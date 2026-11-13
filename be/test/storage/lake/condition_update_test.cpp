@@ -77,7 +77,7 @@ public:
 
     void TearDown() override {
         // check primary index cache's ref
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         remove_test_dir_or_die();
     }
 
@@ -708,7 +708,7 @@ TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_fragmented_win
 }
 
 // Trace stores counters keyed by `const char*` (pointer comparison), and the literal we
-// pass here may not share an address with the one inside update_manager.cpp across
+// pass here may not share an address with the one inside primary_key_manager.cpp across
 // translation units. Match by string value so the lookup is robust against the compiler's
 // string-pooling decisions.
 static int64_t find_trace_metric(const std::map<const char*, int64_t>& metrics, std::string_view name) {

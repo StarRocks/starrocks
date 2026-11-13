@@ -34,6 +34,12 @@
 #include "formats/parquet/encoding.h"
 #include "runtime/current_thread.h"
 
+#if defined(__AVX2__)
+#include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 namespace {
 // Single-pass min/max bounds check for dictionary indices. Reads the unsigned
 // indices through a signed reinterpret to feed SIMD min/max; any value
@@ -132,6 +138,17 @@ public:
                     dst_data[i + idx] = src_data[cnt++];
                 }
             }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+            const uint8x16_t zero = vdupq_n_u8(0);
+            for (i = 0; i + 16 <= count; i += 16) {
+                uint8x16_t loaded = vld1q_u8(&nulls[i]);
+                uint64_t mask = SIMD::get_nibble_mask(vceqq_u8(loaded, zero)) & 0x1111111111111111ULL;
+                while (mask != 0) {
+                    uint32_t idx = __builtin_ctzll(mask) >> 2;
+                    dst_data[i + idx] = src_data[cnt++];
+                    mask &= (mask - 1);
+                }
+            }
 #endif
             // Tail: guard the load so we don't read past the last valid src element
             // when the trailing batch ends with nulls.
@@ -195,8 +212,10 @@ public:
 
     // initialize dictionary
     Status set_dict(int chunk_size, size_t num_values, Decoder* decoder) override {
-        _dict.resize(num_values);
-        _indexes.resize(chunk_size);
+        // Both are written before they are read (the dictionary right below, _indexes by each GetBatch), so
+        // they need no zero filling.
+        raw::stl_vector_resize_uninitialized(&_dict, num_values);
+        raw::stl_vector_resize_uninitialized(&_indexes, chunk_size);
         RETURN_IF_ERROR(decoder->next_batch(num_values, (uint8_t*)&_dict[0]));
         return Status::OK();
     }

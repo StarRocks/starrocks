@@ -1,0 +1,123 @@
+-- name: test_paimon_struct_parent_null
+[UC]paimon_struct_null_catalog=select 'paimon_struct_null_${uuid0}';
+create external catalog paimon_struct_null_${uuid0} properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}",
+"aws.s3.region" = "${oss_region}",
+"aws.s3.enable_ssl" = "true"
+);
+-- result:
+-- !result
+set new_planner_optimize_timeout = 30000;
+-- result:
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+set enable_prune_complex_types = true;
+-- result:
+-- !result
+set chunk_size = 2;
+-- result:
+-- !result
+[ORDER]select id, detail from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1 where id < 8 order by id;
+-- result:
+0	{"marker":10,"payload":'42',"nested":{"payload":'"ok"'}}
+1	None
+2	{"marker":30,"payload":'"visible"',"nested":null}
+3	{"marker":40,"payload":null,"nested":{"payload":null}}
+4	{"marker":50,"payload":'null',"nested":{"payload":'null'}}
+5	{"marker":60,"payload":'{"n":7}',"nested":{"payload":'[1,true,"x"]'}}
+6	None
+7	{"marker":80,"payload":'true',"nested":{"payload":'3.5'}}
+-- !result
+[ORDER]select id, detail is null, detail.nested is null, detail.payload is null, variant_typeof(detail.payload), cast(detail.payload as varchar), variant_typeof(detail.nested.payload), cast(detail.nested.payload as varchar) from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1 where id < 8 order by id;
+-- result:
+0	0	0	0	Int8	42	String	ok
+1	1	1	1	None	None	None	None
+2	0	1	0	String	visible	None	None
+3	0	0	1	None	None	None	None
+4	0	0	0	Null	None	Null	None
+5	0	0	0	Object	{"n":7}	Array	[1,true,"x"]
+6	1	1	1	None	None	None	None
+7	0	0	0	Boolean(true)	true	Decimal4	3.5
+-- !result
+set chunk_size = 1024;
+-- result:
+-- !result
+[ORDER]select id % 8, count(*), sum(detail is null), sum(detail.nested is null), sum(detail.payload is null), sum(detail.nested.payload is null) from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1 group by id % 8 order by 1;
+-- result:
+0	1024	0	0	0	0
+1	1024	1024	1024	1024	1024
+2	1024	0	1024	0	1024
+3	1024	0	0	1024	1024
+4	1024	0	0	0	0
+5	1024	0	0	0	0
+6	1024	1024	1024	1024	1024
+7	1024	0	0	0	0
+-- !result
+[ORDER]select id, cast(detail.payload as varchar), cast(detail.nested.payload as varchar) from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1 where id between 2046 and 2051 order by id;
+-- result:
+2046	None	None
+2047	true	3.5
+2048	42	ok
+2049	None	None
+2050	visible	None
+2051	None	None
+-- !result
+[ORDER]select id from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1 where id < 8 and (detail is null or detail.nested is null) order by id;
+-- result:
+1
+2
+6
+-- !result
+function: assert_paimon_reader("select id, detail from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1", "reader_struct_parent_null_v1", "native")
+-- result:
+None
+-- !result
+function: assert_paimon_native_profile("select id, detail from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1")
+-- result:
+None
+-- !result
+set enable_prune_complex_types = false;
+-- result:
+-- !result
+[ORDER]select cast(detail.nested.payload as varchar), id, cast(detail.payload as varchar) from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1 where id < 8 order by id;
+-- result:
+ok	0	42
+None	1	None
+None	2	visible
+None	3	None
+None	4	None
+[1,true,"x"]	5	{"n":7}
+None	6	None
+3.5	7	true
+-- !result
+set enable_prune_complex_types = true;
+-- result:
+-- !result
+set paimon_reader_mode = 'auto';
+-- result:
+-- !result
+[ORDER]select id, detail is null, detail.nested is null, detail.payload is null, variant_typeof(detail.payload), cast(detail.payload as varchar), variant_typeof(detail.nested.payload), cast(detail.nested.payload as varchar) from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1 where id < 8 order by id;
+-- result:
+0	0	0	0	Int8	42	String	ok
+1	1	1	1	None	None	None	None
+2	0	1	0	String	visible	None	None
+3	0	0	1	None	None	None	None
+4	0	0	0	Null	None	Null	None
+5	0	0	0	Object	{"n":7}	Array	[1,true,"x"]
+6	1	1	1	None	None	None	None
+7	0	0	0	Boolean(true)	true	Decimal4	3.5
+-- !result
+function: assert_paimon_reader("select id, detail from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1", "reader_struct_parent_null_v1", "native")
+-- result:
+None
+-- !result
+CLEANUP {
+  drop catalog if exists ${paimon_struct_null_catalog};
+} END CLEANUP

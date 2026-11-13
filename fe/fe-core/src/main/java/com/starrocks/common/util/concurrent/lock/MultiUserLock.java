@@ -321,6 +321,21 @@ public class MultiUserLock extends Lock {
     }
 
     @Override
+    public boolean isOwnedByThread(long threadId, LockType lockType) {
+        if (isHeldByThread(firstOwner, threadId, lockType)) {
+            return true;
+        }
+        if (otherOwners != null) {
+            for (LockHolder owner : otherOwners) {
+                if (isHeldByThread(owner, threadId, lockType)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    @Override
     public Set<LockHolder> cloneOwners() {
         Set<LockHolder> owners = new HashSet<>();
         if (firstOwner != null) {

@@ -4,8 +4,6 @@ description: "FE/コーディネーターノードのメモリ不足問題を防
 keywords: ['FE', 'Coordinator Node','memory', 'OOM', 'JVM', 'troubleshooting', 'heap']
 ---
 
-import MetaRecv from '../_assets/best_practices/fe_mem_meta_recv.mdx'
-import MetaRecvStep from '../_assets/best_practices/fe_mem_meta_recv_step.mdx'
 
 # FE / コーディネーターノードのメモリ不足問題のトラブルシューティング
 
@@ -103,7 +101,7 @@ FEの状態において、ヒープモニタリングとGCモニタリングは�
 | `jvm_old_gc{type="count"}` | Full GC回数。                          |
 | `jvm_old_gc{type="time"}`  | Full GC時間。                           |
 
-これらのメトリクスおよびその他のモニタリング情報は[モニタリングとアラート](../administration/management/monitoring/monitoring.md)
+これらのメトリクスおよびその他のモニタリング情報は[モニタリングとアラート](../administration/management/monitoring/prometheus_grafana.md)
 
 メモリプロファイルは突発的なヒープ増加を分析できます。サービスのインストール完了後、正常に動作するかどうかを確認する必要があります。
 
@@ -210,7 +208,7 @@ GCログを[https://gceasy.io/](https://gceasy.io/)にアップロードし、**
 
 ### 3. FEプログラムの内部バグによってクラッシュが発生した
 
-<MetaRecv />
+この状況はここでの説明の範囲外です。[メタデータの復元](../administration/Meta_recovery.md)ドキュメントを参照してください。
 
 ### 4. JVMのバグによってFEがクラッシュした
 
@@ -222,7 +220,7 @@ FEの長期運用中に、ヒープ内メモリ使用量が異常に増加し、
 
 ### 現地調査のプロセス
 
-監視ツールを開いてください：[監視とアラート](../administration/management/monitoring/monitoring.md)
+監視ツールを開いてください：[監視とアラート](../administration/management/monitoring/prometheus_grafana.md)
 
 **ステップ1：以下の監視を確認する**
 
@@ -702,7 +700,7 @@ SIMPLE_MAJORITY required 1 replica. But none were active with this master.
 
 **処理方法**：FEのJVMメモリ設定を増やしてください。本番環境では最低16GBを推奨し、その後はメタデータの増加に応じて調整してください。
 
-<MetaRecvStep />
+復旧については、[メタデータの復旧](../administration/Meta_recovery.md)ドキュメントのステップ8と9を参照してください。
 
 ***
 

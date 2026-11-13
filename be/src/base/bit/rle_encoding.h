@@ -132,6 +132,15 @@ public:
 
     bool GetBatch(T* vals, size_t batch_num);
 
+    // GetBatch writing each value as U, e.g. 1-bit definition levels straight into bytes.
+    template <typename U>
+    bool GetBatchAs(U* vals, size_t batch_num);
+
+    // GetBatchAs<uint8_t> for bit_width 1 that parses the byte-aligned run headers itself: a repeated run is a
+    // memset and each literal byte expands to its 8 values through a table, instead of a BitReader round trip
+    // per run. Runs cut by the end of the batch, and anything unusual, go through GetBatchAs.
+    bool GetBitBatchAsBytes(uint8_t* vals, size_t batch_num);
+
     size_t repeated_count() {
         if (repeat_count_ > 0) {
             return repeat_count_;
@@ -449,6 +458,131 @@ inline bool RleDecoder<T>::GetBatch(T* vals, size_t batch_num) {
         }
     }
     return read_num == batch_num;
+}
+
+template <typename T>
+template <typename U>
+inline bool RleDecoder<T>::GetBatchAs(U* vals, size_t batch_num) {
+    size_t read_num = 0;
+    while (read_num < batch_num) {
+        size_t read_this_time = batch_num - read_num;
+
+        if (PREDICT_TRUE(repeat_count_ > 0)) {
+            read_this_time = std::min((size_t)repeat_count_, read_this_time);
+            std::fill_n(vals, read_this_time, static_cast<U>(current_value_));
+            vals += read_this_time;
+            repeat_count_ -= read_this_time;
+            read_num += read_this_time;
+        } else if (literal_count_ > 0) {
+            read_this_time = std::min((size_t)literal_count_, read_this_time);
+            if (PREDICT_FALSE(!bit_reader_.GetBatch(bit_width_, vals, read_this_time))) {
+                return false;
+            }
+            vals += read_this_time;
+            literal_count_ -= read_this_time;
+            read_num += read_this_time;
+        } else {
+            if (!ReadHeader()) {
+                break;
+            }
+        }
+    }
+    return read_num == batch_num;
+}
+
+namespace rle_internal {
+// kBitsToBytes[b] holds the 8 bits of b, least significant first, one per byte.
+struct BitsToBytesTable {
+    uint64_t v[256];
+    constexpr BitsToBytesTable() : v() {
+        for (int b = 0; b < 256; ++b) {
+            uint64_t x = 0;
+            for (int j = 0; j < 8; ++j) {
+                x |= static_cast<uint64_t>((b >> j) & 1) << (8 * j);
+            }
+            v[b] = x;
+        }
+    }
+};
+inline constexpr BitsToBytesTable kBitsToBytes{};
+} // namespace rle_internal
+
+template <typename T>
+inline bool RleDecoder<T>::GetBitBatchAsBytes(uint8_t* vals, size_t batch_num) {
+    DCHECK_EQ(bit_width_, 1);
+    size_t done = 0;
+    while (done < batch_num) {
+        if (repeat_count_ > 0 || literal_count_ > 0 || !bit_reader_.is_byte_aligned()) {
+            // finish the run in progress
+            size_t k = std::min<size_t>(repeat_count_ > 0 ? repeat_count_ : literal_count_, batch_num - done);
+            if (k == 0) {
+                // not aligned between runs, which the RLE layout does not produce: stay on the generic path
+                return GetBatchAs(vals + done, batch_num - done);
+            }
+            if (!GetBatchAs(vals + done, k)) {
+                return false;
+            }
+            done += k;
+            continue;
+        }
+        // Between runs and byte aligned: parse the run headers from the bytes.
+        const uint8_t* const start = bit_reader_.aligned_byte_ptr();
+        const uint8_t* const end = start + bit_reader_.aligned_bytes_left();
+        const uint8_t* p = start;
+        while (done < batch_num) {
+            uint32_t header = 0;
+            const uint8_t* q = p;
+            bool has_header = false;
+            for (int i = 0; i < BitReader::MAX_VLQ_BYTE_LEN && q < end; ++i) {
+                uint8_t byte = *q++;
+                header |= static_cast<uint32_t>(byte & 0x7F) << (7 * i);
+                if ((byte & 0x80) == 0) {
+                    has_header = true;
+                    break;
+                }
+            }
+            if (!has_header || (header >> 1) == 0) {
+                break; // end of data or a malformed header: GetBatchAs decides
+            }
+            if (header & 1) {
+                size_t groups = header >> 1;
+                if (static_cast<size_t>(end - q) < groups) {
+                    break;
+                }
+                size_t full = std::min(groups, (batch_num - done) / 8);
+                for (size_t g = 0; g < full; ++g) {
+                    std::memcpy(vals + done + 8 * g, &rle_internal::kBitsToBytes.v[q[g]], 8);
+                }
+                done += 8 * full;
+                p = q + full;
+                if (full < groups) {
+                    // the batch ends inside this literal run; the rest of it is read through BitReader
+                    literal_count_ = static_cast<uint32_t>((groups - full) * 8);
+                    break;
+                }
+            } else {
+                if (q >= end) {
+                    break;
+                }
+                size_t run = header >> 1;
+                uint8_t value = *q++;
+                size_t take = std::min(run, batch_num - done);
+                std::memset(vals + done, value, take);
+                done += take;
+                p = q;
+                if (take < run) {
+                    repeat_count_ = static_cast<uint32_t>(run - take);
+                    current_value_ = value;
+                    break;
+                }
+            }
+        }
+        bit_reader_.advance_bytes(static_cast<int>(p - start));
+        if (p == start && repeat_count_ == 0 && literal_count_ == 0) {
+            return GetBatchAs(vals + done, batch_num - done);
+        }
+    }
+    return true;
 }
 
 // This function buffers input values 8 at a time.  After seeing all 8 values,

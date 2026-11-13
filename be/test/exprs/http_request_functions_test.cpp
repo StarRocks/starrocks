@@ -30,6 +30,7 @@
 #include "platform/http/http_handler.h"
 #include "platform/http/http_request.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -156,8 +157,7 @@ TEST_F(HttpRequestFunctionsTest, emptyUrlTest) {
     ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
 
     // Create URL column with empty string
-    auto url_column = BinaryColumn::create();
-    url_column->append("");
+    auto url_column = ColumnTestHelper::build_column<Slice>({""});
     Columns columns = create_http_request_columns(url_column, 1);
 
     auto result = HttpRequestFunctions::http_request(_ctx.get(), columns);
@@ -180,8 +180,7 @@ TEST_F(HttpRequestFunctionsTest, invalidUrlTest) {
     ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
 
     // Create URL column with invalid URL
-    auto url_column = BinaryColumn::create();
-    url_column->append("not a valid url");
+    auto url_column = ColumnTestHelper::build_column<Slice>({"not a valid url"});
     Columns columns = create_http_request_columns(url_column, 1);
 
     auto result = HttpRequestFunctions::http_request(_ctx.get(), columns);
@@ -990,30 +989,25 @@ TEST_F(HttpRequestFunctionsTest, customMethodColumnTest) {
     FunctionContext::FunctionStateScope scope = FunctionContext::FRAGMENT_LOCAL;
     ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
 
-    auto url_column = BinaryColumn::create();
-    url_column->append("http://127.0.0.1:99999/nonexistent");
+    auto url_column = ColumnTestHelper::build_column<Slice>({"http://127.0.0.1:99999/nonexistent"});
 
     Columns columns;
     columns.emplace_back(url_column);
 
     // POST method
-    auto method_column = BinaryColumn::create();
-    method_column->append("POST");
+    auto method_column = ColumnTestHelper::build_column<Slice>({"POST"});
     columns.emplace_back(method_column);
 
     // body
-    auto body_column = BinaryColumn::create();
-    body_column->append("{\"key\": \"value\"}");
+    auto body_column = ColumnTestHelper::build_column<Slice>({"{\"key\": \"value\"}"});
     columns.emplace_back(body_column);
 
     // headers
-    auto headers_column = BinaryColumn::create();
-    headers_column->append("{\"Content-Type\": \"application/json\"}");
+    auto headers_column = ColumnTestHelper::build_column<Slice>({"{\"Content-Type\": \"application/json\"}"});
     columns.emplace_back(headers_column);
 
     // timeout_ms
-    auto timeout_column = Int32Column::create();
-    timeout_column->append(1000);
+    auto timeout_column = ColumnTestHelper::build_column<int32_t>({1000});
     columns.emplace_back(timeout_column);
 
     // ssl_verify
@@ -1022,11 +1016,9 @@ TEST_F(HttpRequestFunctionsTest, customMethodColumnTest) {
     columns.emplace_back(ssl_column);
 
     // username/password
-    auto user_column = BinaryColumn::create();
-    user_column->append("");
+    auto user_column = ColumnTestHelper::build_column<Slice>({""});
     columns.emplace_back(user_column);
-    auto pass_column = BinaryColumn::create();
-    pass_column->append("");
+    auto pass_column = ColumnTestHelper::build_column<Slice>({""});
     columns.emplace_back(pass_column);
 
     auto result = HttpRequestFunctions::http_request(_ctx.get(), columns);
@@ -1043,34 +1035,27 @@ TEST_F(HttpRequestFunctionsTest, invalidMethodColumnTest) {
     FunctionContext::FunctionStateScope scope = FunctionContext::FRAGMENT_LOCAL;
     ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
 
-    auto url_column = BinaryColumn::create();
-    url_column->append("http://example.com/api");
+    auto url_column = ColumnTestHelper::build_column<Slice>({"http://example.com/api"});
 
     Columns columns;
     columns.emplace_back(url_column);
 
     // Invalid method
-    auto method_column = BinaryColumn::create();
-    method_column->append("INVALID_METHOD");
+    auto method_column = ColumnTestHelper::build_column<Slice>({"INVALID_METHOD"});
     columns.emplace_back(method_column);
 
-    auto body_column = BinaryColumn::create();
-    body_column->append("");
+    auto body_column = ColumnTestHelper::build_column<Slice>({""});
     columns.emplace_back(body_column);
-    auto headers_column = BinaryColumn::create();
-    headers_column->append("{}");
+    auto headers_column = ColumnTestHelper::build_column<Slice>({"{}"});
     columns.emplace_back(headers_column);
-    auto timeout_column = Int32Column::create();
-    timeout_column->append(1000);
+    auto timeout_column = ColumnTestHelper::build_column<int32_t>({1000});
     columns.emplace_back(timeout_column);
     auto ssl_column = BooleanColumn::create();
     ssl_column->append(true);
     columns.emplace_back(ssl_column);
-    auto user_column = BinaryColumn::create();
-    user_column->append("");
+    auto user_column = ColumnTestHelper::build_column<Slice>({""});
     columns.emplace_back(user_column);
-    auto pass_column = BinaryColumn::create();
-    pass_column->append("");
+    auto pass_column = ColumnTestHelper::build_column<Slice>({""});
     columns.emplace_back(pass_column);
 
     auto result = HttpRequestFunctions::http_request(_ctx.get(), columns);
@@ -1093,35 +1078,28 @@ TEST_F(HttpRequestFunctionsTest, invalidHeadersJsonTest) {
     FunctionContext::FunctionStateScope scope = FunctionContext::FRAGMENT_LOCAL;
     ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
 
-    auto url_column = BinaryColumn::create();
-    url_column->append("http://example.com/api");
+    auto url_column = ColumnTestHelper::build_column<Slice>({"http://example.com/api"});
 
     Columns columns;
     columns.emplace_back(url_column);
 
-    auto method_column = BinaryColumn::create();
-    method_column->append("GET");
+    auto method_column = ColumnTestHelper::build_column<Slice>({"GET"});
     columns.emplace_back(method_column);
-    auto body_column = BinaryColumn::create();
-    body_column->append("");
+    auto body_column = ColumnTestHelper::build_column<Slice>({""});
     columns.emplace_back(body_column);
 
     // Invalid JSON headers
-    auto headers_column = BinaryColumn::create();
-    headers_column->append("not valid json");
+    auto headers_column = ColumnTestHelper::build_column<Slice>({"not valid json"});
     columns.emplace_back(headers_column);
 
-    auto timeout_column = Int32Column::create();
-    timeout_column->append(1000);
+    auto timeout_column = ColumnTestHelper::build_column<int32_t>({1000});
     columns.emplace_back(timeout_column);
     auto ssl_column = BooleanColumn::create();
     ssl_column->append(true);
     columns.emplace_back(ssl_column);
-    auto user_column = BinaryColumn::create();
-    user_column->append("");
+    auto user_column = ColumnTestHelper::build_column<Slice>({""});
     columns.emplace_back(user_column);
-    auto pass_column = BinaryColumn::create();
-    pass_column->append("");
+    auto pass_column = ColumnTestHelper::build_column<Slice>({""});
     columns.emplace_back(pass_column);
 
     auto result = HttpRequestFunctions::http_request(_ctx.get(), columns);
@@ -1141,10 +1119,7 @@ TEST_F(HttpRequestFunctionsTest, multipleRowsTest) {
     FunctionContext::FunctionStateScope scope = FunctionContext::FRAGMENT_LOCAL;
     ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
 
-    auto url_column = BinaryColumn::create();
-    url_column->append("http://127.0.0.1:99999/a");
-    url_column->append("");
-    url_column->append("not-a-url");
+    auto url_column = ColumnTestHelper::build_column<Slice>({"http://127.0.0.1:99999/a", "", "not-a-url"});
     Columns columns = create_http_request_columns(url_column, 3);
 
     auto result = HttpRequestFunctions::http_request(_ctx.get(), columns);

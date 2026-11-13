@@ -48,3 +48,7 @@ select count(l.k1),count(l.k2),count(l.k3) from t1 l join t1 r on l.k1 = r.k1;
 -- result:
 1000000	1000000	1000000
 -- !result
+CLEANUP {
+    admin disable failpoint 'spill_split_yield_after_error';
+    admin disable failpoint 'spill_split_partition_error';
+} END CLEANUP

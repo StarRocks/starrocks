@@ -159,6 +159,7 @@ public class OperationTypeTest {
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DELETE_SQL_DIGEST_BLACK_LIST));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG));
+        Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA));
     }
 
     @Test
@@ -188,6 +189,7 @@ public class OperationTypeTest {
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REPLACE_TEMP_PARTITION));
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RESTORE_JOB_V2));
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SAVE_AUTO_INCREMENT_ID));
+        Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SAVE_GTID));
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SAVE_NEXTID));
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SAVE_TRANSACTION_ID_V2));
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SET_REPLICA_STATUS));

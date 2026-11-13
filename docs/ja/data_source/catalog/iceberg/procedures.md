@@ -7,7 +7,6 @@ keywords: ['iceberg', 'procedures', 'fast forward', 'cherry pick', 'expire snaps
 
 # Iceberg Procedures
 
-import AutoMetaMaintenance from '../../../_assets/commonMarkdown/auto_meta_maintenance.mdx'
 
 StarRocks Iceberg catalog は、スナップショット管理、ブランチ管理、データメンテナンス、メタデータ管理、およびテーブル管理を含む、Iceberg テーブルを管理するためのさまざまなプロシージャをサポートしています。
 
@@ -37,6 +36,52 @@ EXECUTE rollback_to_snapshot(<snapshot_id>)
 ```SQL
 ALTER TABLE iceberg.sales.order
 EXECUTE rollback_to_snapshot(98765);
+```
+
+### タイムスタンプへのロールバック
+
+指定したタイムスタンプより前にコミットされた最新のスナップショットにテーブルをロールバックします。タイムスタンプは現在のセッションのタイムゾーンで解釈されます。
+
+#### `rollback_to_timestamp` 構文
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE rollback_to_timestamp(<timestamp>)
+```
+
+#### パラメータ
+
+`timestamp`: この時点より前にコミットされた最新のスナップショットにテーブルをロールバックします。形式: 'YYYY-MM-DD HH:MM:SS'。この時点より前にコミットされたスナップショットがない場合はエラーを返します。
+
+#### 例
+
+テーブルを 2025-01-01 00:00:00 より前の状態にロールバックします。
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE rollback_to_timestamp('2025-01-01 00:00:00');
+```
+
+### 現在のスナップショットの設定
+
+テーブルの現在のスナップショットを指定されたスナップショット ID に設定します。`rollback_to_snapshot` と異なり、スナップショットは現在のスナップショットの祖先である必要がないため、ロールバックで外れたスナップショットにテーブルを再び進めることができます。
+
+#### `set_current_snapshot` 構文
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE set_current_snapshot(<snapshot_id>)
+```
+
+#### パラメータ
+
+`snapshot_id`: テーブルの現在のスナップショットとして設定するスナップショットの ID。
+
+#### 例
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE set_current_snapshot(98765);
 ```
 
 ### スナップショットの Cherry Pick
@@ -136,6 +181,20 @@ EXECUTE rewrite_data_files
 - 単位: -
 - タイプ: Int
 - デフォルト: 1
+
+###### `delete_ratio_threshold`
+
+- 説明: `min_file_size_bytes` より大きいデータファイルでも、その削除ベクトルまたはファイル単位の位置削除ファイルで削除された行数がファイルの行数に占める割合がこの値に達した場合、書き換えの対象になります。有効範囲: [0, 1]。等価削除ファイルとパーティション単位の位置削除ファイルはこの割合に含まれません。
+- 単位: -
+- タイプ: Double
+- デフォルト: 0.3
+
+###### `delete_file_threshold`
+
+- 説明: `min_file_size_bytes` より大きいデータファイルでも、適用される削除ファイルの数がこの値以上の場合、書き換えの対象になります。正の整数である必要があります。
+- 単位: -
+- タイプ: Int
+- デフォルト: 無制限
 
 ##### `WHERE` 句
 
@@ -257,8 +316,6 @@ ALTER TABLE iceberg.sales.order
 EXECUTE rewrite_manifests()
 ```
 
-<AutoMetaMaintenance />
-
 ## テーブル管理
 
 ### ファイルの追加
@@ -325,6 +382,60 @@ EXECUTE add_files(location = 's3://bucket/data/order/', file_format = 'parquet',
 ```SQL
 ALTER TABLE iceberg.sales.order
 EXECUTE add_files(location = 's3://bucket/data/order/data.parquet', file_format = 'parquet');
+```
+
+### Equality Delete ファイルの追加
+
+既存のファイルを Equality Delete ファイルとして Iceberg テーブルに追加します。ファイル内の各行は、Equality 列の値が同じテーブルの行を削除します。ファイルは新しいスナップショットでコミットされるため、テーブルにすでにあるデータに適用されます。このプロシージャは、Parquet および ORC ファイル形式をサポートしており、フォーマットバージョン 2 以降の Iceberg テーブルが必要です。
+
+ファイルは `add_files` と同じ方法で検出されます。パーティションテーブルの場合、各ファイルのパーティションはパス内の `<column>=<value>` ディレクトリから取得され、削除はそのパーティションのデータファイルにのみ適用されます。いずれかのパーティション列のディレクトリがパスにないファイルは拒否されます。Identity パーティション変換のみサポートされています。非パーティションテーブルの場合、削除はテーブル全体に適用されます。現在のパーティション仕様がパーティション化されていて、古いパーティション仕様で書き込まれたデータファイルがテーブルに残っている場合、削除はそれらのファイルに適用されないため、このプロシージャはエラーになります。セッション変数 `enable_read_iceberg_equality_delete_with_partition_evolution` が `false`（デフォルト: `true`）に設定されている場合、クエリエンジンは複数のパーティション仕様にまたがる Equality Delete を読み取らないため、現在以外のパーティション仕様で書き込まれた Equality Delete ファイルがテーブルに残っているときも、このプロシージャはエラーになります。ファイル内のいずれかの列が Iceberg フィールド ID を持つ場合、そのファイルのすべての Equality 列がテーブルと同じフィールド ID を持つ必要があり、そうでない場合はファイルが拒否されます。Equality 列の型をテーブル列の型として損失なく読み取れないファイル（例: テーブル列が `INT` でファイルの列が文字列）も拒否されます。フィールド ID を持たないファイルは列名でテーブルと照合されるため、ファイルの追加後にその Equality 列の名前を変更しないでください。変更すると削除が適用されなくなります。このプロシージャは `WHERE` 句をサポートしていません。
+
+#### `add_equality_delete_files` 構文
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE add_equality_delete_files(
+    location = '<location>',
+    file_format = '<format>',
+    equality_columns = '<column>[, <column> ...]'
+    [, recursive = <boolean>]
+)
+```
+
+#### パラメータ
+
+##### `location`
+
+- 説明: Equality Delete ファイルの追加元となるディレクトリパスまたはファイルパス。
+- タイプ: String
+- 必須: はい
+
+##### `file_format`
+
+- 説明: Equality Delete ファイルの形式。サポートされている値: 'parquet'、'orc'。
+- タイプ: String
+- 必須: はい
+
+##### `equality_columns`
+
+- 説明: 削除時に照合するテーブル列のカンマ区切りリスト。各列は `INT`、`BIGINT`、`STRING`、`DATE` のいずれかの型のトップレベル列である必要があり、すべてのファイルがこれらの列をすべて含んでいる必要があります。
+- タイプ: String
+- 必須: はい
+
+##### `recursive`
+
+- 説明: `location` のサブディレクトリを再帰的にスキャンするかどうか。
+- タイプ: Boolean
+- デフォルト: true
+- 必須: いいえ
+
+#### 例
+
+`s3://bucket/deletes/order/` 配下のファイル（例: `s3://bucket/deletes/order/dt=2024-01-01/delete.parquet`）のいずれかの行と `id` が一致する行を削除します。
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE add_equality_delete_files(location = 's3://bucket/deletes/order/', file_format = 'parquet', equality_columns = 'id');
 ```
 
 ### テーブルの登録

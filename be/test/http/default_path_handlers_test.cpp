@@ -19,7 +19,11 @@
 
 #include <gtest/gtest.h>
 
+#include "base/auth/credential_mask.h"
+#include "base/utility/defer_op.h"
+#include "common/config_object_storage_fwd.h"
 #include "exec/exec_env.h"
+#include "runtime/mem_tracker.h"
 
 namespace starrocks {
 
@@ -41,6 +45,23 @@ TEST_F(DefaultPathHandlersTest, mem_tracker) {
     MemTrackerWebPageHandler::handle(runtime_env, mem_tracker, args, &output2);
     ASSERT_TRUE(output2.str().find("<tr><td>1</td><td>process</td><td>") == std::string::npos);
     ASSERT_TRUE(output2.str().find("<tr><td>3</td><td>tablet_metadata</td><td>metadata</td>") != std::string::npos);
+}
+
+TEST_F(DefaultPathHandlersTest, passthrough_is_rendered_once_outside_process_tree) {
+    WebPageHandler::ArgumentMap args;
+    const auto& runtime_env = *RuntimeEnv::GetInstance();
+    auto* process = runtime_env.process_mem_tracker();
+    // The passthrough tracker only mirrors bytes the query trackers already count, so it must not be a
+    // real child of process (that would count them twice); the page appends it for diagnosis.
+    ASSERT_EQ(nullptr, runtime_env.passthrough_mem_tracker()->parent());
+
+    std::stringstream output;
+    MemTrackerWebPageHandler::handle(runtime_env, process, args, &output);
+    const std::string page = output.str();
+    const std::string cell = "<td>passthrough</td>";
+    const auto first = page.find(cell);
+    ASSERT_NE(std::string::npos, first);
+    EXPECT_EQ(std::string::npos, page.find(cell, first + cell.size()));
 }
 
 TEST_F(DefaultPathHandlersTest, jemalloc_stats_opts) {
@@ -109,5 +130,29 @@ TEST_F(DefaultPathHandlersTest, mem_tracker_does_not_echo_upper_level) {
 
     ASSERT_TRUE(output.str().find("Invalid upper_level") != std::string::npos);
     ASSERT_TRUE(output.str().find("<script>") == std::string::npos);
+}
+
+TEST_F(DefaultPathHandlersTest, config_handler_masks_object_storage_credentials) {
+    std::string old_ak = config::object_storage_access_key_id;
+    std::string old_sk = config::object_storage_secret_access_key;
+    DeferOp restore([&]() {
+        config::object_storage_access_key_id = old_ak;
+        config::object_storage_secret_access_key = old_sk;
+    });
+
+    config::object_storage_access_key_id = "AKIDEXAMPLEACCESSKEY";
+    config::object_storage_secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+    WebPageHandler::ArgumentMap args;
+    std::stringstream output;
+    config_handler(args, &output);
+    const std::string page = output.str();
+
+    EXPECT_EQ(std::string::npos, page.find("AKIDEXAMPLEACCESSKEY"));
+    EXPECT_EQ(std::string::npos, page.find("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"));
+    const std::string mask(kCredentialMask);
+    EXPECT_NE(std::string::npos, page.find("\nobject_storage_access_key_id=" + mask + "\n"));
+    EXPECT_NE(std::string::npos, page.find("\nobject_storage_secret_access_key=" + mask + "\n"));
+    // Non-credential configs are still printed as is.
+    EXPECT_NE(std::string::npos, page.find("\nobject_storage_endpoint=" + config::object_storage_endpoint + "\n"));
 }
 } // namespace starrocks

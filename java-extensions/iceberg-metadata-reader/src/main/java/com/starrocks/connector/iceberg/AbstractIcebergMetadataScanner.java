@@ -29,11 +29,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.TimeZone;
 
-import static org.apache.iceberg.util.SerializationUtil.deserializeFromBase64;
-
 public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     private static final Logger LOG = LogManager.getLogger(AbstractIcebergMetadataScanner.class);
-    protected final String serializedTable;
+    // Dropped once the table is resolved: the base64 payload can be tens of MB.
+    private String serializedTable;
+    private final long tableCacheCapacity;
+    private SharedTableCache.Lease tableLease;
     protected final String[] requiredFields;
     private final String[] metadataColumnNames;
     private final String[] metadataColumnTypes;
@@ -45,10 +46,6 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     protected FileIO fileIO;
     protected String timezone;
 
-    // expire after 600 seconds long enough for most credential expiration
-    // max 1000 entries large enough for most use cases
-    private static final TableFileIOCache TABLE_FILE_IO_CACHE = new TableFileIOCache(600, 1000);
-
     public AbstractIcebergMetadataScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.requiredFields = params.get("required_fields").split(",");
@@ -57,14 +54,20 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
         this.metadataColumnTypes = params.get("metadata_column_types").split("#");
         this.serializedTable = params.get("serialized_table");
         this.timezone = params.getOrDefault("time_zone", TimeZone.getDefault().getID());
+        // An older BE does not pass the capacity: keep the per-task table it expects.
+        this.tableCacheCapacity = Long.parseLong(params.getOrDefault("table_cache_capacity", "0"));
         this.classLoader = this.getClass().getClassLoader();
     }
 
     @Override
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            this.table = deserializeFromBase64(serializedTable);
-            this.fileIO = TABLE_FILE_IO_CACHE.get(table);
+            // The scan tasks of one query share the deserialized table and its FileIO (keyed by the payload, so
+            // credentials included). The lease, not the scanner, decides when that FileIO is closed.
+            this.tableLease = SharedTableCache.acquire(serializedTable, tableCacheCapacity);
+            this.serializedTable = null;
+            this.table = tableLease.table();
+            this.fileIO = table.io();
             parseRequiredTypes();
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
             doOpen();
@@ -91,7 +94,16 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     @Override
     public void close() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            doClose();
+            try {
+                doClose();
+            } finally {
+                fileIO = null;
+                table = null;
+                if (tableLease != null) {
+                    tableLease.close();
+                    tableLease = null;
+                }
+            }
         } catch (IOException e) {
             LOG.error("Failed to close the {}.", this.getClass().getSimpleName(), e);
             throw new IOException(String.format("Failed to close the %s.", this.getClass().getSimpleName()), e);

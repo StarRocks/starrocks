@@ -31,6 +31,17 @@ REVOKE
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
+#### AI 函数与 Provider
+
+```sql
+REVOKE USAGE ON ALL AI FUNCTIONS FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON AI FUNCTION <function_name> FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON AI PROVIDER <provider_name> FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON ALL AI PROVIDERS FROM {ROLE <role_name> | USER <user_identity>};
+```
+
+撤权影响后续执行和重新规划，包括预处理语句 EXECUTE，不会取消已经运行的查询。本功能接入原生授权；未实现 AI 检查的外部访问控制器将拒绝这些操作。
+
 #### Resource group 相关
 
 ```SQL
@@ -115,7 +126,7 @@ REVOKE <priv> ON TABLE db.tbl FROM {ROLE <role_name> | USER <user_identity>}
 
 ```SQL
 REVOKE
-    { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
+    { ALTER | DROP | SELECT | EXPORT | ALL [PRIVILEGES]}
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
            { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
@@ -123,6 +134,7 @@ REVOKE
 ```
 
 注意：需要执行 SET CATALOG 之后才能使用。view 还可以用 `db.view` 的方式来表示。
+注意：对于 EXPORT 权限，目前仅支持授予和撤销，不支持通过 EXPORT TABLE 导出该视图。
 
 ```SQL
 REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
@@ -132,7 +144,7 @@ REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
 
 ```SQL
 REVOKE
-    { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
+    { SELECT | ALTER | REFRESH | DROP | EXPORT | ALL [PRIVILEGES]}
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
            { { DATABASE <database_name> [,<database_name>,...] } | ALL [DATABASES] }
@@ -140,6 +152,7 @@ REVOKE
 ```
 
 注意：需要执行 SET CATALOG 之后才能使用。mv 还可以用 `db.mv` 的方式来表示。
+注意：对于 EXPORT 权限，目前仅支持授予和撤销，不支持通过 EXPORT TABLE 导出该物化视图。
 
 ```SQL
 REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_identity>};

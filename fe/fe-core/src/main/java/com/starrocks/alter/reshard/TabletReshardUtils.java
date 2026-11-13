@@ -19,10 +19,13 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Config;
+import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
@@ -38,7 +41,8 @@ public class TabletReshardUtils {
 
     // Reshard size invariants — DO NOT change individually.
     //
-    // Let T = Config.tablet_reshard_target_size.
+    // Let T = the table's target size (OlapTable.getTabletReshardTargetSize(): its tablet_reshard_target_size
+    // property when in force, else Config.tablet_reshard_target_size).
     //   splitThreshold     = ceil(1.5 * T)   (split fires when dataSize >= splitThreshold)
     //   mergePairThreshold = ceil(0.8 * T)   (merge fires when pair sum < mergePairThreshold)
     //   mergeGroupCap      = T               (merge groups packed up to mergeGroupCap)
@@ -85,74 +89,57 @@ public class TabletReshardUtils {
         return target;
     }
 
-    public static boolean needSplit(long dataSize) {
+    public static boolean needSplit(long dataSize, long targetSize) {
         // Reuse calcSplitCount so we never trigger when no actual split would be produced
         // (e.g., tablet_reshard_max_split_count <= 1).
-        return calcSplitCount(dataSize, Config.tablet_reshard_target_size) > 1;
+        return calcSplitCount(dataSize, targetSize) > 1;
     }
 
-    public static boolean needMerge(long minAdjacentTabletPairSize) {
-        long target = Config.tablet_reshard_target_size;
-        if (target <= 0) {
+    public static boolean needMerge(long minAdjacentTabletPairSize, long targetSize) {
+        if (targetSize <= 0) {
             return false;
         }
-        return minAdjacentTabletPairSize < mergePairThreshold(target);
+        return minAdjacentTabletPairSize < mergePairThreshold(targetSize);
     }
 
     /**
-     * Target tablet size for one index: the steady-state target, or the size that would give the index
-     * one tablet per slot the bound allows, whichever is smaller, floored so a nearly empty index is not
-     * carved into slivers.
-     *
-     * <p>This target is a function of the index's SIZE, not of how many tablets it has: splitting an
-     * index does not move it. It rises as the index grows and meets the steady-state target once the
-     * index holds {@code bound} targets' worth of data, after which the expression collapses to the
-     * steady-state target and the two rules agree. What ends the adaptive phase earlier, and usually
-     * does, is the index reaching the bound -- the headroom test in
+     * Whether the adaptive rule is on for one index: the bound is resolved, {@code floor} (read once with
+     * {@link #adaptiveSplitFloor}) is positive, and the index holds less than {@code bound} steady-state
+     * targets' worth of data. Past that point the index is the size rule's alone. What usually ends the
+     * adaptive phase first is the index reaching the bound -- the headroom in
      * {@code SplitTabletJobFactory#planIndexSplits}, which owns that count.
      *
-     * <p>The floor is clamped to the target. That clamp is what makes
-     * {@code tablet_reshard_min_split_size >= tablet_reshard_target_size} switch the adaptive behaviour
-     * off: the floor becomes the target, and the whole expression collapses to the target. Without the
-     * clamp, a minimum above the target would raise the effective target above it and change the
-     * steady-state rule too.
+     * <p>The floor is passed in because a caller that also cuts children down to it must take one reading for
+     * both: the minimum is mutable, and two readings could disagree about whether the rule is on. A minimum at
+     * or above the steady-state target reads as a zero floor, which is how it switches the rule off.
      *
      * <p>{@code bound} sits at or below the auto-merge parallelism floor -- it is that floor clamped
      * to the node count, so a single-node warehouse gets 1 where the floor is 2. Merge acts strictly
      * above the floor, so an index this rule widens to the bound is never one merge would immediately
-     * narrow again. A non-positive bound (an unresolved warehouse) leaves the steady-state target
-     * untouched.
+     * narrow again. A non-positive bound (an unresolved warehouse) keeps the rule off.
      */
-    public static long adaptiveTargetSize(long indexDataSize, long steadyTargetSize, int bound) {
-        long configuredFloor = Config.tablet_reshard_min_split_size;
-        // A non-positive minimum has no validator on it, and without a floor this expression would let
-        // an index be carved to the split-count cap. Treat it as "no adaptive target", not "no floor".
-        if (bound <= 0 || steadyTargetSize <= 0 || configuredFloor <= 0) {
-            return steadyTargetSize;
-        }
-        long floor = Math.min(configuredFloor, steadyTargetSize);
-        return Math.max(floor, Math.min(steadyTargetSize, indexDataSize / bound));
+    public static boolean adaptiveRuleOn(long indexDataSize, long steadyTargetSize, int bound, long floor) {
+        return bound > 0 && floor > 0 && indexDataSize / bound < steadyTargetSize;
     }
 
     /**
-     * Child count for the adaptive target: {@code floor(dataSize / target)} once a tablet is worth at
-     * least two of them, and 1 otherwise.
-     *
-     * <p>Requiring two whole targets rather than the size rule's one and a half is what keeps every
-     * child worth at least a target: a tablet of 1.6 targets would otherwise round to two children of
-     * 0.8 each, more tablets than its share and each still under size.
-     *
-     * <p>Flooring bounds the children this asks for, but NOT the width of the index. The tablets it
-     * declines still occupy slots and are absent from that sum, so a skewed index would be widened
-     * past its bound -- {@code 8G, 1G, 1G} against a bound of four lands on five. Capping each split
-     * by the slots the index has left is therefore load bearing, and belongs to the caller that knows
-     * them: see {@code SplitTabletJobFactory#planIndexSplits}.
+     * Whether a tablet of {@code dataSize} can be cut into {@code children} pieces of at least {@code floor}
+     * each. The planner asks it before every child it hands out and the stat scan asks it for a tablet's
+     * first cut, so both apply one definition of a legal cut.
      */
-    public static int adaptiveSplitCount(long dataSize, long target) {
-        if (target <= 0 || dataSize / 2 < target) {
-            return 1;
-        }
-        return (int) Math.min((long) Config.tablet_reshard_max_split_count, dataSize / target);
+    public static boolean canSplitInto(long dataSize, int children, long floor) {
+        return dataSize / children >= floor;
+    }
+
+    /**
+     * Smallest tablet the adaptive rule may produce, or 0 when the rule is off:
+     * {@code tablet_reshard_min_split_size} while it sits strictly between zero and the steady-state target.
+     * At or above the target is the documented off switch. A non-positive minimum has no validator on it, and
+     * treating it as "no floor" would let an index be carved to the split-count cap, so it is off too.
+     */
+    public static long adaptiveSplitFloor(long steadyTargetSize) {
+        long configuredFloor = Config.tablet_reshard_min_split_size;
+        return configuredFloor > 0 && configuredFloor < steadyTargetSize ? configuredFloor : 0;
     }
 
     /*
@@ -253,6 +240,23 @@ public class TabletReshardUtils {
             // throwing from a scheduling decision.
             return false;
         }
+    }
+
+    /**
+     * Whether {@code ALTER TABLE ... COMPACT} on this table should run as UNSHARE compaction when a
+     * partition has a tablet that still shares files with its split siblings.
+     *
+     * <p>True for a shared-data, range-distributed primary-key table with file bundling whose merge is
+     * supported. A tablet merge only accepts a tablet that owns all of its files, and UNSHARE compaction
+     * is what rewrites the shared ones into private files, so compacting such a table that way is what
+     * makes a later merge possible. Other tables keep the ordinary manual compaction: a table whose merge
+     * is unsupported gains nothing from the extra rewrite, and without file bundling UNSHARE is not
+     * served at all.
+     */
+    public static boolean compactUnsharesSharedFiles(OlapTable table) {
+        return table != null && table.isCloudNativeTable() && table.isRangeDistribution()
+                && table.getKeysType() == KeysType.PRIMARY_KEYS && table.isFileBundling()
+                && !tabletMergeUnsupported(table);
     }
 
     /** Per-tablet split fan-out cap for this table. */
@@ -489,5 +493,23 @@ public class TabletReshardUtils {
             sb.append(" (first ").append(shown).append(" of ").append(tablets.size()).append(')');
         }
         return sb.toString();
+    }
+
+    // Bounds are compared by value: a bound decoded from the compute node can carry a different scalar
+    // type than the FE tuple for the same value, which Tuple.equals would treat as different.
+    static boolean sameLowerBound(Range<Tuple> a, Range<Tuple> b) {
+        if (a.isMinimum() || b.isMinimum()) {
+            return a.isMinimum() && b.isMinimum();
+        }
+        return a.getLowerBound().compareTo(b.getLowerBound()) == 0
+                && a.isLowerBoundIncluded() == b.isLowerBoundIncluded();
+    }
+
+    static boolean sameUpperBound(Range<Tuple> a, Range<Tuple> b) {
+        if (a.isMaximum() || b.isMaximum()) {
+            return a.isMaximum() && b.isMaximum();
+        }
+        return a.getUpperBound().compareTo(b.getUpperBound()) == 0
+                && a.isUpperBoundIncluded() == b.isUpperBoundIncluded();
     }
 }

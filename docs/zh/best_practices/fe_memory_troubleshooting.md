@@ -4,8 +4,6 @@ description: "Troubleshoot and resolve FE/Coordinator node memory saturation iss
 keywords: ['FE', 'Coordinator Node','memory', 'OOM', 'JVM', 'troubleshooting', 'heap']
 ---
 
-import MetaRecv from '../_assets/best_practices/fe_mem_meta_recv.mdx'
-import MetaRecvStep from '../_assets/best_practices/fe_mem_meta_recv_step.mdx'
 
 # FE / 协调节点内存满问题故障排查
 
@@ -103,7 +101,7 @@ import MetaRecvStep from '../_assets/best_practices/fe_mem_meta_recv_step.mdx'
 | `jvm_old_gc{type="count"}` | Full GC 次数。                          |
 | `jvm_old_gc{type="time"}`  | Full GC 时间。                           |
 
-这些指标及其他指标的监控信息请参阅[监控与告警](../administration/management/monitoring/monitoring.md)
+这些指标及其他指标的监控信息请参阅[监控与告警](../administration/management/monitoring/prometheus_grafana.md)
 
 内存 profile 可以分析堆内存的突然增长。需要在服务安装完成后确认其是否正常工作。
 
@@ -210,7 +208,7 @@ transfer FE type from LEADER to FOLLOWER. exit
 
 ### 3. FE 程序内部 bug 导致崩溃
 
-<MetaRecv />
+此情况不在本文讨论范围内。请参考[恢复元数据](../administration/Meta_recovery.md)文档。
 
 ### 4. JVM bug 导致 FE 崩溃
 
@@ -222,7 +220,7 @@ transfer FE type from LEADER to FOLLOWER. exit
 
 ### 现场排查流程
 
-打开您的监控工具：[监控与告警](../administration/management/monitoring/monitoring.md)
+打开您的监控工具：[监控与告警](../administration/management/monitoring/prometheus_grafana.md)
 
 **第一步：检查以下监控**
 
@@ -702,7 +700,7 @@ SIMPLE_MAJORITY required 1 replica. But none were active with this master.
 
 **处理方法**：增加 FE JVM 内存配置，生产环境建议最低 16GB，后续根据元数据增量进行调整。
 
-<MetaRecvStep />
+恢复步骤请参考 [元数据恢复](../administration/Meta_recovery.md) 文档中的步骤 8 和 9。
 
 ***
 

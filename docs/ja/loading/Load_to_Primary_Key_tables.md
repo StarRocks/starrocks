@@ -8,7 +8,7 @@ description: "Stream Load、Broker Load、Routine Load を使用して Primary K
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
-StarRocks が提供する[主キーテーブル](../table_design/table_types/primary_key_table.md)を使用すると、[Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、または[Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)ジョブを実行して StarRocks テーブルにデータ変更を加えることができます。これらのデータ変更には、挿入、更新、削除が含まれます。ただし、主キーテーブルは、[Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)や[INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)を使用したデータ変更をサポートしていません。
+StarRocks が提供する[主キーテーブル](../table_design/table_types/primary_key_table.md)を使用すると、[Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、または[Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)ジョブを実行して StarRocks テーブルにデータ変更を加えることができます。これらのデータ変更には、挿入、更新、削除が含まれます。ただし、主キーテーブルは、[Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)を使用したデータ変更をサポートしていません。
 
 StarRocks は部分更新と条件付き更新もサポートしています。
 
@@ -598,6 +598,7 @@ StarRocks v2.5 以降、主キーテーブルは条件付き更新をサポー�
 > - 同じバッチのデータに対して異なる列を更新条件として指定することはできません。
 > - DELETE 操作は条件付き更新をサポートしていません。
 > - バージョン v3.1.3 より前のバージョンでは、部分更新と条件付き更新を同時に使用することはできません。v3.1.3 以降、StarRocks は部分更新と条件付き更新の同時使用をサポートしています。
+> - 共有なしクラスタでは、列モードでの部分更新と条件付き更新を同時に使用することはできず、そのようなロードは失敗します。共有データクラスタでは、v4.1.1 以降、列モードでの部分更新で条件付き更新をサポートしています。
 
 ### データ例
 
@@ -643,7 +644,7 @@ StarRocks v2.5 以降、主キーテーブルは条件付き更新をサポー�
 
 `example5.csv` の `id` が `101` と `102` のレコードをそれぞれ `table5` に更新し、更新が有効になるのは、2 つのレコードの `version` 値がそれぞれの現在の `version` 値以上である場合のみと指定します。
 
-- Insert Load ジョブを実行します。
+- INSERT ジョブを実行します（v3.5.8、v4.0.1、v4.1.0 以降でサポート）。
   ```SQL
   INSERT INTO test_db.table5 properties("merge_condition" = "version")
   VALUES (101, 2, 70), (102, 3, 100);

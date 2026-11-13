@@ -6,7 +6,6 @@ description: "How to manage StarRocks access permissions with Apache Ranger for 
 
 # Manage permissions with Apache Ranger
 
-import ServiceDefLink from '../../../_assets/commonMarkdown/servicedef_link.mdx'
 
 [Apache Ranger](https://ranger.apache.org/) provides a centralized security management framework that allows users to customize access policies through a visual web page. This helps determine which roles can access which data and exercise fine-grained data access control for various components and services in the Hadoop ecosystem.
 
@@ -21,7 +20,16 @@ In addition to the native RBAC privilege system, StarRocks v3.1.9 also supports 
 - Creates access policies, masking policies, and row-level filter policies through Apache Ranger.
 - Ranger audit logs.
 - **Ranger Servers that use Kerberos for authentication are not supported.**
+- **Ranger policy conditions that are evaluated by JavaScript are not supported**, such as the `expression` condition and the `accessed-after-expiry` condition of tag-based policies. See the note below.
 - You can register multiple StarRocks Services in the same Apache Ranger service to manage privileges in different StarRocks clusters.
+
+:::note
+
+StarRocks FE runs on JDK 17 or later, which does not include a JavaScript engine. When Ranger cannot evaluate a JavaScript condition, it treats the condition as satisfied and logs `failed to evaluate condition '<condition>': script engine not found` each time. For example, an allow item with an `expression` condition then grants access without checking the expression. Do not use these conditions in the policies that apply to StarRocks.
+
+When it loads policies, the FE also logs `failed to initialize condition 'accessed-after-expiry'`. This comes from the `EXPIRES_ON` policy of the tag service that Ranger Admin links to a service by default. The message has no effect as long as no resource has the `EXPIRES_ON` tag. Access to a resource with this tag is denied even before its expiry date.
+
+:::
 
 This topic describes the permission control methods and integration process of StarRocks and Apache Ranger. For information on how to create security policies on Ranger to manage data security, see the [Apache Ranger official website](https://ranger.apache.org/).
 
@@ -95,7 +103,11 @@ Also, please notice that if you didn't install the ranger-starrocks-plugin, then
 This step configures the StarRocks Service on Ranger so that users can perform access control on StarRocks objects through Ranger.
 :::
 
-<ServiceDefLink />
+1. Copy [ranger-servicedef-starrocks.json](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-servicedef-starrocks.json) to any directory of the StarRocks FE machine or Ranger machine.
+
+   ```SQL
+   wget https://raw.githubusercontent.com/StarRocks/starrocks/main/conf/ranger/ranger-servicedef-starrocks.json
+   ```
 
    :::note
    If you do not need Ranger's autocomplete feature (which means you did not install the ranger-starrocks-plugin), you must set `implClass` in the .json file to empty:
@@ -112,12 +124,22 @@ This step configures the StarRocks Service on Ranger so that users can perform a
 
    :::
 
+   To grant SELECT on views and materialized views through Ranger, the `accessTypeRestrictions` of the `view` and `materialized_view` resources in the .json file must include `"select"`. If they do not, add it before you add or update the service definition in the next step.
+
 2. Add StarRocks Service by running the following command as a Ranger administrator.
 
    ```Bash
    curl -u <ranger_adminuser>:<ranger_adminpwd> \
    -X POST -H "Accept: application/json" \
    -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/plugins/definitions -d@ranger-servicedef-starrocks.json
+   ```
+
+   If the StarRocks service definition is already registered in Ranger, for example when you upgrade StarRocks, update it instead of adding it again:
+
+   ```Bash
+   curl -u <ranger_adminuser>:<ranger_adminpwd> \
+   -X PUT -H "Accept: application/json" \
+   -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/public/v2/api/servicedef/name/starrocks -d@ranger-servicedef-starrocks.json
    ```
 
 3. Access `http://<ranger-ip>:<ranger-host>/login.jsp` to log in to the Apache Ranger page. The STARROCKS service appears on the page.
@@ -144,7 +166,10 @@ This step configures the StarRocks Service on Ranger so that users can perform a
    ![added service](../../../_assets/ranger_added_service.png)
 
 5. Click **Test connection** to test the connectivity, and save it after the connection is successful. If you didn't install ranger-starrocks-plugin, then you can skip test connection and create directly.
-6. On each FE machine of the StarRocks cluster, create [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:
+
+### Enable Ranger on the FE nodes
+
+1. On each FE machine of the StarRocks cluster, create [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:
 
    - `ranger.plugin.starrocks.service.name`: Change to the name of the StarRocks Service you created in Step 4.
    - `ranger.plugin.starrocks.policy.rest the url`: Change to the address of the Ranger Admin.
@@ -175,16 +200,23 @@ This step configures the StarRocks Service on Ranger so that users can perform a
    ...
    ```
 
-7. (Optional) If you want to use the Audit Log service of Ranger, you need to create the [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml) file in the `fe/conf` folder of each FE machine. Copy the content, **replace `solr_url` in `xasecure.audit.solr.solr_url` with your own `solr_url`**, and save the file.
+2. (Optional) If you want to use the Audit Log service of Ranger, you need to create the [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml) file in the `fe/conf` folder of each FE machine. Copy the content, **replace `solr_url` in `xasecure.audit.solr.solr_url` with your own `solr_url`**, and save the file.
 
-8. Add the configuration `access_control = ranger` to all FE configuration files.
+   StarRocks supports two destinations for Ranger audit logs, and you can use only one of them at a time:
+
+   - Solr: Use the `xasecure.audit.solr.*` properties that the template uses. Configuring Solr with `xasecure.audit.destination.solr` is not supported.
+   - Local file: Set `xasecure.audit.destination.file` to `true` and `xasecure.audit.destination.file.dir` to the directory of the audit files.
+
+   Once any `xasecure.audit.destination.*` property is enabled, Ranger ignores all the `xasecure.audit.<destination>.*` properties, including the Solr ones. This also applies to `ranger-hive-audit.xml`.
+
+3. Add the configuration `access_control = ranger` to all FE configuration files.
 
    ```SQL
    vim fe.conf
    access_control=ranger 
    ```
 
-9. Restart all FE machines.
+4. Restart all FE machines.
 
    ```SQL
    -- Switch to the FE folder. 
@@ -222,6 +254,29 @@ For External Catalog, you can reuse external services (such as Hive Service) for
        ```
 
 ​    This operation changes the authentication method of an existing Catalog to Ranger-based authentication.
+
+4. (Optional) Prefix the database name with the catalog name. This applies to every External Catalog that sets `ranger.plugin.hive.service.name`, such as Hive, Iceberg, and Hudi catalogs.
+
+   The Ranger Hive Service only knows `database`, `table`, and `column`. It has no catalog level, so when several External Catalogs share one Hive Service (for example, several AWS Glue catalogs), a database that exists in more than one catalog matches the same policies. Set the property `"ranger.plugin.hive.catalog_prefix.enabled"` to `"true"` on such a catalog, and StarRocks sends `<catalog_name>_<database_name>` as the `database` resource to Ranger instead of the bare database name. For example, a query against `glue_prod.sales.orders` is checked against a Ranger policy whose database is `glue_prod_sales`.
+
+   ```SQL
+   CREATE EXTERNAL CATALOG glue_prod
+   PROPERTIES (
+       "type" = "hive",
+       "hive.metastore.type" = "glue",
+       "aws.glue.region" = "us-west-2",
+       "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>",
+       "ranger.plugin.hive.catalog_prefix.enabled" = "true"
+   );
+
+   -- Or on an existing catalog. The new value takes effect when the statement returns.
+   ALTER CATALOG glue_prod
+   SET ("ranger.plugin.hive.catalog_prefix.enabled" = "true");
+   ```
+
+   - Valid values are `true` and `false`. Any other value makes CREATE or ALTER CATALOG fail.
+   - When the property is not set, the catalog follows the FE configuration item `ranger_hive_catalog_prefix_enabled` (default `false`). Catalogs that do not set `ranger.plugin.hive.service.name` ignore this property.
+   - The separator between the catalog name and the database name is the FE configuration item `ranger_hive_catalog_prefix_separator` (default `_`). It is global because every catalog that shares one Ranger Service must use the same separator.
 
 ## What to do next
 

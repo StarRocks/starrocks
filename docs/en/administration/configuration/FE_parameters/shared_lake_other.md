@@ -12,7 +12,6 @@ import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note
 
 import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
-import EditonSpecificFEItemSharedLakeOther from '../../../_assets/commonMarkdown/Edition_Specific_FE_Item_shared_lake_other.mdx'
 
 <FEConfigMethod />
 
@@ -435,6 +434,15 @@ This topic introduces the following types of FE configurations:
 - Description: The time range for retaining historical data versions in a shared-data cluster. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish. The default value has been changed from `5` to `30` since v3.3.0, v3.2.5, and v3.1.10.
 - Introduced in: v3.1.0
 
+### `lake_autovacuum_max_versions_per_round`
+
+- Default: 500
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: Per-round work cap for the incremental (bounded, resumable) AutoVacuum in a shared-data cluster: the maximum number of metadata versions a single AutoVacuum round may commit and propose for a partition. The incremental protocol is always on and cannot be disabled, because the legacy one-shot path cannot safely resume after it (it would stop at the chain holes a bounded round leaves and miss the garbage below them). This value only bounds how much work each round does, so that a large backlog of historical versions drains across many rounds instead of repeatedly timing out a single RPC. Values below `100` are clamped up to `100` (a smaller per-round budget would need too many rounds to drain a backlog). It does not change tablet-to-node routing.
+- Introduced in: v4.1.0
+
 ### `lake_autovacuum_parallel_partitions`
 
 - Default: 8
@@ -462,6 +470,15 @@ This topic introduces the following types of FE configurations:
 - Description: If a partition has no updates (loading, DELETE, or Compactions) within this time range, the system will not perform AutoVacuum on this partition.
 - Introduced in: v3.1.0
 
+### `lake_vacuum_reset_partition_ids`
+
+- Default: (empty)
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: A recovery escape hatch for a wedged incremental AutoVacuum in a shared-data cluster: a semicolon-separated list of physical partition IDs (format `id1;id2`) whose incremental vacuum state should be force-reset. When the AutoVacuum daemon next processes a listed partition it discards the in-flight proposal, resume cursor, and tablet generation (while preserving the already-vacuumed retain floor, so the fresh pass does not re-read already-deleted versions), skips that round, and starts a clean pass on the next round. Each ID is consumed exactly once — the daemon removes it from the list immediately after resetting — so a stuck pass is nudged once rather than reset every round. Only the serving leader acts on this item: `ADMIN SET FRONTEND CONFIG` broadcasts the value to every FE, and each FE discards whatever it inherited at the moment it becomes leader, so a request issued shortly before a failover is lost and must be re-issued against the new leader. Leave it empty in normal operation.
+- Introduced in: v26.2.0
+
 ### `lake_compaction_allow_partial_success`
 
 - Default: true
@@ -470,6 +487,30 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: If this item is set to `true`, the system will consider the Compaction operation in a shared-data cluster as successful when one of the sub-tasks succeeds.
 - Introduced in: v3.5.2
+
+### `lake_compaction_admission_mode`
+
+- Default: `NORMAL`
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Controls admission of new shared-data Compaction jobs. Valid values are `NORMAL` and `ALLOWLIST` (case-sensitive). `NORMAL` ignores `lake_compaction_allow_table_ids` and preserves existing scheduling. `ALLOWLIST` only permits tables listed in `lake_compaction_allow_table_ids`. An invalid mode blocks new jobs and logs a warning. Changes take effect on configuration refresh without a restart and do not cancel or drain running jobs. The existing denylist and task limits apply in both modes, including to manual Compaction.
+- Introduced in: -
+
+### `lake_compaction_allow_table_ids`
+
+- Default: ""
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Semicolon-separated positive **table IDs**, for example `12345;98765`. Used only in `ALLOWLIST` mode; an empty list permits no tables. Partition IDs and `*` are not supported. A table entry covers all its physical partitions, including future partitions. Invalid input blocks new jobs in `ALLOWLIST` mode and logs a warning; it does not affect `NORMAL` mode. `lake_compaction_disable_ids` takes precedence for both tables and partitions, and `lake_compaction_max_tasks = 0` still disables all new jobs. Changes take effect on configuration refresh without a restart.
+- Introduced in: -
+
+For a replication migration, keep `lake_compaction_max_tasks = 0` while setting an empty allowlist and switching to `ALLOWLIST`; wait for existing Compaction jobs to finish before starting replication. Restore a nonzero task limit only after the mode has taken effect. Users manage the list manually; no migration-tool changes or automatic list maintenance are required.
+
+Add a table only after **all** its replication transactions are **VISIBLE**, data validation is complete, and no queued, retrying, or future replication remains. Once the table is handed over to target writes or Compaction, do not start replication on it again; drop and recreate the target table if another migration is required. Removing its ID does not restore replication eligibility. This is an operational contract: the allowlist does not implement a replication/Compaction transaction fence or a permanent replication ban.
+
+Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit each live FE's configuration file for the change to take effect. SQL changes are forwarded to live FEs. To survive restarts and leader changes, persist both parameters with `WITH PERSISTENT` where supported, or through the deployment platform's configuration for containerized deployments. Ensure offline or newly added FEs receive the same settings before they can become leader.
 
 ### `lake_compaction_disable_ids`
 
@@ -512,7 +553,7 @@ This topic introduces the following types of FE configurations:
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: The Compaction Score threshold that triggers Compaction operations in a shared-data cluster. When the Compaction Score of a partition is greater than or equal to this value, the system performs Compaction on that partition.
+- Description: The Compaction Score threshold for automatic Compaction in a shared-data cluster. Automatic Compaction requires a partition score greater than `0` and greater than or equal to this threshold. Partitions with a score of `0` are skipped even when this parameter is set to `0`. Manual Compaction and other priority requests bypass these score checks.
 - Introduced in: v3.1.0
 
 ### `lake_compaction_score_upper_bound`
@@ -637,7 +678,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of worker threads that are used by the grpc server in the FE starmgr module.
+- Description: The maximum number of threads that run the gRPC server handlers in the FE starmgr module. The pool keeps one thread per CPU core and starts more threads only when all of its threads are busy. Extra threads exit after they are idle for 60 seconds. When this many threads are busy, new calls wait in a queue. Valid values: 1 or more. A value of 0 or less is rejected, both in `fe.conf` and by `ADMIN SET FRONTEND CONFIG`.
 - Introduced in: v4.0.0, v3.5.8
 
 ### `starmgr_grpc_timeout_seconds`
@@ -648,6 +689,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description:
 - Introduced in: -
+
+### `star_client_get_shard_info_batch_size`
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of tablets that the FE looks up in one StarMgr request when it resolves the Compute Nodes of many tablets at once in a shared-data cluster, for example when it plans a query or a load on a large table, or when AutoVacuum cleans up a partition or the FE deletes tablets. A larger lookup is split into consecutive requests of at most this many tablets. StarMgr holds a lock on its tablet metadata while it answers one request, which blocks StarMgr metadata changes and, on Follower FEs, the replay of StarMgr metadata. A request for all tablets of a large table can therefore stall them for seconds. A smaller value shortens each stall at the cost of more requests. Values less than `1` are treated as `1`.
+- Introduced in: v4.2.0
 
 ### `lake_scheduler_enable_colocate_group_sample`
 
@@ -748,7 +798,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Count
 - Is mutable: Yes
-- Description: Sets the upper bound on how many consecutive transaction versions may be grouped together when building a publish batch for lake (cloud‑native) tables. The value is passed to the transaction graph batching routine (see getReadyToPublishTxnListBatch) and works together with `lake_batch_publish_min_version_num` to determine the candidate range size for a TransactionStateBatch. Larger values can increase publish throughput by batching more commits, but increase the scope of an atomic publish (longer visibility latency and larger rollback surface) and may be limited at runtime when versions are not consecutive. Tune according to workload and visibility/latency requirements.
+- Description: Sets the upper bound on how many consecutive transaction versions may be grouped together when building a publish batch for lake (cloud‑native) tables. The value is passed to the transaction graph batching routine (see getReadyToPublishTxnListBatch) and caps the candidate range size for a TransactionStateBatch. Larger values can increase publish throughput by batching more commits, but increase the scope of an atomic publish (longer visibility latency and larger rollback surface) and may be limited at runtime when versions are not consecutive. Tune according to workload and visibility/latency requirements.
 - Introduced in: v3.2.0
 
 ### `lake_batch_publish_min_version_num`
@@ -757,7 +807,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Sets the minimum number of consecutive transaction versions required to form a publish batch for lake tables. DatabaseTransactionMgr.getReadyToPublishTxnListBatch passes this value to transactionGraph.getTxnsWithTxnDependencyBatch together with `lake_batch_publish_max_version_num` to select dependent transactions. A value of `1` allows single-transaction publishes (no batching). Values `>1` require at least that many consecutively-versioned, single-table, non-replication transactions to be available; batching is aborted if versions are non-consecutive, a replication transaction appears, or a schema change consumes a version. Increasing this value can improve publish throughput by grouping commits but may delay publishing while waiting for enough consecutive transactions.
+- Description: Deprecated. This parameter no longer takes effect. It is kept only so that an existing setting in **fe.conf** or an `ADMIN SET FRONTEND CONFIG` statement on it does not fail. In shared-data mode, batch publish starts a batch in each round from every committed transaction that no longer waits for another transaction, and publishes the batch whatever its size, with at most `lake_batch_publish_max_version_num` transactions in a batch. Previously, this parameter set the minimum number of transactions in a batch, and a batch below the minimum was not published in that round. A batch that could never reach the minimum, for example the last loads into a table that receives no more loads, or loads queued behind a transaction that writes multiple tables, was skipped in every round: its committed transactions never became visible, and later loads into the same tables waited behind them.
 - Introduced in: v3.2.0
 
 ### `lake_publish_version_retry_interval_ms`
@@ -780,12 +830,21 @@ This topic introduces the following types of FE configurations:
 
 ### `lake_enable_batch_publish_multi_table`
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to allow batch publish to group consecutive multi-table transactions into one publish operation. This benefits workloads that commit small atomic transactions spanning the same group of tables at a high rate (for example, CDC pipelines fanning out to multiple tables), where per-transaction publishing serializes on the shared table dependency chain and inflates the commit-to-visible latency. Effective only when `lake_enable_batch_publish_version` is `true`. Enable this parameter only after all FE nodes are upgraded to a version that supports it: an FE follower running an older version that replays a multi-table transaction batch applies the visible log of the first table only.
+- Description: Whether to allow batch publish to group consecutive multi-table transactions into one publish operation. This benefits workloads that commit small atomic transactions spanning the same group of tables at a high rate (for example, CDC pipelines fanning out to multiple tables), where per-transaction publishing serializes on the shared table dependency chain and inflates the commit-to-visible latency. Effective only when `lake_enable_batch_publish_version` is `true`. From v26.3 onwards, the default value is changed from `false` to `true`. FE nodes running a version earlier than v4.1.5 do not support this feature: when such an FE replays a multi-table transaction batch, it applies the visible log of the first table only. Therefore, when you upgrade the cluster from such a version, set this parameter to `false` in **fe.conf** of each upgraded FE node until all FE nodes are upgraded, because a Leader FE failover during the upgrade can make an upgraded FE node the Leader while older FE nodes are still running. When you downgrade the cluster to such a version, set this parameter to `false`, wait until all transactions committed before the change have become visible, and then create the metadata snapshot.
 - Introduced in: v4.1.5
+
+### `lake_enable_batch_publish_retry_freeze`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to retry a batch publish of a shared-data table that did not finish with only the transactions of that attempt, including a batch of one transaction, so that the retry does not take in the transactions committed since. Without it, the retry batch is rebuilt from scratch and takes in those transactions, so the new version of every partition changes and the work the earlier attempt finished at the old version cannot be reused. Set it to `false` to rebuild retry batches as before, from the next publish round. Effective only when `lake_enable_batch_publish_version` is `true`.
+- Introduced in: v26.2
 
 ### `lake_enable_tablet_creation_optimization`
 
@@ -793,7 +852,7 @@ This topic introduces the following types of FE configurations:
 - Type: boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When enabled, StarRocks optimizes tablet creation for cloud-native tables and materialized views in shared-data mode by creating a single shared tablet metadata for all tablets under a physical partition instead of distinct metadata per tablet. This reduces the number of tablet creation tasks and metadata/files produced during table creation, rollup, and schema-change jobs. The optimization is applied only for cloud-native tables/materialized views and is combined with `file_bundling` (the latter reuses the same optimization logic). Note: schema-change and rollup jobs explicitly disable the optimization for tables using `file_bundling` to avoid overwriting files with identical names. Enable cautiously — it changes the granularity of created tablet metadata and can affect how replica creation and file naming behave.
+- Description: Deprecated. This parameter no longer takes effect. It is kept only so that an existing setting in **fe.conf** or an `ADMIN SET FRONTEND CONFIG` statement on it does not fail. In shared-data mode, the table property `file_bundling` alone decides how a cloud-native table or materialized view writes the initial tablet metadata of a new partition: with `file_bundling` enabled, all tablets under a physical partition share a single tablet metadata (except in a table that uses range distribution, whose tablets each carry their own key range); otherwise, each tablet gets its own. Rollup and schema-change jobs always write the metadata per tablet. If the table property `light_weight_tablet_creation` is enabled, no initial tablet metadata is written at creation time in either case. Previously, enabling this parameter also gave the shared tablet metadata to tables without `file_bundling`, where a rollup or schema-change job could overwrite the tablet metadata of the existing index in the same partition. Partitions created while this parameter was enabled remain readable.
 - Introduced in: v3.3.1, v3.4.0, v3.5.0
 
 ### `lake_create_tablet_max_retries`
@@ -878,6 +937,51 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of pending commit operations per Iceberg table. When using the commit queue (`enable_iceberg_commit_queue=true`), this limits the number of commit operations that can be queued for a single table. When the limit is reached, additional commit operations will execute in the caller thread (blocking until capacity available). This configuration is read at FE startup and applies to newly created table executors. Requires FE restart to take effect. Increase this value if you expect many concurrent commits to the same table. If this value is too low, commits may block in the caller thread during high concurrency.
 - Introduced in: v4.1.0
 
+### `deltalake_checkpoint_meta_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one Delta Log Checkpoint file cache shared by all Delta Lake catalogs, so that its total stays within this bound however many catalogs there are. `0` (default) keeps a cache per catalog, bounded by the catalog property `deltalake_checkpoint_meta_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+### `deltalake_json_meta_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one Delta Log JSON file cache shared by all Delta Lake catalogs. `0` (default) keeps a cache per catalog, bounded by the catalog property `deltalake_json_meta_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+### `iceberg_data_file_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one data file Manifest cache shared by all Iceberg catalogs, so that its total stays within this bound however many catalogs there are. `0` (default) keeps a cache per catalog, bounded by the catalog property `iceberg_data_file_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+### `iceberg_delete_file_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one delete file Manifest cache shared by all Iceberg catalogs; the delete file indexes built from them get the same share in a cache of their own. `0` (default) keeps both caches per catalog, bounded by the catalog property `iceberg_delete_file_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+### `iceberg_partition_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one partition cache shared by all Iceberg catalogs. `0` (default) keeps a cache per catalog, bounded by the catalog property `iceberg_partition_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
 ### `iceberg_remove_orphan_files_min_retention_seconds`
 
 - Default: 86400
@@ -895,8 +999,6 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The threshold the system used to judge the tablet balance among workers in a shared-data cluster, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`. If the factor is greater than `lake_balance_tablets_threshold`, a tablet balance will be triggered. This item takes effect only when `lake_enable_balance_tablets_between_workers` is set to `true`.
 - Introduced in: v3.3.4
-
-<EditonSpecificFEItemSharedLakeOther />
 
 ## Other
 
@@ -944,6 +1046,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: How long a credential rejected by the security integration chain is remembered, so that a client retrying the same wrong password does not produce one LDAP bind per attempt - which is what drives Active Directory's `badPwdCount` toward locking the account out. The cache key includes a hash of the credential, so correcting the password takes effect immediately instead of after the TTL, and a failure caused by the directory being unreachable is never cached. Set to `0` to disable.
 - Introduced in: v4.2, v4.1.6
+
+### `authentication_group_case_insensitive`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a group name from a login matches a `GRANT ... TO EXTERNAL GROUP` entry or a `permitted_groups` entry that differs from it only in case. On by default because an LDAP `cn` is case-insensitive in the directory, so a GRANT written in another case than the directory returns must not silently have no effect. Set it to `false` when the identity system behind the groups distinguishes them by case, for example groups read from a JWT claim, so that `Admins` and `admins` stay two groups. Only the comparison is affected: the names are stored and shown exactly as they arrived, and handed to Apache Ranger unchanged.
+- Introduced in: v4.2
 
 ### `authentication_ldap_case_insensitive`
 
@@ -1214,6 +1325,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of low-cardinality dictionary-optimized columns listed in the `dict_col` field of each scan node in `EXPLAIN VERBOSE` output. When a scan node has more applied dictionary columns than this value, the list is truncated and followed by an ellipsis. Values less than or equal to `0` are treated as `0`, which truncates the list entirely. This item affects only the `EXPLAIN VERBOSE` output and does not change how dictionary optimization is applied to queries.
 - Introduced in: v4.2.0
 
+### `gtid_batch_window_ms`
+
+- Default: 5000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: How far ahead the FE reserves a batch of gtids when the next gtid would pass the current batch end. Values below `1` are treated as `1`. The window must also fit in the remaining 42-bit snowflake timestamp; a larger value makes gtid allocation fail instead of wrapping the reserved batch end. A larger valid value writes the metadata journal less often. The side effect is that unused reserved gtids are discarded on leader failover, so the timestamp bits of a gtid can jump forward by at most this window.
+- Introduced in: -
+
 ### `hive_meta_cache_refresh_interval_s`
 
 - Default: 60
@@ -1358,6 +1478,42 @@ This topic introduces the following types of FE configurations:
 - Description: The minimum number of idle connections in the JDBC connection pool for accessing JDBC catalogs.
 - Introduced in: -
 
+### `jwks_cache_ttl_seconds`
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The lifetime of the cached JWKS (JSON Web Key Set) per JWKS URL. Because HTTP Bearer performs a full authentication on every request, the JWK set is cached instead of being fetched from the IdP each time.
+- Introduced in: v4.2
+
+### `jwks_cache_refresh_ahead_seconds`
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How many seconds before the cached JWKS expires that StarRocks refreshes it in the background, to reduce cache misses. Must be smaller than `jwks_cache_ttl_seconds`.
+- Introduced in: v4.2
+
+### `jwks_cache_outage_ttl_seconds`
+
+- Default: 3600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: When the IdP is unreachable, the maximum time StarRocks keeps serving the stale (expired) JWKS so that already-issued tokens can still be verified.
+- Introduced in: v4.2
+
+### `jwks_cache_refresh_rate_limit_seconds`
+
+- Default: 30
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The lower bound on how often an unknown key ID (`kid`) may trigger a forced JWKS refresh, to guard against key-ID flooding.
+- Introduced in: v4.2
+
 ### `jwt_jwks_url`
 
 - Default: Empty string
@@ -1373,7 +1529,7 @@ This topic introduces the following types of FE configurations:
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks.
+- Description: The field in the JWT that identifies the subject. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks. To extract a value from a nested claim, specify an [RFC 6901 JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) (a path starting with `/`). Use `~1` to escape `/` and `~0` to escape `~` in key names.
 - Introduced in: v3.5.0
 
 ### `jwt_required_audience`
@@ -1484,13 +1640,22 @@ This topic introduces the following types of FE configurations:
 - Description: During materialized view refresh, if multiple partitions need to be created in bulk, the system divides them into batches of 64 partitions each. To reduce the risk of failures caused by frequent partition creation, a default interval (in milliseconds) is set between each batch to control the creation frequency.
 - Introduced in: v3.3
 
+### `mv_incremental_refresh_wait_visible_timeout_ms`
+
+- Default: 300000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: How long an incremental refresh of a materialized view waits, before it plans, for the committed transactions on the materialized view to become visible. If one is still not visible by then, the refresh fails without writing data, and the next refresh waits again.
+- Introduced in: -
+
 ### `mv_plan_cache_max_size`
 
 - Default: 1000
 - Type: Long
 - Unit:
 - Is mutable: Yes
-- Description: The maximum size of materialized view plan cache (which is used for materialized view rewrite). If there are many materialized views used for transparent query rewrite, you may increase this value.
+- Description: The maximum size of materialized view plan cache (which is used for materialized view rewrite). If there are many materialized views used for transparent query rewrite, you may increase this value. The value is read only once, when the cache is created at FE startup, so a value changed at runtime takes effect only after the FE restarts.
 - Introduced in: v3.2
 
 ### `mv_plan_cache_thread_pool_size`
@@ -1499,7 +1664,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The default thread pool size of materialized view plan cache (which is used for materialized view rewrite).
+- Description: Deprecated. From v3.5.14, v4.0.7, and v4.1 onwards, this parameter no longer takes effect. The size of the thread pool that loads the materialized view plan cache (which is used for materialized view rewrite) is fixed at the larger of 2 and three quarters of the number of CPU cores.
 - Introduced in: v3.2
 
 ### `mv_refresh_default_planner_optimize_timeout`
@@ -1519,6 +1684,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Mv refresh fails if there is filtered data in refreshing, true by default, otherwise return success by ignoring the filtered data.
 - Introduced in: -
+
+### `mv_refresh_force_partition_type`
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Forces materialized view refreshes of the specified partition types to refresh regardless of whether the base tables have changed. This is useful for materialized views on external tables, where data changes cannot be accurately detected. The value is a bitmap: `0` disables this behavior, `1` applies it to non-partitioned materialized views, `2` to range-partitioned materialized views, and `4` to list-partitioned materialized views. Add the values to combine types, for example, `7` applies to all three. It does not apply to a materialized view whose `refresh_mode` is `INCREMENTAL`.
+- Introduced in: v3.5.16, v4.0.9, v4.1
 
 ### `mv_refresh_try_lock_timeout_ms`
 
@@ -1571,7 +1745,7 @@ This topic introduces the following types of FE configurations:
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks.
+- Description: The field in the JWT that identifies the subject. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks. To extract a value from a nested claim, specify an [RFC 6901 JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) (a path starting with `/`). Use `~1` to escape `/` and `~0` to escape `~` in key names.
 - Introduced in: v3.5.0
 
 ### `oauth2_redirect_url`
@@ -1744,4 +1918,3 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Whether to prefer string type for fixed length char/varchar columns in materialized view creation.
 - Introduced in: v4.0.0
-

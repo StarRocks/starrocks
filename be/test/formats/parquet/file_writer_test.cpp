@@ -35,6 +35,8 @@
 #include "gutil/casts.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks::parquet {
 
@@ -147,35 +149,81 @@ protected:
     HdfsScannerContext _scanner_ctx;
 };
 
+// Helpers to build nested columns whose null rows still own data ("garbage" under null parents).
+static MutableColumnPtr make_null_column(const std::vector<uint8_t>& nulls) {
+    auto null_col = UInt8Column::create();
+    null_col->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
+    return null_col;
+}
+
+static MutableColumnPtr make_nullable_int_column(const std::vector<int32_t>& values,
+                                                 const std::vector<uint8_t>& nulls) {
+    auto data_col = Int32Column::create();
+    data_col->append_numbers(values.data(), sizeof(int32_t) * values.size());
+    return NullableColumn::create(std::move(data_col), make_null_column(nulls));
+}
+
+static MutableColumnPtr make_offsets_column(const std::vector<uint32_t>& offsets) {
+    auto offsets_col = UInt32Column::create();
+    offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
+    return offsets_col;
+}
+
+static MutableColumnPtr make_nullable_array_column(MutableColumnPtr elements, const std::vector<uint32_t>& offsets,
+                                                   const std::vector<uint8_t>& nulls) {
+    auto array_col = ArrayColumn::create(std::move(elements), make_offsets_column(offsets));
+    return NullableColumn::create(std::move(array_col), make_null_column(nulls));
+}
+
+static MutableColumnPtr make_nullable_map_column(MutableColumnPtr keys, MutableColumnPtr values,
+                                                 const std::vector<uint32_t>& offsets,
+                                                 const std::vector<uint8_t>& nulls) {
+    auto map_col = MapColumn::create(std::move(keys), std::move(values), make_offsets_column(offsets));
+    return NullableColumn::create(std::move(map_col), make_null_column(nulls));
+}
+
+static TypeDescriptor make_array_type(const TypeDescriptor& element) {
+    auto type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    type.children.push_back(element);
+    return type;
+}
+
+static TypeDescriptor make_map_type(const TypeDescriptor& key, const TypeDescriptor& value) {
+    auto type = TypeDescriptor::from_logical_type(TYPE_MAP);
+    type.children.push_back(key);
+    type.children.push_back(value);
+    return type;
+}
+
 TEST_F(FileWriterTest, TestWriteIntegralTypes) {
     std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_TINYINT),
-            TypeDescriptor::from_logical_type(TYPE_SMALLINT),
-            TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_BIGINT),
+            TYPE_TINYINT_DESC,
+            TYPE_SMALLINT_DESC,
+            TYPE_INT_DESC,
+            TYPE_BIGINT_DESC,
     };
 
     auto chunk = std::make_shared<Chunk>();
     {
-        auto col0 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_TINYINT), true);
+        auto col0 = ColumnHelper::create_column(TYPE_TINYINT_DESC, true);
         std::vector<int8_t> int8_nums{INT8_MIN, INT8_MAX, 0, 1};
         auto count = col0->append_numbers(int8_nums.data(), size(int8_nums) * sizeof(int8_t));
         ASSERT_EQ(4, count);
         chunk->append_column(std::move(col0), chunk->num_columns());
 
-        auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_SMALLINT), true);
+        auto col1 = ColumnHelper::create_column(TYPE_SMALLINT_DESC, true);
         std::vector<int16_t> int16_nums{INT16_MIN, INT16_MAX, 0, 1};
         count = col1->append_numbers(int16_nums.data(), size(int16_nums) * sizeof(int16_t));
         ASSERT_EQ(4, count);
         chunk->append_column(std::move(col1), chunk->num_columns());
 
-        auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+        auto col2 = ColumnHelper::create_column(TYPE_INT_DESC, true);
         std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
         count = col2->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
         chunk->append_column(std::move(col2), chunk->num_columns());
 
-        auto col3 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+        auto col3 = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
         std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col3->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
@@ -235,7 +283,7 @@ TEST_F(FileWriterTest, TestWriteDecimal) {
 }
 
 TEST_F(FileWriterTest, TestWriteBoolean) {
-    auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
+    auto type_bool = TYPE_BOOLEAN_DESC;
     std::vector<TypeDescriptor> type_descs{type_bool};
 
     auto chunk = std::make_shared<Chunk>();
@@ -263,7 +311,7 @@ TEST_F(FileWriterTest, TestWriteBoolean) {
 }
 
 TEST_F(FileWriterTest, TestWriteFloat) {
-    auto type_float = TypeDescriptor::from_logical_type(TYPE_FLOAT);
+    auto type_float = TYPE_FLOAT_DESC;
     std::vector<TypeDescriptor> type_descs{type_float};
 
     auto chunk = std::make_shared<Chunk>();
@@ -292,7 +340,7 @@ TEST_F(FileWriterTest, TestWriteFloat) {
 }
 
 TEST_F(FileWriterTest, TestWriteDouble) {
-    auto type_float = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    auto type_float = TYPE_DOUBLE_DESC;
     std::vector<TypeDescriptor> type_descs{type_float};
 
     auto chunk = std::make_shared<Chunk>();
@@ -321,7 +369,7 @@ TEST_F(FileWriterTest, TestWriteDouble) {
 }
 
 TEST_F(FileWriterTest, TestWriteDate) {
-    auto type_date = TypeDescriptor::from_logical_type(TYPE_DATE);
+    auto type_date = TYPE_DATE_DESC;
     std::vector<TypeDescriptor> type_descs{type_date};
 
     auto chunk = std::make_shared<Chunk>();
@@ -359,7 +407,7 @@ TEST_F(FileWriterTest, TestWriteDate) {
 }
 
 TEST_F(FileWriterTest, TestWriteDatetime) {
-    auto type_datetime = TypeDescriptor::from_logical_type(TYPE_DATETIME);
+    auto type_datetime = TYPE_DATETIME_DESC;
     std::vector<TypeDescriptor> type_descs{type_datetime};
 
     auto chunk = std::make_shared<Chunk>();
@@ -398,17 +446,13 @@ TEST_F(FileWriterTest, TestWriteDatetime) {
 }
 
 TEST_F(FileWriterTest, TestWriteVarchar) {
-    auto type_varchar = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+    auto type_varchar = TYPE_VARCHAR_DESC;
     std::vector<TypeDescriptor> type_descs{type_varchar};
 
     auto chunk = std::make_shared<Chunk>();
     {
         // not-null column
-        auto data_column = BinaryColumn::create();
-        data_column->append("hello");
-        data_column->append("world");
-        data_column->append("starrocks");
-        data_column->append("lakehouse");
+        auto data_column = ColumnTestHelper::build_column<Slice>({"hello", "world", "starrocks", "lakehouse"});
 
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
@@ -432,7 +476,7 @@ TEST_F(FileWriterTest, TestWriteVarchar) {
 TEST_F(FileWriterTest, TestWriteArray) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int = TYPE_INT_DESC;
     auto type_int_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     type_int_array.children.push_back(type_int);
     type_descs.push_back(type_int_array);
@@ -476,7 +520,7 @@ TEST_F(FileWriterTest, TestWriteArray) {
 TEST_F(FileWriterTest, TestWriteArrayNullWithOffset) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int = TYPE_INT_DESC;
     auto type_int_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     type_int_array.children.push_back(type_int);
     type_descs.push_back(type_int_array);
@@ -507,24 +551,24 @@ TEST_F(FileWriterTest, TestWriteArrayNullWithOffset) {
         chunk->append_column(std::move(nullable_col), chunk->num_columns());
     }
 
-    // write chunk
+    // write chunk: the element under the null array has no slot in parquet and is skipped
     auto schema = _make_schema(type_descs);
     ASSERT_TRUE(schema != nullptr);
     auto st = _write_chunk(chunk, type_descs, schema);
-    ASSERT_ERROR(st);
+    ASSERT_OK(st);
 
-    // // read chunk and assert equality
-    // auto read_chunk = _read_chunk(type_descs);
-    // ASSERT_TRUE(read_chunk != nullptr);
-    // Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
+    // read chunk and assert equality
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
 TEST_F(FileWriterTest, TestWriteStruct) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
-    auto type_int_a = TypeDescriptor::from_logical_type(TYPE_SMALLINT);
-    auto type_int_b = TypeDescriptor::from_logical_type(TYPE_INT);
-    auto type_int_c = TypeDescriptor::from_logical_type(TYPE_BIGINT);
+    auto type_int_a = TYPE_SMALLINT_DESC;
+    auto type_int_b = TYPE_INT_DESC;
+    auto type_int_c = TYPE_BIGINT_DESC;
     auto type_int_struct = TypeDescriptor::from_logical_type(TYPE_STRUCT);
     type_int_struct.children = {type_int_a, type_int_b, type_int_c};
     type_int_struct.field_names = {"a", "b", "c"};
@@ -579,8 +623,8 @@ TEST_F(FileWriterTest, TestWriteStruct) {
 TEST_F(FileWriterTest, TestWriteMap) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
-    auto type_int_key = TypeDescriptor::from_logical_type(TYPE_INT);
-    auto type_int_value = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int_key = TYPE_INT_DESC;
+    auto type_int_value = TYPE_INT_DESC;
     auto type_int_map = TypeDescriptor::from_logical_type(TYPE_MAP);
     type_int_map.children.push_back(type_int_key);
     type_int_map.children.push_back(type_int_value);
@@ -630,10 +674,65 @@ TEST_F(FileWriterTest, TestWriteMap) {
     Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
+// A null map whose offsets still cover entries is rejected like a null array: writing its entries
+// would shift the key/value leaves onto the following rows.
+TEST_F(FileWriterTest, TestWriteMapNullWithOffsetSingleEntry) {
+    // type_descs
+    std::vector<TypeDescriptor> type_descs;
+    auto type_int_key = TYPE_INT_DESC;
+    auto type_int_value = TYPE_INT_DESC;
+    auto type_int_map = TypeDescriptor::from_logical_type(TYPE_MAP);
+    type_int_map.children.push_back(type_int_key);
+    type_int_map.children.push_back(type_int_value);
+    type_descs.push_back(type_int_map);
+
+    // NULL (but covering [5 -> 5]), [10 -> 10]
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto key_data_col = Int32Column::create();
+        std::vector<int32_t> key_nums{5, 10};
+        key_data_col->append_numbers(key_nums.data(), sizeof(int32_t) * key_nums.size());
+        auto key_null_col = UInt8Column::create();
+        std::vector<uint8_t> key_nulls{0, 0};
+        key_null_col->append_numbers(key_nulls.data(), sizeof(uint8_t) * key_nulls.size());
+        auto key_col = NullableColumn::create(std::move(key_data_col), std::move(key_null_col));
+
+        auto value_data_col = Int32Column::create();
+        std::vector<int32_t> value_nums{5, 10};
+        value_data_col->append_numbers(value_nums.data(), sizeof(int32_t) * value_nums.size());
+        auto value_null_col = UInt8Column::create();
+        std::vector<uint8_t> value_nulls{0, 0};
+        value_null_col->append_numbers(value_nulls.data(), sizeof(uint8_t) * value_nulls.size());
+        auto value_col = NullableColumn::create(std::move(value_data_col), std::move(value_null_col));
+
+        auto offsets_col = UInt32Column::create();
+        std::vector<uint32_t> offsets{0, 1, 2};
+        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
+        auto map_col = MapColumn::create(std::move(key_col), std::move(value_col), std::move(offsets_col));
+
+        std::vector<uint8_t> _nulls{1, 0};
+        auto null_col = UInt8Column::create();
+        null_col->append_numbers(_nulls.data(), sizeof(uint8_t) * _nulls.size());
+        auto nullable_col = NullableColumn::create(std::move(map_col), std::move(null_col));
+
+        chunk->append_column(std::move(nullable_col), chunk->num_columns());
+    }
+
+    // write chunk: the entry under the null map has no slot in parquet and is skipped
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema != nullptr);
+    ASSERT_OK(_write_chunk(chunk, type_descs, schema));
+
+    // read chunk and assert equality
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
 TEST_F(FileWriterTest, TestWriteNestedArray) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
-    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int = TYPE_INT_DESC;
     auto type_int_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     auto type_int_array_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     type_int_array.children.push_back(type_int);
@@ -687,18 +786,142 @@ TEST_F(FileWriterTest, TestWriteNestedArray) {
     Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
+TEST_F(FileWriterTest, TestWriteMapNullWithOffset) {
+    auto type_int = TYPE_INT_DESC;
+    std::vector<TypeDescriptor> type_descs{make_map_type(type_int, type_int)};
+
+    // NULL (owns {7 -> 70}), {1 -> 10}, NULL (owns {8 -> 80, NULL -> NULL}), {}, {2 -> 20}
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto keys = make_nullable_int_column({7, 1, 8, -1, 2}, {0, 0, 0, 1, 0});
+        auto values = make_nullable_int_column({70, 10, 80, -1, 20}, {0, 0, 0, 1, 0});
+        chunk->append_column(
+                make_nullable_map_column(std::move(keys), std::move(values), {0, 1, 2, 4, 4, 5}, {1, 0, 1, 0, 0}),
+                chunk->num_columns());
+    }
+
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema != nullptr);
+    ASSERT_OK(_write_chunk(chunk, type_descs, schema));
+
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
+TEST_F(FileWriterTest, TestWriteNestedArrayNullWithOffset) {
+    auto type_int = TYPE_INT_DESC;
+    std::vector<TypeDescriptor> type_descs{make_array_type(make_array_type(type_int))};
+
+    // [[1], NULL (owns [5, 6]), [2, 3]], NULL (owns [[7]]), [[4]]
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto ints = make_nullable_int_column({1, 5, 6, 2, 3, 7, 4}, {0, 0, 0, 0, 0, 0, 0});
+        auto inner = make_nullable_array_column(std::move(ints), {0, 1, 3, 5, 6, 7}, {0, 1, 0, 0, 0});
+        chunk->append_column(make_nullable_array_column(std::move(inner), {0, 3, 4, 5}, {0, 1, 0}),
+                             chunk->num_columns());
+    }
+
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema != nullptr);
+    ASSERT_OK(_write_chunk(chunk, type_descs, schema));
+
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
+TEST_F(FileWriterTest, TestWriteMapOfArrayNullWithOffset) {
+    auto type_int = TYPE_INT_DESC;
+    std::vector<TypeDescriptor> type_descs{make_map_type(type_int, make_array_type(type_int))};
+
+    // {1 -> [10, 11]}, NULL (owns {2 -> [20]}), {3 -> NULL (owns [30]), 4 -> []}
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto keys = make_nullable_int_column({1, 2, 3, 4}, {0, 0, 0, 0});
+        auto ints = make_nullable_int_column({10, 11, 20, 30}, {0, 0, 0, 0});
+        auto values = make_nullable_array_column(std::move(ints), {0, 2, 3, 4, 4}, {0, 0, 1, 0});
+        chunk->append_column(make_nullable_map_column(std::move(keys), std::move(values), {0, 1, 2, 4}, {0, 1, 0}),
+                             chunk->num_columns());
+    }
+
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema != nullptr);
+    ASSERT_OK(_write_chunk(chunk, type_descs, schema));
+
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
+TEST_F(FileWriterTest, TestWriteArrayOfStructOfArrayNullWithOffset) {
+    auto type_int = TYPE_INT_DESC;
+    auto type_struct = TypeDescriptor::from_logical_type(TYPE_STRUCT);
+    type_struct.children = {type_int, make_array_type(type_int)};
+    type_struct.field_names = {"a", "l"};
+    std::vector<TypeDescriptor> type_descs{make_array_type(type_struct)};
+
+    // [{a: 1, l: [1, 2]}, NULL (owns {a: 2, l: [3]})], NULL (owns [{a: 3, l: [4]}]), [{a: 4, l: NULL (owns [5])}]
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto a = make_nullable_int_column({1, 2, 3, 4}, {0, 0, 0, 0});
+        auto ints = make_nullable_int_column({1, 2, 3, 4, 5}, {0, 0, 0, 0, 0});
+        auto l = make_nullable_array_column(std::move(ints), {0, 2, 3, 4, 5}, {0, 0, 0, 1});
+        MutableColumns fields;
+        fields.emplace_back(std::move(a));
+        fields.emplace_back(std::move(l));
+        auto struct_col = StructColumn::create(std::move(fields), std::vector<std::string>{"a", "l"});
+        auto nullable_struct = NullableColumn::create(std::move(struct_col), make_null_column({0, 1, 0, 0}));
+        chunk->append_column(make_nullable_array_column(std::move(nullable_struct), {0, 2, 3, 4}, {0, 1, 0}),
+                             chunk->num_columns());
+    }
+
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema != nullptr);
+    ASSERT_OK(_write_chunk(chunk, type_descs, schema));
+
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
+TEST_F(FileWriterTest, TestWriteStructOfMapNullWithOffset) {
+    auto type_int = TYPE_INT_DESC;
+    auto type_struct = TypeDescriptor::from_logical_type(TYPE_STRUCT);
+    type_struct.children = {make_map_type(type_int, type_int)};
+    type_struct.field_names = {"m"};
+    std::vector<TypeDescriptor> type_descs{type_struct};
+
+    // {m: {1 -> 1}}, NULL (owns {m: {2 -> 2}}), {m: NULL (owns {3 -> 3})}, {m: {}}
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto keys = make_nullable_int_column({1, 2, 3}, {0, 0, 0});
+        auto values = make_nullable_int_column({1, 2, 3}, {0, 0, 0});
+        auto m = make_nullable_map_column(std::move(keys), std::move(values), {0, 1, 2, 3, 3}, {0, 0, 1, 0});
+        MutableColumns fields;
+        fields.emplace_back(std::move(m));
+        auto struct_col = StructColumn::create(std::move(fields), std::vector<std::string>{"m"});
+        chunk->append_column(NullableColumn::create(std::move(struct_col), make_null_column({0, 1, 0, 0})),
+                             chunk->num_columns());
+    }
+
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema != nullptr);
+    ASSERT_OK(_write_chunk(chunk, type_descs, schema));
+
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
 TEST_F(FileWriterTest, TestWriteVarbinary) {
-    auto type_varbinary = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    auto type_varbinary = TYPE_VARBINARY_DESC;
     std::vector<TypeDescriptor> type_descs{type_varbinary};
 
     auto chunk = std::make_shared<Chunk>();
     {
         // not-null column
-        auto data_column = BinaryColumn::create();
-        data_column->append("hello");
-        data_column->append("world");
-        data_column->append("starrocks");
-        data_column->append("lakehouse");
+        auto data_column = ColumnTestHelper::build_column<Slice>({"hello", "world", "starrocks", "lakehouse"});
 
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
@@ -722,8 +945,8 @@ TEST_F(FileWriterTest, TestWriteVarbinary) {
 TEST_F(FileWriterTest, TestFieldIdWithStruct) {
     std::vector<TypeDescriptor> type_descs;
     auto type_int_struct = TypeDescriptor::from_logical_type(TYPE_STRUCT);
-    auto type_int_a = TypeDescriptor::from_logical_type(TYPE_SMALLINT);
-    auto type_int_b = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int_a = TYPE_SMALLINT_DESC;
+    auto type_int_b = TYPE_INT_DESC;
 
     type_int_struct.children = {type_int_a, type_int_b};
     type_int_struct.field_names = {"a", "b"};
@@ -754,7 +977,7 @@ TEST_F(FileWriterTest, TestFieldIdWithStruct) {
 }
 
 TEST_F(FileWriterTest, TestWriteJson) {
-    auto type_json = TypeDescriptor::from_logical_type(TYPE_JSON);
+    auto type_json = TYPE_JSON_DESC;
     std::vector<TypeDescriptor> type_descs{type_json};
 
     // nullable column

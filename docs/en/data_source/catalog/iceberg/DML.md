@@ -32,7 +32,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 :::note
 
-`NULL` values are not allowed in partition columns. Therefore, you must make sure that no empty values are loaded into the partition columns of the Iceberg table.
+`NULL` values are allowed in partition columns. Rows whose partition value is `NULL` are written to the partition whose partition value is `NULL`.
 
 :::
 
@@ -44,7 +44,7 @@ Appends the data to the Iceberg table.
 
 #### OVERWRITE
 
-Overwrites the existing data of the Iceberg table.
+Overwrites the existing data of the Iceberg table. Only the partitions that receive new data are overwritten, and the other partitions are kept. This behavior does not depend on the `dynamic_overwrite` variable, which has no effect on Iceberg tables. For an unpartitioned table, all existing data is replaced. If the query returns no rows, no data is overwritten, even for an unpartitioned table.
 
 #### column_name
 
@@ -74,7 +74,7 @@ Query statement whose result will be loaded into the Iceberg table. It can be an
 
 #### PARTITION
 
-The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement.
+The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If the partition spec of the Iceberg table contains a non-identity transform (for example, `day()` or `bucket()`), the PARTITION clause is not supported.
 
 :::note
 You cannot specify the `column_name` property if you have specified the PARTITION clause.
@@ -132,12 +132,15 @@ You cannot specify the `column_name` property if you have specified the PARTITIO
 
 ## DELETE
 
-You can use the DELETE statement to delete data from Iceberg tables based on specified conditions. This feature is supported from v4.1 and later.
+You can use the DELETE statement to delete data from Iceberg tables based on specified conditions. This feature is supported from v4.1 and later. The `WITH` clause, the `USING` clause, and `FOR VERSION AS OF` are supported from v4.2 and later. The WHERE clause is required, and the PARTITION clause is not supported.
 
 ### Syntax
 
 ```SQL
-DELETE FROM <table_name> WHERE <condition>
+[WITH <with_query> [, ...]]
+DELETE FROM <table_name> [FOR VERSION AS OF <branch_name>]
+[USING <relation> [, ...]]
+WHERE <condition>
 ```
 
 ### Parameters
@@ -146,6 +149,12 @@ DELETE FROM <table_name> WHERE <condition>
   - Fully qualified name: `catalog_name.database_name.table_name`
   - Database-qualified name (after setting catalog): `database_name.table_name`
   - Table name only (after setting catalog and database): `table_name`
+
+- `branch_name`: The branch to delete rows from. The rows are read from the branch and the change is committed to it. It must be a branch, not a tag.
+
+- `relation`: The tables or sub-queries that `condition` joins the target table with. A target row that matches several of their rows is deleted once.
+
+- `with_query`: Common table expressions that `condition` can reference.
 
 - `condition`: The condition to identify which rows to delete. It can include:
   - Comparison operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `<>`
@@ -232,7 +241,8 @@ UPDATE is implemented using the Iceberg V2 **Merge-On-Read** model: each UPDATE 
 ### Syntax
 
 ```SQL
-UPDATE <table_name>
+[WITH <with_query> [, ...]]
+UPDATE <table_name> [FOR VERSION AS OF <branch_name>]
 SET <column_name> = <expression> [, <column_name> = <expression> ...]
 WHERE <condition>
 ```
@@ -246,15 +256,19 @@ WHERE <condition>
 
 - `column_name = expression`: The target column and the new value. The expression may reference other columns in the same row and any supported scalar functions.
 
+- `branch_name`: The branch to update. The rows are read from the branch and the change is committed to it. It must be a branch, not a tag.
+
+- `with_query`: Common table expressions that `condition` can reference.
+
 - `condition`: The predicate that identifies which rows to update. The supported operators match those of `DELETE` (comparison, logical, `IN`/`NOT IN`, `BETWEEN`, `LIKE`, `IS NULL`/`IS NOT NULL`, and `IN`/`EXISTS` sub-queries).
 
 ### Usage notes
 
-- Only Iceberg tables with **format version 2** are supported. UPDATE on V1 and V3 tables is rejected the query analysis phase.
+- Only Iceberg tables with **format version 2** are supported. UPDATE on V1, V3, and V4 tables is rejected the query analysis phase.
 - A `WHERE` clause is **required** to prevent accidental full-table updates.
 - Partition columns cannot be updated. Use `INSERT OVERWRITE` if you need to rewrite partition columns.
 - The hidden metadata columns `_file` and `_pos` cannot be assigned in `SET`.
-- `WITH` (CTE) clauses and `FROM` clauses are not allowed in UPDATE on Iceberg tables.
+- `FROM` clauses are not allowed in UPDATE on Iceberg tables.
 - `DEFAULT` values are not supported, because Iceberg V2 has no column-default semantics (initial-default / write-default are V3 features).
 - Only Parquet-formatted Iceberg tables are supported, matching the existing Iceberg sink.
 - Concurrent UPDATEs use **serializable isolation**: at commit time the system re-checks the data files against the read snapshot, and a conflicting concurrent write causes the UPDATE to fail rather than silently overwriting.
@@ -338,7 +352,7 @@ MERGE INTO reuses the same Iceberg V2 **Merge-On-Read** commit path as UPDATE: m
 ### Syntax
 
 ```SQL
-MERGE INTO <target_table> [ [AS] <target_alias> ]
+MERGE INTO <target_table> [FOR VERSION AS OF <branch_name>] [ [AS] <target_alias> ]
 USING <source_relation> [ [AS] <source_alias> ]
 ON <merge_condition>
 [ WHEN MATCHED [ AND <condition> ] THEN { UPDATE SET <column_name> = <expression> [, ...] | DELETE } ]
@@ -354,6 +368,8 @@ ON <merge_condition>
   - Database-qualified name (after setting catalog): `database_name.table_name`
   - Table name only (after setting catalog and database): `table_name`
 
+- `branch_name`: The branch to merge into. The target rows are read from the branch and the change is committed to it. It must be a branch, not a tag.
+
 - `source_relation`: The data source that drives the merge. It can be a table, a view, or a parenthesized sub-query. Give it an alias when the `ON` condition or the `WHEN` clauses reference its columns.
 
 - `merge_condition`: The `ON` predicate that decides whether a target row and a source row match. It typically joins the target and source on a key column.
@@ -364,7 +380,7 @@ ON <merge_condition>
 
 ### Usage notes
 
-- Only Iceberg tables with **format version 2** are supported. MERGE INTO on V1 and V3 tables, or on non-Iceberg tables (for example, native OLAP tables), is rejected during query analysis.
+- Only Iceberg tables with **format version 2** are supported. MERGE INTO on V1, V3, and V4 tables, or on non-Iceberg tables (for example, native OLAP tables), is rejected during query analysis.
 - At least one `WHEN` clause is required.
 - Each target row must be matched by **at most one** source row. If a target row matches more than one source row, the statement fails at runtime rather than applying an ambiguous change. Deduplicate or aggregate the source in advance when necessary.
 - Partition columns cannot be updated in a `WHEN MATCHED ... THEN UPDATE` clause.
@@ -456,7 +472,7 @@ A MERGE INTO statement that writes to the Iceberg table emits the following FE-s
 
 ## TRUNCATE
 
-You can use the TRUNCATE TABLE statement to quickly delete all data from Iceberg tables.
+You can use the TRUNCATE TABLE statement to quickly delete all data from Iceberg tables. Truncating specific partitions (`TRUNCATE TABLE ... PARTITION`) is not supported for Iceberg tables.
 
 ### Syntax
 

@@ -35,6 +35,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "formats/scan_context.h"
+#include "formats/utils.h"
 #include "fs/fs.h"
 #include "runtime/descriptors.h"
 #include "storage_primitive/column_predicate_factory.h"
@@ -60,6 +61,7 @@ struct HdfsScannerProfile {
     RuntimeProfile::Counter* parquet_lazy_full_trigger_count_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_size = nullptr;
+    RuntimeProfile::Counter* scan_ranges_pruned_by_file_stats_counter = nullptr;
 
     RuntimeProfile::Counter* reader_init_timer = nullptr;
     RuntimeProfile::Counter* open_file_timer = nullptr;
@@ -76,6 +78,7 @@ struct HdfsScannerProfile {
     RuntimeProfile::Counter* datacache_skip_write_bytes = nullptr;
     RuntimeProfile::Counter* datacache_skip_read_counter = nullptr;
     RuntimeProfile::Counter* datacache_skip_read_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_error_counter = nullptr;
     RuntimeProfile::Counter* datacache_read_peer_counter = nullptr;
     RuntimeProfile::Counter* datacache_read_peer_bytes = nullptr;
     RuntimeProfile::Counter* datacache_read_peer_timer = nullptr;
@@ -220,8 +223,8 @@ struct HdfsScannerContext {
     } predicates;
 
     // ===== methods =====
-    std::string formatted_name(const std::string& name) const {
-        return format_scan_context.options.case_sensitive ? name : boost::algorithm::to_lower_copy(name);
+    std::string formatted_name(std::string_view name) const {
+        return Utils::format_name(name, format_scan_context.options.case_sensitive);
     }
 };
 

@@ -26,6 +26,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
+#include "column/datum_tuple.h"
 #include "column/global_dict/types.h"
 #include "column/global_dict/types_fwd_decl.h"
 #include "common/config_exec_fwd.h"
@@ -39,6 +40,7 @@
 #include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/delta_column_group.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/rowset/column_iterator.h"
@@ -120,6 +122,10 @@ public:
     }
     TabletSchemaBuilder& set_length(size_t length) {
         _column_pbs.back().set_length(length);
+        return *this;
+    }
+    TabletSchemaBuilder& set_bitmap_index() {
+        _column_pbs.back().set_has_bitmap_index(true);
         return *this;
     }
 
@@ -1284,6 +1290,89 @@ TEST_F(SegmentIteratorTest, testCharToVarcharZoneMapFilter) {
     }
 }
 
+// (c1 = 1 AND (c2 IN (1, 2))) OR (c1 = 2 AND c2 = 3), with bitmap indexes on c1 and c2. The inner OR fails the
+// bitmap selectivity gate (2 of 10 c2 values) while both AND chains pass it, so the outer OR is used and the second
+// chain is fully erased. The residual must still keep that chain, or row 3001 (c1 = 2, c2 = 3) is lost.
+TEST_F(SegmentIteratorTest, BitmapIndexKeepsPartiallyErasedOr) {
+    using namespace starrocks::test;
+
+    std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaBuilder()
+                                                          .create(0, false, TYPE_INT, true)
+                                                          .create(1, false, TYPE_INT, false)
+                                                          .set_bitmap_index()
+                                                          .create(2, false, TYPE_INT, false)
+                                                          .set_bitmap_index()
+                                                          .build();
+
+    auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), 4096);
+    auto append_row = [&](int32_t id, int32_t c1, int32_t c2) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(id));
+        chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(c1));
+        chunk->get_column_by_index(2)->as_mutable_ptr()->append_datum(Datum(c2));
+    };
+    for (int32_t i = 0; i < 3000; i++) {
+        append_row(i, 1000 + i, i % 10);
+    }
+    append_row(3000, 1, 1);
+    append_row(3001, 2, 3);
+    append_row(3002, 1, 3);
+    append_row(3003, 2, 1);
+
+    auto segment =
+            write_and_open_segment(_fs, kSegmentDir + "/bitmap_index_partially_erased_or", tablet_schema, *chunk, 1024);
+
+    auto vec_schema = VecSchemaBuilder().add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT).add(2, "c2", TYPE_INT).build();
+
+    const auto type_int = get_type_info(TYPE_INT);
+    std::unique_ptr<ColumnPredicate> c1_eq_1(new_column_eq_predicate(type_int, 1, "1"));
+    std::unique_ptr<ColumnPredicate> c2_in_1_2(new_column_in_predicate(type_int, 2, {"1", "2"}));
+    std::unique_ptr<ColumnPredicate> c1_eq_2(new_column_eq_predicate(type_int, 1, "2"));
+    std::unique_ptr<ColumnPredicate> c2_eq_3(new_column_eq_predicate(type_int, 2, "3"));
+
+    PredicateOrNode inner_or;
+    inner_or.add_child(PredicateColumnNode{c2_in_1_2.get()});
+    PredicateAndNode chain1;
+    chain1.add_child(PredicateColumnNode{c1_eq_1.get()});
+    chain1.add_child(std::move(inner_or));
+    PredicateAndNode chain2;
+    chain2.add_child(PredicateColumnNode{c1_eq_2.get()});
+    chain2.add_child(PredicateColumnNode{c2_eq_3.get()});
+    PredicateOrNode outer_or;
+    outer_or.add_child(std::move(chain1));
+    outer_or.add_child(std::move(chain2));
+    PredicateAndNode pred_root;
+    pred_root.add_child(std::move(outer_or));
+
+    SegmentReadOptions seg_opts;
+    OlapReaderStatistics stats;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
+
+    std::vector<int32_t> ids;
+    auto res_chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), config::vector_chunk_size);
+    while (true) {
+        res_chunk->reset();
+        auto st = chunk_iter->get_next(res_chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        auto id_col = ColumnHelper::cast_to_raw<TYPE_INT>(res_chunk->get_column_by_index(0));
+        for (size_t i = 0; i < res_chunk->num_rows(); i++) {
+            ids.push_back(id_col->get_data()[i]);
+        }
+    }
+
+    ASSERT_EQ(3001, stats.rows_bitmap_index_filtered);
+    ASSERT_EQ((std::vector<int32_t>{3000, 3001}), ids);
+}
+
 // Tests for dict_lookup_batch optimization: large IN predicate on dict-encoded VARCHAR column.
 // The hash-based batch lookup (kDictLookupHashThreshold=100) is exercised when either
 // dict_size >= 100 or the IN list has >= 100 values.
@@ -1933,24 +2022,17 @@ TEST_F(SegmentIteratorTest, PreparedRowRangeAndSeekHelpers) {
     ASSERT_OK(fs->create_dir_recursive(dir));
     DeferOp cleanup([&] { (void)fs->delete_dir_recursive(dir); });
 
-    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(file_name));
-    SegmentWriterOptions opts;
-    opts.num_rows_per_block = 10;
     TabletSchemaBuilder builder;
     std::shared_ptr<TabletSchema> tablet_schema =
             builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).build();
-    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
-
-    const int32_t chunk_size = config::vector_chunk_size;
     const size_t num_rows = 100;
-    auto key_provider = [](int32_t i) { return i; };
-    auto val_provider = [](int32_t i) { return i * 2; };
-    TabletDataBuilder segment_data_builder(writer, tablet_schema, chunk_size, num_rows);
-    ASSERT_OK(segment_data_builder.append(0, key_provider));
-    ASSERT_OK(segment_data_builder.append(1, val_provider));
-    ASSERT_OK(segment_data_builder.finalize_footer());
-
-    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, FileInfo{file_name}, 0, tablet_schema));
+    auto written_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk = ChunkFactory::new_chunk(written_schema, num_rows);
+    for (int32_t row = 0; row < num_rows; ++row) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(row));
+        chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(row * 2));
+    }
+    auto segment = write_and_open_segment(fs, file_name, tablet_schema, *chunk, 10);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     OlapReaderStatistics stats;
@@ -1963,7 +2045,7 @@ TEST_F(SegmentIteratorTest, PreparedRowRangeAndSeekHelpers) {
         SegmentReadOptions o;
         o.fs = fs;
         o.stats = &stats;
-        o.chunk_size = chunk_size;
+        o.chunk_size = config::vector_chunk_size;
         o.tablet_schema = tablet_schema;
         ASSIGN_OR_ABORT(auto pruned, get_prepared_pruned_row_ranges(segment, vec_schema, o));
         ASSERT_EQ(num_rows, pruned.span_size());
@@ -1989,6 +2071,7 @@ TEST_F(SegmentIteratorTest, PreparedRowRangeAndSeekHelpers) {
     Schema key_schema({key_field});
     std::vector<SeekRange> seek_ranges;
     seek_ranges.emplace_back(SeekTuple(key_schema, {Datum(10)}), SeekTuple(key_schema, {Datum(50)}));
+    seek_ranges.back().set_inclusive_lower(true);
 
     // The block-aligned window is a non-empty subset of the segment (keys 10..49 live in blocks of 10 rows).
     ASSIGN_OR_ABORT(auto block_range, block_aligned_rowid_range_from_seek_ranges(segment.get(), seek_ranges));
@@ -1998,6 +2081,295 @@ TEST_F(SegmentIteratorTest, PreparedRowRangeAndSeekHelpers) {
     // One resolved rowid range per input SeekRange.
     ASSIGN_OR_ABORT(auto rowid_ranges, segment_seek_ranges_to_rowid_ranges(segment, seek_ranges, io_opts));
     ASSERT_EQ(1u, rowid_ranges.size());
+    ASSERT_TRUE(rowid_ranges.front().has_value());
+    EXPECT_EQ(Range<>(10, 50), *rowid_ranges.front());
+}
+
+// A stream-provided IO snapshot must reach the footer and short-key index statistics exactly once,
+// including both the local and remote parts. MemoryFileSystem itself does not report an IO breakdown.
+TEST_F(SegmentIteratorTest, FooterAndIndexReadsReportStreamStatsOnce) {
+    using namespace starrocks::test;
+
+    class ReadStatsStream : public io::SeekableInputStreamWrapper {
+    public:
+        explicit ReadStatsStream(std::unique_ptr<RandomAccessFile> file)
+                : io::SeekableInputStreamWrapper(std::move(file)) {}
+
+        io::IoStatsSnapshot get_io_stats_snapshot() const override {
+            return {.bytes_read_local_disk = 128,
+                    .bytes_read_remote = 256,
+                    .io_count_local_disk = 2,
+                    .io_count_remote = 3,
+                    .io_ns_read_local_disk = 1000,
+                    .io_ns_read_remote = 2000};
+        }
+    };
+    class ReadStatsFileSystem : public MemoryFileSystem {
+    public:
+        StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                           const std::string& path) override {
+            ASSIGN_OR_RETURN(auto file, MemoryFileSystem::new_random_access_file(opts, path));
+            return std::make_unique<RandomAccessFile>(std::make_shared<ReadStatsStream>(std::move(file)), path);
+        }
+    };
+
+    auto fs = std::make_shared<ReadStatsFileSystem>();
+    const std::string file_name = "/prepare_read_stats.dat";
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(file_name));
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).build();
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, SegmentWriterOptions{});
+    TabletDataBuilder data(writer, tablet_schema, config::vector_chunk_size, 100);
+    ASSERT_OK(data.append(0, [](int32_t i) { return i; }));
+    ASSERT_OK(data.append(1, [](int32_t i) { return i * 2; }));
+    ASSERT_OK(data.finalize_footer());
+    auto segment = std::make_shared<Segment>(fs, FileInfo{file_name}, 0, tablet_schema, nullptr);
+
+    auto expect_stream_stats = [](const OlapReaderStatistics& stats) {
+        EXPECT_EQ(128, stats.compressed_bytes_read_local_disk);
+        EXPECT_EQ(256, stats.compressed_bytes_read_remote);
+        EXPECT_EQ(384, stats.compressed_bytes_read);
+        EXPECT_EQ(2, stats.io_count_local_disk);
+        EXPECT_EQ(3, stats.io_count_remote);
+        EXPECT_EQ(5, stats.io_count);
+        EXPECT_EQ(1000, stats.io_ns_read_local_disk);
+        EXPECT_EQ(2000, stats.io_ns_remote);
+        EXPECT_GT(stats.io_ns, 0);
+    };
+    LakeIOOptions io_opts;
+    io_opts.use_page_cache = false;
+    OlapReaderStatistics footer_stats;
+    ASSERT_OK(segment->open(nullptr, nullptr, io_opts, &footer_stats));
+    EXPECT_EQ(1, footer_stats.segments_opened);
+    EXPECT_EQ(100, segment->num_rows());
+    expect_stream_stats(footer_stats);
+    OlapReaderStatistics index_stats;
+    ASSERT_OK(segment->load_index(io_opts, &index_stats));
+    EXPECT_EQ(0, index_stats.segments_opened);
+    EXPECT_EQ(1, index_stats.io_count_request);
+    expect_stream_stats(index_stats);
+
+    OlapReaderStatistics repeated_stats;
+    ASSERT_OK(segment->open(nullptr, nullptr, io_opts, &repeated_stats));
+    ASSERT_OK(segment->load_index(io_opts, &repeated_stats));
+    EXPECT_EQ(0, repeated_stats.segments_opened);
+    EXPECT_EQ(0, repeated_stats.io_count);
+    EXPECT_EQ(0, repeated_stats.compressed_bytes_read);
+    EXPECT_EQ(0, repeated_stats.io_ns);
+    EXPECT_EQ(0, repeated_stats.io_count_request);
+
+    // Corrupt real footer/index bytes after writing a valid segment. Reads before the parse error
+    // still reach the caller; an unsuccessful footer open must not count as an opened segment.
+    ASSIGN_OR_ABORT(auto original_file, fs->new_random_access_file(RandomAccessFileOptions{}, file_name));
+    ASSIGN_OR_ABORT(auto original_bytes, original_file->read_all());
+    SegmentFooterPB original_footer;
+    ASSERT_TRUE(Segment::parse_segment_footer(original_file.get(), &original_footer, nullptr, nullptr).ok());
+    auto write_corrupt_file = [&](const std::string& path, size_t offset) {
+        std::string bytes = original_bytes;
+        ASSERT_LT(offset, bytes.size());
+        bytes[offset] ^= 1;
+        ASSIGN_OR_ABORT(auto file, fs->new_writable_file(path));
+        ASSERT_OK(file->append(Slice(bytes)));
+        ASSERT_OK(file->close());
+    };
+    const std::string bad_footer_path = "/bad_prepare_footer.dat";
+    ASSERT_NO_FATAL_FAILURE(write_corrupt_file(bad_footer_path, original_bytes.size() - 1));
+    auto bad_footer = std::make_shared<Segment>(fs, FileInfo{bad_footer_path}, 0, tablet_schema, nullptr);
+    OlapReaderStatistics failed_footer_stats;
+    EXPECT_TRUE(bad_footer->open(nullptr, nullptr, io_opts, &failed_footer_stats).is_corruption());
+    EXPECT_EQ(0, failed_footer_stats.segments_opened);
+    expect_stream_stats(failed_footer_stats);
+
+    const std::string bad_index_path = "/bad_prepare_index.dat";
+    ASSERT_NO_FATAL_FAILURE(write_corrupt_file(bad_index_path, original_footer.short_key_index_page().offset()));
+    auto bad_index = std::make_shared<Segment>(fs, FileInfo{bad_index_path}, 0, tablet_schema, nullptr);
+    ASSERT_OK(bad_index->open(nullptr, nullptr, io_opts));
+    OlapReaderStatistics failed_index_stats;
+    EXPECT_TRUE(bad_index->load_index(io_opts, &failed_index_stats).is_corruption());
+    EXPECT_EQ(1, failed_index_stats.io_count_request);
+    expect_stream_stats(failed_index_stats);
+}
+
+// A `.cols` segment is opened by every scan and never cached, so its footer read has to follow the
+// caller's cache options and report to the caller's statistics. Opening it with default options made
+// the read skip the local data cache fill and left it out of the scan's IO statistics.
+TEST_F(SegmentIteratorTest, DcgSegmentOpenFollowsCallerIOOptionsAndStats) {
+    using namespace starrocks::test;
+
+    class ReadStatsStream : public io::SeekableInputStreamWrapper {
+    public:
+        explicit ReadStatsStream(std::unique_ptr<RandomAccessFile> file)
+                : io::SeekableInputStreamWrapper(std::move(file)) {}
+
+        io::IoStatsSnapshot get_io_stats_snapshot() const override {
+            return {.bytes_read_remote = 256, .io_count_remote = 3, .io_ns_read_remote = 2000};
+        }
+    };
+    class RecordingFileSystem : public MemoryFileSystem {
+    public:
+        StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                           const std::string& path) override {
+            skip_fill_by_path[path].push_back(opts.skip_fill_local_cache);
+            ASSIGN_OR_RETURN(auto file, MemoryFileSystem::new_random_access_file(opts, path));
+            return std::make_unique<RandomAccessFile>(std::make_shared<ReadStatsStream>(std::move(file)), path);
+        }
+
+        // One entry per open of the path, in order.
+        std::unordered_map<std::string, std::vector<bool>> skip_fill_by_path;
+    };
+    // Serves one delta column group that moves column uid 2 into `update.cols`.
+    class OneDcgLoader : public DeltaColumnGroupLoader {
+    public:
+        Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs) override {
+            return _load(pdcgs);
+        }
+        Status load(int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id, int64_t version,
+                    DeltaColumnGroupList* pdcgs) override {
+            return _load(pdcgs);
+        }
+
+    private:
+        static Status _load(DeltaColumnGroupList* pdcgs) {
+            auto dcg = std::make_shared<DeltaColumnGroup>();
+            dcg->init(1, {{2}}, {"update.cols"});
+            pdcgs->push_back(std::move(dcg));
+            return Status::OK();
+        }
+    };
+
+    auto fs = std::make_shared<RecordingFileSystem>();
+    ASSERT_OK(fs->create_dir("/dcg"));
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).build();
+    // The second column holds i * |factor|, so a scan shows which file it read the column from.
+    auto write_segment = [&](const std::string& path, int32_t factor) {
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(path));
+        SegmentWriter writer(std::move(wfile), 0, tablet_schema, SegmentWriterOptions{});
+        TabletDataBuilder data(writer, tablet_schema, config::vector_chunk_size, 100);
+        ASSERT_OK(data.append(0, [](int32_t i) { return i; }));
+        ASSERT_OK(data.append(1, [factor](int32_t i) { return i * factor; }));
+        ASSERT_OK(data.finalize_footer());
+    };
+    const std::string segment_path = "/dcg/seg.dat";
+    const std::string cols_path = "/dcg/update.cols";
+    ASSERT_NO_FATAL_FAILURE(write_segment(segment_path, 2));
+    ASSERT_NO_FATAL_FAILURE(write_segment(cols_path, 3));
+
+    auto segment = std::make_shared<Segment>(fs, FileInfo{segment_path}, 0, tablet_schema, nullptr);
+    ASSERT_OK(segment->open(nullptr, nullptr, LakeIOOptions{}));
+    DeltaColumnGroup dcg;
+    dcg.init(1, {{2}}, {"update.cols"});
+
+    // The caller asks for the cache to be filled: the footer read must not skip the fill, and it is
+    // added to the caller's statistics.
+    LakeIOOptions fill_opts;
+    fill_opts.fill_data_cache = true;
+    OlapReaderStatistics stats;
+    ASSIGN_OR_ABORT(auto filled, segment->new_dcg_segment(dcg, 0, tablet_schema, fill_opts, &stats));
+    EXPECT_EQ(100, filled->num_rows());
+    ASSERT_EQ(1, fs->skip_fill_by_path[cols_path].size());
+    EXPECT_FALSE(fs->skip_fill_by_path[cols_path].back());
+    EXPECT_EQ(1, stats.segments_opened);
+    EXPECT_EQ(3, stats.io_count_remote);
+    EXPECT_EQ(3, stats.io_count);
+    EXPECT_EQ(256, stats.compressed_bytes_read_remote);
+    EXPECT_EQ(2000, stats.io_ns_remote);
+    EXPECT_GT(stats.io_ns, 0);
+
+    // A caller that does not want the cache filled keeps that behavior.
+    LakeIOOptions no_fill_opts;
+    no_fill_opts.fill_data_cache = false;
+    ASSIGN_OR_ABORT(auto not_filled, segment->new_dcg_segment(dcg, 0, tablet_schema, no_fill_opts));
+    EXPECT_EQ(100, not_filled->num_rows());
+    EXPECT_TRUE(fs->skip_fill_by_path[cols_path].back());
+
+    // The scan path: SegmentIterator has to hand its own cache options and statistics to the `.cols`
+    // open. It opens the file twice, once for the footer and once to read the column, and neither
+    // open may skip the cache fill.
+    fs->skip_fill_by_path.clear();
+    OlapReaderStatistics scan_stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = fs;
+    seg_opts.stats = &scan_stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.dcg_loader = std::make_shared<OneDcgLoader>();
+    seg_opts.lake_io_opts.fill_data_cache = true;
+    auto scan_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk_iter = new_segment_iterator(segment, scan_schema, seg_opts);
+    auto chunk = ChunkFactory::new_chunk(scan_schema, config::vector_chunk_size);
+    ASSERT_OK(chunk_iter->get_next(chunk.get()));
+    ASSERT_EQ(100, chunk->num_rows());
+    // The column came from the `.cols` file, not from the base segment.
+    EXPECT_EQ(3 * 7, chunk->get_column_by_index(1)->get(7).get_int32());
+    chunk_iter->close();
+
+    const auto& cols_opens = fs->skip_fill_by_path[cols_path];
+    ASSERT_EQ(2, cols_opens.size());
+    EXPECT_FALSE(cols_opens[0]);
+    EXPECT_FALSE(cols_opens[1]);
+    // The base segment was opened above without statistics, so the one segment counted here is the
+    // `.cols` segment the scan opened.
+    EXPECT_EQ(1, scan_stats.segments_opened);
+}
+
+// load_index and segment_seek_ranges_to_rowid_ranges report their reads to the statistics they are given:
+// the short key index page to the call that loads it, the key column pages to the range resolution.
+TEST_F(SegmentIteratorTest, IndexLoadAndSeekRangeResolutionReportTheirReads) {
+    using namespace starrocks::test;
+
+    // segment_seek_ranges_to_rowid_ranges derives its FileSystem from the segment path, so the segment
+    // has to live on a real (posix) path.
+    const std::string dir = "/tmp/sr_index_load_and_seek_reads";
+    const std::string file_name = dir + "/seg.dat";
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(file_name));
+    (void)fs->delete_dir_recursive(dir);
+    ASSERT_OK(fs->create_dir_recursive(dir));
+    DeferOp cleanup([&] { (void)fs->delete_dir_recursive(dir); });
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).build();
+    const size_t num_rows = 100;
+    auto write_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk = ChunkFactory::new_chunk(write_schema, num_rows);
+    for (int32_t i = 0; i < num_rows; ++i) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(i));
+        chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(i * 2));
+    }
+    // Write both columns together so each short-key index entry describes the same row.
+    auto segment = write_and_open_segment(fs, file_name, tablet_schema, *chunk, 10);
+    ASSERT_EQ(num_rows, segment->num_rows());
+
+    // Only the call that loads the index reads its page.
+    OlapReaderStatistics index_stats;
+    ASSERT_OK(segment->load_index(LakeIOOptions{}, &index_stats));
+    EXPECT_EQ(1, index_stats.total_pages_num);
+    EXPECT_EQ(1, index_stats.io_count_request);
+    EXPECT_GT(index_stats.compressed_bytes_read_request, 0);
+    EXPECT_GT(index_stats.io_ns, 0);
+    OlapReaderStatistics reload_stats;
+    ASSERT_OK(segment->load_index(LakeIOOptions{}, &reload_stats));
+    EXPECT_EQ(0, reload_stats.total_pages_num);
+    EXPECT_EQ(0, reload_stats.io_count_request);
+
+    Schema key_schema(std::vector<FieldPtr>{write_schema.field(0)});
+    std::vector<SeekRange> seek_ranges;
+    seek_ranges.emplace_back(SeekTuple(key_schema, {Datum(10)}), SeekTuple(key_schema, {Datum(50)}));
+    seek_ranges.back().set_inclusive_lower(true);
+
+    // The exact bounds are found by reading the key column.
+    OlapReaderStatistics seek_stats;
+    ASSIGN_OR_ABORT(auto rowid_ranges,
+                    segment_seek_ranges_to_rowid_ranges(segment, seek_ranges, LakeIOOptions{}, &seek_stats));
+    ASSERT_EQ(1u, rowid_ranges.size());
+    ASSERT_TRUE(rowid_ranges[0].has_value());
+    EXPECT_EQ(10, rowid_ranges[0]->begin());
+    EXPECT_EQ(50, rowid_ranges[0]->end());
+    EXPECT_GT(seek_stats.io_count_request, 0);
+    EXPECT_GT(seek_stats.compressed_bytes_read_request, 0);
+    EXPECT_GT(seek_stats.io_ns, 0);
 }
 
 // A primary-key tablet's range is expressed over its key columns. When the sort key is separate,
@@ -2104,6 +2476,296 @@ TEST_F(SegmentIteratorTest, tablet_range_still_narrows_without_primary_key) {
         total += out->num_rows();
     }
     ASSERT_LT(total, kNumRows);
+}
+
+namespace {
+
+class GroupedCountingStream : public io::SeekableInputStreamWrapper {
+public:
+    GroupedCountingStream(std::unique_ptr<RandomAccessFile> file, int64_t* bytes)
+            : SeekableInputStreamWrapper(std::move(file)), _bytes(bytes) {}
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        RETURN_IF_ERROR(SeekableInputStreamWrapper::read_at_fully(offset, out, count));
+        *_bytes += count;
+        return Status::OK();
+    }
+    StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override {
+        ASSIGN_OR_RETURN(auto n, SeekableInputStreamWrapper::read_at(offset, out, count));
+        *_bytes += n;
+        return n;
+    }
+
+private:
+    int64_t* _bytes;
+};
+
+class GroupedCountingFileSystem : public MemoryFileSystem {
+public:
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& path) override {
+        ASSIGN_OR_RETURN(auto file, MemoryFileSystem::new_random_access_file(opts, path));
+        auto stream = std::make_shared<GroupedCountingStream>(std::move(file), &bytes);
+        return std::make_unique<RandomAccessFile>(std::move(stream), path);
+    }
+    int64_t bytes = 0;
+};
+
+SeekRange grouped_test_range(const Schema& schema, int64_t lo, int64_t hi) {
+    Schema key_schema(std::vector<FieldPtr>{schema.field(0)});
+    SeekRange result(SeekTuple(key_schema, {Datum(lo)}), SeekTuple(key_schema, {Datum(hi)}));
+    result.set_inclusive_lower(true);
+    return result;
+}
+
+std::vector<int64_t> grouped_read_keys(const ChunkIteratorPtr& iterator) {
+    std::vector<int64_t> keys;
+    auto chunk = ChunkFactory::new_chunk(iterator->schema(), 128);
+    while (true) {
+        chunk->reset();
+        auto status = iterator->get_next(chunk.get());
+        if (status.is_end_of_file()) break;
+        CHECK_OK(status);
+        for (size_t i = 0; i < chunk->num_rows(); ++i) keys.push_back(chunk->get(i)[0].get_int64());
+    }
+    iterator->close();
+    return keys;
+}
+
+} // namespace
+
+TEST_F(SegmentIteratorTest, GroupedTaskIntersectsQueryUnionAndPhysicalRange) {
+    auto schema =
+            std::shared_ptr<TabletSchema>(test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).build());
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    auto chunk = ChunkFactory::new_chunk(read_schema, 20);
+    for (int64_t i = 0; i < 10; ++i) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(i));
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(i));
+    }
+    auto segment = test::write_and_open_segment(_fs, kSegmentDir + "/grouped", schema, *chunk, 2);
+    OlapReaderStatistics stats;
+    SegmentReadOptions opts;
+    opts.fs = _fs;
+    opts.stats = &stats;
+    opts.ranges = {grouped_test_range(read_schema, 0, 3), grouped_test_range(read_schema, 6, 10)};
+    opts.tablet_range = grouped_test_range(read_schema, 2, 8);
+    opts.task_range = grouped_test_range(read_schema, 1, 7);
+    ASSIGN_OR_ABORT(auto iter, segment->new_iterator(read_schema, opts));
+    EXPECT_EQ((std::vector<int64_t>{2, 2, 6, 6}), grouped_read_keys(iter));
+    opts.task_range = grouped_test_range(read_schema, 3, 6);
+    ASSIGN_OR_ABORT(iter, segment->new_iterator(read_schema, opts));
+    EXPECT_TRUE(grouped_read_keys(iter).empty());
+    opts.task_range.reset();
+    ASSIGN_OR_ABORT(iter, segment->new_iterator(read_schema, opts));
+    EXPECT_EQ((std::vector<int64_t>{2, 2, 6, 6, 7, 7}), grouped_read_keys(iter));
+}
+
+TEST_F(SegmentIteratorTest, GroupedTaskConversionRetainsBothIndependentRanges) {
+    auto schema =
+            std::shared_ptr<TabletSchema>(test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).build());
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    SegmentReadOptions original, converted;
+    original.task_range = grouped_test_range(read_schema, -3, 7);
+    original.tablet_range = grouped_test_range(read_schema, 2, 9);
+    ObjectPool pool;
+    ASSERT_OK(original.convert_to(&converted, {TYPE_BIGINT}, &pool));
+    ASSERT_TRUE(converted.task_range);
+    ASSERT_TRUE(converted.tablet_range);
+    EXPECT_EQ(-3, converted.task_range->lower().get(0).get_int64());
+    EXPECT_EQ(7, converted.task_range->upper().get(0).get_int64());
+    EXPECT_TRUE(converted.task_range->inclusive_lower());
+    EXPECT_FALSE(converted.task_range->inclusive_upper());
+    EXPECT_EQ(2, converted.tablet_range->lower().get(0).get_int64());
+    EXPECT_EQ(9, converted.tablet_range->upper().get(0).get_int64());
+    original.task_range.reset();
+    ASSERT_OK(original.convert_to(&converted, {TYPE_BIGINT}, &pool));
+    EXPECT_FALSE(converted.task_range);
+}
+
+TEST_F(SegmentIteratorTest, GroupedTaskRejectsPreparedCacheAndReuse) {
+    auto schema =
+            std::shared_ptr<TabletSchema>(test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).build());
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    auto chunk = ChunkFactory::new_chunk(read_schema, 10);
+    for (int64_t i = 0; i < 10; ++i) chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(i));
+    auto segment = test::write_and_open_segment(_fs, kSegmentDir + "/grouped_reuse", schema, *chunk, 2);
+    OlapReaderStatistics stats;
+    SegmentReadOptions opts;
+    opts.fs = _fs;
+    opts.stats = &stats;
+    ChunkIteratorPtr slot;
+    ASSIGN_OR_ABORT(auto plain, segment->new_reusable_iterator(read_schema, read_schema, opts, &slot));
+    EXPECT_EQ(10, grouped_read_keys(plain).size());
+    opts.task_range = grouped_test_range(read_schema, 1, 5);
+    auto reused = segment->new_reusable_iterator(read_schema, read_schema, opts, &slot);
+    EXPECT_TRUE(reused.status().is_not_supported()) << reused.status();
+    slot->close();
+    opts.read_state_cache.scan_range = std::make_shared<SparseRange<>>(Range<>(0, 10));
+    ASSIGN_OR_ABORT(auto cached, segment->new_iterator(read_schema, opts));
+    chunk->reset();
+    auto status = cached->get_next(chunk.get());
+    EXPECT_TRUE(status.is_not_supported()) << status;
+    cached->close();
+    EXPECT_TRUE(get_prepared_pruned_row_ranges(segment, read_schema, opts).status().is_not_supported());
+}
+
+// The filesystem counts real data/index reads: a row-correct full-scan-then-filter would still
+// read almost a full file per clip. Boundary pages may overlap and are measured, not forbidden.
+TEST_F(SegmentIteratorTest, GroupedTaskReadsClippedPagesInsteadOfRepeatedFullSegments) {
+    auto fs = std::make_shared<GroupedCountingFileSystem>();
+    ASSERT_OK(fs->create_dir(kSegmentDir));
+    const auto saved_page_size = config::data_page_size;
+    config::data_page_size = 1024;
+    DeferOp restore([&] { config::data_page_size = saved_page_size; });
+    auto schema = std::shared_ptr<TabletSchema>(
+            test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).create(1, false, TYPE_BIGINT).build());
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    constexpr int64_t n = 32768;
+    auto chunk = ChunkFactory::new_chunk(read_schema, n);
+    for (int64_t i = 0; i < n; ++i) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(i));
+        chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(int64_t(i * 1234567891011LL)));
+    }
+    auto segment = test::write_and_open_segment(fs, kSegmentDir + "/grouped_io", schema, *chunk, 128);
+    OlapReaderStatistics stats;
+    SegmentReadOptions opts;
+    opts.fs = fs;
+    opts.stats = &stats;
+    opts.use_page_cache = false;
+    fs->bytes = 0;
+    ASSIGN_OR_ABORT(auto all, segment->new_iterator(read_schema, opts));
+    EXPECT_EQ(n, grouped_read_keys(all).size());
+    const auto full_bytes = fs->bytes;
+    ASSERT_GT(full_bytes, 0);
+    fs->bytes = 0;
+    std::vector<int64_t> actual;
+    for (int64_t i = 0; i < 4; ++i) {
+        opts.task_range = grouped_test_range(read_schema, i * n / 4, (i + 1) * n / 4);
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(read_schema, opts));
+        auto keys = grouped_read_keys(iter);
+        ASSERT_EQ(n / 4, keys.size());
+        EXPECT_EQ(i * n / 4, keys.front());
+        EXPECT_EQ((i + 1) * n / 4 - 1, keys.back());
+        actual.insert(actual.end(), keys.begin(), keys.end());
+    }
+    ASSERT_EQ(n, actual.size());
+    for (int64_t i = 0; i < n; ++i) ASSERT_EQ(i, actual[i]);
+    RecordProperty("ordinary_read_bytes", full_bytes);
+    RecordProperty("four_clip_read_bytes", fs->bytes);
+    EXPECT_LT(fs->bytes, full_bytes * 2) << "Allow boundary/index overhead, reject four full reads";
+}
+
+// A grouped physical child must not read global boundary pages outside its rowid window.
+TEST_F(SegmentIteratorTest, GroupedRowidChildrenAvoidDisjointBoundaryPageReads) {
+    auto fs = std::make_shared<GroupedCountingFileSystem>();
+    ASSERT_OK(fs->create_dir(kSegmentDir));
+    const auto saved_page_size = config::data_page_size;
+    config::data_page_size = 1024;
+    DeferOp restore([&] { config::data_page_size = saved_page_size; });
+    auto schema =
+            std::shared_ptr<TabletSchema>(test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).build());
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    constexpr int64_t n = 8192;
+    auto chunk = ChunkFactory::new_chunk(read_schema, n);
+    for (int64_t i = 0; i < n; ++i) chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(i));
+    auto segment = test::write_and_open_segment(fs, kSegmentDir + "/grouped_rowid_io", schema, *chunk, 32);
+    ASSERT_OK(segment->load_index());
+    for (const auto& window : {Range<>(512, 640), Range<>(6400, 6528)}) {
+        OlapReaderStatistics stats;
+        SegmentReadOptions opts;
+        opts.fs = fs;
+        opts.stats = &stats;
+        opts.use_page_cache = false;
+        opts.rowid_range_option = std::make_shared<SparseRange<>>(window);
+        // Prime reusable column/index state only at the child's own page, not at either clip boundary.
+        ASSIGN_OR_ABORT(auto prime, segment->new_iterator(read_schema, opts));
+        ASSERT_EQ(128, grouped_read_keys(prime).size());
+        opts.tablet_range = grouped_test_range(read_schema, 2048, 4096);
+        opts.task_range = grouped_test_range(read_schema, 2200, 3800);
+        fs->bytes = 0;
+        ASSIGN_OR_ABORT(auto child, segment->new_iterator(read_schema, opts));
+        EXPECT_TRUE(grouped_read_keys(child).empty());
+        EXPECT_EQ(0, fs->bytes) << "Short-key bounds already prove that this child is outside both clips";
+    }
+}
+
+TEST_F(SegmentIteratorTest, GroupedRowidChildrenPreserveSparseQueryAndOwnershipIntersection) {
+    auto schema = std::shared_ptr<TabletSchema>(
+            test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).create(1, false, TYPE_BIGINT).build());
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    auto chunk = ChunkFactory::new_chunk(read_schema, 128);
+    for (int64_t row = 0; row < 128; ++row) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(row / 4));
+        chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(row));
+    }
+    auto segment = test::write_and_open_segment(_fs, kSegmentDir + "/grouped_rowid_sparse", schema, *chunk, 4);
+    OlapReaderStatistics stats;
+    SegmentReadOptions opts;
+    opts.fs = _fs;
+    opts.stats = &stats;
+    opts.use_page_cache = false;
+    opts.rowid_range_option =
+            std::make_shared<SparseRange<>>(std::initializer_list<Range<>>{{16, 48}, {60, 78}, {82, 96}});
+    opts.ranges = {grouped_test_range(read_schema, 18, 32), grouped_test_range(read_schema, 0, 10)};
+    opts.tablet_range = grouped_test_range(read_schema, 8, 21);
+    opts.task_range = grouped_test_range(read_schema, 9, 22);
+    auto read_rows = [&] {
+        ASSIGN_OR_ABORT(auto iterator, segment->new_iterator(read_schema, opts));
+        auto out = ChunkFactory::new_chunk(iterator->schema(), 128);
+        std::vector<int64_t> rows;
+        while (true) {
+            out->reset();
+            auto status = iterator->get_next(out.get());
+            if (status.is_end_of_file()) break;
+            CHECK_OK(status);
+            for (size_t i = 0; i < out->num_rows(); ++i) rows.push_back(out->get(i)[1].get_int64());
+        }
+        iterator->close();
+        std::sort(rows.begin(), rows.end());
+        return rows;
+    };
+    EXPECT_EQ((std::vector<int64_t>{36, 37, 38, 39, 72, 73, 74, 75, 76, 77, 82, 83}), read_rows());
+    // Reversed sparse ranges still need a conservative envelope for exact ownership seeks.
+    opts.rowid_range_option->split_and_reverse(opts.rowid_range_option->size(), 128);
+    OlapReaderStatistics reverse_stats;
+    auto reverse_opts = opts;
+    reverse_opts.stats = &reverse_stats;
+    // OSS initializes on the first read. Keep each batch within one sparse range.
+    reverse_opts.chunk_size = 1;
+    ASSIGN_OR_ABORT(auto reversed, segment->new_iterator(read_schema, reverse_opts));
+    auto reversed_chunk = ChunkFactory::new_chunk(read_schema, 1);
+    std::vector<int64_t> reversed_rows;
+    while (true) {
+        reversed_chunk->reset();
+        auto status = reversed->get_next(reversed_chunk.get());
+        if (status.is_end_of_file()) break;
+        ASSERT_OK(status);
+        ASSERT_EQ(1, reversed_chunk->num_rows());
+        reversed_rows.push_back(reversed_chunk->get(0)[1].get_int64());
+    }
+    std::sort(reversed_rows.begin(), reversed_rows.end());
+    EXPECT_EQ((std::vector<int64_t>{36, 37, 38, 39, 72, 73, 74, 75, 76, 77, 82, 83}), reversed_rows);
+    EXPECT_EQ(44, reverse_stats.rows_after_key_range);
+    reversed->close();
+
+    opts.ranges.clear();
+    opts.rowid_range_option = std::make_shared<SparseRange<>>(Range<>(19, 25));
+    opts.tablet_range = grouped_test_range(read_schema, 0, 32);
+    opts.task_range = grouped_test_range(read_schema, 5, 6);
+    opts.task_range->set_inclusive_lower(false);
+    opts.task_range->set_inclusive_upper(true);
+    EXPECT_EQ((std::vector<int64_t>{24}), read_rows());
+    opts.task_range = grouped_test_range(read_schema, 4, 5);
+    opts.task_range->set_inclusive_upper(true);
+    EXPECT_EQ((std::vector<int64_t>{19, 20, 21, 22, 23}), read_rows());
+
+    opts.task_range = SeekRange(SeekTuple(), grouped_test_range(read_schema, 0, 5).upper());
+    EXPECT_EQ((std::vector<int64_t>{19}), read_rows());
+    opts.task_range = SeekRange(grouped_test_range(read_schema, 6, 7).lower(), SeekTuple());
+    opts.task_range->set_inclusive_lower(true);
+    EXPECT_EQ((std::vector<int64_t>{24}), read_rows());
+    opts.rowid_range_option = std::make_shared<SparseRange<>>();
+    EXPECT_TRUE(read_rows().empty());
 }
 
 } // namespace starrocks

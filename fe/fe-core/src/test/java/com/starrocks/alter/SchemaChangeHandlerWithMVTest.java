@@ -14,9 +14,13 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.common.DdlException;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -31,7 +35,9 @@ import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @TestMethodOrder(MethodName.class)
 public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
@@ -403,6 +409,154 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
             } catch (Exception e) {
                 // ignore
             }
+        }
+    }
+
+    @Test
+    public void testBitmapIndexOnRollupOnlyColumnRejectsUnsupportedTypeChange() throws Exception {
+        String tbl = "sc_bm_rollup_tbl";
+        String mv = "sc_bm_rollup_mv";
+        starRocksAssert.withTable("CREATE TABLE " + tbl + " (k1 INT, k2 INT, k3 INT, x INT)\n"
+                + "DUPLICATE KEY(k1, k2, k3)\nDISTRIBUTED BY HASH(k1) BUCKETS 1\n"
+                + "PROPERTIES ('replication_num' = '1');");
+        try {
+            starRocksAssert.withRefreshedMaterializedView(
+                    "create materialized view " + mv + " as select k1, k2, k3, x + 1 as z from " + tbl);
+            // The sync MV's expression column is stored as mv_z; only the rollup carries it.
+            DDLStmtExecutor.execute(parseAndAnalyzeStmt(
+                    "alter table " + tbl + " add index ix_z (mv_z) using bitmap"), connectContext);
+            waitAlterJobDone(GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2());
+
+            int jobsBefore = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().size();
+            Exception e = Assertions.assertThrows(Exception.class, () -> DDLStmtExecutor.execute(parseAndAnalyzeStmt(
+                    "alter table " + tbl + " modify column mv_z DOUBLE after k3 from " + mv), connectContext));
+            Assertions.assertTrue(e.getMessage().contains("is not supported in bitmap index"), e.getMessage());
+            Assertions.assertEquals(jobsBefore,
+                    GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().size());
+        } finally {
+            try {
+                starRocksAssert.dropMaterializedView(mv);
+            } catch (Exception ignore) {
+                // ignore
+            }
+            try {
+                starRocksAssert.dropTable(tbl);
+            } catch (Exception ignore) {
+                // ignore
+            }
+            // Finished jobs of the dropped table stay in the handlers' maps and would break the
+            // other tests' waitAlterJobDone, which looks every job's table up.
+            GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().values()
+                    .removeIf(job -> tbl.equals(job.tableName));
+            GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2().values()
+                    .removeIf(job -> tbl.equals(job.tableName));
+        }
+    }
+
+    @Test
+    public void testBloomFilterOnRollupColumnRejectsUnsupportedTypeChange() throws Exception {
+        String tbl = "sc_bf_rollup_tbl";
+        String mv = "sc_bf_rollup_mv";
+        starRocksAssert.withTable("CREATE TABLE " + tbl + " (k1 INT, k2 INT, k3 INT, x INT) "
+                + "DUPLICATE KEY(k1, k2, k3) DISTRIBUTED BY HASH(k1) BUCKETS 1 "
+                + "PROPERTIES ('replication_num'='1');");
+        try {
+            starRocksAssert.withRefreshedMaterializedView(
+                    "create materialized view " + mv + " as select k1, k2, k3, x + 1 as z from " + tbl);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            OlapTable table = (OlapTable) db.getTable(tbl);
+            Assertions.assertNull(table.getBaseSchema().stream()
+                    .filter(column -> column.getName().equals("mv_z")).findFirst().orElse(null));
+            table.setBloomFilterInfo(Set.of(table.getColumn("mv_z").getColumnId()), 0.05);
+            List<Column> baseSchemaBefore = List.copyOf(table.getBaseSchema());
+            Set<ColumnId> bfColumnsBefore = table.getBfColumnIds();
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            int jobsBefore = handler.getAlterJobsV2().size();
+            AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                    "alter table " + tbl + " modify column mv_z DOUBLE after k3 from " + mv);
+            DdlException e = Assertions.assertThrows(DdlException.class,
+                    () -> handler.process(stmt.getAlterClauseList(), db, table));
+            Assertions.assertEquals("Invalid bloom filter column 'mv_z': unsupported type DOUBLE", e.getMessage());
+            Assertions.assertEquals(jobsBefore, handler.getAlterJobsV2().size());
+            Assertions.assertEquals(baseSchemaBefore, table.getBaseSchema());
+            Assertions.assertEquals(bfColumnsBefore, table.getBfColumnIds());
+            Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+
+            // The rollup has mv_z, but the base schema does not. Adding an unsupported base column
+            // exercises the newly present (oldColumn == null) path while retaining the inherited BF.
+            AlterTableStmt add = (AlterTableStmt) parseAndAnalyzeStmt(
+                    "alter table " + tbl + " add column mv_z DOUBLE");
+            DdlException addError = Assertions.assertThrows(DdlException.class,
+                    () -> handler.process(add.getAlterClauseList(), db, table));
+            Assertions.assertEquals("Invalid bloom filter column 'mv_z': unsupported type DOUBLE",
+                    addError.getMessage());
+            Assertions.assertEquals(jobsBefore, handler.getAlterJobsV2().size());
+            Assertions.assertEquals(baseSchemaBefore, table.getBaseSchema());
+            Assertions.assertEquals(bfColumnsBefore, table.getBfColumnIds());
+            Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+        } finally {
+            try {
+                starRocksAssert.dropMaterializedView(mv);
+            } catch (Exception ignore) {
+                // ignore
+            }
+            try {
+                starRocksAssert.dropTable(tbl);
+            } catch (Exception ignore) {
+                // ignore
+            }
+            GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().values()
+                    .removeIf(job -> tbl.equals(job.tableName));
+            GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2().values()
+                    .removeIf(job -> tbl.equals(job.tableName));
+        }
+    }
+
+    @Test
+    public void testBitmapIndexColumnNewlyAddedToIndexSchemaIsChecked() throws Exception {
+        String tbl = "sc_bm_added_tbl";
+        String mv = "sc_bm_added_mv";
+        starRocksAssert.withTable("CREATE TABLE " + tbl + " (k1 INT, k2 INT, k3 INT, x INT)\n"
+                + "DUPLICATE KEY(k1, k2, k3)\nDISTRIBUTED BY HASH(k1) BUCKETS 1\n"
+                + "PROPERTIES ('replication_num' = '1');");
+        try {
+            starRocksAssert.withRefreshedMaterializedView(
+                    "create materialized view " + mv + " as select k1, k2, k3, x + 1 as z from " + tbl);
+            DDLStmtExecutor.execute(parseAndAnalyzeStmt(
+                    "alter table " + tbl + " add index ix_z (mv_z) using bitmap"), connectContext);
+            waitAlterJobDone(GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2());
+
+            // The base schema has no mv_z and the rollup's mv_z keeps its type, but the new base column
+            // is covered by the BITMAP index and must be a type the BE can encode.
+            int jobsBefore = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().size();
+            Exception e = Assertions.assertThrows(Exception.class, () -> DDLStmtExecutor.execute(parseAndAnalyzeStmt(
+                    "alter table " + tbl + " add column mv_z DOUBLE"), connectContext));
+            Assertions.assertTrue(e.getMessage().contains("is not supported in bitmap index"), e.getMessage());
+            Assertions.assertTrue(e.getMessage().contains("mv_z"), e.getMessage());
+            Assertions.assertEquals(jobsBefore,
+                    GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().size());
+
+            // Control: a type the BITMAP index supports is not rejected by this check.
+            DDLStmtExecutor.execute(parseAndAnalyzeStmt(
+                    "alter table " + tbl + " add column mv_z BIGINT"), connectContext);
+            Assertions.assertEquals(jobsBefore + 1,
+                    GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().size());
+            waitAlterJobDone(GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2());
+        } finally {
+            try {
+                starRocksAssert.dropMaterializedView(mv);
+            } catch (Exception ignore) {
+                // ignore
+            }
+            try {
+                starRocksAssert.dropTable(tbl);
+            } catch (Exception ignore) {
+                // ignore
+            }
+            GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().values()
+                    .removeIf(job -> tbl.equals(job.tableName));
+            GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2().values()
+                    .removeIf(job -> tbl.equals(job.tableName));
         }
     }
 }

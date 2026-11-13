@@ -659,4 +659,18 @@ public class PhysicalPartitionTest {
         Assertions.assertFalse(partition.isUnsharing());
         Assertions.assertEquals(children, partition.getQueryableBaseIndex());
     }
+
+    @Test
+    public void testReleaseMinRetainVersionKeepsAPinSetByAnotherHolder() {
+        PhysicalPartition partition = new PhysicalPartition(1L, 2L, new MaterializedIndex());
+        partition.setMinRetainVersion(3);
+        Assertions.assertTrue(partition.releaseMinRetainVersion(3));
+        Assertions.assertEquals(0, partition.getMinRetainVersion());
+
+        partition.setMinRetainVersion(3);
+        // Another holder pinned a different version since.
+        partition.setMinRetainVersion(7);
+        Assertions.assertFalse(partition.releaseMinRetainVersion(3));
+        Assertions.assertEquals(7, partition.getMinRetainVersion());
+    }
 }

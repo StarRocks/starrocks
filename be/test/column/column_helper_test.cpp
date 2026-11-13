@@ -69,6 +69,17 @@ protected:
     }
 };
 
+TEST_F(ColumnHelperTest, mark_binary_columns_skips_const_null) {
+    const auto binary_type = TYPE_VARBINARY_DESC;
+    for (const auto& type : {binary_type, TypeDescriptor::create_array_type(binary_type)}) {
+        ColumnPtr column = ColumnHelper::create_const_null_column(1);
+        ColumnHelper::mark_binary_columns(column, type);
+        EXPECT_TRUE(column->only_null());
+        EXPECT_TRUE(column->is_null(0));
+        EXPECT_EQ(1, column->size());
+    }
+}
+
 TEST_F(ColumnHelperTest, cast_to_nullable_column) {
     auto col = ColumnHelper::cast_to_nullable_column(create_column());
     ASSERT_TRUE(col->is_nullable());
@@ -83,10 +94,52 @@ TEST_F(ColumnHelperTest, align_return_type) {
     auto nullable_column = create_nullable_column();
     auto not_null_column = create_column();
     auto col_size = not_null_column->size();
-    nullable_column->append(*ColumnHelper::align_return_type(
-            std::move(not_null_column), TypeDescriptor::from_logical_type(TYPE_VARCHAR), col_size, true));
+    nullable_column->append(
+            *ColumnHelper::align_return_type(std::move(not_null_column), TYPE_VARCHAR_DESC, col_size, true));
     ASSERT_TRUE(nullable_column->is_nullable());
     ASSERT_FALSE(nullable_column->is_constant());
+}
+
+TEST_F(ColumnHelperTest, materialize_const_column) {
+    // A NULL literal is a Nullable(Int8) column; materializing it must give an all-NULL column of the given type.
+    auto null_col =
+            ColumnHelper::materialize_const_column(TYPE_VARCHAR_DESC, 3, ColumnHelper::create_const_null_column(1));
+    ASSERT_FALSE(null_col->is_constant());
+    ASSERT_FALSE(null_col->only_null());
+    ASSERT_EQ(3, null_col->size());
+    ASSERT_TRUE(down_cast<const NullableColumn*>(null_col.get())->data_column()->is_binary());
+    for (size_t i = 0; i < 3; ++i) {
+        ASSERT_TRUE(null_col->is_null(i));
+    }
+
+    // A non-NULL constant is duplicated, and a shared reference to it is left untouched.
+    auto inner = Int32Column::create();
+    inner->append(7);
+    ColumnPtr const_col = ConstColumn::create(std::move(inner), 1);
+    ColumnPtr shared = const_col;
+    auto col = ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(const_col));
+    ASSERT_FALSE(col->is_constant());
+    ASSERT_EQ(3, col->size());
+    for (size_t i = 0; i < 3; ++i) {
+        ASSERT_EQ(7, col->get(i).get_int32());
+    }
+    ASSERT_EQ(1, shared->size());
+    ASSERT_EQ(1, down_cast<const ConstColumn*>(shared.get())->data_column()->size());
+
+    // A shared non-constant column is copied on write: the result keeps the contents, and the other owner is untouched.
+    const Column* plain_addr = col.get();
+    ColumnPtr plain = col;
+    auto copied = ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(col));
+    ASSERT_NE(plain_addr, copied.get());
+    ASSERT_EQ(plain_addr, plain.get());
+    ASSERT_EQ(3, copied->size());
+    for (size_t i = 0; i < 3; ++i) {
+        ASSERT_EQ(7, copied->get(i).get_int32());
+        ASSERT_EQ(7, plain->get(i).get_int32());
+    }
+
+    // A non-constant column owned only by the caller is returned as is.
+    ASSERT_EQ(plain_addr, ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(plain)).get());
 }
 
 TEST_F(ColumnHelperTest, get_data_column_by_type) {
@@ -135,16 +188,6 @@ TEST_F(ColumnHelperTest, get_container_varchar) {
     EXPECT_EQ(data[1].to_string(), "world");
 }
 
-TEST_F(ColumnHelperTest, get_container_large_binary) {
-    auto col = LargeBinaryColumn::create();
-    col->append_string("abc");
-    col->append_string("def");
-    auto data = GetContainer<TYPE_VARCHAR>::get_data(col.get());
-    ASSERT_EQ(data.size(), 2);
-    EXPECT_EQ(data[0].to_string(), "abc");
-    EXPECT_EQ(data[1].to_string(), "def");
-}
-
 // GetContainer::get_data(column, row)
 TEST_F(ColumnHelperTest, get_container_get_data_with_row_fixed_length) {
     auto col = ColumnTestHelper::build_column<int32_t>({10, 20, 30});
@@ -170,8 +213,7 @@ TEST_F(ColumnHelperTest, get_container_get_data_with_row_nullable) {
 }
 
 TEST_F(ColumnHelperTest, get_data_column_from_const_nullable_column) {
-    auto data_column = BinaryColumn::create();
-    data_column->append(Slice("v1"));
+    auto data_column = ColumnTestHelper::build_column<Slice>({"v1"});
     auto null_column = NullColumn::create();
     null_column->append(0);
     ColumnPtr nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
@@ -202,8 +244,8 @@ TEST_F(ColumnHelperTest, append_column_value_varchar) {
     EXPECT_EQ(col->debug_string(), "['hello', 'world']");
 }
 
-TEST_F(ColumnHelperTest, append_column_value_large_binary) {
-    auto col = LargeBinaryColumn::create();
+TEST_F(ColumnHelperTest, append_column_value_varbinary) {
+    auto col = BinaryColumn::create();
     ColumnHelper::append_column_value<TYPE_VARBINARY>(col.get(), Slice("foo"));
     ColumnHelper::append_column_value<TYPE_VARBINARY>(col.get(), Slice("bar"));
     EXPECT_EQ(col->debug_string(), "['foo', 'bar']");
@@ -221,18 +263,6 @@ TEST_F(ColumnHelperTest, build_slices_binary_column) {
     EXPECT_EQ(slices[2].to_string(), "baz");
 }
 
-TEST_F(ColumnHelperTest, build_slices_large_binary_column) {
-    auto col = LargeBinaryColumn::create();
-    col->append_string("hello");
-    col->append_string("world");
-
-    Buffer<Slice> slices;
-    ColumnHelper::build_slices(col.get(), slices);
-    ASSERT_EQ(slices.size(), 2);
-    EXPECT_EQ(slices[0].to_string(), "hello");
-    EXPECT_EQ(slices[1].to_string(), "world");
-}
-
 TEST_F(ColumnHelperTest, build_slices_nullable_column) {
     auto nullable = ColumnTestHelper::build_nullable_column<Slice>({"a", "bb"});
 
@@ -244,8 +274,7 @@ TEST_F(ColumnHelperTest, build_slices_nullable_column) {
 }
 
 TEST_F(ColumnHelperTest, build_slices_const_column) {
-    auto inner = BinaryColumn::create();
-    inner->append(Slice("const"));
+    auto inner = ColumnTestHelper::build_column<Slice>({"const"});
     ColumnPtr const_col = ConstColumn::create(std::move(inner), 3);
 
     Buffer<Slice> slices;
@@ -287,16 +316,6 @@ TEST_F(ColumnHelperTest, get_storage_container_varchar) {
     ASSERT_EQ(data.size(), 2);
     EXPECT_EQ(data[0].to_string(), "hello");
     EXPECT_EQ(data[1].to_string(), "world");
-}
-
-TEST_F(ColumnHelperTest, get_storage_container_large_binary) {
-    auto col = LargeBinaryColumn::create();
-    col->append_string("abc");
-    col->append_string("def");
-    auto data = GetStorageContainer<TYPE_VARCHAR>::get_data(col.get());
-    ASSERT_EQ(data.size(), 2);
-    EXPECT_EQ(data[0].to_string(), "abc");
-    EXPECT_EQ(data[1].to_string(), "def");
 }
 
 TEST_F(ColumnHelperTest, get_storage_container_nullable_varchar) {
@@ -379,9 +398,6 @@ TEST_F(ColumnHelperTest, create_geo_placeholder_and_copy) {
         EXPECT_FALSE(geo->is_binary());
         // Generic creation preserves semantic metadata; storage starts unvalidated.
         EXPECT_EQ(*type.geo_type, geo->descriptor().type);
-        EXPECT_EQ(GEO_ENCODING_WKB, geo->descriptor().storage.encoding);
-        EXPECT_EQ(GEO_DIMENSION_UNKNOWN, geo->descriptor().storage.dimension);
-        EXPECT_EQ(GEO_VALIDATION_STATE_UNVALIDATED, geo->descriptor().storage.validation_state);
         for (size_t i = 0; i < geo->size(); ++i) {
             EXPECT_TRUE(geo->get_wkb(i).empty());
         }
@@ -470,7 +486,7 @@ TEST_F(ColumnHelperTest, create_nested_geo_columns) {
     for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
         const auto type = geo_type(primitive);
         const auto array_type = TypeDescriptor::create_array_type(type);
-        const auto map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), array_type);
+        const auto map_type = TypeDescriptor::create_map_type(TYPE_INT_DESC, array_type);
         const auto struct_type =
                 TypeDescriptor::create_struct_type({"direct", "array", "map"}, {type, array_type, map_type});
         auto column = ColumnHelper::create_column(struct_type, false);

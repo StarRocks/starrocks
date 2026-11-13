@@ -6,7 +6,6 @@ toc_max_heading_level: 2
 keywords: ['huan cun']
 ---
 
-import CacheStats from '../../_assets/commonMarkdown/_cache_stats.mdx'
 
 # Data Cache
 
@@ -73,7 +72,7 @@ StarRocks 提供了多种监控 Data Cache 的指标。
 - [虚拟机部署 StarRocks 存算分离集群 Dashboard 模板](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-for-vm.json)
 - [Kubernetes 部署 StarRocks 存算分离集群 Dashboard 模板](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-for-k8s.json)
 
-有关为 StarRocks 部署监控和警报服务的更多说明，请参考 [监控报警](../../administration/management/monitoring/monitoring.md)。
+有关为 StarRocks 部署监控和警报服务的更多说明，请参考 [监控报警](../../administration/management/monitoring/prometheus_grafana.md)。
 
 ### 重要指标
 
@@ -124,8 +123,6 @@ storage_root_path =
 
 - 如果云原生表的 `datacache.enable` 属性设置为 `false`，则不会为该表启用 Data Cache。
 - 如果云原生表的 `datacache.partition_duration` 属性设置为一个特定的时间范围，则超出该时间范围的数据将不会被缓存。
-
-<CacheStats />
 
 ## 已知问题
 

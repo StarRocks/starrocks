@@ -6,6 +6,7 @@ description: "Create and manage users using the native authentication within Sta
 
 # Native Authentication
 
+
 Create and manage users using the native authentication within StarRocks through SQL commands.
 
 StarRocks native authentication is a password-based authentication method. In addition to that, StarRocks also supports integrating with external authentication systems such as LDAP. For more instructions, see [Authenticate with Security Integration](./security_integration.md).
@@ -15,6 +16,8 @@ StarRocks native authentication is a password-based authentication method. In ad
 Users with the system-defined role `user_admin` can create users, alter users, and drop users in StarRocks.
 
 :::
+
+After a StarRocks cluster is created, the system automatically generates a `root` user with root privileges. Because the `root` user and role have all privileges of the system, we recommend that you create new users and roles for subsequent operations to prevent any risky operations. Keep the password of the `root` user properly.
 
 ## Create user
 
@@ -60,7 +63,6 @@ You can reset the password for a user using [SET PASSWORD](../../../sql-referenc
 > **NOTE**
 >
 > - Any user can reset their own passwords without needing any privileges.
-> - Only the `root` user itself can set its password. If you have lost its password and cannot connect to StarRocks, see [Reset lost root password](#reset-lost-root-password) for more instructions.
 
 Both the following examples reset the password of `jack` to `54321`:
 
@@ -78,7 +80,7 @@ Both the following examples reset the password of `jack` to `54321`:
 
 #### Reset lost root password
 
-If you have lost the password of the `root` user and cannot connect to StarRocks, you can reset it by following these procedures:
+Only the `root` user itself can set its password. If you have lost the password of the `root` user and cannot connect to StarRocks, you can reset it by following these procedures:
 
 1. Add the following configuration item to the configuration files **fe/conf/fe.conf** of **all FE nodes** to disable user authentication:
 

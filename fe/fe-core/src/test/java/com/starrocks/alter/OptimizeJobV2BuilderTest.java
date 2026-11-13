@@ -16,6 +16,7 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.OptimizeClause;
@@ -113,6 +114,33 @@ public class OptimizeJobV2BuilderTest {
             Assertions.assertEquals("myTable", onlineOptimizeJob.getTableName());
         } finally {
             Config.enable_online_optimize_table = savedEnableOnlineOptimizeTable;
+        }
+    }
+
+    @Test
+    public void testOnlineOptimizeRejectsNewPublishMechanism() throws StarRocksException {
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Mockito.when(table.getId()).thenReturn(123L);
+        Mockito.when(table.getName()).thenReturn("myTable");
+        Mockito.when(table.getStorageType()).thenReturn(null);
+        Mockito.when(table.enableReplicatedStorage()).thenReturn(true);
+        OptimizeJobV2Builder builder = new OptimizeJobV2Builder(table)
+                .withOptimizeClause(new OptimizeClause(null, null, null, null, null, null));
+
+        boolean savedEnableOnlineOptimizeTable = Config.enable_online_optimize_table;
+        boolean savedEnableNewPublishMechanism = Config.enable_new_publish_mechanism;
+        Config.enable_online_optimize_table = true;
+        Config.enable_new_publish_mechanism = true;
+        try {
+            DdlException e = Assertions.assertThrows(DdlException.class, builder::build);
+            Assertions.assertTrue(e.getMessage().contains("enable_new_publish_mechanism"), e.getMessage());
+
+            // An optimize that takes the blocking path is not affected.
+            Mockito.when(table.enableReplicatedStorage()).thenReturn(false);
+            Assertions.assertTrue(builder.build() instanceof OptimizeJobV2);
+        } finally {
+            Config.enable_online_optimize_table = savedEnableOnlineOptimizeTable;
+            Config.enable_new_publish_mechanism = savedEnableNewPublishMechanism;
         }
     }
 }

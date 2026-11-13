@@ -7,7 +7,7 @@ keywords: ['zhujian']
 
 # 通过导入实现数据变更
 
-StarRocks 的[主键表](../table_design/table_types/primary_key_table.md)支持通过 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 或 [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 导入作业或 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) 语句对表进行数据变更。
+StarRocks 的[主键表](../table_design/table_types/primary_key_table.md)支持通过 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 或 [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 导入作业对表进行数据变更。
 
 StarRocks 还支持部分更新 (Partial Update) 和条件更新 (Conditional Update)。
 
@@ -610,6 +610,8 @@ SELECT * FROM table4;
 >
 > - 在 3.1.3 版本及以前，StarRocks 不支持条件更新同部分更新一并使用。自 3.1.3 版本起，StarRocks 才支持条件更新同部分更新一并使用。
 >
+> - 存算一体集群不支持条件更新同列模式部分更新一并使用，这样的导入会失败。存算分离集群自 v4.1.1 起支持条件更新同列模式部分更新一并使用。
+>
 
 ### 数据样例
 
@@ -655,7 +657,7 @@ SELECT * FROM table4;
 
 通过导入，把 `example5.csv` 文件中 `id` 为 `101`、`102` 的数据更新到 `table5` 表中，指定 `merge_condition` 为 `version` 列，表示只有当导入的数据中 `version` 大于等于 `table5` 中对应行的`version` 值时，更新才会生效。
 
-- 通过 Insert Load 导入:
+- 通过 INSERT 导入（自 v3.5.8、v4.0.1 和 v4.1.0 起支持）：
   ```SQL
   INSERT INTO test_db.table5 properties("merge_condition" = "version")
   VALUES (101, 2, 70), (102, 3, 100);

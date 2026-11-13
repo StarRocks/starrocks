@@ -71,6 +71,10 @@ Shared-data Dashboard includes the following categories of monitoring metrics:
 
 - Description: Number of cache misses in Segment Cache per minute.
 
+#### Metacache Adjustment Evictions
+
+- Description: Cumulative bytes of entries that the tablet metadata cache and the segment metadata cache evicted because their capacities were lowered under memory pressure (see the BE configuration item `lake_tablet_metadata_cache_min_limit`). Evictions made when a cache is full are not counted. The counter starts from 0 when the BE or CN starts. bvar: `lake_metacache_adjust_evicted_bytes`.
+
 ### Vacuum
 
 #### Vacuum Deletes

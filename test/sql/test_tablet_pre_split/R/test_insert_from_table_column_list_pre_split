@@ -73,9 +73,6 @@ WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_SCHEMA = 'db_${uuid0}' AND c.TABLE_NAM
 -- result:
 1
 -- !result
-admin set frontend config ("tablet_pre_split_target_size" = "0");
--- result:
--- !result
 drop table dst_reordered;
 -- result:
 -- !result
@@ -88,3 +85,6 @@ drop table src;
 drop database db_${uuid0};
 -- result:
 -- !result
+CLEANUP {
+    admin set frontend config ("tablet_pre_split_target_size" = "0");
+} END CLEANUP

@@ -17,6 +17,7 @@
 #include "base/concurrency/await.h"
 #include "base/gc/gc_helper.h"
 #include "base/statusor.h"
+#include "base/testutil/sync_point.h"
 #include "cache/datacache.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config_cache_fwd.h"
@@ -25,12 +26,24 @@
 
 namespace starrocks {
 
+MemSpaceMonitor::~MemSpaceMonitor() {
+    stop();
+}
+
 void MemSpaceMonitor::start() {
+    if (!_stopped.load(std::memory_order_acquire)) {
+        // Already running. Never move-assign over a joinable thread.
+        return;
+    }
+    _stopped.store(false, std::memory_order_release);
     _adjust_datacache_thread = std::thread([this] { _adjust_datacache_callback(); });
     Thread::set_thread_name(_adjust_datacache_thread, "adj_mem_cache");
 }
 
 void MemSpaceMonitor::stop() {
+    if (_stopped.load(std::memory_order_acquire)) {
+        return;
+    }
     _stopped.store(true, std::memory_order_release);
     if (_adjust_datacache_thread.joinable()) {
         _adjust_datacache_thread.join();
@@ -57,10 +70,13 @@ void MemSpaceMonitor::_evict_datacache(int64_t bytes_to_dec) {
 void MemSpaceMonitor::_adjust_datacache_callback() {
     int64_t cur_period = config::datacache_mem_adjust_period;
     int64_t cur_interval = config::datacache_mem_adjust_interval_seconds;
-    std::unique_ptr<GCHelper> dec_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
-    std::unique_ptr<GCHelper> inc_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
+    MonoTime now = MonoTime::Now();
+    TEST_SYNC_POINT_CALLBACK("MemSpaceMonitor::now", &now);
+    std::unique_ptr<GCHelper> dec_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, now);
+    std::unique_ptr<GCHelper> inc_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, now);
     while (!_stopped.load(std::memory_order_consume)) {
         int64_t kWaitTimeout = cur_interval * 1000 * 1000;
+        TEST_SYNC_POINT_CALLBACK("MemSpaceMonitor::wait", &kWaitTimeout);
 #ifdef BE_TEST
         static const int64_t kCheckInterval = 10 * 1000; // 10ms for faster shutdown in test environment
 #else
@@ -71,6 +87,9 @@ void MemSpaceMonitor::_adjust_datacache_callback() {
         if (wait_ret) {
             break;
         }
+
+        now = MonoTime::Now();
+        TEST_SYNC_POINT_CALLBACK("MemSpaceMonitor::now", &now);
 
         if (!config::enable_datacache_mem_auto_adjust) {
             continue;
@@ -86,8 +105,8 @@ void MemSpaceMonitor::_adjust_datacache_callback() {
                      cur_interval != config::datacache_mem_adjust_interval_seconds)) {
             cur_period = config::datacache_mem_adjust_period;
             cur_interval = config::datacache_mem_adjust_interval_seconds;
-            dec_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
-            inc_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
+            dec_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, now);
+            inc_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, now);
             // We re-initialized advisor, just continue.
             continue;
         }
@@ -105,31 +124,38 @@ void MemSpaceMonitor::_adjust_datacache_callback() {
         int64_t memory_urgent = memtracker->limit() * memory_urgent_level / 100;
         int64_t delta_urgent = memtracker->consumption() - memory_urgent;
         int64_t memory_high = memtracker->limit() * memory_high_level / 100;
+        // Feed both advisors every round, the idle one with 0, so an abruptly ended pressure or growth episode
+        // can age out. Otherwise the next episode may release or grow its entire excess in the first round.
         if (delta_urgent > 0) {
+            inc_advisor->bytes_should_gc(now, 0);
             // Memory usage exceeds memory_urgent_level, reduce size immediately.
             _datacache->adjust_mem_capacity(-delta_urgent, kcacheMinSize);
-            size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), memory_urgent - memory_high);
+            size_t bytes_to_dec = dec_advisor->bytes_should_gc(now, memory_urgent - memory_high);
             _evict_datacache(static_cast<int64_t>(bytes_to_dec));
             continue;
         }
 
         int64_t delta_high = memtracker->consumption() - memory_high;
         if (delta_high > 0) {
-            size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), delta_high);
+            inc_advisor->bytes_should_gc(now, 0);
+            size_t bytes_to_dec = dec_advisor->bytes_should_gc(now, delta_high);
             _evict_datacache(static_cast<int64_t>(bytes_to_dec));
         } else {
+            dec_advisor->bytes_should_gc(now, 0);
             auto ret = _datacache->get_datacache_limit();
             if (!ret.ok()) {
+                inc_advisor->bytes_should_gc(now, 0);
                 LOG(ERROR) << "Failed to get storage page size: " << ret.status();
                 continue;
             }
             int64_t max_cache_size = std::max(ret.value(), kcacheMinSize);
             int64_t cur_cache_size = _datacache->get_mem_capacity();
             if (cur_cache_size >= max_cache_size) {
+                inc_advisor->bytes_should_gc(now, 0);
                 continue;
             }
             int64_t delta_cache = std::min(max_cache_size - cur_cache_size, std::abs(delta_high));
-            size_t bytes_to_inc = inc_advisor->bytes_should_gc(MonoTime::Now(), delta_cache);
+            size_t bytes_to_inc = inc_advisor->bytes_should_gc(now, delta_cache);
             if (bytes_to_inc > 0) {
                 _datacache->adjust_mem_capacity(bytes_to_inc, kcacheMinSize);
             }

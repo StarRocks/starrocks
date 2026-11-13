@@ -192,4 +192,102 @@ public class IcebergDmlTargetScanTest extends PlanTestBase {
                 "lookup must bind to the scan producing the output row-locator slots, not the first "
                         + "same-identity scan in plan order");
     }
+
+    /**
+     * Under the equality-delete rewrite the row locators come out of a UNION over the two data
+     * scans, so they resolve to no scan and the lookup falls back. The equality-delete scan shares
+     * the target's identity but plans no data files; even when it comes first in plan order the
+     * fallback must land on a data scan.
+     */
+    @Test
+    public void testFindScanNodeForSkipsEqualityDeleteScan() throws Exception {
+        ExecPlan execPlan = new ExecPlan();
+        DescriptorTable descTbl = execPlan.getDescTbl();
+
+        TupleDescriptor eqDeleteTuple = descTbl.createTupleDescriptor("eq-delete-scan");
+        eqDeleteTuple.setTable(icebergTable(2L));
+        SlotDescriptor eqIdSlot = descTbl.addSlotDescriptor(eqDeleteTuple);
+        eqIdSlot.setColumn(new Column("id", IntegerType.INT));
+        eqIdSlot.setIsMaterialized(true);
+        eqDeleteTuple.computeMemLayout();
+
+        TupleDescriptor dataTuple = descTbl.createTupleDescriptor("data-scan-without-eq-delete");
+        dataTuple.setTable(icebergTable(3L));
+        SlotDescriptor dataFileSlot = descTbl.addSlotDescriptor(dataTuple);
+        dataFileSlot.setColumn(new Column(IcebergTable.FILE_PATH, VarcharType.VARCHAR));
+        dataFileSlot.setIsMaterialized(true);
+        dataTuple.computeMemLayout();
+
+        // The UNION output slots the sink consumes; no scan produces them.
+        TupleDescriptor unionTuple = descTbl.createTupleDescriptor("union-output");
+        SlotDescriptor fileSlot = descTbl.addSlotDescriptor(unionTuple);
+        fileSlot.setColumn(new Column(IcebergTable.FILE_PATH, VarcharType.VARCHAR));
+        SlotDescriptor posSlot = descTbl.addSlotDescriptor(unionTuple);
+        posSlot.setColumn(new Column(IcebergTable.ROW_POSITION, IntegerType.BIGINT));
+
+        IcebergScanNode eqDeleteScan = new IcebergScanNode(new PlanNodeId(0), eqDeleteTuple,
+                "IcebergEqualityDeleteScanNode", IcebergTableMORParams.EMPTY,
+                IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE, Lists.newArrayList(1)), null);
+        IcebergScanNode dataScan = new IcebergScanNode(new PlanNodeId(1), dataTuple, "IcebergScanNode",
+                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
+
+        execPlan.getScanNodes().add(eqDeleteScan);
+        execPlan.getScanNodes().add(dataScan);
+        execPlan.getOutputExprs().add(new SlotRef(fileSlot));
+        execPlan.getOutputExprs().add(new SlotRef(posSlot));
+
+        Method method = IcebergPlannerUtils.class.getDeclaredMethod(
+                "findScanNodeFor", ExecPlan.class, IcebergTable.class);
+        method.setAccessible(true);
+        Object found = method.invoke(null, execPlan, icebergTable(1L));
+        assertSame(dataScan, found, "the fallback must skip the equality-delete scan");
+    }
+
+    /**
+     * Equality-delete rewrite plus a same-table subquery (e.g. time travel onto an older
+     * snapshot) registered first: the row locators come out of the UNION and resolve to no
+     * scan, so the fallback must prefer the scan that projects row locators over plan order.
+     */
+    @Test
+    public void testFindScanNodeForFallbackPrefersRowLocatorScan() throws Exception {
+        ExecPlan execPlan = new ExecPlan();
+        DescriptorTable descTbl = execPlan.getDescTbl();
+
+        TupleDescriptor subqueryTuple = descTbl.createTupleDescriptor("same-table-subquery-scan");
+        subqueryTuple.setTable(icebergTable(2L));
+        SlotDescriptor idSlot = descTbl.addSlotDescriptor(subqueryTuple);
+        idSlot.setColumn(new Column("id", IntegerType.INT));
+        idSlot.setIsMaterialized(true);
+        subqueryTuple.computeMemLayout();
+
+        TupleDescriptor dataTuple = descTbl.createTupleDescriptor("data-scan-without-eq-delete");
+        dataTuple.setTable(icebergTable(3L));
+        SlotDescriptor dataFileSlot = descTbl.addSlotDescriptor(dataTuple);
+        dataFileSlot.setColumn(new Column(IcebergTable.FILE_PATH, VarcharType.VARCHAR));
+        dataFileSlot.setIsMaterialized(true);
+        dataTuple.computeMemLayout();
+
+        TupleDescriptor unionTuple = descTbl.createTupleDescriptor("union-output");
+        SlotDescriptor fileSlot = descTbl.addSlotDescriptor(unionTuple);
+        fileSlot.setColumn(new Column(IcebergTable.FILE_PATH, VarcharType.VARCHAR));
+        SlotDescriptor posSlot = descTbl.addSlotDescriptor(unionTuple);
+        posSlot.setColumn(new Column(IcebergTable.ROW_POSITION, IntegerType.BIGINT));
+
+        IcebergScanNode subqueryScan = new IcebergScanNode(new PlanNodeId(0), subqueryTuple, "IcebergScanNode",
+                IcebergTableMORParams.EMPTY, IcebergMORParams.EMPTY, null);
+        IcebergScanNode dataScan = new IcebergScanNode(new PlanNodeId(1), dataTuple, "IcebergScanNode",
+                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
+        dataScan.setUsedForDelete(true);
+
+        execPlan.getScanNodes().add(subqueryScan);
+        execPlan.getScanNodes().add(dataScan);
+        execPlan.getOutputExprs().add(new SlotRef(fileSlot));
+        execPlan.getOutputExprs().add(new SlotRef(posSlot));
+
+        Method method = IcebergPlannerUtils.class.getDeclaredMethod(
+                "findScanNodeFor", ExecPlan.class, IcebergTable.class);
+        method.setAccessible(true);
+        Object found = method.invoke(null, execPlan, icebergTable(1L));
+        assertSame(dataScan, found, "the fallback must prefer the row-locator scan over the same-table subquery scan");
+    }
 }

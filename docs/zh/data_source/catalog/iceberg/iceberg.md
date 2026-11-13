@@ -6,14 +6,12 @@ keywords: ['iceberg']
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
-import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
-import EditionSpecificIcebergCatalogSyntax from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Syntax.mdx'
-import EditionSpecificIcebergCatalogParam from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Param.mdx'
 
 # Iceberg catalog
 
-<QSTip />
+:::tip
+此示例使用了在 [StarRocks Basics](../../../quick_start/shared-nothing.md) 快速入门中介绍的本地气候数据 (LCD) 数据集。您可以导入数据并亲自尝试该示例。
+:::
 
 Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使用 Iceberg catalog，您可以：
 
@@ -33,6 +31,8 @@ Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使�
 - 如果选择 Tabular 作为元存储，则需要使用 Iceberg REST catalog。
 
 :::
+
+如果 Iceberg 列的列表、映射或结构体中嵌套了 geography，则整个列显示为 `UNKNOWN_TYPE`，无法查询，包括其中的非地理空间子字段。其他受支持的列和标量 geography 仍可读取。
 
 ## 使用注意事项
 
@@ -113,7 +113,18 @@ Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使�
 
 ### 语法
 
-<EditionSpecificIcebergCatalogSyntax />
+```SQL
+CREATE EXTERNAL CATALOG <catalog_name>
+[COMMENT <comment>]
+PROPERTIES
+(
+    "type" = "iceberg",
+    [SecurityParams],
+    MetastoreParams,
+    StorageCredentialParams,
+    MetadataRelatedParams
+)
+```
 
 ---
 
@@ -138,7 +149,7 @@ Iceberg catalog 的描述。此参数是可选的。
 
 关于 StarRocks 如何管理 Catalog 数据访问的参数。
 
-<IcebergCatalogIcebergRestSecurityLink />
+有关管理 Iceberg REST Catalog 数据访问的详细说明，请参阅[Iceberg REST Catalog 的安全设置](./iceberg_rest_security.md)。
 
 ##### catalog.access.control
 
@@ -869,10 +880,11 @@ Google GCS 的 `StorageCredentialParams`：
 | **参数**                                 | **默认值**           | **描述**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_iceberg_metadata_cache                 | true                  | 是否缓存 Iceberg 相关的元数据，包括表缓存、分区名称缓存以及 Manifest 中的数据文件缓存和删除数据文件缓存。 |
-| iceberg_manifest_cache_with_column_statistics | true                  | 是否缓存列的统计信息。开启时，仅缓存文件级 min/max 裁剪有效的列（分区来源列、排序键列和 identifier 列）的统计信息，以控制宽表的 Manifest 缓存内存占用。 |
+| iceberg_manifest_cache_with_column_statistics | true                  | 是否缓存列的统计信息。开启时，分区来源列、排序键列和 identifier 列的统计信息总是会被缓存，其他列也会被缓存，总列数不超过 `iceberg_manifest_cache_statistics_max_columns`，使 Manifest 缓存命中时文件级 min/max 裁剪仍然有效。 |
+| iceberg_manifest_cache_statistics_max_columns | 100                   | 开启 `iceberg_manifest_cache_with_column_statistics` 时，每个 Manifest 最多缓存多少列的统计信息。分区来源列、排序键列和 identifier 列总是会被缓存，剩余的名额优先分配给统计模式会写入 min/max 上下界的列（`truncate(N)` 或 `full`），其中通过 `write.metadata.metrics.column.<col>` 显式设置的列最优先，然后才是只写 `counts` 的列；同一组内先按字段 ID 顺序分配给顶层的基本类型列，再分配给 struct 内的基本类型字段。数组和 map 内的字段无法用于裁剪，不会被缓存。统计信息按列存储，每个数据文件每列约 25 字节；STRING 和 BINARY 列超过 16 个字符（字节）的上下界在缓存中会被截断，与 Iceberg 默认的 `truncate(16)` 统计模式相同，裁剪结果不会出错，只是个别情况下裁剪得少一些。设为 `0` 表示只缓存分区来源列、排序键列和 identifier 列。负数按 `0` 处理。 |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | 触发数据文件缓存刷新的最小 Manifest 文件长度。 |
-| iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | Data File Manifest 缓存的最大内存使用率。从 v3.5.6 版本开始支持。 |
-| iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | Delete File Manifest 缓存的最大内存使用率。从 v3.5.6 版本开始支持。 |
+| iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | Data File Manifest 缓存的最大内存使用率。FE 配置项 `iceberg_data_file_cache_global_memory_ratio` 大于 `0` 时该属性不生效。从 v3.5.6 版本开始支持。 |
+| iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | Delete File Manifest 缓存的最大内存使用率。FE 配置项 `iceberg_delete_file_cache_global_memory_ratio` 大于 `0` 时该属性不生效。从 v3.5.6 版本开始支持。 |
 | iceberg_table_cache_refresh_interval_sec      | 60                    | 触发 Iceberg 表缓存异步刷新操作的时间间隔（单位：秒）。从 v3.5.7 版本开始支持。 |
 
 从 v3.4 起，StarRocks 在没有主动触发收集 Iceberg 表统计信息的情况下，可以通过设置以下参数读取 Iceberg 的元数据来获取 Iceberg 表的统计信息。
@@ -880,8 +892,6 @@ Google GCS 的 `StorageCredentialParams`：
 | **参数**                                       | **默认值**             | **描述**                       |
 | :-------------------------------------------- | :-------------------- | :----------------------------- |
 | enable_get_stats_from_external_metadata       | false                 | 是否允许系统从 Iceberg 元数据中获取统计信息。当此项设置为 `true` 时，您可以通过会话变量 [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata) 进一步控制要收集的统计信息类型。 |
-
-<EditionSpecificIcebergCatalogParam />
 
 ### 示例
 
@@ -1532,6 +1542,24 @@ StarRocks 使用最近最少使用（LRU）算法来缓存和驱逐数据。基�
 - 单位：字节
 - 默认值：`8388608`，相当于 8 MB
 - 描述：可以缓存的文件的最大大小。超过此参数值的文件无法缓存。如果查询请求这些文件，StarRocks 将从远端存储中检索它们。
+
+##### iceberg_data_file_cache_global_memory_ratio
+
+- 单位：N/A
+- 默认值：`0`
+- 描述：所有 Iceberg Catalog 共用的一份 Data File Manifest 缓存可以使用的 FE JVM 堆比例，无论有多少个 Catalog，总量都受此上限约束。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `iceberg_data_file_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。
+
+##### iceberg_delete_file_cache_global_memory_ratio
+
+- 单位：N/A
+- 默认值：`0`
+- 描述：所有 Iceberg Catalog 共用的一份 Delete File Manifest 缓存可以使用的 FE JVM 堆比例；由删除文件构建的删除文件索引另有一份同样大小的缓存。默认值 `0` 表示两者都由每个 Catalog 独占，大小由 Catalog 属性 `iceberg_delete_file_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。
+
+##### iceberg_partition_cache_global_memory_ratio
+
+- 单位：N/A
+- 默认值：`0`
+- 描述：所有 Iceberg Catalog 共用的一份分区缓存可以使用的 FE JVM 堆比例。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `iceberg_partition_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。
 
 ##### enable_background_refresh_connector_metadata
 

@@ -13,14 +13,22 @@
 // limitations under the License.
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.planner.OlapScanNode;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
     Map<String, Long> tpcdsStats = null;
@@ -60,6 +68,32 @@ public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
         starRocksAssert.alterTableProperties("alter table t_uk set (\"unique_constraints\" = \"v1\");");
         starRocksAssert.alterTableProperties(
                 "ALTER TABLE t_fk SET(\"foreign_key_constraints\" = \"(v1) REFERENCES t_uk(v1)\");");
+
+        // A unique key table with several partitions and tablets, for scans that name some of them.
+        starRocksAssert.withTable("CREATE TABLE `uk_partitioned` (\n" +
+                "  `pk` bigint NOT NULL,\n" +
+                "  `v1` bigint NULL\n" +
+                ") PRIMARY KEY(`pk`)\n" +
+                "PARTITION BY RANGE(`pk`) (\n" +
+                "  PARTITION p1 VALUES LESS THAN ('100'),\n" +
+                "  PARTITION p2 VALUES LESS THAN ('200'),\n" +
+                "  PARTITION p3 VALUES LESS THAN ('300')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\", \"unique_constraints\" = \"pk\");");
+        starRocksAssert.withTable("CREATE TABLE `fk_to_uk_partitioned` (\n" +
+                "  `id` bigint NOT NULL,\n" +
+                "  `fk` bigint NOT NULL,\n" +
+                "  `v2` bigint NULL\n" +
+                ") DUPLICATE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\", " +
+                "\"foreign_key_constraints\" = \"(fk) REFERENCES uk_partitioned(pk)\");");
+        for (String table : List.of("uk_partitioned", "fk_to_uk_partitioned")) {
+            for (Partition partition : olapTableOf(table).getPartitions()) {
+                UtFrameUtils.setPartitionVersion(partition, Partition.PARTITION_INIT_VERSION + 1);
+            }
+        }
     }
 
     @AfterAll
@@ -157,6 +191,87 @@ public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "HASH JOIN");
         }
+    }
+
+    // The unique key side of a join on a foreign key is removed when only the key is read from it, but not when it
+    // names partitions, tablets or replicas: it then reads only part of the table and can miss rows the foreign key
+    // refers to, so the join drops foreign key rows that the unique key side would no longer filter.
+    @Test
+    public void testUniqueKeySideNamingPartitionsTabletsOrReplicasIsNotRemoved() {
+        List<Long> p1 = tabletsOf("uk_partitioned", "p1");
+        long tablet = p1.get(0);
+        long replica = olapTableOf("uk_partitioned").getPartition("p1").getDefaultPhysicalPartition()
+                .getQueryableBaseIndex().getTablet(tablet).getAllReplicas().get(0).getId();
+        long foreignKeyTablet = tabletsOf("fk_to_uk_partitioned", "fk_to_uk_partitioned").get(0);
+        Object[][] cases = {
+                // statement, the tablets each scan of uk_partitioned reads
+                {"select f.id, f.fk from fk_to_uk_partitioned f join uk_partitioned partition (p1) u " +
+                        "on f.fk = u.pk", List.of(p1)},
+                {"select f.id, f.fk from fk_to_uk_partitioned f join uk_partitioned tablet (" + tablet + ") u " +
+                        "on f.fk = u.pk", List.of(List.of(tablet))},
+                {"select f.id, f.fk from fk_to_uk_partitioned f join uk_partitioned replica (" + replica + ") u " +
+                        "on f.fk = u.pk", List.of(List.of(tablet))},
+                {"select f.id from fk_to_uk_partitioned f left semi join uk_partitioned partition (p1) u " +
+                        "on f.fk = u.pk", List.of(p1)},
+                {"select f.id, u.pk from fk_to_uk_partitioned f left join uk_partitioned partition (p1) u " +
+                        "on f.fk = u.pk", List.of(p1)},
+                // The foreign key side may name some of its tablets: the unique key side is still removed.
+                {"select f.id, f.fk from fk_to_uk_partitioned tablet (" + foreignKeyTablet + ") f " +
+                        "join uk_partitioned u on f.fk = u.pk", List.of()},
+        };
+        List<Executable> checks = Lists.newArrayList();
+        for (Object[] c : cases) {
+            checks.add(() -> {
+                ExecPlan plan = UtFrameUtils.getPlanAndFragment(connectContext, (String) c[0]).second;
+                Assertions.assertEquals(c[1], scannedTablets(plan, "uk_partitioned"), (String) c[0]);
+            });
+        }
+        Assertions.assertAll(checks);
+    }
+
+    // When the rule keeps a join on a foreign key, the unique constraint of the unique key side stays on the plan as it
+    // was, so pruning group by keys still tells the key from the columns it determines and keeps a GROUP BY on the key.
+    @Test
+    public void testGroupByUniqueKeySurvivesKeptJoin() {
+        String[] sqls = {
+                // The join is kept because the unique key side names a partition.
+                "select count(*) from fk_to_uk_partitioned f left join uk_partitioned partition (p1) u " +
+                        "on f.fk = u.pk group by u.pk",
+                // The join is kept because the unique key side filters on the key.
+                "select count(*) from fk_to_uk_partitioned f left join " +
+                        "(select pk from uk_partitioned where pk > 0) u on f.fk = u.pk group by u.pk",
+        };
+        List<Executable> checks = Lists.newArrayList();
+        for (String sql : sqls) {
+            checks.add(() -> {
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "OUTER JOIN");
+                assertMatches(plan, "group by: \\d+: pk");
+                assertNotMatches(plan, "group by: *\n");
+            });
+        }
+        Assertions.assertAll(checks);
+    }
+
+    // The tablets each scan of the table reads, one sorted list per scan, taken from its scan ranges: REPLICA does not
+    // narrow the tablets a scan selects, it drops the scan ranges of the tablets that have none of the named replicas.
+    private static List<List<Long>> scannedTablets(ExecPlan plan, String table) {
+        return plan.getScanNodes().stream()
+                .filter(scan -> scan instanceof OlapScanNode && scan.getTableName().equals(table))
+                .map(scan -> ((OlapScanNode) scan).getScanRangeLocations(0).stream()
+                        .map(range -> range.getScan_range().getInternal_scan_range().getTablet_id())
+                        .sorted()
+                        .collect(Collectors.toList()))
+                .collect(Collectors.toList());
+    }
+
+    private static List<Long> tabletsOf(String table, String partition) {
+        return olapTableOf(table).getPartition(partition).getDefaultPhysicalPartition().getQueryableBaseIndex()
+                .getTabletIdsInOrder().stream().sorted().collect(Collectors.toList());
+    }
+
+    private static OlapTable olapTableOf(String table) {
+        return (OlapTable) connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test").getTable(table);
     }
 
     @Test

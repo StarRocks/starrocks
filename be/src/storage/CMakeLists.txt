@@ -56,6 +56,7 @@ set(STORAGE_FILES
     query/olap_dynamic_morsel_queue.cpp
     query/olap_fixed_morsel_queue.cpp
     query/olap_morsel_queue.cpp
+    query/range_group_task.cpp
     query/split_morsel_queue.cpp
     query/split_scan_morsel.cpp
     protobuf_file.cpp
@@ -159,6 +160,7 @@ set(STORAGE_FILES
     lake_meta_reader.cpp
     olap_meta_reader.cpp
     seek_tuple.cpp
+    sort_key_bounds.cpp
     sort_key_sampler.cpp
     unique_iterator.cpp
     delta_writer.cpp
@@ -203,9 +205,11 @@ set(STORAGE_FILES
     lake/primary_key_compaction_policy.cpp
     lake/tablet_reshard_helper.cpp
     lake/tablet_splitter.cpp
+    lake/tablet_merge_admission.cpp
     lake/tablet_merger.cpp
     lake/tablet_virtual_merge.cpp
     lake/tablet_reshard.cpp
+    lake/replication_schema_utils.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
     lake/lake_proto_normalizer.cpp
@@ -226,7 +230,7 @@ set(STORAGE_FILES
     lake/sst_seek_range.cpp
     lake/transactions.cpp
     lake/metadata_iterator.cpp
-    lake/update_manager.cpp
+    lake/primary_key_manager.cpp
     lake/rowset_update_state.cpp
     lake/segment_pk_iterator.cpp
     lake/meta_file.cpp
@@ -234,6 +238,7 @@ set(STORAGE_FILES
     lake/vertical_compaction_task.cpp
     lake/cloud_native_index_compaction_task.cpp
     lake/metacache.cpp
+    lake/metacache_adjuster.cpp
     lake/lake_primary_key_recover.cpp
     lake/spill_mem_table_sink.cpp
     lake/tablet_retain_info.cpp
@@ -264,7 +269,6 @@ set(STORAGE_FILES
     binlog_builder.cpp
     binlog_manager.cpp
     binlog_reader.cpp
-    lake/update_compaction_state.cpp
     lake/txn_log_applier.cpp
     persistent_index_compaction_manager.cpp
     persistent_index_load_executor.cpp

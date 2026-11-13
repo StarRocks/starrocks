@@ -7,7 +7,6 @@ description: "Iceberg catalog procedures in StarRocks for snapshot management, b
 
 # Iceberg Procedures
 
-import AutoMetaMaintenance from '../../../_assets/commonMarkdown/auto_meta_maintenance.mdx'
 
 StarRocks Iceberg Catalog supports a variety of procedures for managing Iceberg tables, including snapshot management, branch management, data maintenance, metadata management, and table management.
 
@@ -37,6 +36,52 @@ Roll back the table to snapshot with ID 98765:
 ```SQL
 ALTER TABLE iceberg.sales.order
 EXECUTE rollback_to_snapshot(98765);
+```
+
+### Rollback to timestamp
+
+Rolls back the table to the latest snapshot that was committed before the specified timestamp. The timestamp is interpreted in the session time zone.
+
+#### `rollback_to_timestamp` Syntax
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE rollback_to_timestamp(<timestamp>)
+```
+
+#### Parameters
+
+`timestamp`: The table is rolled back to the latest snapshot committed before this point in time. Format: 'YYYY-MM-DD HH:MM:SS'. An error is returned if no snapshot was committed before it.
+
+#### Example
+
+Roll back the table to its state before 2025-01-01 00:00:00:
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE rollback_to_timestamp('2025-01-01 00:00:00');
+```
+
+### Set current snapshot
+
+Sets the table's current snapshot to the specified snapshot ID. Unlike `rollback_to_snapshot`, the snapshot does not need to be an ancestor of the current snapshot, so you can use it to move the table forward again to a snapshot that was rolled back.
+
+#### `set_current_snapshot` Syntax
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE set_current_snapshot(<snapshot_id>)
+```
+
+#### Parameters
+
+`snapshot_id`: ID of the snapshot to set as the current snapshot of the table.
+
+#### Example
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE set_current_snapshot(98765);
 ```
 
 ### Cherry pick a snapshot
@@ -136,6 +181,20 @@ EXECUTE rewrite_data_files
 - Unit: -
 - Type: Int
 - Default: 1
+
+###### `delete_ratio_threshold`
+
+- Description: Data files larger than `min_file_size_bytes` are also rewritten when the rows deleted by their deletion vector or file-scoped position delete files reach this fraction of their rows. Valid range: [0, 1]. Equality delete files and partition-scoped position delete files do not count towards the ratio.
+- Unit: -
+- Type: Double
+- Default: 0.3
+
+###### `delete_file_threshold`
+
+- Description: Data files larger than `min_file_size_bytes` are also rewritten when at least this number of delete files apply to them. It must be a positive integer.
+- Unit: -
+- Type: Int
+- Default: No limit
 
 ##### `WHERE` clause
 
@@ -257,8 +316,6 @@ ALTER TABLE iceberg.sales.order
 EXECUTE rewrite_manifests()
 ```
 
-<AutoMetaMaintenance />
-
 ## Table management
 
 ### Add files
@@ -325,6 +382,60 @@ Add files from a single file:
 ```SQL
 ALTER TABLE iceberg.sales.order
 EXECUTE add_files(location = 's3://bucket/data/order/data.parquet', file_format = 'parquet');
+```
+
+### Add equality delete files
+
+Adds existing files to an Iceberg table as equality delete files. Each row in a file deletes the table rows whose equality columns have the same values. The files are committed in a new snapshot, so they apply to the data already in the table. This procedure supports Parquet and ORC file formats and requires an Iceberg table of format version 2 or later.
+
+Files are discovered from `location` in the same way as `add_files`. For a partitioned table, the partition of each file is taken from the `<column>=<value>` directories in its path, and the delete applies only to the data files in that partition. A file whose path lacks a directory for any partition column is rejected. Only identity partition transforms are supported. For an unpartitioned table, the deletes apply to the whole table. If the current partition spec is partitioned, the procedure fails when the table still has data files written under an older partition spec, because the deletes would not apply to them. When the session variable `enable_read_iceberg_equality_delete_with_partition_evolution` is set to `false` (default: `true`), the query engine does not read equality deletes that span multiple partition specs, so the procedure also fails when the table still has equality delete files written under a partition spec other than the current one. If any column of a file carries an Iceberg field ID, every equality column of that file must carry the table's field ID; otherwise the file is rejected. A file whose equality column is stored in a type that cannot be read as the table column's type without loss is also rejected, for example a string column for an `INT` table column. A file without field IDs is matched to the table by column name, so do not rename its equality columns after the file is added: the deletes would no longer apply. The procedure does not support a `WHERE` clause.
+
+#### `add_equality_delete_files` Syntax
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE add_equality_delete_files(
+    location = '<location>',
+    file_format = '<format>',
+    equality_columns = '<column>[, <column> ...]'
+    [, recursive = <boolean>]
+)
+```
+
+#### Parameters
+
+##### `location`
+
+- Description: The directory path or file path from which to add equality delete files.
+- Type: String
+- Required: Yes
+
+##### `file_format`
+
+- Description: The format of the equality delete files. Supported values: 'parquet', 'orc'.
+- Type: String
+- Required: Yes
+
+##### `equality_columns`
+
+- Description: A comma-separated list of the table columns that the deletes match on. Each column must be a top-level column of type `INT`, `BIGINT`, `STRING`, or `DATE`, and every file must contain all of these columns.
+- Type: String
+- Required: Yes
+
+##### `recursive`
+
+- Description: Whether to recursively scan subdirectories of `location`.
+- Type: Boolean
+- Default: true
+- Required: No
+
+#### Example
+
+Delete the rows whose `id` matches a row in the files under `s3://bucket/deletes/order/`, for example `s3://bucket/deletes/order/dt=2024-01-01/delete.parquet`:
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE add_equality_delete_files(location = 's3://bucket/deletes/order/', file_format = 'parquet', equality_columns = 'id');
 ```
 
 ### Register table

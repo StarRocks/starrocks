@@ -21,6 +21,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.security.PrivilegedAction;
+import java.util.Map;
+import java.util.TreeMap;
 
 public class HadoopExt {
     private static final Logger LOGGER =
@@ -32,6 +34,12 @@ public class HadoopExt {
     public static final String HADOOP_RUNTIME_JARS = "hadoop.runtime.jars";
     public static final String HADOOP_CLOUD_CONFIGURATION_STRING = "hadoop.cloud.configuration.string";
     public static final String HADOOP_USERNAME = "hadoop.username";
+    // Prefix of the credential fingerprint entries a caller writes into the Configuration (e.g. the
+    // Iceberg FileIO writes a digest of the final gs/azure auth settings, vended tokens included). The
+    // entries join the FileSystem cache key next to the cloud configuration string; a Configuration
+    // carrying them is cached even when fs.<scheme>.impl.disable.cache is set, and its cache entries are
+    // evicted once idle. Values must be digests, never the credentials themselves.
+    public static final String HADOOP_DYNAMIC_CREDENTIAL_PREFIX = "hadoop.dynamic.cred.";
 
     public static HadoopExt getInstance() {
         return INSTANCE;
@@ -46,6 +54,18 @@ public class HadoopExt {
 
     public String getCloudConfString(Configuration conf) {
         return conf.get(HADOOP_CLOUD_CONFIGURATION_STRING, "");
+    }
+
+    public String getCredentialFingerprint(Configuration conf) {
+        Map<String, String> entries = conf.getPropsWithPrefix(HADOOP_DYNAMIC_CREDENTIAL_PREFIX);
+        if (entries.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, String> e : new TreeMap<>(entries).entrySet()) {
+            sb.append(e.getKey()).append('=').append(e.getValue()).append(';');
+        }
+        return sb.toString();
     }
 
     public UserGroupInformation getHMSUGI(Configuration conf) {

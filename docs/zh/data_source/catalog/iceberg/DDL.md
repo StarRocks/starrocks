@@ -102,7 +102,7 @@ col_name col_type [COMMENT 'comment'] [DEFAULT default_value]
 
 ##### 默认值
 
-从 v4.1 开始，StarRocks 支持为 Iceberg 表的列设置默认值。此功能需要 Iceberg 格式版本 3（`"format-version" = "3"`）。
+从 v4.1 开始，StarRocks 支持为 Iceberg 表的列设置默认值。此功能需要 Iceberg 格式版本 3 及以上。
 
 **用途：**
 
@@ -117,7 +117,7 @@ col_name col_type DEFAULT default_value
 
 **要求：**
 
-- 表必须使用 Iceberg 格式版本 3（`"format-version" = "3"`）。
+- 表必须使用 Iceberg 格式版本 3 及以上。
 - 数值类型（INT、BIGINT、FLOAT、DOUBLE）、BOOLEAN、STRING 和 DATE/TIMESTAMP 类型的默认值必须使用引号包裹。例如：`DEFAULT "18"`、`DEFAULT "100.0"`、`DEFAULT "true"`。
 
 **示例：**
@@ -158,7 +158,7 @@ PARTITION BY (partition_expr[, partition_expr...])
 - `transform_expr(column_name)`
 - `transform_expr(column_name, parameter)`
 
-StarRocks 支持 Apache Iceberg 规范中定义的分区转换表达式。
+StarRocks 支持以下分区转换：identity（列名或 `identity()`）、`year()`、`month()`、`day()`、`hour()`、`truncate()`、`bucket()` 和 `void()`。使用其他转换会返回错误。
 
 :::note
 分区列支持除 FLOAT、DOUBLE、DECIMAL 和 DATETIME 之外的所有数据类型。
@@ -179,6 +179,10 @@ ORDER BY (column_name [ASC | DESC] [NULLS FIRST | NULLS LAST], ...)
 - `location`: 表的文件路径。在使用 AWS Glue 且未指定数据库级别位置时是必需的。
 - `file_format`: 文件格式。仅支持 `parquet`（默认）。
 - `compression_codec`: 压缩算法。选项：SNAPPY、GZIP、ZSTD、LZ4（默认：`zstd`）。
+- `format-version`: 表的 Iceberg 格式版本。选项：`1`、`2`、`3`、`4`（默认：`2`）。格式版本 4 从 v26.4 开始支持，StarRocks 对格式版本 4 的表的读写与格式版本 3 相同。Iceberg 将格式版本 4 的表的 Manifest 写为 Parquet 文件。格式版本 4 的表的 location 必须带 URI scheme，例如 `s3://` 或 `hdfs://`，因此 location 不带 scheme 的表无法升级到格式版本 4。
+- `write.metadata.metrics.default`: StarRocks 写入数据文件的列统计信息的默认 metrics 模式。选项：`none`、`counts`、`truncate(N)`、`full`（默认：`truncate(16)`）。`none` 不写统计信息，`counts` 只写值个数和 NULL 个数，`truncate(N)` 还会写上下界，其中 STRING 和 BINARY 的上下界截断为 N 个字符（字节），`full` 写不截断的上下界。
+- `write.metadata.metrics.column.<col>`: 列 `<col>` 的 metrics 模式，覆盖默认模式。选项与 `write.metadata.metrics.default` 相同。
+- `write.metadata.metrics.max-inferred-column-defaults`: 未设置 `write.metadata.metrics.default` 时，只有前 N 列使用默认的 `truncate(16)`，其余列为 `none`（默认：`100`）。
 
 ### 示例
 
@@ -268,6 +272,37 @@ DROP PARTITION COLUMN day(sale_date);
 ```SQL
 ALTER TABLE sales_data
 REPLACE PARTITION COLUMN day(sale_date) WITH month(sale_date);
+```
+
+---
+
+## ALTER TABLE（添加或删除嵌套字段）
+
+在 STRUCT 列或其中嵌套的 STRUCT 中添加或删除字段。
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name MODIFY COLUMN column_name
+ADD FIELD field_path field_type [FIRST | AFTER field_name];
+
+ALTER TABLE [catalog.][database.]table_name MODIFY COLUMN column_name
+DROP FIELD field_path;
+```
+
+`field_path` 是字段在列中的路径，例如 `c2.v3`。ARRAY 的元素用 `[*]` 表示，例如 `c2.[*].v3`。
+
+:::note
+对于使用 Hive metastore 的 Catalog，如果 metastore 配置为不允许不兼容的列类型变更（`hive.metastore.disallow.incompatible.col.type.changes`），该变更会被 metastore 拒绝。
+:::
+
+**示例：**
+
+假设列 `fx` 的类型为 `STRUCT<c1 INT, c2 ARRAY<STRUCT<v1 INT>>>`。
+
+```SQL
+-- 在 ARRAY c2 内的 STRUCT 中添加字段 v2
+ALTER TABLE t MODIFY COLUMN fx ADD FIELD c2.[*].v2 STRING AFTER v1;
+-- 删除字段 c1
+ALTER TABLE t MODIFY COLUMN fx DROP FIELD c1;
 ```
 
 ---

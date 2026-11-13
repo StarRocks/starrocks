@@ -23,6 +23,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authentication.GroupNameMatch;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.common.Config;
@@ -184,6 +185,8 @@ public class AuthorizationMgr {
                     ObjectType.PIPE,
                     ObjectType.GLOBAL_FUNCTION,
                     ObjectType.STORAGE_VOLUME,
+                    ObjectType.AI_FUNCTION,
+                    ObjectType.AI_PROVIDER,
                     ObjectType.WAREHOUSE);
             for (ObjectType objectType : objectTypes) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, objectType,
@@ -220,6 +223,8 @@ public class AuthorizationMgr {
                     ObjectType.FUNCTION,
                     ObjectType.GLOBAL_FUNCTION,
                     ObjectType.STORAGE_VOLUME,
+                    ObjectType.AI_FUNCTION,
+                    ObjectType.AI_PROVIDER,
                     ObjectType.PIPE)) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t, provider.getAvailablePrivType(t));
             }
@@ -324,6 +329,8 @@ public class AuthorizationMgr {
                 || ObjectType.CATALOG.equals(objectType)
                 || ObjectType.RESOURCE_GROUP.equals(objectType)
                 || ObjectType.STORAGE_VOLUME.equals(objectType)
+                || ObjectType.AI_FUNCTION.equals(objectType)
+                || ObjectType.AI_PROVIDER.equals(objectType)
                 || ObjectType.WAREHOUSE.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
                     Lists.newArrayList("*")));
@@ -883,7 +890,8 @@ public class AuthorizationMgr {
     }
 
     /**
-     * The key `groupToRoleList` already stores this group under, matched ignoring case, or
+     * The key `groupToRoleList` already stores this group under, matched the way
+     * {@link GroupNameMatch} says (ignoring case unless the cluster is configured otherwise), or
      * `groupName` itself when the group is not stored yet.
      * <p>
      * Every read and write of `groupToRoleList` goes through this, so GRANT, REVOKE, their replays
@@ -902,7 +910,7 @@ public class AuthorizationMgr {
         }
         String match = null;
         for (String stored : groupToRoleList.keySet()) {
-            if (stored.equalsIgnoreCase(groupName) && (match == null || stored.compareTo(match) < 0)) {
+            if (GroupNameMatch.equal(stored, groupName) && (match == null || stored.compareTo(match) < 0)) {
                 match = stored;
             }
         }
@@ -917,8 +925,9 @@ public class AuthorizationMgr {
                 return exactMatch;
             }
 
-            // No exact match: fall back to a case-insensitive scan. An LDAP `cn` is case-insensitive
-            // in the directory, so a GRANT written with a different case than the directory returns
+            // No exact match: fall back to the relaxed comparison (ignoring case unless
+            // authentication_group_case_insensitive is off). An LDAP `cn` is case-insensitive in
+            // the directory, so a GRANT written with a different case than the directory returns
             // must not silently have no effect. Only the lookup is relaxed - neither the stored keys
             // nor the group names of the session are rewritten, because the group name strings are
             // handed to Ranger, which matches them case-sensitively.
@@ -928,7 +937,7 @@ public class AuthorizationMgr {
             // depend on map iteration order and failing would lock out a user who could log in before.
             Set<Long> caseInsensitiveMatch = null;
             for (Map.Entry<String, Set<Long>> entry : groupToRoleList.entrySet()) {
-                if (entry.getKey().equalsIgnoreCase(groupName)) {
+                if (GroupNameMatch.equal(entry.getKey(), groupName)) {
                     if (caseInsensitiveMatch == null) {
                         caseInsensitiveMatch = new HashSet<>();
                     }
@@ -2047,25 +2056,43 @@ public class AuthorizationMgr {
         return getRoleIdsByUser(user);
     }
 
-    // get the list of roles for the current user
-    public List<RolePrivilegeCollectionV2> getApplicableRoles(UserIdentity user) throws PrivilegeException {
+    /**
+     * The roles a caller can use: the roles granted to the user, plus the roles granted to its groups, which the
+     * privilege collection always adds. An ephemeral user, one authenticated through a security integration, owns
+     * no roles: its roles are the ones its session activated. They are taken from the caller, not looked up, as
+     * the lookup reads the session of the current thread, and the RPC threads calling this have none.
+     */
+    public List<RolePrivilegeCollectionV2> getApplicableRoles(UserIdentity user, Set<String> groups,
+                                                              Set<Long> activatedRoleIds) throws PrivilegeException {
+        Set<Long> roleIds = new HashSet<>();
+        if (user.isEphemeral()) {
+            // The activated set is the only place some of these roles live: an LDAP security integration with a
+            // role mapping puts the mapped roles there at login, not on a group. The privilege collection reads
+            // them from the same place.
+            if (activatedRoleIds != null) {
+                roleIds.addAll(activatedRoleIds);
+            }
+        } else {
+            roleIds.addAll(getRoleIdsByUser(user));
+        }
+
         List<RolePrivilegeCollectionV2> applicableRoles = new ArrayList<>();
-        userReadLock();
+        roleReadLock();
         try {
-            Set<Long> roleIds = getRoleIdsByUser(user);
-            roleReadLock();
-            try {
-                for (Long roleId : roleIds) {
-                    RolePrivilegeCollectionV2 rolePrivilegeCollection = roleIdToPrivilegeCollection.get(roleId);
-                    if (rolePrivilegeCollection != null) {
-                        applicableRoles.add(rolePrivilegeCollection);
-                    }
+            // Under the lock: getRoleIdListByGroup can return the live set, which GRANT and REVOKE change in place.
+            if (groups != null) {
+                for (String group : groups) {
+                    roleIds.addAll(getRoleIdListByGroup(group));
                 }
-            } finally {
-                roleReadUnlock();
+            }
+            for (Long roleId : roleIds) {
+                RolePrivilegeCollectionV2 rolePrivilegeCollection = roleIdToPrivilegeCollection.get(roleId);
+                if (rolePrivilegeCollection != null) {
+                    applicableRoles.add(rolePrivilegeCollection);
+                }
             }
         } finally {
-            userReadUnlock();
+            roleReadUnlock();
         }
         return applicableRoles;
     }

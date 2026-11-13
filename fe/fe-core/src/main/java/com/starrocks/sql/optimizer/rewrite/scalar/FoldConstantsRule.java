@@ -318,7 +318,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
         if (handlers.containsKey(call.getFnName())) {
             Optional<ScalarOperator> optResult = handlers.get(call.getFnName()).apply(call);
             if (optResult.isPresent()) {
-                CastOperator castOp = new CastOperator(call.getType(), optResult.get());
+                CastOperator castOp = new CastOperator(call.getType(), optResult.get(), true);
                 ScalarOperator op =
                         new ScalarOperatorRewriter().rewrite(castOp, Lists.newArrayList(new ReduceCastRule()));
                 return Optional.of(op);
@@ -444,8 +444,9 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             }
             Type arrayElemType = ((ArrayType) operator.getType()).getItemType();
             ScalarOperatorRewriteContext subContext = new ScalarOperatorRewriteContext();
+            // Element adaptation is not an explicit scalar CHAR cast; preserve the BE array-cast semantics.
             List<ScalarOperator> newArguments = arg0.getChildren().stream()
-                    .map(arg -> visitCastOperator(new CastOperator(arrayElemType, arg), subContext))
+                    .map(arg -> visitCastOperator(new CastOperator(arrayElemType, arg, true), subContext))
                     .collect(Collectors.toList());
             if (newArguments.stream().allMatch(arg -> arg != null && arg.isConstantRef())) {
                 return new ArrayOperator(operator.getType(), operator.isNullable(), newArguments);
@@ -459,7 +460,8 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
 
         ConstantOperator child = (ConstantOperator) operator.getChild(0);
 
-        Optional<ConstantOperator> result = child.castTo(operator.getType());
+        Optional<ConstantOperator> result = operator.isImplicit()
+                ? child.castTo(operator.getType()) : child.castToExplicitly(operator.getType());
         if (!result.isPresent()) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Fold cast constant error: " + operator + ", " + child.toString());

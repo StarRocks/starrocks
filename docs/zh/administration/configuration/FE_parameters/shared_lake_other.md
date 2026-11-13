@@ -13,7 +13,6 @@ import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note
 
 import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
-import EditonSpecificFEItemSharedLakeOther from '../../../_assets/commonMarkdown/Edition_Specific_FE_Item_shared_lake_other.mdx'
 
 <FEConfigMethod />
 
@@ -436,6 +435,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 存算分离集群中保留历史数据版本的时间范围。在此时间范围内的历史数据版本不会在 Compactions 后通过 AutoVacuum 自动清理。您需要将此值设置得大于最大查询时间，以避免正在运行的查询访问的数据在查询完成之前被删除。从 v3.3.0、v3.2.5 和 v3.1.10 开始，默认值已从 `5` 更改为 `30`。
 - 引入版本: v3.1.0
 
+### `lake_autovacuum_max_versions_per_round`
+
+- 默认值: 500
+- 类型: Long
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群中增量（分批、可续传）AutoVacuum 的每轮工作量上限：单轮 AutoVacuum 针对一个分区最多可提交并提议的元数据版本数。增量协议恒为开启、无法关闭——legacy 单次遍历路径无法在其之后安全续删（会停在分批轮次留下的链空洞处，漏掉其下的垃圾），因此没有回退。该值仅限制每轮的工作量，从而让积压的大量历史版本在多轮中逐步清理，而不是反复在单次 RPC 中超时。小于 `100` 的取值会被上调为 `100`（每轮预算过小会导致清理积压需要过多轮次）。该参数不改变 tablet 到节点的路由。
+- 引入版本: v4.1.0
+
 ### `lake_autovacuum_parallel_partitions`
 
 - 默认值: 8
@@ -463,6 +471,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 如果分区在此时间范围内没有更新（加载、DELETE 或 Compactions），系统将不会对此分区执行 AutoVacuum。
 - 引入版本: v3.1.0
 
+### `lake_vacuum_reset_partition_ids`
+
+- 默认值: （空）
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群中增量 AutoVacuum 卡死时的恢复手段：以分号分隔的物理分区 ID 列表（格式 `id1;id2`），列出的分区其增量 vacuum 状态将被强制重置。AutoVacuum 守护线程下次处理到列表中的分区时，会丢弃其进行中的 proposal、续跑游标和 tablet 代次（但保留已回收的 retain floor，使新一轮不会重新读取已删除的版本），跳过当前轮，并在下一轮开始一次干净的 pass。每个 ID 只消费一次——守护线程在重置后立即将其从列表中移除——因此卡死的 pass 只被推动一次，而非每轮都重置。该项仅在当前服务的 Leader FE 上生效：`ADMIN SET FRONTEND CONFIG` 会将取值广播到所有 FE，而每个 FE 在成为 Leader 的那一刻会丢弃继承到的取值，因此在 failover 前不久下发的请求会丢失，需要对新 Leader 重新下发。正常运行时请保持为空。
+- 引入版本: v26.2.0
+
 ### `lake_compaction_allow_partial_success`
 
 - 默认值: true
@@ -471,6 +488,30 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 如果此项设置为 `true`，则在存算分离集群中，当子任务之一成功时，系统将认为 Compaction 操作成功。
 - 引入版本: v3.5.2
+
+### `lake_compaction_admission_mode`
+
+- 默认值: `NORMAL`
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 控制新的存算分离 Compaction 作业是否可以调度。有效值为 `NORMAL` 和 `ALLOWLIST`（区分大小写）。`NORMAL` 忽略 `lake_compaction_allow_table_ids`，保持原有调度行为；`ALLOWLIST` 仅允许名单中的表。非法模式会阻止新作业并输出日志警告。配置刷新后生效，无需重启，不取消或等待已运行的作业。两种模式下，原有黑名单和任务数量限制均有效，手动 Compaction 也受此策略限制。
+- 引入版本: -
+
+### `lake_compaction_allow_table_ids`
+
+- 默认值: ""
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 分号分隔的正整数**表 ID**，例如 `12345;98765`。仅在 `ALLOWLIST` 模式下生效，空名单不放行任何表。不支持分区 ID 或 `*`。表 ID 放行该表所有物理分区，包括未来新增的分区。非法名单在 `ALLOWLIST` 模式下阻止新作业并输出警告，但不影响 `NORMAL` 模式。`lake_compaction_disable_ids` 的表级或分区级黑名单优先，`lake_compaction_max_tasks = 0` 仍禁止所有新作业。配置刷新后生效，无需重启。
+- 引入版本: -
+
+用于 replication 迁移时，先保持 `lake_compaction_max_tasks = 0`，清空白名单并切换到 `ALLOWLIST`；开始 replication 前等待已有 Compaction 作业结束。确认模式生效后，再恢复非零任务上限。名单由用户手动维护，无需修改迁移工具，也不自动维护。
+
+仅在整张表的**所有** replication 事务均达到 **VISIBLE**、数据校验完成且没有排队、重试或后续 replication 时加白。一旦交接给目标写入或 Compaction，不得再次对该表启动 replication；如需重新迁移，必须 drop 并重建目标表。移出白名单不能恢复迁移资格。这是使用流程约束：白名单不提供 replication 与 Compaction 的事务互斥，也不实现永久禁止 replication 的状态。
+
+使用 `ADMIN SET FRONTEND CONFIG` 动态更新即可生效，无需逐台修改在线 FE 的配置文件；SQL 修改会转发到在线 FE。为保证重启和 Leader 切换后仍有效，在支持的环境中使用 `WITH PERSISTENT` 持久化两个参数；容器部署则通过部署平台保存配置。离线或新增 FE 在具备成为 Leader 的条件前，也应配置相同的值。
 
 ### `lake_compaction_disable_ids`
 
@@ -513,7 +554,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Double
 - 单位: -
 - 是否可变: Yes
-- 描述: 触发存算分离集群中 Compaction 操作的 Compaction Score 阈值。当分区的 Compaction Score 大于或等于此值时，系统会对该分区执行 Compaction。
+- 描述: 存算分离集群中自动 Compaction 的 Compaction Score 阈值。自动 Compaction 要求分区的分数大于 `0` 且大于或等于此阈值。即使此参数设置为 `0`，分数为 `0` 的分区也会被跳过。手动 Compaction 等优先级请求不受这些分数条件限制。
 - 引入版本: v3.1.0
 
 ### `lake_compaction_score_upper_bound`
@@ -638,7 +679,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: FE starmgr 模块中 grpc 服务器使用的最大工作线程数。
+- 描述: FE starmgr 模块中 gRPC 服务端处理请求的最大线程数。线程池常驻线程数与 CPU 核数相同，只有当所有线程都在忙时才会创建新线程，新增的线程空闲 60 秒后自动退出。忙碌的线程数达到该上限后，新的请求会进入队列等待。有效值为大于等于 1 的整数，`fe.conf` 和 `ADMIN SET FRONTEND CONFIG` 都会拒绝 0 或负数。
 - 引入版本: v4.0.0, v3.5.8
 
 ### `starmgr_grpc_timeout_seconds`
@@ -649,6 +690,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述:
 - 引入版本: -
+
+### `star_client_get_shard_info_batch_size`
+
+- 默认值: 1024
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群中，FE 需要一次性确定大量 tablet 所在的计算节点时（例如为大表规划查询或导入、AutoVacuum 清理分区、FE 删除 tablet），单次向 StarMgr 查询的 tablet 数量上限。超出该数量时，FE 会将查询拆分为多次请求依次发送，每次最多包含该数量的 tablet。StarMgr 处理每次请求时都持有 tablet 元数据锁，期间 StarMgr 的元数据变更以及 Follower FE 上的 StarMgr 元数据回放都会被阻塞。如果一次请求就查询大表的全部 tablet，阻塞可能长达数秒。调小该值可以缩短每次阻塞的时间，代价是请求次数增加。小于 `1` 的值按 `1` 处理。
+- 引入版本: v4.2.0
 
 ### `lake_scheduler_enable_colocate_group_sample`
 
@@ -758,7 +808,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 计数
 - 是否可变: Yes
-- 描述: 设置在为 lake（云原生）表构建发布批次时，可能分组的连续事务版本的上限。该值传递给事务图批处理例程（参见 getReadyToPublishTxnListBatch），并与 `lake_batch_publish_min_version_num` 一起确定 TransactionStateBatch 的候选范围大小。较大的值可以通过批处理更多提交来提高发布吞吐量，但会增加原子发布的范围（更长的可见性延迟和更大的回滚表面），并且当版本不连续时可能会在运行时受到限制。根据工作负载和可见性/延迟要求进行调整。
+- 描述: 设置在为 lake（云原生）表构建发布批次时，可能分组的连续事务版本的上限。该值传递给事务图批处理例程（参见 getReadyToPublishTxnListBatch），用于限定 TransactionStateBatch 的候选范围大小。较大的值可以通过批处理更多提交来提高发布吞吐量，但会增加原子发布的范围（更长的可见性延迟和更大的回滚表面），并且当版本不连续时可能会在运行时受到限制。根据工作负载和可见性/延迟要求进行调整。
 - 引入版本: v3.2.0
 
 ### `lake_batch_publish_min_version_num`
@@ -767,7 +817,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 设置构成 lake 表发布批次所需的最小连续事务版本数。DatabaseTransactionMgr.getReadyToPublishTxnListBatch 将此值与 `lake_batch_publish_max_version_num` 一起传递给 transactionGraph.getTxnsWithTxnDependencyBatch 以选择依赖事务。值为 `1` 允许单事务发布（不批处理）。值 `>1` 要求至少有相同数量的连续版本、单表、非复制事务可用；如果版本不连续，出现复制事务，或 schema 更改消耗版本，则批处理中止。增加此值可以通过分组提交来提高发布吞吐量，但可能会在等待足够连续的事务时延迟发布。
+- 描述: 已废弃，设置后不生效。保留该参数只是为了让 **fe.conf** 中已有的配置以及针对该参数的 `ADMIN SET FRONTEND CONFIG` 语句不会报错。存算分离模式下，批量发布每一轮都会从每个无需再等待其他事务的已提交事务开始组成批次，不论批次大小都会发布，每个批次最多包含 `lake_batch_publish_max_version_num` 个事务。此前，该参数指定一个批次至少包含的事务数，事务数不足的批次在当轮不发布。如果某个批次始终达不到这一数量（例如某张表最后几次导入之后再没有新的导入，或者导入排在一个同时写入多张表的事务之后），该批次每一轮都会被跳过，其中已提交的事务一直不可见，后续写入这些表的导入也只能排队等待。
 - 引入版本: v3.2.0
 
 ### `lake_publish_version_retry_interval_ms`
@@ -790,12 +840,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `lake_enable_batch_publish_multi_table`
 
-- 默认值: false
+- 默认值: true
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否允许批量发布（Batch Publish）将连续的多表事务合并为一次发布操作。该功能适用于以较高频率提交小型原子多表事务的负载（例如同时写入多张表的 CDC 数据管道）。在此类负载下，逐事务发布会在共享表的依赖链上串行执行，从而显著增加事务从提交到可见的延迟。仅当 `lake_enable_batch_publish_version` 为 `true` 时生效。请在所有 FE 节点都升级到支持该功能的版本之后再开启此参数：运行旧版本的 FE Follower 在回放多表事务批次时只会应用其中第一张表的 Visible Log。
+- 描述: 是否允许批量发布（Batch Publish）将连续的多表事务合并为一次发布操作。该功能适用于以较高频率提交小型原子多表事务的负载（例如同时写入多张表的 CDC 数据管道）。在此类负载下，逐事务发布会在共享表的依赖链上串行执行，从而显著增加事务从提交到可见的延迟。仅当 `lake_enable_batch_publish_version` 为 `true` 时生效。从 v26.3 开始，默认值从 `false` 更改为 `true`。v4.1.5 之前版本的 FE 不支持该功能，回放多表事务批次时只会应用其中第一张表的 Visible Log。因此，从这类版本升级时，请在每个已升级 FE 节点的 **fe.conf** 中将此参数设为 `false`，直到所有 FE 节点升级完成：升级期间一旦发生 Leader 切换，已升级的 FE 节点可能成为 Leader，而其余 FE 节点仍在运行旧版本。将集群降级到这类版本时，请先将此参数设为 `false`，等待修改之前提交的事务全部变为可见，再创建元数据快照。
 - 引入版本: v4.1.5
+
+### `lake_enable_batch_publish_retry_freeze`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离表的批量发布（Batch Publish）没有完成时，重试是否只包含上一次尝试中的事务，只包含一个事务的批次同样适用，这样重试不会把之后提交的事务加进来。不开启时，重试会重新攒批，把这些事务也加进来，各分区的新版本号随之改变，上一次尝试在旧版本号上已经完成的工作也就无法复用。设为 `false` 可恢复原来的攒批方式，从下一轮发布起生效。仅当 `lake_enable_batch_publish_version` 为 `true` 时生效。
+- 引入版本: v26.2
 
 ### `lake_enable_tablet_creation_optimization`
 
@@ -803,7 +862,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 启用后，StarRocks 在存算分离模式下优化云原生表和物化视图的 tablet 创建，通过为物理分区下的所有 tablet 创建单个共享 tablet 元数据，而不是为每个 tablet 创建不同的元数据。这减少了表创建、rollup 和 schema 变更作业期间创建的 tablet 任务和元数据/文件数量。优化仅适用于云原生表/物化视图，并与 `file_bundling` 结合（后者重用相同的优化逻辑）。注意：schema 变更和 rollup 作业明确禁用使用 `file_bundling` 的表的优化，以避免使用相同名称的文件被覆盖。谨慎启用——它改变了创建的 tablet 元数据的粒度，并可能影响副本创建和文件命名行为。
+- 描述: 已废弃，设置后不生效。保留该参数只是为了让 **fe.conf** 中已有的配置以及针对该参数的 `ADMIN SET FRONTEND CONFIG` 语句不会报错。存算分离模式下，云原生表或物化视图在创建分区时如何写入初始 tablet 元数据，仅由表属性 `file_bundling` 决定：开启 `file_bundling` 时，同一物理分区下的所有 tablet 共用一份 tablet 元数据（Range 分布的表除外，这类表的每个 tablet 都有各自的键范围）；未开启时，每个 tablet 各写一份。rollup 和 schema 变更作业始终为每个 tablet 单独写入元数据。如果开启了表属性 `light_weight_tablet_creation`，以上两种情况在创建时都不写入初始 tablet 元数据。此前，开启该参数后，未开启 `file_bundling` 的表也会使用共享的 tablet 元数据，这类表上的 rollup 或 schema 变更作业可能覆盖同一分区中原有索引的 tablet 元数据。该参数开启期间创建的分区仍可正常读取。
 - 引入版本: v3.3.1, v3.4.0, v3.5.0
 
 ### `lake_create_tablet_max_retries`
@@ -878,6 +937,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 每个 Iceberg 表待处理提交操作的最大数量。当使用提交队列 (`enable_iceberg_commit_queue=true`) 时，这限制了可以为一个表排队的提交操作的数量。当达到限制时，额外的提交操作将在调用者线程中执行（阻塞直到容量可用）。此配置在 FE 启动时读取，并应用于新创建的表执行器。需要重启 FE 才能生效。如果您预期对同一表有许多并发提交，请增加此值。如果此值过低，在高并发期间提交可能会在调用者线程中阻塞。
 - 引入版本: v4.1.0
 
+### `deltalake_checkpoint_meta_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Delta Lake Catalog 共用的一份 Delta Log Checkpoint 文件缓存可以使用的 FE JVM 堆比例，无论有多少个 Catalog，总量都受此上限约束。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `deltalake_checkpoint_meta_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
+### `deltalake_json_meta_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Delta Lake Catalog 共用的一份 Delta Log JSON 文件缓存可以使用的 FE JVM 堆比例。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `deltalake_json_meta_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
+### `iceberg_data_file_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Iceberg Catalog 共用的一份 Data File Manifest 缓存可以使用的 FE JVM 堆比例，无论有多少个 Catalog，总量都受此上限约束。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `iceberg_data_file_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
+### `iceberg_delete_file_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Iceberg Catalog 共用的一份 Delete File Manifest 缓存可以使用的 FE JVM 堆比例；由删除文件构建的删除文件索引另有一份同样大小的缓存。默认值 `0` 表示两者都由每个 Catalog 独占，大小由 Catalog 属性 `iceberg_delete_file_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
+### `iceberg_partition_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Iceberg Catalog 共用的一份分区缓存可以使用的 FE JVM 堆比例。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `iceberg_partition_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
 ### `iceberg_remove_orphan_files_min_retention_seconds`
 
 - 默认值: 86400
@@ -895,8 +999,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变：Yes
 - 描述：系统用于判断存算分离集群中 Worker 之间 Tablet 分布平衡的阈值，不平衡因子的计算公式为 `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。如果该因子大于 `lake_balance_tablets_threshold`，则会触发节点间 Tablet 调度。此配置项仅在 `lake_enable_balance_tablets_between_workers` 设为 `true`时生效。
 - 引入版本：v3.3.4
-
-<EditonSpecificFEItemSharedLakeOther />
 
 ## 其他
 
@@ -945,6 +1047,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 被 security integration 认证链拒绝的凭据记住多久，使得反复重试同一个错误口令的客户端不会每次都产生一次 LDAP bind——正是这种重试会把 Active Directory 的 `badPwdCount` 推向账号锁定。缓存的 key 包含凭据的哈希，因此把口令改对后立即生效，不必等 TTL 过期；由目录本身不可用导致的失败不会被缓存。设为 `0` 表示关闭。
 - 引入版本: v4.2, v4.1.6
 
+### `authentication_group_case_insensitive`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 登录得到的组名与 `GRANT ... TO EXTERNAL GROUP` 或 `permitted_groups` 中仅大小写不同的条目是否算匹配。默认开启，因为 LDAP 的 `cn` 在目录里本就不区分大小写，用另一种大小写写的 GRANT 不应该静默失效。如果组背后的身份系统把大小写不同的组当作不同的组（例如从 JWT claim 读到的组），请设为 `false`，这样 `Admins` 和 `admins` 仍是两个组。只影响比较：组名按到达时的原样存储和显示，交给 Apache Ranger 时也不改写。
+- 引入版本: v4.2
+
 ### `authentication_ldap_case_insensitive`
 
 - 默认值: false
@@ -953,6 +1064,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: StarRocks 侧匹配 LDAP/AD 用户名时是否放宽为忽略大小写。设置为 `true` 时：登录名与使用 `AUTHENTICATION_LDAP_SIMPLE` 创建的用户仅大小写不同时仍能匹配到该用户，从而保证其 per-user DN 和已授予的 Role 生效；通过 LDAP Security Integration 认证成功的登录，其会话身份取自目录中记录的用户名，而不是客户端键入的写法。由于该项同时放宽了登录可匹配到的用户范围、并改变 `current_user()` 与 `SHOW PROCESSLIST` 的返回值，默认关闭。使用原生密码、JWT 或 OAuth2 认证的用户不受影响。如果存在两个仅大小写不同、且均使用 `AUTHENTICATION_LDAP_SIMPLE` 创建的用户，同时匹配到二者的登录会被拒绝，而不会任选其一。组名的大小写匹配与该项无关，独立生效。
 - 引入版本: v4.2.0
+
+### `jwks_cache_ttl_seconds`
+
+- 默认值: 600
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 每个 JWKS URL 对应的公钥集（JWK Set）缓存生命期。HTTP Bearer 每个请求都要做一次完整认证，因此缓存公钥集，而不是每次都去 IdP 拉取。
+- 引入版本: v4.2
+
+### `jwks_cache_refresh_ahead_seconds`
+
+- 默认值: 300
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 在缓存的 JWKS 过期前多少秒于后台提前刷新，以减少缓存未命中。必须小于 `jwks_cache_ttl_seconds`。默认值取的是 TTL 的一半，这样一次刷新失败后还剩半个 TTL 可以重试；注意它是绝对秒数而非比例，调整 TTL 时需要一并调整。
+- 引入版本: v4.2
+
+### `jwks_cache_outage_ttl_seconds`
+
+- 默认值: 3600
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: IdP 不可达时，最多继续使用已过期的陈旧 JWKS 多长时间，以便已签发的 token 仍能验签。
+- 引入版本: v4.2
+
+### `jwks_cache_refresh_rate_limit_seconds`
+
+- 默认值: 30
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 未知 key ID（`kid`）触发强制刷新 JWKS 的最小时间间隔，用于防止 kid flooding。
+- 引入版本: v4.2
 
 ### `authentication_ldap_simple_bind_base_dn`
 
@@ -1213,6 +1360,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: `EXPLAIN VERBOSE` 输出中每个 Scan 节点的 `dict_col` 字段所列出的低基数字典优化列的最大数量。当某个 Scan 节点应用的字典列数量超过该值时，列表将被截断并以省略号结尾。小于或等于 `0` 的值会被视为 `0`，即完全截断该列表。该参数仅影响 `EXPLAIN VERBOSE` 的输出，不会改变字典优化在查询中的实际应用方式。
 - 引入版本: v4.2.0
+
+### `gtid_batch_window_ms`
+
+- 默认值: 5000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 下一条 gtid 将越过当前批次上界时，FE 向前预留的毫秒窗口。小于 `1` 的值按 `1` 处理。窗口还必须落在 snowflake 剩余的 42 位时间戳内；再大则发号失败，而不会把预留上界算溢出。合法范围内值越大，元数据 journal 写入越少。副作用是切主时未用完的预留作废，gtid 的时间戳最多向前跳这整个窗口。
+- 引入版本: -
 
 ### `hive_meta_cache_refresh_interval_s`
 
@@ -1484,22 +1640,31 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 在物化视图刷新期间，如果需要批量创建多个分区，系统会将其分为每批 64 个分区。为降低频繁创建分区导致失败的风险，每个批次之间设置了默认间隔（以毫秒为单位）以控制创建频率。
 - 引入版本: v3.3
 
+### `mv_incremental_refresh_wait_visible_timeout_ms`
+
+- 默认值: 300000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 物化视图增量刷新在规划前，等待该物化视图上已提交的事务变为可见的最长时间。超时仍有事务未可见时，本次刷新失败且不写入数据，下一次刷新会再次等待。
+- 引入版本: -
+
 ### `mv_plan_cache_max_size`
 
 - 默认值: 1000
 - 类型: Long
 - 单位:
 - 是否可变: Yes
-- 描述: 物化视图计划缓存的最大大小（用于物化视图重写）。如果有很多物化视图用于透明查询重写，您可以增加此值。
+- 描述: 物化视图计划缓存的最大大小（用于物化视图重写）。如果有很多物化视图用于透明查询重写，您可以增加此值。该值仅在 FE 启动创建缓存时读取一次，因此运行时修改后需重启 FE 才会生效。
 - 引入版本: v3.2
 
 ### `mv_plan_cache_thread_pool_size`
 
-- 默认值: 3
+- 默认值: 8
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 物化视图计划缓存的默认线程池大小（用于物化视图重写）。
+- 描述: 已废弃。自 v3.5.14、v4.0.7 和 v4.1 起，设置后不生效。加载物化视图计划缓存（用于物化视图重写）的线程池大小固定为 2 与 CPU 核数的四分之三中的较大值。
 - 引入版本: v3.2
 
 ### `mv_refresh_default_planner_optimize_timeout`
@@ -1519,6 +1684,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 如果刷新过程中存在过滤数据，物化视图刷新失败，默认为 true，否则忽略过滤数据并返回成功。
 - 引入版本: -
+
+### `mv_refresh_force_partition_type`
+
+- 默认值: 0
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 对指定分区类型的物化视图，无论基表是否发生变化，刷新时都强制刷新。适用于基于外表、无法准确检测数据变化的物化视图。该值为位图：`0` 表示禁用，`1` 表示非分区物化视图，`2` 表示 Range 分区物化视图，`4` 表示 List 分区物化视图。可将多个值相加组合使用，例如 `7` 表示以上三种类型。对 `refresh_mode` 为 `INCREMENTAL` 的物化视图不生效。
+- 引入版本: v3.5.16, v4.0.9, v4.1
 
 ### `mv_refresh_try_lock_timeout_ms`
 

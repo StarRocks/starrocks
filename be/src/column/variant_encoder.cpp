@@ -662,6 +662,14 @@ Status encode_datum_to_variant_value(const Datum& datum, const TypeDescriptor& t
     case TYPE_VARCHAR:
         append_string_value(out, datum.get_slice());
         return Status::OK();
+    case TYPE_VARBINARY: {
+        // A shredded binary typed_value is read as VARBINARY, and so is a UUID one: both are written as a variant
+        // BINARY, which keeps the bytes. The UUID type identity is not kept. Without this case the rebuild of the row
+        // failed with "Unsupported type" and the whole row was lost.
+        const Slice bytes = datum.get_slice();
+        append_string_or_binary_value(out, VariantType::BINARY, std::string_view(bytes.data, bytes.size));
+        return Status::OK();
+    }
     case TYPE_JSON: {
         const JsonValue* json = datum.get_json();
         if (json == nullptr || json->is_null_or_none()) {
@@ -818,7 +826,10 @@ StatusOr<VariantRowValue> VariantEncoder::encode_json_text_to_variant(std::strin
     // error-code API: a throw per non-JSON row would be far too expensive. The catch only remains as a safety
     // net for exceptions that are not caused by the input, so it costs nothing on the hot path.
     try {
-        auto builder = vpack::Parser::tryFromJson(json_text.data(), json_text.size(), nullptr);
+        // Honor the shared JSON nesting-depth cap here too; over-deep input then fails to parse and
+        // falls back to string storage below, like any other non-JSON text.
+        auto options = JsonValue::parse_options_from_config();
+        auto builder = vpack::Parser::tryFromJson(json_text.data(), json_text.size(), nullptr, &options);
         if (builder == nullptr) {
             return encode_json_to_variant(JsonValue::from_string(Slice(json_text.data(), json_text.size())));
         }

@@ -5,7 +5,6 @@ toc_max_heading_level: 2
 sidebar_position: 20
 ---
 
-import CacheStats from '../../_assets/commonMarkdown/_cache_stats.mdx'
 
 # Data Cache
 
@@ -72,6 +71,8 @@ StarRocks 環境に基づいて、以下の Grafana ダッシュボードテン�
 - [仮想マシン上の StarRocks 共有データクラスタ用ダッシュボードテンプレート](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-for-vm.json)
 - [Kubernetes 上の StarRocks 共有データクラスタ用ダッシュボードテンプレート](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-for-k8s.json)
 
+StarRocks の監視およびアラートサービスの設定方法の詳細については、[Prometheus と Grafana を使用した監視とアラート](../../administration/management/monitoring/prometheus_grafana.md)を参照してください。
+
 ### 重要なメトリクス
 
 #### fslib read io_latency
@@ -121,8 +122,6 @@ CN ノード上でキャッシュされたデータをクリアする手順は�
 
 - クラウドネイティブテーブルに対して `datacache.enable` プロパティが `false` に設定されている場合、そのテーブルに対して Data Cache は有効になりません。
 - `datacache.partition_duration` プロパティが特定の時間範囲に設定されている場合、その時間範囲を超えたデータはキャッシュされません。
-
-<CacheStats />
 
 ## 既知の問題
 

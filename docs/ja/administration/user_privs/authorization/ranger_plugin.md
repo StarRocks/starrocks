@@ -6,7 +6,6 @@ sidebar_position: 40
 
 # Apache Ranger で権限を管理する
 
-import ServiceDefLink from '../../../_assets/commonMarkdown/servicedef_link.mdx'
 
 [Apache Ranger](https://ranger.apache.org/) は、ユーザーが視覚的なウェブページを通じてアクセス ポリシーをカスタマイズできる集中型のセキュリティ管理フレームワークを提供します。これにより、どの役割がどのデータにアクセスできるかを決定し、Hadoop エコシステム内のさまざまなコンポーネントとサービスに対してきめ細かいデータ アクセス制御を実行できます。
 
@@ -21,7 +20,16 @@ StarRocks v3.1.9 では、ネイティブの RBAC 特権システムに加えて
 - Apache Ranger を通じてアクセス ポリシー、マスキング ポリシー、および行レベル フィルタ ポリシーを作成します。
 - Ranger の監査ログ。
 - **Kerberos を使用して認証する Ranger サーバーはサポートされていません。**
+- **JavaScript で評価される Ranger のポリシー条件はサポートされていません。** たとえば、`expression` 条件や、タグベースのポリシーの `accessed-after-expiry` 条件です。詳細は以下の注記を参照してください。
 - 同じ Apache Ranger サービスに複数の StarRocks サービスを登録することで、異なる StarRocks クラスタでの権限管理を行うことができます。
+
+:::note
+
+StarRocks FE は JDK 17 以降で動作し、JavaScript エンジンを含みません。Ranger は JavaScript の条件を評価できない場合、その条件を満たしたものとして扱い、評価のたびに `failed to evaluate condition '<condition>': script engine not found` をログに出力します。たとえば、`expression` 条件を持つ許可項目は、式を確認せずにアクセスを許可します。StarRocks に適用されるポリシーではこれらの条件を使用しないでください。
+
+FE はポリシーの読み込み時にも `failed to initialize condition 'accessed-after-expiry'` をログに出力します。これは、Ranger Admin がデフォルトでサービスに関連付けるタグサービスの `EXPIRES_ON` ポリシーによるものです。`EXPIRES_ON` タグを持つリソースがない限り、このメッセージは影響しません。このタグを持つリソースへのアクセスは、有効期限前でも拒否されます。
+
+:::
 
 このトピックでは、StarRocks と Apache Ranger の権限制御方法と統合プロセスについて説明します。Ranger でセキュリティ ポリシーを作成してデータ セキュリティを管理する方法については、[Apache Ranger 公式ウェブサイト](https://ranger.apache.org/) を参照してください。
 
@@ -93,7 +101,11 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
 このステップでは、Ranger 上で StarRocks Service を設定し、ユーザーが Ranger を通じて StarRocks オブジェクトに対するアクセス制御を実行できるようにします。
 :::
 
-<ServiceDefLink />
+1. [ranger-servicedef-starrocks.json](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-servicedef-starrocks.json) を StarRocks FE マシンまたは Ranger マシンの任意のディレクトリにコピーします。
+
+   ```SQL
+   wget https://raw.githubusercontent.com/StarRocks/starrocks/main/conf/ranger/ranger-servicedef-starrocks.json
+   ```
 
    :::note
    Ranger の自動補完機能が必要ない場合 (つまり、ranger-starrocks-plugin をインストールしていない場合)、.json ファイルの `implClass` を空に設定する必要があります。
@@ -110,12 +122,22 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
 
    :::
 
+   Ranger でビューおよびマテリアライズドビューに SELECT 権限を付与するには、.json ファイル内の `view` リソースと `materialized_view` リソースの `accessTypeRestrictions` に `"select"` が含まれている必要があります。含まれていない場合は、次の手順でサービス定義を追加または更新する前に追加してください。
+
 2. Ranger 管理者として次のコマンドを実行して StarRocks Service を追加します。
 
    ```Bash
    curl -u <ranger_adminuser>:<ranger_adminpwd> \
    -X POST -H "Accept: application/json" \
    -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/plugins/definitions -d@ranger-servicedef-starrocks.json
+   ```
+
+   Ranger に StarRocks のサービス定義がすでに登録されている場合（StarRocks のアップグレード時など）は、再度追加せずに更新します:
+
+   ```Bash
+   curl -u <ranger_adminuser>:<ranger_adminpwd> \
+   -X PUT -H "Accept: application/json" \
+   -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/public/v2/api/servicedef/name/starrocks -d@ranger-servicedef-starrocks.json
    ```
 
 3. `http://<ranger-ip>:<ranger-host>/login.jsp` にアクセスして Apache Ranger ページにログインします。ページに STARROCKS サービスが表示されます。
@@ -142,7 +164,10 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
    ![added service](../../../_assets/ranger_added_service.png)
 
 5. **Test connection** をクリックして接続性をテストし、接続が成功したら保存します。ranger-starrocks-plugin をインストールしていない場合は、接続テストをスキップして直接作成できます。
-6. StarRocks クラスターの各 FE マシンで、`fe/conf` フォルダーに [ranger-starrocks-security.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-security.xml) を作成し、内容をコピーします。次の 2 つのパラメーターを変更し、変更を保存する必要があります。
+
+### FE ノードで Ranger を有効にする
+
+1. StarRocks クラスターの各 FE マシンで、`fe/conf` フォルダーに [ranger-starrocks-security.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-security.xml) を作成し、内容をコピーします。次の 2 つのパラメーターを変更し、変更を保存する必要があります。
 
    - `ranger.plugin.starrocks.service.name`: ステップ 4 で作成した StarRocks Service の名前に変更します。
    - `ranger.plugin.starrocks.policy.rest the url`: Ranger Admin のアドレスに変更します。
@@ -173,16 +198,23 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
    ...
    ```
 
-7. (オプション) Ranger の監査ログサービスを使用する場合は、各 FE マシンの `fe/conf` フォルダーに [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml) ファイルを作成します。内容をコピーし、**`xasecure.audit.solr.solr_url` の `solr_url` を自分の `solr_url` に置き換えて**、ファイルを保存します。
+2. (オプション) Ranger の監査ログサービスを使用する場合は、各 FE マシンの `fe/conf` フォルダーに [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml) ファイルを作成します。内容をコピーし、**`xasecure.audit.solr.solr_url` の `solr_url` を自分の `solr_url` に置き換えて**、ファイルを保存します。
 
-8. すべての FE 設定ファイルに `access_control = ranger` の設定を追加します。
+   StarRocks は Ranger の監査ログの送信先として次の 2 つをサポートしますが、同時に使用できるのはどちらか一方のみです。
+
+   - Solr: テンプレートで使用されている `xasecure.audit.solr.*` プロパティを使用します。`xasecure.audit.destination.solr` による Solr の設定はサポートされていません。
+   - ローカルファイル: `xasecure.audit.destination.file` を `true` に、`xasecure.audit.destination.file.dir` を監査ファイルのディレクトリに設定します。
+
+   `xasecure.audit.destination.*` プロパティのいずれかが有効になると、Ranger は Solr のものを含め、すべての `xasecure.audit.<destination>.*` プロパティを無視します。`ranger-hive-audit.xml` も同様です。
+
+3. すべての FE 設定ファイルに `access_control = ranger` の設定を追加します。
 
    ```SQL
    vim fe.conf
    access_control=ranger 
    ```
 
-9. すべての FE マシンを再起動します。
+4. すべての FE マシンを再起動します。
 
    ```SQL
    -- FE フォルダーに切り替えます。
@@ -220,6 +252,29 @@ External Catalog については、外部サービス (Hive Service など) を�
        ```
 
 ​    この操作により、既存の Catalog の認証方法が Ranger ベースの認証に変更されます。
+
+4. (オプション) データベース名の前に Catalog 名を付ける。`ranger.plugin.hive.service.name` を設定した External Catalog (Hive、Iceberg、Hudi Catalog など) であれば、本節が適用されます。
+
+   Ranger の Hive Service が認識するのは `database`、`table`、`column` の 3 階層だけで、Catalog の階層はありません。そのため、複数の External Catalog が 1 つの Hive Service を共有している場合 (たとえば複数の AWS Glue Catalog)、複数の Catalog に同名のデータベースがあると同じポリシーにマッチしてしまいます。そのような Catalog にプロパティ `"ranger.plugin.hive.catalog_prefix.enabled" = "true"` を設定すると、StarRocks は Ranger に送る `database` リソースとして、素のデータベース名ではなく `<catalog_name>_<database_name>` を使用します。たとえば `glue_prod.sales.orders` へのクエリは、database が `glue_prod_sales` である Ranger ポリシーに対して権限チェックされます。
+
+   ```SQL
+   CREATE EXTERNAL CATALOG glue_prod
+   PROPERTIES (
+       "type" = "hive",
+       "hive.metastore.type" = "glue",
+       "aws.glue.region" = "us-west-2",
+       "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>",
+       "ranger.plugin.hive.catalog_prefix.enabled" = "true"
+   );
+
+   -- 既存の Catalog にも設定できます。新しい値はステートメントが返った時点で有効になります。
+   ALTER CATALOG glue_prod
+   SET ("ranger.plugin.hive.catalog_prefix.enabled" = "true");
+   ```
+
+   - 有効な値は `true` と `false` のみです。それ以外の値を指定すると CREATE または ALTER CATALOG が失敗します。
+   - このプロパティを設定しない場合、Catalog は FE 設定項目 `ranger_hive_catalog_prefix_enabled` (デフォルト `false`) に従います。`ranger.plugin.hive.service.name` を設定していない Catalog ではこのプロパティは無視されます。
+   - Catalog 名とデータベース名の間の区切り文字は FE 設定項目 `ranger_hive_catalog_prefix_separator` (デフォルト `_`) で決まります。1 つの Ranger Service を共有するすべての Catalog で同じ区切り文字を使う必要があるため、この項目はグローバルにのみ設定できます。
 
 ## 次のステップ
 

@@ -73,6 +73,7 @@ import com.starrocks.catalog.PartitionAccessTimePersister;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
+import com.starrocks.catalog.SyncMaterializedViewRecoveryException;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -94,7 +95,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.LogCleaner;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -200,7 +200,6 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.QueryStatisticsInfo;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.VariableMgr;
@@ -221,10 +220,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
 import com.starrocks.sql.ast.RefreshTableStmt;
-import com.starrocks.sql.ast.SetType;
-import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRef;
-import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -257,7 +253,6 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.transaction.PublishVersionDaemon;
-import com.starrocks.type.BooleanType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -334,6 +329,7 @@ public class GlobalStateMgr {
     private final BatchWriteMgr batchWriteMgr;
     private final ExportMgr exportMgr;
     private final MaterializedViewMgr materializedViewMgr;
+    private final MvStartupActivationCoordinator mvStartupActivationCoordinator = new MvStartupActivationCoordinator();
 
     private final ConsistencyChecker consistencyChecker;
     private BackupHandler backupHandler;
@@ -1473,41 +1469,34 @@ public class GlobalStateMgr {
         feType = FrontendNodeType.LEADER;
         dominationStartTimeMs = System.currentTimeMillis();
 
-        try {
-            publishLeaderLease(getEpoch());
+        // No rollback: a half-done activation cannot be un-done reliably. Any failure below escapes
+        // to StateChangeExecutor, which exits the process for a clean restart.
+        publishLeaderLease(getEpoch());
 
-            runLeaderBootstrapActions();
+        runLeaderBootstrapActions();
 
-            // MUST set leader ip before starting checkpoint thread.
-            // because checkpoint thread need this info to select non-leader FE to push image
-            nodeMgr.setLeaderInfo();
+        // MUST set leader ip before starting checkpoint thread.
+        // because checkpoint thread need this info to select non-leader FE to push image
+        nodeMgr.setLeaderInfo();
 
-            // start all daemon threads that only running on MASTER FE
-            startLeaderOnlyDaemonThreads();
-            // start other daemon threads that should run on all FEs
-            startAllNodeTypeDaemonThreads();
-            insertOverwriteJobMgr.cancelRunningJobs();
+        // start all daemon threads that only running on MASTER FE
+        startLeaderOnlyDaemonThreads();
+        // start other daemon threads that should run on all FEs
+        startAllNodeTypeDaemonThreads();
+        insertOverwriteJobMgr.cancelRunningJobs();
 
-            MetricRepo.init();
+        MetricRepo.init();
 
-            isReady.set(true);
+        isReady.set(true);
 
-            String msg = "leader finished to replay journal, can write now.";
-            Util.stdoutWithTime(msg);
-            LOG.info(msg);
+        String msg = "leader finished to replay journal, can write now.";
+        Util.stdoutWithTime(msg);
+        LOG.info(msg);
 
-            // for leader, there are some new thread pools need to register metric
-            ThreadPoolManager.registerAllThreadPoolMetric();
+        // for leader, there are some new thread pools need to register metric
+        ThreadPoolManager.registerAllThreadPoolMetric();
 
-            checkCaseInsensitive();
-        } catch (StarRocksException e) {
-            LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
-            if (!isReady.get()) {
-                // No rollback: a half-done activation cannot be un-done reliably. Let the failure
-                // escape to StateChangeExecutor, which exits the process for a clean restart.
-                throw new RuntimeException("transfer to leader failed", e);
-            }
-        }
+        checkCaseInsensitive();
 
         createBuiltinStorageVolume();
         resourceGroupMgr.createBuiltinResourceGroupsIfNotExist();
@@ -1518,7 +1507,7 @@ public class GlobalStateMgr {
     }
 
     @VisibleForTesting
-    void runLeaderBootstrapActions() throws StarRocksException {
+    void runLeaderBootstrapActions() {
         boolean shouldResetFrontends =
                 (nodeMgr.isFirstTimeStartUp() || Config.bdbje_reset_election_group) && !leaderBootstrapActionsDone;
         boolean runBootStrapActions = nodeMgr.isFirstTimeStartUp() && !leaderBootstrapActionsDone;
@@ -1528,22 +1517,10 @@ public class GlobalStateMgr {
         }
         if (runBootStrapActions) {
             initCaseInsensitive();
-            enableAdaptiveSinkDopForFirstStartup();
         }
         if (shouldResetFrontends || runBootStrapActions) {
             leaderBootstrapActionsDone = true;
         }
-    }
-
-    @VisibleForTesting
-    void enableAdaptiveSinkDopForFirstStartup() throws StarRocksException {
-        // When the cluster is initially deployed, set ENABLE_ADAPTIVE_SINK_DOP so that load is
-        // automatically configured for best performance. For upgraded clusters, retain the
-        // original value to avoid stability risk from concurrency changes.
-        variableMgr.setSystemVariable(variableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
-                        SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
-                        LiteralExprFactory.create("true", BooleanType.BOOLEAN)),
-                false);
     }
 
     private void triggerOnTransferToLeader() {
@@ -2216,6 +2193,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
                 .put(SRMetaBlockID.DIGEST_BLACKLIST_MGR, sqlDigestBlackList::load)
                 .put(SRMetaBlockID.AI_PROVIDER_MGR, aiProviderMgr::load)
+                .put(SRMetaBlockID.GTID_GENERATOR, gtidGenerator::load)
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .put(SRMetaBlockID.TABLET_RESHARD_JOB_MGR, tabletReshardJobMgr::load)
                 .build();
@@ -2279,15 +2257,22 @@ public class GlobalStateMgr {
 
         imageLoader.checkCheckSum();
 
-        try {
-            postLoadImage();
-        } catch (Exception t) {
-            LOG.warn("there is an exception during processing after load image. exception:", t);
-        }
+        postLoadImageWithRecoveryPolicy();
 
         long loadImageEndTime = System.currentTimeMillis();
         this.imageJournalId = imageLoader.getImageJournalId();
         LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
+    }
+
+    @VisibleForTesting
+    void postLoadImageWithRecoveryPolicy() {
+        try {
+            postLoadImage();
+        } catch (SyncMaterializedViewRecoveryException e) {
+            throw e;
+        } catch (Exception t) {
+            LOG.warn("there is an exception during processing after load image. exception:", t);
+        }
     }
 
     private void postLoadImage() {
@@ -2316,6 +2301,9 @@ public class GlobalStateMgr {
                     }
                 } catch (Throwable e) {
                     LOG.error("reload table failed: {}", table, e);
+                    if (e instanceof SyncMaterializedViewRecoveryException recoveryException) {
+                        throw recoveryException;
+                    }
                 }
             }
         }
@@ -2331,28 +2319,52 @@ public class GlobalStateMgr {
             }
         }
 
+        // only load image async when FE restart and it's not checkpoint thread to avoid changing original behavior.
+        boolean isReloadAsync = Config.enable_mv_post_image_reload_cache && !isCheckpointThread();
+        if (!isReloadAsync) {
+            reloadMvsSynchronously(allMVs, startMillis);
+            return;
+        }
+
+        // Asynchronous reload: hand the mvs over to the startup coordinator, which activates them layer by layer so
+        // that an mv only starts once every mv it is built on has finished -- submitted all at once, upper mvs could
+        // occupy every mv-plan-cache thread waiting for base mvs queued behind them. The layers are built before any
+        // mv is reloaded, since a reload may rewrite an mv's base table infos. Nothing is awaited here on purpose:
+        // this runs on the image loading thread and journal replay only starts after it returns.
+        List<List<MaterializedView>> layers = MaterializedViewDependencyGraph.buildTopologicalLayers(allMVs);
+        long topoBuildDuration = System.currentTimeMillis() - startMillis;
+        for (MaterializedView mv : allMVs) {
+            mv.prepareForStartupActivation();
+        }
+        int largestLayer = layers.stream().mapToInt(List::size).max().orElse(0);
+        LOG.info("handing {} materialized views in {} topological layers to the startup activation coordinator, " +
+                "largest layer: {}, topo build cost(ms): {}", allMVs.size(), layers.size(), largestLayer,
+                topoBuildDuration);
+        mvStartupActivationCoordinator.schedule(layers, MaterializedView::activateOnStartup);
+
+        LOG.info("finish handing over all materialized views for startup activation in {}ms, total mv count: {}",
+                System.currentTimeMillis() - startMillis, allMVs.size());
+    }
+
+    private void reloadMvsSynchronously(List<MaterializedView> allMVs, long startMillis) {
         // Process in topological order
         List<MaterializedView> topoOrder = Config.enable_mv_post_image_reload_cache ?
                 MaterializedViewDependencyGraph.buildTopologicalOrder(allMVs) : allMVs;
         long topoBuildDuration = System.currentTimeMillis() - startMillis;
-
-        // only load image async when FE restart and it's not checkpoint thread to avoid changing original behavior.
-        boolean isReloadAsync = Config.enable_mv_post_image_reload_cache && !isCheckpointThread();
         int size = topoOrder.size();
         for (int i = 0; i < size; i++) {
             MaterializedView mv = topoOrder.get(i);
             String dbName = Optional.ofNullable(localMetastore.getDb(mv.getDbId()))
                     .map(Database::getFullName)
                     .orElse(String.valueOf(mv.getDbId()));
-            LOG.info("start to reload mv {}/{}: {}.{} after load image, isReloadAsync:{}",
-                    i + 1, size, dbName, mv.getName(), isReloadAsync);
-            // set `postLoadImage` flag to true to indicate that this is called after image loading
-            mv.onReload(isReloadAsync);
+            LOG.info("start to reload mv {}/{}: {}.{} after load image, isReloadAsync:false",
+                    i + 1, size, dbName, mv.getName());
+            mv.onReload(false);
         }
 
         long duration = System.currentTimeMillis() - startMillis;
         LOG.info("finish processing all tables' related materialized views in {}ms, " +
-                "isReLoadAsync:{}, total mv count: {}, topo mv order:{}, topo build cost(ms):{}", duration, isReloadAsync,
+                "isReLoadAsync:false, total mv count: {}, topo mv order:{}, topo build cost(ms):{}", duration,
                 allMVs.size(), topoOrder.size(), topoBuildDuration);
     }
 
@@ -2455,6 +2467,7 @@ public class GlobalStateMgr {
                 tabletReshardJobMgr.save(imageWriter);
                 sqlDigestBlackList.save(imageWriter);
                 aiProviderMgr.save(imageWriter);
+                gtidGenerator.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
@@ -2525,9 +2538,9 @@ public class GlobalStateMgr {
                 globalTransactionMgr.abortTimeoutTxns();
 
                 try {
-                    loadMgr.cancelResidualJob();
+                    loadMgr.endResidualInsertJobs();
                 } catch (Throwable t) {
-                    LOG.warn("load manager cancel residual job failed", t);
+                    LOG.warn("load manager end residual insert jobs failed", t);
                 }
             }
         };
@@ -3414,6 +3427,10 @@ public class GlobalStateMgr {
      */
     public Function getFunction(Function desc, Function.CompareMode mode) {
         return functionSet.getFunction(desc, mode);
+    }
+
+    public String getGrantableAIFunctionFamily(String name) {
+        return functionSet.getGrantableAIFunctionFamily(name);
     }
 
     public boolean isAggregateFunction(String functionName) {

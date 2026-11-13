@@ -18,10 +18,12 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "base/phmap/phmap.h"
 #include "column/flat_json/flat_json_internal.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
@@ -29,6 +31,33 @@
 #include "types/json_value.h"
 
 namespace starrocks {
+
+namespace {
+// The keys that occur more than once in the object `obj`; stored JSON keeps repeated keys. Most objects have none,
+// and a sorted object keeps its index in key order, where a repeated key is adjacent: that case costs one pass over
+// the index and allocates nothing.
+phmap::flat_hash_set<std::string_view> repeated_keys(const vpack::Slice& obj) {
+    phmap::flat_hash_set<std::string_view> repeated;
+    if (obj.isSorted()) {
+        const vpack::ValueLength n = obj.length();
+        for (vpack::ValueLength i = 1; i < n; i++) {
+            auto key = obj.keyAt(i).stringView();
+            if (key == obj.keyAt(i - 1).stringView()) {
+                repeated.insert(key);
+            }
+        }
+        return repeated;
+    }
+    phmap::flat_hash_set<std::string_view> seen;
+    for (vpack::ObjectIterator it(obj, true); it.valid(); it.next()) {
+        auto key = it.key().stringView();
+        if (!seen.insert(key).second) {
+            repeated.insert(key);
+        }
+    }
+    return repeated;
+}
+} // namespace
 
 JsonMerger::JsonMerger(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain)
         : _src_paths(paths), _has_remain(has_remain) {
@@ -46,6 +75,15 @@ void JsonMerger::set_exclude_paths(const std::vector<std::string>& exclude_paths
     for (auto& path : _exclude_paths) {
         auto* leaf = JsonFlatPath::normalize_from_path(path, _src_root.get());
         leaf->op = JsonFlatPath::OP_EXCLUDE;
+        const JsonFlatPath* node = _src_root.get();
+        for (std::string_view rest = path; !rest.empty();) {
+            auto [key, next] = JsonFlatPath::split_path(rest);
+            node = node->children.at(key).get();
+            if (!next.empty()) {
+                _above_excluded.insert(node);
+            }
+            rest = next;
+        }
     }
 }
 
@@ -77,6 +115,13 @@ void JsonMerger::add_level_paths(const std::vector<std::string>& level_paths) {
 }
 
 void JsonMerger::set_root_path(const std::string& base_path) {
+    _merge_root = JsonFlatPath::normalize_from_path(base_path, _src_root.get());
+    _root_path.clear();
+    for (std::string_view rest = base_path; !rest.empty();) {
+        auto [key, next] = JsonFlatPath::split_path(rest);
+        _root_path.emplace_back(key);
+        rest = next;
+    }
     JsonFlatPath::set_root(base_path, _src_root.get());
 }
 
@@ -95,11 +140,7 @@ ColumnPtr JsonMerger::merge(const Columns& columns) {
         _src_columns.emplace_back(col.get());
     }
 
-    if (_src_root->op == JsonFlatPath::OP_INCLUDE) {
-        _merge_impl<true>(rows, *json_result, *null_result);
-    } else {
-        _merge_impl<false>(rows, *json_result, *null_result);
-    }
+    _merge_impl(rows, *json_result, *null_result);
 
     _src_columns.clear();
     if (_output_nullable) {
@@ -115,43 +156,52 @@ ColumnPtr JsonMerger::merge(const Columns& columns) {
     }
 }
 
-template <bool IN_TREE>
 void JsonMerger::_merge_impl(size_t rows, JsonColumn& json_result, NullColumn& null_result) {
+    const auto* root = _merge_root == nullptr ? _src_root.get() : _merge_root;
     if (_has_remain) {
         auto remain = down_cast<const JsonColumn*>(_src_columns.back());
         for (size_t i = 0; i < rows; i++) {
             auto obj = remain->get_object(i);
             auto vs = obj->to_vslice();
-            if (obj->is_invalid()) {
+            // Start at the requested value: it can be an array/scalar, and {} is distinct from a missing path.
+            for (const auto& key : _root_path) {
+                if (!vs.isObject()) {
+                    vs = vpack::Slice::noneSlice();
+                    break;
+                }
+                vs = vs.get(vpack::StringRef(key.data(), key.size()));
+            }
+            if (obj->is_invalid() || (!_root_path.empty() && vs.isNone())) {
                 vpack::Builder builder;
                 builder.add(vpack::Value(vpack::ValueType::Object));
-                _merge_json(_src_root.get(), &builder, i);
+                _merge_json(root, &builder, i);
                 builder.close();
                 auto slice = builder.slice();
                 json_result.append(JsonValue(slice));
                 null_result.append(slice.isEmptyObject());
             } else if (!vs.isObject()) {
-                for (int k = 0; k < _src_paths.size(); k++) {
-                    // check child column should be null
-                    DCHECK(_src_columns[k]->is_null(i));
+                if (_root_path.empty()) {
+                    for (int k = 0; k < _src_paths.size(); k++) {
+                        DCHECK(_src_columns[k]->is_null(i));
+                    }
                 }
                 json_result.append(JsonValue(vs));
-                null_result.append(vs.isEmptyObject());
+                null_result.append(0);
             } else {
                 vpack::Builder builder;
                 builder.add(vpack::Value(vpack::ValueType::Object));
-                _merge_json_with_remain<IN_TREE>(_src_root.get(), &vs, &builder, i);
+                _merge_json_with_remain<true>(root, &vs, &builder, i);
                 builder.close();
                 auto slice = builder.slice();
                 json_result.append(JsonValue(slice));
-                null_result.append(slice.isEmptyObject());
+                null_result.append(slice.isEmptyObject() && _root_path.empty());
             }
         }
     } else {
         for (size_t i = 0; i < rows; i++) {
             vpack::Builder builder;
             builder.add(vpack::Value(vpack::ValueType::Object));
-            _merge_json(_src_root.get(), &builder, i);
+            _merge_json(root, &builder, i);
             builder.close();
             auto json = builder.slice();
             json_result.append(JsonValue(json));
@@ -162,7 +212,15 @@ void JsonMerger::_merge_impl(size_t rows, JsonColumn& json_result, NullColumn& n
 
 template <bool IN_TREE>
 void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::Slice* remain, vpack::Builder* builder,
-                                         size_t index) {
+                                         size_t index, bool keep_excluded) {
+    // The keys this object repeats, collected once, on its first key at or above an excluded path.
+    std::optional<phmap::flat_hash_set<std::string_view>> repeated;
+    auto is_repeated = [&](std::string_view key) {
+        if (!repeated.has_value()) {
+            repeated = repeated_keys(*remain);
+        }
+        return repeated->contains(key);
+    };
     vpack::ObjectIterator it(*remain, true);
     for (; it.valid(); it.next()) {
         auto k = it.key().stringView();
@@ -178,13 +236,21 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
         }
         auto* child = iter->second.get();
         if (child->op == JsonFlatPath::OP_EXCLUDE) {
+            // An excluded path moves to a sub-column, which holds a single value (JsonFlattener takes the one a
+            // read of the whole JSON finds). Keep every copy of a repeated key here instead, and the path in every
+            // copy of a repeated object above it, so rebuilding the JSON, which prefers the remain, still gives
+            // back each of them.
+            if (keep_excluded || is_repeated(k)) {
+                builder->addUnchecked(k.data(), k.size(), v);
+            }
             continue;
         }
         if (v.isObject()) {
+            const bool keep = keep_excluded || (_above_excluded.contains(child) && is_repeated(k));
             if (child->op == JsonFlatPath::OP_IGNORE) {
-                _merge_json_with_remain<false>(child, &v, builder, index);
+                _merge_json_with_remain<false>(child, &v, builder, index, keep);
             } else if (child->op == JsonFlatPath::OP_ROOT) {
-                _merge_json_with_remain<true>(child, &v, builder, index);
+                _merge_json_with_remain<true>(child, &v, builder, index, keep);
             } else {
                 DCHECK(child->op == JsonFlatPath::OP_INCLUDE || child->op == JsonFlatPath::OP_NEW_LEVEL);
                 bool has_value = false;
@@ -200,9 +266,9 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
                 // Use IN_TREE=false for empty remain to build from flat columns only,
                 // IN_TREE=true otherwise to merge remain and flat columns
                 if (v.isEmptyObject()) {
-                    _merge_json_with_remain<false>(child, &v, &temp_builder, index);
+                    _merge_json_with_remain<false>(child, &v, &temp_builder, index, keep);
                 } else {
-                    _merge_json_with_remain<true>(child, &v, &temp_builder, index);
+                    _merge_json_with_remain<true>(child, &v, &temp_builder, index, keep);
                 }
                 temp_builder.close();
                 auto temp_slice = temp_builder.slice();

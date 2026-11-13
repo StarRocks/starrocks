@@ -17,6 +17,7 @@ package com.starrocks.alter.reshard;
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.starrocks.alter.ConcurrentLoad;
 import com.starrocks.catalog.ColocateRangeUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -37,6 +38,8 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
@@ -44,11 +47,13 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.EditLog;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
 import com.starrocks.proto.ReshardingTabletInfoPB;
 import com.starrocks.proto.StatusPB;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.qe.ConnectContext;
@@ -62,12 +67,15 @@ import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -79,10 +87,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 public class MergeTabletJobTest {
     protected static ConnectContext connectContext;
@@ -231,6 +245,119 @@ public class MergeTabletJobTest {
         Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin()
                 .isMaterializedIndexRecycled(beforeMergeIndex.getId()));
     }
+
+    /**
+     * A load that commits while the job creates the merged shards takes a version below the one the job
+     * commits, so the gtid that labels the job's version must be drawn after the load's, when the job reserves
+     * the version.
+     */
+    @Test
+    public void testCommitVersionGtid() throws Exception {
+        MergeTabletJob mergeJob = createMergeTabletReshardJob();
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        ConcurrentLoad.holdPublishDaemon();
+        List<TxnInfoPB> publishedTxns = new CopyOnWriteArrayList<>();
+        List<Long> publishedVersions = new CopyOnWriteArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(Invocation invocation, List<Tablet> tablets, TxnInfoPB txnInfo,
+                                       long baseVersion, long newVersion, Map<Long, Double> compactionScores,
+                                       Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
+                                       Map<Long, TabletStatPB> tabletStats, boolean useAggregatePublish,
+                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                       boolean preferSharedInitialMetadata) {
+                publishedTxns.add(txnInfo);
+                publishedVersions.add(newVersion);
+                invocation.proceed();
+            }
+        };
+        AtomicReference<TransactionState> load = new AtomicReference<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForMerge(Invocation invocation, Map<Long, List<Long>> newToOldShardIds,
+                                             Map<Long, List<Long>> newShardIdToGroupIds, FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo, Map<String, String> properties,
+                                             ComputeResource computeResource) throws Exception {
+                load.set(ConcurrentLoad.commit(db, table));
+                invocation.proceed();
+            }
+        };
+
+        mergeJob.init();
+        mergeJob.run();
+        // The job waits for the load, which holds the version below the one the job reserved.
+        Assertions.assertEquals(TabletReshardJob.JobState.PREPARING, mergeJob.getJobState());
+        ConcurrentLoad.makeVisible(db, load.get());
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (mergeJob.getJobState() != TabletReshardJob.JobState.FINISHED) {
+            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs,
+                    "job is still " + mergeJob.getJobState());
+            mergeJob.run();
+            Thread.sleep(10);
+        }
+
+        long loadVersion = ConcurrentLoad.versionIn(load.get(), table, physicalPartition.getId());
+        Assertions.assertFalse(publishedTxns.isEmpty());
+        Assertions.assertEquals(Set.of(loadVersion + 1), Set.copyOf(publishedVersions));
+        Set<Long> publishedGtids = publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet());
+        Assertions.assertEquals(1, publishedGtids.size(), publishedGtids.toString());
+        long commitGtid = publishedGtids.iterator().next();
+        Assertions.assertTrue(load.get().getGlobalTransactionId() > 0);
+        Assertions.assertTrue(commitGtid > load.get().getGlobalTransactionId(),
+                "commit version gtid " + commitGtid + " is not after the gtid " + load.get().getGlobalTransactionId()
+                        + " of the load committed below it");
+    }
+
+    /**
+     * A load that committed after the job reserved its version but before the job journaled the reservation would
+     * reach the journal first, so a leader change in between would leave the reserved version to no one and the
+     * partition stuck behind it. Such a load has to wait for the reservation's journal entry, then takes the next
+     * version.
+     */
+    @Test
+    public void testCommitVersionJournaledBeforeNextLoad() throws Exception {
+        MergeTabletJob mergeJob = createMergeTabletReshardJob();
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        ConcurrentLoad.holdPublishDaemon();
+        long loadId = ConcurrentLoad.begin(db, table);
+        AtomicLong nextVersionWhenJournaled = new AtomicLong();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logUpdateTabletReshardJob(Invocation invocation, TabletReshardJob job) {
+                boolean reservationEntry = job.getJobState() == TabletReshardJob.JobState.PREPARING;
+                if (reservationEntry) {
+                    ConcurrentLoad.tryCommit(db, table, loadId, 100);
+                }
+                invocation.proceed();
+                if (reservationEntry) {
+                    nextVersionWhenJournaled.set(physicalPartition.getNextVersion());
+                }
+            }
+        };
+        long reservedVersion = physicalPartition.getNextVersion();
+
+        mergeJob.init();
+        mergeJob.runPendingJob();
+
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Assertions.assertEquals(TransactionStatus.PREPARE,
+                txnMgr.getTransactionState(db.getId(), loadId).getTransactionStatus());
+        Assertions.assertEquals(reservedVersion + 1, nextVersionWhenJournaled.get());
+        TransactionState load = ConcurrentLoad.commit(db, table, loadId);
+        Assertions.assertEquals(reservedVersion + 1, ConcurrentLoad.versionIn(load, table, physicalPartition.getId()));
+
+        // The job publishes the version it reserved, then waits in CLEANING for the load above it.
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (mergeJob.getJobState() != TabletReshardJob.JobState.CLEANING) {
+            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + mergeJob.getJobState());
+            mergeJob.run();
+            Thread.sleep(10);
+        }
+        ConcurrentLoad.makeVisible(db, load);
+        mergeJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, mergeJob.getJobState());
+    }
+
 
     @Test
     public void testRunMergeBumpsOptimisticVersion() throws Exception {
@@ -489,9 +616,9 @@ public class MergeTabletJobTest {
 
     @Test
     public void testRunAbortingJobCatch() throws Exception {
-        MergeTabletJob mergeJob = new MergeTabletJob(GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), table.getId(), createMergeTabletReshardJob().getReshardingPhysicalPartitions()) {
-            @Override
+        MergeTabletJob mergeJob = createMergeTabletReshardJob();
+        new MockUp<MergeTabletJob>() {
+            @Mock
             protected void unregisterReshardingTablets() {
                 throw new RuntimeException("mock");
             }
@@ -639,9 +766,8 @@ public class MergeTabletJobTest {
             Assertions.assertSame(expectedResource, actualResource.get());
             // The job must forward exactly what the predicate says for THIS partition at the publish's base
             // version (visibleVersion == commitVersion - 1). The shared test table may already be past
-            // version 1 here; the positive case, on a fresh partition still at version 1, is
-            // SplitTabletJobTest.testRunRunningHintsSharedInitialMetadataAtVersionOne -- the merge job
-            // runs the identical wiring.
+            // version 1 here. This only checks that the publish forwards what the predicate computes; the
+            // predicate's own cases live in UtilsTest.
             Assertions.assertEquals(
                     Utils.preferSharedInitialMetadata(table, physicalPartition, physicalPartition.getVisibleVersion()),
                     actualPreferSharedInitialMetadata.get());
@@ -678,17 +804,17 @@ public class MergeTabletJobTest {
 
     @Test
     public void testGetLockedTableNotFound() throws Exception {
-        // A dropped table during the reshard is surfaced via run()'s abort wrapper: PENDING -> ABORTED
-        // (no force-ABORTING from getOlapTable when canAbort() is true). The errorMessage is set on
-        // the ABORTING-via-getOlapTable step inside runAbortingJob.
+        // A dropped table follows the existing abort path, preserving the original failure context. The table id
+        // is a real one that no table holds: the job takes the table lock before it looks the table up, and the
+        // lock-target check rejects a placeholder id such as -1.
         MergeTabletJob mergeJob = new MergeTabletJob(GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), -1, new HashMap<>());
-        // First tick: PENDING -> ABORTING via run()'s catch wrapper. Second tick: ABORTING -> ABORTED
-        // via runAbortingJob, which also restores errorMessage from the throwing getOlapTable.
+                db.getId(), GlobalStateMgr.getCurrentState().getNextId(), new HashMap<>());
         mergeJob.run();
+        String originalError = mergeJob.getErrorMessage();
+        Assertions.assertTrue(originalError.startsWith("Table not found"));
         mergeJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.ABORTED, mergeJob.getJobState());
-        Assertions.assertEquals("Table not found", mergeJob.getErrorMessage());
+        Assertions.assertEquals(originalError, mergeJob.getErrorMessage());
     }
 
     @Test
@@ -1431,35 +1557,29 @@ public class MergeTabletJobTest {
         return null;
     }
 
-    private static Map<Long, TabletRange> createContiguousTabletRanges(List<Long> tabletIds, int baseValue, int step) {
-        Map<Long, TabletRange> result = new HashMap<>();
-        for (int i = 0; i < tabletIds.size(); i++) {
-            int lowerValue = baseValue + i * step;
-            int upperValue = baseValue + (i + 1) * step;
-            result.put(tabletIds.get(i), createTabletRange(lowerValue, upperValue));
-        }
-        return result;
-    }
-
+    /**
+     * Creates split ranges the way the compute node does: contiguous children that exactly cover the
+     * old tablet's range, the first keeping its lower bound and the last its upper bound.
+     */
     private static Map<Long, TabletRange> createSplitTabletRanges(long oldTabletId, List<Long> newTabletIds) {
-        TabletRange oldRange = getTabletRangeFromOldTablet(oldTabletId);
-        if (oldRange == null) {
-            return createContiguousTabletRanges(newTabletIds, 0, 100);
-        }
-
-        Integer lowerValue = extractBoundValue(oldRange, true);
-        Integer upperValue = extractBoundValue(oldRange, false);
-        if (lowerValue == null || upperValue == null || upperValue <= lowerValue) {
-            return createContiguousTabletRanges(newTabletIds, 0, 100);
-        }
-
-        int rangeSize = upperValue - lowerValue;
-        int step = Math.max(1, rangeSize / newTabletIds.size());
+        TabletRange oldTabletRange = getTabletRangeFromOldTablet(oldTabletId);
+        Range<Tuple> oldRange = oldTabletRange == null ? Range.all() : oldTabletRange.getRange();
+        Integer oldLower = extractBoundValue(oldTabletRange, true);
+        Integer oldUpper = extractBoundValue(oldTabletRange, false);
+        int count = newTabletIds.size();
+        int step = 100;
+        int lowerValue = oldLower != null ? oldLower : (oldUpper != null ? oldUpper - step * count : 0);
+        int upperValue = oldUpper != null ? oldUpper : lowerValue + step * count;
+        int width = Math.max(1, (upperValue - lowerValue) / count);
         Map<Long, TabletRange> result = new HashMap<>();
-        for (int i = 0; i < newTabletIds.size(); i++) {
-            int subLower = lowerValue + i * step;
-            int subUpper = (i == newTabletIds.size() - 1) ? upperValue : lowerValue + (i + 1) * step;
-            result.put(newTabletIds.get(i), createTabletRange(subLower, subUpper));
+        for (int i = 0; i < count; i++) {
+            boolean first = i == 0;
+            boolean last = i == count - 1;
+            Tuple lower = first ? oldRange.getLowerBound() : createTuple(lowerValue + i * width);
+            Tuple upper = last ? oldRange.getUpperBound() : createTuple(lowerValue + (i + 1) * width);
+            result.put(newTabletIds.get(i), new TabletRange(Range.of(lower, upper,
+                    first ? oldRange.isLowerBoundIncluded() : true,
+                    last ? oldRange.isUpperBoundIncluded() : false)));
         }
         return result;
     }
@@ -1474,13 +1594,8 @@ public class MergeTabletJobTest {
             return createTabletRange(0, oldTabletIds.size() * 100);
         }
 
-        Tuple lowerBound = firstRange.getRange().getLowerBound();
-        Tuple upperBound = lastRange.getRange().getUpperBound();
-        if (lowerBound == null || upperBound == null) {
-            return createTabletRange(0, oldTabletIds.size() * 100);
-        }
-
-        return new TabletRange(Range.of(lowerBound, upperBound,
+        // The merged tablet spans the old tablets, including an unbounded first or last end.
+        return new TabletRange(Range.of(firstRange.getRange().getLowerBound(), lastRange.getRange().getUpperBound(),
                 firstRange.getRange().isLowerBoundIncluded(),
                 lastRange.getRange().isUpperBoundIncluded()));
     }
@@ -1509,8 +1624,12 @@ public class MergeTabletJobTest {
 
     private MergeTabletJob createMergeTabletReshardJob() throws Exception {
         ensureTabletCount(2);
+        return createMergeTabletReshardJob(table);
+    }
 
-        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+    // Merges the first two tablets of the table's base index; every other tablet stays identical.
+    private MergeTabletJob createMergeTabletReshardJob(OlapTable targetTable) {
+        PhysicalPartition physicalPartition = targetTable.getAllPhysicalPartitions().iterator().next();
         MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
         List<Tablet> oldTablets = oldIndex.getTablets();
         Preconditions.checkState(oldTablets.size() >= 2, "Not enough tablets for merge");
@@ -1547,7 +1666,7 @@ public class MergeTabletJobTest {
         // (replay-only) must call mergeJob.createShardsOnStarOS() explicitly to simulate
         // the original leader's PENDING step.
         return new MergeTabletJob(GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), table.getId(), reshardingPartitions);
+                db.getId(), targetTable.getId(), reshardingPartitions);
     }
 
     private void createNewShards(PhysicalPartition physicalPartition,
@@ -1717,5 +1836,205 @@ public class MergeTabletJobTest {
         Assertions.assertNull(droppedPartition.getPublishFailureReason());
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, mergeJob.getJobState());
         Assertions.assertEquals("", mergeJob.getInfo().getError_message());
+    }
+
+    private static TabletRange tabletRangeUpperOnly(int upperValue) {
+        return new TabletRange(Range.lt(createTuple(upperValue)));
+    }
+
+    private static TabletRange tabletRangeLowerOnly(int lowerValue) {
+        return new TabletRange(Range.ge(createTuple(lowerValue)));
+    }
+
+    private static void assertMergeRejected(MergeTabletJob.ExpectedMerge expected, Map<Long, TabletRange> ranges,
+                                            String expectedFragment) {
+        TabletReshardException e = Assertions.assertThrows(TabletReshardException.class,
+                () -> MergeTabletJob.checkMergeTabletRanges(List.of(expected), ranges));
+        Assertions.assertTrue(e.getMessage().contains(expectedFragment), e.getMessage());
+    }
+
+    @Test
+    public void testCheckMergeTabletRangesAcceptsTheSpanOfTheOldTablets() {
+        MergeTabletJob.checkMergeTabletRanges(List.of(
+                new MergeTabletJob.ExpectedMerge(10L, List.of(1L, 2L, 3L),
+                        tabletRangeUpperOnly(100), tabletRangeLowerOnly(200)),
+                new MergeTabletJob.ExpectedMerge(20L, List.of(4L, 5L),
+                        createTabletRange(300, 400), createTabletRange(400, 500))),
+                Map.of(10L, new TabletRange(Range.all()), 20L, createTabletRange(300, 500)));
+    }
+
+    @Test
+    public void testCheckMergeTabletRangesComparesBoundsByValue() {
+        Tuple largeInt100 = new Tuple(List.of(Variant.of(IntegerType.LARGEINT, "100")));
+        Tuple largeInt300 = new Tuple(List.of(Variant.of(IntegerType.LARGEINT, "300")));
+        // The bounds hold the same values in different types, so Tuple.equals tells them apart.
+        Assertions.assertNotEquals(largeInt100, createTuple(100));
+        MergeTabletJob.checkMergeTabletRanges(List.of(new MergeTabletJob.ExpectedMerge(10L, List.of(1L, 2L),
+                        createTabletRange(100, 200), createTabletRange(200, 300))),
+                Map.of(10L, new TabletRange(Range.gelt(largeInt100, largeInt300))));
+    }
+
+    @Test
+    public void testCheckMergeTabletRangesRejectsAnotherRange() {
+        MergeTabletJob.ExpectedMerge expected = new MergeTabletJob.ExpectedMerge(10L, List.of(1L, 2L),
+                createTabletRange(100, 200), createTabletRange(200, 300));
+        // Tablets whose compute-node metadata carries another tablet's range merge into that range.
+        assertMergeRejected(expected, Map.of(10L, tabletRangeUpperOnly(100)), "on FE they run from");
+        // Covering only part of the old tablets, or more than them, is rejected too.
+        assertMergeRejected(expected, Map.of(10L, createTabletRange(100, 200)), "on FE they run from");
+        assertMergeRejected(expected, Map.of(10L, createTabletRange(100, 400)), "on FE they run from");
+        // Same values with an end included that FE excludes.
+        assertMergeRejected(expected, Map.of(10L, new TabletRange(Range.gele(createTuple(100), createTuple(300)))),
+                "on FE they run from");
+    }
+
+    @Test
+    public void testCheckMergeTabletRangesRejectsAMissingRange() {
+        assertMergeRejected(new MergeTabletJob.ExpectedMerge(10L, List.of(1L, 2L),
+                        createTabletRange(100, 200), createTabletRange(200, 300)),
+                Map.of(11L, createTabletRange(100, 300)), "returned no range for tablet 10");
+    }
+
+    /**
+     * When the compute node's merge result disagrees with FE's ranges of the merged tablets, nothing is
+     * installed: the job keeps the old index, stays RUNNING and retries the publish with backoff, and the
+     * reason is reported in ERROR_MESSAGE.
+     */
+    @Test
+    public void testMergeResultThatDisagreesWithFeIsNotInstalled() throws Exception {
+        starRocksAssert.withTable("create table merge_range_mismatch (key1 int, key2 varchar(10))\n"
+                + "order by(key1)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        OlapTable freshTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "merge_range_mismatch");
+        PhysicalPartition physicalPartition = freshTable.getAllPhysicalPartitions().iterator().next();
+        // Split the only tablet first so there are two adjacent tablets to merge: (-inf, 100) and [100, +inf).
+        SplitTabletClause splitClause = new SplitTabletClause(null,
+                new TabletList(List.of(physicalPartition.getLatestBaseIndex().getTablets().get(0).getId())),
+                Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
+        splitClause.setTabletReshardTargetSize(-2);
+        TabletReshardJob splitJob = new SplitTabletJobFactory(db, freshTable, splitClause).createTabletReshardJob();
+        splitJob.init();
+        splitJob.run();
+        splitJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
+        Assertions.assertEquals(2, oldIndex.getTablets().size());
+        // As if compaction had already rewritten the files the split children share; merge refuses them otherwise.
+        for (Tablet tablet : oldIndex.getTablets()) {
+            ((LakeTablet) tablet).setHasSharedFiles(false);
+        }
+        long oldVersion = physicalPartition.getVisibleVersion();
+
+        // Tablets whose compute-node metadata all carries the first tablet's range merge into that range,
+        // (-inf, 100), while FE has them covering every key.
+        AtomicInteger publishAttempts = new AtomicInteger();
+        // A file_bundling table publishes through aggregatePublishVersion.
+        new MockUp<MockLakeService>() {
+            @Mock
+            public Future<PublishVersionResponse> aggregatePublishVersion(AggregatePublishVersionRequest request) {
+                PublishVersionResponse response = new PublishVersionResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = TStatusCode.OK.getValue();
+                response.tabletRanges = new HashMap<>();
+                for (PublishVersionRequest publishRequest : request.publishReqs) {
+                    if (publishRequest.reshardingTabletInfos == null) {
+                        continue;
+                    }
+                    for (ReshardingTabletInfoPB info : publishRequest.reshardingTabletInfos) {
+                        if (info.mergingTabletInfo != null) {
+                            publishAttempts.incrementAndGet();
+                            response.tabletRanges.put(info.mergingTabletInfo.newTabletId,
+                                    tabletRangeUpperOnly(100).toProto());
+                        }
+                    }
+                }
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+        // The class-wide fake executor rethrows a task's exception from submit(). A real ThreadPoolExecutor
+        // hands it back through the Future, which is the path a rejected result has to take; mirror that,
+        // but still rethrow Errors so a failed assertion inside the task stays visible. The task runs on its
+        // own thread, as on the real pool: the caller holds the table lock, and the publish path refuses
+        // blocking calls under it.
+        new MockUp<ThreadPoolExecutor>() {
+            @Mock
+            public <T> Future<T> submit(Callable<T> task) throws InterruptedException {
+                AtomicReference<T> result = new AtomicReference<>();
+                AtomicReference<Throwable> failure = new AtomicReference<>();
+                Thread thread = new Thread(() -> {
+                    try {
+                        result.set(task.call());
+                    } catch (Throwable t) {
+                        failure.set(t);
+                    }
+                });
+                thread.start();
+                thread.join();
+                Throwable failed = failure.get();
+                if (failed instanceof Error) {
+                    throw (Error) failed;
+                }
+                return failed != null ? CompletableFuture.failedFuture(failed)
+                        : CompletableFuture.completedFuture(result.get());
+            }
+        };
+
+        MergeTabletJob mergeJob = createMergeTabletReshardJob(freshTable);
+        try {
+            mergeJob.init();
+            mergeJob.run();
+            mergeJob.run();
+            mergeJob.run();
+
+            Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, mergeJob.getJobState());
+            Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, freshTable.getState());
+            Assertions.assertEquals(oldVersion, physicalPartition.getVisibleVersion());
+            Assertions.assertSame(oldIndex, physicalPartition.getLatestBaseIndex());
+            String error = mergeJob.getInfo().getError_message();
+            Assertions.assertTrue(error.contains("Merge result rejected"), error);
+            // The rejected attempt is not resubmitted on every tick: the retry waits for its backoff.
+            Assertions.assertEquals(1, publishAttempts.get());
+            // Once the backoff has elapsed the publish is retried, and the same result is rejected again.
+            mergeJob.getReshardingPhysicalPartitions().get(physicalPartition.getId()).nextPublishRetryTimeMs = 0;
+            mergeJob.run();
+            mergeJob.run();
+            Assertions.assertEquals(2, publishAttempts.get());
+            Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, mergeJob.getJobState());
+            Assertions.assertSame(oldIndex, physicalPartition.getLatestBaseIndex());
+        } finally {
+            mergeJob.replayAbortedJob();
+            physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);
+        }
+    }
+
+    // The partitions' cache settings are read under the table READ lock: PartitionInfo keeps them in a plain
+    // HashMap that a concurrent ADD PARTITION may be rehashing. The StarOS RPC itself runs without the lock.
+    @Test
+    public void testCreateShardsReadsPartitionCacheInfoUnderTheLockAndCallsStarOSWithoutIt() throws Exception {
+        MergeTabletJob mergeJob = createMergeTabletReshardJob();
+        AtomicBoolean cacheInfoReadUnderLock = new AtomicBoolean(false);
+        AtomicBoolean starOSCalledWithoutLock = new AtomicBoolean(false);
+        new MockUp<LakeTable>() {
+            @Mock
+            public FileCacheInfo getPartitionFileCacheInfo(Invocation invocation, long partitionId) {
+                cacheInfoReadUnderLock.set(LockHoldDepth.current() > 0);
+                return invocation.proceed(partitionId);
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForMerge(Map<Long, List<Long>> newToOldTabletIds,
+                                             Map<Long, List<Long>> newShardIdToGroupIds,
+                                             FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo,
+                                             Map<String, String> properties,
+                                             ComputeResource computeResource) {
+                starOSCalledWithoutLock.set(LockHoldDepth.current() == 0);
+            }
+        };
+        mergeJob.createShardsOnStarOS();
+        Assertions.assertTrue(cacheInfoReadUnderLock.get());
+        Assertions.assertTrue(starOSCalledWithoutLock.get());
     }
 }

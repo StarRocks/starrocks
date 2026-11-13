@@ -18,4 +18,10 @@ set(EXPR_EXTENSION_LIBS
     ExprUtility
 )
 
+# Expression extensions that are not part of this tree: a checkout may add
+# extension_targets.local.cmake next to this file and list(APPEND
+# EXPR_EXTENSION_LIBS ...) the targets it declares in CMakeLists.local.cmake, so
+# they are linked and force-loaded like the ones above without editing this file.
+include(${CMAKE_CURRENT_LIST_DIR}/extension_targets.local.cmake OPTIONAL)
+
 set(EXPR_FORCE_LOAD_LIBS ${EXPR_EXTENSION_LIBS} Expr)

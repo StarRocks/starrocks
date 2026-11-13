@@ -34,12 +34,13 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
-#include "storage/lake/update_manager.h"
 #include "storage/rowset/segment.h"
+#include "storage/sort_key_bounds.h"
 #include "storage/sort_key_sampler.h"
 #include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
@@ -840,6 +841,22 @@ Status validate_split_inputs(const TabletMetadataPB& source, SplitMetadataVisitB
                 previous = index;
                 first = false;
             }
+            // A segment with rows cannot be placed in a child range without sort key bounds (for example,
+            // bounds kept in a field or format version this binary does not know) or with bounds that do
+            // not decode. Every later bound decode of the split reads only segments with rows, so checking
+            // here makes damaged bounds fall back to an identical tablet instead of failing the split.
+            if (segment.num_rows() > 0) {
+                if (!has_segment_sort_key_bounds(segment)) {
+                    fallback = Status::NotSupported("tablet split segment has no sort key bounds");
+                } else {
+                    VariantTuple segment_min;
+                    VariantTuple segment_max;
+                    if (Status st = decode_segment_sort_key_bounds(segment, &segment_min, &segment_max); !st.ok()) {
+                        fallback = Status::NotSupported(
+                                fmt::format("tablet split segment has unreadable sort key bounds: {}", st.message()));
+                    }
+                }
+            }
             RETURN_IF_ERROR(insert_physical_slice(segment, &slices).status());
         }
         for (const auto& del : rowset.del_files()) {
@@ -916,14 +933,13 @@ Status build_unique_boundary_segments(TabletManager* tablet_manager, const Table
                 weighting_range_arity > 0 && (lower_arity == 0 || upper_arity == 0 || lower_arity == upper_arity);
     }
     const auto sample_weight_of = [&](const SegmentMetadataPB& segment_meta) -> int64_t {
-        if (!weight_by_range || !segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) {
+        if (!weight_by_range || !has_segment_sort_key_bounds(segment_meta)) {
             return segment_meta.num_rows();
         }
         VariantTuple segment_min;
         VariantTuple segment_max;
-        if (!segment_min.from_proto(segment_meta.sort_key_min()).ok() ||
-            !segment_max.from_proto(segment_meta.sort_key_max()).ok() || segment_min.size() != weighting_range_arity ||
-            segment_max.size() != weighting_range_arity) {
+        if (!decode_segment_sort_key_bounds(segment_meta, &segment_min, &segment_max).ok() ||
+            segment_min.size() != weighting_range_arity || segment_max.size() != weighting_range_arity) {
             return segment_meta.num_rows();
         }
         // A segment spans the inclusive interval [min, max] -- the same range
@@ -994,8 +1010,7 @@ Status build_unique_boundary_segments(TabletManager* tablet_manager, const Table
             SegmentSplitInfo segment;
             segment.source_id = rowset.id();
             segment.segment_meta_pos = meta_pos;
-            RETURN_IF_ERROR(segment.min_key.from_proto(sm.sort_key_min()));
-            RETURN_IF_ERROR(segment.max_key.from_proto(sm.sort_key_max()));
+            RETURN_IF_ERROR(decode_segment_sort_key_bounds(sm, &segment.min_key, &segment.max_key));
             segment.num_rows = sm.num_rows();
             segment.data_size = sm.size();
 
@@ -1363,7 +1378,7 @@ Status get_tablet_split_ranges_from_pk_index_impl(TabletManager* tablet_manager,
     const size_t target_sample_count = static_cast<size_t>(split_count) * kSamplesPerSplit;
 
     std::vector<std::string> encoded_samples;
-    auto* block_cache = tablet_manager->update_mgr()->block_cache();
+    auto* block_cache = tablet_manager->primary_key_mgr()->block_cache();
     for (const auto* sstable_pb : overlapping_sstables) {
         // Weight each SST's share of the sample budget by its size, so the quantiles picked downstream
         // stay data-volume weighted the way the previous byte-interval sampling made them. Within one
@@ -1655,8 +1670,7 @@ Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<Ta
                 RETURN_IF_ERROR(budget->consume(1, "projector segment declaration"));
                 if (sm.has_num_rows() && sm.num_rows() == 0) continue;
                 SegmentSplitInfo segment;
-                RETURN_IF_ERROR(segment.min_key.from_proto(sm.sort_key_min()));
-                RETURN_IF_ERROR(segment.max_key.from_proto(sm.sort_key_max()));
+                RETURN_IF_ERROR(decode_segment_sort_key_bounds(sm, &segment.min_key, &segment.max_key));
                 segment.num_rows = sm.num_rows();
                 segment.data_size = sm.size();
                 // Samples the planner already computed for THIS segment, if any. They arrive
@@ -2064,7 +2078,7 @@ bool can_prune_rowset_segments(const RowsetMetadataPB& rowset, size_t sort_key_a
     // parallel-array shape check is needed.
     for (const auto& segment_meta : rowset.segment_metas()) {
         if (!segment_meta.has_num_rows() || segment_meta.num_rows() == 0) return false;
-        if (!segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) return false;
+        if (!has_segment_sort_key_bounds(segment_meta)) return false;
         // (c) those bounds must be comparable with the new tablets' ranges, which are at the
         // CURRENT sort-key arity. A rowset written before a metadata-only trailing sort-key ADD
         // stores narrower bounds, and VariantTuple::compare orders a shorter prefix-equal tuple
@@ -2076,8 +2090,7 @@ bool can_prune_rowset_segments(const RowsetMetadataPB& rowset, size_t sort_key_a
         // (prefix, default), so padding the MAX with the NULL minimum understates the segment's
         // reach whenever a post-ADD rowset contributed a boundary between the two. Leave such a
         // rowset unpruned instead; the caller keeps every segment on every new tablet as shared.
-        if (sort_key_arity > 0 && (static_cast<size_t>(segment_meta.sort_key_min().values_size()) != sort_key_arity ||
-                                   static_cast<size_t>(segment_meta.sort_key_max().values_size()) != sort_key_arity)) {
+        if (sort_key_arity > 0 && !segment_sort_key_bounds_have_arity(segment_meta, sort_key_arity)) {
             return false;
         }
     }
@@ -2111,8 +2124,7 @@ StatusOr<RowsetOwnership> compute_rowset_segment_ownership(const RowsetMetadataP
         VariantTuple segment_max_key;
         // An unparseable key means we cannot reason about this rowset's geometry;
         // return non-OK so the caller degrades the whole rowset to all-shared.
-        RETURN_IF_ERROR(segment_min_key.from_proto(segment_meta.sort_key_min()));
-        RETURN_IF_ERROR(segment_max_key.from_proto(segment_meta.sort_key_max()));
+        RETURN_IF_ERROR(decode_segment_sort_key_bounds(segment_meta, &segment_min_key, &segment_max_key));
         // The segment spans the inclusive key interval [min, max].
         TabletRange segment_range(segment_min_key, segment_max_key, /*lower_bound_included=*/true,
                                   /*upper_bound_included=*/true);
@@ -2279,7 +2291,7 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
     // fallback must inherit this flushed metadata rather than the input snapshot.
     TEST_SYNC_POINT_CALLBACK("tablet_splitter:pk_flush", nullptr);
     ASSIGN_OR_RETURN(TabletMetadataPtr old_tablet_metadata,
-                     tablet_manager->update_mgr()->flush_pk_memtable(tablet_metadata, new_version));
+                     tablet_manager->primary_key_mgr()->flush_pk_memtable(tablet_metadata, new_version));
     if (status.ok() && !is_external_boundaries && separate_sort) {
         status = get_tablet_split_ranges_from_pk_index_impl(tablet_manager, old_tablet_metadata,
                                                             splitting_tablet.new_tablet_ids_size(), &split_ranges,

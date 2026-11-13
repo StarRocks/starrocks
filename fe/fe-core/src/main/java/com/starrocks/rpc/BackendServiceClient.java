@@ -77,8 +77,8 @@ public class BackendServiceClient {
     //
     // Call chain: BackendServiceClient → service.execPlanFragmentAsync(pRequest)
     //   → ProtobufRpcProxy.invoke()          // JDK dynamic proxy (InvocationHandler)
-    //     → RpcChannel.getConnection()        // RpcChannel.java line 73
-    //       → ChannelPool.getChannel()        // ChannelPool.java line 77
+    //     → RpcChannel.getConnection()        // RpcChannel.java line 76
+    //       → ChannelPool.getChannel()        // ChannelPool.java line 76
     //         → GenericObjectPool.borrowObject()  // throws NoSuchElementException
     //
     // ChannelPool.getChannel() catches all Exceptions and re-throws as RuntimeException:
@@ -90,7 +90,7 @@ public class BackendServiceClient {
     // ProtobufRpcProxy.invoke() does NOT catch or re-wrap this RuntimeException,
     // so it propagates directly to BackendServiceClient.
     //
-    // Source: https://github.com/baidu/Jprotobuf-rpc-socket (jprotobuf-rpc-core-4.2.1)
+    // Source: https://github.com/StarRocks/Jprotobuf-rpc-socket (com.starrocks:jprotobuf-rpc-core:1.0.0)
     //   - ChannelPool.java: com.baidu.jprotobuf.pbrpc.transport.ChannelPool.getChannel()
     //   - RpcChannel.java: com.baidu.jprotobuf.pbrpc.transport.RpcChannel.getConnection()
     //   - ProtobufRpcProxy.java: com.baidu.jprotobuf.pbrpc.client.ProtobufRpcProxy.invoke()

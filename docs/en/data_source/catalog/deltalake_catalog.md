@@ -4,13 +4,22 @@ displayed_sidebar: docs
 toc_max_heading_level: 5
 description: "Query data directly from Delta Lake"
 ---
-import Intro from '../../_assets/catalog/_deltalake_intro.mdx'
-import DatabricksMetaParams from '../../_assets/catalog/_databricks_meta_params.mdx'
-import DatabricksDataParams from '../../_assets/catalog/_databricks_data_params.mdx'
 
 # Delta Lake catalog
 
-<Intro />
+A Delta Lake catalog is a kind of external catalog that enables you to query data from Delta Lake without ingestion.
+
+Also, you can directly transform and load data from Delta Lake by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) based on Delta Lake catalogs. StarRocks supports Delta Lake catalogs from v2.5 onwards.
+
+To ensure successful SQL workloads on your Delta Lake cluster, your StarRocks cluster must be able to access the storage system and metastore of your Delta Lake cluster. StarRocks supports the following storage systems and metastores:
+
+- Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or other S3-compatible storage system (for example, MinIO)
+
+- Metastore like Hive metastore or AWS Glue
+
+:::note
+If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
+:::
 
 ## Usage notes
 
@@ -156,8 +165,6 @@ The following table describes the parameters you need to configure in `Metastore
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
-<DatabricksMetaParams />
-
 #### StorageCredentialParams
 
 A set of parameters about how StarRocks integrates with your storage system. This parameter set is optional.
@@ -165,8 +172,6 @@ A set of parameters about how StarRocks integrates with your storage system. Thi
 If you use HDFS as storage, you do not need to configure `StorageCredentialParams`.
 
 If you use AWS S3, other S3-compatible storage system, Microsoft Azure Storage, or Google GCS as storage, you must configure `StorageCredentialParams`.
-
-<DatabricksDataParams />
 
 ##### AWS S3
 
@@ -453,10 +458,10 @@ In most cases, if your Delta Lake data is updated at a granularity of 1 hour or 
 | enable_deltalake_table_cache                       | -        | true         | Whether to enable Table Cache in the metadata cache for Delta Lake. |
 | enable_deltalake_json_meta_cache                   | -        | true         | Whether to enable cache for Delta Log JSON files. |
 | deltalake_json_meta_cache_ttl_sec                  | Second   | 48 * 60 * 60 | Time-To-Live (TTL) for the Delta Log JSON file cache. |
-| deltalake_json_meta_cache_memory_usage_ratio       | -        | 0.1          | The maximum ratio of JVM Heap size occupied by the Delta Log JSON file cache. |
+| deltalake_json_meta_cache_memory_usage_ratio       | -        | 0.1          | The maximum ratio of JVM Heap size occupied by the Delta Log JSON file cache. Ignored when the FE configuration item `deltalake_json_meta_cache_global_memory_ratio` is greater than `0`. |
 | enable_deltalake_checkpoint_meta_cache             | -        | true         | Whether to enable cache for Delta Log Checkpoint files. |
 | deltalake_checkpoint_meta_cache_ttl_sec            | Second   | 48 * 60 * 60 | Time-To-Live (TTL) for the Delta Log Checkpoint file cache.  |
-| deltalake_checkpoint_meta_cache_memory_usage_ratio | -        | 0.1          | The maximum ratio of JVM Heap size occupied by the Delta Log Checkpoint file cache. |
+| deltalake_checkpoint_meta_cache_memory_usage_ratio | -        | 0.1          | The maximum ratio of JVM Heap size occupied by the Delta Log Checkpoint file cache. Ignored when the FE configuration item `deltalake_checkpoint_meta_cache_global_memory_ratio` is greater than `0`. |
 
 ### Examples
 

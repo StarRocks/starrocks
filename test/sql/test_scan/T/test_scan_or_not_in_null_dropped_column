@@ -1,0 +1,22 @@
+-- name: test_scan_or_not_in_null_dropped_column
+-- `c NOT IN (.., NULL)` never holds, so the scan predicate builder drops it from an OR without leaving a predicate on c.
+-- The FE had already marked c unused (only pushed-down conjuncts read it), so c was read but neither filtered on nor
+-- output, and SegmentIterator::_finish_late_materialization wrote past the output chunk (SIGSEGV, issue #80374).
+create table t_or_notin_str (id int not null, b varchar(20) null, c varchar(20) null)
+duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num" = "1");
+insert into t_or_notin_str values (1, 'Z', 'Q'), (2, 'A', 'Y'), (3, NULL, NULL), (4, 'Y', NULL);
+
+select id from t_or_notin_str where ('X' < b) or (not (c in ('Y'))) order by id;
+select id from t_or_notin_str where ('X' < b) or (not (c in ('Y', NULL))) order by id;
+select id from t_or_notin_str where b > 'X' or c not in ('Y', NULL) order by id;
+select id from t_or_notin_str where b > 'X' or c not in (NULL) order by id;
+select id from t_or_notin_str where (b > 'X' or c not in ('Y', NULL)) and id > 0 order by id;
+select id from t_or_notin_str where b > 'X' and c not in ('Y', NULL) order by id;
+select /*+ SET_VAR(enable_predicate_col_late_materialize = false) */ id from t_or_notin_str where b > 'X' or c not in ('Y', NULL) order by id;
+
+create table t_or_notin_dt (id int not null, d datetime null, e datetime null)
+duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num" = "1");
+insert into t_or_notin_dt values (1, '2024-01-02 00:00:00', '2024-01-03 00:00:00'), (2, '2023-01-01 00:00:00', '2024-01-01 00:00:00');
+
+select id from t_or_notin_dt where ('2024-01-01 00:00:00' < d) or (not (e in ('2024-01-01 00:00:00'))) order by id;
+select id from t_or_notin_dt where ('2024-01-01 00:00:00' < d) or (not (e in ('2024-01-01 00:00:00', NULL))) order by id;

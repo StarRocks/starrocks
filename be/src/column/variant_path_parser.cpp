@@ -305,14 +305,22 @@ static StatusOr<VariantValue> seek_variant_value(const VariantMetadata& metadata
     if (variant_path == nullptr) {
         return Status::InvalidArgument("Variant value and path must not be null");
     }
-    for (size_t i = seg_offset; i < variant_path->segments.size(); ++i) {
+    const size_t num_segments = variant_path->segments.size();
+    for (size_t i = seg_offset; i < num_segments; ++i) {
         const auto& seg = variant_path->segments[i];
         if (seg.is_object()) {
             ASSIGN_OR_RETURN(current, current.get_object_by_key(metadata, seg.get_key()));
         } else {
             ASSIGN_OR_RETURN(current, current.get_element_at_index(metadata, seg.get_index()));
         }
-        if (current.is_null()) break;
+        // A missing key or an out-of-range index yields the shared empty value, while a JSON null in the data
+        // points into the value buffer: only the latter is a value at the path.
+        if (current.raw().data() == VariantValue::kEmptyValue.data()) {
+            return Status::NotFound("variant path not found");
+        }
+        if (current.is_null() && i + 1 < num_segments) {
+            return Status::NotFound("variant path continues below a null value");
+        }
     }
     return current;
 }

@@ -6,14 +6,16 @@ sidebar_position: 30
 
 # ユーザーグループの認証
 
-import UnixFileIntro from '../../_assets/user_priv/unix_file_intro.mdx'
-import UnixFileSyntax from '../../_assets/user_priv/unix_file_syntax.mdx'
-import UnixFileParam from '../../_assets/user_priv/unix_file_param.mdx'
-import GroupProviderRangerLink from '../../_assets/user_priv/group_provider_ranger_link.mdx'
 
 StarRocks で Group Provider を有効にして、外部認証システムからユーザーグループを認証し、認可します。
 
 v3.5.0 以降、StarRocks は Group Provider をサポートしており、外部認証システムからグループ情報を収集してユーザーグループ管理を行います。
+
+:::note グループの取得元は Group Provider だけではありません
+
+セキュリティインテグレーションは、Group Provider なしで、認証を行った ID プロバイダーからログインのグループを取得することもできます。LDAP インテグレーションはユーザー自身のエントリーのグループメンバーシップ属性から、JWT および OAuth 2.0 インテグレーションは検証済みトークンの claim から取得します。インテグレーションに `group_source` を設定してください。詳細は [セキュリティインテグレーションによる認証](./authentication/security_integration.md) を参照してください。この方法で解決されたグループは、Group Provider のグループとまったく同じ用途で使用されます。
+
+:::
 
 ## 概要
 
@@ -31,7 +33,10 @@ Group Provider は、ユーザーとグループの間のマッピングです�
 
 ## Group Provider を作成する
 
-<UnixFileIntro />
+StarRocks は 3 種類の Group Provider をサポートしています:
+- **LDAP group provider**: LDAP サービス内のユーザーとグループを検索して一致させます
+- **Unix group provider**: オペレーティングシステム内のユーザーとグループを検索して一致させます
+- **File group provider**: ファイルで定義されたユーザーとグループを検索して一致させます
 
 ### 構文
 
@@ -72,11 +77,45 @@ ldap_cache_arg ::=
     ["ldap_cache_max_stale_time" = ""]
 ```
 
-<UnixFileSyntax />
+- Unix group provider:
+
+```SQL
+CREATE GROUP PROVIDER <group_provider_name> 
+PROPERTIES (
+    "type" = "unix"
+)
+```
+
+- File group provider:
+
+```SQL
+CREATE GROUP PROVIDER <group_provider_name> 
+PROPERTIES (
+    "type" = "file",
+    "group_file_url" = ""
+)
+```
 
 ### パラメータ
 
-<UnixFileParam />
+#### `type`
+
+作成する Group Provider のタイプ。 有効な値:
+- `ldap`: LDAP group provider を作成します。この値が設定されている場合、`ldap_info`、`ldap_search_group_arg`、`ldap_search_user_arg`、およびオプションで `ldap_cache_arg` を指定する必要があります。
+- `unix`: Unix group provider を作成します。
+- `file`: File group provider を作成します。この値が設定されている場合、`group_file_url` を指定する必要があります。
+
+#### `group_file_url`
+
+ユーザーグループを定義するファイルへの URL または相対パス（`fe/conf` 以下）。
+
+:::note
+
+グループファイルには、グループとそのメンバーのリストが含まれています。各行でグループ名とメンバーをコロンで区切って定義できます。複数のユーザーはカンマで区切られます。例: `group_name:user_1,user_2,user_3`。
+
+`http://` または `https://` の URL を指定した場合、読み取りには FE 設定項目 `group_provider_http_connect_timeout_ms`（デフォルト 5000）と `group_provider_http_read_timeout_ms`（デフォルト 30000）が接続・読み取りのタイムアウトとして適用されます。この時間内にサーバーが応答しない場合、ステートメントは失敗し、その Group Provider は以前の設定を保持します。
+
+:::
 
 #### `ldap_info` パラメーターグループ
 
@@ -383,8 +422,13 @@ ALTER SECURITY INTEGRATION LDAP SET
 GRANT example_role TO EXTERNAL GROUP analysts;
 ```
 
+外部グループに付与したロールは、作成したユーザーとして実行されるタスク（非同期マテリアライズドビューのリフレッシュや、[SUBMIT TASK](../../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) で送信したタスクなど）にも適用されます。このようなタスクを実行するたびに、StarRocks は作成者のグループを改めて解決します。次の点に注意してください：
+
+- ログイン時の認証情報だけが持つグループ（JWT や OAuth 2.0 トークンのクレームから読み取ったグループなど）は、タスクでは解決できません。
+- JWT または OAuth 2.0 のセキュリティインテグレーションでログインするユーザーの場合、タスクはインテグレーションの `group_provider` プロパティではなく、FE 設定項目 `group_provider` の Group Provider を参照します。
+
 ## Group Provider を外部認可システム (Apache Ranger) と組み合わせる
 
 セキュリティインテグレーションで関連する Group Provider を構成すると、StarRocks はログイン時にユーザーのグループ情報を記録します。このグループ情報は、Ranger との認可プロセスに自動的に含まれ、追加の構成が不要になります。
 
-<GroupProviderRangerLink />
+StarRocks と Ranger の統合に関する詳細な手順については、[Manage permissions with Apache Ranger](./authorization/ranger_plugin.md) を参照してください。

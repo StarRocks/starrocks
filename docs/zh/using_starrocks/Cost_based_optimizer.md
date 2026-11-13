@@ -63,7 +63,7 @@ partition_name: p06
 
 StarRocks 采用等深直方图 (Equi-height Histogram)，即选定若干个 bucket，每个 bucket 中的数据量几乎相等。对于出现频次较高、对选择率（selectivity）影响较大的数值，StarRocks 会分配单独的桶进行存储。桶数量越多时，直方图的估算精度就越高，但是也会增加统计信息的内存使用。您可以根据业务情况调整直方图的桶个数和单个采集任务的 MCV（most common value）个数。
 
-**直方图适用于有明显数据倾斜，并且有频繁查询请求的列。如果您的表数据分布比较均匀，可以不使用直方图。直方图支持的列类型为数值类型、DATE、DATETIME 或字符串类型。**
+**直方图适用于有明显数据倾斜，并且有频繁查询请求的列。如果您的表数据分布比较均匀，可以不使用直方图。直方图支持的列类型为数值类型、DATE、DATETIME 或字符串类型。对于字符串类型，StarRocks 仅收集 MCV（most common value），不收集直方图桶。**
 
 直方图统计信息存储在 StarRocks 集群 `_statistics_` 数据库的 `histogram_statistics` 表中。查询时会返回类似如下信息：
 
@@ -146,7 +146,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 
 对于基础统计信息，StarRocks 默认自动进行全表全量统计信息采集，无需人工操作。对于从未采集过统计信息的表，会在一个调度周期内自动进行统计信息采集。对于已经采集过统计信息的表，StarRocks 会自动更新表的总行数以及修改的行数，将这些信息定期持久化下来，作为是否触发自动采集的判断条件。当前自动采集任务不会对直方图和多列联合统计信息进行采集。
 
-从 2.4.5 版本开始，支持用户配置自动全量采集的时间段，防止因集中采集而导致的集群性能抖动。采集时间段可通过 `statistic_auto_analyze_start_time` 和 `statistic_auto_analyze_end_time` 这两个 FE 配置项来配置。
+从 2.4.5 版本开始，支持用户配置自动全量采集的时间段，防止因集中采集而导致的集群性能抖动。采集时间段可通过 `statistic_auto_analyze_start_time` 和 `statistic_auto_analyze_end_time` 这两个 FE 配置项来配置。开始时间和结束时间都按秒计算并包含在采集时间段内。例如，结束时间为 `17:00:00` 时，`17:00:00` 这一秒结束前都允许采集。如果开始时间晚于结束时间，则采集时间段跨越午夜。
 
 在调度周期内，触发新的自动采集任务的条件：
 
@@ -448,6 +448,12 @@ DROP ALL ANALYZE JOB;
 CREATE ANALYZE FULL ALL db_name PROPERTIES (
    "statistic_exclude_pattern" = "db_name.tbl_name"
 );
+```
+
+**保留 StarRocks 提供的自动采集任务，但不采集 `db_name.tbl_name` 表**
+
+```sql
+ALTER TABLE db_name.tbl_name SET ("enable_statistic_auto_collect" = "false");
 ```
 
 ### 导入数据时采集统计信息

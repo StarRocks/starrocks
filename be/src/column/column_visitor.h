@@ -37,7 +37,6 @@ public:
     virtual Status visit(const MapColumn& column);
     virtual Status visit(const StructColumn& column);
     virtual Status visit(const BinaryColumn& column);
-    virtual Status visit(const LargeBinaryColumn& column);
     virtual Status visit(const Int8Column& column);
     virtual Status visit(const UInt8Column& column);
     virtual Status visit(const Int16Column& column);

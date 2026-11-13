@@ -18,8 +18,10 @@
 #include <google/protobuf/util/message_differencer.h>
 #include <gtest/gtest.h>
 
+#include <map>
 #include <numeric>
 #include <optional>
+#include <unordered_map>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -38,12 +40,14 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/sort_key_bounds_test_util.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
-#include "storage/lake/update_manager.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/sort_key_bounds.h"
 #include "storage/sort_key_sampler.h"
 #include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
@@ -1223,8 +1227,8 @@ static TabletMetadataPtr make_dup_keys_metadata_with_rowsets(
         sm->set_filename("seg" + std::to_string(id));
         sm->set_size(data_size);
         sm->set_num_rows(num_rows);
-        *sm->mutable_sort_key_min() = make_bigint_tuple_pb(lo);
-        *sm->mutable_sort_key_max() = make_bigint_tuple_pb(hi);
+        *sm->mutable_deprecated_sort_key_min() = make_bigint_tuple_pb(lo);
+        *sm->mutable_deprecated_sort_key_max() = make_bigint_tuple_pb(hi);
     }
     return m;
 }
@@ -1319,8 +1323,8 @@ TEST(TabletSplitterExternalBoundariesTest, ExternalRanges_AssignsPointAtPhysical
     *point = rowset->segment_metas(0);
     point->set_filename("point");
     point->set_segment_idx(7);
-    *point->mutable_sort_key_min() = make_bigint_tuple_pb(50);
-    *point->mutable_sort_key_max() = make_bigint_tuple_pb(50);
+    *point->mutable_deprecated_sort_key_min() = make_bigint_tuple_pb(50);
+    *point->mutable_deprecated_sort_key_max() = make_bigint_tuple_pb(50);
     RepeatedPtrField<TabletRangePB> external;
     *external.Add() = make_bigint_range_pb(std::nullopt, 50);
     *external.Add() = make_bigint_range_pb(50, std::nullopt);
@@ -1555,8 +1559,8 @@ static void add_bigint_seg(RowsetMetadataPB* rs, int64_t mn, int64_t mx, const s
     auto* m = rs->add_segment_metas();
     m->set_filename(name);
     m->set_num_rows(1);
-    *m->mutable_sort_key_min() = make_bigint_tuple_pb(mn);
-    *m->mutable_sort_key_max() = make_bigint_tuple_pb(mx);
+    *m->mutable_deprecated_sort_key_min() = make_bigint_tuple_pb(mn);
+    *m->mutable_deprecated_sort_key_max() = make_bigint_tuple_pb(mx);
 }
 } // namespace
 
@@ -1585,7 +1589,7 @@ TEST(TabletSplitterTest, CanPruneRowsetSegments_predicates) {
     } // (c) missing bound on extra segment
     {
         auto rs = make_pruneable();
-        rs.mutable_segment_metas(0)->clear_sort_key_max();
+        rs.mutable_segment_metas(0)->clear_deprecated_sort_key_max();
         EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1));
     } // (c) missing bound
     {
@@ -1618,8 +1622,8 @@ TEST(TabletSplitterTest, CanPruneRowsetSegments_predicates) {
         auto rs = make_pruneable(); // s0's bounds are arity 1
         auto* s1 = rs.add_segment_metas();
         s1->set_filename("s1");
-        *s1->mutable_sort_key_min() = wide_bound;
-        *s1->mutable_sort_key_max() = wide_bound;
+        *s1->mutable_deprecated_sort_key_min() = wide_bound;
+        *s1->mutable_deprecated_sort_key_max() = wide_bound;
         EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/2));
     }
 }
@@ -1668,6 +1672,103 @@ TEST(TabletSplitterTest, ComputeOwnership_failclosed_when_not_contained) {
     ASSERT_TRUE(own.ok());
     EXPECT_TRUE(own->segments[0].keep[0]);
     EXPECT_TRUE(own->segments[0].shared[0]); // fail-closed (not provably contained)
+}
+
+// Encoded bounds narrower than the current sort key keep the rowset unpruned, exactly like deprecated ones: a
+// rowset written before a metadata-only trailing sort-key ADD is not comparable with the new tablets' ranges.
+TEST(TabletSplitterTest, NarrowerEncodedBoundsAreNotPrunable) {
+    TuplePB wide_bound = make_bigint_tuple_pb(5);
+    *wide_bound.add_values() = make_bigint_tuple_pb(5).values(0);
+    for (const auto repr : {SortKeyBoundsRepr::kDeprecated, SortKeyBoundsRepr::kEncoded}) {
+        SCOPED_TRACE(repr == SortKeyBoundsRepr::kEncoded ? "encoded" : "deprecated");
+        RowsetMetadataPB narrow;
+        add_bigint_seg(&narrow, 0, 1, "s0");
+        convert_sort_key_bounds(&narrow, repr);
+        EXPECT_TRUE(can_prune_rowset_segments(narrow, /*sort_key_arity=*/1));
+        EXPECT_FALSE(can_prune_rowset_segments(narrow, /*sort_key_arity=*/2));
+
+        // One narrow segment disqualifies a rowset whose other segments are at the current arity.
+        RowsetMetadataPB mixed_arity;
+        auto* wide = mixed_arity.add_segment_metas();
+        wide->set_filename("s1");
+        wide->set_num_rows(1);
+        *wide->mutable_deprecated_sort_key_min() = wide_bound;
+        *wide->mutable_deprecated_sort_key_max() = wide_bound;
+        convert_sort_key_bounds(&mixed_arity, repr);
+        EXPECT_TRUE(can_prune_rowset_segments(mixed_arity, /*sort_key_arity=*/2));
+        EXPECT_FALSE(can_prune_rowset_segments(mixed_arity, /*sort_key_arity=*/1));
+        *mixed_arity.add_segment_metas() = narrow.segment_metas(0);
+        EXPECT_FALSE(can_prune_rowset_segments(mixed_arity, /*sort_key_arity=*/2));
+    }
+}
+
+// Encoded bounds in format version 1 that do not decode, whether the header or a value is damaged, fail ownership the
+// way an unparseable deprecated tuple does, so the caller never prunes a rowset on bounds it cannot read.
+TEST(TabletSplitterTest, CorruptEncodedBoundsFailOwnership) {
+    const std::vector<TabletRangePB> ranges{make_bigint_range_pb(0, 11), make_bigint_range_pb(11, 21)};
+    {
+        RowsetMetadataPB rs;
+        add_bigint_seg(&rs, 1, 5, "s0");
+        // A non-NULL value without its text does not parse.
+        rs.mutable_segment_metas(0)->mutable_deprecated_sort_key_min()->mutable_values(0)->clear_value();
+        EXPECT_FALSE(compute_rowset_segment_ownership(rs, ranges).ok());
+    }
+    RowsetMetadataPB encoded;
+    add_bigint_seg(&encoded, 1, 5, "s0");
+    convert_sort_key_bounds(&encoded, SortKeyBoundsRepr::kEncoded);
+    {
+        ASSIGN_OR_ABORT(auto own, compute_rowset_segment_ownership(encoded, ranges));
+        EXPECT_TRUE(own.segments[0].keep[0]);
+        EXPECT_FALSE(own.segments[0].keep[1]);
+        EXPECT_FALSE(own.segments[0].shared[0]);
+    }
+    const std::string valid = encoded.segment_metas(0).sort_key_min_encoded();
+    // One BIGINT column: a 4-byte header ending in the type byte (byte 3), the value marker (byte 4) and the 8-byte
+    // payload.
+    ASSERT_EQ(13u, valid.size());
+    std::string bad_type = valid;
+    bad_type[3] = static_cast<char>(0xFF);
+    std::string bad_marker = valid;
+    bad_marker[4] = 0x02;
+    for (const std::string& corrupt :
+         {bad_type, valid.substr(0, valid.size() - 1), bad_marker, valid + std::string(1, '\0')}) {
+        for (const bool corrupt_min : {true, false}) {
+            RowsetMetadataPB rs(encoded);
+            if (corrupt_min) {
+                rs.mutable_segment_metas(0)->set_sort_key_min_encoded(corrupt);
+            } else {
+                rs.mutable_segment_metas(0)->set_sort_key_max_encoded(corrupt);
+            }
+            EXPECT_TRUE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1)) << rs.ShortDebugString();
+            auto own = compute_rowset_segment_ownership(rs, ranges);
+            EXPECT_TRUE(own.status().is_corruption()) << own.status() << " " << rs.ShortDebugString();
+        }
+    }
+}
+
+// Encoded bounds in a format version this binary does not know count as no bounds: the rowset is not prunable, so the
+// caller keeps every segment on every new tablet as shared instead of failing.
+TEST(TabletSplitterTest, UnknownEncodedFormatVersionIsNotPrunable) {
+    RowsetMetadataPB encoded;
+    add_bigint_seg(&encoded, 1, 5, "s0");
+    convert_sort_key_bounds(&encoded, SortKeyBoundsRepr::kEncoded);
+    ASSERT_TRUE(can_prune_rowset_segments(encoded, /*sort_key_arity=*/1));
+    const std::string valid = encoded.segment_metas(0).sort_key_min_encoded();
+    std::string unknown_version = valid;
+    unknown_version[0] = 0x02;
+    for (const std::string& corrupt : {unknown_version, std::string("garbage"), std::string()}) {
+        for (const bool corrupt_min : {true, false}) {
+            RowsetMetadataPB rs(encoded);
+            if (corrupt_min) {
+                rs.mutable_segment_metas(0)->set_sort_key_min_encoded(corrupt);
+            } else {
+                rs.mutable_segment_metas(0)->set_sort_key_max_encoded(corrupt);
+            }
+            EXPECT_FALSE(has_segment_sort_key_bounds(rs.segment_metas(0))) << rs.ShortDebugString();
+            EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1)) << rs.ShortDebugString();
+            EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/0)) << rs.ShortDebugString();
+        }
+    }
 }
 
 TEST(TabletSplitterTest, ApplyOwnership_prunes_and_rebuilds_shared) {
@@ -1804,8 +1905,8 @@ TEST(TabletSplitterTest, BuildSegmentsFromRowsets_NullTabletManagerSkipsSampling
     sm->set_filename("never_written.dat");
     sm->set_size(100);
     sm->set_num_rows(10);
-    sm->mutable_sort_key_min()->CopyFrom(make_bigint_tuple_pb(0));
-    sm->mutable_sort_key_max()->CopyFrom(make_bigint_tuple_pb(9));
+    sm->mutable_deprecated_sort_key_min()->CopyFrom(make_bigint_tuple_pb(0));
+    sm->mutable_deprecated_sort_key_max()->CopyFrom(make_bigint_tuple_pb(9));
 
     std::vector<SegmentSplitInfo> segments;
     ASSERT_OK(build_segments_from_rowsets(/*tablet_manager=*/nullptr, metadata, /*split_width=*/2,
@@ -1925,8 +2026,8 @@ static std::shared_ptr<TabletMetadataPB> make_trailing_key_added_metadata(
         sm->set_size(data_size);
         sm->set_num_rows(num_rows);
         // Arity 1: written before `ADD COLUMN k2`.
-        *sm->mutable_sort_key_min() = make_bigint_tuple_pb(lo);
-        *sm->mutable_sort_key_max() = make_bigint_tuple_pb(hi);
+        *sm->mutable_deprecated_sort_key_min() = make_bigint_tuple_pb(lo);
+        *sm->mutable_deprecated_sort_key_max() = make_bigint_tuple_pb(hi);
     }
     return m;
 }
@@ -1963,8 +2064,8 @@ TEST(TabletSplitterTest, BuildSegmentsFromRowsets_LeavesUnsetSegmentKeysEmpty) {
             std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(1, 0, 499, 500, 5000),
     });
     auto* sm = m->mutable_rowsets(0)->mutable_segment_metas(0);
-    sm->clear_sort_key_min();
-    sm->clear_sort_key_max();
+    sm->clear_deprecated_sort_key_min();
+    sm->clear_deprecated_sort_key_max();
 
     std::vector<SegmentSplitInfo> segments;
     ASSERT_OK(build_segments_from_rowsets(/*tablet_manager=*/nullptr, m, /*split_width=*/2,
@@ -2150,8 +2251,8 @@ protected:
         _test_dir = paths[0].path + "/sort_key_sampling_splitter_test";
         _location_provider = std::make_shared<FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _update_manager.get(), 16384);
+        _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 16384, 16384);
     }
 
     void TearDown() override {
@@ -2315,8 +2416,8 @@ protected:
             // Path A verifies that entry 0 of the short key index decodes EQUAL to sort_key_min, and
             // both paths reject a sample outside [sort_key_min, sort_key_max], so these must be the
             // segment's real first/last key -- not a rounded envelope.
-            *sm->mutable_sort_key_min() = key_tuple_pb(keys.front());
-            *sm->mutable_sort_key_max() = key_tuple_pb(keys.back());
+            *sm->mutable_deprecated_sort_key_min() = key_tuple_pb(keys.front());
+            *sm->mutable_deprecated_sort_key_max() = key_tuple_pb(keys.back());
         }
         return metadata;
     }
@@ -2383,8 +2484,8 @@ protected:
             sm->set_num_rows(num_rows);
             // A lost segment keeps the bounds its metadata declares -- the file is gone, the
             // metadata is not.
-            *sm->mutable_sort_key_min() = key_tuple_pb(keys.front());
-            *sm->mutable_sort_key_max() = key_tuple_pb(keys.back());
+            *sm->mutable_deprecated_sort_key_min() = key_tuple_pb(keys.front());
+            *sm->mutable_deprecated_sort_key_max() = key_tuple_pb(keys.back());
             rowset_rows += num_rows;
             rowset_size += static_cast<int64_t>(size);
             key_start += num_rows;
@@ -2426,8 +2527,8 @@ protected:
             sm->set_filename(name);
             sm->set_size(static_cast<int64_t>(size));
             sm->set_num_rows(rows_per_segment);
-            *sm->mutable_sort_key_min() = key_tuple_pb(key_start);
-            *sm->mutable_sort_key_max() = key_tuple_pb(key_start + rows_per_segment - 1);
+            *sm->mutable_deprecated_sort_key_min() = key_tuple_pb(key_start);
+            *sm->mutable_deprecated_sort_key_max() = key_tuple_pb(key_start + rows_per_segment - 1);
         };
 
         std::vector<int64_t> shared_keys(rows_per_segment);
@@ -2486,8 +2587,8 @@ protected:
             sm->set_filename(name);
             sm->set_size(static_cast<int64_t>(size));
             sm->set_num_rows(rows_per_segment);
-            *sm->mutable_sort_key_min() = key_tuple_pb(keys.front());
-            *sm->mutable_sort_key_max() = key_tuple_pb(keys.back());
+            *sm->mutable_deprecated_sort_key_min() = key_tuple_pb(keys.front());
+            *sm->mutable_deprecated_sort_key_max() = key_tuple_pb(keys.back());
         }
         return metadata;
     }
@@ -2534,8 +2635,8 @@ protected:
             sm->set_size(static_cast<int64_t>(size));
             sm->set_num_rows(num_rows);
             sm->set_segment_idx(0);
-            *sm->mutable_sort_key_min() = key_tuple_pb(keys.front());
-            *sm->mutable_sort_key_max() = key_tuple_pb(keys.back());
+            *sm->mutable_deprecated_sort_key_min() = key_tuple_pb(keys.front());
+            *sm->mutable_deprecated_sort_key_max() = key_tuple_pb(keys.back());
         }
         return metadata;
     }
@@ -2648,8 +2749,8 @@ protected:
         sm->set_size(static_cast<int64_t>(size));
         sm->set_num_rows(num_rows);
         // Arity 1: written before the ADD, exactly like the samples the sampler will decode.
-        *sm->mutable_sort_key_min() = key_tuple_pb(keys.front());
-        *sm->mutable_sort_key_max() = key_tuple_pb(keys.back());
+        *sm->mutable_deprecated_sort_key_min() = key_tuple_pb(keys.front());
+        *sm->mutable_deprecated_sort_key_max() = key_tuple_pb(keys.back());
         return metadata;
     }
 
@@ -2726,7 +2827,7 @@ protected:
     std::string _test_dir;
     std::shared_ptr<FixedLocationProvider> _location_provider;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<TabletManager> _tablet_manager;
     // (first key, key count) of every segment the last write_tablet* call wrote, in write order.
     std::vector<std::pair<int64_t, int64_t>> _segment_key_runs;
@@ -3288,8 +3389,8 @@ TEST_F(SortKeySamplingSplitterTest, split_boundary_planner_skips_zero_row_segmen
     live->set_segment_idx(1);
     live->set_num_rows(100);
     live->set_size(live_size);
-    live->mutable_sort_key_min()->CopyFrom(key_tuple_pb(0));
-    live->mutable_sort_key_max()->CopyFrom(key_tuple_pb(99));
+    live->mutable_deprecated_sort_key_min()->CopyFrom(key_tuple_pb(0));
+    live->mutable_deprecated_sort_key_max()->CopyFrom(key_tuple_pb(99));
     live->set_deprecated_sort_key_sample_row_interval(50);
     live->add_deprecated_sort_key_samples()->CopyFrom(key_tuple_pb(50));
 
@@ -3311,6 +3412,138 @@ TEST_F(SortKeySamplingSplitterTest, split_boundary_planner_skips_zero_row_segmen
     ASSERT_EQ(2, ranges.size());
     ASSERT_TRUE(ranges[0].range.has_upper_bound());
     EXPECT_EQ(1, ranges[0].range.upper_bound().values_size());
+}
+
+// The child metadata split_tablet produced, each segment's bounds rewritten into one representation so that the
+// splits of sources in different representations compare byte for byte.
+static std::map<int64_t, std::string> normalized_children(
+        const std::unordered_map<int64_t, MutableTabletMetadataPtr>& children) {
+    std::map<int64_t, std::string> normalized;
+    for (const auto& [id, child] : children) {
+        TabletMetadataPB copy(*child);
+        normalize_sort_key_bounds(&copy);
+        normalized.emplace(id, copy.SerializeAsString());
+    }
+    return normalized;
+}
+
+// split_tablet produces the same children whether the source's segments carry the deprecated pair, the encoded pair
+// or a mix of both, through the FE-supplied boundaries and through the data-driven planner, and every child segment
+// keeps the representation of the source segment it was copied from. A segment with rows but without bounds makes
+// every representation fall back to an identical tablet.
+TEST_F(SortKeySamplingSplitterTest, SplitTabletIdenticalAcrossRepresentations) {
+    // One compacted rowset over the disjoint key runs [0, 300), [300, 500) and [500, 800). Split at about 400, the
+    // middle segment stays shared and the outer ones become private to their child.
+    const auto base = write_one_rowset_with_segments({300, 200, 300});
+    auto* base_rowset = base->mutable_rowsets(0);
+    tablet_reshard_helper::set_rowset_uid(base_rowset);
+    for (int i = 0; i < base_rowset->segment_metas_size(); ++i) {
+        base_rowset->mutable_segment_metas(i)->set_segment_idx(i);
+    }
+    TabletMetadataPB boundless(*base);
+    auto* boundless_segment = boundless.mutable_rowsets(0)->add_segment_metas();
+    boundless_segment->set_filename("boundless.dat");
+    boundless_segment->set_segment_idx(3);
+    boundless_segment->set_num_rows(100);
+    boundless_segment->set_size(100);
+
+    const int64_t left_id = next_id();
+    const int64_t right_id = next_id();
+    auto split = [&](const TabletMetadataPB& source, bool external) {
+        SplittingTabletInfoPB splitting;
+        splitting.set_old_tablet_id(source.id());
+        splitting.add_new_tablet_ids(left_id);
+        splitting.add_new_tablet_ids(right_id);
+        if (external) *splitting.mutable_new_tablet_ranges() = two_external_ranges();
+        TxnInfoPB txn_info;
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+        return split_tablet(_tablet_manager.get(), std::make_shared<TabletMetadataPB>(source), splitting,
+                            /*new_version=*/2, txn_info);
+    };
+
+    for (const bool external : {true, false}) {
+        SCOPED_TRACE(external ? "FE-supplied boundaries" : "data-driven boundaries");
+        std::map<int64_t, std::string> expected;
+        for (const auto repr :
+             {SortKeyBoundsRepr::kDeprecated, SortKeyBoundsRepr::kEncoded, SortKeyBoundsRepr::kMixed}) {
+            SCOPED_TRACE(fmt::format("representation {}", static_cast<int>(repr)));
+            TabletMetadataPB source(*base);
+            convert_sort_key_bounds(&source, repr);
+            std::map<std::string, SegmentMetadataPB> source_segments;
+            for (const auto& segment : source.rowsets(0).segment_metas()) source_segments[segment.filename()] = segment;
+
+            ASSIGN_OR_ABORT(auto children, split(source, external));
+            ASSERT_EQ(2u, children.size());
+            int private_segments = 0;
+            for (const auto& [id, child] : children) {
+                for (const auto& rowset : child->rowsets()) {
+                    for (const auto& segment : rowset.segment_metas()) {
+                        const auto& from = source_segments.at(segment.filename());
+                        EXPECT_EQ(from.has_sort_key_min_encoded(), segment.has_sort_key_min_encoded());
+                        EXPECT_EQ(from.has_sort_key_max_encoded(), segment.has_sort_key_max_encoded());
+                        EXPECT_EQ(from.has_deprecated_sort_key_min(), segment.has_deprecated_sort_key_min());
+                        EXPECT_EQ(from.has_deprecated_sort_key_max(), segment.has_deprecated_sort_key_max());
+                        private_segments += segment.shared() ? 0 : 1;
+                    }
+                }
+            }
+            EXPECT_GT(private_segments, 0) << "no segment was pruned to one child, so ownership was not computed";
+            if (repr == SortKeyBoundsRepr::kDeprecated) {
+                expected = normalized_children(children);
+            } else {
+                EXPECT_EQ(expected, normalized_children(children));
+            }
+
+            TabletMetadataPB boundless_source(boundless);
+            convert_sort_key_bounds(&boundless_source, repr);
+            ASSIGN_OR_ABORT(auto fallback, split(boundless_source, external));
+            ASSERT_EQ(1u, fallback.size());
+            EXPECT_EQ(boundless_source.rowsets(0).SerializeAsString(),
+                      fallback.begin()->second->rowsets(0).SerializeAsString());
+        }
+    }
+}
+
+// get_tablet_split_ranges returns the same ranges and projected statistics whether the source's segments carry the
+// deprecated pair, the encoded pair or a mix of both. The tablet range leaves the large segment wholly outside it, so
+// the boundaries can come only from the small in-range segment, which gets a sample budget only when the large one is
+// weighed by its bounds against the tablet range.
+TEST_F(SortKeySamplingSplitterTest, SplitRangesIdenticalAcrossRepresentations) {
+    const auto base = write_one_rowset_with_segments({70000, 500});
+    *base->mutable_range()->mutable_lower_bound() = key_tuple_pb(70000);
+    base->mutable_range()->set_lower_bound_included(true);
+
+    std::vector<TabletRangeInfo> expected;
+    for (const auto repr : {SortKeyBoundsRepr::kDeprecated, SortKeyBoundsRepr::kEncoded, SortKeyBoundsRepr::kMixed}) {
+        SCOPED_TRACE(fmt::format("representation {}", static_cast<int>(repr)));
+        auto metadata = std::make_shared<TabletMetadataPB>(*base);
+        convert_sort_key_bounds(metadata.get(), repr);
+        std::vector<TabletRangeInfo> ranges;
+        ASSERT_OK(get_tablet_split_ranges(_tablet_manager.get(), metadata, 4, &ranges));
+        ASSERT_EQ(4u, ranges.size());
+        for (size_t i = 0; i + 1 < ranges.size(); ++i) {
+            const auto boundary = decode_bound(ranges[i].range, /*lower=*/false);
+            ASSERT_TRUE(boundary.has_value());
+            EXPECT_GT(*boundary, 70000);
+            EXPECT_LT(*boundary, 70500);
+        }
+        if (repr == SortKeyBoundsRepr::kDeprecated) {
+            expected = ranges;
+            continue;
+        }
+        for (size_t i = 0; i < ranges.size(); ++i) {
+            EXPECT_TRUE(MessageDifferencer::Equals(expected[i].range, ranges[i].range)) << i;
+            ASSERT_EQ(expected[i].rowset_stats.size(), ranges[i].rowset_stats.size()) << i;
+            for (const auto& [rowset_id, stats] : expected[i].rowset_stats) {
+                ASSERT_TRUE(ranges[i].rowset_stats.contains(rowset_id)) << i;
+                const auto& actual = ranges[i].rowset_stats.at(rowset_id);
+                EXPECT_EQ(stats.num_rows, actual.num_rows) << i;
+                EXPECT_EQ(stats.data_size, actual.data_size) << i;
+                EXPECT_EQ(stats.num_dels, actual.num_dels) << i;
+            }
+        }
+    }
 }
 
 } // namespace starrocks::lake

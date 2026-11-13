@@ -36,6 +36,7 @@
 #include "common/statusor.h"
 #include "compute_env/query/file_scan_split_context.h"
 #include "formats/deletion_bitmap.h"
+#include "formats/utils.h"
 #include "gen_cpp/Exprs_types.h"
 #include "runtime/descriptors.h"
 
@@ -47,6 +48,7 @@ class RuntimeFilterPredicates;
 class RuntimeScanRangePruner;
 struct FileScanSplitContext;
 class TIcebergSchema;
+class TParquetEncryptionInfo;
 
 struct SkipRowsContext {
     DeletionBitmapPtr deletion_bitmap;
@@ -110,6 +112,8 @@ struct FormatScannerStats {
     int64_t column_reader_init_ns = 0;
     // dict filter
     int64_t group_chunk_read_ns = 0;
+    // compacting the active columns to the rows that passed the predicates and runtime filters
+    int64_t group_chunk_filter_ns = 0;
     int64_t group_dict_filter_ns = 0;
     int64_t group_dict_decode_ns = 0;
     // io coalesce
@@ -124,6 +128,10 @@ struct FormatScannerStats {
     int64_t page_index_ns = 0;
     int64_t total_row_groups = 0;
     int64_t filtered_row_groups = 0;
+    // Row groups / ORC stripes / data files whose rows are all in the deletion bitmap, skipped before any IO.
+    int64_t deleted_row_groups_skipped = 0;
+    int64_t deleted_stripes_skipped = 0;
+    int64_t deleted_files_skipped = 0;
 
     // late materialize round-by-round
     int64_t group_min_round_cost = 0;
@@ -169,10 +177,19 @@ struct FormatScannerStats {
 struct FormatScannerOptions {
     bool case_sensitive = false;
     bool use_min_max_opt = false;
+    // The scan node plans with the min/max optimization, so min_max_values carry every slot (use_min_max_opt may be
+    // turned off for one scan range). Otherwise they carry only the runtime filter probe slots the FE chose for file
+    // pruning.
+    bool min_max_values_of_all_slots = false;
     // Set by PruneHDFSScanColumnRule when all queried columns are partition columns
     // and a placeholder materialized column was injected.  Combined with
     // use_min_max_opt to skip reading the placeholder from the data file.
     bool can_use_any_column = false;
+    // Materialized slots the query reads itself although can_use_any_column is set. The FE treats the source column
+    // of an Iceberg partition transform (e.g. `d` of `year(d)`) as a partition column, so a query on it gets a
+    // placeholder column, but a file stores the column as data. Only the placeholder may then be filled with a default
+    // value; these slots keep their min/max value or are read from the file.
+    std::unordered_set<SlotId> any_column_queried_slots;
     bool use_count_opt = false;
     bool orc_use_column_names = false;
     bool parquet_page_index_enable = false;
@@ -215,10 +232,7 @@ struct FormatColumnInfo {
     SlotDescriptor* slot_desc;
     bool decode_needed = true;
 
-    std::string formatted_name(bool case_sensitive) const {
-        auto n = std::string(name());
-        return case_sensitive ? n : boost::algorithm::to_lower_copy(n);
-    }
+    std::string formatted_name(bool case_sensitive) const { return Utils::format_name(name(), case_sensitive); }
     std::string_view name() const { return slot_desc->col_name(); }
     int32_t col_unique_id() const { return slot_desc->col_unique_id(); }
     std::string_view col_physical_name() const { return slot_desc->col_physical_name(); }
@@ -275,6 +289,8 @@ struct FormatScanContext {
     int64_t scan_range_length = std::numeric_limits<int64_t>::max();
     int32_t scan_range_id = -1;
     std::map<int32_t, TExprMinMaxValue> min_max_values;
+    // Per slot, how many values of its [null?, min, max] the batches too small to hold them all have emitted.
+    std::unordered_map<int32_t, size_t> min_max_value_cursors;
     std::map<int32_t, TExpr> extended_column_exprs;
     std::optional<int64_t> first_row_id;
     int64_t file_record_count = 0;
@@ -283,6 +299,13 @@ struct FormatScanContext {
 
     // Table/lake schema used by Parquet schema evolution matching.
     const TIcebergSchema* lake_schema = nullptr;
+
+    // Non-owning. Parquet Modular Encryption material for this scan range: the per-file data
+    // key and, when the writer withheld it from the file, the AAD prefix. FE recovers both from
+    // the Iceberg data file's key_metadata. nullptr for plaintext tables. Owned by the
+    // THdfsScanRange held in the scanner context, which outlives every format reader built
+    // from it.
+    const TParquetEncryptionInfo* parquet_encryption_info = nullptr;
 
     // Non-owning predicate state built by upper scan orchestration.
     const PredicateTree* predicate_tree = nullptr;
@@ -311,6 +334,12 @@ struct FormatScanContext {
     } split;
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
+
+    // A one-row column of `type` holding an Iceberg initial-default as FE serializes it, for a column or struct
+    // subfield missing from a data file. TIME arrives as "HH:MM[:SS[.ffffff]]" and is stored as whole seconds, like
+    // the file readers do. NotSupported for a type the value cannot be parsed into.
+    static StatusOr<MutableColumnPtr> create_initial_default_column(const TypeDescriptor& type, bool nullable,
+                                                                    const std::string& value);
     bool can_use_count_optimization() const;
     bool has_count_column() const { return _count_slot.has_value(); }
     bool can_use_min_max_optimization() const;

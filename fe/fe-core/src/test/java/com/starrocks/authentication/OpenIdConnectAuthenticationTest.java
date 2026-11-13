@@ -16,7 +16,6 @@ package com.starrocks.authentication;
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.UserAuthOptionAnalyzer;
@@ -25,6 +24,8 @@ import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.parser.NodePosition;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.Map;
 
 public class OpenIdConnectAuthenticationTest {
 
@@ -42,12 +43,12 @@ public class OpenIdConnectAuthenticationTest {
                 new UserAuthOption(null, "", true, NodePosition.ZERO));
         String openIdConnectJson = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
 
-        MysqlSerializer serializer = MysqlSerializer.newInstance();
-        serializer.writeInt1(0);
-        serializer.writeLenEncodedString(openIdConnectJson);
+        // The MySQL [1B][lenenc] wrapper is peeled off at the entry point now
+        // (AuthenticationHandler#fromMysqlHandshake), so what reaches this provider is the bare
+        // token, whichever channel it came in on.
         try {
             provider.authenticate(new ConnectContext().getAccessControlContext(), new UserIdentity("harbor", "%"),
-                    serializer.toArray());
+                    AuthCredentials.ofBearer(openIdConnectJson, AuthChannel.MYSQL, "%"));
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }
@@ -150,5 +151,57 @@ public class OpenIdConnectAuthenticationTest {
         } catch (AuthenticationException e) {
             Assertions.assertTrue(e.getMessage().contains("JWT expired at"));
         }
+    }
+
+    @Test
+    public void testNestedClaimJsonPointer() throws Exception {
+        MockTokenUtils.MockJwkMgr mockJwkMgr = new MockTokenUtils.MockJwkMgr();
+        JWKSet jwkSet = mockJwkMgr.getJwkSet("jwks.json");
+
+        String token = mockTokenUtils.generateTestOIDCToken(3600 * 1000,
+                Map.of("realm_access", Map.of("user", "harbor")));
+
+        OpenIdConnectVerifier.verify(token, "harbor", jwkSet, "/realm_access/user", emptyIssuer, emptyAudience);
+    }
+
+    @Test
+    public void testDeeplyNestedClaimJsonPointer() throws Exception {
+        MockTokenUtils.MockJwkMgr mockJwkMgr = new MockTokenUtils.MockJwkMgr();
+        JWKSet jwkSet = mockJwkMgr.getJwkSet("jwks.json");
+
+        String token = mockTokenUtils.generateTestOIDCToken(3600 * 1000,
+                Map.of("https://sts.amazonaws.com/",
+                        Map.of("request_tags", Map.of("starrocks_user", "harbor"))));
+
+        OpenIdConnectVerifier.verify(token, "harbor", jwkSet,
+                "/https:~1~1sts.amazonaws.com~1/request_tags/starrocks_user",
+                emptyIssuer, emptyAudience);
+    }
+
+    @Test
+    public void testNestedClaimNotFound() throws Exception {
+        MockTokenUtils.MockJwkMgr mockJwkMgr = new MockTokenUtils.MockJwkMgr();
+        JWKSet jwkSet = mockJwkMgr.getJwkSet("jwks.json");
+
+        String token = mockTokenUtils.generateTestOIDCToken(3600 * 1000,
+                Map.of("realm_access", Map.of("user", "harbor")));
+
+        try {
+            OpenIdConnectVerifier.verify(token, "harbor", jwkSet,
+                    "/realm_access/nonexistent", emptyIssuer, emptyAudience);
+            Assertions.fail();
+        } catch (AuthenticationException e) {
+            Assertions.assertTrue(e.getMessage().contains("Can not get specified principal /realm_access/nonexistent"));
+        }
+    }
+
+    @Test
+    public void testFlatLookupStillWorks() throws Exception {
+        MockTokenUtils.MockJwkMgr mockJwkMgr = new MockTokenUtils.MockJwkMgr();
+        JWKSet jwkSet = mockJwkMgr.getJwkSet("jwks.json");
+
+        // Flat claim (no leading /) should work exactly as before
+        String token = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
+        OpenIdConnectVerifier.verify(token, "harbor", jwkSet, "preferred_username", emptyIssuer, emptyAudience);
     }
 }

@@ -62,9 +62,9 @@ SHOW TABLET <tablet_id>
 | TabletId | ReplicaId | BackendId | SchemaHash | Version | VersionHash | LstSuccessVersion | LstSuccessVersionHash | LstFailedVersion | LstFailedVersionHash | LstFailedTime | DataSize | RowCount | State  | LstConsistencyCheckTime | CheckVersion | CheckVersionHash | VersionCount | PathHash | MetaUrl  | CompactionStatus  | DiskRootPath  |
 +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+------------------+--------------+----------+----------+-------------------+---------------+
 -- In shared-data cluster
-+----------+-----------+----------+----------+------------+
-| TabletId | BackendId | DataSize | RowCount | MinVersion |
-+----------+-----------+----------+----------+------------+
++----------+-----------+----------+----------+------------+-------+
+| TabletId | BackendId | DataSize | RowCount | MinVersion | Range |
++----------+-----------+----------+----------+------------+-------+
 ```
 
 | **Field**                | **Description**                        |
@@ -92,6 +92,7 @@ SHOW TABLET <tablet_id>
 | CompactionStatus        | The URL used to query data version compaction status.    |
 | DiskRootPath            | The disk where the replica is located.    |
 | MinVersion              | The minimum data version retained for the tablet. For shared-data clusters only. |
+| Range                   | The key range of the tablet. `null` for tablets of tables that do not use range distribution. For shared-data clusters only. Supported from v4.1 onwards. |
 
 ### Query information of a specific tablet
 

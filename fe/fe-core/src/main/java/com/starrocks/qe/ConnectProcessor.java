@@ -40,6 +40,7 @@ import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -81,13 +82,11 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
@@ -568,6 +567,7 @@ public class ConnectProcessor {
         executeInvoked = false;
         ctx.setExecutor(null);
         ctx.setQueryDetail(null);
+        ctx.setResourceGroup(null);
         ctx.getState().reset();
         ctx.resetReturnRows();
         ctx.setStartTime();
@@ -652,14 +652,7 @@ public class ConnectProcessor {
             executor = new StmtExecutor(ctx, parsedStmt);
             ctx.setExecutor(executor);
 
-            //Build View SQL without Policy Rewrite
-            new AstTraverser<Void, Void>() {
-                @Override
-                public Void visitRelation(Relation relation, Void context) {
-                    relation.setNeedRewrittenByPolicy(true);
-                    return null;
-                }
-            }.visit(parsedStmt);
+            SecurityPolicyRewriteRule.markRelationsForRewrite(parsedStmt);
 
             if (ctx.getQueryDetail() == null) {
                 executor.addRunningQueryDetail(parsedStmt);
@@ -894,8 +887,18 @@ public class ConnectProcessor {
             return;
         }
 
+        // Both ids below come from a MetadataMgr resolution, so for an external catalog both are minted by the
+        // connector. The lock is not merely harmless overhead there: the two id spaces are not partitioned, so
+        // a collision makes COM_FIELD_LIST on a Hive table take IS + READ on an unrelated internal one and
+        // stall DDL against it. Nothing it would protect is FE-owned -- the schema comes from the connector
+        // cache, which is replaced wholesale and never takes the Locker -- and the revalidation below is
+        // already internal-catalog only. Fail-closed via Table#isMetaLockTarget, so a resource-mapping table,
+        // which lives in an internal database and is rewritten in place under this lock, keeps it.
+        boolean needLock = table.isMetaLockTarget();
         Locker locker = new Locker();
-        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+        if (needLock) {
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+        }
         try {
             // Revalidate by name to detect concurrent DROP/RENAME between unlocked lookup
             // and lock acquisition. The table id is stable, so id-based revalidation would
@@ -920,7 +923,9 @@ public class ConnectProcessor {
         } catch (StarRocksConnectorException e) {
             LOG.error("errors happened when getting table {}", tableName, e);
         } finally {
-            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+            if (needLock) {
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+            }
         }
         ctx.getState().setEof();
     }
@@ -1067,6 +1072,54 @@ public class ConnectProcessor {
         ctx.getState().setStateType(QueryState.MysqlStateType.NOOP);
     }
 
+    /**
+     * A connection whose handshake was answered before the login completed - an OAuth2 user whose
+     * token arrives later through the browser callback - may ping, quit or re-authenticate, and
+     * nothing else: until the token is there, {@code checkLoginSuccess} refuses every other command
+     * with the same error the first statement would get (the authorization URL). Without this,
+     * such a connection could switch databases, list columns or probe which databases exist,
+     * because only the statement commands checked. Those keep their own check inside
+     * {@link #handleQuery} / {@link #handleExecute}, which also records the refusal in the audit log.
+     */
+    private boolean refusedUntilLoggedIn(MysqlCommand command) {
+        switch (command) {
+            // Allowed while the login is pending: a client keeps the connection alive with PING
+            // while the user is in the browser, may give up with QUIT, and CHANGE_USER is itself a
+            // new authentication.
+            case COM_QUIT:
+            case COM_PING:
+            case COM_CHANGE_USER:
+                return false;
+            // Not exempt, just checked elsewhere: the statement commands run the same
+            // checkLoginSuccess inside handleQuery / handleExecute (validateStmtBeforeExecution),
+            // where the refusal is also written to the audit log. Checking here too would only
+            // report it twice.
+            case COM_QUERY:
+            case COM_STMT_PREPARE:
+            case COM_STMT_EXECUTE:
+                return false;
+            // Everything else - COM_INIT_DB, COM_FIELD_LIST, COM_STMT_RESET / CLOSE, ... - asks now.
+            default:
+                break;
+        }
+        AuthenticationProvider provider = ctx.getAuthenticationProvider();
+        if (provider == null) {
+            return false;
+        }
+        try {
+            provider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAccessControlContext());
+            return false;
+        } catch (AuthenticationException e) {
+            if (e.getErrorCode() != null) {
+                ErrorReport.report(e.getErrorCode(), e.getMessage());
+            } else {
+                ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED, e.getMessage());
+            }
+            ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            return true;
+        }
+    }
+
     private static boolean isNull(byte[] bitmap, int position) {
         return (bitmap[position / 8] & (0xff & (1 << (position & 7)))) != 0;
     }
@@ -1086,6 +1139,11 @@ public class ConnectProcessor {
         ctx.setUseConnectorMetadataCache(Optional.empty());
         ctx.setResourceGroup(null);
         ctx.resetErrorCode();
+
+        if (refusedUntilLoggedIn(command)) {
+            replaceDiagnosticsForCommand();
+            return;
+        }
 
         switch (command) {
             case COM_INIT_DB:
@@ -1380,14 +1438,7 @@ public class ConnectProcessor {
             List<StatementBase> stmts = SqlParser.parse(request.getSql(), ctx.getSessionVariable());
             ctx.setMultiStmt(stmts.size() > 1);
             StatementBase statement = stmts.get(idx);
-            //Build View SQL without Policy Rewrite
-            new AstTraverser<Void, Void>() {
-                @Override
-                public Void visitRelation(Relation relation, Void context) {
-                    relation.setNeedRewrittenByPolicy(true);
-                    return null;
-                }
-            }.visit(statement);
+            SecurityPolicyRewriteRule.markRelationsForRewrite(statement);
             statement.setOrigStmt(new OriginStatement(request.getSql(), idx));
 
             executor = doProxyExecute(result, request, statement, requestFE);
@@ -1503,6 +1554,9 @@ public class ConnectProcessor {
         final MysqlChannel channel = ctx.getMysqlChannel();
         channel.setSequenceId(req.packageId());
         channel.accSequenceId();
+        if (req.compressedSequenceId() >= 0) {
+            channel.setCompressedSequenceId(req.compressedSequenceId() + 1);
+        }
 
         dispatch();
 

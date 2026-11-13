@@ -25,6 +25,16 @@ GEOGRAPHY ST_GeogFromText(VARCHAR wkt, INT srid)
 
 `GEOGRAPHY` 値を返します。いずれかの引数が `NULL`、WKT が無効、座標がサポート範囲外、または `srid` が `4326` 以外の場合は `NULL` を返します。
 
+クエリでは、互換性のあるネイティブ空間値を `ARRAY` の要素、`MAP` の値、`STRUCT` のフィールドに使用できます。コンテナの構築、要素やフィールドへのアクセス、`cardinality` と `array_length`、`UNNEST` による配列の展開、`array_map` と `array_filter`、順序指定と `DISTINCT` を伴わない `array_agg` と `map_agg` がサポートされます。
+
+`MAP` のキーに空間値を含めることはできません。比較、ソート、重複排除など、空間値の等価性、順序付け、ハッシュ化が必要な操作は拒否されます。ビュー、マテリアライズドビュー、SQL UDF、生成列、SQL プランベースライン、パイプなどの保存済み SQL 定義では、ネストされた空間式を使用できません。
+
+コンテナをクライアントに返すには、空間値を含む要素やフィールドを事前に `ST_AsText` または `ST_AsBinary` で変換します。スカラーの `GEOGRAPHY` は直接返せます。スカラーの `GEOMETRY` にも明示的な変換が必要です。
+
+```sql
+SELECT array_map(x -> ST_AsText(x), [ST_GeogFromText('POINT (1 2)')]);
+```
+
 ## 例
 
 ```SQL

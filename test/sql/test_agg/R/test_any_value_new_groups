@@ -1,0 +1,84 @@
+-- name: test_any_value_new_groups
+CREATE DATABASE db_${uuid0};
+-- result:
+-- !result
+USE db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t (
+    k int NOT NULL,
+    g int NULL,
+    v int NULL,
+    s varchar(20) NULL,
+    w int NULL
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 4 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t
+SELECT x,
+       if(x % 1000 = 7, NULL, x % 1000),
+       if(x % 5 = 0, NULL, (x % 1000) % 13),
+       concat('s', (x % 1000) % 17),
+       if(x % 3 = 0, NULL, (x % 1000) % 11)
+FROM TABLE(generate_series(1, 200000)) AS r(x);
+-- result:
+-- !result
+SELECT count(*), sum(if(a_v <=> m_v, 0, 1)), sum(if(a_s <=> m_s, 0, 1)), sum(if(a_w <=> m_w, 0, 1)), sum(if(g IS NULL, 1, 0))
+FROM (SELECT g, any_value(v) a_v, min(v) m_v, any_value(s) a_s, min(s) m_s, any_value(w) a_w, min(w) m_w
+      FROM t GROUP BY g) x;
+-- result:
+1000	0	0	0	1
+-- !result
+SELECT count(*) FROM (SELECT g, any_value(w) a FROM t GROUP BY g) x WHERE a IS NULL;
+-- result:
+0
+-- !result
+SET new_planner_agg_stage = 2;
+-- result:
+-- !result
+SET streaming_preaggregation_mode = 'force_preaggregation';
+-- result:
+-- !result
+SELECT count(*), sum(if(a_v <=> m_v, 0, 1)), sum(if(a_s <=> m_s, 0, 1)), sum(if(a_w <=> m_w, 0, 1))
+FROM (SELECT g, any_value(v) a_v, min(v) m_v, any_value(s) a_s, min(s) m_s, any_value(w) a_w, min(w) m_w
+      FROM t GROUP BY g) x;
+-- result:
+1000	0	0	0
+-- !result
+SET streaming_preaggregation_mode = 'force_streaming';
+-- result:
+-- !result
+SELECT count(*), sum(if(a_v <=> m_v, 0, 1)), sum(if(a_s <=> m_s, 0, 1)), sum(if(a_w <=> m_w, 0, 1))
+FROM (SELECT g, any_value(v) a_v, min(v) m_v, any_value(s) a_s, min(s) m_s, any_value(w) a_w, min(w) m_w
+      FROM t GROUP BY g) x;
+-- result:
+1000	0	0	0
+-- !result
+SET streaming_preaggregation_mode = 'auto';
+-- result:
+-- !result
+SELECT count(*), sum(if(a <=> m, 0, 1))
+FROM (SELECT k % 50000 AS kk, s, any_value(k % 50000 + 1) a, min(k % 50000 + 1) m FROM t GROUP BY k % 50000, s) x;
+-- result:
+50000	0
+-- !result
+SET enable_spill = true;
+-- result:
+-- !result
+SET spill_mode = 'force';
+-- result:
+-- !result
+SELECT count(*), sum(if(a_v <=> m_v, 0, 1)), sum(if(a_s <=> m_s, 0, 1)), sum(if(a_w <=> m_w, 0, 1))
+FROM (SELECT g, any_value(v) a_v, min(v) m_v, any_value(s) a_s, min(s) m_s, any_value(w) a_w, min(w) m_w
+      FROM t GROUP BY g) x;
+-- result:
+1000	0	0	0
+-- !result
+SELECT count(*), sum(if(a <=> m, 0, 1))
+FROM (SELECT k % 50000 AS kk, s, any_value(k % 50000 + 1) a, min(k % 50000 + 1) m FROM t GROUP BY k % 50000, s) x;
+-- result:
+50000	0
+-- !result
+DROP DATABASE db_${uuid0};
+-- result:
+-- !result

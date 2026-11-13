@@ -18,18 +18,39 @@ text := import("text")
 // Build the list of byte-offset ranges [begin, end] for all code regions.
 code_regions := []
 
-// Backtick fenced code blocks.
-// Closing fence: optional leading whitespace, ```, optional trailing whitespace,
-// then newline or end of string.
-for groups in text.re_find("(?s)```[^\n]*\n.*?\n[ \t]*```[ \t]*(?:\n|$)", scope, -1) {
-    m := groups[0]
-    code_regions = append(code_regions, [m.begin, m.end])
+// Fenced code blocks, scanned line by line.
+//
+// CommonMark requires a closing fence to use the same character as the opening
+// fence AND to be at least as long. RE2 has no backreferences, so a regex
+// cannot express that: a ``` line nested inside a ```` block closed it early,
+// and every fence after it was then inverted — content inside code read as
+// prose and got flagged.
+fence_offset := 0
+in_fence := false
+fence_char := ""
+fence_len := 0
+fence_start := 0
+
+for fence_line in text.split(scope, "\n") {
+    fence_hits := text.re_find("^[ \t]*(`{3,}|~{3,})", fence_line, 1)
+    if !is_undefined(fence_hits) {
+        fence_token := fence_hits[0][1].text
+        if !in_fence {
+            in_fence = true
+            fence_char = fence_token[0:1]
+            fence_len = len(fence_token)
+            fence_start = fence_offset
+        } else if fence_token[0:1] == fence_char && len(fence_token) >= fence_len {
+            in_fence = false
+            code_regions = append(code_regions, [fence_start, fence_offset + len(fence_line) + 1])
+        }
+    }
+    fence_offset += len(fence_line) + 1
 }
 
-// Tilde fenced code blocks (same structure, different fence character).
-for groups in text.re_find("(?s)~~~[^\n]*\n.*?\n[ \t]*~~~[ \t]*(?:\n|$)", scope, -1) {
-    m := groups[0]
-    code_regions = append(code_regions, [m.begin, m.end])
+// An unterminated fence runs to the end of the document.
+if in_fence {
+    code_regions = append(code_regions, [fence_start, len(scope)])
 }
 
 // Inline code spans (single or multiple backticks, no newlines inside).

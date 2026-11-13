@@ -448,16 +448,12 @@ SELECT dt, c_city, sum(tax) FROM tbl GROUP BY dt, c_city;
 #### Which resource group controls the resources for asynchronous materialized views? How can I adjust the configuration of it?
 
 If the `resource_group` property is not specified when creating an asynchronous materialized view, the system assigns it to the default resource group `default_mv_wg`. Its default configuration is:
-- `cpu_core_limit`: 1
+- `cpu_weight_percent`: 1
 - `mem_limit`: 80%
 - `concurrency_limit`: 0
 - `spill_mem_limit_threshold`: 80%
 
-You can adjust its CPU limit, memory limit, concurrency limit, and spill threshold through the following BE configuration items:
-- `default_mv_resource_group_cpu_limit`
-- `default_mv_resource_group_memory_limit`
-- `default_mv_resource_group_concurrency_limit`
-- `default_mv_resource_group_spill_mem_limit_threshold`
+`default_mv_wg` is stored and persisted in the FE. You can adjust its CPU limit, memory limit, concurrency limit, and spill threshold with [ALTER RESOURCE GROUP](../../sql-reference/sql-statements/cluster-management/resource_group/ALTER_RESOURCE_GROUP.md), for example, `ALTER RESOURCE GROUP default_mv_wg WITH ('mem_limit' = '60%')`. The BE configuration items `default_mv_resource_group_cpu_limit`, `default_mv_resource_group_memory_limit`, `default_mv_resource_group_concurrency_limit`, and `default_mv_resource_group_spill_mem_limit_threshold` are deprecated and no longer affect `default_mv_wg`.
 
 You can also assign a dedicated resource group to a materialized view by specifying the `resource_group` property.
 

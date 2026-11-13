@@ -27,6 +27,8 @@ to_json(any_value)
 
 `any_value`: the Map or Struct expression you want to convert. If the input value is invalid, an error is returned. The value in each key-value pair of the Map or Struct value is nullable. See the last example.
 
+`GEOGRAPHY` and `GEOMETRY` are unsupported anywhere inside the input, including typed NULLs. Use `ST_AsText` on the geo values before building the Map or Struct to include their WKT in JSON.
+
 ## Return value
 
 Returns a JSON value.

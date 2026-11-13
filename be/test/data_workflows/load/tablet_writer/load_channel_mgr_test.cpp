@@ -165,8 +165,9 @@ TEST_F(LoadChannelMgrTest, async_open_success) {
     PTabletWriterOpenRequest request = create_open_request(load_id, rand());
     PTabletWriterOpenResult result;
     _load_channel_mgr->open(&cntl, request, &result, &closure);
-    ASSERT_TRUE(Awaitility().timeout(60000).until(
-            [&] { return _load_channel_mgr->async_rpc_pool()->total_executed_tasks() == 1; }));
+    ASSERT_TRUE(Awaitility().timeout(60 * 1000 * 1000).until([&] {
+        return _load_channel_mgr->async_rpc_pool()->total_executed_tasks() == 1;
+    }));
     ASSERT_TRUE(closure.has_run());
     ASSERT_TRUE(result.status().status_code() == TStatusCode::OK);
     auto load_channel = _load_channel_mgr->TEST_get_load_channel(UniqueId(load_id));

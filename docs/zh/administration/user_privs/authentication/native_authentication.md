@@ -6,6 +6,7 @@ sidebar_position: 10
 
 # 本地身份验证
 
+
 通过 SQL 命令在 StarRocks 中使用本地身份验证创建和管理用户。
 
 StarRocks 本地身份验证是一种基于密码的身份验证方法。此外，StarRocks 还支持与外部身份验证系统集成，如 LDAP。更多说明，请参见[通过安全集成认证用户](./security_integration.md)。
@@ -15,6 +16,8 @@ StarRocks 本地身份验证是一种基于密码的身份验证方法。此外�
 具有系统定义角色 `user_admin` 的用户可以在 StarRocks 中创建用户、修改用户和删除用户。
 
 :::
+
+StarRocks 集群最初创建时，系统会自动生成 `root` 用户，该用户拥有 root 权限。由于 `root` 用户、角色的权限范围过大，建议您在后续使用和维护集群时创建新的用户和角色，避免直接使用此用户和角色。`root` 用户的密码请您妥善保管。
 
 ## 创建用户
 
@@ -60,7 +63,6 @@ ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
 > **NOTE**
 >
 > - 任何用户都可以在不需要任何权限的情况下重置自己的密码。
-> - 只有 `root` 用户本身可以设置其密码。如果您丢失了其密码并且无法连接到 StarRocks，请参见[重置遗失的 root 用户密码](#重置遗失的-root-用户密码) 获取更多说明。
 
 以下两个示例都将 `jack` 的密码重置为 `54321`：
 
@@ -78,7 +80,7 @@ ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
 
 #### 重置遗失的 root 用户密码
 
-如果您丢失了 `root` 用户的密码并且无法连接到 StarRocks，可以通过以下步骤重置：
+只有 `root` 用户本身可以设置其密码。如果您丢失了 `root` 用户的密码并且无法连接到 StarRocks，可以通过以下步骤重置：
 
 1. 在 **所有 FE 节点** 的配置文件 **fe/conf/fe.conf** 中添加以下配置项以禁用用户身份验证：
 

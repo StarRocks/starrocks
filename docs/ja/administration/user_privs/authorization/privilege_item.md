@@ -7,8 +7,6 @@ sidebar_label: "権限項目"
 
 # StarRocks がサポートする権限
 
-import PrivCreateWarehouse from '../../../_assets/commonMarkdown/priv_create_warehouse.mdx'
-import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 
 ユーザーまたはロールに付与された権限は、そのユーザーまたはロールが特定のオブジェクトに対してどの操作を実行できるかを決定します。権限は、データセキュリティを保護するためのきめ細かいアクセス制御を実装するために使用できます。
 
@@ -24,7 +22,31 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 
 ### SYSTEM
 
-<PrivCreateWarehouse />
+| 権限                    | 説明                                                                 |
+| ----------------------- | ------------------------------------------------------------------- |
+| NODE                    | ノードの操作（追加、削除、または退役など）。クラスターのセキュリティを確保するため、この権限はユーザーまたはロールに直接付与することはできません。`cluster_admin` ロールがこの権限を持っています。 |
+| GRANT                   | ユーザーまたはロールを作成、変更、またはユーザーまたはロールに権限を付与します。この権限はユーザーまたはロールに直接付与することはできません。`user_admin` ロールがこの権限を持っています。 |
+| CREATE RESOURCE GROUP   | リソースグループを作成します。                                      |
+| CREATE RESOURCE         | Spark Load ジョブまたは外部テーブルのリソースを作成します。          |
+| CREATE EXTERNAL CATALOG | 外部カタログを作成します。                                          |
+| PLUGIN                  | プラグインをインストールまたはアンインストールします。               |
+| REPOSITORY              | リポジトリを作成、削除、または表示します。                          |
+| BLACKLIST               | SQL ブラックリストおよび BE ブラックリストを作成、削除、または表示します。 |
+| FILE                    | ファイルを作成、削除、または表示します。                            |
+| OPERATE                 | レプリカ、設定項目、変数、およびトランザクションを管理します。       |
+| CREATE GLOBAL FUNCTION  | グローバル UDF を作成します。                                       |
+| CREATE STORAGE VOLUME   | リモートストレージシステムのストレージボリュームを作成します。       |
+| SECURITY                | セキュリティインテグレーションおよび Group Provider の作成または管理を行います。 |
+
+### AI FUNCTION / AI PROVIDER {/* #ai-function-privileges */}
+
+| オブジェクト | 権限 | 用途 |
+| --- | --- | --- |
+| AI FUNCTION | USAGE | 指定された AI 関数を使用します。 |
+| AI PROVIDER | USAGE | 指定された AI Provider を使用します。 |
+
+> 注意: AI 関数の呼び出しには、関数と選択した Provider の両方の USAGE 権限が必要です。デフォルト Provider も対象です。Provider の管理には SYSTEM OPERATE 権限が必要です。
+
 
 ### RESOURCE GROUP
 
@@ -100,6 +122,7 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 | 権限 | 説明                             |
 | ---- | -------------------------------- |
 | SELECT | ビューのデータをクエリします。   |
+| EXPORT | EXPORT 権限の付与・取り消しのみ対応。EXPORT TABLE は未サポート。 |
 | ALTER  | ビューの定義を変更します。       |
 | DROP   | ビューを削除します。             |
 | ALL    | ビューに対して上記すべての権限を持ちます。 |
@@ -109,6 +132,7 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 | 権限 | 説明                                          |
 | ---- | --------------------------------------------- |
 | SELECT | クエリを高速化するためにマテリアライズドビューをクエリします。 |
+| EXPORT | EXPORT 権限の付与・取り消しのみ対応。EXPORT TABLE は未サポート。 |
 | ALTER  | マテリアライズドビューを変更します。         |
 | REFRESH | マテリアライズドビューを更新します。         |
 | DROP   | マテリアライズドビューを削除します。         |
@@ -130,8 +154,6 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 | DROP  | ストレージボリュームを削除します。               |
 | USAGE | ストレージボリュームを説明します。   |
 | ALL   | ストレージボリュームに対して上記すべての権限を持ちます。  |
-
-<PrivWarehouse />
 
 ## アップグレードノート
 

@@ -5,9 +5,6 @@ description: "Best practices guide for developing authentication and authorizati
 
 # 认证与授权
 
-import AuthConcept from '../_assets/best_practices/auth_concept.mdx'
-import AuthFeature from '../_assets/best_practices/auth_feature.mdx'
-import AuthSeeAlso from '../_assets/best_practices/auth_see_also.mdx'
 
 本文旨在为开发您自己的身份验证和授权工作流提供一个连贯的最佳实践指南。
 
@@ -70,7 +67,28 @@ LDAP 可以用作：
 - **身份验证**来源（验证用户名和密码）。
 - 用于访问控制的**组信息**提供者。
 
-<AuthConcept />
+### UNIX Groups
+
+出于安全或隔离的原因，有时用户会在本地（主机操作系统上）镜像 LDAP 组，以避免与外部 LDAP 服务器直接通信。这些本地 UNIX 组可用于身份验证或访问控制执行。
+
+### OAuth、OIDC 和 JWT
+
+:::tip
+
+**术语解释**
+
+- **ID Token**: 身份证明（我是我。）
+- **Access Token**: 访问某些资源的权限证明（我可以做某些事情。）
+- **OAuth 2.0**: 提供访问令牌的授权框架。
+- **OIDC**: OAuth 之上的身份验证层。提供 ID 和访问令牌。
+- **JWT**: 令牌格式。同时被 OAuth 和 OIDC 使用。
+
+:::
+
+**实际应用：**
+
+- **基于 OAuth 的登录**：重定向到外部登录页面（例如，Google），然后返回集群。需要提前设置浏览器访问和重定向 URL。
+- **基于 JWT 的登录**：用户直接将令牌传递给集群，这需要提前设置公钥或端点。
 
 ## 功能
 
@@ -86,7 +104,11 @@ LDAP 可以用作：
 
 ![Authentication and Authorization](../_assets/best_practices/auth_feature.png)
 
-<AuthFeature />
+从功能的角度来看：
+
+1. **身份验证提供者** – 支持的协议：本地用户、LDAP、OIDC 和 OAuth 2.0。
+2. **Group Provider** – 支持的来源：LDAP、操作系统和基于文件的配置。
+3. **授权系统** – 支持的系统：内置 RBAC & IBAC 和 Apache Ranger。
 
 ### 身份验证
 
@@ -305,4 +327,27 @@ Apache Ranger 可以作为一个完整的解决方案本身使用，也可以与
 
 ![Authentication and Authorization - Solution-3](../_assets/best_practices/auth_solution_3.png)
 
-<AuthSeeAlso />
+## See also
+
+- **Authentication**
+  - [Native Authentication](../administration/user_privs/authentication/native_authentication.md)
+  - [Security Integration](../administration/user_privs/authentication/security_integration.md)
+  - [LDAP Authentication](../administration/user_privs/authentication/ldap_authentication.md)
+  - [OAuth 2.0 Authentication](../administration/user_privs/authentication/oauth2_authentication.md)
+  - [JSON Web Token Authentication](../administration/user_privs/authentication/jwt_authentication.md)
+- [**Group Provider**](../administration/user_privs/group_provider.md)
+- **Authorization**
+  - [Native Authorization](../administration/user_privs/authorization/User_privilege.md)
+  - [Apache Ranger Plugin](../administration/user_privs/authorization/ranger_plugin.md)
+## 另请参阅
+
+- **认证**
+  - [Native Authentication](../administration/user_privs/authentication/native_authentication.md)
+  - [Security Integration](../administration/user_privs/authentication/security_integration.md)
+  - [LDAP Authentication](../administration/user_privs/authentication/ldap_authentication.md)
+  - [OAuth 2.0 Authentication](../administration/user_privs/authentication/oauth2_authentication.md)
+  - [JSON Web Token Authentication](../administration/user_privs/authentication/jwt_authentication.md)
+- [**Group Provider**](../administration/user_privs/group_provider.md)
+- **授权**
+  - [Native Authorization](../administration/user_privs/authorization/User_privilege.md)
+  - [Apache Ranger Plugin](../administration/user_privs/authorization/ranger_plugin.md)

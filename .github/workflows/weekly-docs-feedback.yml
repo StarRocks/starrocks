@@ -41,7 +41,7 @@ jobs:
           echo "## Feedback from readers" >> feedback.md
           echo "Three sections: feedback, top working searches, and top failed searches." >> feedback.md
           echo "Please check off the feedback and failed searches as you fix them and" >> feedback.md
-          echo "please add the `doc-feedback` label to your PRs related to this issue." >> feedback.md
+          echo 'please add the `doc-feedback` label to your PRs related to this issue.' >> feedback.md
           echo " " >> feedback.md
           echo "You do not need to edit this issue with PR numbers, as everything with" >> feedback.md
           echo "the label will show in the GitHub project." >> feedback.md
@@ -90,14 +90,17 @@ jobs:
           echo " " >> feedback.md
 
       - name: Check for broken external links
+        id: lychee
         continue-on-error: true
         uses: lycheeverse/lychee-action@v2.8.0
         with:
           fail: false
+          # lychee-action always passes its own --output and --format, so set
+          # them here; putting them in args makes the action exit with an error.
+          format: markdown
+          output: lychee-broken-links.md
           args: >
             --config docs/lychee.toml
-            --format markdown
-            --output lychee-broken-links.md
             "docs/en/**/*.md*"
             "docs/zh/**/*.md*"
             "docs/ja/**/*.md*"
@@ -106,7 +109,9 @@ jobs:
         run: |
           echo " " >> feedback.md
           echo "## Broken external links" >> feedback.md
-          if [ -f lychee-broken-links.md ] && grep -q "Errors per input" lychee-broken-links.md; then
+          if [ "${{ steps.lychee.outcome }}" = "failure" ]; then
+            echo "The link check did not run. See the \"Check for broken external links\" step in ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> feedback.md
+          elif [ -f lychee-broken-links.md ] && grep -q "Errors per input" lychee-broken-links.md; then
             cat lychee-broken-links.md >> feedback.md
           else
             echo "No broken links detected." >> feedback.md

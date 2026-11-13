@@ -99,9 +99,25 @@ static StatusOr<LogicalType> choose_common_logical_type(LogicalType lhs, Logical
         return TYPE_VARIANT;
     }
     if (is_float_type(lhs) || is_float_type(rhs)) {
+        // A double holds every FLOAT and every integer of 32 bits or less exactly, but not a BIGINT or LARGEINT: 2^53 + 1
+        // would come back as 2^53. Keep those mixed paths lossless by hoisting both sides to VARIANT, which keeps the
+        // type of each value, like a decimal scale mismatch does.
+        const LogicalType other = is_float_type(lhs) ? rhs : lhs;
+        if (is_integer_type(other) && get_integer_rank(other) >= get_integer_rank(TYPE_BIGINT)) {
+            return TYPE_VARIANT;
+        }
         return TYPE_DOUBLE;
     }
     return wider_integer_type(lhs, rhs);
+}
+
+static bool type_has_variant_descendant(const TypeDescriptor& type_desc) {
+    for (const auto& child : type_desc.children) {
+        if (child.type == TYPE_VARIANT || type_has_variant_descendant(child)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static StatusOr<MutableColumnPtr> cast_column_to_variant(const Column& src_col, const TypeDescriptor& src_type_desc) {
@@ -109,6 +125,19 @@ static StatusOr<MutableColumnPtr> cast_column_to_variant(const Column& src_col, 
         return src_col.clone();
     }
     ColumnBuilder<TYPE_VARIANT> builder(src_col.size());
+    if (type_has_variant_descendant(src_type_desc)) {
+        // e.g. ARRAY<VARIANT> of a shredded array path: its elements are a VariantColumn, which the Datum based
+        // encoder cannot read; encode each row from the columns instead.
+        for (size_t row = 0; row < src_col.size(); ++row) {
+            ASSIGN_OR_RETURN(auto encoded, VariantColumn::encode_typed_row_as_variant(&src_col, row, src_type_desc));
+            if (encoded.state == VariantColumn::EncodedVariantState::kNull) {
+                builder.append_null();
+            } else {
+                builder.append(std::move(encoded.value));
+            }
+        }
+        return builder.build_nullable_column();
+    }
     auto src_cloned = src_col.clone();
     RETURN_IF_ERROR(VariantEncoder::encode_column(src_cloned, src_type_desc, &builder, false));
     return builder.build_nullable_column();
@@ -192,6 +221,8 @@ static StatusOr<MutableColumnPtr> cast_variant_column_to_scalar(const Column& sr
     const bool is_const = src_col.is_constant();
     VariantRowRef row_ref;
     VariantRowValue row_buffer;
+    TzOffsetCache offset_cache;
+    offset_cache.bind(zone);
     for (size_t i = 0; i < src_col.size(); ++i) {
         if (src_col.is_null(i)) {
             builder.append_null();
@@ -199,7 +230,7 @@ static StatusOr<MutableColumnPtr> cast_variant_column_to_scalar(const Column& sr
         }
         size_t variant_row = is_const ? 0 : i;
         if (variant_col->try_get_row_ref(variant_row, &row_ref)) {
-            Status cast_status = VariantRowConverter::cast_to<ResultType, false>(row_ref, zone, builder);
+            Status cast_status = VariantRowConverter::cast_to<ResultType, false>(row_ref, zone, builder, &offset_cache);
             RETURN_IF_ERROR(cast_status);
             continue;
         }
@@ -208,7 +239,8 @@ static StatusOr<MutableColumnPtr> cast_variant_column_to_scalar(const Column& sr
             builder.append_null();
             continue;
         }
-        Status cast_status = VariantRowConverter::cast_to<ResultType, false>(row->as_ref(), zone, builder);
+        Status cast_status =
+                VariantRowConverter::cast_to<ResultType, false>(row->as_ref(), zone, builder, &offset_cache);
         RETURN_IF_ERROR(cast_status);
     }
     return builder.build(false);

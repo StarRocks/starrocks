@@ -1,0 +1,7 @@
+position: 10
+label: 'FILE functions'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: file-functions

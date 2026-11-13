@@ -6,7 +6,6 @@ sidebar_position: 40
 
 # 使用 Apache Ranger 管理权限
 
-import ServiceDefLink from '../../../_assets/commonMarkdown/servicedef_link.mdx'
 
 [Apache Ranger](https://ranger.apache.org/) 提供了一个集中式的安全管理框架，用户可以通过可视化的 Web 页面来定制各种访问策略，决定哪些角色能访问哪些数据，对 Hadoop 生态的各个组件和服务进行细粒度的数据访问控制，确保数据的安全性和合规性。
 
@@ -21,7 +20,16 @@ Apache Ranger 提供以下核心模块：
 - 通过 Ranger 创建 Access policy、Masking policy、Row-level filter policy。
 - 支持 Ranger 审计日志。
 - 暂不支持 Kerberos 认证的 Ranger Server。
+- 暂不支持由 JavaScript 求值的 Ranger 策略条件，例如 `expression` 条件和 tag 策略的 `accessed-after-expiry` 条件，详见下方说明。
 - 同一个 Apache Ranger 中可以注册多个 StarRocks Service 管理不同 StarRocks 集群的权限。
+
+:::note
+
+StarRocks FE 运行在 JDK 17 及以上版本，其中不带 JavaScript 引擎。Ranger 无法对 JavaScript 条件求值时，会把该条件当作满足，并在每次求值时打印 `failed to evaluate condition '<condition>': script engine not found`。例如，带 `expression` 条件的允许项会不检查表达式而直接放行。因此，不要在作用于 StarRocks 的策略中使用这类条件。
+
+FE 加载策略时还会打印 `failed to initialize condition 'accessed-after-expiry'`。它来自 Ranger Admin 默认为 service 关联的 tag service 中的 `EXPIRES_ON` 策略。只要没有资源带 `EXPIRES_ON` 标签，这条日志就没有影响。带该标签的资源在过期日期之前也会被拒绝访问。
+
+:::
 
 本文介绍 StarRocks 与 Apache Ranger 集成后的权限控制方式以及集成过程。关于如何在 Ranger 上创建权限策略来管理数据安全，参见 [Apache Ranger 官网](https://ranger.apache.org/)。
 
@@ -90,7 +98,11 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 本步骤的目的是在 Ranger Admin 上配置 StarRocks 服务，通过 Ranger 对 StarRocks 的对象进行权限管控。
 :::
 
-<ServiceDefLink />
+1. 拷贝 [ranger-servicedef-starrocks.json](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-servicedef-starrocks.json) 至 StarRocks FE 机器或 Ranger 集群机器上的任意目录。
+
+   ```SQL
+   wget https://raw.githubusercontent.com/StarRocks/starrocks/main/conf/ranger/ranger-servicedef-starrocks.json
+   ```
 
    :::note
    如果不需要开启 Ranger 的自动补全功能，即在上一步中没有安装 ranger-starrocks-plugin，您需要修改 .json 文件中的 `implClass` 为空，即：
@@ -107,12 +119,22 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
    :::
 
+   如需通过 Ranger 授予视图和物化视图的 SELECT 权限，.json 文件中 `view` 和 `materialized_view` 两个资源的 `accessTypeRestrictions` 必须包含 `"select"`。如果没有，请先添加，再在下一步中添加或更新 service definition。
+
 2. 使用 Ranger 的管理员账户运行以下命令，添加 StarRocks Service。
 
    ```Bash
    curl -u <ranger_adminuser>:<ranger_adminpwd> \
    -X POST -H "Accept: application/json" \
    -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/plugins/definitions -d@ranger-servicedef-starrocks.json
+   ```
+
+   如果 Ranger 中已经注册过 StarRocks 的 service definition（例如升级 StarRocks 时），请改为更新，而不是重新添加：
+
+   ```Bash
+   curl -u <ranger_adminuser>:<ranger_adminpwd> \
+   -X PUT -H "Accept: application/json" \
+   -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/public/v2/api/servicedef/name/starrocks -d@ranger-servicedef-starrocks.json
    ```
 
 3. 登录 Ranger 界面 `http://<ranger-ip>:<ranger-host>/login.jsp`。可以看到界面上出现了 STARROCKS 服务。
@@ -139,7 +161,10 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ![service](../../../_assets/ranger_added_service.png)
 
 5. 点击 **Test connection** 测试连通性，连通成功后保存。需要注意，如果您没有安装 ranger-starrocks-plugin，则可以跳过测试直接保存。
-6. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [ranger-starrocks-security.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：
+
+### 在 FE 节点上启用 Ranger
+
+1. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [ranger-starrocks-security.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：
 
    - `ranger.plugin.starrocks.service.name` 改为刚刚创建的 StarRocks Service 的名称。
    - `ranger.plugin.starrocks.policy.rest.url` 改为 Ranger Admin 的地址。
@@ -171,16 +196,23 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ...
    ```
 
-7. （可选）如果您希望使用 Ranger 的 Audit Log 功能，则需要在 StarRocks 集群每一台 FE 机器的 `fe/conf` 文件夹内创建 [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml)。将内容拷贝，**修改 `xasecure.audit.solr.solr_url` 中的 `solr_url` 为自己的 `solr_url`**，并保存文件。
+2. （可选）如果您希望使用 Ranger 的 Audit Log 功能，则需要在 StarRocks 集群每一台 FE 机器的 `fe/conf` 文件夹内创建 [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml)。将内容拷贝，**修改 `xasecure.audit.solr.solr_url` 中的 `solr_url` 为自己的 `solr_url`**，并保存文件。
 
-8. 修改所有 FE 的配置文件，添加 `access_control=ranger`。
+   StarRocks 支持两种 Ranger 审计日志目的地，同一时间只能使用其中一种：
+
+   - Solr：使用模板中的 `xasecure.audit.solr.*` 配置项。不支持用 `xasecure.audit.destination.solr` 配置 Solr。
+   - 本地文件：把 `xasecure.audit.destination.file` 设为 `true`，并把 `xasecure.audit.destination.file.dir` 设为审计文件所在的目录。
+
+   只要启用了任何一个 `xasecure.audit.destination.*` 配置项，Ranger 就会忽略所有 `xasecure.audit.<destination>.*` 配置项，包括 Solr 的配置项。`ranger-hive-audit.xml` 同样如此。
+
+3. 修改所有 FE 的配置文件，添加 `access_control=ranger`。
 
    ```SQL
    vim fe.conf
    access_control=ranger 
    ```
 
-9. 重启所有 FE。
+4. 重启所有 FE。
 
    ```SQL
    -- 回到 FE 文件夹内
@@ -216,6 +248,29 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
       ALTER CATALOG hive_catalog_1
       SET ("ranger.plugin.hive.service.name" = "<ranger_hive_service_name>");
     ```
+
+4. （可选）在库名前拼接 Catalog 名。只要 External Catalog 设置了 `ranger.plugin.hive.service.name`（例如 Hive、Iceberg、Hudi Catalog），本节就适用。
+
+   Ranger 的 Hive Service 只有 `database`、`table`、`column` 三级，没有 Catalog 这一层。当多个 External Catalog 共用同一个 Hive Service（例如多个 AWS Glue Catalog）时，出现在多个 Catalog 里的同名库会命中同一批策略。为这类 Catalog 设置属性 `"ranger.plugin.hive.catalog_prefix.enabled" = "true"` 后，StarRocks 向 Ranger 发送的 `database` 资源会变成 `<catalog_name>_<database_name>`，而不是裸库名。例如，访问 `glue_prod.sales.orders` 时，会按 database 为 `glue_prod_sales` 的 Ranger 策略进行鉴权。
+
+   ```SQL
+   CREATE EXTERNAL CATALOG glue_prod
+   PROPERTIES (
+       "type" = "hive",
+       "hive.metastore.type" = "glue",
+       "aws.glue.region" = "us-west-2",
+       "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>",
+       "ranger.plugin.hive.catalog_prefix.enabled" = "true"
+   );
+
+   -- 也可以对已有的 Catalog 设置，语句返回后新值即生效。
+   ALTER CATALOG glue_prod
+   SET ("ranger.plugin.hive.catalog_prefix.enabled" = "true");
+   ```
+
+   - 取值只能是 `true` 或 `false`，其他值会导致 CREATE 或 ALTER CATALOG 失败。
+   - 未设置该属性时，Catalog 跟随 FE 配置项 `ranger_hive_catalog_prefix_enabled`（默认 `false`）。未设置 `ranger.plugin.hive.service.name` 的 Catalog 会忽略该属性。
+   - Catalog 名与库名之间的分隔符由 FE 配置项 `ranger_hive_catalog_prefix_separator` 决定（默认 `_`）。共用同一个 Ranger Service 的所有 Catalog 必须使用相同的分隔符，因此该项只在全局配置。
 
 ## 后续步骤
 

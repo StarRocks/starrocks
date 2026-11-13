@@ -6,8 +6,6 @@ keywords: ['session','variable']
 
 # 系统变量
 
-import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
-import EditionSpecificVariable from '../_assets/commonMarkdown/Edition_Specific_Variable.mdx'
 
 StarRocks 提供多个系统变量（system variables），方便您根据业务情况进行调整。本文介绍 StarRocks 支持的变量。您可以在 MySQL 客户端通过命令 [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) 查看当前变量。也可以通过 [SET](sql-statements/cluster-management/config_vars/SET.md) 命令动态设置或者修改变量。您可以设置变量在系统全局 (global) 范围内生效、仅在当前会话 (session) 中生效、或者仅在单个查询语句中生效。
 
@@ -15,7 +13,7 @@ StarRocks 中的变量参考 MySQL 中的变量设置，但**部分变量仅用�
 
 > **说明**
 >
-> 任何用户都有权限通过 SHOW VARIABLES 查看变量。任何用户都有权限设置变量在 Session 级别生效。只有拥有 System 级 OPERATE 权限的用户才可以设置变量为全局生效。设置全局生效后，后续所有新的会话都会使用新配置，当前会话仍然使用老的配置。
+> 任何用户都有权限通过 SHOW VARIABLES 查看变量。任何用户都有权限设置变量在 Session 级别生效。只有拥有 System 级 OPERATE 权限的用户才可以设置变量为全局生效。设置全局生效后，当前会话和后续所有新的会话都会使用新配置，其他已有的会话仍然使用老的配置。
 
 ## 查看变量
 
@@ -42,7 +40,7 @@ StarRocks 支持三种类型（层级）的变量：全局变量、Session 变�
 
 ### 设置变量全局生效或在会话中生效
 
-变量一般可以设置为**全局**生效或**仅当前会话**生效。设置为全局生效后，**后续所有新的会话**连接中会使用新设置的值，当前会话还会继续使用之前设置的值；设置为仅当前会话生效时，变量仅对当前会话产生作用。
+变量一般可以设置为**全局**生效或**仅当前会话**生效。设置为全局生效后，当前会话和**后续所有新的会话**连接中会使用新设置的值，其他已有的会话还会继续使用之前设置的值，直到执行 [REFRESH CONNECTIONS](sql-statements/cluster-management/config_vars/REFRESH_CONNECTIONS.md)。下文所列仅支持全局生效的变量除外，其新值会立即对所有会话生效；设置为仅当前会话生效时，变量仅对当前会话产生作用。
 
 通过 `SET <var_name> = xxx;` 语句设置的变量仅在当前会话生效。如：
 
@@ -137,7 +135,7 @@ DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
 FROM my_table PARTITION p1
 WHERE k1 = 3;
 
-INSERT /*+ SET_VAR(insert_timeout = 10000000) */
+INSERT /*+ SET_VAR(insert_timeout = 86400) */
 INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
@@ -153,8 +151,8 @@ StarRocks 同时支持在单个语句中设置多个变量，参考如下示例�
 ```sql
 SELECT /*+ SET_VAR
   (
-  exec_mem_limit = 515396075520,
-  query_timeout=10000000,
+  query_mem_limit = 515396075520,
+  query_timeout=86400,
   batch_size=4096,
   parallel_fragment_exec_instance_num=32
   )
@@ -258,12 +256,36 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### blacklist_backup_routing
 
 * **范围**：Session
-* **描述**：在 shared-data（存算分离）模式下，若某次扫描在规划中偏好的计算节点不在本查询当前可使用的计算节点范围内（例如节点宕机或出现在主机黑名单上），则规划器需另选备份计算节点。本变量控制在该候选集合中如何挑选备份节点。`RANDOM` 在候选集中均匀随机选取。`CIRCULAR` 在按 id 排好序的节点环上、从主节点起向后寻找第一个可用候选（确定性、与旧版行为类似）。哪些节点可作为备份还受 `skip_black_list` 影响：默认会排除位于主机黑名单上的节点；`skip_black_list` 为 `true` 时，位于黑名单的节点在集群中仍属可用时，也可能被选为备份。
+* **描述**：在 shared-data（存算分离）模式下，若某次扫描在规划中偏好的计算节点不在本查询当前可使用的计算节点范围内（例如节点宕机或出现在主机黑名单上），则规划器需另选备份计算节点。本变量控制在该候选集合中如何挑选备份节点。`RANDOM` 在候选集中均匀随机选取。`CIRCULAR` 在按 id 排好序的节点环上、从主节点起向后寻找第一个可用候选（确定性、与旧版行为类似）。`TABLET_HASH` 对 tablet 与各候选节点计算哈希（rendezvous hashing），选取哈希值最大的节点：不可用节点上的 tablet 会均匀分散到其余节点，而同一个 tablet 在不同查询中始终落到同一个备份节点，其数据只需缓存在这一个节点上。Colocate 扫描以 Colocation Group 和分桶代替 tablet 计算哈希，同一 Group 内各表的同一分桶会选中同一个备份节点。只要各 FE 看到的候选节点相同，它们为同一 tablet 选出的备份节点也相同。导入（例如 `INSERT`）写入的 tablet 所在计算节点不可用时，同样按本变量选择备份节点。哪些节点可作为备份还受 `skip_black_list` 影响：默认会排除位于主机黑名单上的节点；`skip_black_list` 为 `true` 时，位于黑名单的节点在集群中仍属可用时，也可能被选为备份。
 
-* **默认值**：`CIRCULAR`
+* **默认值**：`TABLET_HASH`
 * **类型**：String
-* **合法取值**：`CIRCULAR`、`RANDOM`
-* **引入版本**：-
+* **合法取值**：`CIRCULAR`、`RANDOM`、`TABLET_HASH`
+* **引入版本**：v4.1.1
+
+### broadcast_mem_exceeded_penalty_factor
+
+* **描述**: 设置广播 CPU、内存和网络成本的惩罚因子，在每个 BE/CN 的构建侧估算数据量超过广播内存阈值时生效。设置为 `1.0` 可禁用此惩罚。
+* **作用域**: Session, Global
+* **默认值**: `1000.0`
+* **数据类型**: Double
+* **有效值**: `[1.0, 1000000.0]` 范围内的有限数值。超出此范围的值、非数值、`NaN` 和无穷大均会被拒绝。
+
+支持通过 `SET`、`SET GLOBAL` 或语句级 `SET_VAR` Hint 设置。例如：
+
+```sql
+SET broadcast_mem_exceeded_penalty_factor = 10.0;
+SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
+```
+
+### broadcast_mem_threshold
+
+* **描述**：设置构建侧预估大小阈值，超过此阈值时优化器会惩罚广播计划。此阈值适用于预估发送到每个 BE 的字节数。预估大小等于阈值时不会受到惩罚。此变量是优化器阈值，而非运行时内存限制。它独立于 `exec_mem_limit`；`broadcast_row_limit` 仍控制广播选择的行数检查。设置为 `0` 时，所有预估大小大于零的广播都会受到惩罚。
+* **范围**：Session、Global
+* **默认值**：`2147483648`（2 GiB）
+* **单位**：字节
+* **类型**：long
+* **合法取值**：[0, 9223372036854775807]
 
 ### catalog（3.2.4 及以后）
 
@@ -527,8 +549,8 @@ FROM test;
 
 ### enable_adaptive_sink_dop
 
-* 描述：是否开启导入自适应并行度。开启后 INSERT INTO 和 Broker Load 自动设置导入并行度，保持和 `pipeline_dop` 一致。新部署的 2.5 版本默认值为 `true`，从 2.4 版本升级上来为 `false`。
-* 默认值：false
+* 描述：是否开启导入自适应并行度。开启后 INSERT INTO 和 Broker Load 自动设置导入并行度，保持和 `pipeline_dop` 一致。默认值为 `true`。如果集群持久化的元数据中已保存该变量的值，则保留该值。例如，从 v2.4 及更早版本升级上来的集群保持 `false`。执行 `SET enable_adaptive_sink_dop = DEFAULT` 或 `SET GLOBAL enable_adaptive_sink_dop = DEFAULT` 会将该变量设为 `true`，即使集群当前的值为 `false`。
+* 默认值：true
 * 引入版本：v2.5
 
 ### enable_bucket_aware_execution_on_lake
@@ -592,6 +614,12 @@ FROM test;
 - 默认值：true
 - 引入版本：v3.5.1
 
+### enable_delta_lake_function_predicate_pruning
+
+* 描述：对 Delta Lake 表列取函数后的谓词，是否用于跳过数据文件。StarRocks 会把这类谓词转换为该列本身的条件，例如把 `year(dt) = 2024` 转换为 `dt >= '2024-01-01' AND dt < '2025-01-01'`，从而通过分区值和文件列统计信息跳过文件，并通过 Parquet row group 的列统计信息跳过 row group。适用的函数与 `enable_iceberg_function_predicate_pruning` 相同。原谓词仍会对数据行求值。设置为 `false` 时按原方式规划这类查询，例如用于对比结果。
+* 默认值：true
+* 引入版本：v26.3
+
 ### enable_distinct_agg_over_window
 
 * **描述**: 控制优化器重写，将带有 WINDOW 子句的 DISTINCT 聚合调用转换为等价的基于 join 的计划。启用时（`true`，默认值），QueryOptimizer.invoke convertDistinctAggOverWindowToNullSafeEqualJoin 将会：
@@ -614,11 +642,23 @@ FROM test;
 * 默认值：false，表示不开启。
 * 引入版本：v2.5
 
+### enable_exchange_sink_buffer_flush
+
+* 描述：是否限制 Exchange Sink 在 Shuffle 时用于缓存待发送数据的内存。Exchange Sink 会为每个目标 Pipeline Driver 保留一个未填满的 Chunk，通常在 Chunk 填满后才发送；当该变量为 `true` 且一个 Driver 的这些 Chunk 占用的内存超过 BE 配置项 `exchange_sink_buffer_flush_threshold_bytes` 时，会立即发送。设置为 `false` 可在当前会话中恢复之前的行为。
+* 默认值：true
+* 引入版本：-
+
 ### enable_force_rule_based_mv_rewrite
 
 * 描述：在优化器的 RBO（rule-based optimization）阶段是否针对多表查询启用查询改写。启用此功能将提高查询改写的鲁棒性。但如果查询未命中物化视图，则会增加优化耗时。
 * 默认值：true
 * 引入版本：v3.3
+
+### enable_gather_fragment_child_affinity
+
+* 描述：是否将 Gather Fragment（`DataPartition = UNPARTITIONED` 的单实例结果 Fragment）调度到其子 Fragment 已使用的 BE 上，而不是通过全局轮询（round-robin）从所有 BE 中选择。在使用 `labels.location` 的存算一体集群中，开启后 Gather Fragment 不会被调度到查询其他部分未使用的 BE 上。但该参数本身并不保证标签隔离：如果查询的任一其他 Fragment 运行在标签范围外，Gather Fragment 也可能运行在该处。已知情况包括：扫描外部 Catalog 表（如 Hive 或 Iceberg）、`choose_execute_instances_mode` 不为 `LOCALITY`、`prefer_compute_node=true`，以及存在分桶裁剪的 Right/Full Bucket Shuffle Join。如果 Gather Fragment 没有子 Fragment 实例，则回退到轮询方式。
+* 默认值：false
+* 引入版本：v4.2
 
 ### enable_gin_filter
 
@@ -649,6 +689,24 @@ FROM test;
 * 默认值：false，表示不开启。
 * 引入版本：v3.1.4
 
+### enable_hive_function_predicate_pruning
+
+* 描述：对 Hive 表日期或日期时间列取函数后的谓词，是否用于裁剪分区。StarRocks 会把这类谓词转换为该列本身的条件，例如把 `year(dt) = 2024` 转换为 `dt >= '2024-01-01' AND dt < '2025-01-01'`，从而在分区列上裁剪分区，并通过 row group 的列统计信息跳过 row group。适用于 `enable_iceberg_function_predicate_pruning` 中列出的日期和时间函数。原谓词仍会对数据行求值。设置为 `false` 时按原方式规划这类查询，例如用于对比结果。
+* 默认值：true
+* 引入版本：v26.3
+
+### enable_iceberg_eq_delete_runtime_filter_pruning
+
+* 描述：是否允许 Runtime Filter 跳过 Iceberg 表的 Equality Delete 文件。仅当表从未变更过分区规格（Partition Spec），且每个分区字段都是查询所读取的 INT、DATE 或 STRING 列的 identity 转换时生效。此时，Join 在这些列上生成的 Runtime Filter 会跳过被其过滤掉的分区的 Equality Delete 文件。设置为 `false` 时会应用所有 Equality Delete 文件，例如查询报错且错误信息中提到该变量时。
+* 默认值：true
+* 引入版本：v26.2
+
+### enable_iceberg_function_predicate_pruning
+
+* 描述：对 Iceberg 表列取函数后的谓词，是否用于跳过数据文件。StarRocks 会把这类谓词转换为该列本身的条件，例如把 `year(dt) = 2024` 转换为 `dt >= '2024-01-01' AND dt < '2025-01-01'`，从而通过该列的任意分区转换（`year`、`month`、`day`、`hour`、`truncate`）以及文件列统计信息跳过文件。适用于 `year()`、`to_date()`、`date()`、`date_trunc()`、使用 `'%Y-%m'` 等补零格式的 `date_format()`、`datediff()`、`weeks_add()`/`hours_add()`/`minutes_add()`/`seconds_add()` 及对应的 `_sub` 形式、`year() = ... AND month()/quarter() = ...`、做等值比较的 `left()`/`substr(s, 1, n)`，以及 `starts_with()`。原谓词仍会对数据行求值。设置为 `false` 时按原方式规划这类查询，例如用于对比结果。
+* 默认值：true
+* 引入版本：v26.2
+
 ### enable_incremental_mv
 
 * **描述**: 会话变量，用于控制服务器是否会为使用增量刷新（incremental refresh）的物化视图规划并保留内存中的计划。当启用时，对于刷新方案为增量刷新的物化视图创建语句，系统会为视图查询构建逻辑和物理计划并设置会话的 `enableMVPlanner` 标志（`setMVPlanner(true)`）。禁用时，增量刷新物化视图的规划将被跳过。
@@ -659,7 +717,7 @@ FROM test;
 
 ### enable_insert_partial_update
 
-* **描述**：是否为主键表的 INSERT 语句启用部分更新（Partial Update）。当设置为 `true`（默认）时，如果 INSERT 语句只指定了部分列（少于表中所有非生成列），系统会执行部分更新，即仅更新指定列，并保留其他列的现有值。当设置为 `false` 时，系统会对未指定的列使用默认值，而不是保留已有值。此功能特别适用于对主键表的特定列进行更新，而不影响其他列的值。
+* **描述**：是否为主键表的 INSERT 语句启用部分更新（Partial Update）。当设置为 `true`（默认）时，如果 INSERT 语句只指定了部分列（少于表中所有非生成列），系统会执行部分更新，即仅更新指定列，并保留其他列的现有值。当设置为 `false` 时，系统会对未指定的列使用默认值，而不是保留已有值。此功能特别适用于对主键表的特定列进行更新，而不影响其他列的值。如果目标分区从未有任何事务提交过数据，就不存在需要保留的已有值，此时 INSERT 会作为普通插入执行，未指定的列填充默认值，跳过部分更新的处理。这只在未指定的列都能这样填充（可为空或有默认值，且不是 AUTO_INCREMENT 列）时生效，INSERT OVERWRITE 和显式事务（`BEGIN ... COMMIT`）内的 INSERT 不适用，仍按部分更新执行。如果有其他写入抢先提交到了这些分区，该 INSERT 会自动重新规划并按部分更新再执行一次。
 * **默认值**：true
 * **引入版本**：v3.3.20、v3.4.9、v3.5.8、v4.0.2
 
@@ -1148,7 +1206,7 @@ FROM test;
 ### interactive_timeout
 
 * 描述：用于兼容 MySQL 客户端。无实际作用。
-* 默认值：1024
+* 默认值：3600
 * 单位：秒
 * 类型：Int
 
@@ -1178,7 +1236,7 @@ FROM test;
 
 ### lake_bucket_assign_mode
 
-* 描述：数据湖表查询的分桶分配模式。此变量控制系统执行查询期间启用 Bucket-aware 执行时如何将分桶分配给工作节点。有效值：
+* 描述：External Catalog（数据湖）表查询的分桶分配模式。仅作用于 Colocate 或 Bucket Shuffle Join Fragment 中对 External Catalog 表的扫描，对 StarRocks 内表（包括存算分离集群中的云原生表）无效。此变量控制系统执行查询期间启用 Bucket-aware 执行时如何将分桶分配给工作节点。有效值：
   * `balance`：在工作节点间均匀分配分桶以实现负载均衡，以获取更好的性能。
   * `elastic`：使用一致性哈希将分桶分配给工作节点，可以在弹性环境中提供更好的负载分配。
 * 默认值：balance
@@ -1197,11 +1255,11 @@ FROM test;
 
 ### load_mem_limit
 
-* 描述：用于指定导入操作的内存限制，单位为 Byte。默认值为 0，即表示不使用该变量，而采用 `query_mem_limit` 作为导入操作的内存限制。
+* 描述：用于指定导入操作的内存限制，单位为 Byte。默认值为 0，即表示不限制单个导入任务的内存，导入仅受各 BE 节点上所有导入任务的内存上限（BE 配置项 `load_process_max_memory_limit_percent` 和 `load_process_max_memory_limit_bytes`）限制。
 
-  这个变量仅用于 INSERT 操作。因为 INSERT 操作涉及查询和导入两个部分，如果用户不设置此变量，则查询和导入操作各自的内存限制均为 `query_mem_limit`。否则，INSERT 的查询部分内存限制为 `query_mem_limit`，而导入部分限制为 `load_mem_limit`。
+  INSERT 操作涉及查询和导入两个部分，其中查询部分的内存限制由 `query_mem_limit` 设置，导入部分的内存限制由 `load_mem_limit` 设置。
 
-  其他导入方式，如 Broker Load，STREAM LOAD 的内存限制依然使用 `query_mem_limit`。
+  如果未指定作业属性 `load_mem_limit`，Broker Load 也使用该变量。对于 Broker Load，该值同时限制作业的查询部分和导入部分。Stream Load 则使用 HTTP Header `load_mem_limit`。Routine Load 不使用该变量。
 
 * 默认值：0
 * 单位：Byte
@@ -1350,7 +1408,12 @@ FROM test;
 
 ### paimon_reader_mode
 
-* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。`AUTO` 表示由 StarRocks 自动选择合适的 Reader。`JNI` 始终使用 JNI Reader。`NATIVE` 使用 paimon-cpp 原生 Reader。注意 `paimon_force_jni_reader` 的优先级高于本变量：一旦其设置为 `true`，将始终使用 JNI Reader。
+* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。
+
+  * `AUTO`：由 StarRocks 自动选择合适的读取模式。
+  * `JNI`：强制使用 Paimon Java Reader，通过 JNI 读取。
+  * `NATIVE`：兼容时使用 StarRocks 文件 Reader，否则要求使用兼容的 paimon-cpp Reader；无法支持时查询报错，不回退到 JNI。
+  * 设置 `paimon_force_jni_reader=true` 等价于选择 `JNI`，优先于本变量的设置。
 * 默认值：AUTO
 * 类型：String
 * 引入版本：v4.2
@@ -1484,6 +1547,13 @@ FROM test;
 
  用于兼容 JDBC 连接池 C3P0。无实际作用。
 
+### query_history_load_interval_seconds (global)
+
+* 描述：当 `enable_query_history` 为 `true` 时，FE 内存中缓存的查询历史写入 `_statistics_.query_history` 表的间隔。系统没有后台定时任务：在距上次写入超过该间隔后有 SELECT 语句执行结束时，会写入缓存的查询历史。在繁忙的集群上，如果序列化后的缓存达到 200 MB，也可能在间隔到期之前写入。
+* 单位：秒
+* 默认值：`900`
+* 引入版本：v4.0
+
 ### query_mem_limit
 
 * 描述：用于设置每个 BE 节点上单个查询的内存限制。该项仅在启用 Pipeline Engine 后生效。设置为 `0` 表示没有限制。
@@ -1510,7 +1580,7 @@ FROM test;
 
 ### query_queue_mem_used_pct_limit (global)
 
-* 描述：单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。
+* 描述：单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。在 Query Queue v1 下，它作用于集群中的每个 BE 和 CN 节点。在 Query Queue v2 下，任一存活节点达到该上限时，新查询会等待。详细信息，参见 [内存准入](../administration/management/resource_management/query_queues.md#内存准入)。
 * 默认值：`0`
 * 取值范围：[0, 1]
 
@@ -1533,6 +1603,26 @@ FROM test;
 * 描述：设置进行 Range 分区裁剪时，最多能使用的 IN 谓词的个数，默认值：100。如果超过该值，会扫描全部 tablet，降低查询性能。
 * 默认值：100
 * 引入版本：v3.0
+
+### range_scan_execution_mode
+
+* 描述：原生存算分离范围 Colocate 表的只读单表聚合实验执行模式。`colocate` 保留范围 Colocate 执行；`parallel` 将扫描的有效分布设为 ANY，通过 Hash/Gather Exchange 合并聚合结果，包括精确的 `COUNT DISTINCT`。取值不区分大小写，不支持 `auto`。
+* 作用域：Session
+* 默认值：`colocate`
+* 数据类型：String
+* 有效值：`colocate`、`parallel`、`grouped`
+
+非空并行扫描必须选中至少两个逻辑分区和两个真实 Tablet，所选计算资源中必须至少有两个可用 CN。使用 DISTINCT 修饰符的聚合目前仅支持 `COUNT DISTINCT`。必须启用 Pipeline 执行，且 `parallel_fragment_exec_instance_num = 1`。并行模式会增加网络及聚合状态传输开销，并可能增加非归属节点的远程读取；不保证加速或使用全部计算节点。分区及 Tablet 裁剪保持不变。
+
+并行模式不支持写入/刷新、JOIN、集合运算、CTE、子查询、窗口函数、Grouping Sets、特殊/历史/元数据/缓存统计扫描、采样或扫描 Hint、MV/Rollup 源替换、多个最终扫描、Query Cache、分阶段调度、预备物理分片扫描、单节点计划和非 Pipeline 执行。输入完全裁剪时保留普通空输入聚合语义。不支持的请求会明确报错，不会修改其他会话设置。
+
+`grouped` 是仅限会话的实验性显式选项。它根据 Tablet 范围边界构造临时键范围分组，跨选中分区对齐同一键范围内的扫描任务。同一 SQL 聚合分组的全部输入由同一 CN 上的一个聚合逻辑 driver 处理，从而省去原始行在 CN 之间及节点内的按键 Shuffle。过滤条件、输出别名、HAVING 和最终 ORDER BY/LIMIT 在保留完整分组归属证明时继续生效。该模式的适用性在规划阶段检查，不满足当前实验性实现条件的请求会明确报错。
+
+Grouped 执行一次性捕获源版本和 Tablet 范围，在所有选中物理分区上构造完整键范围分组。至少需要两个选中物理分区和两个非空键范围分组。每个分组交给一个阻塞式 HASH 聚合，仅汇总已最终计算的标量结果。必须启用 Pipeline 和 Group Execution，且 `parallel_fragment_exec_instance_num = 1`。并行模式的限制同样适用；不支持强制多阶段聚合及不兼容的全局延迟物化。此路径禁用排序聚合和逐桶聚合。完全裁剪的输入保留普通空输入语义。PREPARE/EXECUTE 按当前模式重新规划聚合，不复用完整物理计划。
+
+当 `enable_lake_tablet_internal_parallel` 开启时，grouped 扫描支持普通的非 prepared 物理行号拆分。每个完整键分组仍由一个 CN 上的一个聚合逻辑 driver 处理；新增 I/O 任务直接向同一个 driver 提供数据，不引入按键 Shuffle。关闭 `enable_lake_tablet_internal_parallel` 时保留不拆分路径。默认的 16 个 I/O 槽位限制同时活跃的 I/O 数量，并非生成子任务的数量上限。
+
+每次扫描最多支持 1,024 个分组和 8,192 个根裁剪任务；这两个限制不约束生成的 I/O 子任务数量。Group Execution 容量限制仍然适用。EXPLAIN 显示 grouped 执行以及唯一源、分组和根任务数量。`RangeClipTasks` 对成功打开的根裁剪任务计数一次，不包含子任务；`MorselsCount` 包含根任务和子任务。结合 `PeakIOTasks`、扫描时间、行数和远端读取字节数评估 I/O 并发。普通 Tablet 和 Segment 计数可能包含重复任务读取，不代表全局唯一源数量。此模式不保证加速，也不保证 DISTINCT 聚合使用恒定内存。默认模式仍为 `colocate`。
 
 ### resource_group
 
@@ -1717,7 +1807,7 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 ### lake_multi_node_write_bytes_per_node
 
-* **描述**：仅在存算分离模式下生效，且只有在开启 `lake_multi_node_tablet_write_mode` 后才起作用。表示在把下一个节点加入某个 tablet 的写入集合之前，先给一个计算节点分配多少字节的导入量。节点数量等于该导入的预估大小除以本变量（整除，因此只有凑满一整份时才会增加一个节点），最终使用的并行度取该数值、会话变量 `lake_multi_node_write_max_nodes` 以及存活计算节点数量三者中的最小值。例如 10 GB 的导入在默认 2 GB 下得到 5 个节点，在 3 节点的 Warehouse 上再被夹到 3。分散写入并非没有代价：tablet 节点列表中的每一个节点都会写出自己的 segment 并产生自己的部分事务日志，而且无论某个节点最终是否分到数据，open/close 都会发送到列表中的每一个节点——因此把小规模导入摊得过开，只会按节点数多付出 segment 和事务日志，收益却很有限。大小来源：`INSERT` 取优化器的预估值，Broker Load 取已解析的文件列表；两者都拿不到时，节点数量完全交由 `lake_multi_node_write_max_nodes` 决定——对这两条路径来说，"大小未知"不等于"大小很小"。Stream Load 与 Routine Load 则是例外，根本不会分散：对这两条路径而言，大小未知恰恰说明这是一次小批量写入，而不是没能估算出来的大批量导入。设置为 0 表示关闭按大小推算。
+* **描述**：仅在存算分离模式下生效，且只有在开启 `lake_multi_node_tablet_write_mode` 后才起作用。表示在把下一个节点加入某个 tablet 的写入集合之前，先给一个计算节点分配多少字节的导入量。节点数量等于该导入的预估大小除以本变量（整除，因此只有凑满一整份时才会增加一个节点），最终使用的并行度取该数值、会话变量 `lake_multi_node_write_max_nodes` 以及存活计算节点数量三者中的最小值。例如 10 GB 的导入在默认 2 GB 下得到 5 个节点，在 3 节点的 Warehouse 上再被夹到 3。分散写入并非没有代价：tablet 节点列表中的每一个节点都会写出自己的 segment 并产生自己的部分事务日志，而且无论某个节点最终是否分到数据，open/close 都会发送到列表中的每一个节点——因此把小规模导入摊得过开，只会按节点数多付出 segment 和事务日志，收益却很有限。大小来源：`INSERT` 取优化器的预估值，Broker Load 取已解析的文件列表。主键表的 `UPDATE` 和 `DELETE` 根据预估输出行数及实际写入列的宽度估计大小：部分列更新计算主键及实际更新或生成的列，删除计算主键、必需的生成分区列及操作列，不使用源数据的扫描大小。当行数可信但列宽未知时，使用类型大小；行数缺失或不准确时保留未知大小，并沿用既有节点上限及存活节点数限制。Stream Load 与 Routine Load 则是例外，根本不会分散：对这两条路径而言，大小未知恰恰说明这是一次小批量写入，而不是没能估算出来的大批量导入。设置为 0 表示关闭按大小推算。
 * **默认值**：2147483648（2 GB）
 * **单位**：字节
 * **类型**：Long
@@ -1761,6 +1851,3 @@ MySQL 服务器的版本，取值等于 FE 参数 `mysql_server_version`。
 * 单位：秒
 * 类型：Int
 
-<EditionSpecificVariable />
-
-<VariableWarehouse />

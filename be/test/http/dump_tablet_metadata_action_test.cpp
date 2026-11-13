@@ -418,7 +418,7 @@ protected:
         (void)fs::remove_all(_root);
         ASSERT_OK(fs::create_directories(join_path(_root, kMetadataDirectoryName)));
         _provider = std::make_shared<FixedLocationProvider>(_root);
-        _tablet_manager = std::make_unique<TabletManager>(_provider, 1LL << 30);
+        _tablet_manager = std::make_unique<TabletManager>(_provider, 1LL << 30, 1LL << 30);
         s_injected_send_reply = capture_reply;
     }
 
@@ -521,8 +521,8 @@ TEST_F(DumpTabletMetadataActionTest, ReturnsDirectlyCachedRequestedMetadataAsJso
     metadata->set_version(kVersion);
     metadata->mutable_schema()->set_id(702);
     metadata->mutable_schema()->set_keys_type(DUP_KEYS);
-    _tablet_manager->metacache()->cache_tablet_metadata(_tablet_manager->tablet_metadata_location(kTabletId, kVersion),
-                                                        metadata);
+    _tablet_manager->metacache()->cache_tablet_metadata(
+            MetacacheKey::tablet_metadata(_tablet_manager->tablet_metadata_location(kTabletId, kVersion)), metadata);
     DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
     auto request = valid_request(&action, std::to_string(kTabletId), std::to_string(kVersion));
 
@@ -558,10 +558,10 @@ TEST_F(DumpTabletMetadataActionTest, DoesNotApplyRetiredProtobufSizeLimit) {
             ->MutableUnknownFields(metadata.get())
             ->AddLengthDelimited(9999, std::string(17 << 20, 'x'));
     ASSERT_GT(metadata->ByteSizeLong(), 16 << 20);
-    _tablet_manager->metacache()->cache_tablet_metadata(_tablet_manager->tablet_metadata_location(kTabletId, kVersion),
-                                                        metadata);
-    ASSERT_NE(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(
-                               _tablet_manager->tablet_metadata_location(kTabletId, kVersion)));
+    _tablet_manager->metacache()->cache_tablet_metadata(
+            MetacacheKey::tablet_metadata(_tablet_manager->tablet_metadata_location(kTabletId, kVersion)), metadata);
+    ASSERT_NE(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                               _tablet_manager->tablet_metadata_location(kTabletId, kVersion))));
     DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
     auto request = valid_request(&action, std::to_string(kTabletId), std::to_string(kVersion));
 
@@ -584,8 +584,8 @@ TEST_F(DumpTabletMetadataActionTest, SnapshotsMutableJsonLimitForEachRequest) {
     auto metadata = std::make_shared<TabletMetadataPB>();
     metadata->set_id(kTabletId);
     metadata->set_version(kVersion);
-    _tablet_manager->metacache()->cache_tablet_metadata(_tablet_manager->tablet_metadata_location(kTabletId, kVersion),
-                                                        metadata);
+    _tablet_manager->metacache()->cache_tablet_metadata(
+            MetacacheKey::tablet_metadata(_tablet_manager->tablet_metadata_location(kTabletId, kVersion)), metadata);
     DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
 
     config::lake_dump_tablet_metadata_per_request_json_size_limit_bytes = 1024;
@@ -650,8 +650,8 @@ TEST_F(DumpTabletMetadataActionTest, ReturnsCacheScopeErrorWhenDurableMetadataIs
     constexpr int64_t kVersion = 23;
     put_metadata(kTabletId, kVersion);
     const std::string key = _tablet_manager->tablet_metadata_location(kTabletId, kVersion);
-    _tablet_manager->metacache()->erase(key);
-    ASSERT_EQ(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(key));
+    _tablet_manager->metacache()->erase(MetacacheKey::TEST_from_string(key));
+    ASSERT_EQ(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(key)));
     DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
     auto request = valid_request(&action, std::to_string(kTabletId), std::to_string(kVersion));
 
@@ -675,7 +675,9 @@ TEST_F(DumpTabletMetadataActionTest, ReportsRequestedAndCachedIdentityWhenCached
     metadata->set_id(kCachedTabletId);
     metadata->set_version(kCachedVersion);
     _tablet_manager->metacache()->cache_tablet_metadata(
-            _tablet_manager->tablet_metadata_location(kRequestedTabletId, kRequestedVersion), metadata);
+            MetacacheKey::tablet_metadata(
+                    _tablet_manager->tablet_metadata_location(kRequestedTabletId, kRequestedVersion)),
+            metadata);
     DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
     auto request = valid_request(&action, std::to_string(kRequestedTabletId), std::to_string(kRequestedVersion));
 

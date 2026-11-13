@@ -26,7 +26,7 @@ PROPERTIES ("key" = "value", ...)
 
 現在サポートされている属性は以下の通りです:
 
-"table_id": 必須。Tablet Id を指定します。
+"tablet_id": 必須。Tablet Id を指定します。
 
 "backend_id": 必須。Backend Id を指定します。
 
