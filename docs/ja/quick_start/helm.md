@@ -6,7 +6,6 @@ displayed_sidebar: docs
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import OperatorPrereqs from '../_assets/deployment/_OperatorPrereqs.mdx'
 import DDL from '../_assets/quick-start/_DDL.mdx'
 import Clients from '../_assets/quick-start/_clientsAllin1.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
@@ -46,7 +45,26 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 ## 前提条件
 
-<OperatorPrereqs />
+### Kubernetes 環境
+
+このガイドを作成する際に使用した Kubernetes 環境は、4 vCPUS と 16GB RAM を持つ 3 つのノードで構成されています（GCP `e2-standard-4` マシン）。Kubernetes クラスターは次の `gcloud` コマンドでデプロイされました。
+
+:::tip
+このコマンドは参考用です。AWS、Azure、または他の Kubernetes プロバイダーを使用している場合は、環境に合わせてこれを変更する必要があります。Google Cloud では、独自のプロジェクトと適切なロケーションを指定する必要があります。
+:::
+
+```bash
+gcloud container --project enterprise-demo-422514 \
+  clusters create ee-docs \
+  --location=southamerica-west1-b \
+  --machine-type e2-standard-4 --disk-size 80 --num-nodes 3
+```
+
+### Helm
+
+Helm は、Kubernetes のパッケージマネージャーで、アプリケーションのデプロイと管理を簡素化します。このラボでは、Helm を使用して CelerData Enterprise Edition Kubernetes operator とサンプルの StarRocks クラスターをデプロイします。
+
+[Install helm](https://helm.sh/docs/intro/quickstart/)
 
 ### SQL クライアント
 
