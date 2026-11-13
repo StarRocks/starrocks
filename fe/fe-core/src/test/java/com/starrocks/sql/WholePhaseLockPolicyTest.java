@@ -197,6 +197,24 @@ public class WholePhaseLockPolicyTest extends PlanTestBase {
                 }
                 return invocation.proceed(session, name, columns);
             }
+
+            // the lock-set pre-pass asks through the unaudited lookups
+            @Mock
+            public Expr getRowAccessPolicyWithoutAudit(Invocation invocation, ConnectContext session, TableName name) {
+                if (Thread.currentThread() == planner) {
+                    lookups.merge("row:" + name.getTbl(), 1, Integer::sum);
+                }
+                return invocation.proceed(session, name);
+            }
+
+            @Mock
+            public Map<String, Expr> getColumnMaskingPolicyWithoutAudit(Invocation invocation, ConnectContext session,
+                                                                        TableName name, List<Column> columns) {
+                if (Thread.currentThread() == planner) {
+                    lookups.merge("mask:" + name.getTbl(), 1, Integer::sum);
+                }
+                return invocation.proceed(session, name, columns);
+            }
         };
         Set<String> copied = new CopyOnWriteArraySet<>();
         List<String> copiedWithoutLock = new CopyOnWriteArrayList<>();
