@@ -820,6 +820,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         if (isWithTimezone(node)) {
             return convertWithTimezone(node, node, null, context);
         }
+        if (node.getName().toString().equalsIgnoreCase(WITH_TIMEZONE)) {
+            throw unsupportedWithTimezone(node);
+        }
         addWallClockArguments(node);
         List<Expr> arguments = visit(node.getArguments(), context, Expr.class);
 
@@ -1182,11 +1185,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         Optional<ZoneId> to = toZone == null ? fromZone : backendZone(toZone);
         Optional<String> from = fromZone.flatMap(zone -> attachedOffset(timestamp, zone));
         if (!wallClockArguments.contains(node) || from.isEmpty() || to.isEmpty()) {
-            throw unsupportedException(String.format("Trino parser on StarRocks does not support %s here: "
-                    + "with_timezone is supported only as a wall-clock time (CAST to TIMESTAMP or DATE, date and "
-                    + "field functions, EXTRACT, date_format or format_datetime without a zone pattern, or date_trunc "
-                    + "under one of these), with literal zones (UTC, +HH:MM or a region ID), and with a fixed-offset "
-                    + "zone or a TIMESTAMP literal that isn't in a DST transition of that zone", node));
+            throw unsupportedWithTimezone(node);
         }
         // Trino promotes a DATE argument to TIMESTAMP. A format rounds the instant to milliseconds, which is rounding ts
         // in the fixed offset attached to it, before the value is read in its zone
@@ -1200,6 +1199,14 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return new FunctionCallExpr("convert_tz", List.of(value,
                 new com.starrocks.sql.ast.expression.StringLiteral(from.get()),
                 new com.starrocks.sql.ast.expression.StringLiteral(to.get().getId())));
+    }
+
+    private static RuntimeException unsupportedWithTimezone(Expression node) {
+        return unsupportedException(String.format("Trino parser on StarRocks does not support %s here: "
+                + "with_timezone is supported only as a plain call read as a wall-clock time (CAST to TIMESTAMP or "
+                + "DATE, date and field functions, EXTRACT, date_format or format_datetime without a zone pattern, or "
+                + "date_trunc under one of these), with literal zones (UTC, +HH:MM or a region ID), and with a "
+                + "fixed-offset zone or a TIMESTAMP literal that isn't in a DST transition of that zone", node));
     }
 
     // The zone to attach to timestamp as convert_tz takes it, if attaching it is exact: a fixed offset, or the single
@@ -1259,17 +1266,20 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return seconds % 60 == 0 && seconds >= -(12 * 3600 + 59 * 60) && seconds <= 14 * 3600 + 59 * 60;
     }
 
+    // with_timezone(ts, zone) as a plain call; Trino rejects a window, FILTER, DISTINCT or ORDER BY on it
     private static boolean isWithTimezone(Expression expression) {
-        return expression instanceof FunctionCall
-                && ((FunctionCall) expression).getName().toString().equalsIgnoreCase(WITH_TIMEZONE)
-                && ((FunctionCall) expression).getArguments().size() == 2;
+        return expression instanceof FunctionCall && isPlainCall((FunctionCall) expression, WITH_TIMEZONE);
     }
 
-    // at_timezone(with_timezone(ts, from), to) as a plain call, without a window, FILTER, DISTINCT or ORDER BY
+    // at_timezone(with_timezone(ts, from), to) as a plain call
     private static boolean isAtTimezoneOfWithTimezone(FunctionCall call) {
-        return call.getName().toString().equalsIgnoreCase(AT_TIMEZONE) && call.getArguments().size() == 2
-                && isWithTimezone(call.getArguments().get(0)) && call.getWindow().isEmpty()
-                && call.getFilter().isEmpty() && !call.isDistinct() && call.getOrderBy().isEmpty();
+        return isPlainCall(call, AT_TIMEZONE) && isWithTimezone(call.getArguments().get(0));
+    }
+
+    private static boolean isPlainCall(FunctionCall call, String name) {
+        return call.getName().toString().equalsIgnoreCase(name) && call.getArguments().size() == 2
+                && call.getWindow().isEmpty() && call.getFilter().isEmpty() && !call.isDistinct()
+                && call.getOrderBy().isEmpty();
     }
 
     // Marks the arguments of node that it reads only as a wall-clock time. date_trunc keeps the zone in Trino, so it
@@ -1293,25 +1303,37 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     // Whether a date_format (MySQL-style) or format_datetime (Joda) format may not print what Trino prints. date_format
     // needs a MySQL-style format without the zone: StarRocks reads one starting with yyyy as a Java-style mask, which
     // Trino prints as written. format_datetime needs the Joda fields that the BE formats as Joda does, outside quotes:
-    // y, M, d, H, h, m, s, a, E and up to six S. The BE drops an escaped quote ('') and fails on long output
+    // y, M, d, H, h, m, s, a, E and up to six S; the BE drops an escaped quote (''). Both BE formatters return NULL for
+    // output longer than 127 characters, so a field counts as its longest output, a month or day name
     private static boolean isFormatUnlikeTrino(String function, String format) {
+        int maxLength = 0;
         if (function.equals("date_format")) {
-            return format.contains("%z") || format.contains("%Z") || !format.contains("%") || format.startsWith("yyyy");
+            if (format.contains("%z") || format.contains("%Z") || !format.contains("%") || format.startsWith("yyyy")) {
+                return true;
+            }
+            for (int i = 0; i < format.length(); i++) {
+                maxLength += format.charAt(i) == '%' && i + 1 < format.length() ? 9 : 1;
+                i += format.charAt(i) == '%' ? 1 : 0;
+            }
+            return maxLength > 127;
         }
-        if (format.length() > 60 || format.contains("''")) {
+        if (format.contains("''")) {
             return true;
         }
         boolean quoted = false;
-        int fractionDigits = 0;
-        for (char c : format.toCharArray()) {
-            fractionDigits = !quoted && c == 'S' ? fractionDigits + 1 : 0;
+        int run = 0;
+        for (int i = 0; i < format.length(); i++) {
+            char c = format.charAt(i);
+            boolean field = !quoted && Character.isLetter(c);
+            run = field && i > 0 && format.charAt(i - 1) == c ? run + 1 : (field ? 1 : 0);
             if (c == '\'') {
                 quoted = !quoted;
-            } else if ((!quoted && Character.isLetter(c) && "yMdHhmsaES".indexOf(c) < 0) || fractionDigits > 6) {
+            } else if ((field && "yMdHhmsaES".indexOf(c) < 0) || (c == 'S' && run > 6)) {
                 return true;
             }
+            maxLength += field && run == 1 ? 9 : (field ? 1 : (c == '\'' ? 0 : 1));
         }
-        return false;
+        return maxLength > 127;
     }
 
     // The zone whose wall-clock time a with_timezone value is: z2 of a conversion, or z1

@@ -161,6 +161,12 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                 "select format_datetime(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), 'HH:mm:ss.SSSSSSS')",
                 "select format_datetime(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), 'xxxx-ww')",
                 "select format_datetime(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), 'HH''''mm')",
+                // Output the BE formatters don't have room for
+                "select date_format(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), '" + "%Y".repeat(32) + "')",
+                "select format_datetime(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), '" +
+                        "EEEE ".repeat(16) + "')",
+                // Trino rejects with_timezone as a window function
+                "select cast(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC') over () AS DATE)",
                 // A DST zone attached to a column, or to a literal it skips or repeats: Trino and convert_tz resolve
                 // those differently (Trino: 10:30, 08:30 and 01:30 UTC)
                 "select cast(with_timezone(ts, 'America/Los_Angeles') AT TIME ZONE 'UTC' AS TIMESTAMP)" + values,
