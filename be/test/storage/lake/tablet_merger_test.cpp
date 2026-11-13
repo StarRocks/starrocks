@@ -20,11 +20,7 @@
 #include <string_view>
 
 #include "exec/exec_env.h"
-<<<<<<< HEAD
-=======
-#include "storage/lake/position_delete_test_util.h"
 #include "storage/lake/sort_key_bounds_test_util.h"
->>>>>>> bb58fd57489... [BugFix][RB-1485] Store segment sort key bounds in a compact encoding (#69327)
 #include "storage/lake/tablet_reshard_test_base.h"
 
 namespace starrocks {

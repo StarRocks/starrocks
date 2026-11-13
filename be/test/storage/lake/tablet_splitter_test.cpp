@@ -3459,7 +3459,7 @@ TEST_F(SortKeySamplingSplitterTest, SplitTabletIdenticalAcrossRepresentations) {
         txn_info.set_commit_time(1);
         txn_info.set_gtid(1);
         return split_tablet(_tablet_manager.get(), std::make_shared<TabletMetadataPB>(source), splitting,
-                            /*new_version=*/2, txn_info, /*publish_property=*/std::nullopt);
+                            /*new_version=*/2, txn_info);
     };
 
     for (const bool external : {true, false}) {
