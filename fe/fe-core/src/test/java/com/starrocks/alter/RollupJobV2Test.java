@@ -35,6 +35,7 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.LocalTablet;
@@ -47,6 +48,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -175,6 +177,39 @@ public class RollupJobV2Test extends DDLTestBase {
                     materializedViewHandler.getTableRunningJobMap().get(olapTable.getId()).size());
         assertEquals(2, alterJobsV2.size());
         assertEquals(OlapTableState.ROLLUP, olapTable.getState());
+    }
+
+    private RollupJobV2 addRollupAndGetJob(AddRollupClause addRollupClause) throws StarRocksException {
+        MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        ArrayList<AlterClause> alterClauses = new ArrayList<>();
+        alterClauses.add(addRollupClause);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
+        materializedViewHandler.process(alterClauses, db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = materializedViewHandler.getAlterJobsV2();
+        assertEquals(1, alterJobsV2.size());
+        return (RollupJobV2) alterJobsV2.values().iterator().next();
+    }
+
+    @Test
+    public void testRollupJobTimeoutUsesAlterTableTimeoutByDefault() throws StarRocksException {
+        RollupJobV2 rollupJob = addRollupAndGetJob(clause);
+        // alter_table_timeout_second is in seconds, the job keeps the timeout in milliseconds
+        assertEquals(Config.alter_table_timeout_second * 1000L, rollupJob.getTimeoutMs());
+    }
+
+    @Test
+    public void testRollupJobTimeoutUsesTimeoutProperty() throws Exception {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(PropertyAnalyzer.PROPERTIES_TIMEOUT, "120");
+        AddRollupClause clauseWithTimeout = new AddRollupClause(GlobalStateMgrTestUtil.testRollupIndex2,
+                    Lists.newArrayList("v1"), null, GlobalStateMgrTestUtil.testTable1, properties);
+        new AlterTableClauseAnalyzer(null).analyze(null, clauseWithTimeout);
+
+        RollupJobV2 rollupJob = addRollupAndGetJob(clauseWithTimeout);
+        assertEquals(120 * 1000L, rollupJob.getTimeoutMs());
+        assertFalse(rollupJob.isTimeout());
     }
 
     @Test
