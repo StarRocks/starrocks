@@ -20,16 +20,15 @@ import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.Files;
 import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
-<<<<<<< HEAD
-=======
-import org.apache.iceberg.io.OutputFile;
 import org.apache.iceberg.io.ResolvingFileIO;
 import org.apache.iceberg.io.SeekableInputStream;
->>>>>>> 42af33d ([BugFix][RB-225] Skip the storage stat on Iceberg metadata reads that do not need it (#83182))
 import org.apache.iceberg.util.SerializableSupplier;
 import org.apache.iceberg.util.SerializationUtil;
 import org.junit.jupiter.api.Assertions;

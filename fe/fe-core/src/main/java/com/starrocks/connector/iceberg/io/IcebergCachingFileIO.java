@@ -215,18 +215,10 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public InputFile newInputFile(String path, long length) {
         try {
-<<<<<<< HEAD
             setWrappedConf(buildConfFromProperties(properties, path));
-            return new CachingInputFile(fileContentCache, wrappedIO.newInputFile(path));
-=======
-            String normalizedPath = AzurePathNormalizingFileIO.normalizeAzurePath(path);
-            setWrappedConf(buildConfFromProperties(properties, normalizedPath));
-            InputFile wrappedInputFile = length >= 0 ? wrappedIO.newInputFile(normalizedPath, length)
-                    : wrappedIO.newInputFile(normalizedPath);
-            // Keep the caller's path as location(): the content cache and the parsed-manifest caches
-            // (seeded under ManifestFile.path()) are keyed by it. Only the storage access is normalized.
-            return new CachingInputFile(fileContentCache, wrappedInputFile, path, length);
->>>>>>> 42af33d ([BugFix][RB-225] Skip the storage stat on Iceberg metadata reads that do not need it (#83182))
+            InputFile wrappedInputFile = length >= 0 ? wrappedIO.newInputFile(path, length)
+                    : wrappedIO.newInputFile(path);
+            return new CachingInputFile(fileContentCache, wrappedInputFile, length);
         } catch (StarRocksException e) {
             String errorMessage = String.format("Failed to new input file for path: %s, properties: %s", path, properties);
             LOG.error(errorMessage, e);
@@ -720,23 +712,14 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private static class CachingInputFile implements InputFile {
         private final ContentCache contentCache;
         private final InputFile wrappedInputFile;
-<<<<<<< HEAD
-
-        private CachingInputFile(ContentCache cache, InputFile inFile) {
-            this.contentCache = cache;
-            this.wrappedInputFile = inFile;
-=======
-        private final String location;
         // Length supplied by the caller or learned by the first stat, -1 if unknown. Kept so one open does
         // not stat the object twice (once to decide to cache it, once more to fill the entry).
         private volatile long knownLength;
 
-        private CachingInputFile(ContentCache cache, InputFile inFile, String location, long knownLength) {
+        private CachingInputFile(ContentCache cache, InputFile inFile, long knownLength) {
             this.contentCache = cache;
             this.wrappedInputFile = inFile;
-            this.location = location;
             this.knownLength = knownLength;
->>>>>>> 42af33d ([BugFix][RB-225] Skip the storage stat on Iceberg metadata reads that do not need it (#83182))
         }
 
         @Override
@@ -745,20 +728,12 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 return knownLength;
             }
             long len = contentCache.getLength(location());
-<<<<<<< HEAD
-            return len == -1 ? wrappedInputFile.getLength() : len;
-=======
             if (len != -1) {
                 return len;
             }
-            // Not in the cache, so the size is a stat against storage. This is the door iceberg's own
-            // planning goes through -- manifest lists, manifests, metadata.json -- and it is reached
-            // through the FileIO the catalogs install, not through MetadataMgr.
-            BlockingCallValidator.validateNotUnderLock("remote-storage");
             len = wrappedInputFile.getLength();
             knownLength = len;
             return len;
->>>>>>> 42af33d ([BugFix][RB-225] Skip the storage stat on Iceberg metadata reads that do not need it (#83182))
         }
 
         @Override
