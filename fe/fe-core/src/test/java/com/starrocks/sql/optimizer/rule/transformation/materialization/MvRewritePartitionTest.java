@@ -18,8 +18,12 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
@@ -760,6 +764,65 @@ public class MvRewritePartitionTest extends MVTestBase {
             testRefreshAndRewriteWithMultiJoinMV(param);
         }
         connectContext.getSessionVariable().setEnableMaterializedViewRewritePartitionCompensate(true);
+    }
+
+    @Test
+    public void testScanPartitionLimitAfterMultiStageMvRewrite() throws Exception {
+        SessionVariable session = connectContext.getSessionVariable();
+        int oldLimit = session.getScanOlapPartitionNumLimit();
+        boolean oldRewrite = session.isEnableMaterializedViewRewrite();
+        boolean oldMultiStage = session.isEnableMaterializedViewMultiStagesRewrite();
+        String oldMode = session.getMaterializedViewRewriteMode();
+        boolean oldMetaScan = session.isEnableRewriteSimpleAggToMetaScan();
+        try {
+            session.setScanOlapPartitionNumLimit(0);
+            session.setEnableMaterializedViewRewrite(true);
+            session.setEnableMaterializedViewMultiStagesRewrite(true);
+            session.setMaterializedViewRewriteMode("DEFAULT");
+            session.setEnableRewriteSimpleAggToMetaScan(false);
+            starRocksAssert.withTable("CREATE TABLE mv_scan_limit_base (id INT, dt DATE NOT NULL, analysis_date DATE) " +
+                    "DUPLICATE KEY(id, dt) PARTITION BY date_trunc('day', dt) " +
+                    "DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num'='1')");
+            // The pseudo cluster mocks DML, so create the automatic range partitions before the insert.
+            cluster.runSql(DB_NAME, "ALTER TABLE mv_scan_limit_base ADD PARTITIONS " +
+                    "START ('2023-03-07') END ('2023-03-10') EVERY (INTERVAL 1 DAY)");
+            cluster.runSql(DB_NAME, "INSERT INTO mv_scan_limit_base VALUES " +
+                    "(1, '2023-03-07', '2023-03-07'), (2, '2023-03-08', '2023-03-08'), " +
+                    "(3, '2023-03-09', '2023-03-09')");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_scan_limit_daily " +
+                    "PARTITION BY mv_dt DISTRIBUTED BY HASH(mv_analysis_date) BUCKETS 1 " +
+                    "REFRESH DEFERRED MANUAL PROPERTIES ('replication_num'='1') " +
+                    "AS SELECT dt AS mv_dt, analysis_date AS mv_analysis_date, COUNT(1) AS cnt " +
+                    "FROM mv_scan_limit_base GROUP BY dt, analysis_date");
+            refreshMaterializedViewWithPartition(DB_NAME, "mv_scan_limit_daily", "2023-03-07", "2023-03-10");
+
+            String oneDay = "SELECT COUNT(1) FROM mv_scan_limit_base WHERE dt = '2023-03-08'";
+            String allDays = "SELECT COUNT(1) FROM mv_scan_limit_base";
+            PlanTestBase.assertContains(getFragmentPlan(allDays), "partitions=3/3");
+            session.setScanOlapPartitionNumLimit(1);
+            PlanTestBase.assertContains(getFragmentPlan(oneDay), "TABLE: mv_scan_limit_daily", "partitions=1/3");
+            StarRocksPlannerException error =
+                    Assertions.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(allDays));
+            Assertions.assertEquals(ErrorType.USER_ERROR, error.getType());
+            Assertions.assertEquals("Exceeded the limit of number of olap table partitions to be scanned. " +
+                    "Number of partitions allowed: 1, number of partitions to be scanned: 3. " +
+                    "Please adjust the SQL or change the limit by set variable scan_olap_partition_num_limit.",
+                    error.getMessage());
+
+            session.setScanOlapPartitionNumLimit(3);
+            PlanTestBase.assertContains(getFragmentPlan(allDays), "partitions=3/3");
+            session.setEnableMaterializedViewRewrite(false);
+            session.setScanOlapPartitionNumLimit(1);
+            PlanTestBase.assertContains(getFragmentPlan(oneDay), "TABLE: mv_scan_limit_base", "partitions=1/3");
+        } finally {
+            session.setScanOlapPartitionNumLimit(oldLimit);
+            session.setEnableMaterializedViewRewrite(oldRewrite);
+            session.setEnableMaterializedViewMultiStagesRewrite(oldMultiStage);
+            session.setMaterializedViewRewriteMode(oldMode);
+            session.setEnableRewriteSimpleAggToMetaScan(oldMetaScan);
+            starRocksAssert.dropMaterializedView("mv_scan_limit_daily");
+            starRocksAssert.dropTable("mv_scan_limit_base");
+        }
     }
 
     @Test

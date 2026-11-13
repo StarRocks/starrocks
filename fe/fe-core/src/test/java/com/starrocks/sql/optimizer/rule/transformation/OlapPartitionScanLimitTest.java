@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
@@ -58,6 +59,15 @@ public class OlapPartitionScanLimitTest {
             //check set value -1, means no limit
             stmt.execute("set scan_olap_partition_num_limit=-1;");
             stmt.execute(query);
+            // At the limit, the optional metadata-scan rewrite remains available.
+            stmt.execute("set scan_olap_partition_num_limit=5;");
+            boolean hasMetaScan = false;
+            try (ResultSet explain = stmt.executeQuery("EXPLAIN " + query)) {
+                while (explain.next()) {
+                    hasMetaScan |= explain.getString(1).contains("MetaScan");
+                }
+            }
+            Assertions.assertTrue(hasMetaScan, "expected a metadata scan when the partition limit is met");
             //check set value 3, 5 partitions have to be scanned so the query must be rejected
             stmt.execute("set scan_olap_partition_num_limit=3;");
             SQLException e = Assertions.assertThrows(SQLException.class, () -> stmt.execute(query));
