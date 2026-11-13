@@ -1202,8 +1202,15 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         // a NULL array produces no rows, or a NULL-padded row in a left join, and leaves the other arrays intact.
         List<Pair<ColumnRefOperator, ScalarOperator>> projectMap = new ArrayList<>();
         for (int i = 0; i < node.getChildExpressions().size(); ++i) {
-            Expr argument = TypeManager.addCastExpr(node.getChildExpressions().get(i), tableFunction.getArgs()[i]);
-            ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(argument, context, columnRefFactory);
+            ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(node.getChildExpressions().get(i),
+                    context, columnRefFactory);
+            // Coerce the argument the way ImplicitCastRule coerced it as a child of the call, so constants are
+            // still cast and folded by the scalar rules (e.g. a numeric string with spaces).
+            Type argumentType = tableFunction.getArgs()[i];
+            if (!argumentType.matchesType(scalarOperator.getType())) {
+                scalarOperator = new ScalarOperatorRewriter().rewrite(new CastOperator(argumentType, scalarOperator, true),
+                        ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            }
             if (scalarOperator.isConstantNull() && !FunctionSet.UNNEST.equalsIgnoreCase(tableFunction.functionName())) {
                 throw new StarRocksPlannerException("table function not support null parameter", ErrorType.USER_ERROR);
             }
