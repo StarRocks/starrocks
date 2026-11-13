@@ -3,7 +3,6 @@ displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';
-import TableURL from '../../../_assets/commonMarkdown/stream_load_table_url.mdx';
 import TableURLTip from '../../../_assets/commonMarkdown/stream_load_table_url_tip.mdx';
 
 # STREAM LOAD
@@ -57,7 +56,22 @@ Specifies the HTTP request method. This is a required parameter. Stream Load sup
 
 Specifies the URL of the table. Syntax:
 
-<TableURL />
+```Plain
+http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
+```
+
+The following table describes the parameters in the URL.
+
+| Parameter     | Required | Description                                                  |
+| ------------- | -------- | ------------------------------------------------------------ |
+| fe_host       | Yes      | The IP address of the FE node in your cluster.<br/>**NOTE**<br/>If you submit the load job to a specific BE or CN node, you must input the IP address of the BE or CN node. |
+| fe_http_port  | Yes      | The HTTP port number of the FE node in your cluster. The default port number is `8030`.<br/>**NOTE**<br/>If you submit the load job to a specific BE or CN node, you must input the HTTP port number of the BE or CN node. The default port number is `8030`. |
+| database_name | Yes      | The name of the database to which the table belongs.         |
+| table_name    | Yes      | The name of the table.                                       |
+
+:::note
+You can use [SHOW FRONTENDS](../cluster-management/nodes_processes/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
+:::
 
 ### data_desc
 

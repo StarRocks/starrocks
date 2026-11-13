@@ -5,7 +5,6 @@ displayed_sidebar: docs
 # CREATE USER
 
 import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.mdx'
-import AuthOption from '../../../_assets/commonMarkdown/AuthOption.mdx'
 
 CREATE USER は StarRocks ユーザーを作成します。StarRocks では、「user_identity」がユーザーを一意に識別します。v3.3.3 以降、StarRocks はユーザー作成時にユーザープロパティの設定をサポートしています。
 
@@ -26,7 +25,34 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
   ユーザー名の命名規則については、以下を参照してください。[システム制限](../../System_limit.md)。
 
-<AuthOption />
+- `auth_option` は認証方法を指定します。現在、StarRocksネイティブパスワード、`mysql_native_password`、`authentication_ldap_simple`、JSON Web Token (JWT) 認証、OAuth 2.0 認証の5つの認証方法がサポートされています。StarRocksネイティブパスワードはロジック上は`mysql_native_password`と同じですが、構文が若干異なります。1つのユーザーIDは1つの認証方法のみを使用できます。
+
+  ```SQL
+  auth_option: {
+      IDENTIFIED BY 'auth_string'
+      IDENTIFIED WITH mysql_native_password BY 'auth_string'
+      IDENTIFIED WITH mysql_native_password AS 'auth_string'
+      IDENTIFIED WITH authentication_ldap_simple AS 'auth_string'
+      IDENTIFIED WITH authentication_jwt [AS 'auth_properties']
+      IDENTIFIED WITH authentication_oauth2 [AS 'auth_properties']
+  }
+  ```
+
+  | **認証方法**    | **ユーザー作成時のパスワード** | **ログイン時のパスワード** |
+  | ---------------------------- | ------------------------------ | ---------------------- |
+  | ネイティブパスワード              | 平文または暗号文        | 平文              |
+  | `mysql_native_password BY`   | 平文                      | 平文              |
+  | `mysql_native_password WITH` | 暗号文                     | 平文              |
+  | `authentication_ldap_simple` | 平文                      | 平文              |
+
+  :::note
+  StarRocksはユーザーのパスワードを保存する前に暗号化します。
+  :::
+
+  JSON Web Token (JWT) 認証およびOAuth 2.0 認証の`auth_properties`の詳細については、対応するドキュメントを参照してください。
+
+  - [JSON Web Token認証](../../../administration/user_privs/authentication/jwt_authentication.md)
+  - [OAuth 2.0認証](../../../administration/user_privs/authentication/oauth2_authentication.md)
 
 - `DEFAULT ROLE <role_name>[, <role_name>, ...]`: このパラメータが指定されている場合、ユーザーがログインすると、ロールは自動的にユーザーに割り当てられ、デフォルトでアクティブ化されます。指定されていない場合、このユーザーはどの権限も持ちません。指定されたすべてのロールが既に存在することを確認してください。
 

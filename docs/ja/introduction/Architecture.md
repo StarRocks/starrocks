@@ -2,8 +2,6 @@
 sidebar_position: 20
 displayed_sidebar: docs
 ---
-import QSOverview from '../_assets/commonMarkdown/quickstart-overview-tip.mdx'
-import EditionSpecificFeature from '../_assets/commonMarkdown/Edition_Specific_Feature.mdx'
 
 # アーキテクチャ
 
@@ -132,6 +130,21 @@ StarRocks 共有データクラスタは、データストレージと計算を�
 | クエリキャッシュ | v2.5+ | v3.4+ |
 | ロールアップと同期マテリアライズドビュー | v1.x+ | v3.3+ |
 
-<EditionSpecificFeature />
+### 災害復旧
 
-<QSOverview />
+| 機能 | シェアードナッシング | シェアードデータ |
+| ---------------------------------------------------- | -------------- | --------------- |
+| バックアップとリストア | v1.x+ | 該当なし |
+| BE/CN ブラックリスト | v3.3+ | v4.0+ |
+| クロスクラスターデータ移行ツール | v3.3+ | 該当なし |
+| クラスター スナップショット | 該当なし | v3.4.2+ |
+
+### セキュリティと認証
+
+| 機能 | シェアードナッシング | シェアードデータ |
+| ---------------------------------------------------- | -------------- | --------------- |
+| HDFS での Kerberos サポート | 該当なし | v3.2+ |
+
+## 実践で学ぶ
+
+[クイックスタート](../quick_start/quick_start.mdx) を試して、StarRocks を現実的なシナリオで使用する概要を把握しましょう。

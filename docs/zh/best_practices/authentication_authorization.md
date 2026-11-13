@@ -4,7 +4,6 @@ sidebar_position: 100
 
 # 认证与授权
 
-import AuthSeeAlso from '../_assets/best_practices/auth_see_also.mdx'
 
 本文旨在为开发您自己的身份验证和授权工作流提供一个连贯的最佳实践指南。
 
@@ -327,4 +326,27 @@ Apache Ranger 可以作为一个完整的解决方案本身使用，也可以与
 
 ![Authentication and Authorization - Solution-3](../_assets/best_practices/auth_solution_3.png)
 
-<AuthSeeAlso />
+## See also
+
+- **Authentication**
+  - [Native Authentication](../administration/user_privs/authentication/native_authentication.md)
+  - [Security Integration](../administration/user_privs/authentication/security_integration.md)
+  - [LDAP Authentication](../administration/user_privs/authentication/ldap_authentication.md)
+  - [OAuth 2.0 Authentication](../administration/user_privs/authentication/oauth2_authentication.md)
+  - [JSON Web Token Authentication](../administration/user_privs/authentication/jwt_authentication.md)
+- [**Group Provider**](../administration/user_privs/group_provider.md)
+- **Authorization**
+  - [Native Authorization](../administration/user_privs/authorization/User_privilege.md)
+  - [Apache Ranger Plugin](../administration/user_privs/authorization/ranger_plugin.md)
+## 另请参阅
+
+- **认证**
+  - [Native Authentication](../administration/user_privs/authentication/native_authentication.md)
+  - [Security Integration](../administration/user_privs/authentication/security_integration.md)
+  - [LDAP Authentication](../administration/user_privs/authentication/ldap_authentication.md)
+  - [OAuth 2.0 Authentication](../administration/user_privs/authentication/oauth2_authentication.md)
+  - [JSON Web Token Authentication](../administration/user_privs/authentication/jwt_authentication.md)
+- [**Group Provider**](../administration/user_privs/group_provider.md)
+- **授权**
+  - [Native Authorization](../administration/user_privs/authorization/User_privilege.md)
+  - [Apache Ranger Plugin](../administration/user_privs/authorization/ranger_plugin.md)
