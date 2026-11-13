@@ -5,10 +5,6 @@ toc_max_heading_level: 2
 keywords: ['huan cun']
 ---
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 73448c3 ([Doc] Merge the remaining single-use partials into their pages (#83169))
 # Data Cache
 
 自 StarRocks v3.1.7 和 v3.2.3 版本起，StarRocks 引入 Data Cache 功能用以加速存算分离集群中的查询。该功能将取代早期版本中的 File Cache 功能。Data Cache 以 Block（MB 级别）为单位，按需从远端存储中加载数据。相较之下，File Cache 无论查询需要读取多少数据，都需要在后台线程加载整个数据文件。
@@ -130,7 +126,6 @@ storage_root_path =
 - 如果云原生表的 `datacache.partition_duration` 属性设置为一个特定的时间范围，则超出该时间范围的数据将不会被缓存。
 - 从 v3.3 版本降级到 v3.2.8 及其之前版本时，如需复用先前缓存数据，需要手动修改 **starlet_cache** 目录下 Blockfile 文件名，将文件名格式从 `blockfile_{n}.{version}` 改为 `blockfile_{n}`，即去掉版本后缀。v3.2.9 及以后版本自动兼容 v3.3 文件名格式，无需手动执行该操作。您可使用以下脚本进行批量修改：
 
-<<<<<<< HEAD
 ```Bash
 #!/bin/bash
 
@@ -145,8 +140,6 @@ for blockfile in ${starlet_cache_path}/blockfile_*; do
 done
 ```
 
-=======
->>>>>>> 73448c3 ([Doc] Merge the remaining single-use partials into their pages (#83169))
 ## 已知问题
 
 ### 内存占用过高

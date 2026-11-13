@@ -39,15 +39,15 @@ CREATE USER [IF NOT EXISTS] <user_identity>
   ```
 
   | **认证方法**    | **用户创建密码** | **登录密码** |
-| ---------------------------- | ------------------------------ | ---------------------- |
-| 原生密码                     | 明文或密文                     | 明文                   |
-| `mysql_native_password BY`   | 明文                           | 明文                   |
-| `mysql_native_password WITH` | 密文                           | 明文                   |
-| `authentication_ldap_simple` | 明文                           | 明文                   |
+  | ---------------------------- | ------------------------------ | ---------------------- |
+  | 原生密码                     | 明文或密文                     | 明文                   |
+  | `mysql_native_password BY`   | 明文                           | 明文                   |
+  | `mysql_native_password WITH` | 密文                           | 明文                   |
+  | `authentication_ldap_simple` | 明文                           | 明文                   |
 
   :::note
-StarRocks 在存储用户密码之前会对其进行加密。
-:::
+  StarRocks 在存储用户密码之前会对其进行加密。
+  :::
 
   有关 JSON Web Token (JWT) 认证和 OAuth 2.0 认证的 `auth_properties` 详细信息，请参阅相应文档：
 

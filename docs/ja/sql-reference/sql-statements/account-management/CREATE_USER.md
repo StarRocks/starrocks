@@ -39,15 +39,15 @@ CREATE USER [IF NOT EXISTS] <user_identity>
   ```
 
   | **認証方法**    | **ユーザー作成時のパスワード** | **ログイン時のパスワード** |
-| ---------------------------- | ------------------------------ | ---------------------- |
-| ネイティブパスワード              | 平文または暗号文        | 平文              |
-| `mysql_native_password BY`   | 平文                      | 平文              |
-| `mysql_native_password WITH` | 暗号文                     | 平文              |
-| `authentication_ldap_simple` | 平文                      | 平文              |
+  | ---------------------------- | ------------------------------ | ---------------------- |
+  | ネイティブパスワード              | 平文または暗号文        | 平文              |
+  | `mysql_native_password BY`   | 平文                      | 平文              |
+  | `mysql_native_password WITH` | 暗号文                     | 平文              |
+  | `authentication_ldap_simple` | 平文                      | 平文              |
 
   :::note
-StarRocksはユーザーのパスワードを保存する前に暗号化します。
-:::
+  StarRocksはユーザーのパスワードを保存する前に暗号化します。
+  :::
 
   JSON Web Token (JWT) 認証およびOAuth 2.0 認証の`auth_properties`の詳細については、対応するドキュメントを参照してください。
 

@@ -3,11 +3,6 @@ displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
-<<<<<<< HEAD
-import TableURL from '../../../_assets/commonMarkdown/stream_load_table_url.mdx';
-=======
-import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';
->>>>>>> 73448c3 ([Doc] Merge the remaining single-use partials into their pages (#83169))
 import TableURLTip from '../../../_assets/commonMarkdown/stream_load_table_url_tip.mdx';
 
 # STREAM LOAD

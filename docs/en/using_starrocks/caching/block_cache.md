@@ -4,10 +4,6 @@ sidebar_position: 20
 toc_max_heading_level: 2
 ---
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 73448c3 ([Doc] Merge the remaining single-use partials into their pages (#83169))
 # Data Cache
 
 From v3.1.7 and v3.2.3 onwards, StarRocks introduced Data Cache to accelerate queries in shared-data clusters, replacing File Cache in earlier versions. Data Cache loads data from remote storage in blocks (on the order of MBs) as needed, while File Cache loads entire data files each time in the background, regardless of how many data rows are actually needed.
@@ -129,7 +125,6 @@ Follow these steps to clear the cached data on a CN node:
 - If the `datacache.partition_duration` property is set to a specific time range, data beyond the time range will not be cached.
 - After downgrading a shared-data cluster from v3.3 to v3.2.8 and earlier, if you want to re-use the cached data in Data Cache, you need to manually rename the Blockfile in the directory `starlet_cache` by changing the file name format from `blockfile_{n}.{version}` to `blockfile_{n}`, that is, to remove the suffix of version information. v3.2.9 and later versions are compatible with the file name format in v3.3, so you do not need to perform this operation manually. You can change the name by running the following shell script:
 
-<<<<<<< HEAD
 ```Bash
 #!/bin/bash
 
@@ -144,8 +139,6 @@ for blockfile in ${starlet_cache_path}/blockfile_*; do
 done
 ```
 
-=======
->>>>>>> 73448c3 ([Doc] Merge the remaining single-use partials into their pages (#83169))
 ## Known issues
 
 ### High memory usage
