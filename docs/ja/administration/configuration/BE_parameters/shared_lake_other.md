@@ -322,7 +322,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_segment_metadata_cache_limit_percent
 
-- デフォルト: 20
+- デフォルト: 10
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
@@ -340,7 +340,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_tablet_metadata_cache_limit_percent
 
-- デフォルト: 10
+- デフォルト: 5
 - タイプ: Int
 - 単位: -
 - 変更可能: はい

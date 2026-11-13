@@ -322,7 +322,7 @@ Enable this option only after **all target CNs** support it. A normalized replic
 
 ### lake_segment_metadata_cache_limit_percent
 
-- Default: 20
+- Default: 10
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -340,7 +340,7 @@ Enable this option only after **all target CNs** support it. A normalized replic
 
 ### lake_tablet_metadata_cache_limit_percent
 
-- Default: 10
+- Default: 5
 - Type: Int
 - Unit: -
 - Is mutable: Yes
