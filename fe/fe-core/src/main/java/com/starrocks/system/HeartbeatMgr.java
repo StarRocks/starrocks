@@ -411,12 +411,14 @@ public class HeartbeatMgr extends LeaderDaemon {
             if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().first)) {
                 // heartbeat to self
                 if (GlobalStateMgr.getCurrentState().isReady()) {
-                    return new FrontendHbResponse(fe.getNodeName(), Config.query_port, Config.rpc_port,
-                            GlobalStateMgr.getCurrentState().getMaxJournalId(), System.currentTimeMillis(),
-                            GlobalStateMgr.getCurrentState().getFeStartTime(),
+                    FrontendHbResponse response = new FrontendHbResponse(fe.getNodeName(), Config.query_port,
+                            Config.rpc_port, GlobalStateMgr.getCurrentState().getMaxJournalId(),
+                            System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getFeStartTime(),
                             Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH,
                             JvmStats.getJvmHeapUsedPercent(), MachineInfo.getInstance().getCpuCores(),
                             MachineInfo.getInstance().getMacAddress());
+                    response.setRebuildsLakeIndexPayload(true);
+                    return response;
                 } else {
                     return new FrontendHbResponse(fe.getNodeName(), "not ready");
                 }
@@ -437,10 +439,12 @@ public class HeartbeatMgr extends LeaderDaemon {
                 if (result.getStatus() != ActionStatus.OK) {
                     return new FrontendHbResponse(fe.getNodeName(), result.getMessage());
                 } else {
-                    return new FrontendHbResponse(fe.getNodeName(), result.getQueryPort(), result.getRpcPort(),
-                            result.getReplayedJournal(), System.currentTimeMillis(),
+                    FrontendHbResponse response = new FrontendHbResponse(fe.getNodeName(), result.getQueryPort(),
+                            result.getRpcPort(), result.getReplayedJournal(), System.currentTimeMillis(),
                             result.getFeStartTime(), result.getFeVersion(), result.getHeapUsedPercent(),
                             result.getCpuCores(), result.getMacAddress());
+                    response.setRebuildsLakeIndexPayload(result.rebuildsLakeIndexPayload());
+                    return response;
                 }
             } catch (Exception e) {
                 return new FrontendHbResponse(fe.getNodeName(),

@@ -19,6 +19,8 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateIndexClause;
@@ -26,6 +28,8 @@ import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.system.Frontend;
+import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.JsonType;
@@ -49,7 +53,9 @@ import static org.mockito.Mockito.when;
  * Tests the decision matrix of {@link SchemaChangeIndexFastPathClassifier}.
  * Pure unit-test using Mockito for OlapTable / Index to avoid pulling in the
  * full catalog. The classifier is intentionally stateless and small, so
- * lightweight mocking covers it well.
+ * lightweight mocking covers it well. The FEs it checks before taking a fast
+ * path are those of {@code GlobalStateMgr}, which has none here unless a test
+ * adds one.
  */
 public class SchemaChangeIndexFastPathClassifierTest {
 
@@ -562,6 +568,71 @@ public class SchemaChangeIndexFastPathClassifierTest {
                         List.of(bfPropClause(Map.of(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, "c1"))));
         assertNotNull(delta);
         assertTrue(delta.isPureAdd());
+    }
+
+    @Test
+    public void testFastPathsWaitForEveryElectableFrontendToRebuildThePayload() {
+        OlapTable t = lakeTable();
+        when(t.getBfFpp()).thenReturn(0.05);
+        when(t.getBfColumnNames()).thenReturn(Collections.emptySet());
+        Index ix = mock(Index.class);
+        when(ix.getIndexName()).thenReturn("idx_a");
+        when(ix.getIndexType()).thenReturn(IndexDef.IndexType.BITMAP);
+        when(t.getIndexes()).thenReturn(Collections.singletonList(ix));
+        List<AlterClause> addIndex = List.of(createIndex(IndexDef.IndexType.BITMAP));
+        List<AlterClause> dropIndex = List.of(dropIndex("idx_a"));
+        List<AlterClause> addBloomFilter =
+                List.of(bfPropClause(Map.of(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, "c1")));
+
+        // A follower not upgraded yet would send BE empty requests for a fast-path job if it became leader, so the
+        // alters take the regular schema change.
+        Frontend follower = frontend(FrontendNodeType.FOLLOWER, "fe_not_upgraded", false);
+        Map<String, Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends();
+        frontends.put(follower.getNodeName(), follower);
+        try {
+            assertFalse(SchemaChangeIndexFastPathClassifier.shouldUseAddIndexFastPath(t, addIndex));
+            assertFalse(SchemaChangeIndexFastPathClassifier.shouldUseDropIndexFastPath(t, dropIndex));
+            assertNull(SchemaChangeIndexFastPathClassifier.classifyBloomFilterChange(t, addBloomFilter));
+
+            // Upgraded, it reports the rebuild in its heartbeat.
+            follower.handleHbResponse(heartbeat(follower.getNodeName(), true), true);
+            assertTrue(SchemaChangeIndexFastPathClassifier.shouldUseAddIndexFastPath(t, addIndex));
+            assertTrue(SchemaChangeIndexFastPathClassifier.shouldUseDropIndexFastPath(t, dropIndex));
+            assertNotNull(SchemaChangeIndexFastPathClassifier.classifyBloomFilterChange(t, addBloomFilter));
+        } finally {
+            frontends.remove(follower.getNodeName());
+        }
+    }
+
+    @Test
+    public void testFrontendsWithoutPayloadRebuild() {
+        // Neither the FE that decides nor an observer can take a job over; every other FE must be alive and report
+        // the rebuild.
+        Frontend self = frontend(FrontendNodeType.FOLLOWER, "fe_self", false);
+        Frontend observer = frontend(FrontendNodeType.OBSERVER, "fe_observer", false);
+        Frontend upgraded = frontend(FrontendNodeType.FOLLOWER, "fe_upgraded", true);
+        assertEquals(List.of(), SchemaChangeIndexFastPathClassifier.frontendsWithoutPayloadRebuild(
+                List.of(self, observer, upgraded), "fe_self"));
+
+        Frontend notUpgraded = frontend(FrontendNodeType.FOLLOWER, "fe_not_upgraded", false);
+        // It may come back on another version.
+        Frontend dead = frontend(FrontendNodeType.FOLLOWER, "fe_dead", true);
+        dead.setAlive(false);
+        assertEquals(List.of("fe_not_upgraded", "fe_dead"), SchemaChangeIndexFastPathClassifier
+                .frontendsWithoutPayloadRebuild(List.of(self, observer, upgraded, notUpgraded, dead), "fe_self"));
+    }
+
+    private static Frontend frontend(FrontendNodeType role, String name, boolean rebuildsPayload) {
+        Frontend fe = new Frontend(role, name, name, 9010);
+        fe.handleHbResponse(heartbeat(name, rebuildsPayload), true);
+        return fe;
+    }
+
+    private static FrontendHbResponse heartbeat(String name, boolean rebuildsPayload) {
+        FrontendHbResponse hbResponse = new FrontendHbResponse(name, 9030, 9020, 1L, System.currentTimeMillis(), 1L,
+                "version", 0.0f, 1, "");
+        hbResponse.setRebuildsLakeIndexPayload(rebuildsPayload);
+        return hbResponse;
     }
 
     private static ModifyTablePropertiesClause bfPropClause(Map<String, String> props) {
