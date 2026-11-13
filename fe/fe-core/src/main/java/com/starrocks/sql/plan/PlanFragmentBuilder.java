@@ -57,6 +57,7 @@ import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.delta.DeltaLakePreimagePredicates;
 import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
@@ -272,6 +273,7 @@ import java.util.stream.Stream;
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.ErrorType.UNSUPPORTED;
+import static com.starrocks.sql.common.ErrorType.USER_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperator.isColumnEqualConstant;
 import static com.starrocks.thrift.PlanNodesConstants.ROW_ID_COLUMN_NAME;
@@ -1097,9 +1099,27 @@ public class PlanFragmentBuilder {
             return paths;
         }
 
+        private static void checkOlapScanPartitionLimit(ConnectContext session, int selectedPartitionCount) {
+            if (session == null) {
+                return;
+            }
+            int limit = session.getSessionVariable().getScanOlapPartitionNumLimit();
+            if (limit > 0 && selectedPartitionCount > limit) {
+                String message = "Exceeded the limit of number of olap table partitions to be scanned. "
+                        + "Number of partitions allowed: " + limit
+                        + ", number of partitions to be scanned: " + selectedPartitionCount
+                        + ". Please adjust the SQL or change the limit by set variable scan_olap_partition_num_limit.";
+                LOG.warn("{} queryId: {}", message,
+                        session.getQueryId() == null ? "" : DebugUtil.printId(session.getQueryId()));
+                throw new StarRocksPlannerException(message, USER_ERROR);
+            }
+        }
+
         @Override
         public PlanFragment visitPhysicalOlapScan(OptExpression optExpr, ExecPlan context) {
             PhysicalOlapScanOperator node = (PhysicalOlapScanOperator) optExpr.getOp();
+            // Enforce the limit on the chosen scan, not on intermediate pruning during rewrite.
+            checkOlapScanPartitionLimit(context.getConnectContext(), node.getSelectedPartitionId().size());
 
             OlapTable referenceTable = (OlapTable) node.getTable();
             context.getDescTbl().addReferencedTable(referenceTable);
