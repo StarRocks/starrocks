@@ -15,6 +15,7 @@
 #include "storage/rowset/segment_file_info.h"
 
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/sort_key_bounds.h"
 
 namespace starrocks {
 
@@ -32,8 +33,9 @@ void to_file_meta_pb(const FileInfo& file, FileMetaPB* file_meta) {
 }
 
 void SegmentFileInfo::sort_key_fields_to_proto(SegmentMetadataPB* segment_meta) const {
-    sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-    sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+    // Writes the encoded bounds and clears the deprecated pair (and any stale encoded pair), or
+    // clears all four when the segment has no bounds.
+    set_segment_sort_key_bounds(sort_key_min, sort_key_max, segment_meta);
     // Nothing writes the deprecated samples any more -- split points come from the segment's own
     // short key index or its data pages (storage/sort_key_sampler.h). Clear them anyway so this
     // function still fully determines the target's sort-key fields: no code maintains the samples,
