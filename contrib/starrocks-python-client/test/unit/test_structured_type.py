@@ -210,11 +210,10 @@ class TestArrayResultProcessor:
         assert isinstance(result[0], Decimal)
         assert result[0] == Decimal('0.123456789012345678')
 
-    def test_array_of_json_returns_raw_string(self):
+    def test_array_of_json_decodes_single_quoted_items(self):
         # StarRocks sends ARRAY<JSON> using single-quoted elements (not valid JSON).
-        # We fall back to returning the raw string rather than crashing.
         raw = """['{"a":1}','{"b":2}']"""
-        assert _process(datatype.ARRAY(datatype.JSON()), raw) == raw
+        assert _process(datatype.ARRAY(datatype.JSON()), raw) == [{"a": 1}, {"b": 2}]
 
     @pytest.mark.parametrize("json_str,expected", [
         ("[1]", [1]),
