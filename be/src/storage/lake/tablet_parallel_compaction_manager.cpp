@@ -47,6 +47,7 @@
 #include "storage/rows_mapper.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_file_info.h"
+#include "storage/sort_key_bounds.h"
 #include "storage/sort_key_sampler.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema.h"
@@ -3148,10 +3149,7 @@ bool TabletParallelCompactionManager::_can_use_range_split(const std::vector<Row
             return false;
         }
         for (const auto& segment_meta : rowset_meta.segment_metas()) {
-            if (!segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) {
-                return false;
-            }
-            if (segment_meta.sort_key_min().values_size() == 0 || segment_meta.sort_key_max().values_size() == 0) {
+            if (!has_segment_sort_key_bounds(segment_meta)) {
                 return false;
             }
         }
@@ -3260,8 +3258,7 @@ StatusOr<std::vector<SegmentSplitInfo>> TabletParallelCompactionManager::_collec
         for (int meta_pos = 0; meta_pos < num_segments; ++meta_pos) {
             const auto& segment_meta = rowset_meta.segment_metas(meta_pos);
             SegmentSplitInfo segment;
-            RETURN_IF_ERROR(segment.min_key.from_proto(segment_meta.sort_key_min()));
-            RETURN_IF_ERROR(segment.max_key.from_proto(segment_meta.sort_key_max()));
+            RETURN_IF_ERROR(decode_segment_sort_key_bounds(segment_meta, &segment.min_key, &segment.max_key));
             segment.num_rows = segment_meta.has_num_rows() ? segment_meta.num_rows() : 0;
             if (segment.num_rows > 0 && rowset_num_rows > 0) {
                 segment.data_size = rowset_data_size * segment.num_rows / rowset_num_rows;

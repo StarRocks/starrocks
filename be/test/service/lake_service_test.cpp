@@ -174,8 +174,8 @@ protected:
         auto* segment_meta = rowset->add_segment_metas();
         segment_meta->set_filename("seg_" + std::to_string(tablet_id) + "_0");
         segment_meta->set_size(100);
-        segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(lower_key));
-        segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(upper_key - 1));
+        segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(lower_key));
+        segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(upper_key - 1));
         segment_meta->set_num_rows(10);
         segment_meta->set_segment_idx(0);
 
@@ -242,8 +242,8 @@ protected:
         auto* segment_meta = rowset->add_segment_metas();
         segment_meta->set_filename("seg_" + std::to_string(tablet_id) + "_0");
         segment_meta->set_size(100);
-        segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(lower_key));
-        segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(upper_key - 1));
+        segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(lower_key));
+        segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(upper_key - 1));
         segment_meta->set_num_rows(10);
         segment_meta->set_segment_idx(0);
 
@@ -282,9 +282,9 @@ protected:
             auto* segment_meta = log.mutable_op_write()->mutable_rowset()->add_segment_metas();
             segment_meta->set_filename(generate_segment_file(txn_id));
             segment_meta->set_size(1024);
-            segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(sort_key));
+            segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(sort_key));
             sort_key += 100;
-            segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(sort_key));
+            segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(sort_key));
             segment_meta->set_num_rows(100);
             segment_meta->set_segment_idx(i);
         }
@@ -315,8 +315,8 @@ protected:
             auto* segment_meta = log.mutable_op_write()->mutable_rowset()->add_segment_metas();
             segment_meta->set_filename(generate_segment_file(txn_id));
             segment_meta->set_size(segment_sizes[i]);
-            segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(min_keys[i]));
-            segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(max_keys[i]));
+            segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(min_keys[i]));
+            segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(max_keys[i]));
             segment_meta->set_num_rows(segment_num_rows[i]);
             segment_meta->set_segment_idx(i);
             total_rows += segment_num_rows[i];
@@ -1686,16 +1686,16 @@ TEST_F(LakeServiceTest, test_splitting_tablet_pk_with_delvec_stats) {
     auto* segment_meta0 = rowset->add_segment_metas();
     segment_meta0->set_filename("seg_0");
     segment_meta0->set_size(1000);
-    segment_meta0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    segment_meta0->mutable_sort_key_max()->CopyFrom(generate_sort_key(50));
+    segment_meta0->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+    segment_meta0->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(50));
     segment_meta0->set_num_rows(100);
     segment_meta0->set_segment_idx(0);
 
     auto* segment_meta1 = rowset->add_segment_metas();
     segment_meta1->set_filename("seg_1");
     segment_meta1->set_size(500);
-    segment_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(100));
-    segment_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(150));
+    segment_meta1->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(100));
+    segment_meta1->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(150));
     segment_meta1->set_num_rows(50);
     segment_meta1->set_segment_idx(1);
 
@@ -1966,8 +1966,8 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
         auto* seg_meta1 = log1.mutable_op_write()->mutable_rowset()->add_segment_metas();
         seg_meta1->set_filename(generate_segment_file_for_tablet(old_tablet_id_1, txn_id));
         seg_meta1->set_size(1024);
-        seg_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        seg_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(10));
+        seg_meta1->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        seg_meta1->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(10));
         seg_meta1->set_num_rows(10);
         seg_meta1->set_segment_idx(0);
         auto* rowset1 = log1.mutable_op_write()->mutable_rowset();
@@ -1984,8 +1984,8 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
         auto* seg_meta2 = log2.mutable_op_write()->mutable_rowset()->add_segment_metas();
         seg_meta2->set_filename(generate_segment_file_for_tablet(old_tablet_id_2, txn_id));
         seg_meta2->set_size(1024);
-        seg_meta2->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        seg_meta2->mutable_sort_key_max()->CopyFrom(generate_sort_key(60));
+        seg_meta2->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        seg_meta2->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(60));
         seg_meta2->set_num_rows(10);
         seg_meta2->set_segment_idx(0);
         auto* rowset2 = log2.mutable_op_write()->mutable_rowset();
