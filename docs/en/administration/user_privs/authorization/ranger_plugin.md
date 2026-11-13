@@ -5,8 +5,6 @@ sidebar_position: 40
 
 # Manage permissions with Apache Ranger
 
-import ServiceDefLink from '../../../_assets/commonMarkdown/servicedef_link.mdx'
-import EditionSpecificRangerClusterConfig from '../../../_assets/commonMarkdown/Edition_Specific_Ranger_Cluster_Config.mdx'
 
 [Apache Ranger](https://ranger.apache.org/) provides a centralized security management framework that allows users to customize access policies through a visual web page. This helps determine which roles can access which data and exercise fine-grained data access control for various components and services in the Hadoop ecosystem.
 
@@ -104,7 +102,11 @@ Also, please notice that if you didn't install the ranger-starrocks-plugin, then
 This step configures the StarRocks Service on Ranger so that users can perform access control on StarRocks objects through Ranger.
 :::
 
-<ServiceDefLink />
+1. Copy [ranger-servicedef-starrocks.json](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-servicedef-starrocks.json) to any directory of the StarRocks FE machine or Ranger machine.
+
+   ```SQL
+   wget https://raw.githubusercontent.com/StarRocks/starrocks/main/conf/ranger/ranger-servicedef-starrocks.json
+   ```
 
    :::note
    If you do not need Ranger's autocomplete feature (which means you did not install the ranger-starrocks-plugin), you must set `implClass` in the .json file to empty:
@@ -164,7 +166,93 @@ This step configures the StarRocks Service on Ranger so that users can perform a
 
 5. Click **Test connection** to test the connectivity, and save it after the connection is successful. If you didn't install ranger-starrocks-plugin, then you can skip test connection and create directly.
 
-<EditionSpecificRangerClusterConfig />
+### Enable Ranger on the FE nodes
+
+1. On each FE machine of the StarRocks cluster, create [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:
+
+   - `ranger.plugin.starrocks.service.name`: Change to the name of the StarRocks Service you created in Step 4.
+   - `ranger.plugin.starrocks.policy.rest the url`: Change to the address of the Ranger Admin.
+
+   If you need to modify other configurations, refer to official documentation of Apache Ranger. For example, you can modify `ranger.plugin.starrocks.policy.pollIntervalMs` to change the interval for pulling policy changes.
+
+   ```SQL
+   vim ranger-starrocks-security.xml
+
+   ...
+       <property>
+           <name>ranger.plugin.starrocks.service.name</name>
+           <value>starrocks</value> -- Change it to the StarRocks Service name.
+           <description>
+               Name of the Ranger service containing policies for this StarRocks instance
+           </description>
+       </property>
+   ...
+
+   ...
+       <property>
+           <name>ranger.plugin.starrocks.policy.rest.url</name>
+           <value>http://localhost:6080</value> -- Change it to Ranger Admin address.
+           <description>
+               URL to Ranger Admin
+           </description>
+       </property>   
+   ...
+   ```
+
+2. (Optional) If you want to use the Audit Log service of Ranger, you need to create the [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml) file in the `fe/conf` folder of each FE machine. Copy the content, **replace `solr_url` in `xasecure.audit.solr.solr_url` with your own `solr_url`**, and save the file.
+
+   StarRocks supports two destinations for Ranger audit logs, and you can use only one of them at a time:
+
+   - Solr: Use the `xasecure.audit.solr.*` properties that the template uses. Configuring Solr with `xasecure.audit.destination.solr` is not supported.
+   - Local file: Set `xasecure.audit.destination.file` to `true` and `xasecure.audit.destination.file.dir` to the directory of the audit files.
+
+   Once any `xasecure.audit.destination.*` property is enabled, Ranger ignores all the `xasecure.audit.<destination>.*` properties, including the Solr ones. This also applies to `ranger-hive-audit.xml`.
+
+3. Add the configuration `access_control = ranger` to all FE configuration files.
+
+   ```SQL
+   vim fe.conf
+   access_control=ranger 
+   ```
+
+4. Restart all FE machines.
+
+   ```SQL
+   -- Switch to the FE folder. 
+   cd..
+
+   bin/stop_fe.sh
+   bin/start_fe.sh
+   ```
+
+## Reuse other services to control access to external tables
+
+For External Catalog, you can reuse external services (such as Hive Service) for access control. StarRocks supports matching different Ranger external services for different Catalogs. When users access an external table, the system implements access control based on the access policy of the Ranger Service corresponding to the external table. The user permissions are consistent with the Ranger user with the same name.
+
+1. Copy Hive's Ranger configuration files [ranger-hive-security.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-security.xml) and [ranger-hive-audit.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml) to the `fe/conf` file of all FE machines. Make sure Ranger's IP and port are correct.
+2. Restart all FE machines.
+3. Configure External Catalog.
+
+   - When you create an External Catalog, add the property `"ranger.plugin.hive.service.name"`.
+
+      ```SQL
+        CREATE EXTERNAL CATALOG hive_catalog_1
+        PROPERTIES (
+            "type" = "hive",
+            "hive.metastore.type" = "hive",
+            "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+            "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>"
+        )
+      ```
+
+   - You can also add this property to an existing External Catalog.
+  
+       ```SQL
+       ALTER CATALOG hive_catalog_1
+       SET ("ranger.plugin.hive.service.name" = "<ranger_hive_service_name>");
+       ```
+
+​    This operation changes the authentication method of an existing Catalog to Ranger-based authentication.
 
 ## What to do next
 

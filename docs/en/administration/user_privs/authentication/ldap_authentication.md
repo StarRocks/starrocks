@@ -5,7 +5,6 @@ sidebar_position: 30
 
 # LDAP Authentication
 
-import LDAPSSLLink from '../../../_assets/commonMarkdown/ldap_ssl_link.mdx'
 
 In addition to native password-based authentication, StarRocks also supports the LDAP authentication.
 
@@ -133,7 +132,7 @@ mysql -utom -P9030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-c
 
 - **JDBC**
 
-<LDAPSSLLink />
+Note that when you use JDBC connections, you must enable SSL on the server side. For more information, see [SSL Authentication](../ssl_authentication.md).
 
 JDBC 5:
 

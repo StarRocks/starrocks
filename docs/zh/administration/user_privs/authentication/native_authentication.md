@@ -5,8 +5,6 @@ sidebar_position: 10
 
 # 本地身份验证
 
-import EditionSpecificDefaultAdminUser from '../../../_assets/commonMarkdown/Edition_Specific_Default_Admin_User.mdx'
-import EditionSpecificResetLostAdminPassword from '../../../_assets/commonMarkdown/Edition_Specific_Reset_Lost_Admin_Password.mdx'
 
 通过 SQL 命令在 StarRocks 中使用本地身份验证创建和管理用户。
 
@@ -18,7 +16,7 @@ StarRocks 本地身份验证是一种基于密码的身份验证方法。此外�
 
 :::
 
-<EditionSpecificDefaultAdminUser />
+StarRocks 集群最初创建时，系统会自动生成 `root` 用户，该用户拥有 root 权限。由于 `root` 用户、角色的权限范围过大，建议您在后续使用和维护集群时创建新的用户和角色，避免直接使用此用户和角色。`root` 用户的密码请您妥善保管。
 
 ## 创建用户
 
@@ -79,7 +77,53 @@ ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
   ALTER USER jack@'172.10.1.10' IDENTIFIED BY '54321';
   ```
 
-<EditionSpecificResetLostAdminPassword />
+#### 重置遗失的 root 用户密码
+
+只有 `root` 用户本身可以设置其密码。如果您丢失了 `root` 用户的密码并且无法连接到 StarRocks，可以通过以下步骤重置：
+
+1. 在 **所有 FE 节点** 的配置文件 **fe/conf/fe.conf** 中添加以下配置项以禁用用户身份验证：
+
+   ```YAML
+   enable_auth_check = false
+   ```
+
+2. 重启 **所有 FE 节点** 以使配置生效。
+
+   ```Bash
+   ./fe/bin/stop_fe.sh
+   ./fe/bin/start_fe.sh
+   ```
+
+3. 从 MySQL 客户端通过 `root` 用户连接到 StarRocks。禁用用户身份验证时，无需指定密码。
+
+   ```Bash
+   mysql -h <fe_ip_or_fqdn> -P<fe_query_port> -uroot
+   ```
+
+4. 重置 `root` 用户的密码。
+
+   ```SQL
+   SET PASSWORD for root = PASSWORD('xxxxxx');
+   ```
+
+5. 通过在 **所有 FE 节点** 的配置文件 **fe/conf/fe.conf** 中将配置项 `enable_auth_check` 设置为 `true` 来重新启用用户身份验证。
+
+   ```YAML
+   enable_auth_check = true
+   ```
+
+6. 重启 **所有 FE 节点** 以使配置生效。
+
+   ```Bash
+   ./fe/bin/stop_fe.sh
+   ./fe/bin/start_fe.sh
+   ```
+
+7. 从 MySQL 客户端使用 `root` 用户和新密码连接到 StarRocks，以验证密码是否重置成功。
+
+   ```Bash
+   mysql -h <fe_ip_or_fqdn> -P<fe_query_port> -uroot -p<xxxxxx>
+   ```
 
 ## 删除用户
 

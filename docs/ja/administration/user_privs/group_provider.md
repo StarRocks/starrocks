@@ -5,7 +5,6 @@ sidebar_position: 30
 
 # ユーザーグループの認証
 
-import GroupProviderRangerLink from '../../_assets/user_priv/group_provider_ranger_link.mdx'
 
 StarRocks で Group Provider を有効にして、外部認証システムからユーザーグループを認証し、認可します。
 
@@ -344,4 +343,4 @@ GRANT example_role TO EXTERNAL GROUP analysts;
 
 セキュリティインテグレーションで関連する Group Provider を構成すると、StarRocks はログイン時にユーザーのグループ情報を記録します。このグループ情報は、Ranger との認可プロセスに自動的に含まれ、追加の構成が不要になります。
 
-<GroupProviderRangerLink />
+StarRocks と Ranger の統合に関する詳細な手順については、[Manage permissions with Apache Ranger](./authorization/ranger_plugin.md) を参照してください。
