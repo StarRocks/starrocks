@@ -309,7 +309,7 @@ TEST_F(SegmentReaderWriterTest, ProcessOwnedFactoryReleasesExternalDependenciesU
 }
 
 TEST_F(SegmentReaderWriterTest, ProcessOwnedSegmentReadsRealFooterAndLazyIndex) {
-    auto schema = TabletSchemaHelper::create_tablet_schema({create_int_key_pb(1), create_int_value_pb(2)});
+    TabletSchemaCSPtr schema = TabletSchemaHelper::create_tablet_schema({create_int_key_pb(1), create_int_value_pb(2)});
     SegmentWriterOptions options;
     std::shared_ptr<Segment> original;
     build_segment(options, schema, schema, 32, DefaultIntGenerator, &original);
