@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 80
+<<<<<<< HEAD
+=======
+description: "In some cases, administrators need to disable certain patterns of SQL to avoid SQL from triggering cluster crashes or unexpected high concurrent queries."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Blacklist Management

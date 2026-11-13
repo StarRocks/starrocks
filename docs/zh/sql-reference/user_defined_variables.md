@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks 2.5+ supports user-defined variables to store session-level values for reuse in SQL statements."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 用户自定义变量

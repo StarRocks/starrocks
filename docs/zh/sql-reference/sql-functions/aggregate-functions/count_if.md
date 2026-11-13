@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "count_if 计算满足指定条件的记录数，内部转化为 COUNT 和 IF 的组合。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # count_if

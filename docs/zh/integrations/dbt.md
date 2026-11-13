@@ -1,6 +1,11 @@
 ---
 sidebar_position: 110
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "使用 dbt-starrocks 在 StarRocks 中通过 dbt 建模模式和最佳实践进行数据转换。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import Experimental from '../_assets/commonMarkdown/_experimental.mdx'

@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Use the IMPERSONATE privilege with EXECUTE AS statements to switch the execution context of the current session to the impersonated user."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # EXECUTE AS

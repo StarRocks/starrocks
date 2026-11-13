@@ -1,6 +1,11 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "The External Table feature is no longer recommended except for certain corner usage cases, and might be deprecated in future releases."
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # External table

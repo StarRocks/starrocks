@@ -1,6 +1,11 @@
 ---
 sidebar_position: 110
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "大查询监控和管理方案：通过资源组、查询队列和实时监控防止资源耗尽。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 监控管理大查询

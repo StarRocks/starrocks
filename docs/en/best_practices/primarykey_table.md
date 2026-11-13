@@ -1,5 +1,10 @@
 ---
 sidebar_position: 40
+<<<<<<< HEAD
+=======
+description: "The Primary Key table uses a new storage engine designed by StarRocks."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Primary Key tables

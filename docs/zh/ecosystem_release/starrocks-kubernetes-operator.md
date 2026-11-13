@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks 提供的 Operator 用于在 Kubernetes 环境中部署 StarRocks 集群。"
+products: [oss]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Kubernetes Operator 版本发布

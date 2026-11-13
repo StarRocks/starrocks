@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Flink Connector のタイムゾーン処理、シンク設定に関するよくある質問。频繁"
+products: [oss, enterprise]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Flink Connector

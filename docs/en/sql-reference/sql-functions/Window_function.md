@@ -2,6 +2,11 @@
 displayed_sidebar: docs
 keywords: ['analytic']
 sidebar_position: 0.9
+<<<<<<< HEAD
+=======
+description: "The window function is a special class of built-in functions."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Window functions

@@ -1,6 +1,11 @@
 ---
 sidebar_position: 70
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "v3.3.6以降、SQL Digest はパラメータを削除した SQL フィンガープリントで同一構造クエリをクラスタリングします。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # SQL Digest

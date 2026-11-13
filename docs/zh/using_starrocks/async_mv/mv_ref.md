@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 sidebar_label: "相关参考"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 异步物化视图相关参考文献

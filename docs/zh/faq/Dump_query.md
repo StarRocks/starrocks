@@ -1,6 +1,11 @@
 ---
 sidebar_position: 70
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "使用 query_dump 接口捕获 SQL 查询详情以进行故障排查。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # query_dump 接口

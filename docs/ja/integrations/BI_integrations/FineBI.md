@@ -1,6 +1,11 @@
 ---
 sidebar_position: 20
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "FineBI を StarRocks に接続して、StarRocks データを FineBI 上で可視化分析する方法を説明します。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # FineBI

@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "CANCEL ALTER TABLE 取消正在执行的 ALTER TABLE 操作，包括修改列、优化表结构、创建或删除 Rollup 索引。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # CANCEL ALTER TABLE

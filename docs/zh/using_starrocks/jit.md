@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 130
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 表达式 JIT 编译

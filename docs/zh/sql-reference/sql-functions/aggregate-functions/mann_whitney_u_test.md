@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: "docs"
+<<<<<<< HEAD
+=======
+description: "mann_whitney_u_test 对来自两个总体的样本执行 Mann-Whitney 非参数检验。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # mann_whitney_u_test

@@ -1,6 +1,11 @@
 ---
 keywords: ['xiugai', 'ziyuanzu'] 
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "ALTER RESOURCE GROUP modifies the configuration of a resource group."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ALTER RESOURCE GROUP

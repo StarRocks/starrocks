@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 10
 keywords: ['linshi'] 
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 表概览

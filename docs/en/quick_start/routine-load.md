@@ -2,7 +2,12 @@
 displayed_sidebar: docs
 sidebar_position: 60
 toc_max_heading_level: 2
+<<<<<<< HEAD
 description: Kafka routine load with shared-data storage
+=======
+description: "Quick start guide for streaming data from Kafka into StarRocks using Routine Load with shared-data storage."
+products: [oss]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Kafka routine load StarRocks using shared-data storage

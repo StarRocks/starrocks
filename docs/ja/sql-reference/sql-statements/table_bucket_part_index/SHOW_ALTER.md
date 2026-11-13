@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "進行中のALTER TABLE操作の実行状態を表示します。列変更、スキーマ最適化、ロールアップインデックス変更を含みます。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # SHOW ALTER TABLE

@@ -1,5 +1,11 @@
 ---
 sidebar_position: 10
+<<<<<<< HEAD
+=======
+keywords: ['partition']
+description: "Fast analytics in StarRocks begin with a table layout that matches your query patterns."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Partitioning

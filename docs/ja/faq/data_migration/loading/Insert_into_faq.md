@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Insert Into は一度に1行ずつデータを挿入するのではなく、バッチ挿入を推奨し、タイムアウト設定の調整方法を説明します。"
+products: [oss, enterprise]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Insert Into

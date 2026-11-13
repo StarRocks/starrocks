@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 100
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # AUTO INCREMENT とグローバル辞書を使用した COUNT(DISTINCT) とジョインの高速化

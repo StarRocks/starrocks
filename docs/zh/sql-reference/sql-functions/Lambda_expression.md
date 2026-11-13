@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 0.9
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Lambda 表达式

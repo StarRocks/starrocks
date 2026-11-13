@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['ziyuanzu'] 
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE RESOURCE GROUP

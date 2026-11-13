@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarGo コマンドラインツールで複数 StarRocks クラスターをデプロイ、管理、アップグレード、起動/停止します。"
+products: [oss]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # StarGo を使用した StarRocks のデプロイと管理

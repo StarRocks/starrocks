@@ -1,5 +1,10 @@
 ---
 sidebar_position: 20
+<<<<<<< HEAD
+=======
+description: "A thoughtful sort‑key is the highest‑leverage physical‑design knob in StarRocks."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Table clustering

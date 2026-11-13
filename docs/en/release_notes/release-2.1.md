@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks 2.1 release notes: Iceberg external tables (preview), pipeline execution engine for adaptive multicore scheduling, CREATE TABLE AS SELECT, SQL..."
+products: [oss]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # StarRocks version 2.1

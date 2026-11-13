@@ -1,6 +1,11 @@
 ---
 sidebar_position: 130
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks FE、BE 和 CN 节点支持优雅退出，实现无中断升级和重启。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 优雅退出

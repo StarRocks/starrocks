@@ -1,6 +1,11 @@
 ---
 sidebar_position: 20
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Iceberg 元数据表提供 Iceberg 表的变更历史、快照和 Manifest 等元数据查询接口。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Iceberg 元数据表

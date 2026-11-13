@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 40
+<<<<<<< HEAD
+=======
+description: "From v3.5.0 onwards, StarRocks supports authenticating client access using JSON Web Tokens."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # JSON Web Token Authentication

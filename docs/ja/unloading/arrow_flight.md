@@ -1,6 +1,11 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks は v3.5.1 以降 Apache Arrow Flight SQL プロトコルでの接続をサポートしています。"
+products: [oss, enterprise]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Arrow Flight SQL を使用して StarRocks と対話する

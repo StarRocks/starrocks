@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 30
+<<<<<<< HEAD
+=======
+description: "Enable Group Provider in StarRocks to authenticate, and authorize user groups from external authentication systems."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Authenticate User Groups

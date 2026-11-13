@@ -1,6 +1,11 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Recover StarRocks cluster metadata when FE nodes fail to restart, fail to serve requests, or need metadata restored from backup."
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Metadata Recovery

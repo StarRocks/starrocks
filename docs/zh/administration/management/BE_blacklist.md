@@ -1,6 +1,11 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Configure BE and CN blacklist in StarRocks to exclude problematic nodes from query execution."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 管理 BE 和 CN 黑名单

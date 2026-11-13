@@ -1,6 +1,11 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Querybook 支持对 StarRocks 的内部数据和外部数据进行查询和可视化处理。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Querybook

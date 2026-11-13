@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 50
+<<<<<<< HEAD
+=======
+description: "How to configure StarRocks to spill intermediate query results to disk or object storage to prevent out-of-memory errors."
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import Beta from '../../../_assets/commonMarkdown/_beta.mdx'

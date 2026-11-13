@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "使用 Flink CDC 实时同步 MySQL 数据至 StarRocks 的常见问题及故障排查。"
+products: [oss, enterprise]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # MySQL 实时同步至 StarRocks 常见问题

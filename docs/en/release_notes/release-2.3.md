@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks 2.3 release notes: persistent primary key indexes, DELETE WHERE on Primary Key tables, global dictionary updates during ingestion, async CREATE..."
+products: [oss]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # StarRocks version 2.3

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['FE', 'Coordinator Node','memory', 'OOM', 'JVM', 'troubleshooting', 'heap']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 

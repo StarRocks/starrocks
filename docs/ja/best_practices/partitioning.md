@@ -1,5 +1,10 @@
 ---
 sidebar_position: 10
+<<<<<<< HEAD
+=======
+description: "StarRocks でのパーティショニング戦略を通じて、クエリパフォーマンスと管理を最適化する方法。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # パーティショニング

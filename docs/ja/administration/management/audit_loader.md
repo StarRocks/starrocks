@@ -1,6 +1,11 @@
 ---
 sidebar_position: 80
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "AuditLoader プラグインを使用して StarRocks 内のテーブルで監査ログを管理する方法。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # AuditLoader を使用して StarRocks 内の監査ログを管理する

@@ -1,6 +1,11 @@
 ---
 sidebar_position: 100
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Set time zone in StarRocks at session or global level using the time_zone parameter, ensuring consistency with FE deployment timezone before data import."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 设置时区

@@ -3,6 +3,7 @@ displayed_sidebar: docs
 toc_max_heading_level: 4
 description: Partition and bucket data
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Data distribution

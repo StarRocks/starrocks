@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 4
+<<<<<<< HEAD
+=======
+description: "STREAM LOAD 允许您从本地文件系统或流式数据源加载数据。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import TableURLTip from '../../../_assets/commonMarkdown/stream_load_table_url_tip.mdx';

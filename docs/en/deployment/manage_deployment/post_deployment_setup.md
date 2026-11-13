@@ -1,6 +1,11 @@
 ---
 sidebar_position: 10
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Before getting your new StarRocks cluster into production, you must secure the initial account and set the necessary variables and properties to allow your..."
+products: [oss]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Post-deployment setup

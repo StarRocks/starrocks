@@ -1,3 +1,13 @@
+<<<<<<< HEAD
+=======
+---
+sidebar_position: 20
+displayed_sidebar: docs
+products: [oss, cloud, anywhere]
+description: "StarRocks version naming conventions: MAJOR.MINOR.PATCH format, prerelease designations, and how to interpret version numbers."
+---
+
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 # Version naming
 
 Purpose: To provide a unified and clear explanation of the current naming conventions for StarRocks software packages.

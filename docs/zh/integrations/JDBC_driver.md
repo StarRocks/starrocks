@@ -1,6 +1,11 @@
 ---
 sidebar_position: 90
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks 提供原生 JDBC 驱动，支持任何兼容 JDBC 的客户端、IDE 或应用程序直接连接。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # StarRocks JDBC 驱动

@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 40
+<<<<<<< HEAD
+=======
+description: "How to manage StarRocks access permissions with Apache Ranger for centralized, fine-grained access control."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Manage permissions with Apache Ranger

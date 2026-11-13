@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
 keywords: ['waibiao']
+=======
+description: "StarRocks 从 v2.3 起支持 catalog 功能，用于统一管理内部和外部数据源的查询。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 概述

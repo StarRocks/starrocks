@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 sidebar_label: "認証、クエリ、およびロード"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 設定 - 認証、クエリ、およびロード

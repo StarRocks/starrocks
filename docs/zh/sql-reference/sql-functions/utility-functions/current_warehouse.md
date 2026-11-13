@@ -1,5 +1,10 @@
 ---
 title: CURRENT_WAREHOUSE
+<<<<<<< HEAD
+=======
+description: "返回当前会话正在使用的计算仓库名称。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 返回当前会话正在使用的计算仓库名称。该仓库可能通过 `SET WAREHOUSE` 显式设置，也可能是系统默认仓库。

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Range 分区（不推荐）

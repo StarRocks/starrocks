@@ -1,6 +1,11 @@
 ---
 sidebar_position: 50
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "How to connect QuickBI to StarRocks for visualized data analysis."
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # QuickBI

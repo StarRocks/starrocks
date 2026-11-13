@@ -2,6 +2,11 @@
 displayed_sidebar: docs
 sidebar_position: 25
 sidebar_label: "Built-in Roles"
+<<<<<<< HEAD
+=======
+description: "Reference for the five built-in StarRocks roles: db_admin, cluster_admin, user_admin, security_admin, and public."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 

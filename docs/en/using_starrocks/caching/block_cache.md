@@ -2,6 +2,11 @@
 displayed_sidebar: docs
 sidebar_position: 20
 toc_max_heading_level: 2
+<<<<<<< HEAD
+=======
+description: "How to configure and use Data Cache in StarRocks to cache data blocks from remote storage (object storage, HDFS) on local disk, accelerating queries in..."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Data Cache

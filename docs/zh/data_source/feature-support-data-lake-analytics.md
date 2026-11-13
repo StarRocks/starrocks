@@ -2,6 +2,7 @@
 sidebar_position: 60
 displayed_sidebar: docs
 sidebar_label: "能力边界"
+products: [oss, enterprise, anywhere]
 ---
 
 # 数据湖分析能力边界

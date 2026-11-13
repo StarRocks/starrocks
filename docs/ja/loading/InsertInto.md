@@ -1,6 +1,11 @@
 ---
 sidebar_position: 70
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "INSERT ステートメント（INSERT VALUES、INSERT INTO SELECT、INSERT OVERWRITE）を使用して StarRocks にデータをロードする方法。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # INSERT を使用したデータのロード

@@ -1,6 +1,11 @@
 ---
 sidebar_position: 70
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "How to use the query_dump interface in StarRocks to capture SQL query details for troubleshooting."
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # query_dump interface

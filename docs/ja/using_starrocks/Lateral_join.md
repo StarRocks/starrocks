@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 50
 keywords: ['explode']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Lateral Join を使用した列から行への変換

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 物化视图查询改写

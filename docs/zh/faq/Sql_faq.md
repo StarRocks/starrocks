@@ -1,6 +1,11 @@
 ---
 sidebar_position: 50
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks SQL 查询常见问题。"
+products: [oss, enterprise]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 查询常见问题

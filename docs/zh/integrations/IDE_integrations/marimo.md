@@ -1,6 +1,11 @@
 ---
 sidebar_position: 50
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "将 StarRocks 集群与 Marimo 响应式 Python 笔记本集成，实现可复现和交互的数据分析。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Marimo

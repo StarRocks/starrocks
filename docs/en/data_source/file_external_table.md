@@ -1,6 +1,11 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "File external table is a special type of external table."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # File external table

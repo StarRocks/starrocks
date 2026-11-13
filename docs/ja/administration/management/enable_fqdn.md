@@ -1,6 +1,11 @@
 ---
 sidebar_position: 90
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "完全修飾ドメイン名（FQDN）を使用して StarRocks クラスターへのアクセスを有効化する方法。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # FQDN アクセスを有効にする

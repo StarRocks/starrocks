@@ -1,6 +1,11 @@
 ---
 sidebar_position: 10
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Apache Superset supports querying and visualizing both internal data and external data in StarRocks."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Apache Superset

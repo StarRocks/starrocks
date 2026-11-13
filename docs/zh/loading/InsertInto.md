@@ -1,6 +1,11 @@
 ---
 sidebar_position: 70
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "通过 INSERT 语句向 StarRocks 导入数据：INSERT VALUES、INSERT INTO SELECT 和动态覆盖。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 通过 INSERT 语句导入数据

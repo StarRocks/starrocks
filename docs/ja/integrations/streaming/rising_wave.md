@@ -1,6 +1,11 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "RisingWave は分散 SQL ストリーミングデータベースとして、ユーザーが直接 StarRocks にデータをシンクして Duplicate Key・主キー・ユニークキーテーブルに対応できます。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # RisingWave から StarRocks へのデータシンク

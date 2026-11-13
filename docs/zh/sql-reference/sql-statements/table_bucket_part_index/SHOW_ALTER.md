@@ -1,6 +1,11 @@
 ---
 keywords: ['xiugai'] 
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "显示正在进行的ALTER TABLE操作的执行状态，包括列修改、schema优化和rollup索引变更。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # SHOW ALTER TABLE

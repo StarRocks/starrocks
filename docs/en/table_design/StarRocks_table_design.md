@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
+<<<<<<< HEAD
+=======
+description: "Overview of StarRocks table design principles: columnar storage, sort keys, data organization, and how to structure tables for optimized query performance."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Table overview

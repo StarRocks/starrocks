@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "be_cloud_native_compactions provides information on compaction transactions running on CNs (or BEs for v3.0) of a shared-data cluster."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # be_cloud_native_compactions

@@ -1,6 +1,11 @@
 ---
 sidebar_position: 20
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "规划 StarRocks 生产集群的节点数、CPU、内存和存储资源配置。"
+products: [oss, enterprise]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 规划 StarRocks 集群

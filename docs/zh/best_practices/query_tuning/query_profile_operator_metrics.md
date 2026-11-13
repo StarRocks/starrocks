@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 80
 keywords: ['profile', 'query', '指标']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 查询概要指标

@@ -1,6 +1,11 @@
 ---
 sidebar_position: 20
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Dataphin は OneData データガバナンス手法に基づくクラウドベースのデータ統合・管理プラットフォームです。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Dataphin

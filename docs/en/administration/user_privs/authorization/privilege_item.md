@@ -2,6 +2,11 @@
 displayed_sidebar: docs
 sidebar_position: 20
 sidebar_label: "Privilege Items"
+<<<<<<< HEAD
+=======
+description: "Privileges granted to a user or role determine which operations the user or role can perform on certain objects."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Privileges supported by StarRocks

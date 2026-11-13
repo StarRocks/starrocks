@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 100
+<<<<<<< HEAD
+=======
+description: "How to use AUTO INCREMENT columns and Global Dictionary in StarRocks to replace string keys with integer IDs, accelerating COUNT(DISTINCT) and join operations."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Accelerate COUNT(DISTINCT) and Joins with AUTO INCREMENT and Global Dictionary

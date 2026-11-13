@@ -1,6 +1,11 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks Operator で Kubernetes クラスタ上の StarRocks クラスタをデプロイ・管理する方法。"
+products: [oss]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Operator を使用して StarRocks をデプロイする

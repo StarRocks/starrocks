@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Routine Load can continuously consume messages from Apache Kafka® and load data into StarRocks."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';

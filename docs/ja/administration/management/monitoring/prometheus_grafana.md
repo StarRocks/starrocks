@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 4
+<<<<<<< HEAD
+=======
+description: "Prometheus と Grafana を使用して StarRocks クラスターの稼働状況を監視、可視化、アラートします。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Prometheus と Grafana を使用した監視とアラート

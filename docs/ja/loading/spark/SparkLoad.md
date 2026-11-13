@@ -1,6 +1,11 @@
 ---
 sidebar_position: 20
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "外部 Spark リソースを使用してデータを前処理し、TB スケールの初期データ移行に適した Spark Load による大規模データロード。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Spark Load を使用してデータを一括ロードする

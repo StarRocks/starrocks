@@ -3,6 +3,7 @@ sidebar_position: 70
 displayed_sidebar: docs
 description: Use Helm to deploy StarRocks
 toc_max_heading_level: 2
+products: [oss]
 ---
 
 import Tabs from '@theme/Tabs';

@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 11
+<<<<<<< HEAD
+=======
+description: "How to use SQL Plan Manager in StarRocks to bind a fixed query plan to a SQL statement, preventing plan changes from statistics or data updates and..."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import Beta from '../_assets/commonMarkdown/_beta.mdx'

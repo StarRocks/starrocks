@@ -1,6 +1,11 @@
 ---
 sidebar_position: 140
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks 从 v3.3 起支持 Kudu catalog，无导入直接查询 Apache Kudu 数据及转换导入。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
 

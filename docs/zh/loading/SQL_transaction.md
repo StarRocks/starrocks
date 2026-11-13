@@ -1,6 +1,11 @@
 ---
 sidebar_position: 80
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "使用 SQL 事务以原子方式在 StarRocks 中提交多个 INSERT、UPDATE、DELETE 语句，支持 ACID 特性。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import Beta from '../_assets/commonMarkdown/_beta.mdx'

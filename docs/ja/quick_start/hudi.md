@@ -2,6 +2,7 @@
 sidebar_position: 50
 description: Apache Hudi を使用したデータレイクハウス
 displayed_sidebar: docs
+products: [oss]
 ---
 import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'

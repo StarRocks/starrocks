@@ -1,6 +1,11 @@
 ---
 sidebar_position: 160
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "SMT、DataX、DBT、CloudCanal などのサードパーティツールおよびエコシステム統合によるデータロード。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ツールを使用したデータロード

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['suoyin']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE INDEX

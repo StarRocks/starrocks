@@ -2,6 +2,11 @@
 sidebar_position: 70
 displayed_sidebar: docs
 toc_max_heading_level: 4
+<<<<<<< HEAD
+=======
+description: "StarRocks supports JDBC catalogs from v3.0 onwards."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'

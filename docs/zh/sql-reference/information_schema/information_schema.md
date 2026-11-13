@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['Yuanshuju']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Information Schema

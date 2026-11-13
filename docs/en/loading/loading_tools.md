@@ -1,6 +1,11 @@
 ---
 sidebar_position: 160
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Overview of third-party tools for loading data into StarRocks: SMT, DataX, DBT, CloudCanal, and other ecosystem integrations."
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Load data using tools

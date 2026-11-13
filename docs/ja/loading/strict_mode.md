@@ -1,6 +1,11 @@
 ---
 sidebar_position: 170
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks データロード時の Strict mode：設定方法、制御内容、列型変換失敗時の行拒否タイミング。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Strict mode

@@ -1,6 +1,11 @@
 ---
 sidebar_position: 120
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "存算分离集群中 Compaction 的管理和监控方法。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 存算分离集群 Compaction

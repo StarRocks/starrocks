@@ -1,6 +1,11 @@
 ---
 sidebar_position: 100
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "FE/BE パラメータ設定によるデータベース削除後のゴミ箱管理とリカバリー方法を紹介します。"
+products: [oss, enterprise]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 運用とメンテナンス

@@ -3,6 +3,11 @@ sidebar_position: 70
 displayed_sidebar: docs
 sidebar_label: "Feature Support"
 keywords: ['compaction']
+<<<<<<< HEAD
+=======
+description: "Each of the features below lists the version number that they were added in."
+products: [oss]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Feature Support: Shared-data Clusters

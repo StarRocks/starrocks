@@ -4,6 +4,7 @@ sidebar_position: 3
 description: Data Lakehouse with Apache Iceberg
 toc_max_heading_level: 2
 keywords: [ 'iceberg' ]
+products: [oss]
 ---
 
 import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.mdx'

@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
+<<<<<<< HEAD
+=======
+description: "How to use bitmaps in StarRocks for efficient COUNT(DISTINCT) calculations using the BITMAP type and bitmap functions, reducing storage space and..."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Bitmap for Count Distinct

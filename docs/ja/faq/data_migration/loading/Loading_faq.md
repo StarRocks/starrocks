@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "頻繁なロードジョブによるデータ圧縮遅延とバージョン上限超過の問題解決方法を紹介します。"
+products: [oss, enterprise]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # データロードに関するよくある質問

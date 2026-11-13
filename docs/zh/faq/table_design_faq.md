@@ -1,6 +1,11 @@
 ---
 sidebar_position: 60
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks 表设计常见问题：表创建、schema 变更、分区、分桶和索引配置故障排查。"
+products: [oss, enterprise]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 ## 排查表设计问题

@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+products: [oss, enterprise, anywhere]
+description: "Cancels an ongoing RESTORE task in a specified database."
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # CANCEL RESTORE

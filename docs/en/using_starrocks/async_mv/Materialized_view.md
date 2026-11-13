@@ -2,6 +2,11 @@
 displayed_sidebar: docs
 sidebar_position: 10
 keywords: ['materialized', 'view', 'views']
+<<<<<<< HEAD
+=======
+description: "How to create, use, refresh, and manage asynchronous materialized views in StarRocks for accelerating multi-table join and aggregation queries with..."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Asynchronous materialized views

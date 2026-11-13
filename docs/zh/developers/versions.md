@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 1
+products: [oss]
 ---
 
 # 版本发布指南

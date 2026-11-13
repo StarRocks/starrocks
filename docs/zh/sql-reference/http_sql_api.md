@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "HTTP SQL API 允许用户通过 HTTP 协议执行 SELECT、SHOW、EXPLAIN、KILL 语句。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # HTTP SQL API

@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 5
+<<<<<<< HEAD
+=======
+description: "Table function for defining data files in remote storage (HDFS, S3, GCS) for use in loading data into or unloading data from StarRocks."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # `FILES`

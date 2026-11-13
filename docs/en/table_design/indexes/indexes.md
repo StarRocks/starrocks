@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 5
+<<<<<<< HEAD
+=======
+description: "Overview of index types in StarRocks: built-in indexes (Prefix, Ordinal, ZoneMap) automatically created by the system, and user-created indexes (Bitmap,..."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Indexes

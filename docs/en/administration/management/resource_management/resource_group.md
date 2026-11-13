@@ -2,6 +2,11 @@
 displayed_sidebar: docs
 sidebar_position: 10
 keywords: ['resource groups', 'isolation']
+<<<<<<< HEAD
+=======
+description: "How to use resource groups in StarRocks to isolate resources and run multiple workloads concurrently in a single cluster."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Resource group

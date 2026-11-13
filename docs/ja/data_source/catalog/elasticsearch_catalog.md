@@ -2,6 +2,7 @@
 sidebar_position: 90
 displayed_sidebar: docs
 toc_max_heading_level: 4
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Elasticsearch catalog

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['Fuben', 'fuzai']
+products: [oss, enterprise, anywhere]
 ---
 
 # 管理副本

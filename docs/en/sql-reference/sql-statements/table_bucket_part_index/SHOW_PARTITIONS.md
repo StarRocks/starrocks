@@ -2,6 +2,11 @@
 displayed_sidebar: docs
 keywords:
   - SHOW PARTITIONS
+<<<<<<< HEAD
+=======
+description: "SHOW PARTITIONS displays partition information for a table, including common and temporary partitions."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # SHOW PARTITIONS

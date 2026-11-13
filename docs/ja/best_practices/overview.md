@@ -2,6 +2,11 @@
 sidebar_position: 1
 sidebar_label: '概要'
 keywords: ['S3 API', 'reduce cost', 'efficiency', 'efficient', 'performance']
+<<<<<<< HEAD
+=======
+description: "経験豊富なデータベースエンジニアが執筆した、StarRocks の効率的な設計のベストプラクティス。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ベストプラクティス

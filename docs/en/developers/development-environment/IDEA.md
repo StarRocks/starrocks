@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "How to set up the StarRocks FE development environment in IntelliJ IDEA on macOS Apple Silicon."
+products: [oss]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Setup StarRocks FE development environment on IDEA

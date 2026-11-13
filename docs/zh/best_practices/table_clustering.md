@@ -1,5 +1,10 @@
 ---
 sidebar_position: 20
+<<<<<<< HEAD
+=======
+description: "Sort keys are the highest-leverage physical design element in StarRocks, enabling efficient filtering, aggregation, and compression."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 表聚簇

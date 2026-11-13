@@ -1,6 +1,11 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "DELETE 操作後，StarRocks が一定期間ゴミ箱にデータを保持し、RECOVER コマンドで誤削除したデータベース・テーブル・パーティションを復旧できます。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # データリカバリ

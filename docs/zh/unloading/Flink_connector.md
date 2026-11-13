@@ -1,6 +1,11 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks provides a self-developed connector for Apache Flink to read data in bulk from a StarRocks cluster using SQL or DataStream."
+products: [oss, enterprise]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 使用 Flink Connector 读取数据

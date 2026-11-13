@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+products: [oss, enterprise, anywhere]
+description: "Restores databases, tables, materialized views, logical views, and UDFs in StarRocks from a snapshot created by BACKUP."
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # RESTORE

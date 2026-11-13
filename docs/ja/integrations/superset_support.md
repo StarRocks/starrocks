@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Apache Superset は SQLAlchemy を使用して StarRocks のクエリを実行し、モダンなデータ探索と可視化プラットフォームを提供します。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Superset サポート

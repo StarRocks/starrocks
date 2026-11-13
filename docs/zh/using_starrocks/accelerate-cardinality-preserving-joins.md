@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 120
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 加速基数保留 Join

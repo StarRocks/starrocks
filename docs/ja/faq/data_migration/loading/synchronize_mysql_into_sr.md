@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Flink CDC を使用して MySQL からリアルタイムでデータを StarRocks に同期する際の設定エラーを解決します。"
+products: [oss, enterprise]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # MySQL からリアルタイムでデータを同期する

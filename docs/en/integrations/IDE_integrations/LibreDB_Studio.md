@@ -2,6 +2,7 @@
 sidebar_position: 35
 displayed_sidebar: docs
 description: "LibreDB Studio is an open source, browser-based SQL IDE. Connect to StarRocks over its MySQL wire protocol to browse schemas and run queries."
+products: [oss, enterprise, anywhere]
 ---
 
 # LibreDB Studio

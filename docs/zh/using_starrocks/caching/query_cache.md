@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 10
 keywords: ['huan cun']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Query Cache

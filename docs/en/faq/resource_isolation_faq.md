@@ -1,6 +1,11 @@
 ---
 sidebar_position: 80
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "FAQ for common StarRocks resource isolation questions."
+products: [oss, enterprise]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Troubleshooting Resource Isolation

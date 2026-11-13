@@ -1,5 +1,10 @@
 ---
 sidebar_position: 20
+<<<<<<< HEAD
+=======
+description: "StarRocks のテーブルクラスタリングを通じた、物理設計の最適化と効果的なソートキーの選択。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # テーブルクラスタリング

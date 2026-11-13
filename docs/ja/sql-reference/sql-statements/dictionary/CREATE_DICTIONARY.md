@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "CREATE DICTIONARY は、元のオブジェクトに基づいて辞書オブジェクトを作成します。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import Beta from '../../../_assets/commonMarkdown/_beta.mdx'

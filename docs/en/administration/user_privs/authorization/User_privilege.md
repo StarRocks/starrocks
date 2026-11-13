@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 30
+<<<<<<< HEAD
+=======
+description: "How to manage user privileges in StarRocks using role-based access control (RBAC) and identity-based access control (IBAC)."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Manage user privileges

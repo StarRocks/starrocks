@@ -1,6 +1,11 @@
 ---
 sidebar_position: 50
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Marimo（リアクティブ Python ノートブック）を StarRocks と統合して、対話的なデータ分析を行う方法を説明します。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # マリモ

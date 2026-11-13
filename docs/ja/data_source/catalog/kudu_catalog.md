@@ -1,6 +1,11 @@
 ---
 sidebar_position: 140
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks v3.3 以降の Kudu catalog で、Apache Kudu からデータをインジェストせずにクエリおよび変換ロード。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
 

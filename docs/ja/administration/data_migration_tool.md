@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks コミュニティ提供のクロスクラスターデータ移行ツールを使用して異なるクラスター間のデータ移行を実施。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # クロスクラスタデータ移行ツール

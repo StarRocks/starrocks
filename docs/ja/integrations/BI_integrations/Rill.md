@@ -1,6 +1,11 @@
 ---
 sidebar_position: 60
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "Rill は StarRocks に OLAP コネクタとして接続し、ダッシュボードを強化するデータソースとして利用できます。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Rill

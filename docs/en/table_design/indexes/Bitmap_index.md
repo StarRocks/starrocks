@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 20
+<<<<<<< HEAD
+=======
+description: "How to create and manage bitmap indexes in StarRocks to accelerate equality and range queries on low-cardinality columns using bitmap data structures."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Bitmap indexes

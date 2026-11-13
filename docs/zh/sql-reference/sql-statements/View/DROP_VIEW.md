@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['shitu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP VIEW

@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 50
+<<<<<<< HEAD
+=======
+description: "FAQ for common StarRocks privilege and authorization questions, including role activation issues."
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Privilege FAQ

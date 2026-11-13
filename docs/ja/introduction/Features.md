@@ -1,6 +1,11 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks は MPP フレームワーム・完全ベクトル化エンジン・列指向ストレージ・CBO・マテリアライズドビューなど豊富な機能で超高速分析を提供します。"
+products: [oss, enterprise, cloud]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 機能

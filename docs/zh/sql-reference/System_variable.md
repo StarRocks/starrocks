@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['session','variable']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 系统变量

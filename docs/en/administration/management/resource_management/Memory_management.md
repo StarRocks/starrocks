@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 40
+<<<<<<< HEAD
+=======
+description: "Overview of memory classification and memory management strategies in StarRocks."
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Memory Management

@@ -1,5 +1,10 @@
 ---
 sidebar_position: 40
+<<<<<<< HEAD
+=======
+description: "主キーテーブルは、StarRocks によって設計された新しいストレージエンジンを使用します。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 主キーテーブル

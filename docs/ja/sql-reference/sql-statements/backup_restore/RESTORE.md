@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks は、内部データベース、テーブル、パーティション、外部カタログのメタデータ、マテリアライズドビュー、ビュー、ユーザー定義関数のバックアップと復元をサポートしています。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # RESTORE

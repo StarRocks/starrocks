@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+products: [oss, enterprise, anywhere]
+description: "StarRocks 共有データクラスタでクラスタースナップショットを作成・復元し、バックアップと災害復旧を実現。"
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 sidebar_label: クラスタースナップショット
 keywords: ['バックアップ', '復元', '共有データ', 'スナップショット']
 ---

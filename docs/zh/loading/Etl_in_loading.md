@@ -1,6 +1,11 @@
 ---
 sidebar_position: 150
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "在导入过程中实现数据转换：列映射、过滤条件及派生列表达式在多种导入方式中的应用。"
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 导入过程中实现数据转换

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 25
 sidebar_label: "内置角色"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 

@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "How to enable and visualize Jemalloc Heap Profiling for StarRocks BE nodes to diagnose memory usage issues."
+products: [oss]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Jemalloc Heap Profiling

@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 4
+<<<<<<< HEAD
+=======
+description: "StarRocks provides a monitor and alert solution by using Prometheus and Grafana."
+products: [oss, enterprise, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Monitor and Alert with Prometheus and Grafana

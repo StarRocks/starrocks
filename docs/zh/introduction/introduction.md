@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 是极速 MPP 数据库，采用向量化引擎和 CBO 优化器，支持多种数据分析场景。"
+products: [oss, enterprise, cloud]
 ---
 
 # 什么是 StarRocks

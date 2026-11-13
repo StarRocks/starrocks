@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks 3.3：共有データの高速スキーマ進化による準秒 DDL、StarRocks データ移行ツール、データレイク ウォームアップ用 CACHE SELECT。"
+products: [oss]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # StarRocks version 3.3

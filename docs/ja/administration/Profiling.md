@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks は重複キー、集計、ユニークキー、主キーテーブルをサポートしており、これらはすべて KEY でソートされています。"
+products: [oss]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # パフォーマンス最適化

@@ -1,6 +1,11 @@
 ---
 sidebar_position: 10
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "StarRocks 支持时间旅行查询历史 Iceberg 快照，使用 AS OF 子句访问指定时间点数据。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import Beta from '../../../_assets/commonMarkdown/_beta.mdx'

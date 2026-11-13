@@ -1,6 +1,11 @@
 ---
 sidebar_position: 100
 displayed_sidebar: docs
+<<<<<<< HEAD
+=======
+description: "How to configure time zone settings in StarRocks and understand their effects on data storage and queries."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Configure a time zone

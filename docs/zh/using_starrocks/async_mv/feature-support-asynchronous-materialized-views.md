@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 50
 sidebar_label: "能力边界"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 异步物化视图能力边界

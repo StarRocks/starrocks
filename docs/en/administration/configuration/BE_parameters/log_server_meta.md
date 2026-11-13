@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Logging, Server, and Metadata"
+<<<<<<< HEAD
+=======
+description: "BE configuration parameters for logging, server settings, and metadata management."
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
