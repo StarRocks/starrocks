@@ -26,6 +26,10 @@ class TableEngine:
 class TableDistribution:
     HASH = "HASH"
     RANDOM = "RANDOM"
+    # Range distribution (StarRocks 4.1+) has no DISTRIBUTED BY syntax: a table
+    # gets it by declaring a key type or ORDER BY and omitting DISTRIBUTED BY.
+    # "RANGE" is only a reflected value, and a marker users may set in metadata.
+    RANGE = "RANGE"
 
 
 class TableType:
