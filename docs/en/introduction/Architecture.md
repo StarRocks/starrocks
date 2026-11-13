@@ -3,8 +3,6 @@ sidebar_position: 20
 displayed_sidebar: docs
 description: "StarRocks has a simple architecture."
 ---
-import QSOverview from '../_assets/commonMarkdown/quickstart-overview-tip.mdx'
-import EditionSpecificFeature from '../_assets/commonMarkdown/Edition_Specific_Feature.mdx'
 
 # Architecture
 
@@ -133,6 +131,23 @@ This section lists the differences of features supported in shared-nothing and s
 | Query Cache                                          | v2.5+          | v3.4+           |
 | Rollup and Synchronous Materialized view             | v1.x+          | v3.3+           |
 
-<EditionSpecificFeature />
+### Data Protection
 
-<QSOverview />
+| Feature                                              | Shared-nothing | Shared-data     |
+| ---------------------------------------------------- | -------------- | --------------- |
+| Backup & Restore                                     | v1.x+          | Not applicable  |
+| BE/CN Blacklist                                      | v3.3+          | v4.0+           |
+| Cross-cluster Data Migration Tool                    | v3.3+          | Not applicable  |
+| Cluster Snapshot                                     | Not applicable | v3.4.2+         |
+
+### Security and Authentication
+
+| Feature                                              | Shared-nothing | Shared-data     |
+| ---------------------------------------------------- | -------------- | --------------- |
+| Kerberos Support on HDFS                             | Not applicable | v3.2+           |
+
+---
+---
+## Learn by doing
+
+Try the [Quick Starts](../quick_start/quick_start.mdx) to get an overview of using StarRocks with realistic scenarios.
