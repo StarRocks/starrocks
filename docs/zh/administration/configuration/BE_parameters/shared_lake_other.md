@@ -319,7 +319,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_segment_metadata_cache_limit_percent
 
-- 默认值：20
+- 默认值：10
 - 类型：Int
 - 单位：-
 - 是否动态：是
@@ -337,7 +337,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_tablet_metadata_cache_limit_percent
 
-- 默认值：10
+- 默认值：5
 - 类型：Int
 - 单位：-
 - 是否动态：是
