@@ -41,6 +41,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.authentication.OAuth2Context;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -79,12 +80,10 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
@@ -596,14 +595,7 @@ public class ConnectProcessor {
             ctx.setIsLastStmt(i == stmts.size() - 1);
             ctx.setSingleStmt(stmts.size() == 1);
 
-            //Build View SQL without Policy Rewrite
-            new AstTraverser<Void, Void>() {
-                @Override
-                public Void visitRelation(Relation relation, Void context) {
-                    relation.setNeedRewrittenByPolicy(true);
-                    return null;
-                }
-            }.visit(parsedStmt);
+            SecurityPolicyRewriteRule.markRelationsForRewrite(parsedStmt);
 
             // Only add the last running stmt for multi statement,
             // because the audit log will only show the last stmt.
@@ -1126,14 +1118,7 @@ public class ConnectProcessor {
             // in the profile and audit log instead of the origin text.
             ctx.setSingleStmt(stmts.size() == 1);
             StatementBase statement = stmts.get(idx);
-            //Build View SQL without Policy Rewrite
-            new AstTraverser<Void, Void>() {
-                @Override
-                public Void visitRelation(Relation relation, Void context) {
-                    relation.setNeedRewrittenByPolicy(true);
-                    return null;
-                }
-            }.visit(statement);
+            SecurityPolicyRewriteRule.markRelationsForRewrite(statement);
             statement.setOrigStmt(new OriginStatement(request.getSql(), idx));
 
             executor = doProxyExecute(result, request, statement, requestFE);
