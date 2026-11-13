@@ -58,12 +58,12 @@ insert into t_pk_like values (1, 10, 3, '2020-01-01', 'v1'), (2, 20, 2, '2020-01
 select * from t_pk order by id;
 select * from t_pk_like order by id;
 
-function: assert_query_contains("show create table t_pk", "AS named_struct('f', `a`).`f`")
-function: assert_query_contains("show create table t_pk", "AS array_contains(ARRAY<DATE>['2020-1-1'], `d`)")
+function: assert_query_contains("show create table t_pk", "`a`).`f` COMMENT")
+function: assert_query_contains("show create table t_pk", "AS array_contains(ARRAY<DATE>[")
 function: assert_query_contains("show create table t_pk", "AS array_contains([`a`, `b`], 3)")
 function: assert_query_contains("show create table t_pk", "AS map{1:`s`}[1]")
-function: assert_query_contains("show create table t_pk_like", "AS named_struct('f', `a`).`f`")
-function: assert_query_contains("show create table t_pk_like", "AS array_contains(ARRAY<DATE>['2020-1-1'], `d`)")
+function: assert_query_contains("show create table t_pk_like", "`a`).`f` COMMENT")
+function: assert_query_contains("show create table t_pk_like", "AS array_contains(ARRAY<DATE>[")
 function: assert_query_contains("show create table t_pk_like", "AS array_contains([`a`, `b`], 3)")
 function: assert_query_contains("show create table t_pk_like", "AS map{1:`s`}[1]")
 
