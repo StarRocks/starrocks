@@ -826,6 +826,62 @@ public class MvRewritePartitionTest extends MVTestBase {
     }
 
     @Test
+    public void testScanPartitionLimitFallsBackFromOverLimitMv() throws Exception {
+        SessionVariable session = connectContext.getSessionVariable();
+        int oldLimit = session.getScanOlapPartitionNumLimit();
+        String oldMode = session.getMaterializedViewRewriteMode();
+        boolean oldMetaScan = session.isEnableRewriteSimpleAggToMetaScan();
+        boolean oldRewrite = session.isEnableMaterializedViewRewrite();
+        boolean oldMultiStage = session.isEnableMaterializedViewMultiStagesRewrite();
+        try {
+            session.setScanOlapPartitionNumLimit(0);
+            session.setMaterializedViewRewriteMode("FORCE");
+            session.setEnableMaterializedViewRewrite(true);
+            session.setEnableMaterializedViewMultiStagesRewrite(true);
+            session.setEnableRewriteSimpleAggToMetaScan(false);
+            starRocksAssert.withTable("CREATE TABLE mv_scan_limit_monthly (id INT, dt DATE NOT NULL) " +
+                    "DUPLICATE KEY(id, dt) PARTITION BY date_trunc('month', dt) " +
+                    "DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num'='1')");
+            cluster.runSql(DB_NAME, "ALTER TABLE mv_scan_limit_monthly ADD PARTITIONS " +
+                    "START ('2023-03-01') END ('2023-04-01') EVERY (INTERVAL 1 MONTH)");
+            cluster.runSql(DB_NAME, "INSERT INTO mv_scan_limit_monthly VALUES " +
+                    "(1, '2023-03-07'), (2, '2023-03-08'), (3, '2023-03-09')");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_scan_limit_finer " +
+                    "PARTITION BY date_trunc('day', mv_dt) DISTRIBUTED BY HASH(mv_dt) BUCKETS 1 " +
+                    "REFRESH DEFERRED MANUAL PROPERTIES ('replication_num'='1') " +
+                    "AS SELECT dt AS mv_dt, COUNT(1) AS cnt FROM mv_scan_limit_monthly GROUP BY dt");
+            refreshMaterializedView(DB_NAME, "mv_scan_limit_finer");
+
+            String query = "SELECT COUNT(1) FROM mv_scan_limit_monthly " +
+                    "WHERE dt >= '2023-03-07' AND dt < '2023-03-10'";
+            PlanTestBase.assertContains(getFragmentPlan(query), "TABLE: mv_scan_limit_finer", "partitions=3/31");
+            session.setScanOlapPartitionNumLimit(3);
+            PlanTestBase.assertContains(getFragmentPlan(query), "TABLE: mv_scan_limit_finer", "partitions=3/31");
+            session.setScanOlapPartitionNumLimit(1);
+            PlanTestBase.assertContains(getFragmentPlan(query), "TABLE: mv_scan_limit_monthly", "partitions=1/1");
+
+            // An over-limit candidate must not prevent a different MV from being used.
+            session.setScanOlapPartitionNumLimit(0);
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_scan_limit_coarser " +
+                    "PARTITION BY date_trunc('month', mv_dt) DISTRIBUTED BY HASH(mv_dt) BUCKETS 1 " +
+                    "REFRESH DEFERRED MANUAL PROPERTIES ('replication_num'='1') " +
+                    "AS SELECT dt AS mv_dt, COUNT(1) AS cnt FROM mv_scan_limit_monthly GROUP BY dt");
+            refreshMaterializedView(DB_NAME, "mv_scan_limit_coarser");
+            session.setScanOlapPartitionNumLimit(1);
+            PlanTestBase.assertContains(getFragmentPlan(query), "TABLE: mv_scan_limit_coarser", "partitions=1/1");
+        } finally {
+            session.setScanOlapPartitionNumLimit(oldLimit);
+            session.setMaterializedViewRewriteMode(oldMode);
+            session.setEnableRewriteSimpleAggToMetaScan(oldMetaScan);
+            session.setEnableMaterializedViewRewrite(oldRewrite);
+            session.setEnableMaterializedViewMultiStagesRewrite(oldMultiStage);
+            starRocksAssert.dropMaterializedView("mv_scan_limit_coarser");
+            starRocksAssert.dropMaterializedView("mv_scan_limit_finer");
+            starRocksAssert.dropTable("mv_scan_limit_monthly");
+        }
+    }
+
+    @Test
     public void testMVRewriteWithHaving() throws Exception {
         starRocksAssert.withTable("CREATE TABLE `test_pt` (\n" +
                 "  `id` int(11) NULL,\n" +
