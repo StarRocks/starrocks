@@ -2081,6 +2081,23 @@ StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t v
     return VersionedTablet(this, std::move(metadata));
 }
 
+// Whether a cached |segment| can serve a request for |tablet_schema|.
+static bool segment_schema_matches(Segment& segment, const TabletSchemaPtr& tablet_schema) {
+    const auto cached_schema = segment.tablet_schema_share_ptr();
+    return cached_schema != nullptr && cached_schema->id() == tablet_schema->id() &&
+           cached_schema->schema_version() == tablet_schema->schema_version() &&
+           cached_schema->num_columns() == tablet_schema->num_columns();
+}
+
+SegmentPtr TabletManager::lookup_opened_segment(const FileInfo& segment_info, const TabletSchemaPtr& tablet_schema) {
+    auto segment = metacache()->lookup_segment(MetacacheKey::segment(segment_info), /*count_miss=*/false);
+    if (segment == nullptr || !segment->has_opened() ||
+        (tablet_schema != nullptr && !segment_schema_matches(*segment, tablet_schema))) {
+        return nullptr;
+    }
+    return segment;
+}
+
 StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                                  const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
                                                  TabletSchemaPtr tablet_schema, OlapReaderStatistics* stats) {
@@ -2116,10 +2133,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         }
     }
     if (tablet_schema != nullptr) {
-        const auto cached_schema = segment->tablet_schema_share_ptr();
-        if (cached_schema == nullptr || cached_schema->id() != tablet_schema->id() ||
-            cached_schema->schema_version() != tablet_schema->schema_version() ||
-            cached_schema->num_columns() != tablet_schema->num_columns()) {
+        if (!segment_schema_matches(*segment, tablet_schema)) {
             // A physical lookup hit can still be unusable for this request's schema.
             // Count the final cache winner, including an insert-if-absent race.
             g_segment_cache_schema_reject_total << 1;

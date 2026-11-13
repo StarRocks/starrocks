@@ -321,6 +321,24 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Is mutable: Yes
 - Description: Sub-chunk granularity for `RowsMapperIterator` pipelined reads of `.lcrm` files during light Primary Key compaction publish in a shared-data cluster. Each output segment is split into `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` sub-chunks pipelined independently. Smaller values raise the achievable parallelism for few-but-large output segments at the cost of more range reads and an extra memcpy on consume. Defaults to 4 MiB to align with the starcache disk-tier block size.
 
+### lake_scan_parallel_segment_open
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a query scan in a shared-data cluster opens the segments of all rowsets of a tablet at once, one task per segment on the segment loading thread pool, instead of one rowset after another, and builds the iterators of the rowsets in parallel. It applies only to query scans. Takes effect only when `remote_io_scheduler_enable` is `true`. Loads, compaction, and other reads keep following `enable_load_segment_parallel`. Segments whose footers are already open in the segment metadata cache are used without a task. The query profile reports them in `TabletPrepareCachedSegments`, and the footer reads in the other `TabletPrepare*` counters.
+- Introduced in: -
+
+### lake_scan_warm_index
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a query scan in a shared-data cluster, split or not, asynchronously warms the index pages it reads next once it has opened the tablet's segments: the short key index of every segment, the zone map and bloom filter root pages of the predicate columns, and the ordinal index root pages of the read columns. Scans do not wait for the warming, and read as usual if it fails. Segments that the segment metadata filter (`enable_lake_segment_metadata_filter`) excludes from the scan are not warmed. This item takes effect only for queries, and only when the remote I/O scheduler is enabled (`remote_io_scheduler_enable`). It is independent of `lake_scan_parallel_segment_open`. The query profile reports the warming in `TabletPrepareIndexWarmSegments`, `TabletPrepareIndexWarmRanges`, `TabletPrepareIndexWarmBlocks`, `TabletPrepareIndexWarmSkipped`, and `TabletPrepareIndexWarmPrunedSegments`.
+- Introduced in: -
+
 ### lake_segment_metadata_cache_limit_percent
 
 - Default: 10

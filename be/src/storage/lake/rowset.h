@@ -37,6 +37,9 @@
 
 namespace starrocks {
 class DisjunctivePredicates;
+namespace io {
+class CacheWarmHandle;
+}
 class RowsetReadOptions;
 class SegmentReadOptions;
 } // namespace starrocks
@@ -125,6 +128,12 @@ struct PreparedTabletReadState {
     std::vector<RowsetPtr> rowsets;
     std::vector<std::vector<SegmentPtr>> rowset_segments;
     std::vector<std::vector<PreparedSegmentReadStatePtr>> rowset_prepared_states;
+    // lake_scan_warm_index: the cache fills started for the index pages of these segments. A segment's index pages
+    // are read when the scan reaches that segment, which for the last segments of a long scan is near its end, and
+    // dropping a handle withdraws its fills that no reader has joined yet. So the handles are held as long as this
+    // state: until the last split that shares it, or the close of a non-split reader. A finished fill holds no data
+    // (the warm files are not retainable), so holding its handle costs only the handle.
+    std::vector<std::shared_ptr<io::CacheWarmHandle>> index_warm_handles;
 
     void disable_runtime_filter_dependent_cache() {
         for (const auto& prepared_states : rowset_prepared_states) {
@@ -295,6 +304,10 @@ public:
     [[nodiscard]] StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked(const LakeIOOptions& lake_io_opts,
                                                                                OlapReaderStatistics* stats,
                                                                                const std::atomic<bool>* is_cancelled);
+    // Before a CLASSIC physical split plans its splits, hands it the segment set the tablet preparation already
+    // opened, in metadata order, so that the splitter and the split readers use the same Segment objects. The
+    // query's split contexts own these rowsets and their segment references.
+    Status set_segments_for_split(const std::vector<SegmentPtr>& segments);
 
     StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
@@ -316,6 +329,18 @@ public:
         SegmentPtr segment;           // nullptr if the segment was skipped, filtered out, or lost
         int32_t segment_meta_pos = 0; // position in _metadata->segment_metas()
     };
+
+    // Loads the segment at |segment_meta_pos| of segment_metas() the way load_segments() does, for a caller that
+    // loads the segments of several rowsets at once. Only for a rowset that can_hold_segments(), whose segments are
+    // exactly segment_metas() in order. Returns nullptr for a lost segment that experimental_lake_ignore_lost_segment
+    // skips. If |stats| is not null, the footer read is added to it.
+    StatusOr<SegmentPtr> load_segment_at(int32_t segment_meta_pos, const LakeIOOptions& lake_io_opts,
+                                         OlapReaderStatistics* stats);
+
+    // Non-blocking metadata cache lookup for the same position and key as load_segment_at(). Returns nullptr for a
+    // miss, an entry whose open has not finished, an entry opened with another schema, or a rowset whose segments are
+    // not exactly segment_metas() in order.
+    SegmentPtr lookup_opened_segment_at(int32_t segment_meta_pos, const LakeIOOptions& lake_io_opts) const;
 
     // `fill_cache` controls `fill_data_cache` and `fill_meta_cache`
     Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
@@ -342,6 +367,8 @@ public:
     int64_t end_version() const override { return 0; }
 
 private:
+    FileInfo segment_file_info(int32_t segment_meta_pos, const LakeIOOptions& lake_io_opts,
+                               std::shared_ptr<FileSystem> fs) const;
     struct ReadContext {
         const std::vector<SegmentPtr>* prepared_segments = nullptr;
         std::optional<size_t> target_segment_idx = std::nullopt;
