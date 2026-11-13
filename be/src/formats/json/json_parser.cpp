@@ -168,11 +168,23 @@ Status JsonDocumentStreamParser::advance() noexcept {
         ++_doc_stream_itr;
         if (_doc_stream_itr.error() != simdjson::SUCCESS &&
             (batch_size >= cur_left_len || !_check_and_new_doc_stream_iterator())) {
-            // EMPTY: nothing follows the skipped record. truncated_bytes() > 0: stage 1 cut the input inside the
-            // failed record (eg. at a missing comma), so nothing follows it either. Both end the stream and leave
-            // the failed record as one filtered row, as on 3.9.4.
-            if (_doc_stream_itr.error() == simdjson::EMPTY || _doc_stream.truncated_bytes() > 0) {
+            // EMPTY: nothing follows the skipped record. If stage 1 cut the tail (truncated_bytes() > 0), probe the
+            // prefix before the cut: if skipping the failed record reaches EOF/EMPTY there, the stage-1 cut was inside
+            // the failed trailing record (eg. at a missing comma), whereas if a non-EMPTY error remains, an unclosed
+            // mid-buffer container swallowed subsequent complete records before the cut and must surface as a parse error.
+            if (_doc_stream_itr.error() == simdjson::EMPTY) {
                 return Status::EndOfFile("all documents of the stream are iterated");
+            }
+            if (size_t truncated = _doc_stream.truncated_bytes(); truncated > 0 && truncated < cur_left_len) {
+                size_t cut = cur_left_len - truncated;
+                simdjson::ondemand::document_stream probe = _parser->iterate_many(_data + _last_begin_offset, cut, cut);
+                auto it = probe.begin();
+                if (it != probe.end()) {
+                    ++it;
+                }
+                if (it == probe.end() || it.error() == simdjson::EMPTY) {
+                    return Status::EndOfFile("all documents of the stream are iterated");
+                }
             }
             auto err_msg = strings::Substitute("Failed to iterate document stream as object. error: $0",
                                                simdjson::error_message(_doc_stream_itr.error()));
