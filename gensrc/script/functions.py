@@ -1924,16 +1924,12 @@ vectorized_functions = [
     [210015, 'fl_get_inline', True, False, 'VARBINARY', ['FILE'], 'FileFunctions::fl_get_inline'],
     # get_presigned_url(storage_volume, absolute_uri [, expiration_seconds])
     [210016, 'get_presigned_url', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
-     'FileFunctions::get_presigned_url',
-     'FileFunctions::presigned_prepare', 'FileFunctions::presigned_close'],
+     'FileFunctions::get_presigned_url'],
     [210017, 'get_presigned_url', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'],
-     'FileFunctions::get_presigned_url_with_expiration',
-     'FileFunctions::presigned_prepare', 'FileFunctions::presigned_close'],
+     'FileFunctions::get_presigned_url_with_expiration'],
     # get_presigned_file(storage_volume, file [, expiration_seconds])
     [210018, 'get_presigned_file', True, False, 'FILE', ['VARCHAR', 'FILE'],
-     'FileFunctions::get_presigned_file',
-     'FileFunctions::presigned_prepare', 'FileFunctions::presigned_close'],
+     'FileFunctions::get_presigned_file'],
     [210019, 'get_presigned_file', True, False, 'FILE', ['VARCHAR', 'FILE', 'BIGINT'],
-     'FileFunctions::get_presigned_file_with_expiration',
-     'FileFunctions::presigned_prepare', 'FileFunctions::presigned_close'],
+     'FileFunctions::get_presigned_file_with_expiration'],
 ]

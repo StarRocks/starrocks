@@ -15,6 +15,7 @@
 #include "exprs/function_call_expr.h"
 
 #include <cstdint>
+#include <memory>
 
 #include "base/failpoint/fail_point.h"
 #include "base/string/slice.h"
@@ -129,6 +130,11 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
     // todo: varargs use for allocate slice memory, need compute buffer size
     //  for varargs in vectorized engine?
     _fn_context_index = context->register_func(state, return_type, args_types);
+    if (_fn.__isset.cloud_configuration) {
+        // Builtins that act on behalf of a storage volume read its credentials from the FunctionContext.
+        context->fn_context(_fn_context_index)
+                ->set_cloud_configuration(std::make_shared<const TCloudConfiguration>(_fn.cloud_configuration));
+    }
 
     _is_returning_random_value = _fn.fid == 10300 /* rand */ || _fn.fid == 10301 /* random */ ||
                                  _fn.fid == 10302 /* rand */ || _fn.fid == 10303 /* random */ ||

@@ -18,8 +18,12 @@
 
 #include <algorithm>
 #include <array>
+#include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 
+#include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/const_column.h"
@@ -28,6 +32,7 @@
 #include "column/struct_column.h"
 #include "exprs/function_context.h"
 #include "gutil/strings/ascii_ctype.h"
+#include "platform/object_storage_presigner.h"
 
 namespace starrocks {
 
@@ -206,6 +211,158 @@ StatusOr<ColumnPtr> get_file_field(const Columns& columns) {
     return Column::mutate(std::move(result));
 }
 
+constexpr const char* kPresignedUrlName = "GET_PRESIGNED_URL";
+constexpr const char* kPresignedFileName = "GET_PRESIGNED_FILE";
+// Argument positions shared by all presign overloads. Argument 0 is the storage volume name, which the FE has
+// already resolved into the cloud configuration of the function.
+constexpr size_t kPresignTargetArgIdx = 1;
+constexpr size_t kPresignExpirationArgIdx = 2;
+// Bounds of the expiration time, in seconds. They are a policy of these functions: the storage accepts longer
+// lifetimes, but a URL handed to an external service should not outlive the request it was signed for by much.
+constexpr int64_t kMinPresignExpirationSeconds = 1;
+constexpr int64_t kMaxPresignExpirationSeconds = 3600;
+constexpr int64_t kDefaultPresignExpirationSeconds = 3600;
+
+// Expiration time of each row: the default when the overload has no expiration argument or the row is NULL.
+template <bool HasExpiration>
+class PresignExpiration {
+public:
+    explicit PresignExpiration(const Columns& columns) {
+        if constexpr (HasExpiration) {
+            _viewer.emplace(columns[kPresignExpirationArgIdx]);
+        }
+    }
+
+    int64_t at(size_t row) const {
+        if (_viewer.has_value() && !_viewer->is_null(row)) {
+            return _viewer->value(row);
+        }
+        return kDefaultPresignExpirationSeconds;
+    }
+
+private:
+    std::optional<ColumnViewer<TYPE_BIGINT>> _viewer;
+};
+
+// Creates the presigner of one batch from the cloud configuration the FE bound to the call. It keeps no state
+// between batches: the storage client behind it is cached process-wide.
+StatusOr<std::unique_ptr<ObjectStoragePresigner>> new_presigner(FunctionContext* context) {
+    const auto& cloud_configuration = context->cloud_configuration();
+    if (cloud_configuration == nullptr) {
+        return Status::InternalError("presign functions require the cloud configuration of a storage volume");
+    }
+    return ObjectStoragePresigner::create(*cloud_configuration);
+}
+
+bool has_prefix_ignore_case(std::string_view value, std::string_view lower_prefix) {
+    return value.size() >= lower_prefix.size() &&
+           std::equal(lower_prefix.begin(), lower_prefix.end(), value.begin(), [](char expected, char actual) {
+               return ascii_tolower(static_cast<unsigned char>(actual)) == expected;
+           });
+}
+
+bool is_http_uri(std::string_view uri) {
+    return has_prefix_ignore_case(uri, "http://") || has_prefix_ignore_case(uri, "https://");
+}
+
+StatusOr<std::string> presign_read(const ObjectStoragePresigner& presigner, const Slice& uri,
+                                   int64_t expiration_seconds) {
+    if (expiration_seconds < kMinPresignExpirationSeconds || expiration_seconds > kMaxPresignExpirationSeconds) {
+        return Status::InvalidArgument(fmt::format("expiration time must be between {} and {} seconds, but got {}",
+                                                   kMinPresignExpirationSeconds, kMaxPresignExpirationSeconds,
+                                                   expiration_seconds));
+    }
+    return presigner.presign_read(uri.to_string(), expiration_seconds);
+}
+
+template <bool HasExpiration>
+StatusOr<ColumnPtr> presigned_url_impl(FunctionContext* context, const Columns& columns) {
+    const auto& uris = columns[kPresignTargetArgIdx];
+    const size_t num_rows = uris->size();
+    if (uris->only_null()) {
+        return ColumnHelper::create_const_null_column(num_rows);
+    }
+    auto presigner = new_presigner(context);
+    if (!presigner.ok()) {
+        return presigner.status().clone_and_prepend(kPresignedUrlName);
+    }
+    const ColumnViewer<TYPE_VARCHAR> uri_viewer(uris);
+    const PresignExpiration<HasExpiration> expirations(columns);
+    ColumnBuilder<TYPE_VARCHAR> builder(num_rows);
+    for (size_t row = 0; row < num_rows; ++row) {
+        // A NULL URI yields NULL without validating the expiration time of that row.
+        if (uri_viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+        auto url = presign_read(*presigner.value(), uri_viewer.value(row), expirations.at(row));
+        if (!url.ok()) {
+            return url.status().clone_and_prepend(kPresignedUrlName);
+        }
+        builder.append(Slice(url.value()));
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+template <bool HasExpiration>
+StatusOr<ColumnPtr> presigned_file_impl(FunctionContext* context, const Columns& columns) {
+    const auto& input = columns[kPresignTargetArgIdx];
+    const size_t num_rows = input->size();
+    if (input->only_null()) {
+        return ColumnHelper::create_const_null_column(num_rows);
+    }
+    auto presigner = new_presigner(context);
+    if (!presigner.ok()) {
+        return presigner.status().clone_and_prepend(kPresignedFileName);
+    }
+    // A constant FILE is expanded so that each row can be signed with its own expiration time.
+    const ColumnPtr files = ColumnHelper::unpack_and_duplicate_const_column(num_rows, input);
+    const NullableColumn* nullable = nullptr;
+    const Column* data = files.get();
+    if (data->is_nullable()) {
+        nullable = down_cast<const NullableColumn*>(data);
+        data = nullable->data_column_raw_ptr();
+    }
+    if (!data->is_file()) {
+        return Status::InvalidArgument(fmt::format("{} requires a FILE argument", kPresignedFileName));
+    }
+    auto fields = down_cast<const FileColumn*>(data)->fields();
+
+    const ColumnViewer<TYPE_VARCHAR> uri_viewer(fields[FileColumn::URI]);
+    const PresignExpiration<HasExpiration> expirations(columns);
+    ColumnBuilder<TYPE_VARCHAR> builder(num_rows);
+    for (size_t row = 0; row < num_rows; ++row) {
+        if ((nullable != nullptr && nullable->is_null(row)) || uri_viewer.is_null(row)) {
+            // A NULL FILE stays NULL through the outer NULLs. A FILE without a URI, such as inline content, has
+            // nothing to sign.
+            builder.append_null();
+            continue;
+        }
+        const Slice uri = uri_viewer.value(row);
+        // An http(s) URI can already be consumed as it is, so the row passes through unchanged and its
+        // expiration time is not validated.
+        if (is_http_uri(std::string_view(uri.data, uri.size))) {
+            builder.append(uri);
+            continue;
+        }
+        auto url = presign_read(*presigner.value(), uri, expirations.at(row));
+        if (!url.ok()) {
+            return url.status().clone_and_prepend(kPresignedFileName);
+        }
+        builder.append(Slice(url.value()));
+    }
+
+    // Only the URI changes; the other fields are shared with the input.
+    fields[FileColumn::URI] = builder.build_nullable_column();
+    ColumnPtr result = FileColumn::create(std::move(fields));
+    if (nullable != nullptr) {
+        result = NullableColumn::create(result, nullable->null_column());
+    }
+    // The result shares columns with the input, and Chunk filters columns in place without acquiring COW
+    // ownership, including their children.
+    return Column::mutate(std::move(result));
+}
+
 } // namespace
 
 StatusOr<ColumnPtr> FileFunctions::to_file(FunctionContext* context, const Columns& columns) {
@@ -238,6 +395,23 @@ StatusOr<ColumnPtr> FileFunctions::fl_get_checksum(FunctionContext* context, con
 
 StatusOr<ColumnPtr> FileFunctions::fl_get_inline(FunctionContext* context, const Columns& columns) {
     return get_file_field<FileColumn::INLINE>(columns);
+}
+
+StatusOr<ColumnPtr> FileFunctions::get_presigned_url(FunctionContext* context, const Columns& columns) {
+    return presigned_url_impl<false>(context, columns);
+}
+
+StatusOr<ColumnPtr> FileFunctions::get_presigned_url_with_expiration(FunctionContext* context, const Columns& columns) {
+    return presigned_url_impl<true>(context, columns);
+}
+
+StatusOr<ColumnPtr> FileFunctions::get_presigned_file(FunctionContext* context, const Columns& columns) {
+    return presigned_file_impl<false>(context, columns);
+}
+
+StatusOr<ColumnPtr> FileFunctions::get_presigned_file_with_expiration(FunctionContext* context,
+                                                                      const Columns& columns) {
+    return presigned_file_impl<true>(context, columns);
 }
 
 } // namespace starrocks

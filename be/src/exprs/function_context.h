@@ -30,6 +30,7 @@ namespace starrocks {
 
 class MemPool;
 class RuntimeState;
+class TCloudConfiguration;
 
 struct NgramBloomFilterState;
 
@@ -141,6 +142,13 @@ public:
 
     void set_constant_columns(Columns columns) { _constant_columns = std::move(columns); }
 
+    // Cloud configuration the FE bound to this call (TFunction.cloud_configuration), e.g. the storage volume
+    // credentials GET_PRESIGNED_URL signs with. Read-only and shared with clones; null when the FE sent none.
+    void set_cloud_configuration(std::shared_ptr<const TCloudConfiguration> cloud_configuration) {
+        _cloud_configuration = std::move(cloud_configuration);
+    }
+    const std::shared_ptr<const TCloudConfiguration>& cloud_configuration() const { return _cloud_configuration; }
+
     MemPool* mem_pool() { return _mem_pool; }
 
     void set_mem_usage_counter(int64_t* mem_usage_counter) { _mem_usage_counter = mem_usage_counter; }
@@ -220,6 +228,8 @@ private:
     std::vector<FunctionContext::TypeDesc> _arg_types;
 
     Columns _constant_columns;
+
+    std::shared_ptr<const TCloudConfiguration> _cloud_configuration;
 
     // Indicates whether this context has been closed. Used for verification/debugging.
     bool _is_udf = false;
