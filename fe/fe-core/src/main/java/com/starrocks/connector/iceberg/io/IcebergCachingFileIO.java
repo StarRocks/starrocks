@@ -735,20 +735,14 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 return knownLength;
             }
             long len = contentCache.getLength(location());
-<<<<<<< HEAD
-            return len == -1 ? wrappedInputFile.getLength() : len;
-=======
             if (len != -1) {
                 return len;
             }
-            // Not in the cache, so the size is a stat against storage. This is the door iceberg's own
-            // planning goes through -- manifest lists, manifests, metadata.json -- and it is reached
-            // through the FileIO the catalogs install, not through MetadataMgr.
-            BlockingCallValidator.validateNotUnderLock("remote-storage");
+            // Not in the cache, so the size is a stat against storage. Remember it so one open does not
+            // stat the object twice.
             len = wrappedInputFile.getLength();
             knownLength = len;
             return len;
->>>>>>> 42af33d ([BugFix][RB-225] Skip the storage stat on Iceberg metadata reads that do not need it (#83182))
         }
 
         @Override
