@@ -194,6 +194,18 @@ private:
     std::atomic<int32_t> _num_uncancelled_sinkers = 0;
     std::atomic<int32_t> _num_remaining_eos = 0;
 
+<<<<<<< HEAD
+=======
+    // Peak statistics exposed by update_profile() to explain where sink memory goes:
+    // requests waiting in the per-destination queues plus requests already in flight.
+    std::atomic<int32_t> _peak_in_flight_rpc = 0;
+    std::atomic<int64_t> _num_buffered_requests = 0;
+    std::atomic<int64_t> _peak_buffered_requests = 0;
+    std::atomic<int64_t> _peak_request_bytes = 0;
+
+    size_t _memory_limit = 0;
+
+>>>>>>> 3d8ffac ([Enhancement] Add PeakRequestBytes to the exchange sink profile (#82343))
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
     // but there may be still in-flight RPC running.
     // It becomes true, when all sinkers have sent EOS, or been set_finished/cancelled, or RPC has returned error.
