@@ -1501,8 +1501,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         ComputeResource computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr().acquireComputeResource(warehouseId);
         TransactionResult resp = new TransactionResult();
         StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+        // clientIp is the peer of this RPC, the backend. The client that sent the load to it is in user_ip.
+        String loadClientIp = Strings.isNullOrEmpty(request.getUser_ip()) ? clientIp : request.getUser_ip();
         streamLoadManager.beginLoadTaskFromBackend(dbName, table.getName(), request.getLabel(), request.getRequest_id(),
-                loadUser, clientIp, timeoutSecond * 1000, resp, false, computeResource, backendId);
+                loadUser, loadClientIp, clientIp, timeoutSecond * 1000, resp, false, computeResource, backendId);
         if (!resp.stateOK()) {
             LOG.warn(resp.msg);
             throw resp.getException();

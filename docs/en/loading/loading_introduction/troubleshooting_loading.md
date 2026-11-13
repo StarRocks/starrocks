@@ -39,7 +39,7 @@ SHOW LOAD statements return information of Broker Load, Insert Into, and Spark L
 
 #### information_schema.loads
 
-The **information_schema.loads** system view stores information about recent load tasks, including active and recently completed ones. StarRocks periodically synchronizes the data to the **statistics.loads_history** system table for persistent storage.
+The **information_schema.loads** system view stores information about recent load tasks, including active and recently completed ones. When a load task finishes or is cancelled, StarRocks writes its row to the **statistics.loads_history** system table for persistent storage.
 
 **information_schema.loads** provides the following fields:
 
@@ -135,6 +135,12 @@ The **information_schema.loads** system view stores information about recent loa
 #### statistics.loads_history
 
 The **statistics.loads_history** system view stores load records for the last three months by default. DBAs can adjust the retention period by modifying the `partition_ttl` of the view. **statistics.loads_history** has the consistent schema with **information_schema.loads**.
+
+:::note
+After an upgrade, StarRocks adds to **statistics.loads_history** the columns that the new version introduces in **information_schema.loads**. If you later downgrade the cluster to a version that does not have these columns, the synchronization to **statistics.loads_history** fails, because that version copies the rows by column position. To resume the synchronization after the downgrade, use ALTER TABLE to drop the added columns (`txn_id`, `load_id`, `table_id`, `parent_id`, `statement`, `error_code`, `visible_time`, `sink_bytes`, `client_ip`, `be_ids`, `commit_throttle_ms`, `cpu_ns`, `peak_mem_bytes`) from `_statistics_.loads_history`. During an upgrade, upgrade all BEs and CNs before the FEs: a BE or CN of the earlier version cannot serve the new columns, so queries on **information_schema.loads** and the synchronization fail until it is upgraded.
+:::
+
+Rows are written when a load task reaches its final state (FINISHED, CANCELLED, or UNKNOWN). The Leader FE queues finished tasks in memory (at most `loads_history_queue_max_rows`, default 100000, and `loads_history_queue_max_bytes`, default 256 MB; the oldest rows are dropped when either bound is reached) and writes them in batches, either when `loads_history_flush_batch_rows` (default 500) rows are pending or every `loads_history_flush_interval_second` (default 10) seconds. A backstop sync from **information_schema.loads** runs when an FE becomes the Leader and after rows were dropped from the queue (a full queue, or a row whose write failed three times in a row), so that rows that could not be written on completion are still archived; it looks back `loads_history_backstop_lookback_minutes` (default 60) minutes, skips rows already in the table, and `loads_history_sync_interval_second` limits how often it runs. For a dropped row, the backstop sync looks back as far as the load of that row. After a Leader change, load tasks that finished earlier than the look-back and were not written are not archived. A load task that finishes before its transaction is visible (for example, after a publish timeout) is written once the transaction is visible, or without `visible_time` if that takes longer than half the look-back. The FE metrics `loads_history_queue_rows`, `loads_history_dropped_total`, and `loads_history_flush_latency_ms` show the number of rows waiting to be written, the rows dropped from the queue, and the duration of the last write.
 
 ## Identify loading performance issues with Load Profiles
 

@@ -1297,6 +1297,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：BE レプリカが許容できる最大ロード遅延。この値を超えると、他のレプリカからデータをクローンするクローニングが実行されます。
 - 導入時期：-
 
+### `loads_history_backstop_lookback_minutes`
+
+- デフォルト：60
+- タイプ：Int
+- 単位：Minutes
+- 変更可能：Yes
+- 説明：バックストップ同期が、内部 `_statistics_.loads_history` テーブルに欠けている完了済みロードジョブを `information_schema.loads` でどこまで遡って探すかを指定します。バックストップ同期は、この分数前から 1 分前までの間に完了し、`id` がまだテーブルにないロードジョブをコピーします。2 未満の値は 2 として扱われます。キューから行が破棄されたロードジョブについては、バックストップ同期はそのジョブの完了時刻まで遡ります。Leader の切り替え後は、この範囲より前に完了し、まだ書き込まれていないロードジョブは復元されません。トランザクションが可視になる前に完了したロードジョブは、この時間の半分が経過すると `visible_time` なしで書き込まれます。バックストップ同期の実行タイミングについては `loads_history_sync_interval_second` を参照してください。
+- 導入時期：v4.2.0
+
+### `loads_history_flush_batch_rows`
+
+- デフォルト：500
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：内部 `_statistics_.loads_history` テーブルへの即時書き込みをトリガーする完了済みロードジョブの数であり、1 つの `INSERT` あたりの最大行数でもあります。完了したロードジョブ (Broker Load、Spark Load、INSERT、Stream Load、Routine Load タスク、Merge Commit タスク) は完了時に FE メモリ内のキューに入り、バッチで書き込まれます。保留中の行数がこの値に達するか、`loads_history_flush_interval_second` 秒が経過するか、いずれか早い方でバッチが書き込まれます。キューは最大 `loads_history_queue_max_rows` 行を保持し、満杯になると最も古い行が破棄され、`loads_history_dropped_total` メトリクスにカウントされます。
+- 導入時期：v4.2.0
+
+### `loads_history_flush_interval_second`
+
+- デフォルト：10
+- タイプ：Int
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：保留中の行数が `loads_history_flush_batch_rows` 未満のとき、完了したロードジョブが内部 `_statistics_.loads_history` テーブルに書き込まれるまで FE メモリ内で待機する最長時間。値を小さくすると履歴レコードが早く利用可能になりますが、小さな `INSERT` 文がより頻繁に実行されます。
+- 導入時期：v4.2.0
+
+### `loads_history_queue_max_bytes`
+
+- デフォルト：268435456
+- タイプ：Long
+- 単位：Bytes
+- 変更可能：Yes
+- 説明：内部 `_statistics_.loads_history` テーブルへの書き込みを待つ完了済みロードジョブが Leader FE 上で使用できる最大メモリ。行はレンダリング済みの SQL 値として保持されるため、この上限は近似値です。上限に達すると最も古い行が破棄され、`loads_history_queue_max_rows` と同様に `loads_history_dropped_total` メトリクスにカウントされます。
+- 導入時期：v4.2.0
+
+### `loads_history_queue_max_rows`
+
+- デフォルト：100000
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：内部 `_statistics_.loads_history` テーブルへの書き込みを待つ間、Leader FE のメモリに保持する完了済みロードジョブの最大数。キューが満杯になると最も古い行が破棄され、`loads_history_dropped_total` メトリクスにカウントされます。実行時に値を下げると、次のエンキュー時に新しい上限を超える最も古い行が破棄されます。
+- 導入時期：v4.2.0
+
 ### `loads_history_retained_days`
 
 - デフォルト：30
@@ -1312,7 +1357,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：Seconds
 - 変更可能：Yes
-- 説明：LoadsHistorySyncer が `information_schema.loads` から内部 `_statistics_.loads_history` テーブルに完了したロードジョブを定期的に同期する間隔 (秒単位)。この値は、FrontendDaemon の間隔を設定するためにコンストラクターで 1000 倍されます。シンカーは最初の実行をスキップし (テーブル作成を許可するため)、1 分以上前に完了したロードのみをインポートします。値が小さいと DML とエクゼキュータの負荷が増加し、値が大きいと履歴ロードレコードの可用性が遅延します。ターゲットテーブルの保持/パーティショニング動作については `loads_history_retained_days` を参照してください。
+- 説明：完了したロードジョブを `information_schema.loads` から内部 `_statistics_.loads_history` テーブルにコピーするバックストップ同期の最小間隔 (秒単位)。完了したロードジョブは通常、完了時にテーブルへ直接書き込まれます (`loads_history_flush_interval_second` と `loads_history_flush_batch_rows` を参照)。バックストップ同期は、FE が Leader になったときと、キューから行が破棄された後 (キューの満杯、または行の書き込みが 3 回連続で失敗した場合) にのみ実行されます。1 未満の値は 1 として扱われます。1 分以上前かつ直近 `loads_history_backstop_lookback_minutes` 分以内に完了したロードのみをコピーし、テーブルに既に存在する行はスキップし、同じ行が二度書き込まれないようメモリ内キューが空になった後にのみ実行されます。FE が Leader でなくなった時点でメモリ内キューに残っている行は破棄され、新しい Leader のバックストップ同期によって補われます。FE メトリクス `loads_history_queue_rows`、`loads_history_dropped_total`、`loads_history_flush_latency_ms` がライターの状態を示します。ターゲットテーブルの保持/パーティショニング動作については `loads_history_retained_days` を参照してください。
 - 導入時期：v3.3.6, v3.4.0, v3.5.0
 
 ### `max_broker_load_job_concurrency`

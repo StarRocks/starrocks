@@ -703,6 +703,24 @@ struct TLoadInfo {
     35: optional i64 load_start_time_ms
     36: optional i64 load_commit_time_ms
     37: optional i64 load_finish_time_ms
+    // Job-level columns of information_schema.loads. txn_id (18) and load_id (25)
+    // above back the TXN_ID / LOAD_ID columns.
+    38: optional i64 table_id
+    // Routine load task -> routine load job id; merge commit task -> merge commit job id.
+    39: optional i64 parent_id
+    // INSERT jobs only: INSERT_SELECT, INSERT_VALUES, INSERT_FILES, UPDATE, DELETE, MERGE.
+    40: optional string statement
+    41: optional string error_code
+    // UTC epoch milliseconds at which the transaction became VISIBLE.
+    42: optional i64 visible_time_ms
+    43: optional i64 sink_bytes
+    44: optional string client_ip
+    // Comma-separated ids of the backends that executed the load.
+    45: optional string be_ids
+    // Milliseconds the commit was held back by lake ingest slowdown.
+    46: optional i64 commit_throttle_ms
+    47: optional i64 cpu_ns
+    48: optional i64 peak_mem_bytes
 }
 
 struct TGetLoadsResult {

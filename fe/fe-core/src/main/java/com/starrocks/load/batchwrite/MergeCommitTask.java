@@ -49,6 +49,7 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.LoadConstants;
 import com.starrocks.load.loadv2.LoadErrorUtils;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.load.loadv2.LoadsHistoryWriter;
 import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
@@ -66,6 +67,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.VisibleStateWaiter;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.arrow.util.VisibleForTesting;
@@ -81,8 +83,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
@@ -238,6 +242,16 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
     private volatile long txnId = -1;
     // The id of the target table, set once run() resolves it. -1 until then.
     private volatile long tableId = -1;
+    // When the transaction became visible; -1 until publish succeeded.
+    private volatile long visibleTimeMs = -1;
+    // Captured at commit: the transaction only keeps the value in memory and may be purged before the task.
+    private volatile long commitThrottleMs = -1;
+    // Set when run() starts. From then on run() hands the loads_history row over itself, after it
+    // collected the profile, so that the row carries the profile id.
+    private final AtomicBoolean runStarted = new AtomicBoolean(false);
+    private final AtomicBoolean historyRecorded = new AtomicBoolean(false);
+    // Id of the table-level MergeCommitJob that created this task; -1 when created standalone.
+    private volatile long mergeCommitJobId = -1;
     // Load statistics; set when entering COMMITTING in {@link #run()}.
     private volatile LoadStats loadStats = null;
     // Observes state transitions for unit tests.
@@ -300,6 +314,7 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
      */
     @Override
     public void run() {
+        runStarted.set(true);
         long startTimeMs = System.currentTimeMillis();
         loadTimeTrace.startTimeMs.set(startTimeMs);
         loadTimeTrace.pendingCostMs.set(startTimeMs - loadTimeTrace.createTimeMs);
@@ -357,6 +372,11 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
                         null, timeoutWatcher.getLeftTimeoutMillis());
                 loadTimeTrace.commitTimeMs.set(System.currentTimeMillis());
             }
+            TransactionState committedTxn = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionState(dbId, localTxnId);
+            if (committedTxn != null) {
+                this.commitThrottleMs = committedTxn.getCommitThrottleMs();
+            }
 
             // 5) Wait for publish/visibility.
             transitionToState(TaskState.COMMITTED, "", null, () -> {});
@@ -367,6 +387,10 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
                 if (timeout) {
                     throw new Exception(String.format("publish timed out after %sms", publishTimeoutMs));
                 }
+                TransactionState visibleTxn = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getTransactionState(dbId, localTxnId);
+                this.visibleTimeMs = visibleTxn != null && visibleTxn.getFinishTime() > 0
+                        ? visibleTxn.getFinishTime() : System.currentTimeMillis();
             } catch (Exception e) {
                 String error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
                 publishFailMsg = "publish failed: " + error;
@@ -407,6 +431,7 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             completionCallback.finish(this);
             updateMetrics();
             collectProfile(connectContext, loadPlanner, coordinator);
+            recordHistory();
             // close tracer after profile collection
             Tracers.close();
             if (LOG.isDebugEnabled()) {
@@ -735,6 +760,10 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
         }
         if (targetState.isFinalState()) {
             loadTimeTrace.endTimeMs.set(System.currentTimeMillis());
+            if (!runStarted.get()) {
+                // Cancelled before it ran: no profile will follow, record the row now.
+                recordHistory();
+            }
         }
         if (observer != null && prevTaskState != null) {
             observer.onTransition(prevTaskState, targetState, targetStateMsg, taskStateCancelHandler != null);
@@ -742,6 +771,43 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
         if (targetState == TaskState.CANCELLED && prevTaskStateCancelHandler != null) {
             prevTaskStateCancelHandler.cancel(targetStateMsg);
         }
+    }
+
+    /** Hand the row of this task to the loads_history writer, once. */
+    private void recordHistory() {
+        if (!historyRecorded.compareAndSet(false, true)) {
+            return;
+        }
+        // A task whose publish wait timed out is FINISHED while its transaction is only
+        // committed: the writer holds the row until the visible time is known.
+        if (isPublishPending() && LoadsHistoryWriter.holdUntilVisible(taskId, this::toHistoryRow)) {
+            return;
+        }
+        LoadsHistoryWriter.offerAll(this::toThrift);
+    }
+
+    @VisibleForTesting
+    boolean isPublishPending() {
+        if (visibleTimeMs > 0 || txnId < 0 || getTaskState().first != TaskState.FINISHED) {
+            return false;
+        }
+        TransactionState txnState = lookupTransaction();
+        return txnState != null && txnState.getTransactionStatus() == TransactionStatus.COMMITTED;
+    }
+
+    private TransactionState lookupTransaction() {
+        try {
+            return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, txnId);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // The row of a task that finished before its transaction was visible, read again later:
+    // toThrift takes the visible time from the transaction once it is visible.
+    private TLoadInfo toHistoryRow() {
+        List<TLoadInfo> rows = toThrift();
+        return rows.isEmpty() ? null : rows.get(0);
     }
 
     Pair<TaskState, String> getTaskState() {
@@ -797,6 +863,14 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
     @Override
     public long getId() {
         return taskId;
+    }
+
+    public long getMergeCommitJobId() {
+        return mergeCommitJobId;
+    }
+
+    public void setMergeCommitJobId(long mergeCommitJobId) {
+        this.mergeCommitJobId = mergeCommitJobId;
     }
 
     @Override
@@ -900,7 +974,9 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             info.setUser(user);
             info.setLabel(label);
             info.setLoad_id(DebugUtil.printId(loadId));
-            info.setTxn_id(txnId);
+            if (txnId > 0) {
+                info.setTxn_id(txnId);
+            }
             if (ProfileManager.getInstance().hasProfile(DebugUtil.printId(loadId))) {
                 info.setProfile_id(DebugUtil.printId(loadId));
             }
@@ -969,6 +1045,36 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             double progress = taskState == TaskState.FINISHED ? 1.0
                     : (double) Math.max(0, Math.min(mergeCommitIntervalMs, mergeWindowElapsedMs)) / mergeCommitIntervalMs;
             info.setProgress(String.format("Merge Window %.2f%%", progress * 100));
+
+            if (tableId >= 0) {
+                info.setTable_id(tableId);
+            }
+            if (mergeCommitJobId >= 0) {
+                info.setParent_id(mergeCommitJobId);
+            }
+            if (stats != null) {
+                info.setSink_bytes(stats.normalBytes);
+            }
+            if (backendIds != null && !backendIds.isEmpty()) {
+                info.setBe_ids(LoadJob.joinForLoadsColumn(",", new TreeSet<>(backendIds)));
+            }
+            TransactionState txnState = txnId >= 0
+                    ? GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, txnId)
+                    : null;
+            if (commitThrottleMs >= 0) {
+                info.setCommit_throttle_ms(commitThrottleMs);
+            } else if (txnState != null && txnState.getCommitThrottleMs() >= 0) {
+                info.setCommit_throttle_ms(txnState.getCommitThrottleMs());
+            }
+            if (visibleTimeMs > 0) {
+                info.setVisible_time_ms(visibleTimeMs);
+            } else if (taskState == TaskState.FINISHED && txnState != null
+                    && txnState.getTransactionStatus() == TransactionStatus.VISIBLE
+                    && txnState.getFinishTime() > 0) {
+                // The publish wait timed out and the task finished without seeing the transaction
+                // become visible: trust the transaction, which did later.
+                info.setVisible_time_ms(txnState.getFinishTime());
+            }
             return info;
         });
     }

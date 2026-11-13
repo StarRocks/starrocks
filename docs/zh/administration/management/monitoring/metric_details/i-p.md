@@ -557,6 +557,24 @@ description: "Alphabetical i - p"
 - 类型：瞬时值
 - 描述：导入 Sink 关闭线程池的最大线程数，由 `load_sink_close_thread_pool_num_max` 设置。
 
+## `loads_history_dropped_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：Leader FE 在写入 `_statistics_.loads_history` 之前丢弃的已完成导入记录总数。内存队列已满（`loads_history_queue_max_rows`，默认 100000，或 `loads_history_queue_max_bytes`）或某条记录连续三次写入失败时，记录会被丢弃。被丢弃的记录之后由兜底同步补齐（参见 `loads_history_sync_interval_second`）。
+
+## `loads_history_flush_latency_ms`
+
+- 单位：毫秒
+- 类型：瞬时值
+- 描述：最近一次成功将已完成导入记录批量写入 `_statistics_.loads_history` 的耗时。
+
+## `loads_history_queue_rows`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：在 Leader FE 内存中等待写入 `_statistics_.loads_history` 的已完成导入记录数量。
+
 ## `local_column_pool_bytes (Deprecated)`
 
 ## `low_cardinality_dict_cache_bytes`

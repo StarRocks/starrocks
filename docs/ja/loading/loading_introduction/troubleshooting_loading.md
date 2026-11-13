@@ -39,7 +39,7 @@ SHOW LOAD ステートメントは Broker Load、Insert Into、Spark Load タス
 
 #### information_schema.loads
 
-**information_schema.loads** システムビューは、最近のロードタスクに関する情報を保存し、アクティブなものと最近完了したものを含みます。StarRocks は定期的にデータを **statistics.loads_history** システムテーブルに同期し、永続的に保存します。
+**information_schema.loads** システムビューは、最近のロードタスクに関する情報を保存し、アクティブなものと最近完了したものを含みます。ロードタスクが完了またはキャンセルされると、StarRocks はその行を **statistics.loads_history** システムテーブルに書き込み、永続的に保存します。
 
 **information_schema.loads** は以下のフィールドを提供します：
 
@@ -135,6 +135,12 @@ SHOW LOAD ステートメントは Broker Load、Insert Into、Spark Load タス
 #### statistics.loads_history
 
 **statistics.loads_history** システムビューは、デフォルトで過去3か月間のロード記録を保存します。DBA はビューの `partition_ttl` を変更して保持期間を調整できます。**statistics.loads_history** は **information_schema.loads** と一貫したスキーマを持っています。
+
+:::note
+アップグレード後、StarRocks は新しいバージョンで **information_schema.loads** に追加された列を **statistics.loads_history** にも追加します。その後、これらの列を持たないバージョンにクラスターをダウングレードすると、そのバージョンは列の位置で行をコピーするため、**statistics.loads_history** への同期が失敗します。ダウングレード後に同期を再開するには、ALTER TABLE を使用して、追加された列（`txn_id`、`load_id`、`table_id`、`parent_id`、`statement`、`error_code`、`visible_time`、`sink_bytes`、`client_ip`、`be_ids`、`commit_throttle_ms`、`cpu_ns`、`peak_mem_bytes`）を `_statistics_.loads_history` から削除してください。アップグレード時は、FE より先にすべての BE と CN をアップグレードしてください。旧バージョンの BE または CN は新しい列を提供できないため、アップグレードされるまで **information_schema.loads** へのクエリと同期は失敗します。
+:::
+
+行は、ロードタスクが最終状態 (FINISHED、CANCELLED、または UNKNOWN) に達したときに書き込まれます。Leader FE は完了したタスクをメモリ内のキュー (最大 `loads_history_queue_max_rows` 行、デフォルト 100000、および `loads_history_queue_max_bytes`、デフォルト 256 MB。いずれかの上限に達すると最も古い行が破棄されます) に入れ、保留中の行数が `loads_history_flush_batch_rows` (デフォルト 500) に達するか、`loads_history_flush_interval_second` (デフォルト 10) 秒ごとにバッチで書き込みます。FE が Leader になったとき、およびキューから行が破棄された後 (キューの満杯、または行の書き込みが 3 回連続で失敗した場合) には、**information_schema.loads** からのバックストップ同期が実行され、完了時に書き込めなかった行もアーカイブされます。バックストップ同期は `loads_history_backstop_lookback_minutes` (デフォルト 60) 分遡り、テーブルに既にある行はスキップし、`loads_history_sync_interval_second` がその実行頻度を制限します。破棄された行については、バックストップ同期はその行のロードタスクの完了時刻まで遡ります。Leader の切り替え後は、遡る範囲より前に完了し、まだ書き込まれていないロードタスクはアーカイブされません。トランザクションが可視になる前に完了したロードタスク (たとえば Publish タイムアウトの場合) の行は、トランザクションが可視になった時点で書き込まれます。遡る時間の半分を超えて待った場合は、`visible_time` なしで書き込まれます。FE メトリクス `loads_history_queue_rows`、`loads_history_dropped_total`、`loads_history_flush_latency_ms` は、それぞれ書き込み待ちの行数、キューから破棄された行数、最後の書き込みにかかった時間を示します。
 
 ## Load Profiles でロードパフォーマンスの問題を特定する
 

@@ -89,6 +89,7 @@ import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.LoadJobWithWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -114,6 +115,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
     public static final String LOADED_BYTES = "loaded.bytes";
 
     private static final int TASK_SUBMIT_RETRY_NUM = 2;
+    // Length of the varchar columns of _statistics_.loads_history; values built here must fit.
+    public static final int LOADS_VARCHAR_COLUMN_LENGTH = 2048;
 
     @SerializedName("id")
     protected long id;
@@ -160,13 +163,22 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
     protected long loadCommittedTimestamp = -1;
     @SerializedName("f")
     protected long finishTimestamp = -1;
+    // When the transaction became VISIBLE; -1 until then and for cancelled jobs.
+    @SerializedName("vt")
+    protected long visibleTimestamp = -1;
 
     @SerializedName("tx")
     protected long transactionId;
     @SerializedName("fm")
     protected FailMsg failMsg;
     protected Map<Long, LoadTask> idToTasks = Maps.newConcurrentMap();
+    // Persisted so that LOAD_ID survives a restart; cleared when the job is retried.
+    @SerializedName("lids")
     protected List<String> loadIds = Lists.newArrayList();
+    // Captured when the transaction commits: the transaction only keeps the value in memory and
+    // is purged long before the job is. -1 when ingestion slowdown never evaluated the commit.
+    @SerializedName("ctm")
+    protected long commitThrottleMs = -1;
     protected Set<Long> finishedTaskIds = Sets.newHashSet();
     @SerializedName("lt")
     protected EtlStatus loadingStatus = new EtlStatus();
@@ -200,6 +212,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
     protected boolean isCommitting = false;
 
     protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
+    // Whether the history row is to be recorded when the write lock is released. Guarded by the write lock.
+    private boolean historyPending = false;
 
     // this request id is only used for checking if a load begin request is a duplicate request.
     protected TUniqueId requestId;
@@ -240,7 +254,26 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
     }
 
     protected void writeUnlock() {
+        // The history row is taken once the lock is released: toThrift() looks the transaction
+        // up, and the transaction manager must not be entered with the job lock held.
+        boolean record = historyPending && lock.getWriteHoldCount() == 1;
+        if (record) {
+            historyPending = false;
+        }
         lock.writeLock().unlock();
+        if (record) {
+            LoadsHistoryWriter.offer(this::toThrift);
+        }
+    }
+
+    // Record the final state of this job in loads_history, after the write lock is released
+    // when the caller holds it.
+    private void recordHistoryAfterUnlock() {
+        if (lock.isWriteLockedByCurrentThread()) {
+            historyPending = true;
+        } else {
+            LoadsHistoryWriter.offer(this::toThrift);
+        }
     }
 
     @Override
@@ -325,7 +358,15 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
         createTimestamp = System.currentTimeMillis();
         idToTasks.clear();
         finishedTaskIds.clear();
+        // the next attempt runs under load ids of its own
+        loadIds.clear();
         loadingStatus.reset();
+    }
+
+    protected void captureCommitThrottle(TransactionState txnState) {
+        if (txnState != null && txnState.getCommitThrottleMs() >= 0) {
+            commitThrottleMs = txnState.getCommitThrottleMs();
+        }
     }
 
     public boolean isTimeout() {
@@ -439,6 +480,16 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
      * Ids of the tables this job loads into, whether or not they still exist.
      */
     public abstract Set<Long> getTableIds();
+
+    // Which DML statement produced the job (INSERT jobs only), otherwise null.
+    protected String getStatementKind() {
+        return null;
+    }
+
+    // Address of the client that submitted the job, otherwise null.
+    protected String getClientIp() {
+        return null;
+    }
 
     protected abstract List<TabletCommitInfo> getTabletCommitInfos();
 
@@ -710,6 +761,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
         // can be remove due to label expiration so soon as possible
         finishTimestamp = createTimestamp;
         state = JobState.UNKNOWN;
+        recordHistoryAfterUnlock();
     }
 
     private void executeLoad() {
@@ -834,6 +886,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
         } else {
             state = JobState.CANCELLED;
         }
+        recordHistoryAfterUnlock();
     }
 
     private void executeFinish() {
@@ -848,6 +901,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
         }
         // when load job finished, there is no need to hold the tasks which are the biggest memory consumers.
         idToTasks.clear();
+        recordHistoryAfterUnlock();
     }
 
     public boolean checkDataQuality() {
@@ -1034,9 +1088,39 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
         return gson.toJson(properties);
     }
 
+    /**
+     * Join values for a varchar(2048) column of information_schema.loads and its archive,
+     * keeping only as many leading values as fit so that no value is cut in the middle.
+     */
+    public static String joinForLoadsColumn(String separator, Iterable<?> values) {
+        StringBuilder sb = new StringBuilder();
+        for (Object value : values) {
+            String text = String.valueOf(value);
+            int length = sb.length() + (sb.length() == 0 ? 0 : separator.length()) + text.length();
+            if (length > LOADS_VARCHAR_COLUMN_LENGTH) {
+                break;
+            }
+            if (sb.length() > 0) {
+                sb.append(separator);
+            }
+            sb.append(text);
+        }
+        return sb.toString();
+    }
+
     public TLoadInfo toThrift() {
+        // Looked up before taking the job lock. On a follower, replaying a transaction holds the
+        // transaction manager lock while it takes the job lock, so the columns added here do not
+        // enter the transaction manager with the job lock held.
+        long lookedUpTxnId = transactionId;
+        TransactionState txnState = GlobalStateMgr.getCurrentState()
+                .getGlobalTransactionMgr().getTransactionState(dbId, lookedUpTxnId);
         readLock();
         try {
+            if (lookedUpTxnId != transactionId) {
+                // the job moved on to another transaction in between
+                txnState = null;
+            }
             TLoadInfo info = new TLoadInfo();
             info.setJob_id(id);
             info.setLabel(label);
@@ -1045,9 +1129,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
             } catch (MetaNotFoundException e) {
                 info.setDb("");
             }
-            info.setTxn_id(transactionId);
+            if (transactionId > 0) {
+                info.setTxn_id(transactionId);
+            }
             if (!loadIds.isEmpty()) {
-                info.setLoad_id(Joiner.on(", ").join(loadIds));
+                info.setLoad_id(joinForLoadsColumn(", ", loadIds));
 
                 List<String> profileIds = Lists.newArrayList();
                 for (String loadId : loadIds) {
@@ -1056,7 +1142,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
                     }
                 }
                 if (!profileIds.isEmpty()) {
-                    info.setProfile_id(Joiner.on(", ").join(loadIds));
+                    info.setProfile_id(joinForLoadsColumn(", ", loadIds));
                 }
             }
             try {
@@ -1162,6 +1248,40 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
             } else {
                 info.setWarehouse("");
             }
+
+            Set<Long> tableIds = getTableIds();
+            if (tableIds.size() == 1) {
+                info.setTable_id(tableIds.iterator().next());
+            }
+            String statementKind = getStatementKind();
+            if (!Strings.isNullOrEmpty(statementKind)) {
+                info.setStatement(statementKind);
+            }
+            String clientIp = getClientIp();
+            if (!Strings.isNullOrEmpty(clientIp)) {
+                info.setClient_ip(clientIp);
+            }
+            if (visibleTimestamp > 0) {
+                info.setVisible_time_ms(visibleTimestamp);
+            } else if (state == JobState.FINISHED && txnState != null
+                    && txnState.getTransactionStatus() == TransactionStatus.VISIBLE) {
+                // Jobs that finished before visibleTimestamp existed: trust the transaction, not the
+                // job, because an INSERT is marked FINISHED even when its publish wait timed out.
+                long visibleMs = txnState.getFinishTime() > 0 ? txnState.getFinishTime() : finishTimestamp;
+                if (visibleMs > 0) {
+                    info.setVisible_time_ms(visibleMs);
+                }
+            }
+            info.setSink_bytes(loadingStatus.getLoadStatistic().totalSinkLoadBytes());
+            Set<Long> backendIds = loadingStatus.getLoadStatistic().distinctBackendIds();
+            if (!backendIds.isEmpty()) {
+                info.setBe_ids(joinForLoadsColumn(",", backendIds));
+            }
+            if (commitThrottleMs >= 0) {
+                info.setCommit_throttle_ms(commitThrottleMs);
+            } else if (txnState != null && txnState.getCommitThrottleMs() >= 0) {
+                info.setCommit_throttle_ms(txnState.getCommitThrottleMs());
+            }
             return info;
         } finally {
             readUnlock();
@@ -1210,6 +1330,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
         writeLock();
         try {
             unprotectUpdateLoadingStatus(txnState);
+            captureCommitThrottle(txnState);
             isCommitting = false;
             state = JobState.COMMITTED;
             loadCommittedTimestamp = System.currentTimeMillis();
@@ -1285,6 +1406,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
     public void afterVisible(TransactionState txnState) {
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onLoadJobTransactionFinish(txnState);
         unprotectUpdateLoadingStatus(txnState);
+        writeLock();
+        try {
+            visibleTimestamp = txnState.getFinishTime() > 0 ? txnState.getFinishTime() : System.currentTimeMillis();
+            captureCommitThrottle(txnState);
+        } finally {
+            writeUnlock();
+        }
         updateState(JobState.FINISHED);
     }
 
@@ -1295,6 +1423,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
             replayTxnAttachment(txnState);
             progress = 100;
             finishTimestamp = txnState.getFinishTime();
+            visibleTimestamp = txnState.getFinishTime();
             state = JobState.FINISHED;
             failMsg = null;
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);

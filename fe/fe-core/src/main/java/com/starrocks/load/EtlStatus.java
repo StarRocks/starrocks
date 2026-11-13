@@ -58,6 +58,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.function.Consumer;
 
 public class EtlStatus implements Writable {
@@ -438,6 +439,23 @@ public class EtlStatus implements Writable {
                 totalSourceRows += rows;
             }
             return totalSourceRows;
+        }
+
+        public synchronized long totalSinkLoadBytes() {
+            long totalSinkBytes = 0;
+            for (long bytes : sinkBytesCounterTbl.values()) {
+                totalSinkBytes += bytes;
+            }
+            return totalSinkBytes;
+        }
+
+        // Ids of every backend that took part in any load task, sorted and de-duplicated.
+        public synchronized Set<Long> distinctBackendIds() {
+            Set<Long> ids = new TreeSet<>();
+            for (List<Long> backendIds : allBackendIds.values()) {
+                ids.addAll(backendIds);
+            }
+            return ids;
         }
 
         public synchronized long totalRows() {

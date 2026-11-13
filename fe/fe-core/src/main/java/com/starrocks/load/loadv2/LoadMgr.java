@@ -255,7 +255,9 @@ public class LoadMgr implements MemoryTrackable {
                                                long timeout,
                                                long warehouseId,
                                                Coordinator coordinator,
-                                               InsertLoadTxnCallback insertLoadTxnCallback) throws StarRocksException {
+                                               InsertLoadTxnCallback insertLoadTxnCallback,
+                                               String statementKind,
+                                               String clientIp) throws StarRocksException {
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
@@ -265,7 +267,8 @@ public class LoadMgr implements MemoryTrackable {
         InsertLoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
             loadJob = new InsertLoadJob(label, db.getId(), tableId, txnId, loadId, user,
-                    createTimestamp, timeout, warehouseId, coordinator, insertLoadTxnCallback);
+                    createTimestamp, timeout, warehouseId, coordinator, insertLoadTxnCallback,
+                    statementKind, clientIp);
             loadJob.setLoadFileInfo(estimateStats.estimateFileNum, estimateStats.estimateFileSize);
             loadJob.setEstimateScanRow(estimateStats.estimateScanRows);
             loadJob.setTransactionId(txnId);
@@ -668,27 +671,6 @@ public class LoadMgr implements MemoryTrackable {
         } finally {
             readUnlock();
         }
-    }
-
-    public long getLatestFinishTimeExcludeTable(long dbId, long tableId) {
-        long latestFinishTime = -1L;
-        readLock();
-        try {
-            for (LoadJob loadJob : idToLoadJob.values()) {
-                if (loadJob instanceof InsertLoadJob
-                        && loadJob.getDbId() == dbId
-                        && ((InsertLoadJob) loadJob).getTableId() == tableId) {
-                    continue;
-                }
-                if (loadJob.isFinal()) {
-                    latestFinishTime = Math.max(latestFinishTime, loadJob.getFinishTimestamp());
-                }
-            }
-        } finally {
-            readUnlock();
-        }
-
-        return latestFinishTime;
     }
 
     public List<LoadJob> getLoadJobsByDb(long dbId, String labelValue, boolean accurateMatch) {

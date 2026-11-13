@@ -39,7 +39,7 @@ SHOW LOAD 语句返回 Broker Load、Insert Into 和 Spark Load 任务的信息�
 
 #### information_schema.loads
 
-**information_schema.loads** 系统视图存储有关最近导入任务的信息，包括活动的和最近完成的任务。StarRocks 定期将数据同步到 **statistics.loads_history** 系统表以进行持久存储。
+**information_schema.loads** 系统视图存储有关最近导入任务的信息，包括活动的和最近完成的任务。导入任务完成或取消时，StarRocks 会将其记录写入 **statistics.loads_history** 系统表以进行持久存储。
 
 **information_schema.loads** 提供以下字段：
 
@@ -135,6 +135,12 @@ SHOW LOAD 语句返回 Broker Load、Insert Into 和 Spark Load 任务的信息�
 #### statistics.loads_history
 
 **statistics.loads_history** 系统视图默认存储最近三个月的导入记录。数据库管理员可以通过修改视图的 `partition_ttl` 来调整保留期。**statistics.loads_history** 的模式与 **information_schema.loads** 一致。
+
+:::note
+升级后，StarRocks 会把新版本在 **information_schema.loads** 中新增的列添加到 **statistics.loads_history**。如果之后将集群降级到没有这些列的版本，向 **statistics.loads_history** 的同步会失败，因为该版本按列的位置复制数据。降级后如需恢复同步，请使用 ALTER TABLE 从 `_statistics_.loads_history` 中删除新增的列（`txn_id`、`load_id`、`table_id`、`parent_id`、`statement`、`error_code`、`visible_time`、`sink_bytes`、`client_ip`、`be_ids`、`commit_throttle_ms`、`cpu_ns`、`peak_mem_bytes`）。升级时请先升级所有 BE 和 CN，再升级 FE：旧版本的 BE 或 CN 无法提供新增的列，在其升级之前，对 **information_schema.loads** 的查询和同步都会失败。
+:::
+
+记录在导入任务到达最终状态（FINISHED、CANCELLED 或 UNKNOWN）时写入。Leader FE 将已完成的任务放入内存队列（最多 `loads_history_queue_max_rows` 行，默认 100000，以及 `loads_history_queue_max_bytes`，默认 256 MB；达到任一上限时丢弃最旧的行）并分批写入：待写入行数达到 `loads_history_flush_batch_rows`（默认 500）或每隔 `loads_history_flush_interval_second`（默认 10）秒写入一次。当 FE 成为 Leader 时，以及有行被从队列中丢弃之后（队列已满，或某一行连续三次写入失败），会从 **information_schema.loads** 运行一次兜底同步，以归档未能在完成时写入的记录；它回溯 `loads_history_backstop_lookback_minutes`（默认 60）分钟，跳过表中已有的行，`loads_history_sync_interval_second` 限制其运行频率。对于被丢弃的行，兜底同步会回溯到该行对应的导入任务的完成时间。Leader 切换之后，完成时间早于回溯范围且尚未写入的导入任务不会被归档。如果导入任务在其事务可见之前就已完成（例如 Publish 超时），其记录会在事务可见后写入；如果等待超过回溯时间的一半，则写入不带 `visible_time` 的记录。FE 指标 `loads_history_queue_rows`、`loads_history_dropped_total` 和 `loads_history_flush_latency_ms` 分别表示等待写入的行数、从队列中丢弃的行数以及最近一次写入的耗时。
 
 ## 使用 Load Profiles 识别导入性能问题
 

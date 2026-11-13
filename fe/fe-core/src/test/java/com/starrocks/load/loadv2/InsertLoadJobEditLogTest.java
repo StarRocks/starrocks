@@ -15,18 +15,25 @@
 package com.starrocks.load.loadv2;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.load.loadv2.LoadsHistoryWriter.Row;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TLoadJobType;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -47,7 +54,88 @@ public class InsertLoadJobEditLogTest {
 
     @AfterEach
     public void tearDown() {
+        LoadsHistoryWriter.activate(null);
         UtFrameUtils.tearDownForPersisTest();
+    }
+
+    @Test
+    public void testHistoryRowCarriesTheProfileTheStatementRegistersLater() throws Exception {
+        LoadsHistoryWriter writer = new LoadsHistoryWriter(10, (sql, rows) -> { });
+        LoadsHistoryWriter.activate(writer);
+        ConnectContext previous = ConnectContext.get();
+        ConnectContext session = new ConnectContext();
+        session.setThreadLocalInfo();
+        try {
+            // The statement pushes its profile only after it recorded the job, so the profile
+            // manager does not know the load id yet when the row is taken.
+            session.getSessionVariable().setEnableProfile(true);
+            createLoadingJob("profiled_label").setLoadFinishOrCancel("", "");
+            List<Row> rows = writer.takeBatch(10, 0);
+            Assertions.assertEquals(1, rows.size());
+            Assertions.assertTrue(rows.get(0).values.contains("'profiled_label', '" + LOAD_ID + "', "), rows.get(0).values);
+
+            // A statement that keeps no profile leaves the column empty.
+            session.getSessionVariable().setEnableProfile(false);
+            createLoadingJob("plain_label").setLoadFinishOrCancel("", "");
+            rows = writer.takeBatch(10, 0);
+            Assertions.assertEquals(1, rows.size());
+            Assertions.assertTrue(rows.get(0).values.contains("'plain_label', NULL, "), rows.get(0).values);
+        } finally {
+            ConnectContext.remove();
+            if (previous != null) {
+                previous.setThreadLocalInfo();
+            }
+        }
+    }
+
+    @Test
+    public void testHistoryRowWaitsForVisibleWhenPublishIsPending() throws Exception {
+        LoadsHistoryWriter writer = new LoadsHistoryWriter(10, (sql, rows) -> { });
+        LoadsHistoryWriter.activate(writer);
+
+        // The statement gave up waiting for the publish: the job is FINISHED while its
+        // transaction is only committed, and the visible time is not known yet.
+        InsertLoadJob job = spy(createLoadingJob("pending_label"));
+        doReturn(true).when(job).isPublishPending();
+        job.setLoadFinishOrCancel("", "");
+        Assertions.assertEquals(JobState.FINISHED, job.getState());
+        // The writer holds the row and keeps the backstop from archiving the load without its
+        // visible time meanwhile.
+        writer.releaseHolds();
+        Assertions.assertEquals(0, writer.queueSize());
+        Assertions.assertEquals(1, writer.heldRows());
+        Assertions.assertEquals(List.of(job.getId()), writer.beginBackstop().excludedIds);
+        writer.endBackstop();
+
+        TransactionState txnState = new TransactionState();
+        long visibleMs = System.currentTimeMillis() + 5000L;
+        txnState.setFinishTime(visibleMs);
+        job.afterVisible(txnState);
+        // A repeated callback does not record the load again.
+        job.afterVisible(txnState);
+        Assertions.assertEquals(0, writer.queueSize());
+        writer.releaseHolds();
+        writer.releaseHolds();
+        Assertions.assertEquals(0, writer.heldRows());
+        // Still left out by the backstop until the row is written.
+        Assertions.assertEquals(List.of(job.getId()), writer.beginBackstop().excludedIds);
+        writer.endBackstop();
+        List<Row> rows = writer.takeBatch(10, 0);
+        Assertions.assertEquals(1, rows.size());
+        Assertions.assertEquals("pending_label", rows.get(0).label);
+        Assertions.assertTrue(rows.get(0).values.contains("'" + LoadsHistoryWriter.formatDatetime(visibleMs) + "'"),
+                rows.get(0).values);
+
+        // The usual order, visible first: the callback records nothing, the statement does.
+        InsertLoadJob published = createLoadingJob("published_label");
+        published.afterVisible(txnState);
+        Assertions.assertEquals(0, writer.queueSize());
+        Assertions.assertFalse(published.isPublishPending());
+        published.setLoadFinishOrCancel("", "");
+        rows = writer.takeBatch(10, 0);
+        Assertions.assertEquals(1, rows.size());
+        Assertions.assertTrue(rows.get(0).values.contains("'" + LoadsHistoryWriter.formatDatetime(visibleMs) + "'"),
+                rows.get(0).values);
     }
 
     @Test
@@ -108,10 +196,11 @@ public class InsertLoadJobEditLogTest {
     private static InsertLoadJob createLoadingJob(String label) {
         Coordinator coordinator = mock(Coordinator.class);
         when(coordinator.getLoadJobType()).thenReturn(TLoadJobType.INSERT_QUERY);
+        when(coordinator.getQueryProfile()).thenReturn(new RuntimeProfile("Query"));
         InsertLoadTxnCallback insertLoadTxnCallback = mock(InsertLoadTxnCallback.class);
         long createTimestamp = System.currentTimeMillis();
         return new InsertLoadJob(label, DB_ID, TABLE_ID, TXN_ID, LOAD_ID, USER, createTimestamp,
                 Math.max(TIMEOUT, Config.insert_load_default_timeout_second),
-                0L, coordinator, insertLoadTxnCallback);
+                0L, coordinator, insertLoadTxnCallback, "INSERT_SELECT", "127.0.0.1");
     }
 }

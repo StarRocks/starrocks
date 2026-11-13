@@ -35,7 +35,8 @@ import java.util.List;
  * does not hold SELECT on every table it loads into ({@link LoadJobVisibility.Access#METADATA}). Removed, that is
  * NULL, are the error-log URL and the tracking SQL that reads it, the rejected record path, the error messages, the
  * properties, and of the runtime details the load ids, the backends keyed by them and the transaction error. A failed
- * load or routine load keeps its failure type, without the message.
+ * load or routine load keeps its failure type, without the message. What the runtime details lose is also removed
+ * where a column of its own carries it: the load ids (LOAD_ID) and the backends (BE_IDS) of information_schema.loads.
  */
 public final class LoadJobRedaction {
 
@@ -86,6 +87,9 @@ public final class LoadJobRedaction {
         if (info.isSetRuntime_details()) {
             info.setRuntime_details(withoutEntries(info.getRuntime_details(), RUNTIME_DETAILS_KEYS));
         }
+        // The same load ids and backends, where they are columns of their own.
+        info.unsetLoad_id();
+        info.unsetBe_ids();
         return info;
     }
 
