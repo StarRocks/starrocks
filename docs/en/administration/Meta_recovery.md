@@ -77,7 +77,7 @@ You can follow these steps to fix this issue:
 :::tip
 
 - This bug has been fixed in StarRocks v3.1. You can avoid this issue by upgrading your cluster to v3.1 or later. 
-- This solution does not apply if more than half of the FE nodes have encountered this issue. You must follow the instructions provided in [Measure of the last resort](#7-measure-of-the-last-resort) to fix the issue.
+- This solution does not apply if more than half of the FE nodes have encountered this issue. You must follow the instructions provided in [Measure of the last resort](#10-measure-of-the-last-resort) to fix the issue.
 
 :::
 

@@ -43,7 +43,7 @@ sidebar_label: 機能サポート
 | enable_materialized_view_plan_cache             | マテリアライズドビューのプランキャッシュを有効にするかどうか。デフォルトで、1000 のマテリアライズドビュープランがキャッシュされます。 | TRUE        | v2.5.13+<br />v3.0.7+<br />v3.1.4+<br />v3.2.0+<br />v3.3.0+ |
 | query_including_mv_names                        | クエリの書き換えに使用できるマテリアライズドビューのホワイトリスト。 |             | v3.1.11+<br />v3.2.5+                                        |
 | query_excluding_mv_names                        | クエリの書き換えに使用できるマテリアライズドビューのブラックリスト。 |             | v3.1.11+<br />v3.2.5+                                        |
-| cbo_materialized_view_rewrite_related_mvs_limit | プラン段階での候補マテリアライズドビューの最大数。 | 64          | v3.1.9+<br /> v3.2.5+                                        |
+| cbo_materialized_view_rewrite_related_mvs_limit | プラン段階での候補マテリアライズドビューの最大数。 | 16          | v3.1.9+<br /> v3.2.5+                                        |
 
 ## プロパティ
 
@@ -75,7 +75,7 @@ sidebar_label: 機能サポート
 | [時間粒度ロールアップでパーティションを揃える (STRING 型)](use_cases/create_partitioned_materialized_view.md#align-partitions-with-time-granularity-rollup) | `date_trunc` 関数をパーティションキーに使用して、ベーステーブルよりも大きなパーティショニング粒度を持つマテリアライズドビューを作成します。パーティションキーは STRING 型である必要があります。 | v3.1.4+<br />v3.2+       |
 | [カスタマイズされた時間粒度でパーティションを揃える](use_cases/create_partitioned_materialized_view.md#align-partitions-at-a-customized-time-granularity)        | `date_trunc` 関数と `time_slice` または `date_slice` 関数を使用して、パーティションの時間粒度をカスタマイズしたマテリアライズドビューを作成します。 | v3.2+                    |
 | [複数のベーステーブルでパーティションを揃える](use_cases/create_partitioned_materialized_view.md#align-partitions-with-multiple-base-tables)               | 複数のベーステーブルのパーティションと揃えたマテリアライズドビューを作成します。ベーステーブルが同じタイプのパーティションキーを使用している限り可能です。 | v3.3+                    |
-| [マルチパーティション列整列](use_cases/create_partitioned_materialized_view.md#align-multiple-partition-columns)                     | マテリアライズドビューに複数のパーティション列を指定し、ベーステーブルのパーティション列を 1 つずつマッピングします。                                 | v3.5+              |
+| [マルチパーティション列整列](use_cases/create_partitioned_materialized_view.md#align-multiple-partition-columns)                     | マテリアライズドビューに複数のパーティション列を指定し、ベーステーブルのパーティション列の全部または一部にマッピングします。                                 | v3.5+              |
 
 **異なるジョイン方法**
 

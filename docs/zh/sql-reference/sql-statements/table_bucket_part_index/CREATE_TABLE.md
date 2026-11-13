@@ -847,7 +847,7 @@ PROPERTIES (
 )
 ```
 
-- `storage_volume`：用于存储您要创建的云原生表的存储卷的名称。如果未指定此属性，则使用默认存储卷。此属性从 v3.1 开始支持。
+- `storage_volume`：用于存储您要创建的云原生表的存储卷的名称。如果未指定此属性，则使用数据库的存储卷；如果数据库未设置存储卷，则使用默认存储卷。此属性从 v3.1 开始支持。
 
 - `datacache.enable`：是否启用本地磁盘缓存。默认值：`true`。
 
@@ -858,7 +858,7 @@ PROPERTIES (
 要启用本地磁盘缓存，您必须在 BE 配置项 `storage_root_path` 中指定磁盘目录。
 :::
 
-- `datacache.partition_duration`：热数据的有效期。启用本地磁盘缓存后，所有数据都会加载到缓存中。当缓存满时，StarRocks 会从缓存中删除最近使用较少的数据。当查询需要扫描已删除的数据时，StarRocks 会检查数据是否在有效期内。如果数据在有效期内，StarRocks 会再次将数据加载到缓存中。如果数据不在有效期内，StarRocks 则不会将其加载到缓存中。此属性是一个字符串值，可以使用以下单位指定：`YEAR`、`MONTH`、`DAY` 和 `HOUR`，例如 `7 DAY` 和 `12 HOUR`。如果未指定，所有数据都将作为热数据缓存。
+- `datacache.partition_duration`：热分区的时间范围，从当前时间向前计算。对于按 DATE 或 DATETIME 列分区的表，查询扫描某个分区时，仅当该分区的范围与此时间范围有交集（对于 List 分区，即分区值落在此时间范围内）时，StarRocks 才会将扫描的数据填充到缓存中。查询其他分区时仍可读取已缓存的数据，但不会填充缓存，也不会使用内存中的 Page Cache。该属性在查询时根据分区边界进行判断，而非根据数据导入时间，并且不会淘汰已缓存的数据。对于既不是按单个 DATE 或 DATETIME 列进行 Range 分区、也不是按 DATE 或 DATETIME 列进行 List 分区的表，该属性不生效。此属性是一个字符串值，格式为 `<数值> <单位>`，单位可以是 `YEAR`、`MONTH`、`WEEK`、`DAY`、`HOUR`、`MINUTE` 或 `SECOND`（不区分大小写，单复数均可），例如 `7 DAY` 和 `12 HOUR`。可以组合多个数值和单位，例如 `1 DAY 12 HOUR`，但 `YEAR`、`MONTH`、`WEEK` 不能与 `HOUR`、`MINUTE`、`SECOND` 组合使用。如果未指定，查询所有分区时均会填充缓存。
 
   :::note
 此属性仅在 `datacache.enable` 设置为 `true` 时可用。
