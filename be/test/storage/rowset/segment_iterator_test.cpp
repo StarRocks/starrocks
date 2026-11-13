@@ -36,6 +36,7 @@
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_memory.h"
+#include "fs/remote_read_context.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
@@ -1919,7 +1920,8 @@ TEST_F(SegmentIteratorTest, ReuseSegmentIteratorAcrossScans) {
 
 // A reused iterator keeps its column files open across the scans it serves, and their statistics are cumulative. Each
 // flush -- at the end of a scan, when the slot is rebuilt, at close -- adds only what was read since the last one, so
-// every scan reports its own IO and nothing is counted twice.
+// every scan reports its own IO and nothing is counted twice. The column files, opened lazily on the first read, are
+// attributed to the work that built the iterator when the options carry no remote read context.
 TEST_F(SegmentIteratorTest, ReusedIteratorFlushesStreamStatsOnce) {
     using namespace starrocks::test;
 
@@ -1936,6 +1938,9 @@ TEST_F(SegmentIteratorTest, ReusedIteratorFlushesStreamStatsOnce) {
             stats->append(kBytesReadRemote, v);
             stats->append(kIOCountRemote, v / 10);
             stats->append(kIONsReadRemote, 1000 * v);
+            stats->append(kRemoteQueueWaitNs, 20 * v);
+            stats->append(kRemoteFillWaitNs, 30 * v);
+            stats->append(kRemoteFillJoins, v / 50);
             return stats;
         }
 
@@ -1948,10 +1953,12 @@ TEST_F(SegmentIteratorTest, ReusedIteratorFlushesStreamStatsOnce) {
         StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                            const std::string& path) override {
             ++opened;
+            opened_with.push_back(opts.remote_read);
             ASSIGN_OR_RETURN(auto file, MemoryFileSystem::new_random_access_file(opts, path));
             return std::make_unique<RandomAccessFile>(std::make_shared<CumulativeStatsStream>(std::move(file)), path);
         }
         int opened = 0;
+        std::vector<RemoteReadContext> opened_with;
     };
 
     auto fs = std::make_shared<CumulativeStatsFileSystem>();
@@ -1989,12 +1996,27 @@ TEST_F(SegmentIteratorTest, ReusedIteratorFlushesStreamStatsOnce) {
     };
 
     g_reported = 0;
+    fs->opened_with.clear();
+    const auto query = RemoteReadContext::for_query(3, 4, 5, 6);
     ChunkIteratorPtr slot;
-    ASSIGN_OR_ABORT(auto scan, segment->new_reusable_iterator(vec_schema, vec_schema, read_opts, &slot));
+    ChunkIteratorPtr scan;
+    {
+        ScopedRemoteReadContext scope(query);
+        ASSIGN_OR_ABORT(scan, segment->new_reusable_iterator(vec_schema, vec_schema, read_opts, &slot));
+    }
+    // The column files are opened here, outside the scope that built the iterator.
     drain(scan);
     scan->close();
     const int opened = fs->opened;
     ASSERT_GT(opened, 0);
+    ASSERT_FALSE(fs->opened_with.empty());
+    for (const auto& ctx : fs->opened_with) {
+        EXPECT_TRUE(ctx.is_set);
+        EXPECT_EQ(RemoteReadContext::Workload::QUERY, ctx.workload);
+        EXPECT_EQ(query.group_id, ctx.group_id);
+        EXPECT_EQ(query.group_config_version, ctx.group_config_version);
+        EXPECT_EQ(query.flow_id, ctx.flow_id);
+    }
 
     // End of the first scan. Only the column files report through the iterator, one per column.
     g_reported = 100;
@@ -2004,6 +2026,9 @@ TEST_F(SegmentIteratorTest, ReusedIteratorFlushesStreamStatsOnce) {
     EXPECT_EQ(100 * files, stats.compressed_bytes_read_remote);
     EXPECT_EQ(10 * files, stats.io_count_remote);
     EXPECT_EQ(100000 * files, stats.io_ns_remote);
+    EXPECT_EQ(2000 * files, stats.remote_io_queue_wait_ns);
+    EXPECT_EQ(3000 * files, stats.remote_io_fill_wait_ns);
+    EXPECT_EQ(2 * files, stats.remote_io_fill_joins);
     // A second flush with nothing read in between adds nothing.
     flush_segment_iterator_io_stats(slot.get());
     EXPECT_EQ(100 * files, stats.compressed_bytes_read_remote);
@@ -2026,6 +2051,8 @@ TEST_F(SegmentIteratorTest, ReusedIteratorFlushesStreamStatsOnce) {
     EXPECT_EQ(70 * files, stats.compressed_bytes_read_remote);
     EXPECT_EQ(7 * files, stats.io_count_remote);
     EXPECT_EQ(70000 * files, stats.io_ns_remote);
+    EXPECT_EQ(1400 * files, stats.remote_io_queue_wait_ns);
+    EXPECT_EQ(2100 * files, stats.remote_io_fill_wait_ns);
     // flush_segment_iterator_io_stats() ignores an iterator that is not a segment iterator.
     flush_segment_iterator_io_stats(scan.get());
 
