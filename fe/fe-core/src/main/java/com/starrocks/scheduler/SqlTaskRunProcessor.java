@@ -19,12 +19,6 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
-<<<<<<< HEAD
-import com.starrocks.sql.ast.AstTraverser;
-import com.starrocks.sql.ast.Relation;
-=======
-import com.starrocks.sql.ast.OriginStatement;
->>>>>>> 66f9c08 ([BugFix] Apply security policy rewrites to Flight and HTTP SQL queries (#78049))
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.logging.log4j.LogManager;

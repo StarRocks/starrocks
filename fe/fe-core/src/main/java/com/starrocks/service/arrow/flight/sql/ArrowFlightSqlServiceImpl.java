@@ -22,11 +22,8 @@ import com.google.common.collect.Maps;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
-<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
-=======
 import com.starrocks.authorization.SecurityPolicyRewriteRule;
->>>>>>> 66f9c08 ([BugFix] Apply security policy rewrites to Flight and HTTP SQL queries (#78049))
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;

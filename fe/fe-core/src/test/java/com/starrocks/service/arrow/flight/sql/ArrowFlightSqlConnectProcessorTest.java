@@ -14,18 +14,18 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
-import com.starrocks.catalog.TableName;
+import com.starrocks.analysis.TableName;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpConnectProcessor;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
