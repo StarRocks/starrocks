@@ -32,6 +32,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Locale;
 import java.util.Optional;
 
 import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
@@ -2518,6 +2519,17 @@ public class AggregateTest extends PlanTestBase {
         String sql = "select percentile_approx(1, cast(0.4 as DOUBLE));";
         String plan = getCostExplain(sql);
         assertContains(plan, "percentile_approx[(1.0, 0.4); args: DOUBLE,DOUBLE");
+
+        // A decimal literal must fold to a double constant regardless of the JVM locale's decimal separator
+        Locale defaultFormatLocale = Locale.getDefault(Locale.Category.FORMAT);
+        try {
+            Locale.setDefault(Locale.Category.FORMAT, Locale.GERMANY);
+            sql = "select percentile_approx(1, 0.5);";
+            plan = getCostExplain(sql);
+            assertContains(plan, "percentile_approx[(1.0, 0.5); args: DOUBLE,DOUBLE");
+        } finally {
+            Locale.setDefault(Locale.Category.FORMAT, defaultFormatLocale);
+        }
 
         sql = "with cc as (select 1 as a) select percentile_approx(1, cc.a) from cc;";
         plan = getFragmentPlan(sql);

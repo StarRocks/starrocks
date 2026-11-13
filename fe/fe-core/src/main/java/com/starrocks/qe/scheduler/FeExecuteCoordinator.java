@@ -52,9 +52,11 @@ import org.apache.commons.lang3.StringUtils;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -420,7 +422,9 @@ public class FeExecuteCoordinator extends Coordinator {
                     case DECIMAL256:
                         int scale = ((ScalarType) constantOperator.getType()).getScalarScale();
                         BigDecimal val1 = constantOperator.getDecimal();
-                        DecimalFormat df = new DecimalFormat((scale == 0 ? "0" : "0.") + StringUtils.repeat("0", scale));
+                        DecimalFormatSymbols formatSymbols = DecimalFormatSymbols.getInstance(Locale.ROOT);
+                        DecimalFormat df = new DecimalFormat((scale == 0 ? "0" : "0.") + StringUtils.repeat("0", scale),
+                                formatSymbols);
                         value = df.format(val1);
                         break;
                     case CHAR:
