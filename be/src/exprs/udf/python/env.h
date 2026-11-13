@@ -18,6 +18,7 @@
 #include <sys/types.h>
 
 #include <atomic>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -175,6 +176,10 @@ private:
     const size_t max_worker_per_driver = 2;
     std::mutex _mutex;
     std::unordered_map<int32_t, std::vector<std::shared_ptr<PyWorker>>> _processes;
+    // Per driver, the number of workers being started by _acquire_worker.
+    std::unordered_map<int32_t, size_t> _num_starting;
+    // Notified when a worker start finishes, successfully or not.
+    std::condition_variable _worker_started;
 };
 
 // TODO: support config PYTHONPATH

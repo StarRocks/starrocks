@@ -20,15 +20,19 @@
 #include <signal.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <optional>
 #include <string>
+#include <thread>
 #include <unordered_map>
+#include <vector>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "common/config_path_fwd.h"
 #include "common/config_udf_fwd.h"
 #include "exprs/udf/python/callstub.h"
@@ -303,6 +307,51 @@ TEST_F(PyWorkerManagerEnvTest, remote_worker_has_no_process_lifecycle) {
     worker.reset(); // destructor must not touch any process or socket
 
     ASSERT_TRUE(std::filesystem::exists(sentinel)) << "a remote worker must never unlink a socket file";
+}
+
+// Concurrent calls of one driver, such as its scan IO tasks building stubs at the same time, must
+// not each start a worker: workers being started count against the driver's pool size.
+TEST_F(PyWorkerManagerEnvTest, concurrent_acquires_do_not_start_extra_workers) {
+    ASSERT_NO_FATAL_FAILURE(create_fake_python_env());
+    auto& manager = PyWorkerManager::getInstance();
+    constexpr int32_t driver_id = 0x7fff0001;
+    std::vector<std::shared_ptr<PyWorker>> held(16);
+    DeferOp cleanup([&]() {
+        held.clear();
+        std::vector<std::shared_ptr<PyWorker>> workers;
+        {
+            std::lock_guard guard(manager._mutex);
+            workers = std::move(manager._processes[driver_id]);
+            manager._processes.erase(driver_id);
+        }
+        for (auto& worker : workers) {
+            worker->terminate_and_wait();
+        }
+    });
+
+    std::vector<std::thread> threads;
+    for (size_t i = 0; i < held.size(); ++i) {
+        threads.emplace_back([&, i]() {
+            std::string url;
+            auto worker = manager._acquire_worker(driver_id, /*reusable=*/1, &url);
+            EXPECT_OK(worker.status());
+            if (worker.ok()) {
+                held[i] = worker.value();
+            }
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    std::lock_guard guard(manager._mutex);
+    const auto& workers = manager._processes[driver_id];
+    ASSERT_EQ(manager.max_worker_per_driver + 1, workers.size());
+    ASSERT_EQ(0, manager._num_starting.count(driver_id));
+    for (const auto& worker : held) {
+        ASSERT_NE(nullptr, worker);
+        ASSERT_NE(workers.end(), std::find(workers.begin(), workers.end(), worker));
+    }
 }
 
 // The Flight descriptor must carry the zip checksum (so an external worker can verify a package it

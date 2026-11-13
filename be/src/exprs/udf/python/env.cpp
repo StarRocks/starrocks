@@ -25,6 +25,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <csignal>
 #include <memory>
 #include <mutex>
@@ -277,37 +278,56 @@ StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t dri
         return child_process;
     }
     std::shared_ptr<PyWorker> worker;
+    std::vector<std::shared_ptr<PyWorker>> dead_workers;
     {
-        // try to find a worker from pool
-        std::lock_guard guard(_mutex);
-        auto& workers = _processes[driver_id];
-        if (workers.size() > max_worker_per_driver) {
-            worker = workers[ThreadLocalRandomUniform(static_cast<int32_t>(max_worker_per_driver))];
+        // A driver keeps up to max_worker_per_driver + 1 workers. Workers still starting count
+        // against that size, so concurrent calls of one driver (e.g. its scan IO tasks building
+        // stubs at once) wait for a starting worker instead of each starting one of their own.
+        std::unique_lock lock(_mutex);
+        while (true) {
+            auto& workers = _processes[driver_id];
+            if (workers.size() > max_worker_per_driver) {
+                auto picked = workers[ThreadLocalRandomUniform(static_cast<int32_t>(max_worker_per_driver))];
+                if (!picked->is_dead()) {
+                    worker = std::move(picked);
+                    break;
+                }
+                workers.erase(std::remove(workers.begin(), workers.end(), picked), workers.end());
+                dead_workers.push_back(std::move(picked));
+                continue;
+            }
+            if (workers.size() + _num_starting[driver_id] <= max_worker_per_driver) {
+                ++_num_starting[driver_id];
+                break;
+            }
+            _worker_started.wait(lock);
         }
     }
-    if (worker && worker->is_dead()) {
-        worker->terminate_and_wait();
-        std::lock_guard guard(_mutex);
-        auto& workers = _processes[driver_id];
-        workers.erase(std::remove(workers.begin(), workers.end(), worker), workers.end());
+    for (auto& dead : dead_workers) {
+        dead->terminate_and_wait();
     }
-    if (worker != nullptr && !worker->is_dead()) {
+    if (worker != nullptr) {
         *url = worker->url();
         worker->touch();
         return worker;
     }
 
     std::unique_ptr<LocalPyWorker> uniq_worker;
-    RETURN_IF_ERROR(_fork_py_worker(&uniq_worker));
-    *url = uniq_worker->url();
-    worker = std::move(uniq_worker);
-
+    Status st = _fork_py_worker(&uniq_worker);
     {
-        // add to pool
         std::lock_guard guard(_mutex);
-        _processes[driver_id].push_back(worker);
+        if (--_num_starting[driver_id] == 0) {
+            _num_starting.erase(driver_id);
+        }
+        if (st.ok()) {
+            worker = std::move(uniq_worker);
+            _processes[driver_id].push_back(worker);
+        }
     }
+    _worker_started.notify_all();
+    RETURN_IF_ERROR(st);
 
+    *url = worker->url();
     worker->touch();
     return worker;
 }
