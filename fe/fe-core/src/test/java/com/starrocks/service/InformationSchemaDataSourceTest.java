@@ -75,7 +75,6 @@ import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TUserIdentity;
-import com.starrocks.thrift.TUserRoles;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -543,12 +542,11 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
 
     private static TUserIdentity applicableRolesCaller(UserIdentity user, List<String> roles, List<String> groups) {
         AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
-        TUserIdentity caller = UserIdentityUtils.toThrift(user);
-        TUserRoles userRoles = new TUserRoles();
-        userRoles.setRole_id_list(roles.stream().map(authorizationMgr::getRoleIdByNameAllowNull).collect(Collectors.toList()));
-        caller.setCurrent_role_ids(userRoles);
-        caller.setGroups(groups);
-        return caller;
+        ConnectContext caller = new ConnectContext();
+        caller.setCurrentUserIdentity(user);
+        caller.setCurrentRoleIds(roles.stream().map(authorizationMgr::getRoleIdByNameAllowNull).collect(Collectors.toSet()));
+        caller.setGroups(Set.copyOf(groups));
+        return UserIdentityUtils.callerToThrift(caller);
     }
 
     private static void createApplicableRolesFixture() throws Exception {
@@ -571,7 +569,7 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         // An ephemeral user, one logged in through a security integration, owns no roles: it can use the roles
         // its session activated and the roles of its groups. Looking its roles up must not read the session of
         // the thread, which the RPC thread does not have.
-        TUserIdentity caller = applicableRolesCaller(new UserIdentity("ar_ephemeral", "%", false, true),
+        TUserIdentity caller = applicableRolesCaller(UserIdentity.createEphemeralUserIdent("ar_ephemeral", "%"),
                 List.of("ar_db_role"), List.of("ar_group"));
         Assertions.assertEquals(Set.of("ar_db_role", "ar_group_role"), applicableRolesWithoutSession(caller));
     }
