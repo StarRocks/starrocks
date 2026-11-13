@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_table_partition_info

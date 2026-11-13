@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 10
 keywords: ['materialized', 'view', 'views']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Asynchronous materialized views

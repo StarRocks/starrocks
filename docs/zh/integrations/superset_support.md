@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # 支持 Superset

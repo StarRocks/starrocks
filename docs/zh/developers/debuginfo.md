@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # 使用 debuginfo 文件进行调试

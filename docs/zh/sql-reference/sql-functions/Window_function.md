@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords: ['窗口函数', '窗口']
 sidebar_position: 0.9
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 窗口函数

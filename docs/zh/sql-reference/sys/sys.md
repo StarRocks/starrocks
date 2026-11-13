@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 系统元数据库

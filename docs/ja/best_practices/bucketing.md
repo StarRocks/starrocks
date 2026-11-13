@@ -1,5 +1,6 @@
 ---
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # バケット法

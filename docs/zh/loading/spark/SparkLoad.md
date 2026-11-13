@@ -1,6 +1,7 @@
 ---
 sidebar_position: 20
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # 使用 Spark Load 批量导入数据

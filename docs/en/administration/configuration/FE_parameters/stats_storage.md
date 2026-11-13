@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 sidebar_label: "Statistics and Storage"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE Configuration - Statistics and Storage

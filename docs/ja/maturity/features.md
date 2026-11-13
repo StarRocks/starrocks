@@ -1,6 +1,7 @@
 ---
 sidebar_position: 10
 description: "Explains feature maturity levels: Experimental, Beta, Generally Available (GA), Deprecated, and End-of-Life, and what each means for production use."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ベータ版および実験的機能

@@ -1,6 +1,7 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # StarRocks Kubernetes Operator

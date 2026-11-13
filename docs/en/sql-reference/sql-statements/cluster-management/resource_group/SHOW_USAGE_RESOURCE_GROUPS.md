@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW USAGE RESOURCE GROUPS

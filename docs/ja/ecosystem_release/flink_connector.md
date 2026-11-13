@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # StarRocks Connector for Flink のリリース

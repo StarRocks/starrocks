@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['waibiao']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 概述

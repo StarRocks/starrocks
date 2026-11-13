@@ -1,5 +1,6 @@
 ---
 sidebar_position: 120
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 監査ログベースのリソースグループ設定

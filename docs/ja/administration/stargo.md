@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # StarGo を使用した StarRocks のデプロイと管理

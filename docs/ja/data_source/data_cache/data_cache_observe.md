@@ -1,6 +1,7 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # Data Cache の可観測性

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 100
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Accelerate COUNT(DISTINCT) and Joins with AUTO INCREMENT and Global Dictionary

@@ -1,5 +1,6 @@
 ---
 sidebar_position: 120
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Audit Log-based Resource Group Configuration

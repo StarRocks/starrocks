@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 30
 keywords: ['profile', 'query', '慢查询']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Query Profile 概述

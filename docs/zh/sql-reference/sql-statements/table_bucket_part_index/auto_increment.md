@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['zizeng']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # AUTO_INCREMENT

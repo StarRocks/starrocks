@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 160
 description: "StarRocks 及生态伙伴提供的数据导入工具概览：SMT、DataX、CloudCanal 和 Kettle connector。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 使用工具导入

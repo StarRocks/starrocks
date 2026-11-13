@@ -2,6 +2,7 @@
 sidebar_position: 30
 description: 計算とストレージの分離
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # ストレージとコンピュートの分離

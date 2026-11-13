@@ -1,5 +1,6 @@
 ---
 sidebar_position: 120
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 基于审计日志的资源组配置

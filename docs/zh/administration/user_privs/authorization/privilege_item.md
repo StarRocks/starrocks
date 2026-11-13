@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 sidebar_label: "权限项"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 权限项

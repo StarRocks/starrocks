@@ -1,6 +1,7 @@
 ---
 sidebar_position: 70
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 通过 INSERT 语句导入数据

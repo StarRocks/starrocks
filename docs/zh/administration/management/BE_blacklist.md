@@ -1,6 +1,7 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 管理 BE 和 CN 黑名单

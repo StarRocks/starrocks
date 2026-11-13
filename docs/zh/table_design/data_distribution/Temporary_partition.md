@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords: ['fenqu', 'linshi']
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 临时分区

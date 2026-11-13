@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # base64_decode_string

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 50
 sidebar_label: 機能サポート
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 機能サポート: データ分散

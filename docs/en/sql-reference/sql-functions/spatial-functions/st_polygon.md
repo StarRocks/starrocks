@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Polygon,ST_PolyFromText,ST_PolygonFromText

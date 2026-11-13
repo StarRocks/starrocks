@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 sidebar_label: "Privilege Items"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Privileges supported by StarRocks

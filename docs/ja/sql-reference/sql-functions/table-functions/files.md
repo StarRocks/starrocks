@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 5
+products: [oss, enterprise, cloud, anywhere]
 description: "リモートストレージ内のデータファイルを定義し、データのロードおよびアンロードに使用します。"
 ---
 

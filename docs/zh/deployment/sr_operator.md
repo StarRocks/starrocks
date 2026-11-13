@@ -1,6 +1,7 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # 使用 Operator 部署 StarRocks 集群

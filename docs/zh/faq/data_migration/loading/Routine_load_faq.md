@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise]
 ---
 
 # Routine Load 导入常见问题

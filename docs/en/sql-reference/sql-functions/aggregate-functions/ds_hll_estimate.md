@@ -1,3 +1,7 @@
+---
+products: [oss, enterprise, cloud, anywhere]
+---
+
 # ds_hll_estimate
 
 Estimates the approximate distinct count from a serialized HyperLogLog sketch. This function is part of the DataSketches HLL family of functions for approximate distinct counting.

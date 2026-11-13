@@ -1,6 +1,7 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
+products: [oss, enterprise]
 ---
 
 # 通过 Arrow Flight SQL 与 StarRocks 交互

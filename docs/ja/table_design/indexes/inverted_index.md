@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 toc_max_heading_level: 4
 sidebar_position: 50
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # 视频资源

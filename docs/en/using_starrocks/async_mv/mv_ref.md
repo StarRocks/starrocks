@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 sidebar_label: "Related References"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Asynchronous Materialized View References

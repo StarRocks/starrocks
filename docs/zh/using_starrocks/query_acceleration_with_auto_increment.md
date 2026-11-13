@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 100
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 使用 AUTO INCREMENT 列构建全局字典以加速精确去重计算和 Join

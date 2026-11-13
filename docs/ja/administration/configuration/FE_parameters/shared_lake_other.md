@@ -2,6 +2,7 @@
 sidebar_position: 40
 displayed_sidebar: docs
 sidebar_label: "共有データ、データレイク、その他"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 設定 - 共有データ、データレイク、その他

@@ -1,6 +1,7 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Iceberg REST Catalog 的安全设置

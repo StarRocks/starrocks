@@ -1,3 +1,7 @@
+---
+products: [oss, enterprise, cloud, anywhere]
+---
+
 # Beta and experimental features
 
 Features have five potential maturity levels:

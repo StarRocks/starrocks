@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['Canshu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'

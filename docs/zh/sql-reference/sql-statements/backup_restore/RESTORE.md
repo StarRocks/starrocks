@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['beifen']
+products: [oss, enterprise, anywhere]
 ---
 
 # RESTORE

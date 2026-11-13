@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords:
   - SHOW PARTITIONS
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW PARTITIONS

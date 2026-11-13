@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 9
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 查看运行中的查询

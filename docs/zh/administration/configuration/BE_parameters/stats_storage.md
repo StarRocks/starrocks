@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 sidebar_label: "统计报告和存储"
 keywords: ['Canshu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'

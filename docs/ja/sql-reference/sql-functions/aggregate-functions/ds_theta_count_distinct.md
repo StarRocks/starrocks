@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DataSketches Theta スケッチを使用して近似重複除去カウントを返します。COUNT DISTINCT より高速で、高カーディナリティ列のメモリ使用量が少なくなります。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_count_distinct

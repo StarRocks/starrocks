@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # 在 AWS 上使用 AWS CloudFormation 部署 StarRocks 集群

@@ -2,6 +2,7 @@
 sidebar_position: 90
 displayed_sidebar: docs
 sidebar_label: "FE 内存 FAQ"
+products: [oss, enterprise]
 ---
 
 # FE 堆内存故障排查

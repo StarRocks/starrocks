@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 keywords: ['shen ji ri zhi']
+products: [oss, enterprise, anywhere]
 ---
 
 在部署和操作StarRocks时，理解并正确使用日志系统对于故障排除、性能分析和系统调优至关重要。本文详细介绍了StarRocks的Frontend（FE）和Backend（BE或CN）组件的日志文件类型、典型内容、配置方法以及日志滚动和保留策略。

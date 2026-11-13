@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 90
+products: [oss, enterprise, anywhere]
 ---
 
 # File manager

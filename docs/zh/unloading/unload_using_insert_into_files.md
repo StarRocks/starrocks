@@ -1,6 +1,7 @@
 ---
 sidebar_position: 60
 displayed_sidebar: docs
+products: [oss, enterprise]
 ---
 
 # 使用 INSERT INTO FILES 导出数据

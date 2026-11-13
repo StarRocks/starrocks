@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 sidebar_label: 集群快照
 keywords: ['备份', '恢复', '存算分离', '快照']
 ---

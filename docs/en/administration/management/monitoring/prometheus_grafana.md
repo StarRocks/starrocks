@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 4
+products: [oss, enterprise, anywhere]
 ---
 
 # Monitor and Alert with Prometheus and Grafana

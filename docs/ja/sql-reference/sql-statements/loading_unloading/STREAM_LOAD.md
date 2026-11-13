@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 4
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';

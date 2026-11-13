@@ -1,6 +1,7 @@
 ---
 sidebar_position: 110
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # 大規模クエリの監視と管理

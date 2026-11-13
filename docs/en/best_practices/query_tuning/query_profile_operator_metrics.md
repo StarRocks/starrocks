@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords: ['profile', 'query', 'metric']
 sidebar_position: 80
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Query Profile Metrics

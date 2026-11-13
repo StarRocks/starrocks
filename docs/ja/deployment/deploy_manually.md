@@ -1,6 +1,7 @@
 ---
 sidebar_position: 20
 displayed_sidebar: docs
+products: [oss]
 ---
 
 import ManualPrep from '../_assets/deployment/manual_prep.mdx'

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise]
 ---
 
 # Synchronize data from MySQL in real time

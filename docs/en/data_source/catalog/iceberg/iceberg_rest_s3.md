@@ -1,6 +1,7 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Create Iceberg REST Catalog for AWS S3 Tables

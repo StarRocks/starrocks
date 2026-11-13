@@ -1,6 +1,7 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
+products: [oss, enterprise]
 ---
 
 # 使用 Flink Connector 读取数据

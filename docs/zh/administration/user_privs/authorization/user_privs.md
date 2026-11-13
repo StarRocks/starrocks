@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords: ['quanxian', 'yonghu']
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 权限系统总览

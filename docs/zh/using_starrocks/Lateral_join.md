@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 50
 keywords: ['爆裂函数','一行转多行','炸开','explode']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 使用 Lateral Join 实现列转行

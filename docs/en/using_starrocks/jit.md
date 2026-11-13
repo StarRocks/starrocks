@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 130
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # JIT Compilation for Expressions

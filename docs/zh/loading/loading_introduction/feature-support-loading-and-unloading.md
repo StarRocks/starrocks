@@ -2,6 +2,7 @@
 sidebar_position: 40
 displayed_sidebar: docs
 sidebar_label: "能力边界"
+products: [oss, enterprise, anywhere]
 ---
 
 # 功能边界：数据导入导出

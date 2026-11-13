@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 toc_max_heading_level: 5
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Hive catalog

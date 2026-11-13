@@ -2,6 +2,7 @@
 sidebar_position: 70
 displayed_sidebar: docs
 sidebar_label: 機能サポート
+products: [oss]
 ---
 
 # 機能サポート: 共有データクラスタ

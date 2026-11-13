@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 sidebar_label: "Cluster Snapshot"
 keywords: ['backup','restore','shared data','snapshot']
 ---

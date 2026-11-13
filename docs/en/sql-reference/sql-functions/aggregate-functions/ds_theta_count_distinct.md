@@ -1,3 +1,7 @@
+---
+products: [oss, enterprise, cloud, anywhere]
+---
+
 # ds_theta_count_distinct
 
 Returns the approximate value of aggregate function similar to the result of `COUNT(DISTINCT col)`. `ds_theta_count_distinct` is faster than `COUNT(DISTINCT col)` and uses less memory for columns of high cardinality.

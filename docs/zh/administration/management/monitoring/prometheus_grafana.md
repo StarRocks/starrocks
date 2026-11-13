@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 4
 keywords: ['jian kong']
+products: [oss, enterprise, anywhere]
 ---
 
 # 使用 Prometheus 和 Grafana 监控报警

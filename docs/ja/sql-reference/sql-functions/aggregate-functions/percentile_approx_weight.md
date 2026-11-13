@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定されたパーセンタイルの加重近似値を返します。PERCENTILE_APPROX の重み付きバージョンで、各入力値に重みを指定できます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_approx_weight

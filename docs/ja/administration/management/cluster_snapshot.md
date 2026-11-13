@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 sidebar_label: クラスタースナップショット
 keywords: ['バックアップ', '復元', '共有データ', 'スナップショット']
 ---

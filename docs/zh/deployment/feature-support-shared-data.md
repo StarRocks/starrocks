@@ -2,6 +2,7 @@
 sidebar_position: 70
 displayed_sidebar: docs
 sidebar_label: "能力边界"
+products: [oss]
 ---
 
 # 存算分离集群能力边界

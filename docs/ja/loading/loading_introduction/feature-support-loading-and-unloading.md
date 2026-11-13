@@ -2,6 +2,7 @@
 sidebar_position: 40
 displayed_sidebar: docs
 sidebar_label: 機能サポート
+products: [oss, enterprise, anywhere]
 ---
 
 # 機能サポート: データロードとアンロード

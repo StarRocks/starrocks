@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 sidebar_label: "Authentication, Query, and Loading"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE Configuration - Authentication, Query, and Loading

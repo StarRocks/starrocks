@@ -1,6 +1,7 @@
 ---
 sidebar_position: 80
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 通过 AuditLoader 管理 StarRocks 中的审计日志

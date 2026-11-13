@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 80
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Blacklist Management

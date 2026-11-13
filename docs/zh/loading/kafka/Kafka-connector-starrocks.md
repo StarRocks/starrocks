@@ -1,6 +1,7 @@
 ---
 sidebar_position: 10
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # 使用 Kafka connector 导入数据

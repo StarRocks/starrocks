@@ -1,6 +1,7 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # Operator を使用して StarRocks をデプロイする

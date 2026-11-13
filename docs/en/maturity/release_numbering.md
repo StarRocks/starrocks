@@ -1,3 +1,7 @@
+---
+products: [oss, cloud, anywhere]
+---
+
 # Version naming
 
 Purpose: To provide a unified and clear explanation of the current naming conventions for StarRocks software packages.

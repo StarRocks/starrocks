@@ -5,6 +5,7 @@ keywords:
   - broker
   - load
   - broker load
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 <head><meta name="docsearch:pagerank" content="100"/></head>

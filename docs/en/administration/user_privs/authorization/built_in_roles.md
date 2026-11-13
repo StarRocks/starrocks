@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 25
 sidebar_label: "Built-in Roles"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "如何查看和解读 StarRocks 物化视图刷新 Task Run 的详细信息，以了解刷新行为、排查刷新失败并监控刷新性能。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 理解物化视图Task Run

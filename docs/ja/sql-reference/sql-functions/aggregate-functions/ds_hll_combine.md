@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "複数のシリアライズされた DataSketches HyperLogLog (HLL) スケッチを、近似重複除去カウント用の単一のシリアライズされたスケッチに結合します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_hll_combine

@@ -1,3 +1,7 @@
+---
+products: [oss, enterprise, cloud, anywhere]
+---
+
 # ds_hll_count_distinct
 
 Returns the approximate value of aggregate function similar to the result of COUNT(DISTINCT col). APPROX_COUNT_DISTINCT(expr) is similar function.

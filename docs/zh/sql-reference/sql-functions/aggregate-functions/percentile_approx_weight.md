@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算指定百分位数的加权近似值。PERCENTILE_APPROX 的加权版本，允许为每个输入值指定权重。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_approx_weight

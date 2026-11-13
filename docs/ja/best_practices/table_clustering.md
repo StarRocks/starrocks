@@ -1,5 +1,6 @@
 ---
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # テーブルクラスタリング

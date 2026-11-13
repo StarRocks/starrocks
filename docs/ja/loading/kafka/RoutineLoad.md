@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 keywords: ['Routine Load']
+products: [oss, enterprise, anywhere]
 ---
 
 # Routine Load を使用したデータのロード

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "値を HyperLogLog スケッチに蓄積し、シリアライズされたスケッチを VARBINARY として返します。DataSketches HLL 関数ファミリーの一部です。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_hll_accumulate

@@ -1,5 +1,6 @@
 ---
 sidebar_position: 100
+products: [oss, enterprise, anywhere]
 ---
 
 # 认证与授权

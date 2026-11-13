@@ -1,6 +1,7 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # 从 RisingWave 持续导入

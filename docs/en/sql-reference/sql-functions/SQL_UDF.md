@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 0.95
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SQL UDF

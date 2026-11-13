@@ -1,6 +1,7 @@
 ---
 sidebar_position: 10
 displayed_sidebar: docs
+products: [oss, enterprise, cloud]
 ---
 
 # SSB 扁平表基准测试

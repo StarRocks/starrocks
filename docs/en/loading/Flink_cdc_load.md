@@ -6,6 +6,7 @@ keywords:
   - mysql
   - sync
   - Flink CDC
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Realtime synchronization from MySQL

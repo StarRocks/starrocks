@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 使用 Apache Ranger 管理权限

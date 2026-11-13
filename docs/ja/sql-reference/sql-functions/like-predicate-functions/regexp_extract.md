@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';

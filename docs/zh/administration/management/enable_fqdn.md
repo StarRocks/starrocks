@@ -1,6 +1,7 @@
 ---
 sidebar_position: 90
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # 启用 FQDN 访问

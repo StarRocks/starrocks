@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['session variable']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # System variables

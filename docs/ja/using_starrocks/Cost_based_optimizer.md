@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CBO の統計情報を収集する

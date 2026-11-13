@@ -1,6 +1,7 @@
 ---
 sidebar_position: 10
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # StarRocks migration tool（SMT）

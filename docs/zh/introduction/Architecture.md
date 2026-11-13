@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 keywords: ['cun chu']
+products: [oss, enterprise, cloud]
 ---
 
 

@@ -1,6 +1,7 @@
 ---
 sidebar_position: 130
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 import Experimental from '../_assets/commonMarkdown/_experimental.mdx'
 

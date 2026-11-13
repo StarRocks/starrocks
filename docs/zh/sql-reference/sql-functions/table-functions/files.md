@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 5
+products: [oss, enterprise, cloud, anywhere]
 description: "定义远程存储中的数据文件，用于导入和导出数据。"
 ---
 

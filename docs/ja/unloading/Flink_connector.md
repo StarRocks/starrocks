@@ -1,6 +1,7 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
+products: [oss, enterprise]
 ---
 
 # Flink コネクタを使用して StarRocks からデータを読み取る

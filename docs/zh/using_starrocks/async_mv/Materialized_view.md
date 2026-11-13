@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 10
 keywords: ['wuhua', 'Wuhuashitu', 'yibu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 异步物化视图

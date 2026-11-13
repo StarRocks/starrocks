@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise]
 ---
 
 # MySQL 实时同步至 StarRocks 常见问题

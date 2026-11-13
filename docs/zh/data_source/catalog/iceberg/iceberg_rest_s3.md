@@ -1,6 +1,7 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 为 AWS S3 表创建 Iceberg REST Catalog
