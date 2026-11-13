@@ -75,6 +75,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         String plan = getFragmentPlan(sql);
         Assertions.assertEquals(1, StringUtils.countMatches(plan, "rand()"), plan);
         assertPlanContains("select sequence(1, (select max(v1) from t0))", "trino_sequence(1, ");
+
+        // Other bound types aren't cast to BIGINT.
+        analyzeFail("select sequence('1', '3')", "Unexpected parameters (varchar, varchar) for function sequence");
     }
 
     @Test
