@@ -2612,6 +2612,32 @@ TEST_F(JsonScannerTruncatedDocTest, mid_document_syntax_error_positions) {
     EXPECT_TRUE(multi_batch_res.status.is_end_of_file()) << multi_batch_res.status;
     EXPECT_EQ(40, multi_batch_res.rows);
     EXPECT_EQ(1, multi_batch_res.filtered);
+
+    // 10. Repeated malformed rows in a single batch reuse the indexed stage-1 batch without rescanning the
+    // remainder on every rejected row, and rewinding to the document root before skipping prevents a missing
+    // field value ("k2":}) from leaving depth > 1 and swallowing a following row with an extra closing brace.
+    config::json_parse_many_batch_size = 1000000;
+    auto mv_followed_by_extra_brace = scan({R"({"k1":"x","k2":})"
+                                            "\n"
+                                            R"({"k1":"x","k2":1}})"
+                                            "\n" +
+                                            v});
+    EXPECT_TRUE(mv_followed_by_extra_brace.status.is_data_quality_error()) << mv_followed_by_extra_brace.status;
+    EXPECT_EQ(1, mv_followed_by_extra_brace.rows);
+    EXPECT_EQ(2, mv_followed_by_extra_brace.filtered);
+
+    std::string many_bad_body;
+    constexpr int kManyBadRows = 20000;
+    many_bad_body.reserve(kManyBadRows * 18 + 32);
+    for (int i = 0; i < kManyBadRows; i++) {
+        many_bad_body += R"({"k1":"x","k2":})"
+                         "\n";
+    }
+    many_bad_body += v + "\n";
+    auto many_bad_res = scan({many_bad_body});
+    EXPECT_TRUE(many_bad_res.status.is_end_of_file()) << many_bad_res.status;
+    EXPECT_EQ(1, many_bad_res.rows);
+    EXPECT_EQ(kManyBadRows, many_bad_res.filtered);
 }
 
 TEST_F(JsonScannerTest, test_simdjson_v511_big_integer_and_unicode_escapes) {
