@@ -36,6 +36,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <memory>
@@ -310,41 +311,34 @@ static size_t entry_charge_for_int_key() {
 
 TEST_F(CacheTest, Usage) {
     LRUCache cache;
-    cache.set_capacity(1000);
 
     CacheKey key1("100");
     size_t key_mem_usage = sizeof(LRUHandle) - 1 + key1.size();
+    cache.set_capacity(std::max(800 + 2 * key_mem_usage, 900 + key_mem_usage));
     insert_LRUCache(cache, key1, 100, 100, CachePriority::NORMAL);
-    // 100 + 90
     ASSERT_EQ(100 + key_mem_usage, cache.get_usage());
 
     CacheKey key2("200");
     insert_LRUCache(cache, key2, 200, 200, CachePriority::DURABLE);
-    // 300 + 180
     ASSERT_EQ(300 + key_mem_usage * 2, cache.get_usage());
 
     CacheKey key3("300");
     insert_LRUCache(cache, key3, 300, 300, CachePriority::NORMAL);
-    // 600 + 270
     ASSERT_EQ(600 + key_mem_usage * 3, cache.get_usage());
 
     CacheKey key4("400");
     insert_LRUCache(cache, key4, 400, 400, CachePriority::NORMAL);
-    // 600 + 180
     ASSERT_EQ(600 + key_mem_usage * 2, cache.get_usage());
 
     CacheKey key5("500");
     insert_LRUCache(cache, key5, 500, 500, CachePriority::NORMAL);
-    // 700 + 180
     ASSERT_EQ(700 + key_mem_usage * 2, cache.get_usage());
 
     CacheKey key6("600");
     insert_LRUCache(cache, key6, 600, 600, CachePriority::NORMAL);
-    // 800 + 180
     ASSERT_EQ(800 + key_mem_usage * 2, cache.get_usage());
 
     CacheKey key7("950");
-    // 900 + 90
     insert_LRUCache(cache, key7, 900, 900, CachePriority::DURABLE);
     ASSERT_EQ(900 + key_mem_usage, cache.get_usage());
 }
