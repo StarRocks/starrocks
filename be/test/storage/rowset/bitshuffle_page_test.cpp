@@ -36,17 +36,28 @@
 
 #include <gtest/gtest.h>
 
+#include <fstream>
 #include <memory>
 
 #include "base/logging.h"
+#include "base/types/decimal12.h"
+#include "base/types/uint24.h"
+#include "column/adaptive_nullable_column.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
+#include "column/const_column.h"
 #include "column/datum_convert.h"
+#include "column/nullable_column.h"
 #include "column/raw_data_visitor.h"
 #include "storage/chunk_helper.h"
+#include "storage/rowset/encoding_info.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_decoder.h"
+#include "storage/rowset/parsed_page.h"
 #include "storage/rowset/storage_page_decoder.h"
+#include "types/date_value.h"
+#include "types/decimalv2_value.h"
+#include "types/timestamp_value.h"
 
 using starrocks::PageBuilderOptions;
 using starrocks::DataDecoder;
@@ -649,6 +660,1216 @@ TEST_F(BitShufflePageTest, TestReadByRowids) {
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(3, num_read);
     ASSERT_EQ("[0, 50, 99]", column->debug_string());
+}
+
+namespace {
+
+// An encoded bitshuffle page, its decoder and the source values it was built from.
+template <LogicalType Type>
+struct ReadByRowidsPage {
+    using CppType = StorageCppType<Type>;
+    using ElemType = std::conditional_t<std::is_same_v<CppType, bool>, uint8_t, CppType>;
+
+    std::vector<ElemType> src;
+    OwnedSlice owned;
+    Slice encoded;
+    std::unique_ptr<std::vector<uint8_t>> decoded_page;
+    std::unique_ptr<PageDecoder> decoder;
+
+    void build(size_t rows) {
+        src.resize(rows);
+        for (size_t i = 0; i < rows; i++) {
+            if constexpr (Type == TYPE_BOOLEAN) {
+                src[i] = static_cast<uint8_t>(i & 1);
+            } else if constexpr (Type == TYPE_INT256 || Type == TYPE_DECIMAL256) {
+                int128_t hi = static_cast<int128_t>(i) * 0x123456789ABCDEF0LL ^ 0x5555555555555555LL;
+                uint128_t lo = static_cast<uint128_t>(i) * 0x0FEDCBA987654321ULL ^ 0xAAAAAAAAAAAAAAAAULL;
+                src[i] = int256_t(hi, lo);
+            } else if constexpr (Type == TYPE_DECIMAL) {
+                src[i] = decimal12_t(i, 0);
+            } else if constexpr (Type == TYPE_DECIMALV2) {
+                src[i] = DecimalV2Value(i, 0);
+            } else if constexpr (Type == TYPE_DATE_V1) {
+                src[i] = static_cast<CppType>(static_cast<uint32_t>(i));
+            } else if constexpr (Type == TYPE_DATETIME_V1) {
+                src[i] = static_cast<CppType>(static_cast<int64_t>(i));
+            } else {
+                src[i] = static_cast<CppType>(static_cast<int64_t>(i) * 2654435761LL % 100003 - 50000);
+            }
+        }
+        PageBuilderOptions options;
+        options.data_page_size = 1024 * 1024;
+        BitshufflePageBuilder<Type> builder(options);
+        ASSERT_EQ(rows, builder.add(reinterpret_cast<const uint8_t*>(src.data()), rows));
+        owned = builder.finish()->build();
+        encoded = owned.slice();
+
+        PageFooterPB footer;
+        footer.set_type(DATA_PAGE);
+        footer.mutable_data_page_footer()->set_nullmap_size(0);
+        ASSERT_TRUE(StoragePageDecoder::decode_page(&footer, 0, BIT_SHUFFLE, &decoded_page, &encoded).ok());
+        const EncodingInfo* enc_info = nullptr;
+        if (EncodingInfo::get(Type, BIT_SHUFFLE, &enc_info).ok() && enc_info != nullptr) {
+            PageDecoder* raw_decoder = nullptr;
+            ASSERT_TRUE(enc_info->create_page_decoder(encoded, &raw_decoder).ok());
+            decoder.reset(raw_decoder);
+        } else {
+            decoder = std::make_unique<BitShufflePageDecoder<Type>>(encoded);
+        }
+        ASSERT_TRUE(decoder->init().ok());
+    }
+};
+
+template <LogicalType Type>
+void check_non_nullable_stride(size_t rows, size_t stride) {
+    using CppType = StorageCppType<Type>;
+    ReadByRowidsPage<Type> page;
+    page.build(rows);
+    ASSERT_NE(nullptr, page.decoder);
+
+    std::vector<rowid_t> rowids;
+    for (size_t i = 0; i < rows; i += stride) {
+        rowids.push_back(static_cast<rowid_t>(i));
+    }
+    auto column = ChunkFactory::column_from_field_type(Type, false);
+    size_t count = rowids.size();
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids.data(), &count, column.get()).ok());
+    ASSERT_EQ(rowids.size(), count);
+    ASSERT_EQ(count, column->size());
+
+    const auto values = GetStorageContainer<Type>::get_data(column);
+    for (size_t i = 0; i < count; i++) {
+        ASSERT_EQ(0, memcmp(&page.src[rowids[i]], &values[i], sizeof(CppType))) << "type=" << Type << " at " << i;
+    }
+}
+
+template <LogicalType StorageType, LogicalType DecimalType>
+void check_delegated_empty_column() {
+    using CppType = StorageCppType<StorageType>;
+    static_assert(std::is_same_v<CppType, StorageCppType<DecimalType>>);
+
+    constexpr size_t kRows = 1003;
+    ReadByRowidsPage<StorageType> page;
+    page.build(kRows);
+    ASSERT_NE(nullptr, page.decoder);
+
+    std::vector<rowid_t> rowids;
+    for (size_t i = 0; i < kRows; i += 7) {
+        rowids.push_back(static_cast<rowid_t>(i));
+    }
+    if (rowids.back() != kRows - 1) {
+        rowids.push_back(static_cast<rowid_t>(kRows - 1));
+    }
+
+    auto column = ChunkFactory::column_from_field_type(DecimalType, false);
+    ASSERT_EQ(0, column->size());
+
+    size_t count = rowids.size();
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids.data(), &count, column.get()).ok());
+    ASSERT_EQ(rowids.size(), count);
+    ASSERT_EQ(count, column->size());
+
+    const auto values = GetStorageContainer<DecimalType>::get_data(column);
+    for (size_t i = 0; i < count; i++) {
+        ASSERT_EQ(0, memcmp(&page.src[rowids[i]], &values[i], sizeof(CppType)))
+                << "storage_type=" << StorageType << " decimal_type=" << DecimalType << " at index=" << i;
+        EXPECT_EQ(page.src[rowids[i]], values[i])
+                << "storage_type=" << StorageType << " decimal_type=" << DecimalType << " at index=" << i;
+    }
+
+    // Verify non-zero first ordinal in page
+    {
+        constexpr ordinal_t kFirst = 500;
+        const rowid_t first_rowids[] = {500, 510, 520, 599};
+        auto col = ChunkFactory::column_from_field_type(DecimalType, false);
+        size_t n = 4;
+        ASSERT_TRUE(page.decoder->read_by_rowids(kFirst, first_rowids, &n, col.get()).ok());
+        ASSERT_EQ(4, n);
+        ASSERT_EQ(4, col->size());
+        const auto v = GetStorageContainer<DecimalType>::get_data(col);
+        EXPECT_EQ(page.src[0], v[0]);
+        EXPECT_EQ(page.src[10], v[1]);
+        EXPECT_EQ(page.src[20], v[2]);
+        EXPECT_EQ(page.src[99], v[3]);
+    }
+}
+
+template <LogicalType StorageType, LogicalType DecimalType>
+void check_delegated_truncation_and_reread() {
+    using CppType = StorageCppType<StorageType>;
+    static_assert(std::is_same_v<CppType, StorageCppType<DecimalType>>);
+
+    constexpr size_t kRows = 200;
+    ReadByRowidsPage<StorageType> page;
+    page.build(kRows);
+    ASSERT_NE(nullptr, page.decoder);
+
+    auto column = ChunkFactory::column_from_field_type(DecimalType, false);
+
+    // 1. Initial read into empty column
+    const rowid_t first_rowids[] = {1, 5, 20, 50, 99};
+    size_t count = 5;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, first_rowids, &count, column.get()).ok());
+    ASSERT_EQ(5, count);
+    ASSERT_EQ(5, column->size());
+    auto values = GetStorageContainer<DecimalType>::get_data(column);
+    for (size_t i = 0; i < 5; i++) {
+        EXPECT_EQ(page.src[first_rowids[i]], values[i]);
+    }
+
+    // 2. Truncate / resize column down to 2 elements and re-read
+    column->resize(2);
+    ASSERT_EQ(2, column->size());
+
+    const rowid_t second_rowids[] = {10, 30, 70};
+    count = 3;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, second_rowids, &count, column.get()).ok());
+    ASSERT_EQ(3, count);
+    ASSERT_EQ(5, column->size());
+    values = GetStorageContainer<DecimalType>::get_data(column);
+    EXPECT_EQ(page.src[first_rowids[0]], values[0]);
+    EXPECT_EQ(page.src[first_rowids[1]], values[1]);
+    for (size_t i = 0; i < 3; i++) {
+        EXPECT_EQ(page.src[second_rowids[i]], values[2 + i]);
+    }
+
+    // 3. Clear / truncate to 0 elements and re-read
+    column->resize(0);
+    ASSERT_EQ(0, column->size());
+
+    const rowid_t third_rowids[] = {0, 42, 100, 199};
+    count = 4;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, third_rowids, &count, column.get()).ok());
+    ASSERT_EQ(4, count);
+    ASSERT_EQ(4, column->size());
+    values = GetStorageContainer<DecimalType>::get_data(column);
+    for (size_t i = 0; i < 4; i++) {
+        EXPECT_EQ(page.src[third_rowids[i]], values[i]);
+    }
+
+    // 4. Out-of-bounds rowids triggering decoder-level truncation
+    const rowid_t out_of_bounds_rowids[] = {15, 25, static_cast<rowid_t>(kRows), static_cast<rowid_t>(kRows + 10)};
+    count = 4;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, out_of_bounds_rowids, &count, column.get()).ok());
+    ASSERT_EQ(2, count);
+    ASSERT_EQ(6, column->size());
+    values = GetStorageContainer<DecimalType>::get_data(column);
+    for (size_t i = 0; i < 4; i++) {
+        EXPECT_EQ(page.src[third_rowids[i]], values[i]);
+    }
+    EXPECT_EQ(page.src[15], values[4]);
+    EXPECT_EQ(page.src[25], values[5]);
+}
+
+template <LogicalType StorageType, LogicalType DecimalType>
+void check_delegated_appends_to_populated_column() {
+    using CppType = StorageCppType<StorageType>;
+    static_assert(std::is_same_v<CppType, StorageCppType<DecimalType>>);
+
+    constexpr size_t kRows = 1000;
+    ReadByRowidsPage<StorageType> page;
+    page.build(kRows);
+    ASSERT_NE(nullptr, page.decoder);
+
+    auto column = ChunkFactory::column_from_field_type(DecimalType, false);
+    std::vector<CppType> existing(5);
+    for (size_t i = 0; i < 5; i++) {
+        if constexpr (StorageType == TYPE_INT256) {
+            existing[i] = int256_t(~static_cast<int128_t>(i), static_cast<uint128_t>(i) + 100);
+        } else {
+            existing[i] = static_cast<CppType>(-(static_cast<int64_t>(i) + 1));
+        }
+    }
+    ASSERT_EQ(5, column->append_numbers(existing.data(), existing.size() * sizeof(CppType)));
+    ASSERT_EQ(5, column->size());
+
+    const rowid_t rowids[] = {3, 10, 500, 999};
+    size_t count = 4;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids, &count, column.get()).ok());
+    ASSERT_EQ(4, count);
+    ASSERT_EQ(9, column->size());
+
+    const auto values = GetStorageContainer<DecimalType>::get_data(column);
+    for (size_t i = 0; i < 5; i++) {
+        EXPECT_EQ(existing[i], values[i])
+                << "existing mismatch storage_type=" << StorageType << " decimal_type=" << DecimalType << " at " << i;
+    }
+    for (size_t i = 0; i < 4; i++) {
+        EXPECT_EQ(page.src[rowids[i]], values[5 + i])
+                << "appended mismatch storage_type=" << StorageType << " decimal_type=" << DecimalType << " at " << i;
+    }
+
+    // Verify destination backed by shared resource
+    {
+        std::vector<CppType> shared_vec(4);
+        for (size_t i = 0; i < 4; i++) {
+            if constexpr (StorageType == TYPE_INT256) {
+                shared_vec[i] = int256_t(static_cast<int128_t>(i) + 1, static_cast<uint128_t>(i) + 100);
+            } else {
+                shared_vec[i] = static_cast<CppType>((i + 1) * 11);
+            }
+        }
+        auto shared = std::make_shared<std::vector<CppType>>(shared_vec);
+        const std::vector<CppType> shared_before = *shared;
+        auto shared_col = ChunkFactory::column_from_field_type(DecimalType, false);
+        ContainerResource resource(shared, shared->data(), shared->size() * sizeof(CppType));
+        ASSERT_EQ(4, shared_col->append_numbers(resource));
+
+        const rowid_t shared_rowids[] = {0, 1, 2, 998, 999};
+        size_t shared_count = 5;
+        ASSERT_TRUE(page.decoder->read_by_rowids(0, shared_rowids, &shared_count, shared_col.get()).ok());
+        ASSERT_EQ(5, shared_count);
+        ASSERT_EQ(9, shared_col->size());
+
+        const auto shared_vals = GetStorageContainer<DecimalType>::get_data(shared_col);
+        for (size_t i = 0; i < 4; i++) {
+            EXPECT_EQ(shared_before[i], shared_vals[i]);
+        }
+        for (size_t i = 0; i < 5; i++) {
+            EXPECT_EQ(page.src[shared_rowids[i]], shared_vals[4 + i]);
+        }
+        EXPECT_EQ(shared_before, *shared) << "shared backing storage was modified";
+    }
+}
+
+template <LogicalType Type>
+void check_parsed_page_v2_nullable() {
+    using ValueType = typename StorageColumnType<Type>::ValueType;
+    constexpr size_t kRows = 1000;
+    std::vector<ValueType> src(kRows);
+    std::vector<uint8_t> null_flags(kRows);
+    for (size_t i = 0; i < kRows; ++i) {
+        if constexpr (Type == TYPE_BOOLEAN) {
+            src[i] = static_cast<uint8_t>(i & 1);
+        } else if constexpr (Type == TYPE_DATE) {
+            src[i] = DateValue::create(2020 + static_cast<int>(i % 10), 1 + static_cast<int>(i % 12),
+                                       1 + static_cast<int>(i % 28));
+        } else if constexpr (Type == TYPE_DATETIME) {
+            src[i] = TimestampValue::create(2020 + static_cast<int>(i % 10), 1 + static_cast<int>(i % 12),
+                                            1 + static_cast<int>(i % 28), static_cast<int>(i % 24),
+                                            static_cast<int>(i % 60), static_cast<int>(i % 60));
+        } else if constexpr (Type == TYPE_BIGINT) {
+            src[i] = static_cast<int64_t>(i * 1000000007LL + 42);
+        } else {
+            src[i] = static_cast<int32_t>(i * 17 + 5);
+        }
+        null_flags[i] = (i % 3 == 0) ? 1 : 0;
+    }
+
+    PageBuilderOptions options;
+    options.data_page_size = 256 * 1024;
+    BitshufflePageBuilder<Type> page_builder(options);
+    size_t added = page_builder.add(reinterpret_cast<const uint8_t*>(src.data()), kRows);
+    ASSERT_EQ(kRows, added);
+    OwnedSlice data_owned = page_builder.finish()->build();
+
+    size_t padded_null_size = ALIGN_UP(kRows, 8u);
+    std::vector<uint8_t> padded_nulls(padded_null_size, 0);
+    memcpy(padded_nulls.data(), null_flags.data(), kRows);
+    std::vector<uint8_t> compressed_nulls(bitshuffle::compress_lz4_bound(padded_null_size, sizeof(uint8_t), 0));
+    int64_t r = bitshuffle::compress_lz4(padded_nulls.data(), compressed_nulls.data(), padded_null_size,
+                                         sizeof(uint8_t), 0);
+    ASSERT_GT(r, 0);
+    compressed_nulls.resize(r);
+
+    std::string encoded(data_owned.slice().data, data_owned.slice().size);
+    encoded.append(reinterpret_cast<const char*>(compressed_nulls.data()), compressed_nulls.size());
+
+    PageFooterPB page_footer;
+    page_footer.set_type(DATA_PAGE);
+    DataPageFooterPB* data_page_footer = page_footer.mutable_data_page_footer();
+    data_page_footer->set_format_version(2);
+    data_page_footer->set_nullmap_size(compressed_nulls.size());
+    data_page_footer->set_first_ordinal(0);
+    data_page_footer->set_num_values(kRows);
+
+    Slice body(encoded);
+    std::unique_ptr<std::vector<uint8_t>> decoded_page;
+    ASSERT_TRUE(StoragePageDecoder::decode_page(&page_footer, 0, BIT_SHUFFLE, &decoded_page, &body).ok());
+
+    const EncodingInfo* encoding = nullptr;
+    ASSERT_TRUE(EncodingInfo::get(Type, BIT_SHUFFLE, &encoding).ok());
+    std::unique_ptr<ParsedPage> parsed_page;
+    PagePointer page_pointer;
+    ASSERT_TRUE(parse_page(&parsed_page, PageHandle(), body, *data_page_footer, encoding, page_pointer, 0).ok());
+    ASSERT_TRUE(parsed_page->supports_read_by_rowids());
+
+    auto nullable_col = ChunkFactory::column_from_field_type(Type, true);
+    std::vector<rowid_t> rowids;
+    for (size_t i = 0; i < kRows; i += 7) {
+        rowids.push_back(static_cast<rowid_t>(i));
+    }
+    if (rowids.back() != kRows - 1) {
+        rowids.push_back(static_cast<rowid_t>(kRows - 1));
+    }
+    size_t count = rowids.size();
+    ASSERT_TRUE(parsed_page->read_by_rowids(nullable_col.get(), rowids.data(), &count).ok());
+    ASSERT_EQ(rowids.size(), count);
+    ASSERT_EQ(count, nullable_col->size());
+
+    auto* nc = down_cast<NullableColumn*>(nullable_col.get());
+    const auto values = GetStorageContainer<Type>::get_data(nc->data_column());
+    for (size_t i = 0; i < count; ++i) {
+        rowid_t rid = rowids[i];
+        bool expected_null = (null_flags[rid] != 0);
+        EXPECT_EQ(expected_null, nc->is_null(i))
+                << "type=" << Type << " null mismatch at rowid=" << rid << " index=" << i;
+        EXPECT_EQ(src[rid], values[i]) << "type=" << Type << " data mismatch at rowid=" << rid << " index=" << i;
+    }
+
+    // Verify appending to populated NullableColumn preserves existing values
+    {
+        auto col = ChunkFactory::column_from_field_type(Type, true);
+        auto* nc_col = down_cast<NullableColumn*>(col.get());
+        ValueType existing_val{};
+        if constexpr (Type == TYPE_BOOLEAN) {
+            existing_val = 1;
+        } else if constexpr (Type == TYPE_DATE) {
+            existing_val = DateValue::create(1999, 12, 31);
+        } else if constexpr (Type == TYPE_DATETIME) {
+            existing_val = TimestampValue::create(1999, 12, 31, 23, 59, 59);
+        } else if constexpr (Type == TYPE_BIGINT) {
+            existing_val = 42;
+        } else {
+            existing_val = 42;
+        }
+        nc_col->append_datum(Datum());
+        nc_col->append_datum(Datum(existing_val));
+        ASSERT_EQ(2, col->size());
+        ASSERT_TRUE(col->is_null(0));
+        ASSERT_FALSE(col->is_null(1));
+
+        const rowid_t append_rowids[] = {1, 3, 5, 999};
+        size_t append_count = 4;
+        ASSERT_TRUE(parsed_page->read_by_rowids(col.get(), append_rowids, &append_count).ok());
+        ASSERT_EQ(4, append_count);
+        ASSERT_EQ(6, col->size());
+
+        EXPECT_TRUE(col->is_null(0));
+        EXPECT_FALSE(col->is_null(1));
+        EXPECT_EQ(existing_val, GetStorageContainer<Type>::get_data(nc_col->data_column())[1]);
+
+        const auto append_vals = GetStorageContainer<Type>::get_data(nc_col->data_column());
+        for (size_t i = 0; i < 4; ++i) {
+            rowid_t rid = append_rowids[i];
+            bool expected_null = (null_flags[rid] != 0);
+            EXPECT_EQ(expected_null, col->is_null(2 + i))
+                    << "type=" << Type << " append null mismatch at rowid=" << rid;
+            EXPECT_EQ(src[rid], append_vals[2 + i]) << "type=" << Type << " append data mismatch at rowid=" << rid;
+        }
+    }
+}
+
+class DirectWriteSpyNullableColumn final : public NullableColumn {
+public:
+    DirectWriteSpyNullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column)
+            : NullableColumn(std::move(data_column), std::move(null_column)) {}
+
+    size_t append_numbers(const void* buff, size_t length) override {
+        ++append_numbers_calls;
+        return NullableColumn::append_numbers(buff, length);
+    }
+
+    size_t append_numbers_calls = 0;
+};
+
+template <LogicalType Type>
+void check_parsed_page_v2_nullable_null_free() {
+    using CppType = StorageCppType<Type>;
+    using ElemType = std::conditional_t<std::is_same_v<CppType, bool>, uint8_t, CppType>;
+    constexpr size_t kRows = 1003;
+    std::vector<ElemType> src(kRows);
+    for (size_t i = 0; i < kRows; ++i) {
+        if constexpr (Type == TYPE_BOOLEAN) {
+            src[i] = static_cast<uint8_t>(i & 1);
+        } else if constexpr (Type == TYPE_DECIMAL256 || Type == TYPE_INT256) {
+            int128_t hi = static_cast<int128_t>(i) * 0x123456789ABCDEF0LL ^ 0x5555555555555555LL;
+            uint128_t lo = static_cast<uint128_t>(i) * 0x0FEDCBA987654321ULL ^ 0xAAAAAAAAAAAAAAAAULL;
+            src[i] = int256_t(hi, lo);
+        } else {
+            src[i] = static_cast<CppType>(static_cast<int64_t>(i) * 2654435761LL % 100003 - 50000);
+        }
+    }
+
+    PageBuilderOptions options;
+    options.data_page_size = 256 * 1024;
+    BitshufflePageBuilder<Type> page_builder(options);
+    size_t added = page_builder.add(reinterpret_cast<const uint8_t*>(src.data()), kRows);
+    ASSERT_EQ(kRows, added);
+    OwnedSlice data_owned = page_builder.finish()->build();
+    std::string encoded(data_owned.slice().data, data_owned.slice().size);
+
+    PageFooterPB page_footer;
+    page_footer.set_type(DATA_PAGE);
+    DataPageFooterPB* data_page_footer = page_footer.mutable_data_page_footer();
+    data_page_footer->set_format_version(2);
+    data_page_footer->set_nullmap_size(0);
+    data_page_footer->set_first_ordinal(0);
+    data_page_footer->set_num_values(kRows);
+
+    Slice body(encoded);
+    std::unique_ptr<std::vector<uint8_t>> decoded_page;
+    ASSERT_TRUE(StoragePageDecoder::decode_page(&page_footer, 0, BIT_SHUFFLE, &decoded_page, &body).ok());
+
+    const EncodingInfo* encoding = nullptr;
+    ASSERT_TRUE(EncodingInfo::get(Type, BIT_SHUFFLE, &encoding).ok());
+    std::unique_ptr<ParsedPage> parsed_page;
+    PagePointer page_pointer;
+    ASSERT_TRUE(parse_page(&parsed_page, PageHandle(), body, *data_page_footer, encoding, page_pointer, 0).ok());
+    ASSERT_TRUE(parsed_page->supports_read_by_rowids());
+
+    std::vector<rowid_t> rowids;
+    for (size_t i = 0; i < kRows; i += 7) {
+        rowids.push_back(static_cast<rowid_t>(i));
+    }
+    if (rowids.back() != kRows - 1) {
+        rowids.push_back(static_cast<rowid_t>(kRows - 1));
+    }
+
+    // 1. Verify direct-write path is taken (no fallback to NullableColumn::append_numbers)
+    //    for all fast-path types when ParsedPageV2 passes the outer NullableColumn* directly.
+    {
+        auto data_col = ChunkFactory::column_from_field_type(Type, false);
+        auto null_col = NullColumn::create();
+        DirectWriteSpyNullableColumn spy(std::move(data_col), std::move(null_col));
+        size_t count = rowids.size();
+        ASSERT_TRUE(parsed_page->read_by_rowids(&spy, rowids.data(), &count).ok());
+        ASSERT_EQ(rowids.size(), count);
+        ASSERT_EQ(count, spy.size());
+        EXPECT_FALSE(spy.has_null());
+        if constexpr (Type != TYPE_BOOLEAN) {
+            EXPECT_EQ(0u, spy.append_numbers_calls)
+                    << "type=" << Type << " unexpectedly fell back to NullableColumn::append_numbers";
+        }
+        const auto values = GetStorageContainer<Type>::get_data(spy.data_column());
+        for (size_t i = 0; i < count; ++i) {
+            rowid_t rid = rowids[i];
+            EXPECT_FALSE(spy.is_null(i)) << "type=" << Type << " unexpected null at index=" << i;
+            EXPECT_EQ(0, memcmp(&src[rid], &values[i], sizeof(CppType)))
+                    << "type=" << Type << " data mismatch at rowid=" << rid << " index=" << i;
+        }
+    }
+
+    // 2. Verify appending to a populated NullableColumn (including an existing null row)
+    //    preserves existing rows and null flags, and marks newly read rows non-null.
+    {
+        auto col = ChunkFactory::column_from_field_type(Type, true);
+        auto* nc = down_cast<NullableColumn*>(col.get());
+        nc->append_nulls(1);
+        ASSERT_EQ(1, nc->data_column_raw_ptr()->append_numbers(&src[0], sizeof(CppType)));
+        nc->null_column_data().push_back(0);
+        ASSERT_EQ(2, col->size());
+        ASSERT_TRUE(col->has_null());
+        ASSERT_TRUE(col->is_null(0));
+        ASSERT_FALSE(col->is_null(1));
+
+        const rowid_t append_rowids[] = {1, 3, 5, static_cast<rowid_t>(kRows - 1)};
+        size_t append_count = 4;
+        ASSERT_TRUE(parsed_page->read_by_rowids(col.get(), append_rowids, &append_count).ok());
+        ASSERT_EQ(4, append_count);
+        ASSERT_EQ(6, col->size());
+        EXPECT_TRUE(col->has_null());
+        EXPECT_TRUE(col->is_null(0));
+        EXPECT_FALSE(col->is_null(1));
+
+        const auto append_vals = GetStorageContainer<Type>::get_data(nc->data_column());
+        EXPECT_EQ(0, memcmp(&src[0], &append_vals[1], sizeof(CppType)));
+        for (size_t i = 0; i < 4; ++i) {
+            rowid_t rid = append_rowids[i];
+            EXPECT_FALSE(col->is_null(2 + i)) << "type=" << Type << " append null mismatch at rowid=" << rid;
+            EXPECT_EQ(0, memcmp(&src[rid], &append_vals[2 + i], sizeof(CppType)))
+                    << "type=" << Type << " append data mismatch at rowid=" << rid;
+        }
+    }
+
+    // 3. Verify out-of-page rowid truncation keeps data and null column sizes in sync.
+    {
+        auto col = ChunkFactory::column_from_field_type(Type, true);
+        auto* nc = down_cast<NullableColumn*>(col.get());
+        const rowid_t trunc_rowids[] = {2, 10, static_cast<rowid_t>(kRows), static_cast<rowid_t>(kRows + 5)};
+        size_t trunc_count = 4;
+        ASSERT_TRUE(parsed_page->read_by_rowids(col.get(), trunc_rowids, &trunc_count).ok());
+        ASSERT_EQ(2, trunc_count);
+        ASSERT_EQ(2, col->size());
+        ASSERT_EQ(2, nc->data_column()->size());
+        ASSERT_EQ(2, nc->null_column()->size());
+        EXPECT_FALSE(col->has_null());
+        const auto vals = GetStorageContainer<Type>::get_data(nc->data_column());
+        EXPECT_EQ(0, memcmp(&src[2], &vals[0], sizeof(CppType)));
+        EXPECT_EQ(0, memcmp(&src[10], &vals[1], sizeof(CppType)));
+    }
+}
+
+} // namespace
+
+TEST_F(BitShufflePageTest, non_nullable_matches_source_all_fast_path_types) {
+    constexpr size_t kRows = 16384;
+    constexpr size_t kStride = 7;
+    check_non_nullable_stride<TYPE_TINYINT>(kRows, kStride);
+    check_non_nullable_stride<TYPE_SMALLINT>(kRows, kStride);
+    check_non_nullable_stride<TYPE_INT>(kRows, kStride);
+    check_non_nullable_stride<TYPE_BIGINT>(kRows, kStride);
+    check_non_nullable_stride<TYPE_LARGEINT>(kRows, kStride);
+    check_non_nullable_stride<TYPE_FLOAT>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DOUBLE>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DATE>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DATETIME>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DECIMAL32>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DECIMAL64>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DECIMAL128>(kRows, kStride);
+    check_non_nullable_stride<TYPE_INT256>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DECIMAL256>(kRows, kStride);
+}
+
+TEST_F(BitShufflePageTest, non_nullable_matches_source_legacy_types) {
+    constexpr size_t kRows = 16384;
+    constexpr size_t kStride = 7;
+    check_non_nullable_stride<TYPE_DATE_V1>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DATETIME_V1>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DECIMAL>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DECIMALV2>(kRows, kStride);
+}
+
+TEST_F(BitShufflePageTest, delegated_decimal_empty_column) {
+    check_delegated_empty_column<TYPE_INT, TYPE_DECIMAL32>();
+    check_delegated_empty_column<TYPE_BIGINT, TYPE_DECIMAL64>();
+    check_delegated_empty_column<TYPE_LARGEINT, TYPE_DECIMAL128>();
+    check_delegated_empty_column<TYPE_INT256, TYPE_DECIMAL256>();
+}
+
+TEST_F(BitShufflePageTest, delegated_decimal_truncation_and_reread) {
+    check_delegated_truncation_and_reread<TYPE_INT, TYPE_DECIMAL32>();
+    check_delegated_truncation_and_reread<TYPE_BIGINT, TYPE_DECIMAL64>();
+    check_delegated_truncation_and_reread<TYPE_LARGEINT, TYPE_DECIMAL128>();
+    check_delegated_truncation_and_reread<TYPE_INT256, TYPE_DECIMAL256>();
+}
+
+TEST_F(BitShufflePageTest, delegated_decimal_appends_to_populated_column) {
+    check_delegated_appends_to_populated_column<TYPE_INT, TYPE_DECIMAL32>();
+    check_delegated_appends_to_populated_column<TYPE_BIGINT, TYPE_DECIMAL64>();
+    check_delegated_appends_to_populated_column<TYPE_LARGEINT, TYPE_DECIMAL128>();
+    check_delegated_appends_to_populated_column<TYPE_INT256, TYPE_DECIMAL256>();
+}
+
+// Review focus 2: output appends and never overwrites rows already in the column.
+TEST_F(BitShufflePageTest, appends_to_populated_column) {
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(1000);
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    const int32_t existing[] = {-1, -2, -3, -4, -5};
+    ASSERT_EQ(5, column->append_numbers(existing, sizeof(existing)));
+
+    const rowid_t rowids[] = {3, 10, 500, 999};
+    size_t count = 4;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids, &count, column.get()).ok());
+    ASSERT_EQ(4, count);
+    ASSERT_EQ(9, column->size());
+
+    const auto values = GetStorageContainer<TYPE_INT>::get_data(column);
+    for (size_t i = 0; i < 5; i++) {
+        EXPECT_EQ(existing[i], values[i]);
+    }
+    for (size_t i = 0; i < 4; i++) {
+        EXPECT_EQ(page.src[rowids[i]], values[5 + i]);
+    }
+}
+
+// Review focus 2: a column whose rows live in shared (zero-copy) storage must be appended to
+// without writing through to the shared buffer.
+TEST_F(BitShufflePageTest, destination_backed_by_shared_resource) {
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(1000);
+
+    auto shared = std::make_shared<std::vector<int32_t>>(std::vector<int32_t>{11, 22, 33, 44});
+    const std::vector<int32_t> shared_before = *shared;
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    ContainerResource resource(shared, shared->data(), shared->size() * sizeof(int32_t));
+    ASSERT_EQ(4, column->append_numbers(resource));
+
+    const rowid_t rowids[] = {0, 1, 2, 998, 999};
+    size_t count = 5;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids, &count, column.get()).ok());
+    ASSERT_EQ(5, count);
+    ASSERT_EQ(9, column->size());
+
+    const auto values = GetStorageContainer<TYPE_INT>::get_data(column);
+    for (size_t i = 0; i < 4; i++) {
+        EXPECT_EQ(shared_before[i], values[i]);
+    }
+    for (size_t i = 0; i < 5; i++) {
+        EXPECT_EQ(page.src[rowids[i]], values[4 + i]);
+    }
+    EXPECT_EQ(shared_before, *shared) << "shared backing storage was modified";
+}
+
+// Review focus 3: stop at the first rowid outside the page; `count` reports rows actually read.
+TEST_F(BitShufflePageTest, truncates_at_first_out_of_page_rowid) {
+    constexpr uint32_t kRows = 100;
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(kRows);
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    const rowid_t rowids[] = {5, 10, kRows, kRows + 10};
+    size_t count = 4;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids, &count, column.get()).ok());
+    ASSERT_EQ(2, count);
+    ASSERT_EQ(2, column->size());
+    const auto values = GetStorageContainer<TYPE_INT>::get_data(column);
+    EXPECT_EQ(page.src[5], values[0]);
+    EXPECT_EQ(page.src[10], values[1]);
+}
+
+// Truncation must also leave rows that were already in the column untouched.
+TEST_F(BitShufflePageTest, truncation_preserves_existing_rows) {
+    constexpr uint32_t kRows = 100;
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(kRows);
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    const int32_t existing[] = {-7, -8, -9};
+    ASSERT_EQ(3, column->append_numbers(existing, sizeof(existing)));
+    const rowid_t rowids[] = {1, 2, 3, kRows + 5, 4};
+    size_t count = 5;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids, &count, column.get()).ok());
+    ASSERT_EQ(3, count);
+    ASSERT_EQ(6, column->size());
+    const auto values = GetStorageContainer<TYPE_INT>::get_data(column);
+    for (size_t i = 0; i < 3; i++) {
+        EXPECT_EQ(existing[i], values[i]);
+        EXPECT_EQ(page.src[rowids[i]], values[3 + i]);
+    }
+}
+
+// The page's first ordinal is subtracted from the rowids before bounds checking.
+TEST_F(BitShufflePageTest, nonzero_first_ordinal_in_page) {
+    constexpr uint32_t kRows = 100;
+    constexpr ordinal_t kFirst = 1000;
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(kRows);
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    const rowid_t rowids[] = {1000, 1050, 1099, 1100};
+    size_t count = 4;
+    ASSERT_TRUE(page.decoder->read_by_rowids(kFirst, rowids, &count, column.get()).ok());
+    ASSERT_EQ(3, count);
+    ASSERT_EQ(3, column->size());
+    const auto values = GetStorageContainer<TYPE_INT>::get_data(column);
+    EXPECT_EQ(page.src[0], values[0]);
+    EXPECT_EQ(page.src[50], values[1]);
+    EXPECT_EQ(page.src[99], values[2]);
+}
+
+// Review focus 1: row counts that are not a multiple of 8 (the bitshuffle block width).
+TEST_F(BitShufflePageTest, page_not_multiple_of_eight) {
+    constexpr uint32_t kRows = 1003;
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(kRows);
+    std::vector<rowid_t> rowids;
+    for (uint32_t i = 0; i < kRows; i += 3) {
+        rowids.push_back(i);
+    }
+    rowids.push_back(kRows - 1); // 1002, the last row, which sits in the padded tail group
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    size_t count = rowids.size();
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids.data(), &count, column.get()).ok());
+    ASSERT_EQ(rowids.size(), count);
+    ASSERT_EQ(rowids.size(), column->size());
+    const auto values = GetStorageContainer<TYPE_INT>::get_data(column);
+    for (size_t i = 0; i < count; i++) {
+        ASSERT_EQ(page.src[rowids[i]], values[i]) << "at " << i;
+    }
+    EXPECT_EQ(page.src[kRows - 1], values[count - 1]);
+}
+
+TEST_F(BitShufflePageTest, count_zero_is_noop) {
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(100);
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    const int32_t existing[] = {42};
+    ASSERT_EQ(1, column->append_numbers(existing, sizeof(existing)));
+    const rowid_t rowids[] = {1};
+    size_t count = 0;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids, &count, column.get()).ok());
+    EXPECT_EQ(0, count);
+    ASSERT_EQ(1, column->size());
+    EXPECT_EQ(42, GetStorageContainer<TYPE_INT>::get_data(column)[0]);
+}
+
+TEST_F(BitShufflePageTest, ParsedPageV2ReadByRowidsNullable) {
+    {
+        SCOPED_TRACE("TYPE_INT");
+        check_parsed_page_v2_nullable<TYPE_INT>();
+    }
+    {
+        SCOPED_TRACE("TYPE_BIGINT");
+        check_parsed_page_v2_nullable<TYPE_BIGINT>();
+    }
+    {
+        SCOPED_TRACE("TYPE_DATE");
+        check_parsed_page_v2_nullable<TYPE_DATE>();
+    }
+    {
+        SCOPED_TRACE("TYPE_DATETIME");
+        check_parsed_page_v2_nullable<TYPE_DATETIME>();
+    }
+    {
+        SCOPED_TRACE("TYPE_BOOLEAN");
+        check_parsed_page_v2_nullable<TYPE_BOOLEAN>();
+    }
+}
+
+TEST_F(BitShufflePageTest, ParsedPageV2ReadByRowidsNullableNullFreePage) {
+    {
+        SCOPED_TRACE("TYPE_INT");
+        check_parsed_page_v2_nullable_null_free<TYPE_INT>();
+    }
+    {
+        SCOPED_TRACE("TYPE_BIGINT");
+        check_parsed_page_v2_nullable_null_free<TYPE_BIGINT>();
+    }
+    {
+        SCOPED_TRACE("TYPE_DATE");
+        check_parsed_page_v2_nullable_null_free<TYPE_DATE>();
+    }
+    {
+        SCOPED_TRACE("TYPE_DATETIME");
+        check_parsed_page_v2_nullable_null_free<TYPE_DATETIME>();
+    }
+    {
+        SCOPED_TRACE("TYPE_BOOLEAN");
+        check_parsed_page_v2_nullable_null_free<TYPE_BOOLEAN>();
+    }
+    {
+        SCOPED_TRACE("TYPE_DECIMAL32");
+        check_parsed_page_v2_nullable_null_free<TYPE_DECIMAL32>();
+    }
+    {
+        SCOPED_TRACE("TYPE_DECIMAL64");
+        check_parsed_page_v2_nullable_null_free<TYPE_DECIMAL64>();
+    }
+    {
+        SCOPED_TRACE("TYPE_DECIMAL128");
+        check_parsed_page_v2_nullable_null_free<TYPE_DECIMAL128>();
+    }
+    {
+        SCOPED_TRACE("TYPE_DECIMAL256");
+        check_parsed_page_v2_nullable_null_free<TYPE_DECIMAL256>();
+    }
+}
+
+TEST_F(BitShufflePageTest, nullable_and_adaptive_nullable_direct_read_by_rowids) {
+    constexpr size_t kRows = 500;
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(kRows);
+    ASSERT_NE(nullptr, page.decoder);
+
+    const rowid_t rowids[] = {0, 7, 42, 128, 499};
+
+    // 1. Direct decoder call on DirectWriteSpyNullableColumn (including delegated DecimalV3 column)
+    {
+        auto dec_data = ChunkFactory::column_from_field_type(TYPE_DECIMAL32, false);
+        auto null_col = NullColumn::create();
+        DirectWriteSpyNullableColumn spy(std::move(dec_data), std::move(null_col));
+        size_t count = 5;
+        ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids, &count, &spy).ok());
+        ASSERT_EQ(5, count);
+        ASSERT_EQ(5, spy.size());
+        EXPECT_EQ(0u, spy.append_numbers_calls);
+        EXPECT_FALSE(spy.has_null());
+        const auto vals = GetStorageContainer<TYPE_DECIMAL32>::get_data(spy.data_column());
+        for (size_t i = 0; i < 5; ++i) {
+            EXPECT_FALSE(spy.is_null(i));
+            EXPECT_EQ(page.src[rowids[i]], vals[i]);
+        }
+    }
+
+    // 2. Direct decoder call on AdaptiveNullableColumn (uninitialized state + pre-populated state)
+    {
+        auto adaptive = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+        size_t count = 5;
+        ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids, &count, adaptive.get()).ok());
+        ASSERT_EQ(5, count);
+        ASSERT_EQ(5, adaptive->size());
+        EXPECT_FALSE(adaptive->has_null());
+        for (size_t i = 0; i < 5; ++i) {
+            EXPECT_FALSE(adaptive->is_null(i));
+            EXPECT_EQ(page.src[rowids[i]], adaptive->get(i).get_int32());
+        }
+
+        // Append a null row and then read more rows with out-of-page truncation
+        adaptive->append_nulls(1);
+        ASSERT_EQ(6, adaptive->size());
+        EXPECT_TRUE(adaptive->has_null());
+
+        const rowid_t more_rowids[] = {10, 20, static_cast<rowid_t>(kRows)};
+        size_t more_count = 3;
+        ASSERT_TRUE(page.decoder->read_by_rowids(0, more_rowids, &more_count, adaptive.get()).ok());
+        ASSERT_EQ(2, more_count);
+        ASSERT_EQ(8, adaptive->size());
+        EXPECT_TRUE(adaptive->has_null());
+        EXPECT_TRUE(adaptive->is_null(5));
+        EXPECT_FALSE(adaptive->is_null(6));
+        EXPECT_FALSE(adaptive->is_null(7));
+        EXPECT_EQ(page.src[10], adaptive->get(6).get_int32());
+        EXPECT_EQ(page.src[20], adaptive->get(7).get_int32());
+    }
+}
+
+TEST_F(BitShufflePageTest, rowid_preceding_page_ordinal_returns_corruption) {
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(100);
+
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    column->append_datum(Datum(static_cast<int32_t>(42)));
+    size_t orig_size = column->size();
+
+    // first_ordinal_in_page is 50, but rowids[0] is 40 (< 50)
+    rowid_t rowids[] = {40, 55, 60};
+    size_t count = 3;
+    Status st = page.decoder->read_by_rowids(50, rowids, &count, column.get());
+    EXPECT_TRUE(st.is_corruption());
+    EXPECT_EQ(orig_size, column->size());
+}
+
+TEST_F(BitShufflePageTest, ConstColumnFallbackReadByRowids) {
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(100);
+    ASSERT_NE(nullptr, page.decoder);
+
+    const rowid_t rowids[] = {5, 25, 75};
+
+    // 1. ConstColumn wrapping Int32Column with 1 element: must not enter down_cast<BaseCol*>
+    //    direct-write block and instead fall back to ConstColumn::append_numbers.
+    {
+        auto data_col = Int32Column::create();
+        data_col->append(7);
+        auto const_col = ConstColumn::create(std::move(data_col), 1);
+        ASSERT_TRUE(const_col->is_constant());
+        ASSERT_FALSE(const_col->is_nullable());
+
+        size_t count = 3;
+        Status st = page.decoder->read_by_rowids(0, rowids, &count, const_col.get());
+        EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+        EXPECT_NE(std::string::npos, st.message().find("append_numbers failed")) << st.to_string();
+        EXPECT_EQ(1u, const_col->size());
+        EXPECT_EQ(7, const_col->get(0).get_int32());
+    }
+
+    // 2. ConstColumn wrapping a NullableColumn (is_constant() == true && is_nullable() == true):
+    //    must not enter down_cast<NullableColumn*> and instead fall back to ConstColumn::append_numbers.
+    {
+        auto inner_nullable = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        inner_nullable->append_nulls(1);
+        auto const_nullable = ConstColumn::create(std::move(inner_nullable), 1);
+        ASSERT_TRUE(const_nullable->is_constant());
+        ASSERT_TRUE(const_nullable->is_nullable());
+
+        size_t count = 3;
+        Status st = page.decoder->read_by_rowids(0, rowids, &count, const_nullable.get());
+        EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+        EXPECT_NE(std::string::npos, st.message().find("append_numbers failed")) << st.to_string();
+        EXPECT_EQ(1u, const_nullable->size());
+        EXPECT_TRUE(const_nullable->is_null(0));
+    }
+
+    // 3. Non-fixed-length column (BinaryColumn): BitShuffleRawDataVisitor::do_visit(const T&)
+    //    returns Status::NotSupported and falls back to BinaryColumn::append_numbers.
+    {
+        auto binary_col = BinaryColumn::create();
+        size_t count = 3;
+        Status st = page.decoder->read_by_rowids(0, rowids, &count, binary_col.get());
+        EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+        EXPECT_NE(std::string::npos, st.message().find("append_numbers failed")) << st.to_string();
+    }
+
+    // 4. Fixed-length column with mismatched element width (Int64Column on TYPE_INT page):
+    //    BitShuffleRawDataVisitor::visit_fixed rejects sizeof(int64_t) != sizeof(int32_t) and falls back.
+    {
+        auto int64_col = Int64Column::create();
+        size_t count = 2;
+        Status st = page.decoder->read_by_rowids(0, rowids, &count, int64_col.get());
+        EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+        EXPECT_NE(std::string::npos, st.message().find("append_numbers failed")) << st.to_string();
+    }
+}
+
+namespace {
+
+struct WideColumnSlot {
+    virtual ~WideColumnSlot() = default;
+    virtual void init(size_t rows) = 0;
+    virtual Column* reset_column(int mode) = 0;
+    virtual Status read_by_rowids(ordinal_t first_ord, const rowid_t* rowids, size_t* count, Column* col) = 0;
+    virtual void verify(int mode, const rowid_t* expected_rowids, size_t expected_rows, Column* col,
+                        size_t col_idx) const = 0;
+};
+
+template <LogicalType StorageType, LogicalType ColType>
+struct TypedWideColumnSlot final : WideColumnSlot {
+    using CppType = StorageCppType<StorageType>;
+    static_assert(sizeof(CppType) == sizeof(StorageCppType<ColType>));
+
+    ReadByRowidsPage<StorageType> page;
+    MutableColumnPtr owned_col;
+    std::unique_ptr<DirectWriteSpyNullableColumn> owned_spy;
+
+    void init(size_t rows) override {
+        page.build(rows);
+        ASSERT_NE(nullptr, page.decoder);
+    }
+
+    Column* reset_column(int mode) override {
+        owned_col.reset();
+        owned_spy.reset();
+        if (mode == 0) {
+            owned_col = ChunkFactory::column_from_field_type(ColType, false);
+            return owned_col.get();
+        } else if (mode == 1) {
+            owned_spy = std::make_unique<DirectWriteSpyNullableColumn>(
+                    ChunkFactory::column_from_field_type(ColType, false), NullColumn::create());
+            return owned_spy.get();
+        } else {
+            owned_col = AdaptiveNullableColumn::create(ChunkFactory::column_from_field_type(ColType, false),
+                                                       NullColumn::create());
+            return owned_col.get();
+        }
+    }
+
+    Status read_by_rowids(ordinal_t first_ord, const rowid_t* rowids, size_t* count, Column* col) override {
+        return page.decoder->read_by_rowids(first_ord, rowids, count, col);
+    }
+
+    void verify(int mode, const rowid_t* expected_rowids, size_t expected_rows, Column* col,
+                size_t col_idx) const override {
+        ASSERT_EQ(expected_rows, col->size()) << "col_idx=" << col_idx << " mode=" << mode;
+        for (size_t r = 0; r < expected_rows; ++r) {
+            EXPECT_FALSE(col->is_null(r)) << "col_idx=" << col_idx << " mode=" << mode << " row=" << r;
+        }
+
+        if (mode == 0) {
+            EXPECT_FALSE(col->is_nullable()) << "col_idx=" << col_idx;
+            const auto values = GetStorageContainer<ColType>::get_data(col);
+            for (size_t r = 0; r < expected_rows; ++r) {
+                rowid_t rid = expected_rowids[r];
+                EXPECT_EQ(0, std::memcmp(&page.src[rid], &values[r], sizeof(CppType)))
+                        << "col_idx=" << col_idx << " mode=0 row=" << r << " rid=" << rid;
+            }
+        } else if (mode == 1) {
+            auto* spy = down_cast<DirectWriteSpyNullableColumn*>(col);
+            EXPECT_FALSE(spy->has_null()) << "col_idx=" << col_idx;
+            ASSERT_EQ(expected_rows, spy->data_column()->size()) << "col_idx=" << col_idx;
+            ASSERT_EQ(expected_rows, spy->null_column()->size()) << "col_idx=" << col_idx;
+            if constexpr (StorageType != TYPE_BOOLEAN) {
+                EXPECT_EQ(0u, spy->append_numbers_calls)
+                        << "col_idx=" << col_idx << " unexpectedly fell back to NullableColumn::append_numbers";
+            }
+            const auto values = GetStorageContainer<ColType>::get_data(spy->data_column());
+            for (size_t r = 0; r < expected_rows; ++r) {
+                rowid_t rid = expected_rowids[r];
+                EXPECT_EQ(0, std::memcmp(&page.src[rid], &values[r], sizeof(CppType)))
+                        << "col_idx=" << col_idx << " mode=1 row=" << r << " rid=" << rid;
+            }
+        } else {
+            auto* adaptive = down_cast<AdaptiveNullableColumn*>(col);
+            EXPECT_FALSE(adaptive->has_null()) << "col_idx=" << col_idx;
+            if constexpr (StorageType != TYPE_BOOLEAN) {
+                EXPECT_EQ(AdaptiveNullableColumn::State::kMaterialized, adaptive->state()) << "col_idx=" << col_idx;
+            }
+            const auto& data_col = adaptive->materialized_raw_data_column();
+            const auto& null_col = adaptive->materialized_raw_null_column();
+            ASSERT_EQ(expected_rows, data_col->size()) << "col_idx=" << col_idx;
+            ASSERT_EQ(expected_rows, null_col->size()) << "col_idx=" << col_idx;
+            const auto values = GetStorageContainer<ColType>::get_data(data_col);
+            for (size_t r = 0; r < expected_rows; ++r) {
+                rowid_t rid = expected_rowids[r];
+                EXPECT_EQ(0, std::memcmp(&page.src[rid], &values[r], sizeof(CppType)))
+                        << "col_idx=" << col_idx << " mode=2 row=" << r << " rid=" << rid;
+            }
+        }
+    }
+};
+
+} // namespace
+
+TEST_F(BitShufflePageTest, WideSchema105ColumnsReadByRowids) {
+    constexpr size_t kNumColumns = 105;
+    constexpr size_t kPageRows = 1024;
+
+    std::vector<std::unique_ptr<WideColumnSlot>> slots;
+    slots.reserve(kNumColumns);
+    for (size_t col_idx = 0; col_idx < kNumColumns; ++col_idx) {
+        switch (col_idx % 15) {
+        case 0:
+            slots.push_back(std::make_unique<TypedWideColumnSlot<TYPE_TINYINT, TYPE_TINYINT>>());
+            break;
+        case 1:
+            slots.push_back(std::make_unique<TypedWideColumnSlot<TYPE_SMALLINT, TYPE_SMALLINT>>());
+            break;
+        case 2:
+            slots.push_back(std::make_unique<TypedWideColumnSlot<TYPE_INT, TYPE_INT>>());
+            break;
+        case 3:
+            slots.push_back(std::make_unique<TypedWideColumnSlot<TYPE_BIGINT, TYPE_BIGINT>>());
+            break;
+        case 4:
+            slots.push_back(std::make_unique<TypedWideColumnSlot<TYPE_LARGEINT, TYPE_LARGEINT>>());
+            break;
+        case 5:
+            slots.push_back(std::make_unique<TypedWideColumnSlot<TYPE_FLOAT, TYPE_FLOAT>>());
+            break;
+        case 6:
+            slots.push_back(std::make_unique<TypedWideColumnSlot<TYPE_DOUBLE, TYPE_DOUBLE>>());
+            break;
+        case 7:
+            slots.push_back(std::make_unique<TypedWideColumnSlot<TYPE_DATE, TYPE_DATE>>());
+            break;
+        case 8:
+            slots.push_back(std::make_unique<TypedWideColumnSlot<TYPE_DATETIME, TYPE_DATETIME>>());
+            break;
+        case 9:
+            slots.push_back(std::make_unique<TypedWideColumnSlot<TYPE_INT, TYPE_DECIMAL32>>());
+            break;
+        case 10:
+            slots.push_back(std::make_unique<TypedWideColumnSlot<TYPE_BIGINT, TYPE_DECIMAL64>>());
+            break;
+        case 11:
+            slots.push_back(std::make_unique<TypedWideColumnSlot<TYPE_LARGEINT, TYPE_DECIMAL128>>());
+            break;
+        case 12:
+            slots.push_back(std::make_unique<TypedWideColumnSlot<TYPE_INT256, TYPE_INT256>>());
+            break;
+        case 13:
+            slots.push_back(std::make_unique<TypedWideColumnSlot<TYPE_INT256, TYPE_DECIMAL256>>());
+            break;
+        case 14:
+            slots.push_back(std::make_unique<TypedWideColumnSlot<TYPE_BOOLEAN, TYPE_BOOLEAN>>());
+            break;
+        }
+        slots.back()->init(kPageRows);
+    }
+
+    const size_t kBatchSizes[] = {1, 10, 64};
+    for (size_t batch_idx = 0; batch_idx < std::size(kBatchSizes); ++batch_idx) {
+        const size_t batch_size = kBatchSizes[batch_idx];
+        std::vector<rowid_t> rowids;
+        rowids.reserve(batch_size + 1);
+        for (size_t i = 0; i < batch_size; ++i) {
+            rowids.push_back(static_cast<rowid_t>((i * 15 + 3) % kPageRows));
+        }
+        std::sort(rowids.begin(), rowids.end());
+        rowids.erase(std::unique(rowids.begin(), rowids.end()), rowids.end());
+        while (rowids.size() < batch_size) {
+            rowid_t next_id = rowids.empty() ? 0 : (rowids.back() + 1);
+            ASSERT_LT(next_id, kPageRows);
+            rowids.push_back(next_id);
+        }
+        // Append an out-of-page rowid at the tail to verify truncation across all 105 columns
+        rowids.push_back(static_cast<rowid_t>(kPageRows + 17));
+
+        std::vector<Column*> columns(kNumColumns);
+        std::vector<int> modes(kNumColumns);
+        for (size_t col_idx = 0; col_idx < kNumColumns; ++col_idx) {
+            modes[col_idx] = static_cast<int>((col_idx + col_idx / 15 + batch_idx) % 3);
+            columns[col_idx] = slots[col_idx]->reset_column(modes[col_idx]);
+        }
+
+        for (size_t col_idx = 0; col_idx < kNumColumns; ++col_idx) {
+            size_t count = rowids.size();
+            ASSERT_TRUE(slots[col_idx]->read_by_rowids(0, rowids.data(), &count, columns[col_idx]).ok())
+                    << "col_idx=" << col_idx << " batch_size=" << batch_size;
+            ASSERT_EQ(batch_size, count) << "col_idx=" << col_idx << " batch_size=" << batch_size;
+        }
+
+        for (size_t col_idx = 0; col_idx < kNumColumns; ++col_idx) {
+            slots[col_idx]->verify(modes[col_idx], rowids.data(), batch_size, columns[col_idx], col_idx);
+        }
+    }
+}
+
+TEST_F(BitShufflePageTest, ReadByRowidsUnsignedDestinationColumns) {
+    constexpr size_t kPageRows = 256;
+    const rowid_t rowids[] = {0, 7, 63, 128, 255, 300};
+
+    // 1. TYPE_INT page decoded into UInt32Column (used by ArrayColumnIterator / MapColumnIterator
+    //    when reading bitshuffle-encoded TYPE_INT length/offset streams).
+    {
+        ReadByRowidsPage<TYPE_INT> int_page;
+        int_page.build(kPageRows);
+
+        auto uint32_col = UInt32Column::create();
+        uint32_col->append(999U);
+        size_t count = std::size(rowids);
+        ASSERT_TRUE(int_page.decoder->read_by_rowids(0, rowids, &count, uint32_col.get()).ok());
+        ASSERT_EQ(5, count);
+        ASSERT_EQ(6, uint32_col->size());
+        EXPECT_EQ(999U, uint32_col->get_data()[0]);
+        for (size_t i = 0; i < count; ++i) {
+            EXPECT_EQ(static_cast<uint32_t>(int_page.src[rowids[i]]), uint32_col->get_data()[i + 1]) << "i=" << i;
+        }
+
+        auto nullable_uint32 = NullableColumn::create(UInt32Column::create(), NullColumn::create());
+        size_t nullable_count = std::size(rowids);
+        ASSERT_TRUE(int_page.decoder->read_by_rowids(0, rowids, &nullable_count, nullable_uint32.get()).ok());
+        ASSERT_EQ(5, nullable_count);
+        ASSERT_EQ(5, nullable_uint32->size());
+        const auto* data_col = down_cast<const UInt32Column*>(nullable_uint32->data_column_raw_ptr());
+        for (size_t i = 0; i < nullable_count; ++i) {
+            EXPECT_FALSE(nullable_uint32->is_null(i));
+            EXPECT_EQ(static_cast<uint32_t>(int_page.src[rowids[i]]), data_col->get_data()[i]) << "i=" << i;
+        }
+    }
+
+    // 2. TYPE_TINYINT page decoded into NullColumn / UInt8Column (used by ArrayColumnIterator /
+    //    MapColumnIterator / StructColumnIterator / JsonFlatColumnIterator when reading
+    //    bitshuffle-encoded TYPE_TINYINT null streams).
+    {
+        ReadByRowidsPage<TYPE_TINYINT> tinyint_page;
+        tinyint_page.build(kPageRows);
+
+        auto null_col = NullColumn::create();
+        null_col->append(1U);
+        size_t count = std::size(rowids);
+        ASSERT_TRUE(tinyint_page.decoder->read_by_rowids(0, rowids, &count, null_col.get()).ok());
+        ASSERT_EQ(5, count);
+        ASSERT_EQ(6, null_col->size());
+        EXPECT_EQ(1U, null_col->get_data()[0]);
+        for (size_t i = 0; i < count; ++i) {
+            EXPECT_EQ(static_cast<uint8_t>(tinyint_page.src[rowids[i]]), null_col->get_data()[i + 1]) << "i=" << i;
+        }
+
+        auto nullable_uint8 = NullableColumn::create(UInt8Column::create(), NullColumn::create());
+        size_t nullable_count = std::size(rowids);
+        ASSERT_TRUE(tinyint_page.decoder->read_by_rowids(0, rowids, &nullable_count, nullable_uint8.get()).ok());
+        ASSERT_EQ(5, nullable_count);
+        ASSERT_EQ(5, nullable_uint8->size());
+        const auto* data_col = down_cast<const UInt8Column*>(nullable_uint8->data_column_raw_ptr());
+        for (size_t i = 0; i < nullable_count; ++i) {
+            EXPECT_FALSE(nullable_uint8->is_null(i));
+            EXPECT_EQ(static_cast<uint8_t>(tinyint_page.src[rowids[i]]), data_col->get_data()[i]) << "i=" << i;
+        }
+    }
+}
+
+TEST_F(BitShufflePageTest, ReadByRowidsNoRttiGuard) {
+    std::string test_file = __FILE__;
+    auto pos = test_file.rfind("be/test/storage/rowset/bitshuffle_page_test.cpp");
+    ASSERT_NE(std::string::npos, pos) << "Unexpected __FILE__ path: " << test_file;
+    std::string header_path = test_file.substr(0, pos) + "be/src/storage/rowset/bitshuffle_page.h";
+
+    std::ifstream in(header_path);
+    ASSERT_TRUE(in.is_open()) << "Unable to open " << header_path;
+    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+
+    auto fn_pos = content.find("BitShufflePageDecoder<Type>::read_by_rowids(");
+    ASSERT_NE(std::string::npos, fn_pos) << "Could not find BitShufflePageDecoder<Type>::read_by_rowids in header";
+    std::string fn_body = content.substr(fn_pos);
+
+    EXPECT_EQ(std::string::npos, fn_body.find("dynamic_cast"))
+            << "BitShufflePageDecoder::read_by_rowids must not use dynamic_cast (RTTI overhead in point-lookup hot "
+               "path)";
+    EXPECT_EQ(std::string::npos, fn_body.find("typeid")) << "BitShufflePageDecoder::read_by_rowids must not use typeid";
+    EXPECT_EQ(std::string::npos, fn_body.find("down_cast<BaseCol*>"))
+            << "BitShufflePageDecoder::read_by_rowids must not use down_cast<BaseCol*>, which fails on unsigned "
+               "destinations (UInt32Column / UInt8Column)";
+    EXPECT_NE(std::string::npos, fn_body.find("accept_mutable"))
+            << "BitShufflePageDecoder::read_by_rowids must resolve mutable raw data via accept_mutable";
 }
 
 } // namespace starrocks
