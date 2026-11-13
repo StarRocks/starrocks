@@ -26,6 +26,7 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Locale;
@@ -33,6 +34,7 @@ import java.util.Optional;
 import java.util.Set;
 import javax.naming.Context;
 import javax.naming.InvalidNameException;
+import javax.naming.NameNotFoundException;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
 import javax.naming.PartialResultException;
@@ -116,6 +118,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     @Override
     public UserIdentity authenticate(AccessControlContext authContext, UserIdentity userIdentity, AuthCredentials cred)
             throws AuthenticationException {
+        long startNanos = System.nanoTime();
         // One shape only. The MySQL clear-password frame reaches here as PLAIN_PASSWORD with its
         // trailing NUL already stripped at the entry point, so MySQL and HTTP Basic are the same
         // bytes by the time they arrive.
@@ -147,6 +150,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         LdapUserEntry userEntry = null;
         boolean directBind = false;
         try {
+            LdapRetryPolicy.checkInterrupted();
             String password = new String(clearPassword, StandardCharsets.UTF_8);
             if (legacyPerUserDN) {
                 // Priority 1: per-user DN (from CREATE USER ... AS \'dn\')
@@ -178,19 +182,19 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             // set distinguished name to auth context
             authContext.setDistinguishedName(distinguishedName);
         } catch (AuthenticationException e) {
-            // Already classified (empty password, user not found, or a nested bind failure): pass it through.
-            LOG.warn("check password failed for user: {}", user, e);
+            // Preserve upstream's rejection-cache classification.
+            if (LdapRetryPolicy.isInterruption(e)) {
+                e.asTransient();
+            }
+            logAuthenticationFailure(user, e, startNanos);
             throw e;
         } catch (javax.naming.AuthenticationException e) {
-            // The directory answered and rejected the credential -- a definitive "wrong password".
-            LOG.warn("check password failed for user: {}", user, e);
-            throw new AuthenticationException(e.getMessage());
+            logAuthenticationFailure(user, e, startNanos);
+            throw new AuthenticationException(e.getMessage(), e);
         } catch (Exception e) {
-            // Anything else means we could not get an answer: connection refused, timeout, TLS failure.
-            // Mark it transient so a caller that caches rejections does not hold a valid credential back
-            // until the directory recovers.
-            LOG.warn("cannot reach the directory while authenticating user: {}", user, e);
-            throw new AuthenticationException(e.getMessage()).asTransient();
+            // Transport failures and cancellation must not enter the rejected-credential cache.
+            logAuthenticationFailure(user, e, startNanos);
+            throw new AuthenticationException(e.getMessage(), e).asTransient();
         }
 
         if (readCanonicalName) {
@@ -211,6 +215,15 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             }
         }
         return userIdentity;
+    }
+
+    private void logAuthenticationFailure(String user, Exception failure, long startNanos) {
+        if (LdapRetryPolicy.isInterruption(failure)) {
+            Thread.currentThread().interrupt();
+        }
+        LOG.warn("LDAP authentication failed for user={}, elapsedMs={}, failureType={}",
+                user, LdapRetryPolicy.elapsedMs(startNanos), LdapRetryPolicy.failureType(failure));
+        LOG.debug("LDAP authentication failure details", failure);
     }
 
     @Override
@@ -482,19 +495,24 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     protected LdapUserEntry checkPasswordByDnPattern(String user, String password, String[] requestedAttributes)
             throws Exception {
         Exception lastException = null;
+        Set<String> attemptedDNs = new HashSet<>();
         for (String dn : candidateDNsFromPattern(user)) {
+            LdapRetryPolicy.checkInterrupted();
+            if (!attemptedDNs.add(dn)) {
+                continue;
+            }
             try {
                 if (requestedAttributes.length == 0) {
                     checkPassword(dn, password);
                     return new LdapUserEntry(dn, null);
                 }
                 return checkPasswordAndReadAttributes(dn, password, requestedAttributes);
-            } catch (Exception e) {
+            } catch (javax.naming.AuthenticationException | NameNotFoundException e) {
+                LdapRetryPolicy.rethrowIfInterrupted(e);
                 lastException = e;
-                LOG.debug("direct bind failed for dn '{}' with user '{}': {}", dn, user, e.getMessage());
+                LOG.debug("LDAP direct bind pattern did not match, failureType={}", LdapRetryPolicy.failureType(e));
             }
         }
-        // Null only when the pattern produced no candidate at all - `";"` splits to an empty array.
         throw lastException != null ? lastException
                 : new AuthenticationException("bind dn pattern '" + ldapBindDNPattern + "' produced no candidate DN");
     }
@@ -506,6 +524,10 @@ public class LDAPAuthProvider implements AuthenticationProvider {
      */
     // Package-private so a test can assert the two timeouts below are actually set.
     Hashtable<String, String> buildEnv(String principal, String credentials) throws Exception {
+        return buildEnv(principal, credentials, retryPolicy());
+    }
+
+    private Hashtable<String, String> buildEnv(String principal, String credentials, LdapRetryPolicy policy) throws Exception {
         Hashtable<String, String> env = new Hashtable<>();
         env.put(Context.SECURITY_AUTHENTICATION, "simple");
         env.put(Context.SECURITY_CREDENTIALS, credentials);
@@ -516,13 +538,23 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         // directory can pin the calling thread -- an HTTP worker or a thrift handler now that a security
         // integration serves those channels too. LDAPGroupProvider sets the same two properties.
         env.put("com.sun.jndi.ldap.connect.timeout",
-                String.valueOf(Config.authentication_ldap_simple_conn_timeout_ms));
+                Integer.toString(policy.connectTimeoutMs()));
         env.put("com.sun.jndi.ldap.read.timeout",
-                String.valueOf(Config.authentication_ldap_simple_conn_read_timeout_ms));
+                Integer.toString(policy.readTimeoutMs()));
         if (useSSL) {
             setSSLContext(env);
         }
         return env;
+    }
+
+    private static LdapRetryPolicy retryPolicy() {
+        return new LdapRetryPolicy(Config.authentication_ldap_simple_conn_timeout_ms,
+                Config.authentication_ldap_simple_conn_read_timeout_ms, Config.authentication_ldap_simple_max_retries,
+                Config.authentication_ldap_simple_retry_interval_ms);
+    }
+
+    DirContext createDirContext(Hashtable<String, String> env) throws NamingException {
+        return new InitialDirContext(env);
     }
 
     private static void closeQuietly(DirContext ctx) {
@@ -558,12 +590,13 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             throw new AuthenticationException("empty password is not allowed for simple authentication");
         }
 
-        Hashtable<String, String> env = buildEnv(dn, password);
+        LdapRetryPolicy policy = retryPolicy();
+        Hashtable<String, String> env = buildEnv(dn, password, policy);
 
         DirContext ctx = null;
         try {
             //this will send a bind call to ldap server, throw exception if failed
-            ctx = new InitialDirContext(env);
+            ctx = policy.execute("user bind", () -> createDirContext(env));
             if (requestedAttributes.length == 0) {
                 return new LdapUserEntry(dn, null);
             }
@@ -574,6 +607,10 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                 // escape it, so the String form would split the DN and fail with NameNotFoundException.
                 return new LdapUserEntry(dn, ctx.getAttributes(new LdapName(dn), requestedAttributes));
             } catch (Exception e) {
+                if (LdapRetryPolicy.isInterruption(e)) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
                 LOG.warn("bound as {} but failed to read attributes {}: {}",
                         dn, Arrays.toString(requestedAttributes), e.getMessage());
                 return new LdapUserEntry(dn, null);
@@ -589,15 +626,17 @@ public class LDAPAuthProvider implements AuthenticationProvider {
      */
     protected Attributes readAttributesAsServiceAccount(String dn, String[] requestedAttributes) throws Exception {
         String rootDN = trim(trim(ldapBindRootDN, "\""), "'");
-        Hashtable<String, String> env = buildEnv(rootDN, ldapBindRootPwd);
-        DirContext ctx = null;
-        try {
-            ctx = new InitialDirContext(env);
-            // LdapName for the same reason as in checkPasswordAndReadAttributes().
-            return ctx.getAttributes(new LdapName(dn), requestedAttributes);
-        } finally {
-            closeQuietly(ctx);
-        }
+        LdapRetryPolicy policy = retryPolicy();
+        Hashtable<String, String> env = buildEnv(rootDN, ldapBindRootPwd, policy);
+        return policy.execute("service account attribute read", () -> {
+            DirContext ctx = null;
+            try {
+                ctx = createDirContext(env);
+                return ctx.getAttributes(new LdapName(dn), requestedAttributes);
+            } finally {
+                closeQuietly(ctx);
+            }
+        });
     }
 
     //1. bind ldap server by root dn
@@ -622,56 +661,52 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             throw new AuthenticationException("empty password is not allowed for simple authentication");
         }
 
-        //dn contains '=', so we should use ' or " to wrap the value in config file
-        String rootDN = ldapBindRootDN;
-        rootDN = trim(rootDN, "\"");
-        rootDN = trim(rootDN, "'");
-        Hashtable<String, String> env = buildEnv(rootDN, ldapBindRootPwd);
-
-        DirContext ctx = null;
-        try {
-            String baseDN = ldapBindBaseDN;
-            baseDN = trim(baseDN, "\"");
-            baseDN = trim(baseDN, "'");
-            SearchControls sc = new SearchControls();
-            sc.setSearchScope(SearchControls.SUBTREE_SCOPE);
-            sc.setReturningAttributes(requestedAttributes);
-            // Normalize username for case-insensitive LDAP search
-            // LDAP treats usernames as case-insensitive by default, aligning with Microsoft Active Directory
-            String normalizedUser = normalizeUsername(user);
-            // Escapes special characters in user input to prevent LDAP injection
-            String safeUser = escapeLdapValue(normalizedUser);
-            String searchFilter = "(" + ldapSearchFilter + "=" + safeUser + ")";
-            ctx = new InitialDirContext(env);
-            NamingEnumeration<SearchResult> results = ctx.search(baseDN, searchFilter, sc);
-
-            String userDN = null;
-            Attributes userAttributes = null;
-            int matched = 0;
-
+        LdapRetryPolicy policy = retryPolicy();
+        String rootDN = trim(trim(ldapBindRootDN, "\""), "'");
+        Hashtable<String, String> env = buildEnv(rootDN, ldapBindRootPwd, policy);
+        String baseDN = trim(trim(ldapBindBaseDN, "\""), "'");
+        SearchControls sc = new SearchControls();
+        sc.setSearchScope(SearchControls.SUBTREE_SCOPE);
+        sc.setReturningAttributes(requestedAttributes);
+        String safeUser = escapeLdapValue(normalizeUsername(user));
+        String searchFilter = "(" + ldapSearchFilter + "=" + safeUser + ")";
+        return policy.execute("root bind/search", () -> {
+            DirContext ctx = null;
+            NamingEnumeration<SearchResult> results = null;
             try {
-                while (results.hasMore()) {
-                    matched++;
-                    if (matched > 1) {
-                        throw new AuthenticationException("searched more than one entry from ldap server for user " + user);
+                ctx = createDirContext(env);
+                results = ctx.search(baseDN, searchFilter, sc);
+                String userDN = null;
+                Attributes userAttributes = null;
+                int matched = 0;
+                try {
+                    while (results.hasMore()) {
+                        matched++;
+                        if (matched > 1) {
+                            throw new AuthenticationException("searched more than one entry from ldap server for user " + user);
+                        }
+                        SearchResult result = results.next();
+                        userDN = result.getNameInNamespace();
+                        userAttributes = result.getAttributes();
                     }
-
-                    SearchResult result = results.next();
-                    userDN = result.getNameInNamespace();
-                    userAttributes = result.getAttributes();
+                } catch (PartialResultException e) {
+                    LOG.warn("ldap search partial result exception", e);
                 }
-            } catch (PartialResultException e) {
-                LOG.warn("ldap search partial result exception", e);
+                if (matched != 1) {
+                    throw new AuthenticationException("ldap search matched user count " + matched);
+                }
+                return new LdapUserEntry(userDN, userAttributes);
+            } finally {
+                if (results != null) {
+                    try {
+                        results.close();
+                    } catch (Exception e) {
+                        // ignore
+                    }
+                }
+                closeQuietly(ctx);
             }
-
-            if (matched != 1) {
-                throw new AuthenticationException("ldap search matched user count " + matched);
-            }
-
-            return new LdapUserEntry(userDN, userAttributes);
-        } finally {
-            closeQuietly(ctx);
-        }
+        });
     }
 
     // trim prefix and suffix of target from src

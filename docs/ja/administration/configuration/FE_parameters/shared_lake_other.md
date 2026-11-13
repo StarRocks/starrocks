@@ -1105,6 +1105,26 @@ replication 移行では、`lake_compaction_max_tasks = 0` を維持したまま
 - 説明：未知の鍵 ID（`kid`）が JWKS の強制更新を引き起こせる最小間隔。kid フラッディングを防ぎます。
 - 導入時期：v4.2
 
+### `authentication_ldap_simple_max_retries`
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: Bind または管理者 Bind/検索操作ごとの追加リトライ回数。有効範囲：[0, 5]。0 はリトライなしの 1 回の試行です。
+
+### `authentication_ldap_simple_retry_interval_ms`
+
+- デフォルト: 200
+- タイプ: Int
+- 単位: ms
+- 変更可能: はい
+- 説明: リトライのバックオフ基準間隔。有効範囲：[1, 10000]。失敗ごとに待機時間が倍増し、最大 10000 ms です。検索リソースは待機前に閉じられます。一時的な接続障害と認識可能な JNDI 応答読み取りタイムアウトのみリトライします。同じ操作の認証情報、権限、DN、設定、TLS 検証エラーはリトライしません。スレッドの割り込みでリトライと DN パターンの切り替えを停止します。
+
+設定は各 Bind または検索操作の開始時に読み取られ、FE の再起動なしで後続の操作に適用されます。LDAP 認証専用であり、LDAP Group Provider には適用されません。複数の DN パターンを含むログイン全体の期限は保証しません。
+
+既存の `authentication_ldap_simple_conn_timeout_ms` と `authentication_ldap_simple_conn_read_timeout_ms` を使用し、デフォルトの 30000 ms を維持します。どちらも有効範囲は [1, 300000] です。JDK によっては、初期 Bind と LDAPS ハンドシェイクの待機に読み取りタイムアウトではなく接続タイムアウトが使用されます。
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - デフォルト：Empty string

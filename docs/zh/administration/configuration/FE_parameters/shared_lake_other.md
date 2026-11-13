@@ -1101,6 +1101,26 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 未知 key ID（`kid`）触发强制刷新 JWKS 的最小时间间隔，用于防止 kid flooding。
 - 引入版本: v4.2
 
+### `authentication_ldap_simple_max_retries`
+
+- 默认值: 2
+- 类型: Int
+- 单位: -
+- 是否动态: 是
+- 说明: 每次 Bind 或管理员 Bind/搜索操作的额外重试次数。有效范围：[0, 5]。0 表示只尝试一次，不重试。
+
+### `authentication_ldap_simple_retry_interval_ms`
+
+- 默认值: 200
+- 类型: Int
+- 单位: ms
+- 是否动态: 是
+- 说明: 重试退避基准间隔。有效范围：[1, 10000]。每次失败后等待时间加倍，上限为 10000 ms；等待前关闭失败搜索的资源。仅对瞬态连接错误和可识别的 JNDI 响应读取超时进行重试。同一操作的凭据、权限、DN、配置和 TLS 校验错误不重试。线程中断时终止重试及 DN pattern 切换。
+
+每次 Bind 或搜索开始时读取配置，修改后对后续操作生效，无需重启 FE。这些配置适用于 LDAP 登录认证，不控制 LDAP Group Provider，也不保证包含多个 DN pattern 在内的整次登录总时限。
+
+复用现有的 `authentication_ldap_simple_conn_timeout_ms` 和 `authentication_ldap_simple_conn_read_timeout_ms`，默认值保持为 30000 ms，有效范围均为 [1, 300000]。取决于 JDK 实现，初始 Bind 和 LDAPS 握手等待可能使用连接超时，而非读取超时。
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - 默认值: 空字符串

@@ -1065,6 +1065,26 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Description: Whether the StarRocks-side matching of an LDAP/AD user name is relaxed to ignore case. When this item is set to `true`, a login whose name differs only in case from a user created with `AUTHENTICATION_LDAP_SIMPLE` still resolves to that user, so its per-user DN and the roles granted to it apply; and a login authenticated by an LDAP security integration takes its session identity from the name held by the directory rather than the one typed by the client. Because this both widens which stored user a login may resolve to and changes the value reported by `current_user()` and `SHOW PROCESSLIST`, it is disabled by default. Users authenticated by native password, JWT, or OAuth2 are never affected. If two users created with `AUTHENTICATION_LDAP_SIMPLE` have names that differ only in case, a login matching both of them is refused rather than resolved to either. Group names are matched without regard to case independently of this item.
 - Introduced in: v4.2.0
 
+### `authentication_ldap_simple_max_retries`
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum additional retries per Bind or root-bind/search operation. Valid range: [0, 5]. Zero means one attempt without retries.
+
+### `authentication_ldap_simple_retry_interval_ms`
+
+- Default: 200
+- Type: Int
+- Unit: ms
+- Is mutable: Yes
+- Description: Base retry backoff interval. Valid range: [1, 10000]. The delay doubles after each failed attempt and is capped at 10000 ms. Resources from a failed search are closed before waiting. Only transient connection failures and recognized JNDI response read timeouts are retried. Credential, permission, DN, configuration, and TLS validation failures are not retried for the same operation. Thread interruption stops retries and DN pattern fallback.
+
+Values are read at the start of each Bind or search operation. Changes apply to subsequent operations without restarting FE. These settings apply to LDAP authentication, not LDAP Group Provider, and do not guarantee a deadline for an entire login, including multiple DN patterns.
+
+The existing `authentication_ldap_simple_conn_timeout_ms` and `authentication_ldap_simple_conn_read_timeout_ms` retain their default of 30000 ms. Both accept values in [1, 300000]. Depending on the JDK, initial Bind and LDAPS handshake waits can use the connection timeout rather than the read timeout.
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - Default: Empty string

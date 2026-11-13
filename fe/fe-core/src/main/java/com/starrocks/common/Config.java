@@ -2628,11 +2628,11 @@ public class Config extends ConfigBase {
             "authentication_ldap_simple. Without it the bind falls back to the OS TCP timeout, which can pin " +
             "the request thread for minutes when the directory is unreachable. Matches the default of the other " +
             "LDAP paths (group provider, enterprise ldap integration).")
-    public static int authentication_ldap_simple_conn_timeout_ms = 30000;
+    public static volatile int authentication_ldap_simple_conn_timeout_ms = 30000;
 
     @ConfField(mutable = true, comment = "Socket read timeout in milliseconds for the LDAP bind done by " +
             "authentication_ldap_simple.")
-    public static int authentication_ldap_simple_conn_read_timeout_ms = 30000;
+    public static volatile int authentication_ldap_simple_conn_read_timeout_ms = 30000;
 
     @ConfField(mutable = true, comment = "How long (seconds) a rejected credential is remembered so that a " +
             "client retrying the same wrong password does not produce one LDAP bind per attempt. The cache key " +
@@ -2643,6 +2643,13 @@ public class Config extends ConfigBase {
             "authentication_failure_cache_ttl_second. Bounds the memory a client (or an attacker) cycling " +
             "usernames can occupy.")
     public static int authentication_failure_cache_capacity = 1024;
+
+    @ConfField(mutable = true, comment = "Maximum additional retries for one LDAP bind or root-bind/search operation. " +
+            "Valid range: [0, 5]. Zero disables retries.")
+    public static volatile int authentication_ldap_simple_max_retries = 2;
+
+    @ConfField(mutable = true, comment = "Base LDAP retry backoff in milliseconds. Valid range: [1, 10000].")
+    public static volatile int authentication_ldap_simple_retry_interval_ms = 200;
 
     @ConfField(mutable = true, comment = "false to enable ssl connection")
     public static boolean authentication_ldap_simple_ssl_conn_allow_insecure = true;
