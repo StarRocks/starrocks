@@ -25,6 +25,7 @@
 #include "formats/parquet/encoding_delta.h"
 #include "formats/parquet/encoding_dict.h"
 #include "formats/parquet/encoding_plain.h"
+#include "formats/parquet/encoding_rle_boolean.h"
 #include "formats/parquet/types.h"
 #include "gutil/strings/substitute.h"
 
@@ -224,6 +225,18 @@ struct TypeEncodingTraits<tparquet::Type::BOOLEAN, tparquet::Encoding::RLE_DICTI
     }
 };
 
+template <>
+struct TypeEncodingTraits<tparquet::Type::BOOLEAN, tparquet::Encoding::RLE> {
+    static Status create_decoder(std::unique_ptr<Decoder>* decoder) {
+        *decoder = std::make_unique<RleBooleanDecoder>();
+        return Status::OK();
+    }
+    static Status create_encoder(std::unique_ptr<Encoder>* encoder) {
+        *encoder = std::make_unique<RleBooleanEncoder>();
+        return Status::OK();
+    }
+};
+
 template <tparquet::Type::type type_arg, tparquet::Encoding::type encoding_arg>
 struct EncodingTraits : TypeEncodingTraits<type_arg, encoding_arg> {
     static constexpr tparquet::Type::type type = type_arg;
@@ -258,6 +271,7 @@ EncodingInfoResolver::EncodingInfoResolver() {
     // BOOL
     _add_map<tparquet::Type::BOOLEAN, tparquet::Encoding::PLAIN>();
     _add_map<tparquet::Type::BOOLEAN, tparquet::Encoding::RLE_DICTIONARY>();
+    _add_map<tparquet::Type::BOOLEAN, tparquet::Encoding::RLE>();
     // INT32
     _add_map<tparquet::Type::INT32, tparquet::Encoding::PLAIN>();
     _add_map<tparquet::Type::INT32, tparquet::Encoding::RLE_DICTIONARY>();
