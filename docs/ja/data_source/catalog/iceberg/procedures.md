@@ -7,10 +7,6 @@ keywords: ['iceberg', 'procedures', 'fast forward', 'cherry pick', 'expire snaps
 
 # Iceberg Procedures
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 79bfefd ([Doc] Merge the Iceberg and JDBC catalog partials into their pages (#83157))
 StarRocks Iceberg catalog は、スナップショット管理、ブランチ管理、データメンテナンス、メタデータ管理、およびテーブル管理を含む、Iceberg テーブルを管理するためのさまざまなプロシージャをサポートしています。
 
 プロシージャを実行するには、適切な権限が必要です。権限の詳細については、[権限](../../../administration/user_privs/authorization/privilege_item.md) を参照してください。

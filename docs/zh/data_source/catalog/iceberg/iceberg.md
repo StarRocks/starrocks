@@ -6,11 +6,6 @@ keywords: ['iceberg']
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-<<<<<<< HEAD
-import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
-import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
-=======
->>>>>>> 79bfefd ([Doc] Merge the Iceberg and JDBC catalog partials into their pages (#83157))
 
 # Iceberg catalog
 

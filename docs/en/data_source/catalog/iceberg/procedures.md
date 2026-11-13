@@ -7,10 +7,6 @@ description: "Iceberg catalog procedures in StarRocks for snapshot management, b
 
 # Iceberg Procedures
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 79bfefd ([Doc] Merge the Iceberg and JDBC catalog partials into their pages (#83157))
 StarRocks Iceberg Catalog supports a variety of procedures for managing Iceberg tables, including snapshot management, branch management, data maintenance, metadata management, and table management.
 
 You must have the appropriate privileges to execute procedures. For more information about privileges, see [Privileges](../../../administration/user_privs/authorization/privilege_item.md).
