@@ -1080,6 +1080,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             streamLoadTask.setTxnId(txnId);
             streamLoadTask.setLabel(label);
             streamLoadTask.setTUniqueId(loadId);
+            streamLoadTask.setRoutineLoadJobId(id);
+            streamLoadTask.setBeId(beId);
             streamLoadManager.addLoadTask(streamLoadTask);
             streamLoadTask.setCoordinator(coord);
 
@@ -1230,15 +1232,17 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     public void afterVisible(TransactionState txnState) {
         writeLock();
         try {
-            if (state != JobState.RUNNING) {
-                // job is not running, nothing need to be done
-                return;
-            }
-
+            // The transaction is visible whatever happened to the job since it committed, so the
+            // load task of it finishes, and gets its visible time, even when the job was paused.
             StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
                     getSyncSteamLoadTaskByTxnId(txnState.getTransactionId());
             if (streamLoadTask != null) {
                 streamLoadTask.afterVisible(txnState);
+            }
+
+            if (state != JobState.RUNNING) {
+                // job is not running, nothing need to be done
+                return;
             }
 
             Optional<RoutineLoadTaskInfo> routineLoadTaskInfoOptional = routineLoadTaskInfoList.stream().filter(

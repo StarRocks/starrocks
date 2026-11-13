@@ -51,6 +51,8 @@ import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.PulsarUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.load.streamload.StreamLoadMgr;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.EditLog;
@@ -136,6 +138,32 @@ public class RoutineLoadJobTest {
         Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
         routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
 
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+    }
+
+    @Test
+    public void testAfterVisibleFinishesTheLoadTaskOfAPausedJob() {
+        // The job was paused between the commit and the publish of this task's transaction.
+        StreamLoadTask streamLoadTask = new StreamLoadTask();
+        streamLoadTask.init();
+        new MockUp<StreamLoadMgr>() {
+            @Mock
+            public StreamLoadTask getSyncSteamLoadTaskByTxnId(long txnId) {
+                return txnId == 77L ? streamLoadTask : null;
+            }
+        };
+        TransactionState txnState = new TransactionState();
+        Deencapsulation.setField(txnState, "transactionId", 77L);
+        txnState.setFinishTime(1_700_000_000_000L);
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
+        routineLoadJob.afterVisible(txnState);
+
+        // The transaction is visible all the same, so the load task finishes with its visible time.
+        Assertions.assertEquals("FINISHED", streamLoadTask.getStateName());
+        Assertions.assertEquals(1_700_000_000_000L,
+                Deencapsulation.<Long>getField(streamLoadTask, "visibleTimeMs").longValue());
         Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
     }
 

@@ -7,7 +7,7 @@ description: "loads 提供导入作业的结果信息。"
 
 提供导入作业的结果信息。此视图自 StarRocks v3.1 版本起支持。
 
-对导入作业的每一张目标表都拥有至少一项权限，或者拥有 OPERATE 权限的用户，可以在 `loads` 中看到该作业。如果没有每一张目标表的 SELECT 权限，可能暴露导入数据的字段会被隐藏：`TRACKING_SQL`、`REJECTED_RECORD_PATH` 和 `PROPERTIES` 为 NULL；`ERROR_MSG` 对 Broker Load 和 INSERT 作业只保留失败类型（例如 `type:ETL_QUALITY_UNSATISFIED`），对其他作业为 NULL；`RUNTIME_DETAILS` 不含导入 ID、BE 节点和事务错误信息。`root` 用户可以看到所有导入作业的完整信息。目标表已被删除的导入作业，只有 `root` 用户能看到完整信息，拥有 OPERATE 权限的用户看到的是隐藏上述字段后的信息。
+对导入作业的每一张目标表都拥有至少一项权限，或者拥有 OPERATE 权限的用户，可以在 `loads` 中看到该作业。如果没有每一张目标表的 SELECT 权限，可能暴露导入数据的字段会被隐藏：`TRACKING_SQL`、`REJECTED_RECORD_PATH`、`PROPERTIES`、`LOAD_ID` 和 `BE_IDS` 为 NULL；`ERROR_MSG` 对 Broker Load 和 INSERT 作业只保留失败类型（例如 `type:ETL_QUALITY_UNSATISFIED`），对其他作业为 NULL；`RUNTIME_DETAILS` 不含导入 ID、BE 节点和事务错误信息。`root` 用户可以看到所有导入作业的完整信息。目标表已被删除的导入作业，只有 `root` 用户能看到完整信息，拥有 OPERATE 权限的用户看到的是隐藏上述字段后的信息。
 
 `loads` 提供以下字段：
 
@@ -38,6 +38,19 @@ description: "loads 提供导入作业的结果信息。"
 | ERROR_MSG            | 导入作业的错误信息。如果导入作业未遇到任何错误，则返回 `NULL`。 |
 | TRACKING_SQL         | 可用于查询导入作业跟踪日志的 SQL 语句。仅当导入作业涉及不合格数据行时，才返回 SQL 语句。如果导入作业不涉及任何不合格数据行，则返回 `NULL`。 |
 | REJECTED_RECORD_PATH | 可以从中访问导入作业中过滤掉的所有不合格数据行的路径。记录的不合格数据行数由导入作业中配置的 `log_rejected_record_num` 参数决定。可以使用 `wget` 命令访问该路径。如果导入作业不涉及任何不合格数据行，则返回 `NULL`。 |
+| TXN_ID               | 导入事务的 ID。尚未开启事务时返回 `NULL`。                   |
+| LOAD_ID              | 导入执行计划的全局唯一 ID。                                  |
+| TABLE_ID             | 目标表的 ID。当 Broker Load 作业导入多张表时返回 `NULL`。    |
+| PARENT_ID            | 对于 Routine Load 任务，为其所属 Routine Load 作业的 ID；对于 Merge Commit 任务，为其所属 Merge Commit 作业的 ID。其他情况返回 `NULL`。 |
+| STATEMENT            | 对于 INSERT 作业，为创建该作业的语句类型：`INSERT_SELECT`、`INSERT_VALUES`、`INSERT_FILES`、`UPDATE`、`DELETE` 或 `MERGE`。其他情况返回 `NULL`。 |
+| ERROR_CODE           | 导入被取消的原因，取值为以下固定编码之一：`FILTER_RATIO_EXCEEDED`、`MEM_LIMIT_EXCEEDED`、`COMPACTION_SCORE_EXCEEDED`、`TOO_MANY_RUNNING_TXNS`、`LABEL_ALREADY_EXISTS`、`TIMEOUT`、`USER_CANCELLED`、`SOURCE_READ_FAILED`、`SCHEMA_MISMATCH`、`BE_UNAVAILABLE`、`TXN_CONFLICT`、`INTERNAL_ERROR` 或 `UNKNOWN`。未被取消的导入作业返回 `NULL`。 |
+| VISIBLE_TIME         | 导入事务变为可见的时间。未完成或已取消的导入作业返回 `NULL`。 |
+| SINK_BYTES           | 写入目标表的字节数。对应导入类型未统计时返回 `NULL`。          |
+| CLIENT_IP            | 提交导入作业的客户端 IP 地址。INSERT 和 Stream Load 作业可用；其他导入类型以及在 FE 上开启事务的 Stream Load 返回 `NULL`。 |
+| BE_IDS               | 执行导入的 BE 的 ID，以逗号分隔。对应导入类型未统计时返回 `NULL`。 |
+| COMMIT_THROTTLE_MS   | 存算分离集群中，导入限速要求事务在写入结束后等待多久才能提交（毫秒）。如果导入因其他原因（例如两阶段提交）在此之后才提交，实际等待的时间更短。无需等待时为 `0`；该事务未经过导入限速判断时为 `NULL`。仅在 Leader FE 上记录。 |
+| CPU_NS               | 预留字段。当前始终为 `NULL`。                                 |
+| PEAK_MEM_BYTES       | 预留字段。当前始终为 `NULL`。                                 |
 
 :::note
 

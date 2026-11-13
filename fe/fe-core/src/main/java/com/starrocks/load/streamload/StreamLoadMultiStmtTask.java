@@ -350,7 +350,8 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                         // Mark sub-tasks committed before tryRollbackNow invokes
                         // cancelCoordinatorOnly on them; otherwise a committed
                         // transaction would display CANCELLED sub-tasks.
-                        propagateCommitStateToSubTasks(status == TransactionStatus.VISIBLE);
+                        propagateCommitStateToSubTasks(status == TransactionStatus.VISIBLE,
+                                txnState.getFinishTime());
                     }
                     return true;
                 }
@@ -640,29 +641,35 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
             return;
         }
         boolean visible = false;
+        long txnVisibleTimeMs = -1L;
         try {
             TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .getTransactionState(dbId, txnId);
             visible = txnState != null && txnState.getTransactionStatus() == TransactionStatus.VISIBLE;
+            if (visible) {
+                txnVisibleTimeMs = txnState.getFinishTime();
+            }
         } catch (Exception e) {
             LOG.warn("Failed to get transaction status when propagating commit state, label: {}, " +
                     "txnId: {}, treating as committed", label, txnId, e);
         }
-        propagateCommitStateToSubTasks(visible);
+        propagateCommitStateToSubTasks(visible, txnVisibleTimeMs);
     }
 
     /**
      * Propagate the committed transaction's final state to all sub-tasks.
      * Sub-tasks already in an unreversible state are left untouched.
      */
-    private void propagateCommitStateToSubTasks(boolean visible) {
+    private void propagateCommitStateToSubTasks(boolean visible, long txnVisibleTimeMs) {
         // For FINISHED sub-tasks use the time visibility was observed: convergence via
         // checkNeedRemove may happen long after the parent's commit endTimeMs, and the
         // single-table afterVisible path also stamps the observation time. COMMITED
         // sub-tasks keep the commit completion time.
+        // The visible time is the transaction's own finish time, not the observation time: the
+        // cleaner may notice the transaction long after it became visible.
         long finishTimeMs = !visible && this.endTimeMs != -1 ? this.endTimeMs : System.currentTimeMillis();
         for (StreamLoadTask task : taskMaps.values()) {
-            task.markCommittedByParent(visible, finishTimeMs);
+            task.markCommittedByParent(visible, finishTimeMs, txnVisibleTimeMs);
         }
     }
 
@@ -756,7 +763,9 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
             LOG.info("Cancel multi-statement stream load task due to timeout, label: {}, txnId: {}, " +
                     "createTimeMs: {}, timeoutMs: {}", label, txnId, createTimeMs, timeoutMs);
             this.errorMsg = "transaction timeout after " + timeoutMs + "ms";
-            transitionToAborting("timeout");
+            // The abort reason becomes the error message of every sub-task, which is what the
+            // rows of this load show, so it has to say what timed out.
+            transitionToAborting(this.errorMsg);
         } finally {
             writeUnlock();
         }

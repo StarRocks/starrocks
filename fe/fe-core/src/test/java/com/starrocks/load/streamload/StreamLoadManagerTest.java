@@ -351,6 +351,24 @@ public class StreamLoadManagerTest {
         Assertions.assertEquals(1, streamLoadManager.getStreamLoadTaskCount());
     }
 
+    @Test
+    public void testBackendLoadRecordsTheClientAndTheBackend() throws StarRocksException {
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+        TransactionResult resp = new TransactionResult();
+        // The client sent the load to the backend at 192.168.0.2, which begins the transaction.
+        streamLoadManager.beginLoadTaskFromBackend(
+                "test_db", "test_tbl", "label_client_ip", null, "", "10.0.0.5", "192.168.0.2", 100000, resp,
+                false, WarehouseManager.DEFAULT_RESOURCE, 10001);
+
+        Map<String, StreamLoadTask> idToStreamLoadTask =
+                Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
+        StreamLoadTask task = idToStreamLoadTask.get("label_client_ip");
+        Assertions.assertEquals(10001L, task.getBeId());
+        TLoadInfo info = task.toThrift().get(0);
+        Assertions.assertEquals("10.0.0.5", info.getClient_ip());
+        Assertions.assertEquals("10001", info.getBe_ids());
+    }
+
     // ---- Cover lines 149-153: beginMultiStatementLoadTask label exists in txn history ----
     @Test
     public void testBeginMultiStmtLoadTaskLabelAlreadyExists() throws StarRocksException {
