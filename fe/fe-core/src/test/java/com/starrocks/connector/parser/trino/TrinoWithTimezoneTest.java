@@ -71,8 +71,9 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
         String values = " from (values TIMESTAMP '2024-08-19 14:36:41') t(ts)";
         assertPlanContains("select cast(with_timezone(ts, 'UTC') AT TIME ZONE 'America/Los_Angeles' AS TIMESTAMP)" +
                 values, "convert_tz(1: ts, 'UTC', 'America/Los_Angeles')");
+        // A format rounds the instant before the conversion
         assertPlanContains("select date_format(at_timezone(with_timezone(ts, '+03:00'), 'UTC'), '%Y-%m-%d')" + values,
-                "convert_tz(1: ts, '+03:00', 'UTC')");
+                "convert_tz(time_slice(microseconds_add(", "'millisecond', 'floor'), '+03:00', 'UTC')");
         assertPlanContains("select cast(with_timezone(ts, '+00:00') AT TIME ZONE 'UTC' AS DATE)" + values,
                 "convert_tz(1: ts, 'UTC', 'UTC')");
         // The wall-clock time of with_timezone(ts, zone) is ts
@@ -156,6 +157,10 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                 "select cast(with_timezone(TIMESTAMP '2024-08-19 14:36:41.66', 'UTC') AS TIMESTAMP(1))",
                 // Trino prints a Java-style mask as written; StarRocks formats it
                 "select date_format(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), 'yyyy-MM-dd')",
+                // Joda masks the BE formats differently or not at all
+                "select format_datetime(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), 'HH:mm:ss.SSSSSSS')",
+                "select format_datetime(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), 'xxxx-ww')",
+                "select format_datetime(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), 'HH''''mm')",
                 // A DST zone attached to a column, or to a literal it skips or repeats: Trino and convert_tz resolve
                 // those differently (Trino: 10:30, 08:30 and 01:30 UTC)
                 "select cast(with_timezone(ts, 'America/Los_Angeles') AT TIME ZONE 'UTC' AS TIMESTAMP)" + values,

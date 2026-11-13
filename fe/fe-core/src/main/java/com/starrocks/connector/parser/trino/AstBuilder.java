@@ -1290,18 +1290,24 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         }
     }
 
-    // Whether a date_format (MySQL-style) or format_datetime (Joda) format prints the time zone, which a DATETIME
-    // doesn't carry, or, for date_format, isn't a MySQL-style format: StarRocks reads one starting with yyyy as a
-    // Java-style mask, which Trino prints as written
+    // Whether a date_format (MySQL-style) or format_datetime (Joda) format may not print what Trino prints. date_format
+    // needs a MySQL-style format without the zone: StarRocks reads one starting with yyyy as a Java-style mask, which
+    // Trino prints as written. format_datetime needs the Joda fields that the BE formats as Joda does, outside quotes:
+    // y, M, d, H, h, m, s, a, E and up to six S. The BE drops an escaped quote ('') and fails on long output
     private static boolean isFormatUnlikeTrino(String function, String format) {
         if (function.equals("date_format")) {
             return format.contains("%z") || format.contains("%Z") || !format.contains("%") || format.startsWith("yyyy");
         }
+        if (format.length() > 60 || format.contains("''")) {
+            return true;
+        }
         boolean quoted = false;
+        int fractionDigits = 0;
         for (char c : format.toCharArray()) {
+            fractionDigits = !quoted && c == 'S' ? fractionDigits + 1 : 0;
             if (c == '\'') {
                 quoted = !quoted;
-            } else if (!quoted && (c == 'z' || c == 'Z')) {
+            } else if ((!quoted && Character.isLetter(c) && "yMdHhmsaES".indexOf(c) < 0) || fractionDigits > 6) {
                 return true;
             }
         }
