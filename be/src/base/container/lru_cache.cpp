@@ -179,7 +179,7 @@ void LRUCache::_lru_append(LRUHandle* list, LRUHandle* e) {
     e->next->prev = e;
 }
 
-void LRUCache::set_capacity(size_t capacity) {
+size_t LRUCache::set_capacity(size_t capacity) {
     std::vector<LRUHandle*> last_ref_list;
     {
         std::lock_guard l(_mutex);
@@ -187,9 +187,12 @@ void LRUCache::set_capacity(size_t capacity) {
         _evict_from_lru(0, &last_ref_list);
     }
 
+    size_t evicted = 0;
     for (auto entry : last_ref_list) {
+        evicted += entry->charge;
         entry->free();
     }
+    return evicted;
 }
 
 uint64_t LRUCache::get_lookup_count() const {
@@ -585,18 +588,20 @@ ShardedLRUCache::ShardedLRUCache(size_t capacity) : _capacity(capacity) {
     }
 }
 
-void ShardedLRUCache::_set_capacity(size_t capacity) {
+size_t ShardedLRUCache::_set_capacity(size_t capacity) {
     const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;
+    size_t evicted = 0;
     for (auto& _shard : _shards) {
-        _shard.set_capacity(per_shard);
+        evicted += _shard.set_capacity(per_shard);
     }
     _capacity = capacity;
+    return evicted;
 }
 
-void ShardedLRUCache::set_capacity(size_t capacity) {
+size_t ShardedLRUCache::set_capacity(size_t capacity) {
     // Maybe multi client try to set capactity, we protect it using mutex.
     std::lock_guard l(_mutex);
-    _set_capacity(capacity);
+    return _set_capacity(capacity);
 }
 
 bool ShardedLRUCache::adjust_capacity(int64_t delta, size_t min_capacity) {
@@ -696,6 +701,15 @@ void ShardedLRUCache::prune() {
         num_prune += _shard.prune();
     }
     VLOG(7) << "Successfully prune cache, clean " << num_prune << " entries.";
+}
+
+std::vector<size_t> ShardedLRUCache::get_shard_memory_usages() const {
+    std::vector<size_t> usages;
+    usages.reserve(kNumShards);
+    for (const auto& shard : _shards) {
+        usages.push_back(static_cast<size_t>(shard.get_usage()));
+    }
+    return usages;
 }
 
 size_t ShardedLRUCache::get_memory_usage() const {

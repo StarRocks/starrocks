@@ -218,6 +218,20 @@ TEST_F(CacheTest, EvictionPolicy) {
     ASSERT_EQ(-1, Lookup(200));
 }
 
+TEST_F(CacheTest, SetCapacityReturnsTheEvictedCharge) {
+    for (int i = 0; i < 1000; i++) {
+        Insert(1000 + i, 2000 + i, 100);
+    }
+    const size_t usage = _cache->get_memory_usage();
+    ASSERT_GT(usage, 0u);
+    // Growing evicts nothing.
+    EXPECT_EQ(0u, _cache->set_capacity(static_cast<size_t>(kCacheSize) * 2));
+    const size_t evicted = _cache->set_capacity(static_cast<size_t>(kCacheSize) / 4);
+    EXPECT_GT(evicted, 0u);
+    EXPECT_EQ(usage - evicted, _cache->get_memory_usage());
+    EXPECT_EQ(static_cast<size_t>(kCacheSize) / 4, _cache->get_capacity());
+}
+
 TEST_F(CacheTest, EvictionPolicyWithDurable) {
     Insert(100, 101, 1);
     InsertDurable(200, 201, 1);

@@ -22,11 +22,11 @@
 namespace starrocks::config {
 // Memory urged water level, if the memory usage exceeds this level,
 // be will free up some memory immediately to ensure the system runs smoothly.
-// Currently, only support to release memory of data cache and lake memtable.
+// Currently, only support to release memory of data cache, shared-data metadata cache and lake memtable.
 CONF_mInt64(memory_urgent_level, "85");
 
 // Memory high water level, if the memory usage exceeds this level, be will free up some memory slowly
-// Currently, only support release memory of data cache.
+// Currently, only support release memory of data cache and shared-data metadata cache.
 CONF_mInt64(memory_high_level, "75");
 
 // The high disk usage level, which trigger to release of disk space immediately to disk_safe_level,

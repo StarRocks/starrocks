@@ -222,9 +222,13 @@ public:
 
     virtual void get_cache_status(rapidjson::Document* document) = 0;
 
-    virtual void set_capacity(size_t capacity) = 0;
+    // Sets the capacity and evicts entries until the cache fits it. Returns the total charge of the evicted entries.
+    virtual size_t set_capacity(size_t capacity) = 0;
     virtual size_t get_capacity() const = 0;
     virtual size_t get_memory_usage() const = 0;
+    // Memory usage of each shard that set_capacity() divides the capacity evenly among, so that each shard holds at
+    // most capacity / shards. A cache that is not sharded reports one shard.
+    virtual std::vector<size_t> get_shard_memory_usages() const { return {get_memory_usage()}; }
     virtual size_t get_lookup_count() const = 0;
     virtual size_t get_hit_count() const = 0;
     virtual size_t get_insert_count() const = 0;
@@ -307,8 +311,9 @@ public:
     LRUCache();
     ~LRUCache() noexcept;
 
-    // Separate from constructor so caller can easily make an array of LRUCache
-    void set_capacity(size_t capacity);
+    // Separate from constructor so caller can easily make an array of LRUCache. Returns the total charge of the
+    // entries evicted to fit the new capacity.
+    size_t set_capacity(size_t capacity);
 
     // Like Cache methods, but with an extra "hash" parameter.
     Cache::Handle* insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
@@ -412,8 +417,9 @@ public:
     uint64_t new_id() override;
     void prune() override;
     void get_cache_status(rapidjson::Document* document) override;
-    void set_capacity(size_t capacity) override;
+    size_t set_capacity(size_t capacity) override;
     size_t get_memory_usage() const override;
+    std::vector<size_t> get_shard_memory_usages() const override;
     size_t get_capacity() const override;
     size_t get_lookup_count() const override;
     size_t get_hit_count() const override;
@@ -425,7 +431,7 @@ public:
 private:
     static uint32_t _hash_slice(const CacheKey& s);
     static uint32_t _shard(uint32_t hash);
-    void _set_capacity(size_t capacity);
+    size_t _set_capacity(size_t capacity);
     size_t _get_stat(uint64_t (LRUCache::*mem_fun)() const) const;
 
     LRUCache _shards[kNumShards];

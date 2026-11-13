@@ -299,6 +299,7 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_primary_key_recover_test.cpp
     ./exec/lake_connector_scan_node_test.cpp
     ./storage/lake/metacache_test.cpp
+    ./storage/lake/metacache_adjuster_test.cpp
     ./storage/lake/meta_file_test.cpp
     ./storage/lake/lake_proto_normalizer_test.cpp
     ./storage/lake/partial_update_test.cpp

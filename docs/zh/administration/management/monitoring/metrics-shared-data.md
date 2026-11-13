@@ -71,6 +71,10 @@ Shared-data Dashboard 包括以下监控指标类别：
 
 - 描述 Segment Cache 每分钟 Miss 的次数。
 
+#### Metacache Adjustment Evictions
+
+- 描述 内存紧张时，Tablet 元数据缓存和 Segment 元数据缓存因容量被调低而淘汰的条目累计字节数（参见 BE 配置项 `lake_tablet_metadata_cache_min_limit`），不含缓存写满时的正常淘汰。BE 或 CN 启动后从 0 开始计数。对应 bvar：`lake_metacache_adjust_evicted_bytes`。
+
 ### Vacuum
 
 #### Vacuum Deletes
