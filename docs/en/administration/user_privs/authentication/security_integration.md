@@ -188,9 +188,7 @@ PROPERTIES (
     "jwks_url" = "",
     "principal_field" = "",
     "required_issuer" = "",
-    "required_audience" = "",
-    "group_source" = "",
-    "group_claim" = "",
+    "required_audience" = ""
     "comment" = ""
 );
 ```
@@ -215,7 +213,7 @@ PROPERTIES (
 ##### principal_field
 
 - Required: Yes
-- Description: The field in the JWT that identifies the subject. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks. To extract a value from a nested claim, specify an [RFC 6901 JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) (a path starting with `/`). Use `~1` to escape `/` and `~0` to escape `~` in key names. For example, `/https:~1~1sts.amazonaws.com~1/request_tags/starrocks_user` resolves the `starrocks_user` field nested under the URI-namespaced claim `https://sts.amazonaws.com/`.
+- Description: The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks.
 
 ##### required_issuer
 
@@ -226,23 +224,6 @@ PROPERTIES (
 
 - Required: No
 - Description: The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience.
-
-##### group_source
-
-- Required: No
-- Description: Where the groups of a user authenticated by this integration come from. Valid values:
-  - `group_provider` (default): only the group providers listed in `group_provider` are used. This is the behavior of earlier versions.
-  - `claim`: only the claim named by `group_claim` of the verified token is used. Group providers listed in `group_provider` are ignored, but their configuration is kept, so switching back takes one `ALTER SECURITY INTEGRATION`.
-  - `both`: the union of the two sources.
-
-  Taking the groups from the token is what lets an identity provider with no LDAP directory grant any privilege at all: the resolved groups take part in role mapping via `GRANT ... TO EXTERNAL GROUP`, in the `permitted_groups` login check, in `current_group()`, and in Apache Ranger authorization, exactly like the groups of a group provider. Supported from v4.2 onwards.
-
-##### group_claim
-
-- Required: Yes when `group_source` is `claim` or `both`. Setting it without `group_source` is refused, because it would have no effect; together with an explicit `group_source` of `group_provider` it is accepted and kept, so the claim can be put in place before an `ALTER SECURITY INTEGRATION` switches the source.
-- Description: The claim of the token that holds the user's groups, dot-separated for a claim nested inside another object. For example, `groups` for a top-level claim, `realm_access.roles` for the realm roles of Keycloak, and `resource_access.<client_id>.roles` for its client roles. The claim should hold an array of strings; a single string is accepted as one group. Surrounding whitespace is removed from each name; nothing else is rewritten - not the case, not a leading slash - because the names are handed to Apache Ranger, which matches them exactly. Whether a name matches a `GRANT ... TO EXTERNAL GROUP` or `permitted_groups` entry that differs only in case is decided by the FE configuration item `authentication_group_case_insensitive` (ignoring case by default; set it to `false` if your identity provider distinguishes groups by case).
-
-  There is deliberately no default: the claim an identity provider emits differs per provider, and a wrong guess would let users log in with no privileges instead of failing visibly. The claim is read only after the signature, the required issuer and the required audience have been verified, so the holder of a token cannot choose their own groups. If the claim is absent from a token, the login still succeeds with no groups and the reason is logged rather than reported as an authentication failure - Microsoft Entra ID drops the claim entirely for a user in more than 200 groups, so an absent claim is a state a correct configuration produces. Note that most identity providers do not put groups in a token unless asked to: Keycloak needs a group membership mapper on the client, and Entra ID needs the groups claim added to the token configuration. Supported from v4.2 onwards.
 
 ##### comment
 
@@ -265,9 +246,7 @@ PROPERTIES (
     "jwks_url" = "",
     "principal_field" = "",
     "required_issuer" = "",
-    "required_audience" = "",
-    "group_source" = "",
-    "group_claim" = "",
+    "required_audience" = ""
     "comment" = ""
 )
 ```
@@ -317,7 +296,7 @@ PROPERTIES (
 ##### principal_field
 
 - Required: Yes
-- Description: The field in the JWT that identifies the subject. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks. To extract a value from a nested claim, specify an [RFC 6901 JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) (a path starting with `/`). Use `~1` to escape `/` and `~0` to escape `~` in key names. For example, `/https:~1~1sts.amazonaws.com~1/request_tags/starrocks_user` resolves the `starrocks_user` field nested under the URI-namespaced claim `https://sts.amazonaws.com/`.
+- Description: The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks.
 
 ##### required_issuer
 
@@ -328,23 +307,6 @@ PROPERTIES (
 
 - Required: No
 - Description: The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience.
-
-##### group_source
-
-- Required: No
-- Description: Where the groups of a user authenticated by this integration come from. Valid values:
-  - `group_provider` (default): only the group providers listed in `group_provider` are used. This is the behavior of earlier versions.
-  - `claim`: only the claim named by `group_claim` of the verified token is used. Group providers listed in `group_provider` are ignored, but their configuration is kept, so switching back takes one `ALTER SECURITY INTEGRATION`.
-  - `both`: the union of the two sources.
-
-  Taking the groups from the token is what lets an identity provider with no LDAP directory grant any privilege at all: the resolved groups take part in role mapping via `GRANT ... TO EXTERNAL GROUP`, in the `permitted_groups` login check, in `current_group()`, and in Apache Ranger authorization, exactly like the groups of a group provider. For an OAuth 2.0 integration this also covers the browser login over the MySQL protocol: there the token reaches StarRocks only after the user has signed in through the browser, so the groups are read from the ID token when it arrives, and `permitted_groups` is checked on the first statement after the browser login rather than when the connection opens. With `group_source` left at `group_provider`, nothing changes: the groups and the check are decided when the connection opens, as before. Supported from v4.2 onwards.
-
-##### group_claim
-
-- Required: Yes when `group_source` is `claim` or `both`; setting it with any other `group_source` is refused, because it would have no effect.
-- Description: The claim of the token that holds the user's groups, dot-separated for a claim nested inside another object. For example, `groups` for a top-level claim, `realm_access.roles` for the realm roles of Keycloak, and `resource_access.<client_id>.roles` for its client roles. The claim should hold an array of strings; a single string is accepted as one group. Surrounding whitespace is removed from each name; nothing else is rewritten - not the case, not a leading slash - because the names are handed to Apache Ranger, which matches them exactly. Whether a name matches a `GRANT ... TO EXTERNAL GROUP` or `permitted_groups` entry that differs only in case is decided by the FE configuration item `authentication_group_case_insensitive` (ignoring case by default; set it to `false` if your identity provider distinguishes groups by case).
-
-  There is deliberately no default: the claim an identity provider emits differs per provider, and a wrong guess would let users log in with no privileges instead of failing visibly. The claim is read only after the signature, the required issuer and the required audience have been verified, so the holder of a token cannot choose their own groups. If the claim is absent from a token, the login still succeeds with no groups and the reason is logged rather than reported as an authentication failure - Microsoft Entra ID drops the claim entirely for a user in more than 200 groups, so an absent claim is a state a correct configuration produces. Note that most identity providers do not put groups in a token unless asked to: Keycloak needs a group membership mapper on the client, and Entra ID needs the groups claim added to the token configuration. Supported from v4.2 onwards.
 
 ##### comment
 
@@ -457,9 +419,6 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 `ldap_bind_root_pwd` is masked when SHOW CREATE SECURITY INTEGRATION is executed.
 :::
 
-<<<<<<< HEAD
-<SecurityIntegrationConnectSeeAlso />
-=======
 ## Connect to StarRocks via a security integration
 
 - For instructions on how to connect to StarRocks via LDAP, see [LDAP Authentication - Connect to StarRocks](./ldap_authentication.md#connect-from-mysql-client-with-ldap).
@@ -472,4 +431,3 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 - For instructions on how to manually authenticate users via JSON Web Token in StarRocks, see [JSON Web Token Authentication](./jwt_authentication.md).
 - For instructions on how to manually authenticate users via OAuth 2.0 in StarRocks, see [OAuth 2.0 Authentication](./oauth2_authentication.md).
 - For instructions on how to authenticate user groups, see [Authenticate User Groups](../group_provider.md).
->>>>>>> 2b39e08 ([Doc] Merge the authentication and authorization partials into their pages (#83146))
