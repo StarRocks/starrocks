@@ -23,6 +23,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -170,7 +171,8 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         // Idea: the most frequent composite tuple (k_1, k_2, ..., k_n) is bounded by the most
         // frequent value of each individual key. If any key k_i is not skewed (no value exceeds
         // the threshold), then no composite tuple can exceed it either, so no partition is skewed.
-        record PredicateSkewInfo(ColumnRefOperator column, ColumnRefOperator otherColumn, DataSkew.SkewInfo skewInfo) {
+        record PredicateSkewInfo(ColumnRefOperator column, ColumnRefOperator otherColumn, DataSkew.SkewInfo skewInfo,
+                boolean nullSafe) {
         }
 
         List<PredicateSkewInfo> skewedPredicates = new ArrayList<>();
@@ -186,7 +188,9 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             final var leftCol = (ColumnRefOperator) equalConj.getChild(0);
             final var rightCol = (ColumnRefOperator) equalConj.getChild(1);
             final var otherColumn = columnOpt.get().equals(leftCol) ? rightCol : leftCol;
-            skewedPredicates.add(new PredicateSkewInfo(columnOpt.get(), otherColumn, skewInfoOpt.get()));
+            final var nullSafe = equalConj.getBinaryType() == BinaryType.EQ_FOR_NULL;
+            skewedPredicates.add(new PredicateSkewInfo(columnOpt.get(), otherColumn, skewInfoOpt.get(),
+                    nullSafe));
         }
 
         for (final var skewPredicate : skewedPredicates) {
@@ -211,7 +215,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             }
 
             // Check how many rows on the other side would be affected by salting, as this can lead to a
-            // cardinality blow up. We only check for MCVs since for NULLs this is not an issue as NULL does not join.
+            // cardinality blow up. NULLs only join under <=>, which is checked separately below.
             final var skewInfoMcvs = skewInfo.getMcvs();
             if (skewInfo.hasMcvSkew()) {
                 final var rightChildStats = input.inputAt(1).getStatistics();
@@ -230,6 +234,22 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                         }
                     }
                 }
+            }
+
+            // With <=>, NULLs do join, so every NULL row on the other side gets one copy per salt value,
+            // if that blows up cardinality, don't salt NULLs at all.
+            if (skewPredicate.nullSafe() && skewValues.stream().anyMatch(ScalarOperator::isConstantNull)) {
+                final var rightChildStats = input.inputAt(1).getStatistics();
+                if (rightChildStats != null && rightChildStats.getColumnStatistics().containsKey(skewPredicate.otherColumn)) {
+                    final var otherNullRows = rightChildStats.getOutputRowCount()
+                            * rightChildStats.getColumnStatistic(skewPredicate.otherColumn).getNullsFraction();
+                    if (otherNullRows > context.getSessionVariable().getSkewJoinMaxOtherSideOverlapRowCount()) {
+                        skewValues.removeIf(ScalarOperator::isConstantNull);
+                    }
+                }
+            }
+            if (skewValues.isEmpty()) {
+                continue;
             }
 
             joinOperator.setSkewColumn(skewJoinColumn);
@@ -251,7 +271,9 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         List<BinaryPredicateOperator> equalConjs = JoinHelper.
                 getEqualsPredicate(leftOutputColumns, rightOutputColumns,
                         Utils.extractConjuncts(oldJoinOperator.getOnPredicate()));
+        boolean nullSafe = false;
         for (BinaryPredicateOperator equalConj : equalConjs) {
+            nullSafe = equalConj.getBinaryType() == BinaryType.EQ_FOR_NULL;
             ScalarOperator child0 = equalConj.getChild(0);
             ScalarOperator child1 = equalConj.getChild(1);
             // skew column may be left or right column of the equal predicate
@@ -312,12 +334,12 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         }
         if (skewSideIsLeft) {
             newLeftChild = addSaltForSkewChild(input.inputAt(0), skewColumn,
-                    oldJoinOperator.getSkewValues(), context);
-            newRightChild = addSaltForOtherChild(oldJoinOperator, input.inputAt(1), otherSideSkewColumn, context);
+                    oldJoinOperator.getSkewValues(), nullSafe, context);
+            newRightChild = addSaltForOtherChild(oldJoinOperator, input.inputAt(1), otherSideSkewColumn, nullSafe, context);
         } else {
             newRightChild = addSaltForSkewChild(input.inputAt(1), skewColumn,
-                    oldJoinOperator.getSkewValues(), context);
-            newLeftChild = addSaltForOtherChild(oldJoinOperator, input.inputAt(0), otherSideSkewColumn, context);
+                    oldJoinOperator.getSkewValues(), nullSafe, context);
+            newLeftChild = addSaltForOtherChild(oldJoinOperator, input.inputAt(0), otherSideSkewColumn, nullSafe, context);
         }
 
         Map<ColumnRefOperator, ScalarOperator> leftProjectMap = ((LogicalProjectOperator) newLeftChild.getOp()).
@@ -358,7 +380,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
     }
 
     private OptExpression addSaltForSkewChild(OptExpression input, ScalarOperator skewColumn,
-                                              List<ScalarOperator> skewValues,
+                                              List<ScalarOperator> skewValues, boolean nullSafe,
                                               OptimizerContext context) {
         ColumnRefSet columnRefSet = input.getOutputColumns();
         // case when skew is null then round(rand() * 100) when skew in (skew values) then round(rand() * 100) else 0 end
@@ -390,8 +412,12 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         InPredicateOperator inPredicateOperator = new InPredicateOperator(false, inPredicateArgs);
 
         List<ScalarOperator> when = Lists.newArrayList();
-        when.add(isNullPredicateOperator);
-        when.add(roundFnOperator);
+        // With "=" NULLs never join, salting them is safe. With "<=>" NULLs join, so only salt them when
+        // NULL is a skew value. Then the other side replicates its NULLs per salt value.
+        if (!nullSafe || skewValues.stream().anyMatch(ScalarOperator::isConstantNull)) {
+            when.add(isNullPredicateOperator);
+            when.add(roundFnOperator);
+        }
         // only add IN branch when we indeed have non-null skew values
         if (!nonNullSkewValues.isEmpty()) {
             when.add(inPredicateOperator);
@@ -502,7 +528,8 @@ public class SkewJoinOptimizeRule extends TransformationRule {
     }
 
     private OptExpression addSaltForOtherChild(LogicalJoinOperator oldJoinOperator, OptExpression input,
-                                               ScalarOperator otherSideSkewColumn, OptimizerContext context) {
+                                               ScalarOperator otherSideSkewColumn, boolean nullSafe,
+                                               OptimizerContext context) {
         List<ScalarOperator> skewValues = oldJoinOperator.getSkewValues();
         OptExpression skewValueSaltOpt = createSkewValueSaltTable(skewValues, context);
         Map<ColumnRefOperator, ScalarOperator> skewValueSaltProjects =
@@ -518,7 +545,9 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         }
 
         // other table join with skew value salt table
-        ScalarOperator onPredicate = BinaryPredicateOperator.eq(otherSideSkewColumn, unnestColumn);
+        ScalarOperator onPredicate = nullSafe
+                ? BinaryPredicateOperator.null_safe_eq(otherSideSkewColumn, unnestColumn)
+                : BinaryPredicateOperator.eq(otherSideSkewColumn, unnestColumn);
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         onPredicate = rewriter.rewrite(onPredicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
 
