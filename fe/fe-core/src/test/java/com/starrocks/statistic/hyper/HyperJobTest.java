@@ -306,6 +306,59 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+    public void testSampleJobsForKeyModels() throws Exception {
+        new MockUp<SampleInfo>() {
+            @Mock
+            public List<TabletStats> getMediumHighWeightTablets() {
+                return List.of(new TabletStats(1, pid, 5000000));
+            }
+        };
+
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        for (String keyModel : List.of("duplicate", "primary", "unique", "aggregate")) {
+            String name = "t_sample_" + keyModel;
+            boolean aggregate = keyModel.equals("aggregate");
+            boolean sampleValues = keyModel.equals("unique") || aggregate;
+            starRocksAssert.withTable("CREATE TABLE " + name + " (k INT NOT NULL, v_int BIGINT" +
+                    (aggregate ? " SUM" : "") + ", v_time DATETIME" + (aggregate ? " MAX" : "") +
+                    ", v_str VARCHAR(32)" + (aggregate ? " REPLACE" : "") + ") " + keyModel +
+                    " KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1')");
+            OlapTable modelTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", name);
+            Partition partition = modelTable.getPartition(name);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(10000);
+            List<Long> partitionIds = List.of(partition.getId());
+            PartitionSampler modelSampler = PartitionSampler.create(modelTable, partitionIds, Maps.newHashMap(), null);
+            List<String> columns = List.of("k", "v_int", "v_time", "v_str");
+            List<Type> types = columns.stream().map(c -> modelTable.getColumn(c).getType()).collect(Collectors.toList());
+
+            for (boolean manual : List.of(false, true)) {
+                List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(1L, connectContext, db, modelTable,
+                        columns, types, partitionIds, 1, modelSampler, manual);
+                Assertions.assertEquals(2, jobs.size());
+                Assertions.assertInstanceOf(MetaQueryJob.class, jobs.get(0));
+                Assertions.assertInstanceOf(SampleQueryJob.class, jobs.get(1));
+                Assertions.assertEquals(sampleValues ? List.of("k") : List.of("k", "v_int", "v_time"),
+                        jobs.get(0).columnStats.stream().map(ColumnStats::getColumnNameStr).collect(Collectors.toList()),
+                        keyModel);
+                Assertions.assertEquals(sampleValues ? List.of("v_int", "v_time", "v_str") : List.of("v_str"),
+                        jobs.get(1).columnStats.stream().map(ColumnStats::getColumnNameStr).collect(Collectors.toList()),
+                        keyModel);
+                if (sampleValues) {
+                    String sql = String.join(" ", jobs.get(1).buildQuerySQL());
+                    assertContains(sql, "IFNULL(MAX(`v_int`), '')", "IFNULL(MIN(`v_int`), '')",
+                            "IFNULL(MAX(`v_time`), '')", "IFNULL(MIN(`v_time`), '')");
+                    Assertions.assertFalse(sql.contains("[_META_]"));
+                }
+            }
+
+            List<HyperQueryJob> fullJobs = HyperQueryJob.createFullQueryJobs(1L, connectContext, db, modelTable,
+                    columns, types, partitionIds, 1, false);
+            Assertions.assertEquals(1, fullJobs.size());
+            Assertions.assertInstanceOf(FullQueryJob.class, fullJobs.get(0));
+        }
+    }
+
+    @Test
     public void testArrayNDV() {
         Pair<List<String>, List<Type>> pair = initColumn(List.of("c7"));
 
