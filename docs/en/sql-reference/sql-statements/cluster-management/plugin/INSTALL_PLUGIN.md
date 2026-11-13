@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "INSTALL PLUGIN is used to install a plugin."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # INSTALL PLUGIN

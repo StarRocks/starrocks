@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "AUTO_INCREMENT column attribute automatically assigns unique integer values to rows since StarRocks v3.0."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # AUTO_INCREMENT

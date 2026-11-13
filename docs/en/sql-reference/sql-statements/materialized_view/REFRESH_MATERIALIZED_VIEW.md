@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "REFRESH MATERIALIZED VIEW manually refreshes a specific asynchronous materialized view or partitions within."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # REFRESH MATERIALIZED VIEW

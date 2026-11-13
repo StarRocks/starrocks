@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DATETIME 类型用于存储日期和时间，支持毫秒和微秒精度，格式为 YYYY-MM-DD HH:MM:SS。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import DateTip from '../../../_assets/commonMarkdown/dateTimeTip.mdx'

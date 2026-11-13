@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "明示的な CRS を指定して WKT からネイティブ GEOMETRY を構築するか、従来の 1 引数形式を使用します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_GeomFromText, ST_GeometryFromText

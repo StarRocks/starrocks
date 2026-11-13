@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks のシステム変数を表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW VARIABLES

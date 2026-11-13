@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "lhs と rhs に固有の要素からなる集合を計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_xor

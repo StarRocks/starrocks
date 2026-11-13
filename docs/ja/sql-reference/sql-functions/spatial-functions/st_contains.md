@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ポリゴンが点を内部に含むかどうかを判定します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Contains

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "expr のいずれかの行が true と評価された場合に true を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bool_or

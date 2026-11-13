@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从字符串左侧返回指定长度的字符，是left函数的别名。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # strleft

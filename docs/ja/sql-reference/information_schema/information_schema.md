@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks Information Schemaは各インスタンス内のメタデータ情報を格納する読み取り専用のシステム定義ビューです。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Information Schema

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "percentile_approx 计算百分位数的近似值，支持单个或多个百分位，使用固定大小内存。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_approx

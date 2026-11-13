@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "You can execute the CREATE FILE statement to create a file."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE FILE

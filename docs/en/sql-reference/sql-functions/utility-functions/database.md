@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the name of the current database."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # database

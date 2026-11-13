@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Shared-data, Data Lake, and Others"
 description: "FE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE Configuration - Shared-data, Data Lake, and Others

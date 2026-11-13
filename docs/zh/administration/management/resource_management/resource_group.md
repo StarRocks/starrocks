@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Resource groups in StarRocks enable resource isolation and multi-tenant management by limiting query resource consumption through CPU, memory, and concurrency controls."
 keywords: ['fuzai', 'ziyuan', 'ziyuanzu'] 
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 

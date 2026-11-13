@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns values from an array that matches the given filter."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_filter

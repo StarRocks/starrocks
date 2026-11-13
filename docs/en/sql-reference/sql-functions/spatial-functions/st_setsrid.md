@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 51
 description: "Changes native GEOMETRY CRS metadata without transforming coordinates."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_SetSRID

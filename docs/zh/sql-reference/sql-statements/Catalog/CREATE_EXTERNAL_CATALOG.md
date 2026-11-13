@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE EXTERNAL CATALOG 用于创建 External Catalog；支持 Hive、Iceberg、Hudi 等。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE EXTERNAL CATALOG

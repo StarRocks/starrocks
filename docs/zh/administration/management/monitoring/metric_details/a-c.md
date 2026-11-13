@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical a - c"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 指标 a 到 c

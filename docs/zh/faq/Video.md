@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 视频学习资源。"
+products: [oss]
 ---
 
 # 视频资源

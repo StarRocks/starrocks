@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the OGC geometry family of a GEOGRAPHY or GEOMETRY value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_GEOMETRYTYPE

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "如何在 StarRocks 中通过 Skew Join V2 广播倾斜值优化存在数据倾斜的 JOIN 查询性能。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Skew Join V2

@@ -2,6 +2,7 @@
 sidebar_position: 120
 displayed_sidebar: docs
 description: "为 Flink 作业启用多表事务，以便在一个处理周期内向同一数据库中的多个表写入数据。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 使用 Apache Flink® 通过多表事务加载数据

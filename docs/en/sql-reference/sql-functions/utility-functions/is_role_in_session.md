@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Verifies whether a role (or a nested role) is active in the current session."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # is_role_in_session

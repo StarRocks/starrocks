@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "StarRocks supports backing up data to alicloud OSS / AWS S3 (or object storage compatible with S3 protocol)."
+products: [oss, enterprise]
 ---
 
 # Data Export

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定されたデータアンロードジョブをキャンセルします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CANCEL EXPORT

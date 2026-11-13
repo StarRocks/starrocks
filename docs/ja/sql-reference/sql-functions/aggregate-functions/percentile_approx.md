@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "PERCENTILE_APPROX関数は指定されたパーセンタイルの加重近似値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_approx

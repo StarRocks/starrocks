@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回存在于第一个 Bitmap 中但不存在于第二个 Bitmap 中的值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_andnot

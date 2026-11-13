@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Formats TIME-type values in the specified format."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # time_format

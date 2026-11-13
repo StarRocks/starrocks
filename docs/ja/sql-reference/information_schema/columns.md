@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "columnsはすべてのテーブル列またはビュー列に関する情報を含みます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # columns

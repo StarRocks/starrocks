@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Builds an Apache DataSketches Theta sketch from column values and returns a serialized compact sketch as VARBINARY."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_accumulate

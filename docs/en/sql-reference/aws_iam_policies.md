@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "A policy in AWS IAM declares a set of permissions on a specific AWS resource."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # AWS IAM policies

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks は重複キー、集計、ユニークキー、主キーテーブルをサポートしており、これらはすべて KEY でソートされています。"
+products: [oss]
 ---
 
 # パフォーマンス最適化

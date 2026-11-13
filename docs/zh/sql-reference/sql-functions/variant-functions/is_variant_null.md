@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "判断 VARIANT 值是否为 VARIANT null（例如 JSON null）。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # is_variant_null

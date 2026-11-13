@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP CATALOG deletes an external catalog."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP CATALOG

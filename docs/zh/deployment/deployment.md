@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 集群部署、升级和降级的完整流程和步骤概览。"
+products: [oss]
 ---
 
 # 部署总览

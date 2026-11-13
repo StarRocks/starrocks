@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Routine Load の並行性向上によるロード性能改善とパラメータ設定を解説します。"
+products: [oss, enterprise]
 ---
 
 # Routine Load

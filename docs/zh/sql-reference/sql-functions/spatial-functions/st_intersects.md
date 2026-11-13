@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "判断两个原生多边形或多重多边形是否相交。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Intersects

@@ -2,6 +2,7 @@
 sidebar_position: 30
 description: GCS で認証する方法について説明します
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Google Cloud Storage への認証

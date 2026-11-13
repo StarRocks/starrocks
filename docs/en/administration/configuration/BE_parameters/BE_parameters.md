@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks BE configuration reference: complete list of BE parameters configurable in be.conf or via SQL."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'

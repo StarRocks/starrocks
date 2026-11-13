@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将字符串中每个单词的首字母转换为大写，其余字符转换为小写。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # initcap

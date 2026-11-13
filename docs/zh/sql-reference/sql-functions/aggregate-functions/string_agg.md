@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将分组中的多个非NULL值连接成一个字符串，兼容PostgreSQL和SQL Server。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # string_agg

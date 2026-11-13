@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the day of the year for a given date."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # dayofyear

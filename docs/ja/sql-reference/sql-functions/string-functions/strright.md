@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列の右端から指定した文字数を抽出します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # strright

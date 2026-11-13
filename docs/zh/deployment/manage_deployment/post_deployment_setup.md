@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "部署 StarRocks 后需执行的初始账户管理和集群配置任务。"
+products: [oss]
 ---
 
 # 部署后设置

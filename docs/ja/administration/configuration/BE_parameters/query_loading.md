@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "BE 設定パラメーター：クエリ実行とデータロードに関連する設定項目。"
 sidebar_label: "Query and Loading"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'

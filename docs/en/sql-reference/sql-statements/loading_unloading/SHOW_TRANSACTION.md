@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW TRANSACTION is used to view the transaction details of the specified transaction id."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW TRANSACTION

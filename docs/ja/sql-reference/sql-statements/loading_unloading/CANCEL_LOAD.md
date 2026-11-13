@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Broker Load、Spark Load、または INSERT ロードジョブをキャンセルします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CANCEL LOAD

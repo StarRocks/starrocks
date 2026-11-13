@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "STRING 是字符串类型，最大长度为 65533 字节。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # STRING

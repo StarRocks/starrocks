@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "How to export table data from StarRocks as CSV files to HDFS or object storage using the EXPORT statement."
+products: [oss, enterprise]
 ---
 
 # Export data using EXPORT

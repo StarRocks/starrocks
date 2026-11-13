@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN SHOW CONFIG 显示当前集群的 FE 配置项信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SHOW CONFIG

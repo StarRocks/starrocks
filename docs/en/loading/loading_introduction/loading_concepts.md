@@ -3,6 +3,7 @@ sidebar_position: 20
 displayed_sidebar: docs
 toc_max_heading_level: 4
 description: "Key concepts for data loading in StarRocks: privileges, labels, atomicity, data type conversion, column mapping, and error tolerance (max_filter_ratio)."
+products: [oss, enterprise, anywhere]
 ---
 
 # Loading concepts

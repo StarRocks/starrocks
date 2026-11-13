@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the number of characters in a string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # char_length

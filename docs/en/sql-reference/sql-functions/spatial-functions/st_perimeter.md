@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the boundary length of polygon components in a native GEO value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Perimeter

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "ORDER BY clause sorts the result set by comparing values from one or more columns."
 sidebar_label: "ORDER BY"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ORDER BY

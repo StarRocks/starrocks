@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 toc_max_heading_level: 4
 description: "STREAM LOAD 允许您从本地文件系统或流式数据源加载数据。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';

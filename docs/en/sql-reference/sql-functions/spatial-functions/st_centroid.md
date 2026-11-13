@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the dimension-weighted centroid of a native GEO value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Centroid

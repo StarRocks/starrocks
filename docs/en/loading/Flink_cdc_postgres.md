@@ -7,6 +7,7 @@ keywords:
   - sync
   - Flink CDC
 description: "How to use a Flink CDC pipeline to capture PostgreSQL changes and stream them into StarRocks Primary Key tables in real time."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Realtime synchronization from PostgreSQL

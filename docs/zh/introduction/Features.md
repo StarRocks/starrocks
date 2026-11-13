@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "StarRocks 采用 MPP 架构和向量化执行引擎，提供极速多维高并发数据分析能力。"
+products: [oss, enterprise, cloud]
 ---
 
 # 产品特性

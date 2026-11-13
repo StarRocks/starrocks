@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回两个数值的按位 XOR 运算结果。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitxor

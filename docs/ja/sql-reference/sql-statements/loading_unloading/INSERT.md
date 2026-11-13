@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "テーブルにデータを挿入またはテーブルをデータで上書きします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # INSERT

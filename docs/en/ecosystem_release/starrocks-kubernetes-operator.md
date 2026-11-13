@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "The Operator provided by StarRocks is used to deploy StarRocks clusters in the Kubernetes environment."
+products: [oss]
 ---
 
 # Releases of Kubernetes Operator for StarRocks

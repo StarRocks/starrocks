@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the month for a given date."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # month

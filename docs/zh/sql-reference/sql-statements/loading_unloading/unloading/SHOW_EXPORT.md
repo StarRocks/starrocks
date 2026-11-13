@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "查询符合指定条件的导出作业的执行情况。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW EXPORT

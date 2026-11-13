@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Terminates a connection or a query currently being performed by threads executing within StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # KILL

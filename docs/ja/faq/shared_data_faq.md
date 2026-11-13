@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "共有データクラスタのオブジェクトストレージ設定エラーと一般的なトラブルシューティング方法を紹介します。"
+products: [oss, enterprise]
 ---
 
 # 共有データ

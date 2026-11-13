@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "現在のcatalogの名前を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # catalog

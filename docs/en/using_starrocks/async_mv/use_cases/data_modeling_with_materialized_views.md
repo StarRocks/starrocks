@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 10
 description: "How to use asynchronous materialized views in StarRocks to simplify ETL pipelines, build reusable data models, and improve query performance through layered..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Data modeling with materialized views

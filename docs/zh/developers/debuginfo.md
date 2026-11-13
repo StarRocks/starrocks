@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从 v2.5 版本开始，BE debuginfo 文件从安装包中分离以减小包大小。"
+products: [oss]
 ---
 
 # 使用 debuginfo 文件进行调试

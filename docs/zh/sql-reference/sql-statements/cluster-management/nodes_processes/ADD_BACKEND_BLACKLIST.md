@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADD BACKEND/COMPUTE NODE BLACKLIST 将 BE 或 CN 节点添加到黑名单。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADD BACKEND/COMPUTE NODE BLACKLIST

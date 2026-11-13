@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "開始値と終了値の間で指定されたステップで値の系列を生成します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # generate_series

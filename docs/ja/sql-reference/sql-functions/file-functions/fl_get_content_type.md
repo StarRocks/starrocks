@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "FILE 値の content_type フィールドを取得します。"
 sidebar_position: 60
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

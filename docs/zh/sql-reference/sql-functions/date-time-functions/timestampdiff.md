@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回两个日期时间表达式之间的时间间隔。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # timestampdiff

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "列出已注册的 AI provider，可按名称模式或类型过滤。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW AI PROVIDERS

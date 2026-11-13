@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Base64 でエンコードされた文字列をデコードし、BINARY を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # base64_decode_binary

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定されたキーと値の配列からMAP値を作成します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # map_from_arrays

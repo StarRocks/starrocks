@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将字符串或数组反转。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # reverse

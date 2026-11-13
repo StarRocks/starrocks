@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Routine Load 常见问题，包括如何提升导入性能和排查常见问题。"
+products: [oss, enterprise]
 ---
 
 # Routine Load 导入常见问题

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "v2.5 以降の BE debuginfo ファイルの別途ダウンロード・使用方法。"
+products: [oss]
 ---
 
 # デバッグのための debuginfo ファイルの使用

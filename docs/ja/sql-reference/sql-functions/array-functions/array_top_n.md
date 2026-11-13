@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された配列の要素を自然な降順でソートし、トップn要素を配列で返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_top_n

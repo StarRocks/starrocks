@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP ANALYZE 删除自定义自动采集任务。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP ANALYZE

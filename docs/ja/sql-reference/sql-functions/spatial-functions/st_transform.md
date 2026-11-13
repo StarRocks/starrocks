@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 52
 description: "EPSG:4326 と EPSG:3857 の間でネイティブ GEOMETRY の座標を再投影します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Transform

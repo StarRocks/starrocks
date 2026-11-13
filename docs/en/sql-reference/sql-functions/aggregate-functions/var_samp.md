@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the sample variance of an expression."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # var_samp,variance_samp

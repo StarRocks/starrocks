@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "聚合函数。通过 anchor 标志将行路由到两组 Theta 草图，单次扫描即可计算两组草图的交集基数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_intersect_cond_agg

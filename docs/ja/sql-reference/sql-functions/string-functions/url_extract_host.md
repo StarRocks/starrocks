@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "URLからホスト部分を抽出します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # url_extract_host

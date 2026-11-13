@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Constructs a FILE value from a STRUCT expression."
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

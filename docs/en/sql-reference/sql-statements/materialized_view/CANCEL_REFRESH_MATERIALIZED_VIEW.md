@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CANCEL REFRESH MATERIALIZED VIEW cancels a refresh task for an asynchronous materialized view."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CANCEL REFRESH MATERIALIZED VIEW

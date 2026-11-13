@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "停止 Routine Load 导入作业，导入作业停止且无法恢复。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # STOP ROUTINE LOAD

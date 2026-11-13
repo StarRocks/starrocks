@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Draw a bar graph like histogram to inspect the data distribution."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bar

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns approximate distinct count using DataSketches Theta sketch. Faster than COUNT(DISTINCT) with lower memory usage for high-cardinality columns."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_count_distinct

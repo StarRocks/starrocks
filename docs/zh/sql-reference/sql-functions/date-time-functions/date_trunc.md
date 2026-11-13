@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "根据指定的精度级别将一个日期时间截断。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # date_trunc

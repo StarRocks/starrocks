@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "获取计算所在节点的主机名。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # host_name

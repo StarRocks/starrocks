@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "STRUCT 式から FILE 値を構築します。"
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

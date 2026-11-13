@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the estimated memory usage for a specified StarRocks FE module as a JSON string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_memory

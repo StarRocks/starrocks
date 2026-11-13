@@ -1,3 +1,7 @@
+---
+products: [oss, enterprise, cloud, anywhere]
+---
+
 # percentile_approx_weight
 
 指定されたパーセンタイルの加重近似値を返します。パーセンタイルパラメータ p は単一の値または配列を指定できます。`percentile_approx_weight` は `PERCENTILE_APPROX` の重み付きバージョンであり、各入力値に対して重み（定数値または数値列）を指定することができます。

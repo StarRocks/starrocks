@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 10
 description: "How Prefix indexes work in StarRocks as automatically generated sort-key indexes that accelerate range queries and equality filters on sort key columns."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Prefix indexes

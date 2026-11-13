@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "be_txns 提供每个 BE 节点上事务的信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # be_txns

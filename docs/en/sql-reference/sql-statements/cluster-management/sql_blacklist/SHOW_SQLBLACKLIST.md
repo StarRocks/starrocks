@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW SQLBLACKLIST shows the SQL regular expressions in the SQL blacklist."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW SQLBLACKLIST

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ANALYZE TABLE 创建手动采集任务进行 CBO 统计信息采集。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ANALYZE TABLE

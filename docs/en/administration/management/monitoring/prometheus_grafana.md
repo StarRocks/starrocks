@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 4
 description: "StarRocks provides a monitor and alert solution by using Prometheus and Grafana."
+products: [oss, enterprise, anywhere]
 ---
 
 # Monitor and Alert with Prometheus and Grafana

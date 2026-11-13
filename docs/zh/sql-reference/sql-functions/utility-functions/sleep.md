@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将当前正在执行的线程休眠指定秒数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # sleep

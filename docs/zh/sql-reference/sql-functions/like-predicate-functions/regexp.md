@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "检查字符串是否匹配给定的正则表达式。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # regexp

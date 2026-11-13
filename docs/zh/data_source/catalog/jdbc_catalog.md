@@ -3,6 +3,7 @@ sidebar_position: 70
 displayed_sidebar: docs
 description: "StarRocks 从 v3.0 起支持 JDBC catalog，无导入直接查询 JDBC 数据源及执行转换导入。"
 toc_max_heading_level: 4
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'

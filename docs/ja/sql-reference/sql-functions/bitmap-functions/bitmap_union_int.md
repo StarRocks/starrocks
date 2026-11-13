@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "TINYINT、SMALLINT、INT 型の列における異なる値の数をカウントします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_union_int

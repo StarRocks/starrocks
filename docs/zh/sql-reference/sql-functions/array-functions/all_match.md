@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "判断数组中的所有元素是否都匹配给定的谓词条件。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # all_match

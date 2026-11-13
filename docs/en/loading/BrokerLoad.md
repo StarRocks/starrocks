@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "How to use Broker Load for asynchronous bulk data loading from HDFS or cloud storage (S3, GCS, Azure) into StarRocks, with job management and error handling."
+products: [oss, enterprise, anywhere]
 ---
 
 # Load data from HDFS or cloud storage

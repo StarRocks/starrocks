@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回圆周率π的值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # pi

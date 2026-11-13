@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP DICTIONARY deletes a dictionary object or clears its cached data."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP DICTIONARY

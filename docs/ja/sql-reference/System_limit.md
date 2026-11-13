@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 使用時に適用されるルールと制限、データベース・テーブル・パーティション・カラム・識別子の命名規則。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # システム制限

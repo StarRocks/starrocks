@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 3.3 版本发布说明：子秒级 DDL、Fast Schema Evolution、数据迁移工具、数据湖预热缓存功能。"
+products: [oss]
 ---
 
 # StarRocks version 3.3

@@ -1,6 +1,7 @@
 ---
 sidebar_position: 20
 displayed_sidebar: docs
+products: [oss, cloud, anywhere]
 description: "StarRocks version naming conventions: MAJOR.MINOR.PATCH format, prerelease designations, and how to interpret version numbers."
 ---
 

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "UNINSTALL PLUGIN は、プラグインをアンインストールするために使用されます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # プラグインのアンインストール

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Uses the specified Advanced Encryption Standard (AES) algorithm and an encryption key to encrypt a string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # aes_encrypt

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ALTER STORAGE VOLUME は、ストレージボリュームのクレデンシャルプロパティ、コメント、またはステータスを変更します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER STORAGE VOLUME

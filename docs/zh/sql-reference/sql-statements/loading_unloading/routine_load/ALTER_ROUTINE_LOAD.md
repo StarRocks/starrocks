@@ -2,6 +2,7 @@
 keywords: ['xiugai'] 
 displayed_sidebar: docs
 description: "修改处于 PAUSED 状态的 Routine Load 导入作业。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER ROUTINE LOAD

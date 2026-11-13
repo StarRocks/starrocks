@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DECIMAL(P[,S]) is a high-precision fixed-point value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DECIMAL

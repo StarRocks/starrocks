@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW ROUTINE LOAD shows the execution information of Routine Load jobs."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW ROUTINE LOAD

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the bitwise negation of a numeric expression."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitnot
