@@ -1424,6 +1424,7 @@ The StarRocks version. Cannot be changed.
 * **Unit**: Second
 * **Data type**: Int
 
+<<<<<<< HEAD
 ### orc_use_column_names
 
 * **Description**: Used to specify how columns are matched when StarRocks reads ORC files from Hive. The default value is `false`, which means columns in ORC files are read based on their ordinal positions in the Hive table definition. If this variable is set to `true`, columns are read based on their names.
@@ -1472,3 +1473,5 @@ The StarRocks version. Cannot be changed.
 * **Default**: true
 * **Introduced in**: v3.4
 
+=======
+>>>>>>> 43416b8 ([Doc] Merge the configuration and variable partials into their pages (#83162))
