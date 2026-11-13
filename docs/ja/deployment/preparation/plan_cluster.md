@@ -18,7 +18,7 @@ FE ノードは主にメタデータ管理、クライアント接続管理、�
 
 実運用環境では、単一障害点 (SPOF) を防ぐために、StarRocks クラスターに少なくとも **3 つ** の Follower FE ノードをデプロイすることをお勧めします。Leader FE はこれらの 3 つのフォロワーから自動的に選出されます。
 
-StarRocks は Raft プロトコルを使用して FE ノード間のメタデータを管理します。StarRocks はすべての Follower FE ノードから Leader FE ノードを選出します。メタデータを書き込むことができるのは Leader FE ノードのみです。他の Follower FE ノードは、Leader FE ノードからのログに基づいてメタデータを更新するだけです。Leader FE ノードが故障するたびに、StarRocks は Follower FE ノードの半数以上が生存している限り、新しい Leader FE ノードを再選出します。
+StarRocks は BDB JE（Berkeley DB Java Edition）のレプリケーションを使用して FE ノード間のメタデータを管理します。StarRocks はすべての Follower FE ノードから Leader FE ノードを選出します。メタデータを書き込むことができるのは Leader FE ノードのみです。他の Follower FE ノードは、Leader FE ノードからのログに基づいてメタデータを更新するだけです。Leader FE ノードが故障するたびに、StarRocks は Follower FE ノードの半数以上が生存している限り、新しい Leader FE ノードを再選出します。
 
 アプリケーションが高い同時実行クエリ要求を生成する場合は、Observer FE ノードをクラスターに追加できます。Observer FE ノードはクエリ要求のみを処理し、Leader FE ノードの選出には参加しません。
 

@@ -88,6 +88,8 @@ From v3.1.4 onwards, you can set individual concurrency limits (`concurrency_lim
 | concurrency_limit   | 0           | The concurrency limit for the resource group on a single BE node. It takes effect only when it is set to greater than `0`. |
 | max_cpu_cores       | 0           | The CPU core limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. |
 
+Resource group-level query queues are implemented only by Query Queue v1. After Query Queue v2 is enabled (`enable_query_queue_v2` is set to `true`, which is the default from v4.1 onwards), `concurrency_limit` and `max_cpu_cores` of a resource group no longer cause queries to be queued. In this case, `max_cpu_cores` has no effect. `concurrency_limit` is not enforced for a query only when `enable_group_level_query_queue` is set to `true` and the query itself is subject to the query queue (that is, the query queue is enabled for its query type). Otherwise, for example when `enable_group_level_query_queue` is `false` (default) or the query queue is disabled for the query type, a query that exceeds `concurrency_limit` on a BE node fails with the error `Exceed concurrency limit` instead of being queued.
+
 You can use SHOW USAGE RESOURCE GROUPS to view the resource usage information for each resource group on each BE node, as described in [View Resource Group Usage Information](./resource_group.md#view-resource-group-usage-information).
 
 #### Manage query concurrency
@@ -260,8 +262,16 @@ Recommended process:
 The default value `0` means unlimited. Set it only when you need an absolute cap on the number of concurrently running queries:
 
 ```SQL
+SET GLOBAL query_queue_concurrency_limit = 8;
+```
+
+In editions that support multiple warehouses, you can instead set the cap for a specific warehouse:
+
+```SQL
 ALTER WAREHOUSE default_warehouse SET ("query_queue_concurrency_limit" = "8");
 ```
+
+StarRocks open source has only `default_warehouse` and does not support warehouse DDL statements such as ALTER WAREHOUSE (they fail with the error `Multi-Warehouse is not implemented`). Use the global variable instead.
 
 Use `query_queue_v2_concurrency_level` to tune resource capacity first. Use `query_queue_concurrency_limit` only when you need to explicitly limit the number of queries run at the same time.
 

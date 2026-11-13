@@ -38,10 +38,10 @@ mysql> SET time_zone = "Asia/Shanghai";
 Query OK, 0 rows affected (0.00 sec)
 ```
 
-示例二：全局设置 `exec_mem_limit` 为 `2147483648`。
+示例二：全局设置 `query_mem_limit` 为 `2147483648`。
 
 ```Plain
-mysql> SET GLOBAL exec_mem_limit = 2147483648;
+mysql> SET GLOBAL query_mem_limit = 2147483648;
 Query OK, 0 rows affected (0.00 sec)
 ```
 
@@ -49,7 +49,7 @@ Query OK, 0 rows affected (0.00 sec)
 
 ```Plain
 mysql> SET 
-       GLOBAL exec_mem_limit = 2147483648,
+       GLOBAL query_mem_limit = 2147483648,
        GLOBAL time_zone = "Asia/Shanghai";
 Query OK, 0 rows affected (0.00 sec)
 ```

@@ -13,14 +13,7 @@ The variables in StarRocks refer to the variable sets in MySQL, but **some varia
 
 > **NOTE**
 >
-> Any user has the privilege to run SHOW VARIABLES and make a variable take effect at session level. However, only users with the SYSTEM-level OPERATE privilege can make a variable take effect globally. Globally effective variables take effect on all the future sessions (excluding the current session).
->
-> If you want to make a setting change for the current session and also make that setting change apply to all future sessions, you can make the change twice, once without the `GLOBAL` modifier and once with it. For example:
->
-> ```SQL
-> SET query_mem_limit = 137438953472; -- Apply to the current session.
-> SET GLOBAL query_mem_limit = 137438953472; -- Apply to all future sessions.
-> ```
+> Any user has the privilege to run SHOW VARIABLES and make a variable take effect at session level. However, only users with the SYSTEM-level OPERATE privilege can make a variable take effect globally. Globally effective variables take effect on the current session and all the future sessions, but not on other existing sessions.
 
 ## Variable hierarchy and types
 
@@ -46,7 +39,7 @@ SHOW VARIABLES LIKE '%time_zone%';
 
 ### Set variables globally or for a single session
 
-You can set variables to take effect **globally** or **only on the current session**. When set to global, the new value will be used for all the future sessions, while the current session still uses the original value. When set to "current session only", the variable will only take effect on the current session.
+You can set variables to take effect **globally** or **only on the current session**. When set to global, the new value will be used by the current session and all the future sessions, while other existing sessions still use the original value until you run [REFRESH CONNECTIONS](sql-statements/cluster-management/config_vars/REFRESH_CONNECTIONS.md). Variables that only take effect globally (listed below) are an exception: a new value takes effect on all sessions at once. When set to "current session only", the variable will only take effect on the current session.
 
 A variable set by `SET <var_name> = xxx;` only takes effect for the current session. Example:
 
@@ -139,7 +132,7 @@ DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
 FROM my_table PARTITION p1
 WHERE k1 = 3;
 
-INSERT /*+ SET_VAR(insert_timeout = 10000000) */
+INSERT /*+ SET_VAR(insert_timeout = 86400) */
 INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
@@ -155,8 +148,8 @@ You can also set multiple variables in a single statement. Example:
 ```sql
 SELECT /*+ SET_VAR
   (
-  exec_mem_limit = 515396075520,
-  query_timeout=10000000,
+  query_mem_limit = 515396075520,
+  query_timeout=86400,
   batch_size=4096,
   parallel_fragment_exec_instance_num=32
   )
@@ -251,7 +244,7 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: `CIRCULAR`
 * **Data type**: String
 * **Valid values**: `CIRCULAR`, `RANDOM`, `TABLET_HASH`
-* **Introduced in**: -
+* **Introduced in**: v4.1.1
 
 ### broadcast_row_limit
 
@@ -1291,7 +1284,7 @@ Used for MySQL client compatibility. No practical usage.
 
 ### lake_bucket_assign_mode
 
-* **Description**: The bucket assignment mode for queries against tables in data lakes. This variable controls how buckets are distributed among worker nodes when bucket-aware execution takes effect during query execution. Valid values:
+* **Description**: The bucket assignment mode for queries against tables in external catalogs (data lakes). It applies only to scans of external catalog tables in colocate or bucket shuffle join fragments, and has no effect on StarRocks internal tables, including cloud-native tables in shared-data clusters. This variable controls how buckets are distributed among worker nodes when bucket-aware execution takes effect during query execution. Valid values:
   * `balance`: Distributes buckets evenly across worker nodes to achieve balanced workload and better performance.
   * `elastic`: Uses consistent hashing to assign buckets to worker nodes, which can provide better load distribution in elastic environments.
 * **Default**: balance
@@ -1317,11 +1310,11 @@ Used for MySQL client compatibility. No practical usage.
 
 ### load_mem_limit
 
-Specifies the memory limit for the import operation. The default value is 0, meaning that this variable is not used and `query_mem_limit` is used instead.
+Specifies the memory limit for the import operation. The default value is 0, meaning that no per-task limit is set and the import is limited only by the memory limit of all load processes on each BE node (BE configuration items `load_process_max_memory_limit_percent` and `load_process_max_memory_limit_bytes`).
 
-This variable is only used for the `INSERT` operation which involves both query and import. If the user does not set this variable, the memory limit for both query and import will be set as `exec_mem_limit`. Otherwise, the memory limit for query will be set as `exec_mem_limit` and the memory limit for import will be as `load_mem_limit`.
+For an `INSERT` operation, which involves both query and import, the memory limit for the query part is set by `query_mem_limit` and the memory limit for the import part is set by `load_mem_limit`.
 
-Other import methods such as `BROKER LOAD`, `STREAM LOAD` still use `exec_mem_limit` for memory limit.
+Broker Load also uses this variable unless the `load_mem_limit` job property is specified. For Broker Load, this value limits both the query part and the import part of the job. Stream Load uses the `load_mem_limit` HTTP header instead. Routine Load does not use this variable.
 
 ### log_rejected_record_num (v3.1 and later)
 
@@ -1596,6 +1589,13 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Default**: `300`
 * **Data Type**: int (seconds)
 * **Introduced in**: v3.2.0
+
+### query_history_load_interval_seconds (global)
+
+* **Description**: The interval at which the query history buffered in FE memory is written to the `_statistics_.query_history` table when `enable_query_history` is `true`. There is no background timer: the buffered history is written when a SELECT statement finishes after this interval has elapsed since the last write. On busy clusters, it can also be written before the interval elapses, once the serialized buffer reaches 200 MB.
+* **Default**: 900
+* **Unit**: Second
+* **Introduced in**: v4.0
 
 ### query_mem_limit
 
@@ -1885,7 +1885,7 @@ The StarRocks version. Cannot be changed.
 
 ### wait_timeout
 
-* **Description**: The number of seconds the server waits for activity on a non-interactive connection before closing it. If a client does not interact with StarRocks for this length of time, StarRocks will actively close the connection.
+* **Description**: The number of seconds the server waits for activity on an idle connection before closing it. It applies to all connections, interactive or not. `interactive_timeout` is not used. If a client does not interact with StarRocks for this length of time, StarRocks will actively close the connection.
 * **Default**: 28800 (8 hours).
 * **Unit**: Second
 * **Data type**: Int

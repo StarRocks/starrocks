@@ -115,7 +115,7 @@ SELECT /*+ SET_VAR(SET resource_group = '<resource_group_name>') */ * FROM tbl;
 
 ### Does memory limit take effect globally, per user, or per BE?
 
-`mem_limit` applies to the resource group per BE. Per-instance memory is controlled by `exec_mem_limit`.
+`mem_limit` applies to the resource group per BE. Per-query memory on each BE is controlled by `query_mem_limit`.
 
 ### Are concurrency and memory limits only effective when resource groups are enabled?
 
@@ -193,7 +193,7 @@ A: You cannot check the number of instance.
 
 Q: If a query consumes 128 GB memory in total and generates 60 instances, while `query_mem_limit=0` and `exec_mem_limit=2G`. Will the query fail?
 
-A: The query fails as long as any instance consumes more than 2 GB (`exec_mem_limit`) memory.
+A: Not because of `exec_mem_limit`. Pipeline queries are not limited by `exec_mem_limit`. The per-query memory limit on each BE is `query_mem_limit`, and `query_mem_limit=0` means no per-query limit. The query is then limited only by the resource group and BE memory limits.
 
 ### How to disable global query queue for one resource group only?
 
@@ -243,7 +243,7 @@ Query queue uses BE-level limits for all queries.
 
 `concurrency_limit` and `max_cpu_cores` both apply when resource group-level query queue is enabled.
 
-### What is the difference between `pipeline_dop`, `exec_mem_limit`, and resource group concurrency limits?
+### What is the difference between `pipeline_dop`, `query_mem_limit`, and resource group concurrency limits?
 
 `pipeline_dop` controls in-query parallelism.
 

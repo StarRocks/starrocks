@@ -74,7 +74,7 @@ ClusterDecommissioned: false
 
 ```
 # 禁用 Data Cache 自动调整
-datacache_auto_adjust_enable = false
+enable_datacache_disk_auto_adjust = false
 # 手动设置 Data Cache 磁盘配额
 datacache_disk_size = 1T
 ```

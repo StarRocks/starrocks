@@ -49,12 +49,8 @@ stop_fe.sh -g
 
 **Leader FE**
 
-- 读取请求处理与 Follower 相同。
-- 写入请求处理需要：
-
-  - 关闭 BDBJE。
-  - 允许新的 Leader 选举完成。
-  - 将后续写入重定向到新选出的 Leader。
+- 请求处理与 Follower 相同：Leader FE 等待其连接排空后退出。
+- Leader FE 在退出前不会主动移交 Leader 身份。进程退出后，剩余的 FE 会选举出新的 Leader。
 
 #### 超时控制
 

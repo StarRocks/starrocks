@@ -6,6 +6,12 @@ description: "Alphabetical s"
 
 # メトリクス s
 
+## `scheduled_tablet_num`
+
+- 単位: カウント
+- タイプ: 瞬間
+- 説明: リーダー FE の tablet スケジューラーがスケジュール中の tablet の数。つまり、Pending 状態と Running 状態の tablet の合計で、BALANCE タイプと REPAIR タイプの両方を含みます。リーダー以外の FE では `0` になります。
+
 ## `schema_change_mem_bytes`
 
 - 単位: バイト
