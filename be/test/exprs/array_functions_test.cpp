@@ -4074,9 +4074,8 @@ TEST_F(ArrayFunctionsTest, trino_sequence_bigint_default_step) {
     _check_array<int64_t>({5, 4, 3, 2, 1}, result->get(1).get_array());
 
     // Constant bounds give a constant result.
-    result = ArrayFunctions::trino_sequence_bigint(
-                     nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(2, 4),
-                               ColumnHelper::create_const_column<TYPE_BIGINT>(0, 4)})
+    result = ArrayFunctions::trino_sequence_bigint(nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(2, 4),
+                                                             ColumnHelper::create_const_column<TYPE_BIGINT>(0, 4)})
                      .value();
     ASSERT_TRUE(result->is_constant());
     ASSERT_EQ(result->size(), 4);
@@ -4085,9 +4084,10 @@ TEST_F(ArrayFunctionsTest, trino_sequence_bigint_default_step) {
 
 TEST_F(ArrayFunctionsTest, trino_sequence_bigint_errors) {
     auto run = [](int64_t start, int64_t stop, int64_t step) {
-        return ArrayFunctions::trino_sequence_bigint(nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(start, 1),
-                                                               ColumnHelper::create_const_column<TYPE_BIGINT>(stop, 1),
-                                                               ColumnHelper::create_const_column<TYPE_BIGINT>(step, 1)});
+        return ArrayFunctions::trino_sequence_bigint(nullptr,
+                                                     {ColumnHelper::create_const_column<TYPE_BIGINT>(start, 1),
+                                                      ColumnHelper::create_const_column<TYPE_BIGINT>(stop, 1),
+                                                      ColumnHelper::create_const_column<TYPE_BIGINT>(step, 1)});
     };
     ASSERT_EQ(run(1, 1, 0).status().message(), "step must not be zero");
     ASSERT_TRUE(run(1, 3, -1).status().message().starts_with(

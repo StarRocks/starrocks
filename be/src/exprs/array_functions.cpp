@@ -1864,8 +1864,8 @@ StatusOr<int64_t> trino_sequence_length(int64_t start, int64_t stop, int64_t ste
     }
     int128_t length = (static_cast<int128_t>(stop) - start) / step + 1;
     if (length > TRINO_SEQUENCE_MAX_ENTRIES) {
-        return Status::InvalidArgument(fmt::format(
-                "result of sequence function must not have more than {} entries", TRINO_SEQUENCE_MAX_ENTRIES));
+        return Status::InvalidArgument(fmt::format("result of sequence function must not have more than {} entries",
+                                                   TRINO_SEQUENCE_MAX_ENTRIES));
     }
     return static_cast<int64_t>(length);
 }
