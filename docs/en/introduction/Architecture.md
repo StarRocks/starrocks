@@ -131,7 +131,7 @@ This section lists the differences of features supported in shared-nothing and s
 | Query Cache                                          | v2.5+          | v3.4+           |
 | Rollup and Synchronous Materialized view             | v1.x+          | v3.3+           |
 
-### Data Protection
+### Disaster Recovery
 
 | Feature                                              | Shared-nothing | Shared-data     |
 | ---------------------------------------------------- | -------------- | --------------- |
