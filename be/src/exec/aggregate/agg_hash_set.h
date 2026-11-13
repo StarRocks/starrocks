@@ -39,13 +39,32 @@ DECLARE_FAIL_POINT(agg_hash_set_bad_alloc);
 // agg_prefetch_dist_bench across number/string keys, map and set; the crossover
 // sits right at the L2 size). So the prefetch path is gated on the resident
 // footprint vs L2 instead of the old fixed bucket_count >= 8192 threshold.
+#if defined(__x86_64__)
+inline constexpr double kArchPrefetchL2Scale = 2.0;
+inline constexpr size_t kArchDefaultAggPrefetchDist = 8;
+#else
+inline constexpr double kArchPrefetchL2Scale = 1.0;
+inline constexpr size_t kArchDefaultAggPrefetchDist = 16;
+#endif
+
+inline constexpr long resolve_agg_l2_cache_bytes(long raw_l2_bytes) {
+#if defined(__x86_64__)
+    return raw_l2_bytes > 0 ? raw_l2_bytes : 2L * 1024 * 1024;
+#else
+    return raw_l2_bytes > 0 ? raw_l2_bytes : 1L * 1024 * 1024;
+#endif
+}
+
+inline long resolve_agg_l2_cache_bytes(const std::vector<long>& cache_sizes) {
+    const long raw_l2 =
+            cache_sizes.size() > static_cast<size_t>(CpuInfo::L2_CACHE) ? cache_sizes[CpuInfo::L2_CACHE] : 0L;
+    return resolve_agg_l2_cache_bytes(raw_l2);
+}
+
 inline size_t agg_prefetch_min_bytes() {
-    static const long l2 = []() {
-        const long v = CpuInfo::get_l2_cache_size();
-        return v > 0 ? v : 1L * 1024 * 1024;
-    }();
+    static const long l2 = resolve_agg_l2_cache_bytes(CpuInfo::get_cache_sizes());
     // Ratio read live (mutable knob); L2 size is constant so it is cached.
-    return static_cast<size_t>(static_cast<double>(l2) * config::agg_prefetch_l2_ratio);
+    return static_cast<size_t>(static_cast<double>(l2) * kArchPrefetchL2Scale * config::agg_prefetch_l2_ratio);
 }
 
 // resident footprint = bucket_count * slot_bytes (+1 control byte per slot).
@@ -54,16 +73,15 @@ inline bool agg_should_prefetch_table(const Table& table) {
     return table.bucket_count() * (sizeof(typename Table::value_type) + 1) >= agg_prefetch_min_bytes();
 }
 
-// Read once per chunk from config::agg_hash_map_prefetch_dist (default 16).
-// The macros below capture it into __prefetch_dist so each inner-loop
-// iteration is a register read, not an atomic load.
+// Read once per chunk from config::agg_hash_map_prefetch_dist (arch default: 8 on x86_64, 16 on aarch64).
+// Clamp negative to 0 (disabled).
 inline size_t agg_hash_map_default_prefetch_dist() {
     const int32_t v = config::agg_hash_map_prefetch_dist;
     return v > 0 ? static_cast<size_t>(v) : 0;
 }
 
 #define AGG_HASH_SET_PRECOMPUTE_HASH_VALS()                  \
-    hashes.reserve(chunk_size);                              \
+    hashes.resize(chunk_size);                               \
     for (size_t i = 0; i < chunk_size; i++) {                \
         hashes[i] = this->hash_set.hash_function()(keys[i]); \
     }                                                        \
@@ -698,7 +716,8 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     template <bool compute_and_allocate>
     void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, Filter* not_founds) {
-        DCHECK(fixed_byte_size != -1);
+        DCHECK(has_null_column || fixed_byte_size != -1);
+        DCHECK_LE(chunk_size, static_cast<size_t>(_chunk_size));
         slice_sizes.assign(chunk_size, 0);
         if constexpr (!compute_and_allocate) {
             DCHECK(not_founds);
@@ -756,13 +775,13 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
     }
 
     void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {
-        DCHECK(fixed_byte_size != -1);
-        tmp_slices.reserve(chunk_size);
+        DCHECK(has_null_column || fixed_byte_size != -1);
+        tmp_slices.resize(chunk_size);
 
         if (!has_null_column) {
             for (int i = 0; i < chunk_size; i++) {
                 FixedSizeSliceKey& key = keys[i];
-                tmp_slices[i].data = key.u.data;
+                tmp_slices[i].data = reinterpret_cast<char*>(&key.u);
                 tmp_slices[i].size = fixed_byte_size;
             }
         } else {

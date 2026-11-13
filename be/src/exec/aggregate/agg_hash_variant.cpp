@@ -330,6 +330,9 @@ void AggHashMapVariant::convert_to_two_level(RuntimeState* state) {
 
     CONVERT_TO_TWO_LEVEL_MAP(phase1_null_string_two_level, phase1_null_string);
     CONVERT_TO_TWO_LEVEL_MAP(phase2_null_string_two_level, phase2_null_string);
+
+    CONVERT_TO_TWO_LEVEL_MAP(phase1_int32_two_level, phase1_int32);
+    CONVERT_TO_TWO_LEVEL_MAP(phase2_int32_two_level, phase2_int32);
 }
 
 #define AGG_VARIANT_TYPE_NAME_CASE(NAME) \
@@ -456,6 +459,9 @@ void AggHashSetVariant::convert_to_two_level(RuntimeState* state) {
 
     CONVERT_TO_TWO_LEVEL_SET(phase1_null_string_two_level, phase1_null_string);
     CONVERT_TO_TWO_LEVEL_SET(phase2_null_string_two_level, phase2_null_string);
+
+    CONVERT_TO_TWO_LEVEL_SET(phase1_int32_two_level, phase1_int32);
+    CONVERT_TO_TWO_LEVEL_SET(phase2_int32_two_level, phase2_int32);
 }
 
 void AggHashSetVariant::reset() {

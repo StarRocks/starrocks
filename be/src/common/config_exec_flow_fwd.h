@@ -205,18 +205,20 @@ CONF_mInt64(partition_hash_join_probe_limit_size, "134217728");
 // pipeline streaming aggregate chunk buffer size
 CONF_mInt32(streaming_agg_chunk_buffer_size, "1024");
 
-// Software prefetch distance (in rows) for the agg hash-map / hash-set
-// probe loop.  Default 16 is empirical for L3-resident tables; raise on
-// DRAM-resident workloads, lower (or 0) on L1-resident ones.  Read once
-// per chunk; changes take effect on the next chunk.
+#if defined(__x86_64__)
+CONF_mInt32(agg_hash_map_prefetch_dist, "8");
+
+#else
 CONF_mInt32(agg_hash_map_prefetch_dist, "16");
 
+#endif
 // Software prefetch is gated on the bucket array spilling L2: it is only
-// enabled when bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio.
+// enabled when bucket_count * (slot_bytes + 1) >= L2_size * kArchPrefetchL2Scale * agg_prefetch_l2_ratio
+// (where kArchPrefetchL2Scale is 2.0 on x86_64 and 1.0 on aarch64).
 // Below that the table is L2-resident and prefetch is a net loss (measured by
-// agg_prefetch_dist_bench; the crossover sits right at L2). Lower the ratio on
-// contended many-driver-per-core deployments where the effective L2 share per
-// table is smaller than the nominal per-core size.
+// agg_prefetch_dist_bench). Lower the ratio on contended many-driver-per-core
+// deployments where the effective L2 share per table is smaller than the
+// nominal per-core size.
 CONF_mDouble(agg_prefetch_l2_ratio, "1.0");
 
 // sink buffer memory limit per driver
