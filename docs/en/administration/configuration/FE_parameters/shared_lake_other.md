@@ -12,7 +12,6 @@ import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note
 
 import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
-import EditonSpecificFEItemSharedLakeOther from '../../../_assets/commonMarkdown/Edition_Specific_FE_Item_shared_lake_other.mdx'
 
 <FEConfigMethod />
 
@@ -955,8 +954,6 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Is mutable: Yes
 - Description: The threshold the system used to judge the tablet balance among workers in a shared-data cluster, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`. If the factor is greater than `lake_balance_tablets_threshold`, a tablet balance will be triggered. This item takes effect only when `lake_enable_balance_tablets_between_workers` is set to `true`.
 - Introduced in: v3.3.4
-
-<EditonSpecificFEItemSharedLakeOther />
 
 ## Other
 
