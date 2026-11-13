@@ -716,6 +716,16 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
     return Status::OK();
 }
 
+void TabletReader::flush_reusable_iterator_io_stats() {
+    for (auto& rowset_iters : _reusable_rowset_iterators) {
+        for (auto& iter : rowset_iters) {
+            if (iter != nullptr) {
+                flush_segment_iterator_io_stats(iter.get());
+            }
+        }
+    }
+}
+
 void TabletReader::close() {
     if (_collect_iter != nullptr) {
         _collect_iter->close();

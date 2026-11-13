@@ -96,6 +96,10 @@ public:
     // Precondition: the last method called must have been `prepare()`.
     Status open(const TabletReaderParams& read_params);
 
+    // Adds what the reused segment iterators have read since their last flush to stats(): they are not closed
+    // between the scans they serve.
+    void flush_reusable_iterator_io_stats();
+
     void close() override;
 
     const OlapReaderStatistics& stats() const;
