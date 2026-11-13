@@ -4074,9 +4074,8 @@ TEST_F(ArrayFunctionsTest, trino_sequence_bigint_default_step) {
     _check_array<int64_t>({5, 4, 3, 2, 1}, result->get(1).get_array());
 
     // Constant bounds give a constant result.
-    result = ArrayFunctions::trino_sequence_bigint(
-                     nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(2, 4),
-                               ColumnHelper::create_const_column<TYPE_BIGINT>(0, 4)})
+    result = ArrayFunctions::trino_sequence_bigint(nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(2, 4),
+                                                             ColumnHelper::create_const_column<TYPE_BIGINT>(0, 4)})
                      .value();
     ASSERT_TRUE(result->is_constant());
     ASSERT_EQ(result->size(), 4);
@@ -4085,9 +4084,10 @@ TEST_F(ArrayFunctionsTest, trino_sequence_bigint_default_step) {
 
 TEST_F(ArrayFunctionsTest, trino_sequence_bigint_errors) {
     auto run = [](int64_t start, int64_t stop, int64_t step) {
-        return ArrayFunctions::trino_sequence_bigint(nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(start, 1),
-                                                               ColumnHelper::create_const_column<TYPE_BIGINT>(stop, 1),
-                                                               ColumnHelper::create_const_column<TYPE_BIGINT>(step, 1)});
+        return ArrayFunctions::trino_sequence_bigint(nullptr,
+                                                     {ColumnHelper::create_const_column<TYPE_BIGINT>(start, 1),
+                                                      ColumnHelper::create_const_column<TYPE_BIGINT>(stop, 1),
+                                                      ColumnHelper::create_const_column<TYPE_BIGINT>(step, 1)});
     };
     ASSERT_EQ(run(1, 1, 0).status().message(), "step must not be zero");
     ASSERT_TRUE(run(1, 3, -1).status().message().starts_with(
@@ -4151,11 +4151,11 @@ TEST_F(ArrayFunctionsTest, trino_sequence_date_months) {
 
 TEST_F(ArrayFunctionsTest, trino_sequence_date_days) {
     auto run = [](DateValue start, DateValue stop, int64_t n, const char* unit) {
-        return ArrayFunctions::trino_sequence_date(
-                nullptr, {ColumnHelper::create_const_column<TYPE_DATE>(start, 1),
-                          ColumnHelper::create_const_column<TYPE_DATE>(stop, 1),
-                          ColumnHelper::create_const_column<TYPE_BIGINT>(n, 1),
-                          ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(unit), 1)});
+        return ArrayFunctions::trino_sequence_date(nullptr,
+                                                   {ColumnHelper::create_const_column<TYPE_DATE>(start, 1),
+                                                    ColumnHelper::create_const_column<TYPE_DATE>(stop, 1),
+                                                    ColumnHelper::create_const_column<TYPE_BIGINT>(n, 1),
+                                                    ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(unit), 1)});
     };
     const auto jan1 = DateValue::create(2024, 1, 1);
     const auto jan3 = DateValue::create(2024, 1, 3);
@@ -4178,10 +4178,10 @@ TEST_F(ArrayFunctionsTest, trino_sequence_date_days) {
     // A NULL bound gives NULL, even with a zero step.
     auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
     start_column->append_datum(Datum());
-    result = ArrayFunctions::trino_sequence_date(nullptr, {start_column,
-                                                           ColumnHelper::create_const_column<TYPE_DATE>(jan3, 1),
-                                                           ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1),
-                                                           ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("day"), 1)})
+    result = ArrayFunctions::trino_sequence_date(nullptr,
+                                                 {start_column, ColumnHelper::create_const_column<TYPE_DATE>(jan3, 1),
+                                                  ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1),
+                                                  ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("day"), 1)})
                      .value();
     ASSERT_TRUE(result->is_null(0));
 }

@@ -1869,8 +1869,8 @@ Status trino_sequence_check_step(const T& start, const T& stop, int128_t step) {
 // Trino's limit on the number of elements, checked before any element is built.
 Status trino_sequence_check_length(int128_t length) {
     if (length > TRINO_SEQUENCE_MAX_ENTRIES) {
-        return Status::InvalidArgument(fmt::format(
-                "result of sequence function must not have more than {} entries", TRINO_SEQUENCE_MAX_ENTRIES));
+        return Status::InvalidArgument(fmt::format("result of sequence function must not have more than {} entries",
+                                                   TRINO_SEQUENCE_MAX_ENTRIES));
     }
     return Status::OK();
 }
@@ -1931,8 +1931,8 @@ enum class TrinoSequenceUnit { YEAR, MONTH, DAY, HOUR, MINUTE, SECOND };
 
 StatusOr<TrinoSequenceUnit> parse_trino_sequence_unit(const std::string& unit) {
     static const std::unordered_map<std::string, TrinoSequenceUnit> units = {
-            {"year", TrinoSequenceUnit::YEAR}, {"month", TrinoSequenceUnit::MONTH},
-            {"day", TrinoSequenceUnit::DAY},   {"hour", TrinoSequenceUnit::HOUR},
+            {"year", TrinoSequenceUnit::YEAR},     {"month", TrinoSequenceUnit::MONTH},
+            {"day", TrinoSequenceUnit::DAY},       {"hour", TrinoSequenceUnit::HOUR},
             {"minute", TrinoSequenceUnit::MINUTE}, {"second", TrinoSequenceUnit::SECOND}};
     auto it = units.find(unit);
     if (it == units.end()) {
@@ -2063,8 +2063,8 @@ StatusOr<ColumnPtr> trino_sequence_temporal(const Columns& columns) {
     TrinoSequenceUnit unit = TrinoSequenceUnit::DAY;
     if (columns.size() == 4) {
         RETURN_IF(!columns[3]->is_constant(), Status::InvalidArgument("sequence step unit must be a constant"));
-        ASSIGN_OR_RETURN(unit, parse_trino_sequence_unit(
-                                       ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[3]).to_string()));
+        ASSIGN_OR_RETURN(
+                unit, parse_trino_sequence_unit(ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[3]).to_string()));
     }
     ColumnViewer<LT> start_viewer(columns[0]);
     ColumnViewer<LT> stop_viewer(columns[1]);
