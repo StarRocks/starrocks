@@ -44,9 +44,9 @@ select * from t1 order by k1;
 drop database test_db_${uuid0};
 -- result:
 -- !result
-update information_schema.be_configs set value = "10" where name = "lake_tablet_metadata_cache_limit_percent";
+update information_schema.be_configs set value = "5" where name = "lake_tablet_metadata_cache_limit_percent";
 -- result:
 -- !result
-update information_schema.be_configs set value = "20" where name = "lake_segment_metadata_cache_limit_percent";
+update information_schema.be_configs set value = "10" where name = "lake_segment_metadata_cache_limit_percent";
 -- result:
 -- !result
