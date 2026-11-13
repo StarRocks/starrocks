@@ -14,10 +14,10 @@
 
 #include "simd/batch_run_counter.h"
 
+#include <algorithm>
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 
@@ -38,7 +38,7 @@ TEST_F(BatchRunCounterTest, batch_size_32) {
         filter[i] = set_or_not;
     }
 
-    size_t zero_count = SIMD::count_zero(filter.data(), test_size);
+    size_t zero_count = std::count(filter.begin(), filter.end(), uint8_t{0});
     BatchRunCounter<32> counter(filter.data(), 0, test_size);
     BatchCount batch = counter.next_batch();
 #if defined(__AVX2__)
@@ -73,7 +73,7 @@ TEST_F(BatchRunCounterTest, batch_size_16) {
         filter[i] = set_or_not;
     }
 
-    size_t zero_count = SIMD::count_zero(filter.data(), test_size);
+    size_t zero_count = std::count(filter.begin(), filter.end(), uint8_t{0});
     BatchRunCounter<16> counter(filter.data(), 0, test_size);
     BatchCount batch = counter.next_batch();
 #if defined(__SSE2__)
@@ -108,7 +108,7 @@ TEST_F(BatchRunCounterTest, batch_size_8) {
         filter[i] = set_or_not;
     }
 
-    size_t zero_count = SIMD::count_zero(filter.data(), test_size);
+    size_t zero_count = std::count(filter.begin(), filter.end(), uint8_t{0});
     BatchRunCounter<8> counter(filter.data(), 0, test_size);
     BatchCount batch = counter.next_batch();
     EXPECT_EQ(batch.length, 8);
@@ -133,8 +133,6 @@ TEST_F(BatchRunCounterTest, batch_size_8) {
     EXPECT_EQ(count, zero_count);
 }
 
-<<<<<<< HEAD:be/test/simd/batch_run_counter_test.cpp
-=======
 TEST_F(BatchRunCounterTest, deterministic_all_zero_all_one_and_single_flip) {
     {
         std::vector<uint8_t> zeros(64, 0);
@@ -163,7 +161,7 @@ TEST_F(BatchRunCounterTest, deterministic_all_zero_all_one_and_single_flip) {
         single_one[k] = 1;
         BatchRunCounter<32> c32(single_one.data(), 0, 32);
         BatchCount b = c32.next_batch();
-#if defined(__AVX2__) || (defined(__ARM_NEON) && defined(__aarch64__))
+#if defined(__AVX2__)
         EXPECT_EQ(b.length, 32);
         EXPECT_FALSE(b.valid_count) << "lane k=" << k;
         EXPECT_FALSE(b.NoneSet()) << "lane k=" << k;
@@ -174,7 +172,7 @@ TEST_F(BatchRunCounterTest, deterministic_all_zero_all_one_and_single_flip) {
         single_zero[k] = 0;
         BatchRunCounter<32> c32_z(single_zero.data(), 0, 32);
         BatchCount bz = c32_z.next_batch();
-#if defined(__AVX2__) || (defined(__ARM_NEON) && defined(__aarch64__))
+#if defined(__AVX2__)
         EXPECT_EQ(bz.length, 32);
         EXPECT_FALSE(bz.valid_count) << "lane k=" << k;
         EXPECT_FALSE(bz.NoneSet()) << "lane k=" << k;
@@ -186,7 +184,7 @@ TEST_F(BatchRunCounterTest, deterministic_all_zero_all_one_and_single_flip) {
         single_one[k] = 1;
         BatchRunCounter<16> c16(single_one.data(), 0, 16);
         BatchCount b = c16.next_batch();
-#if defined(__SSE2__) || (defined(__ARM_NEON) && defined(__aarch64__))
+#if defined(__SSE2__)
         EXPECT_EQ(b.length, 16);
         EXPECT_FALSE(b.valid_count) << "lane k=" << k;
         EXPECT_FALSE(b.NoneSet()) << "lane k=" << k;
@@ -197,7 +195,7 @@ TEST_F(BatchRunCounterTest, deterministic_all_zero_all_one_and_single_flip) {
         single_zero[k] = 0;
         BatchRunCounter<16> c16_z(single_zero.data(), 0, 16);
         BatchCount bz = c16_z.next_batch();
-#if defined(__SSE2__) || (defined(__ARM_NEON) && defined(__aarch64__))
+#if defined(__SSE2__)
         EXPECT_EQ(bz.length, 16);
         EXPECT_FALSE(bz.valid_count) << "lane k=" << k;
         EXPECT_FALSE(bz.NoneSet()) << "lane k=" << k;
@@ -264,7 +262,7 @@ TEST_F(BatchRunCounterTest, unsigned_filter_values) {
             filter[i] = choices[rand() % 5];
         }
 
-        size_t zero_count = SIMD::count_zero(filter.data(), test_size);
+        size_t zero_count = std::count(filter.begin(), filter.end(), uint8_t{0});
 
         auto count_zeros = [&](auto counter) {
             size_t count = 0;
@@ -374,5 +372,4 @@ TEST_F(BatchRunCounterTest, tail_sizes_and_patterns) {
     }
 }
 
->>>>>>> 28f9a91 ([BugFix] Fix BatchRunCounter unsigned filter comparison and delta decode signed overflow UB (#82015)):be/test/base/simd/batch_run_counter_test.cpp
 } // namespace starrocks
