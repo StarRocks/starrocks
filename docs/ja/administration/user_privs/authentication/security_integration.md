@@ -6,17 +6,12 @@ sidebar_position: 20
 
 # セキュリティインテグレーションで認証
 
-import SecurityIntegrationRangerLink from '../../../_assets/user_priv/security_integration_ranger_link.mdx'
-import SecurityIntegrationIntro from '../../../_assets/user_priv/security_integration_intro.mdx'
-import SecurityIntegrationJWT from '../../../_assets/user_priv/security_integration_jwt.mdx'
-import SecurityIntegrationOAuth from '../../../_assets/user_priv/security_integration_oauth.mdx'
-import SecurityIntegrationConnectSeeAlso from '../../../_assets/user_priv/security_integration_connect_see_also.mdx'
 
 StarRocks をセキュリティインテグレーションを使用して外部認証システムと統合します。
 
 StarRocks クラスター内でセキュリティインテグレーションを作成することで、外部認証サービスへのアクセスを StarRocks に許可できます。セキュリティインテグレーションを使用すると、StarRocks 内でユーザーを手動で作成する必要がありません。ユーザーが外部 ID を使用してログインしようとすると、StarRocks は `authentication_chain` の設定に従って対応するセキュリティインテグレーションを使用してユーザーを認証します。認証が成功し、ユーザーがログインを許可された後、StarRocks はセッション内に仮想ユーザーを作成し、そのユーザーが後続の操作を実行できるようにします。
 
-<SecurityIntegrationRangerLink />
+セキュリティインテグレーションを使用して外部認証方法を構成する場合は、外部認可を有効にするために [StarRocks を Apache Ranger と統合](../authorization/ranger_plugin.md) する必要があることに注意してください。現在、セキュリティインテグレーションを StarRocks ネイティブ認可と統合することはサポートされていません。
 
 また、StarRocks に [Group Provider](../group_provider.md) を有効にして、外部認証システムのグループ情報にアクセスし、StarRocks でユーザーグループを作成、認証、および認可することができます。
 
@@ -24,7 +19,10 @@ StarRocks クラスター内でセキュリティインテグレーションを�
 
 ## セキュリティインテグレーションを作成する
 
-<SecurityIntegrationIntro />
+現在、StarRocks のセキュリティインテグレーションは以下の認証システムをサポートしています:
+- LDAP
+- OJSON Web Token（JWT）
+- OAuth 2.0
 
 :::note
 StarRocks はセキュリティインテグレーションを作成する際に接続性チェックを提供しません。
@@ -179,9 +177,179 @@ AD のエントリーの RDN は表示名（`CN=Dana Scully,OU=People,DC=company
 - 必須: いいえ
 - 説明: セキュリティインテグレーションの説明。
 
-<SecurityIntegrationJWT />
+### JWT を使用したセキュリティインテグレーションの作成
 
-<SecurityIntegrationOAuth />
+#### 構文
+
+```SQL
+CREATE SECURITY INTEGRATION <security_integration_name> 
+PROPERTIES (
+    "type" = "authentication_jwt",
+    "jwks_url" = "",
+    "principal_field" = "",
+    "required_issuer" = "",
+    "required_audience" = "",
+    "group_source" = "",
+    "group_claim" = "",
+    "comment" = ""
+)
+```
+
+#### パラメータ
+
+##### security_integration_name
+
+- 必須: はい
+- 説明: セキュリティインテグレーションの名前。<br />**注意**<br />セキュリティインテグレーション名はグローバルに一意です。このパラメータを `native` として指定することはできません。
+
+##### type
+
+- 必須: はい
+- 説明: セキュリティインテグレーションのタイプ。`jwt` として指定します。
+
+##### jwks_url
+
+- 必須: はい
+- 説明: JSON Web Key Set (JWKS) サービスへの URL または `fe/conf` ディレクトリのローカルファイルへのパス。
+
+##### principal_field
+
+- 必須: はい
+- 説明: JWT 内のサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と同一でなければなりません。
+
+##### required_issuer
+
+- 必須: いいえ
+- 説明: JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 発行者と一致する場合にのみ、JWT は有効と見なされます。
+
+##### required_audience
+
+- 必須: いいえ
+- 説明: JWT 内の受信者 (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 受信者と一致する場合にのみ、JWT は有効と見なされます。
+
+##### group_source
+
+- 必須: いいえ
+- 説明: このセキュリティインテグレーションで認証されたユーザーのグループの取得元。有効な値:
+  - `group_provider`（デフォルト）: `group_provider` で設定された Group Provider のみを使用します。以前のバージョンと同じ動作です。
+  - `claim`: 検証済みトークンのうち `group_claim` で指定した claim のみを使用します。`group_provider` で設定された Group Provider は無視されますが設定は保持されるため、元に戻すには `ALTER SECURITY INTEGRATION` 1 回で済みます。
+  - `both`: 両方の和集合。
+
+  トークンからグループを取得できることが、LDAP ディレクトリーを持たない ID プロバイダーでも権限を付与できる前提になります。解決されたグループは、Group Provider のグループと同様に、`GRANT ... TO EXTERNAL GROUP` によるロールマッピング、`permitted_groups` のログインチェック、`current_group()`、および Apache Ranger の認可に参加します。v4.2 以降でサポートされます。
+
+##### group_claim
+
+- 必須: `group_source` が `claim` または `both` の場合は必須です。`group_source` を設定せずにこのパラメータだけを設定すると、効果がないため拒否されます。明示的に `group_source` を `group_provider` に設定した場合は受け付けられ、設定も保持されるため、先に claim を用意してから `ALTER SECURITY INTEGRATION` でソースを切り替えられます。
+- 説明: ユーザーのグループを保持するトークンの claim。他のオブジェクトの中にネストされた claim はドット区切りで指定します。たとえば、トップレベルの claim は `groups`、Keycloak の realm ロールは `realm_access.roles`、その client ロールは `resource_access.<client_id>.roles` です。claim は文字列の配列であることが想定されますが、単一の文字列も 1 つのグループとして受け付けます。各グループ名の前後の空白は除去されます。それ以外は書き換えられません。大文字小文字も先頭のスラッシュもそのまま保持されます。グループ名は Apache Ranger にそのまま渡され、Ranger は厳密に照合するためです。大文字小文字だけが異なる `GRANT ... TO EXTERNAL GROUP` や `permitted_groups` のエントリーと一致するかどうかは、FE 設定項目 `authentication_group_case_insensitive` で決まります（デフォルトでは大文字小文字を無視します。ID プロバイダーが大文字小文字の異なるグループを別のグループとして扱う場合は `false` に設定してください）。
+
+  デフォルト値は意図的に設けていません。ID プロバイダーが発行する claim はプロバイダーごとに異なり、推測を誤ると明確なエラーにならずに「ログインできるが権限がない」状態になるためです。claim は署名、`required_issuer`、`required_audience` の検証がすべて通った後にのみ読み取られるため、トークンの保持者が自分でグループを選ぶことはできません。トークンに claim が存在しない場合でもログインは成功し、グループは空になり、その理由はログに記録されます（認証失敗として扱われません）。Microsoft Entra ID は 200 を超えるグループに所属するユーザーに対して claim 全体を省略するため、claim が存在しない状態は正しい設定でも発生します。また、ほとんどの ID プロバイダーは既定ではグループをトークンに含めません。Keycloak ではクライアントに group membership mapper を追加し、Entra ID ではトークン設定に groups claim を追加する必要があります。v4.2 以降でサポートされます。
+
+##### comment
+
+- 必須: いいえ
+- 説明: セキュリティインテグレーションの説明。
+
+### OAuth 2.0 を使用したセキュリティインテグレーションの作成
+
+#### 構文
+
+```SQL
+CREATE SECURITY INTEGRATION <security_integration_name> 
+PROPERTIES (
+    "type" = "authentication_oauth2",
+    "auth_server_url" = "",
+    "token_server_url" = "",
+    "client_id" = "",
+    "client_secret" = "",
+    "redirect_url" = "",
+    "jwks_url" = "",
+    "principal_field" = "",
+    "required_issuer" = "",
+    "required_audience" = "",
+    "group_source" = "",
+    "group_claim" = "",
+    "comment" = ""
+)
+```
+
+#### パラメータ
+
+##### security_integration_name
+
+- 必須: はい
+- 説明: セキュリティインテグレーションの名前。<br />**注意**<br />セキュリティインテグレーション名はグローバルに一意です。このパラメータを `native` として指定することはできません。
+
+##### auth_server_url
+
+- 必須: はい
+- 説明: 認可 URL。OAuth 2.0 認可プロセスを開始するためにユーザーのブラウザがリダイレクトされる URL。
+
+##### token_server_url
+
+- 必須: はい
+- 説明: StarRocks がアクセストークンを取得するための認可サーバーのエンドポイントの URL。
+
+##### client_id
+
+- 必須: はい
+- 説明: StarRocks クライアントの公開識別子。
+
+##### client_secret
+
+- 必須: はい
+- 説明: 認可サーバーで StarRocks クライアントを認可するために使用される秘密。
+
+##### redirect_url
+
+- 必須: はい
+- 説明: OAuth 2.0 認証が成功した後にユーザーのブラウザがリダイレクトされる URL。認可コードはこの URL に送信されます。ほとんどの場合、`http://<starrocks_fe_url>:<fe_http_port>/api/oauth2` として構成する必要があります。
+
+##### type
+
+- 必須: はい
+- 説明: セキュリティインテグレーションのタイプ。`authentication_oauth2` として指定します。
+
+##### jwks_url
+
+- 必須: はい
+- 説明: JSON Web Key Set (JWKS) サービスへの URL または `fe/conf` ディレクトリのローカルファイルへのパス。
+
+##### principal_field
+
+- 必須: はい
+- 説明: JWT 内のサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と同一でなければなりません。
+
+##### required_issuer
+
+- 必須: いいえ
+- 説明: JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 発行者と一致する場合にのみ、JWT は有効と見なされます。
+
+##### required_audience
+
+- 必須: いいえ
+- 説明: JWT 内の受信者 (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 受信者と一致する場合にのみ、JWT は有効と見なされます。
+
+##### group_source
+
+- 必須: いいえ
+- 説明: このセキュリティインテグレーションで認証されたユーザーのグループの取得元。有効な値:
+  - `group_provider`（デフォルト）: `group_provider` で設定された Group Provider のみを使用します。以前のバージョンと同じ動作です。
+  - `claim`: 検証済みトークンのうち `group_claim` で指定した claim のみを使用します。`group_provider` で設定された Group Provider は無視されますが設定は保持されるため、元に戻すには `ALTER SECURITY INTEGRATION` 1 回で済みます。
+  - `both`: 両方の和集合。
+
+  トークンからグループを取得できることが、LDAP ディレクトリーを持たない ID プロバイダーでも権限を付与できる前提になります。解決されたグループは、Group Provider のグループと同様に、`GRANT ... TO EXTERNAL GROUP` によるロールマッピング、`permitted_groups` のログインチェック、`current_group()`、および Apache Ranger の認可に参加します。 OAuth 2.0 インテグレーションでは、MySQL プロトコル経由のブラウザーログインにも適用されます。この経路ではユーザーがブラウザーでサインインした後にトークンが StarRocks に届くため、グループは ID トークンの到着時に読み取られ、`permitted_groups` も接続確立時ではなくブラウザーログイン後の最初のステートメントで確認されます。`group_source` が `group_provider` のままの場合は変わらず、グループと確認は接続確立時に決まります。v4.2 以降でサポートされます。
+
+##### group_claim
+
+- 必須: `group_source` が `claim` または `both` の場合は必須です。それ以外の `group_source` と組み合わせて設定すると、効果がないため拒否されます。
+- 説明: ユーザーのグループを保持するトークンの claim。他のオブジェクトの中にネストされた claim はドット区切りで指定します。たとえば、トップレベルの claim は `groups`、Keycloak の realm ロールは `realm_access.roles`、その client ロールは `resource_access.<client_id>.roles` です。claim は文字列の配列であることが想定されますが、単一の文字列も 1 つのグループとして受け付けます。各グループ名の前後の空白は除去されます。それ以外は書き換えられません。大文字小文字も先頭のスラッシュもそのまま保持されます。グループ名は Apache Ranger にそのまま渡され、Ranger は厳密に照合するためです。大文字小文字だけが異なる `GRANT ... TO EXTERNAL GROUP` や `permitted_groups` のエントリーと一致するかどうかは、FE 設定項目 `authentication_group_case_insensitive` で決まります（デフォルトでは大文字小文字を無視します。ID プロバイダーが大文字小文字の異なるグループを別のグループとして扱う場合は `false` に設定してください）。
+
+  デフォルト値は意図的に設けていません。ID プロバイダーが発行する claim はプロバイダーごとに異なり、推測を誤ると明確なエラーにならずに「ログインできるが権限がない」状態になるためです。claim は署名、`required_issuer`、`required_audience` の検証がすべて通った後にのみ読み取られるため、トークンの保持者が自分でグループを選ぶことはできません。トークンに claim が存在しない場合でもログインは成功し、グループは空になり、その理由はログに記録されます（認証失敗として扱われません）。Microsoft Entra ID は 200 を超えるグループに所属するユーザーに対して claim 全体を省略するため、claim が存在しない状態は正しい設定でも発生します。また、ほとんどの ID プロバイダーは既定ではグループをトークンに含めません。Keycloak ではクライアントに group membership mapper を追加し、Entra ID ではトークン設定に groups claim を追加する必要があります。v4.2 以降でサポートされます。
+
+##### comment
+
+- 必須: いいえ
+- 説明: セキュリティインテグレーションの説明。
 
 ## 認証チェーンを構成する
 
@@ -321,5 +489,16 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 `ldap_bind_root_pwd` は SHOW CREATE SECURITY INTEGRATION が実行されたときにマスクされます。
 :::
 
-<SecurityIntegrationConnectSeeAlso />
+## セキュリティ統合によるStarRocksへの接続
+
+- LDAP経由でStarRocksに接続する方法については、[LDAP認証 - StarRocksへの接続](./ldap_authentication.md#mysql-クライアントから-ldap-で接続する)を参照してください。
+- JWT 経由で StarRocks に接続する方法については、[JSON Web Token 認証 - StarRocks への接続](./jwt_authentication.md#mysql-クライアントから-jwt-で接続する) を参照してください。
+- OAuth 2.0 経由で StarRocks に接続する方法については、[OAuth 2.0 認証 - StarRocks への接続](./oauth2_authentication.md#jdbc-クライアントからの-oauth-20-接続) を参照してください。
+
+## See also
+
+- StarRocks で LDAP を使用してユーザーを手動で認証する方法については、[LDAP 認証](./ldap_authentication.md) を参照してください。
+- StarRocks で JSON Web Token を使用してユーザーを手動で認証する方法については、[JSON Web Token 認証](./jwt_authentication.md) を参照してください。
+- StarRocks で OAuth 2.0 を使用してユーザーを手動で認証する方法については、[OAuth 2.0 認証](./oauth2_authentication.md) を参照してください。
+- ユーザーグループを認証する方法については、[ユーザーグループの認証](../group_provider.md) を参照してください。
 
