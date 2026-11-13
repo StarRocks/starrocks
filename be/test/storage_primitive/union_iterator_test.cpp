@@ -158,4 +158,121 @@ TEST_F(UnionIteratorTest, union_one) {
     ASSERT_TRUE(st.is_end_of_file());
 }
 
+// A child that reads its numbers like IntIterator and reports a read-ahead of `blocks` blocks once started.
+class ReadAheadIntIterator final : public ChunkIterator {
+public:
+    ReadAheadIntIterator(std::vector<int32_t> numbers, size_t blocks, bool has_read_ahead)
+            : ChunkIterator(schema()), _numbers(std::move(numbers)), _blocks(blocks), _has_read_ahead(has_read_ahead) {}
+
+    Status do_get_next(Chunk* chunk) override {
+        _read = true;
+        if (_idx >= _numbers.size()) {
+            return Status::EndOfFile("eof");
+        }
+        size_t n = std::min(10LU, _numbers.size() - _idx);
+        (void)chunk->get_column_raw_ptr_by_index(0)->append_numbers(_numbers.data() + _idx, n * sizeof(int32_t));
+        _idx += n;
+        return Status::OK();
+    }
+
+    Status start_read_ahead(bool* started) override {
+        _start_calls++;
+        *started = _has_read_ahead;
+        return Status::OK();
+    }
+    size_t read_ahead_blocks() const override { return (_start_calls > 0 || _read) ? _blocks : 0; }
+    bool read_ahead_done() const override { return true; }
+
+    void close() override {}
+
+    int start_calls() const { return _start_calls; }
+
+    static Schema schema() {
+        FieldPtr f = std::make_shared<Field>(0, "c1", get_type_info(TYPE_INT), false);
+        return Schema(std::vector<FieldPtr>{f});
+    }
+
+private:
+    std::vector<int32_t> _numbers;
+    size_t _idx = 0;
+    const size_t _blocks;
+    const bool _has_read_ahead;
+    int _start_calls = 0;
+    bool _read = false;
+};
+
+static std::vector<int32_t> read_all(const ChunkIteratorPtr& iter) {
+    std::vector<int32_t> out;
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), 1024);
+    while (true) {
+        chunk->reset();
+        Status st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        EXPECT_TRUE(st.ok());
+        auto c = FixedLengthColumn<int32_t>::dynamic_pointer_cast(chunk->get_column_by_index(0));
+        out.insert(out.end(), c->immutable_data().begin(), c->immutable_data().end());
+    }
+    return out;
+}
+
+// NOLINTNEXTLINE
+TEST_F(UnionIteratorTest, read_ahead_within_budget) {
+    std::vector<std::shared_ptr<ReadAheadIntIterator>> children;
+    std::vector<ChunkIteratorPtr> iters;
+    for (int i = 0; i < 6; i++) {
+        children.push_back(std::make_shared<ReadAheadIntIterator>(std::vector<int32_t>{i}, 3, true));
+        iters.push_back(children.back());
+    }
+    // At most 4 children ahead, fewer than 8 blocks held ahead in total.
+    auto iter = new_union_iterator(std::move(iters), 4, 8);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), 1024);
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    // Child 0 holds 3, child 1 brings 6, child 2 brings 9: the third one is the last that starts.
+    EXPECT_EQ(0, children[0]->start_calls());
+    EXPECT_EQ(1, children[1]->start_calls());
+    EXPECT_EQ(1, children[2]->start_calls());
+    EXPECT_EQ(0, children[3]->start_calls());
+    // Reading on never starts a child twice and keeps the order of the rows.
+    auto rest = read_all(iter);
+    EXPECT_EQ((std::vector<int32_t>{1, 2, 3, 4, 5}), rest);
+    for (int i = 1; i < 6; i++) {
+        EXPECT_EQ(1, children[i]->start_calls()) << i;
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(UnionIteratorTest, read_ahead_stops_without_child_support) {
+    std::vector<std::shared_ptr<ReadAheadIntIterator>> children;
+    std::vector<ChunkIteratorPtr> iters;
+    for (int i = 0; i < 4; i++) {
+        children.push_back(std::make_shared<ReadAheadIntIterator>(std::vector<int32_t>{i}, 1, i != 1));
+        iters.push_back(children.back());
+    }
+    auto iter = new_union_iterator(std::move(iters), 8, 100);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    EXPECT_EQ((std::vector<int32_t>{0, 1, 2, 3}), read_all(iter));
+    EXPECT_EQ(1, children[1]->start_calls());
+    EXPECT_EQ(0, children[2]->start_calls());
+    EXPECT_EQ(0, children[3]->start_calls());
+}
+
+// NOLINTNEXTLINE
+TEST_F(UnionIteratorTest, no_read_ahead_by_default) {
+    std::vector<std::shared_ptr<ReadAheadIntIterator>> children;
+    std::vector<ChunkIteratorPtr> iters;
+    for (int i = 0; i < 3; i++) {
+        children.push_back(std::make_shared<ReadAheadIntIterator>(std::vector<int32_t>{i}, 1, true));
+        iters.push_back(children.back());
+    }
+    auto iter = new_union_iterator(std::move(iters));
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    EXPECT_EQ((std::vector<int32_t>{0, 1, 2}), read_all(iter));
+    for (auto& c : children) {
+        EXPECT_EQ(0, c->start_calls());
+    }
+}
+
 } // namespace starrocks
