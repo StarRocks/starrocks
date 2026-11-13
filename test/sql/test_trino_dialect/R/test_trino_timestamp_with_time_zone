@@ -20,23 +20,23 @@ set sql_dialect='trino';
 set time_zone='UTC';
 -- result:
 -- !result
-select TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo';
+select at_timezone(TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo', 'UTC');
 -- result:
 2024-01-01 00:00:00
 -- !result
-select TIMESTAMP '2020-05-01 12:34:56.123456 Asia/Kathmandu';
+select at_timezone(TIMESTAMP '2020-05-01 12:34:56.123456 Asia/Kathmandu', 'UTC');
 -- result:
 2020-05-01 06:49:56.123456
 -- !result
-select TIMESTAMP '2020-05-01 12:34:56 -00:35';
+select at_timezone(TIMESTAMP '2020-05-01 12:34:56 -00:35', 'UTC');
 -- result:
 2020-05-01 13:09:56
 -- !result
-select TIMESTAMP '2001-1-2 3:4:5+07:09';
+select at_timezone(TIMESTAMP '2001-1-2 3:4:5+07:09', 'UTC');
 -- result:
 2001-01-01 19:55:05
 -- !result
-select TIMESTAMP '2001-08-22 03:04:05.321 GMT-08:30';
+select at_timezone(TIMESTAMP '2001-08-22 03:04:05.321 GMT-08:30', 'UTC');
 -- result:
 2001-08-22 11:34:05.321000
 -- !result
@@ -44,11 +44,11 @@ select TIMESTAMP '2001-08-22 03:04:05 UT', TIMESTAMP '2001-08-22 03:04:05 Z', TI
 -- result:
 2001-08-22 03:04:05	2001-08-22 03:04:05	2001-08-22 03:04:05
 -- !result
-select TIMESTAMP '2001-01-02 Europe/Berlin';
+select at_timezone(TIMESTAMP '2001-01-02 Europe/Berlin', 'UTC');
 -- result:
 2001-01-01 23:00:00
 -- !result
-select TIMESTAMP '2024-11-03 01:30:00 America/Los_Angeles';
+select at_timezone(TIMESTAMP '2024-11-03 01:30:00 America/Los_Angeles', 'UTC');
 -- result:
 2024-11-03 08:30:00
 -- !result
@@ -67,11 +67,11 @@ select c1 from t1 where c2 = TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo' order by
 set time_zone='Asia/Shanghai';
 -- result:
 -- !result
-select TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo';
+select CAST(at_timezone(TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo', 'Asia/Shanghai') AS TIMESTAMP);
 -- result:
 2024-01-01 08:00:00
 -- !result
-select TIMESTAMP '2024-01-01 09:00:00 UTC';
+select CAST(at_timezone(TIMESTAMP '2024-01-01 09:00:00 UTC', 'Asia/Shanghai') AS TIMESTAMP);
 -- result:
 2024-01-01 17:00:00
 -- !result
@@ -83,7 +83,7 @@ select TIMESTAMP '2020-05-10 04:00:00 America/New_York' = TIMESTAMP '2020-05-10 
 -- result:
 1
 -- !result
-select TIMESTAMP '2012-10-31 01:00 UTC' AT TIME ZONE 'America/Los_Angeles';
+select CAST(TIMESTAMP '2012-10-31 01:00 UTC' AT TIME ZONE 'America/Los_Angeles' AS TIMESTAMP);
 -- result:
 2012-10-30 18:00:00
 -- !result
@@ -97,23 +97,23 @@ set disable_function_fold_constants=true;
 set time_zone='UTC';
 -- result:
 -- !result
-select TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo';
+select at_timezone(TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo', 'UTC');
 -- result:
 2024-01-01 00:00:00
 -- !result
-select TIMESTAMP '2020-05-01 12:34:56.123456 Asia/Kathmandu';
+select at_timezone(TIMESTAMP '2020-05-01 12:34:56.123456 Asia/Kathmandu', 'UTC');
 -- result:
 2020-05-01 06:49:56.123456
 -- !result
-select TIMESTAMP '2020-05-01 12:34:56 -00:35';
+select at_timezone(TIMESTAMP '2020-05-01 12:34:56 -00:35', 'UTC');
 -- result:
 2020-05-01 13:09:56
 -- !result
-select TIMESTAMP '2001-1-2 3:4:5+07:09';
+select at_timezone(TIMESTAMP '2001-1-2 3:4:5+07:09', 'UTC');
 -- result:
 2001-01-01 19:55:05
 -- !result
-select TIMESTAMP '2001-08-22 03:04:05.321 GMT-08:30';
+select at_timezone(TIMESTAMP '2001-08-22 03:04:05.321 GMT-08:30', 'UTC');
 -- result:
 2001-08-22 11:34:05.321000
 -- !result
@@ -121,11 +121,11 @@ select TIMESTAMP '2001-08-22 03:04:05 UT', TIMESTAMP '2001-08-22 03:04:05 Z', TI
 -- result:
 2001-08-22 03:04:05	2001-08-22 03:04:05	2001-08-22 03:04:05
 -- !result
-select TIMESTAMP '2001-01-02 Europe/Berlin';
+select at_timezone(TIMESTAMP '2001-01-02 Europe/Berlin', 'UTC');
 -- result:
 2001-01-01 23:00:00
 -- !result
-select TIMESTAMP '2024-11-03 01:30:00 America/Los_Angeles';
+select at_timezone(TIMESTAMP '2024-11-03 01:30:00 America/Los_Angeles', 'UTC');
 -- result:
 2024-11-03 08:30:00
 -- !result
@@ -136,7 +136,7 @@ select c1 from t1 where c2 = TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo' order by
 set time_zone='Asia/Shanghai';
 -- result:
 -- !result
-select TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo';
+select CAST(at_timezone(TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo', 'Asia/Shanghai') AS TIMESTAMP);
 -- result:
 2024-01-01 08:00:00
 -- !result

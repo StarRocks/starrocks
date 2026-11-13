@@ -131,6 +131,10 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select at_timezone(TIMESTAMP '2024-08-19 14:36:41', 'America/Bogota');";
         assertPlanContains(sql, "2024-08-19 01:36:41");
 
+        sql = "select cast(at_timezone(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), 'America/Bogota') " +
+                "AS TIMESTAMP);";
+        assertPlanContains(sql, "2024-08-19 09:36:41");
+
         sql = "select date_parse('2022/10/20/05', '%Y/%m/%d/%H');";
         assertPlanContains(sql, "2022-10-20 05:00:00");
 

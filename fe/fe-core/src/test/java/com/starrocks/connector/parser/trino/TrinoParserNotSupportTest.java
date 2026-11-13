@@ -72,10 +72,10 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
     // https://trino.io/docs/current/functions/datetime.html#time-zone-conversion
     @Test
     public void testTimeStampWithTimeZone() {
-        String sql = "select TIMESTAMP '2014-03-14 09:30:00 Europe/Berlin'";
+        String sql = "select * from tall where th = TIMESTAMP '2014-03-14 09:30:00 Europe/Berlin'";
         analyzeSuccess(sql);
 
-        sql = "select TIMESTAMP '2014-09-17 Europe/Berlin'";
+        sql = "select * from tall where th = TIMESTAMP '2014-09-17 Europe/Berlin'";
         analyzeSuccess(sql);
     }
 
