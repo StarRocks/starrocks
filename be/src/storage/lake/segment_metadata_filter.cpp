@@ -16,13 +16,8 @@
 
 #include "storage/column_predicate.h"
 #include "storage/datum_variant.h"
-<<<<<<< HEAD
-#include "storage/zone_map_detail.h"
-=======
 #include "storage/sort_key_bounds.h"
-#include "storage_primitive/column_predicate_factory.h"
-#include "storage_primitive/zone_map_detail.h"
->>>>>>> cb9d0bd ([BugFix][RB-1485] Store segment sort key bounds in a compact encoding (#83155))
+#include "storage/zone_map_detail.h"
 
 namespace starrocks::lake {
 

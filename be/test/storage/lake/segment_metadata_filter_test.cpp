@@ -17,28 +17,21 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-#include "runtime/types.h"
-#include "storage/column_predicate.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
-#include "storage/tablet_schema.h"
-=======
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "base/testutil/assert.h"
+#include "runtime/types.h"
+#include "storage/column_predicate.h"
 #include "storage/datum_variant.h"
 #include "storage/lake/sort_key_bounds_test_util.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/sort_key_bounds.h"
 #include "storage/tablet_schema.h"
 #include "storage/variant_tuple.h"
-#include "storage_primitive/column_predicate_factory.h"
-#include "storage_primitive/predicate_tree/predicate_tree.hpp"
-#include "types/type_descriptor.h"
->>>>>>> cb9d0bd ([BugFix][RB-1485] Store segment sort key bounds in a compact encoding (#83155))
+#include "testutil/assert.h"
 
 namespace starrocks::lake {
 

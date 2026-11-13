@@ -24,15 +24,15 @@
 #include <utility>
 #include <vector>
 
-#include "base/testutil/assert.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "runtime/decimalv2_value.h"
+#include "runtime/time_types.h"
+#include "storage/types.h"
 #include "storage/variant_tuple.h"
+#include "testutil/assert.h"
 #include "types/date_value.h"
-#include "types/decimalv2_value.h"
 #include "types/logical_type.h"
-#include "types/time_types.h"
 #include "types/timestamp_value.h"
-#include "types/type_info.h"
 
 namespace starrocks {
 
@@ -273,6 +273,31 @@ TEST(SortKeyBoundsTest, EncodesDocumentedLayout) {
     // Strings escape 0x00 as 0x00 0x01 and end with 0x00 0x00, also in the last column.
     EXPECT_EQ(bytes_of({0x01, 0x00, 0x01, TYPE_VARCHAR, 0x01, 'a', 0x00, 0x01, 'b', 0x00, 0x00}),
               encode(tuple_of({varchar(std::string("a\0b", 3))})));
+}
+
+// This branch encodes BOOLEAN and DECIMAL256 values itself rather than through its KeyCoder. The bytes must be the
+// KeyCoder full ascending encoding of later versions, so that each version reads the bounds the other one wrote.
+TEST(SortKeyBoundsTest, EncodesBooleanAndDecimal256LikeKeyCoder) {
+    auto expect_layout = [](const std::string& label, const VariantTuple& t, const std::string& expected) {
+        EXPECT_EQ(expected, encode(t)) << label;
+        expect_same_tuple(t, decode(expected));
+    };
+
+    // BOOLEAN: one byte, 0 or 1.
+    const std::string boolean_header = bytes_of({0x01, 0x00, 0x01, TYPE_BOOLEAN});
+    expect_layout("false", tuple_of({scalar(TYPE_BOOLEAN, Datum(static_cast<int8_t>(0)))}),
+                  boolean_header + bytes_of({0x01, 0x00}));
+    expect_layout("true", tuple_of({scalar(TYPE_BOOLEAN, Datum(static_cast<int8_t>(1)))}),
+                  boolean_header + bytes_of({0x01, 0x01}));
+
+    // DECIMAL256: 32 bytes, the high 128 bits with the sign bit flipped and then the low 128 bits, both big-endian.
+    const std::string decimal256_header = bytes_of({0x01, 0x00, 0x01, TYPE_DECIMAL256, 76, 20});
+    expect_layout("5 * 2^128 + 7",
+                  tuple_of({decimal(TYPE_DECIMAL256, 76, 20, Datum(int256_t(int128_t{5}, uint128_t{7})))}),
+                  decimal256_header + bytes_of({0x01, 0x80}) + std::string(14, '\x00') + bytes_of({0x05}) +
+                          std::string(15, '\x00') + bytes_of({0x07}));
+    expect_layout("-1", tuple_of({decimal(TYPE_DECIMAL256, 76, 20, Datum(int256_t(int128_t{-1}, ~uint128_t{0})))}),
+                  decimal256_header + bytes_of({0x01, 0x7F}) + std::string(31, '\xFF'));
 }
 
 TEST(SortKeyBoundsTest, PreservesOrderForEqualHeaders) {

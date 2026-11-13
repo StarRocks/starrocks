@@ -21,17 +21,17 @@
 #include <utility>
 #include <vector>
 
-#include "base/decimal_types.h"
 #include "column/datum_convert.h"
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "fmt/format.h"
 #include "gen_cpp/lake_types.pb.h"
-#include "storage_primitive/key_coder.h"
-#include "storage_primitive/primary_key_encoder.h"
+#include "storage/key_coder.h"
+#include "storage/primary_key_encoder.h"
+#include "storage/type_traits.h"
+#include "storage/types.h"
 #include "types/logical_type.h"
-#include "types/storage_type_traits.h"
-#include "types/type_info.h"
+#include "util/decimal_types.h"
 
 namespace starrocks {
 
@@ -95,6 +95,44 @@ bool is_valid_decimal(LogicalType type, int precision, int scale) {
     return precision >= 1 && precision <= max_decimal_precision(type) && scale >= 0 && scale <= precision;
 }
 
+// This branch's KeyCoder has no full encoding for a 256-bit integer and decodes every BOOLEAN as true, so the codec
+// handles those two types itself. The bytes are the KeyCoder full ascending encoding of later versions, which read
+// these bounds as well: a BOOLEAN is one byte, 0 or 1; a 256-bit integer is 32 bytes, big-endian, sign bit flipped.
+constexpr size_t kInt256Size = 32;
+
+void encode_int256(const int256_t& v, std::string* out) {
+    const uint128_t hi = static_cast<uint128_t>(v.high) ^ (static_cast<uint128_t>(1) << 127);
+    const uint128_t lo = v.low;
+    char buf[kInt256Size];
+    for (int i = 0; i < 16; i++) buf[i] = static_cast<char>(hi >> (8 * (15 - i)));
+    for (int i = 0; i < 16; i++) buf[16 + i] = static_cast<char>(lo >> (8 * (15 - i)));
+    out->append(buf, kInt256Size);
+}
+
+Status decode_int256(Slice* in, Datum* out) {
+    if (in->size < kInt256Size) {
+        return Status::Corruption(fmt::format("sort key bound: truncated {} value", type_to_string(TYPE_DECIMAL256)));
+    }
+    const auto* p = reinterpret_cast<const uint8_t*>(in->data);
+    uint128_t hi = 0;
+    uint128_t lo = 0;
+    for (int i = 0; i < 16; i++) hi = (hi << 8) | p[i];
+    for (int i = 0; i < 16; i++) lo = (lo << 8) | p[16 + i];
+    hi ^= (static_cast<uint128_t>(1) << 127);
+    out->set_int256(int256_t(static_cast<int128_t>(hi), lo));
+    in->remove_prefix(kInt256Size);
+    return Status::OK();
+}
+
+Status decode_boolean(Slice* in, Datum* out) {
+    if (in->empty()) {
+        return Status::Corruption(fmt::format("sort key bound: truncated {} value", type_to_string(TYPE_BOOLEAN)));
+    }
+    out->set(static_cast<uint8_t>((*in)[0]) != 0);
+    in->remove_prefix(1);
+    return Status::OK();
+}
+
 Status encode_value(const DatumVariant& value, std::string* out) {
     TypeInfo* type_info = value.type().get();
     const Datum& datum = value.value();
@@ -116,6 +154,9 @@ Status encode_value(const DatumVariant& value, std::string* out) {
         get_key_coder(type)->full_encode_ascending(normalized, out);
         return Status::OK();
     }
+    case TYPE_DECIMAL256:
+        encode_int256(datum.get_int256(), out);
+        return Status::OK();
     default:
         get_key_coder(type)->full_encode_ascending(datum, out);
         return Status::OK();
@@ -211,7 +252,7 @@ Status unescape_string(Slice* in, std::string* out) {
 // put there (for example, DATE as its int32 julian day).
 template <LogicalType LT>
 Status decode_fixed(Slice* in, Datum* out) {
-    using CppType = StorageCppType<LT>;
+    using CppType = typename CppTypeTraits<LT>::CppType;
     if (in->size < sizeof(CppType)) {
         return Status::Corruption(fmt::format("sort key bound: truncated {} value", type_to_string(LT)));
     }
@@ -237,7 +278,7 @@ Status decode_value(LogicalType type, Slice* in, std::string* scratch, Datum* ou
             return Status::Corruption(
                     fmt::format("sort key bound: invalid BOOLEAN value {}", static_cast<uint8_t>((*in)[0])));
         }
-        return decode_fixed<TYPE_BOOLEAN>(in, out);
+        return decode_boolean(in, out);
 #define M(LT) \
     case LT:  \
         return decode_fixed<LT>(in, out);
@@ -252,8 +293,9 @@ Status decode_value(LogicalType type, Slice* in, std::string* scratch, Datum* ou
         M(TYPE_DECIMAL32)
         M(TYPE_DECIMAL64)
         M(TYPE_DECIMAL128)
-        M(TYPE_DECIMAL256)
 #undef M
+    case TYPE_DECIMAL256:
+        return decode_int256(in, out);
     default:
         // parse_header admits only the types handled above.
         return Status::Corruption(fmt::format("sort key bound: unsupported type {}", type_to_string(type)));

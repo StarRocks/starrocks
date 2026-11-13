@@ -16,11 +16,11 @@
 
 #include <cstddef>
 
-#include "base/testutil/assert.h"
 #include "common/logging.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/sort_key_bounds.h"
 #include "storage/variant_tuple.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 

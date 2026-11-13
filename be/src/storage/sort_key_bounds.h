@@ -17,10 +17,10 @@
 #include <cstddef>
 #include <string>
 
-#include "base/string/slice.h"
 #include "common/status.h"
 #include "storage/datum_variant.h"
 #include "storage/variant_tuple.h"
+#include "util/slice.h"
 
 namespace starrocks {
 

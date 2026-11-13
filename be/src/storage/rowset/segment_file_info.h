@@ -42,16 +42,10 @@ struct SegmentFileInfo : public FileInfo {
     // compaction/merge.
     void to_proto(uint32_t segment_idx, SegmentMetadataPB* segment_meta) const;
 
-<<<<<<< HEAD
-    // Writes the sort-key fields, and CLEARS the deprecated metadata samples rather than leaving
-    // whatever |segment_meta| already held: nothing maintains those samples any more, so a target
-    // reused from another segment must not carry them forward.
-=======
-    // Serialize just the sort-key fields (the encoded min/max bounds; the deprecated bounds and
-    // samples are cleared) into |segment_meta|, replacing whatever it already held, including a
-    // deprecated pair left by an older writer. Shared by to_proto() and the replace paths, which
-    // refresh these fields on a segment_meta copied from a different file.
->>>>>>> cb9d0bd ([BugFix][RB-1485] Store segment sort key bounds in a compact encoding (#83155))
+    // Writes the sort-key fields (the encoded min/max bounds), and CLEARS the deprecated bounds and
+    // metadata samples rather than leaving whatever |segment_meta| already held: nothing writes the
+    // deprecated pair or maintains the samples any more, so a target reused from another segment
+    // must not carry them forward.
     void sort_key_fields_to_proto(SegmentMetadataPB* segment_meta) const;
 };
 

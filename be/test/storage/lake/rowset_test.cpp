@@ -37,12 +37,7 @@
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/rowset/rowset_options.h"
-<<<<<<< HEAD
-=======
-#include "storage/rowset/segment_options.h"
 #include "storage/sort_key_bounds.h"
-#include "storage/storage_metrics.h"
->>>>>>> cb9d0bd ([BugFix][RB-1485] Store segment sort key bounds in a compact encoding (#83155))
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "testutil/assert.h"
