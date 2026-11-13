@@ -364,12 +364,46 @@ ADMIN SET FRONTEND CONFIG (
 :::note
 - StarRocks 会优先使用本地用户进行验证。如本地不存在同名用户，则按照`authentication_chain`的配置顺序进行认证。如果使用身份验证方法登录失败，集群将按照指定的顺序尝试下一个身份验证方法。
 - 您可以在 `authentication_chain` 中指定多个安全集成，但不能指定多个 OAuth 2.0 安全集成或将其与其他安全集成一起指定。
+- `authentication_chain` 可以同时包含 LDAP 和 JWT 安全集成，但在 MySQL 协议下只是部分支持，见[在一条认证链中混用 LDAP 与 JWT 安全集成](#在一条认证链中混用-ldap-与-jwt-安全集成)。
 :::
 
 您可以使用以下语句检查 `authentication_chain` 的值：
 
 ```SQL
 ADMIN SHOW FRONTEND CONFIG LIKE 'authentication_chain';
+```
+
+### 在一条认证链中混用 LDAP 与 JWT 安全集成
+
+在 HTTP 和 Arrow Flight 上，同一条 `authentication_chain` 里的 LDAP 和 JWT 安全集成可以并存，因为凭据本身就说明了自己是什么：`Basic`（用户名和口令）交给 LDAP 安全集成验证，`Bearer`（token）交给 JWT 和 OAuth 2.0 安全集成验证。参见[通过 HTTP 和 Arrow Flight 连接](#通过-http-和-arrow-flight-连接)。
+
+在 MySQL 协议上只是部分支持。StarRocks 必须在看到任何凭据之前为连接选定一个客户端认证插件，而两类安全集成需要的插件不同：LDAP 用 `mysql_clear_password`，JWT 用 `authentication_openid_connect_client`。StarRocks 按客户端在握手时声明的插件选择：
+
+| 客户端声明的插件 | 使用的安全集成 |
+| --- | --- |
+| `authentication_openid_connect_client` | 链上第一个 JWT 安全集成 |
+| `mysql_clear_password` | 链上第一个 LDAP 安全集成 |
+| 都没有声明（多数客户端默认发送 `mysql_native_password`） | 链上第一个安全集成 |
+
+因此：
+
+- 把大多数客户端不做任何额外设置就要用的安全集成放在最前面。
+- 另一类客户端需要声明自己的插件：MySQL 客户端用 `--default-auth=<plugin>`，MySQL Connector/J 用 `defaultAuthenticationPlugin=<plugin>`。MySQL 客户端从 9.1 起自带 `authentication_openid_connect_client`，社区版也包含；更早的 MySQL 客户端和 MariaDB 客户端没有这个插件。
+- 无法声明插件的客户端（例如 PyMySQL）总是使用链上第一个安全集成。
+
+```Bash
+# JWT 安全集成用户，链上 LDAP 安全集成在前
+mysql -h <fe_host> -P <query_port> --default-auth=authentication_openid_connect_client \
+    --authentication-openid-connect-client-id-token-file=<path_to_token_file> -u <username>
+
+# LDAP 安全集成用户，链上 JWT 安全集成在前
+mysql -h <fe_host> -P <query_port> --default-auth=mysql_clear_password --enable-cleartext-plugin -u <username> -p
+```
+
+如果 JWT 客户端无法加载 OpenID Connect 插件，可以把 FE 配置项 `authentication_chain_accept_jwt_as_password` 设为 `true`，并把 LDAP 安全集成放在最前面。JWT 客户端随后把 token 当口令传入：MySQL 登录的口令形状像 JWT 时，StarRocks 先用 JWT 和 OAuth 2.0 安全集成验证它，没有任何一个接受时才把它当口令交给 LDAP 安全集成。token 和明文口令一样在线路上传输，请使用 SSL 连接。该配置项只作用于 MySQL 协议；在 HTTP 和 Arrow Flight 上请以 `Bearer` 发送 token。
+
+```Bash
+mysql -h <fe_host> -P <query_port> --ssl-mode=REQUIRED --enable-cleartext-plugin -u <username> -p"$(cat <path_to_token_file>)"
 ```
 
 ## 通过 HTTP 和 Arrow Flight 连接
@@ -401,7 +435,7 @@ curl -H "Authorization: Bearer ${TOKEN}" -H "label:load_1" -H "column_separator:
 - 安全集成用户的权限只能通过 [Group Provider](../group_provider.md) 和 `GRANT ... TO EXTERNAL GROUP` 获得；用户解析出的组在所有入口上都生效。
 - 在 Arrow Flight SQL 上，JWT 的认证方式与用户名密码完全一致：服务端返回自己颁发的 session token，客户端在该连接后续的请求中使用它。该 session 不会比 JWT 活得更久；token 的 `exp` 一过，连接即被拒绝，客户端需要用新的 JWT 重新认证。
 - FE 配置项 `enable_rest_bearer_authentication`（默认 `true`）用于关闭 HTTP 和 Arrow Flight 入口的 Bearer 认证。它不影响 MySQL 协议；MySQL 协议下的 token 登录仍使用 `authentication_openid_connect_client` 和 `authentication_oauth2_client` 插件。
-- MySQL 协议同一时刻只能向客户端提供一种 token 插件，由 `authentication_chain` 中排在最前面的 JWT 或 OAuth 2.0 安全集成决定。HTTP 和 Arrow Flight 没有这个限制，因为 token 本身会按 issuer 和 audience 路由。
+- MySQL 协议同一时刻只能向客户端提供一种插件：客户端声明的插件决定走哪个安全集成，没有声明的客户端走 `authentication_chain` 中的第一个安全集成（见[在一条认证链中混用 LDAP 与 JWT 安全集成](#在一条认证链中混用-ldap-与-jwt-安全集成)）。HTTP 和 Arrow Flight 没有这个限制，因为 token 本身会按 issuer 和 audience 路由。
 - 所有 HTTP 认证失败都返回 `401`，`WWW-Authenticate` 中同时带 `Basic` 和 `Bearer` 两个 challenge，且不说明是哪个安全集成拒绝、为何拒绝。排查时请使用 FE 的 `authentication_failure_total` 和 `authentication_failure_reason_total` 指标。
 
 ## 管理安全集成

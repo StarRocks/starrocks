@@ -337,8 +337,47 @@ public class AuthenticationHandler {
         }
     }
 
+    /**
+     * The security-integration chain, with one twist in front of it for the MySQL protocol: a
+     * clear-text password that has the shape of a JWT is first offered to the chain as a Bearer
+     * token, so a client that cannot speak the OpenID Connect plugin can still log in through a
+     * JWT integration by handing the token over as its password. MySQL needs this because a
+     * handshake carries nothing but a user and a password; HTTP and Arrow Flight already say
+     * which credential they carry (Basic or Bearer), so a Basic password there stays a password.
+     * The token attempt runs first because the alternative - binding to the directory with a token
+     * as the password - would count as a failed login on the user's directory account. It stays
+     * away from the rejected-credential cache in both directions: it is keyed by the same bytes as
+     * the password attempt, so a rejection it wrote would refuse the password attempt before any
+     * integration saw it, and one the password attempt wrote earlier would refuse the token.
+     */
     private static AuthenticationResult authenticateWithSecurityIntegration(AccessControlContext authContext,
                                                                             AuthCredentials cred)
+            throws AuthenticationException {
+        if (Config.authentication_chain_accept_jwt_as_password && cred.channel() == AuthChannel.MYSQL
+                && cred.kind() == AuthCredentialKind.PLAIN_PASSWORD && cred.looksLikeJwt()) {
+            AuthCredentials asToken = AuthCredentials.ofBearer(cred.userDeclared(), cred.tokenString(),
+                    cred.channel(), cred.remoteHost());
+            AuthenticationProvider providerBefore = authContext.getAuthenticationProvider();
+            try {
+                AuthenticationResult result = authenticateWithSecurityIntegration(authContext, asToken, false);
+                if (result != null) {
+                    return result;
+                }
+            } catch (AuthenticationException e) {
+                LOG.debug("password of user {} looks like a JWT but no token integration accepted it: {}",
+                        cred.userDeclared(), e.getMessage());
+            }
+            // Undo what the token attempt left on the context, so the password attempt starts from the
+            // same state as without this switch. COM_CHANGE_USER keeps the old session when the
+            // password attempt fails, and that session still needs its own provider.
+            authContext.setAuthenticationProvider(providerBefore);
+        }
+        return authenticateWithSecurityIntegration(authContext, cred, true);
+    }
+
+    private static AuthenticationResult authenticateWithSecurityIntegration(AccessControlContext authContext,
+                                                                            AuthCredentials cred,
+                                                                            boolean useRejectionCache)
             throws AuthenticationException {
         List<Pair<String, AuthenticationException>> exceptions = Lists.newArrayList();
         AuthenticationResult authenticationResult = null;
@@ -370,7 +409,7 @@ public class AuthenticationHandler {
         // on the user finishing the browser flow, not on any bytes it sent. Remembering a timeout as
         // a rejected credential would refuse the retry the user makes right after authorizing, for
         // the whole TTL.
-        boolean cacheable = cred.kind() != AuthCredentialKind.MYSQL_OAUTH2_CLIENT;
+        boolean cacheable = useRejectionCache && cred.kind() != AuthCredentialKind.MYSQL_OAUTH2_CLIENT;
         String cachedRejection = cacheable
                 ? RejectedCredentialCache.getRejection(cred.userDeclared(), cred.rawSecret()) : null;
         if (cachedRejection != null) {

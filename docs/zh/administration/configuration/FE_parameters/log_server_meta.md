@@ -1029,6 +1029,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 非 MySQL 通道（HTTP、Arrow Flight、直连 BE 的 Stream Load）上 Bearer token 认证的总开关。设为 `false` 后，这些通道收到 `Authorization: Bearer ...` 一律返回 HTTP 401，回退到"只有 MySQL 协议支持 token 认证"的行为；Basic 认证与既有的 Arrow Flight UUID session token 不受影响。MySQL 协议的认证任何情况下都不受此开关控制。
 - 引入版本: v4.2
 
+### `authentication_chain_accept_jwt_as_password`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否允许安全集成用户把 JWT 当作 MySQL 登录的口令提交（`mysql_clear_password` 插件）。设为 `true` 后，这样的口令形状像一个 JWT 时，StarRocks 先把它当 token 交给 `authentication_chain` 中的 JWT 和 OAuth 2.0 安全集成验证，没有任何一个接受时才把它当口令交给 LDAP 安全集成。这样没有 `authentication_openid_connect_client` 插件的 MySQL 客户端也能通过与 LDAP 安全集成同在 `authentication_chain` 中的 JWT 安全集成登录。设为 `false` 时，这样的口令直接交给 LDAP 安全集成。该配置项只作用于 MySQL 协议：HTTP 和 Arrow Flight 以 `Bearer` 携带 token，它们的 `Basic` 口令不会被当作 token。一个碰巧长得像 token 的口令会在走口令路径之前多经历一次被拒绝的 token 校验；认证指标只按这次登录的最终结果计数。
+- 引入版本: -
+
 ### `http_web_page_display_hardware`
 
 - 默认值: true

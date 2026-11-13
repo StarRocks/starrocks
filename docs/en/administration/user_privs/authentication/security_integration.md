@@ -364,12 +364,46 @@ ADMIN SET FRONTEND CONFIG (
 :::note
 - StarRocks prioritizes native authentication for local users. If a local user with the same username does not exist, authentication is performed in the order configured by `authentication_chain`. If login fails using the native authentication method, the cluster will try the next authentication method in the specified order.
 - You can specify multiple security integrations in `authentication_chain` except for OAuth 2.0 security integration. You cannot specify multiple OAuth 2.0 security integrations or one with other security integrations.
+- `authentication_chain` can hold both LDAP and JWT security integrations, but over the MySQL protocol this is only partially supported. See [Mix LDAP and JWT security integrations](#mix-ldap-and-jwt-security-integrations).
 :::
 
 You can check the value of `authentication_chain` using the following statement:
 
 ```SQL
 ADMIN SHOW FRONTEND CONFIG LIKE 'authentication_chain';
+```
+
+### Mix LDAP and JWT security integrations
+
+Over HTTP and Arrow Flight, LDAP and JWT security integrations on one `authentication_chain` work side by side, because the credential itself says what it is: `Basic` (user name and password) is tried against the LDAP security integrations, and `Bearer` (a token) against the JWT and OAuth 2.0 security integrations. See [Connect over HTTP and Arrow Flight](#connect-over-http-and-arrow-flight).
+
+Over the MySQL protocol the support is partial. StarRocks has to choose one client authentication plugin for a connection before it sees any credential, and the two kinds of security integration need different plugins: `mysql_clear_password` for LDAP and `authentication_openid_connect_client` for JWT. StarRocks chooses by the plugin the client declares in its handshake:
+
+| The client declares | Security integration used |
+| --- | --- |
+| `authentication_openid_connect_client` | The first JWT security integration on the chain |
+| `mysql_clear_password` | The first LDAP security integration on the chain |
+| Neither (most clients send `mysql_native_password` by default) | The first security integration on the chain |
+
+Therefore:
+
+- Put first the security integration that most of your clients use without any extra setting.
+- Clients of the other kind must declare their plugin: `--default-auth=<plugin>` with the MySQL client, `defaultAuthenticationPlugin=<plugin>` with MySQL Connector/J. The MySQL client includes `authentication_openid_connect_client` from version 9.1, community distributions included. Older MySQL clients and the MariaDB client do not have this plugin.
+- A client that cannot declare a plugin, such as PyMySQL, always gets the first security integration on the chain.
+
+```Bash
+# A JWT security integration user, with the LDAP security integration first on the chain
+mysql -h <fe_host> -P <query_port> --default-auth=authentication_openid_connect_client \
+    --authentication-openid-connect-client-id-token-file=<path_to_token_file> -u <username>
+
+# An LDAP security integration user, with the JWT security integration first on the chain
+mysql -h <fe_host> -P <query_port> --default-auth=mysql_clear_password --enable-cleartext-plugin -u <username> -p
+```
+
+If your JWT clients cannot load the OpenID Connect plugin, set the FE configuration item `authentication_chain_accept_jwt_as_password` to `true` and put the LDAP security integration first. A JWT client then passes its token as the password: when the password of a MySQL login has the shape of a JWT, StarRocks first verifies it against the JWT and OAuth 2.0 security integrations, and only if none accepts it tries it as a password against the LDAP security integrations. The token travels like a clear-text password, so use an SSL connection. This item applies to the MySQL protocol only; over HTTP and Arrow Flight, send the token as `Bearer`.
+
+```Bash
+mysql -h <fe_host> -P <query_port> --ssl-mode=REQUIRED --enable-cleartext-plugin -u <username> -p"$(cat <path_to_token_file>)"
 ```
 
 ## Connect over HTTP and Arrow Flight
@@ -401,7 +435,7 @@ Note the following points:
 - Privileges for security-integration users come from [Group Provider](../group_provider.md) and `GRANT ... TO EXTERNAL GROUP` only; the groups a user is resolved into apply on every entry point.
 - On Arrow Flight SQL, a JWT is authenticated exactly like a user name and password: the server answers with its own session token, which the client uses for the rest of the connection. The session cannot outlive the JWT; once the token's `exp` passes, the connection is refused and the client must authenticate again with a new JWT.
 - The FE configuration item `enable_rest_bearer_authentication` (default `true`) turns Bearer authentication on the HTTP and Arrow Flight entry points off. It never affects the MySQL protocol, where token logins keep using the `authentication_openid_connect_client` and `authentication_oauth2_client` plugins.
-- The MySQL protocol can offer a client only one token plugin at a time: the first JWT or OAuth 2.0 integration on `authentication_chain` decides which one. HTTP and Arrow Flight do not have this limit, because the token itself is routed by issuer and audience.
+- The MySQL protocol can offer a client only one plugin at a time: the plugin the client declares picks the matching security integration, and a client that declares none gets the first security integration on `authentication_chain` (see [Mix LDAP and JWT security integrations](#mix-ldap-and-jwt-security-integrations)). HTTP and Arrow Flight do not have this limit, because the token itself is routed by issuer and audience.
 - Every failed HTTP authentication answers `401` with both a `Basic` and a `Bearer` challenge in `WWW-Authenticate`, and does not say which integration refused or why. Use the `authentication_failure_total` and `authentication_failure_reason_total` metrics on the FE to diagnose failures.
 
 ## Manage security integrations
