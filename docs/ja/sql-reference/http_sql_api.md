@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks v3.2.0 が導入した HTTP SQL API で SELECT/SHOW/EXPLAIN/KILL をサポート。"
+products: [oss, enterprise, anywhere]
 ---
 
 # HTTP SQL API

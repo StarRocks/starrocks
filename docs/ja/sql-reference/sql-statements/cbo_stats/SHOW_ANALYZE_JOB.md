@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW ANALYZE JOB は、カスタム収集タスクの情報とステータスを表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW ANALYZE JOB

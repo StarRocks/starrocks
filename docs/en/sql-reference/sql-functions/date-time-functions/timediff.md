@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the difference between two DATETIME expressions."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # timediff

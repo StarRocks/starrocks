@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Base64 でエンコードされた文字列をデコードします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # from_base64

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回ARRAY中所有元素的最小值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_min

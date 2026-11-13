@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "通过计算两个已归一化向量间夹角的余弦值来衡量向量相似度。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # cosine_similarity_norm

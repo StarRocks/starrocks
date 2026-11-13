@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "BE 設定パラメーター：ログ、サーバー設定、メタデータ管理に関連する設定項目。"
 sidebar_label: "ログ、サーバー、およびメタデータ"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'

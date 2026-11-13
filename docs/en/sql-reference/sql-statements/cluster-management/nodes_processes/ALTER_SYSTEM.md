@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ALTER SYSTEM Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER SYSTEM

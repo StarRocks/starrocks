@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された秒数を日付に加算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # seconds_add

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回当前数据库中所有管道的元数据，以 JSON 格式呈现。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_all_pipes

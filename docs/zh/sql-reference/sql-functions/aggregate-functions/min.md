@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "min 返回表达式的最小值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # min

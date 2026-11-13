@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "在给定的日期上增加指定数量的月份。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # add_months

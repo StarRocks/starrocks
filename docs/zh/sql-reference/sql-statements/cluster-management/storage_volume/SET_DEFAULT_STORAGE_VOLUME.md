@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SET DEFAULT STORAGE VOLUME designates a storage volume as the default for the cluster."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SET DEFAULT STORAGE VOLUME

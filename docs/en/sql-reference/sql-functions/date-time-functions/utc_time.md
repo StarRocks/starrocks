@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the current UTC time as a value in 'HH:MM:SS'."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # utc_time

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "使用 DataSketches Theta 草图返回近似去重计数。比 COUNT DISTINCT 更快，处理高基数列时内存占用更少。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_count_distinct

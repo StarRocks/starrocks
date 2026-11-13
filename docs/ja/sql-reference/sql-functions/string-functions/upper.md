@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列を大文字に変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # upper

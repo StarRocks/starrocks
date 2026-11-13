@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Obtains the minimum value of a bitmap."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_min

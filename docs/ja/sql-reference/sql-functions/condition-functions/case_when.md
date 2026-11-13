@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CASE は条件式で、条件を評価して対応する結果を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # case

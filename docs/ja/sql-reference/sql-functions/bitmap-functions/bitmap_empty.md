@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "空のビットマップを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_empty

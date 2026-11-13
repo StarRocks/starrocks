@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "SHOW INDEX displays bitmap index information for a specified table."
 keywords: ['suoyin']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW INDEX

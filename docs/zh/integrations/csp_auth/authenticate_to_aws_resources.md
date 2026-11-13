@@ -3,6 +3,7 @@ sidebar_position: 10
 displayed_sidebar: docs
 sidebar_label: AWS
 description: "本文介绍如何认证 AWS 资源"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 配置 AWS 认证信息

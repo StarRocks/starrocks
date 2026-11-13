@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SET GLOBAL で変更されたグローバル変数を適用するために、すべてのアクティブな接続をリフレッシュします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # REFRESH CONNECTIONS

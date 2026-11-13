@@ -3,6 +3,7 @@ displayed_sidebar: docs
 keywords: ['profile', 'query', 'tune']
 sidebar_position: 40
 description: "Query tuning recipes for StarRocks: symptom-to-fix playbook using query profiles to diagnose slow operators, skew, spill, and join issues."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Query Tuning Recipes

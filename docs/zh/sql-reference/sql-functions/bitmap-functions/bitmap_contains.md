@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算输入值是否在 Bitmap 列中并返回布尔值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_contains

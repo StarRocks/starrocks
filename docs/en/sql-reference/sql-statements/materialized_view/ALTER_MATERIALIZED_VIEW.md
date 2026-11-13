@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Alters the name, refresh strategy, status, or properties of an asynchronous materialized view, or atomically swaps two views."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER MATERIALIZED VIEW

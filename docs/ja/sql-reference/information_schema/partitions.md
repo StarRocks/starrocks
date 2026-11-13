@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "partitionsはStarRocksで実装されていないプレースホルダービューです。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # partitions

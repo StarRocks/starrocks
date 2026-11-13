@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Grants roles or privileges on specific objects to a user, a role, or an external group."
 toc_max_heading_level: 4
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # GRANT

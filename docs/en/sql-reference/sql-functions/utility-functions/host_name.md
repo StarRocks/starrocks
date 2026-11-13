@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Obtains the hostname of the node on which the computation is performed."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # host_name

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW PLUGINS は、インストールされているプラグインを表示するために使用します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW PLUGINS

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列をセパレータで分割し、指定された位置の部分を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # split_part

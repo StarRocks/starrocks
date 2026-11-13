@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Removes the trailing spaces or specified characters from the end (right) of the str argument."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # rtrim

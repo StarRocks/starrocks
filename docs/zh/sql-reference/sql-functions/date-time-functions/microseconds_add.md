@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "向日期时间添加指定的微秒数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # microseconds_add

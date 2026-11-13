@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Create a new table in StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE TABLE

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 3.1：共有データアーキテクチャ、非同期マテリアライズドビュー、クロスクラスタデータ移行ツールのバグ修正および改善。"
+products: [oss]
 ---
 
 # StarRocks version 3.1

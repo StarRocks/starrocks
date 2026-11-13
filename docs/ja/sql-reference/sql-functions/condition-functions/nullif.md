@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "expr1 が expr2 と等しい場合、NULL を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # nullif

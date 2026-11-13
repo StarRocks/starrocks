@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Creates an order-preserving composite binary key from multiple heterogeneous input columns."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # encode_sort_key

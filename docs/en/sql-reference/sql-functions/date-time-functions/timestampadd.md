@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Adds an integer expression interval to the date or datetime expression datetime_expr."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # timestampadd

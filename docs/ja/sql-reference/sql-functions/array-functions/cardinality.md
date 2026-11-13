@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "配列内の要素数を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # cardinality

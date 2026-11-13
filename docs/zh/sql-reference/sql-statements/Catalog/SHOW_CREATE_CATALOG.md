@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW CREATE CATALOG queries the creation statement of an external catalog."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW CREATE CATALOG

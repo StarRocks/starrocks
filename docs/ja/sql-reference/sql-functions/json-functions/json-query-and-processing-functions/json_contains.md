@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "JSONドキュメントが特定の値またはサブドキュメントを含んでいるかどうかを確認します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # json_contains

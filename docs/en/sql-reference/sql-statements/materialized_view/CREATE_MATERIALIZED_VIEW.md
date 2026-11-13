@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE MATERIALIZED VIEW creates a materialized view."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE MATERIALIZED VIEW

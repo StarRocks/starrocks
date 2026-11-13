@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Checks whether the intersection of two arrays is empty."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # arrays_overlap

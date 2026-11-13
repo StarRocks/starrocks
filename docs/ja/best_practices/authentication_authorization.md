@@ -1,6 +1,7 @@
 ---
 sidebar_position: 100
 description: "大企業向けに統一認証・認可ワークフロー構築のベストプラクティスとユーザーライフサイクル管理を説明します。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 認証と授権

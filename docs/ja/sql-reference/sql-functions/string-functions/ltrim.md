@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列の先頭から空白または指定された文字を削除します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ltrim

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Computes the hyperbolic tangent of the argument."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # tanh

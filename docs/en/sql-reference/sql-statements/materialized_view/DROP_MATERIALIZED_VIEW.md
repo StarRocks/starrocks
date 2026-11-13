@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP MATERIALIZED VIEW drops a materialized view."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP MATERIALIZED VIEW

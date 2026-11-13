@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "policy_references システムビューでオブジェクトの行アクセスポリシーとカラムマスキングポリシーの参照を確認できます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # policy_references

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Each StarRocks cluster maintains a database sys, which contains several read-only, system-defined views."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # System metadatabase

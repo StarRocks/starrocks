@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "StarRocks デプロイ前に確認・設定すべき環境・システム設定項目の一覧。"
+products: [oss]
 ---
 
 # 環境設定の確認

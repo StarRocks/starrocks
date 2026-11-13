@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "CBO は StarRocks で統計情報を収集して最適なクエリプランを選択します。"
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CBO の統計情報を収集する

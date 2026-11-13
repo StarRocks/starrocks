@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Sorts the elements of an array in ascending order."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_sort

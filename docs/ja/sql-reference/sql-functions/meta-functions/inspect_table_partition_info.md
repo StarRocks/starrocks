@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "テーブルのパーティション情報をJSON形式で返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_table_partition_info

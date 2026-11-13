@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "e を x 乗した値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # exp, dexp

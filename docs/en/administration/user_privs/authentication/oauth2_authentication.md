@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 50
 description: "From v3.5.0 onwards, StarRocks supports authenticating client access using OAuth 2.0."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # OAuth 2.0 Authentication

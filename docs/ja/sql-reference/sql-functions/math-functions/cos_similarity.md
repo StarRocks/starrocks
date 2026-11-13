@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "2つのベクトル間の角度の余弦を計算してベクトルの類似性を測定します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # cosine_similarity

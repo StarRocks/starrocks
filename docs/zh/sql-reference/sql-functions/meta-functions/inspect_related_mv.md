@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "以 JSON 数组格式返回引用指定基表的所有物化视图。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_related_mv

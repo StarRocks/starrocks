@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "使用 DataSketches HyperLogLog 返回近似去重计数。与 APPROX_COUNT_DISTINCT 类似，但精度更高。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_hll_count_distinct

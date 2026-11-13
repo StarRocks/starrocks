@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算参数x的平方根。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # sqrt, dsqrt

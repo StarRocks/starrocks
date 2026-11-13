@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN SHOW REPLICA DISTRIBUTION displays the distribution status of table or partition replicas."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SHOW REPLICA DISTRIBUTION

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Kubernetes 環境での StarRocks クラスタをデプロイする Operator のリリースノート・変更履歴。"
+products: [oss]
 ---
 
 # Releases of Kubernetes Operator for StarRocks

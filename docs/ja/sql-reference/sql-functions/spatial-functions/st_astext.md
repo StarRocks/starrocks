@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ジオメトリ図形をWKT(Well Known Text)形式に変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_AsText,ST_AsWKT

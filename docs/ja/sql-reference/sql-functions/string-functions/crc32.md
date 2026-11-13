@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列の32ビット循環冗長検査(CRC)値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # crc32

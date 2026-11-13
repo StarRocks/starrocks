@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Splits a large bitmap into multiple sub-bitmaps."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # subdivide_bitmap

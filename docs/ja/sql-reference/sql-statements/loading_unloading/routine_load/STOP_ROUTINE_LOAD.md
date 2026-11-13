@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Routine Load ジョブを停止します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # STOP ROUTINE LOAD

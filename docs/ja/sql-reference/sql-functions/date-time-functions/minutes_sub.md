@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された分を日付から引きます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # minutes_sub

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "如果 point 是有效的点类型，返回对应的 X 坐标值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_X

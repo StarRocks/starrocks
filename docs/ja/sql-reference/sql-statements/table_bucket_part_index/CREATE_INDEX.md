@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Bitmap、N-Gram Bloom Filter、Full-Text 逆索引、Vector インデックスを作成します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE INDEX

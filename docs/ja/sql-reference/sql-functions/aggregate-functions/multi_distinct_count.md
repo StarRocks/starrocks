@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "expr の行数の合計を返し、count(distinct expr) と同等です。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # multi_distinct_count

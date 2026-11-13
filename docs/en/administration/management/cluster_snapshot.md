@@ -1,6 +1,7 @@
 ---
 sidebar_position: 60
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 sidebar_label: "Cluster Snapshot"
 keywords: ['backup','restore','shared data','snapshot']
 description: "How to create, restore, and manage cluster snapshots for backup and disaster recovery in StarRocks shared-data clusters."

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Decodes a Base64-encoded string and return a BINARY."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # base64_decode_binary

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 70
 description: "Manage data replicas in your StarRocks cluster."
+products: [oss, enterprise, anywhere]
 ---
 
 # Manage replica

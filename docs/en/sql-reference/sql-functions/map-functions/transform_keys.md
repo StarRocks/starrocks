@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Transforms keys in a map using a Lambda expression and produces a new key for each entry in the map."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # transform_keys

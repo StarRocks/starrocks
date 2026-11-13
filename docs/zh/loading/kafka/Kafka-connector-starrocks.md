@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "StarRocks Kafka Connector 作为 sink connector 持续消费 Kafka 消息并导入至 StarRocks。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 使用 Kafka connector 导入数据

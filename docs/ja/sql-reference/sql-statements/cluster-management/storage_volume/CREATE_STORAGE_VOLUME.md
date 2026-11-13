@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE STORAGE VOLUME は、リモートストレージシステム用のストレージボリュームを作成します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE STORAGE VOLUME

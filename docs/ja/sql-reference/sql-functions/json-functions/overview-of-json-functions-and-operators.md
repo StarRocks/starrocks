@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocksがサポートするJSON関数、演算子、パス式の概要を説明します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # JSON 関数と演算子の概要

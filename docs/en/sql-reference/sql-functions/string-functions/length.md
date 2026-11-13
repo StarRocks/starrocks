@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the byte length of a string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # length

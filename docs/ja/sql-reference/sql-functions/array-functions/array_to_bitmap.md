@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "配列をBITMAP値に変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_to_bitmap

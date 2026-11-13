@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "BITMAP 値から指定された位置から始まる要素を抽出します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # sub_bitmap

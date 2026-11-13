@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された外部テーブルのHiveパーティション情報をJSON形式で返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_hive_part_info

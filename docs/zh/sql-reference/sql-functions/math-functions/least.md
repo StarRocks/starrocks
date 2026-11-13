@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回多个输入参数中的最小值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # least

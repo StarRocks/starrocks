@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回当前日期和时间，支持指定秒精度。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # now, current_timestamp, localtime, localtimestamp

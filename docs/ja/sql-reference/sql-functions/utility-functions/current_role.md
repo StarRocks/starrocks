@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "現在のユーザーに対してアクティブ化されているロールをクエリします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # current_role

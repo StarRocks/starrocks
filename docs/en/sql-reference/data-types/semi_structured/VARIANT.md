@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "The VARIANT type is supported only for tables in Iceberg Catalog."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # VARIANT

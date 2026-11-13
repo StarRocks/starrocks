@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された秒数だけクエリ実行を遅延させます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # sleep

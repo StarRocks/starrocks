@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ジオメトリ図形shape1がshape2を完全に含むかどうかを確認します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Contains

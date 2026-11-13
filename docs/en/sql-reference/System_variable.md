@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords: ['session variable']
 description: "StarRocks provides many system variables that can be set and modified to suit your requirements."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # System variables

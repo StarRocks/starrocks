@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "UNNEST is a table function that takes an array and converts elements in that array into multiple rows of a table."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # unnest

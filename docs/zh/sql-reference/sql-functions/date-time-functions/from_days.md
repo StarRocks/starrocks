@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "根据距离 0000-01-01 的天数计算对应的日期。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # from_days

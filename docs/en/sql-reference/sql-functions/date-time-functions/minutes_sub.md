@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Subtracts specified minutes from the date, accurate to the minute."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # minutes_sub

@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "How to use temporary partitions in StarRocks to atomically overwrite data, adjust partitioning strategies, or stage data without affecting production."
 keywords: ['fenqu', 'linshi']
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 临时分区

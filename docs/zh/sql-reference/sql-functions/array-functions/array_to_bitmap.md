@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将ARRAY类型转化为BITMAP类型。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_to_bitmap

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a byte count into a human-readable string with appropriate units (B, KB, MB, GB, TB, PB, EB)."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # format_bytes

@@ -3,6 +3,7 @@ sidebar_position: 70
 displayed_sidebar: docs
 description: "StarRocks Iceberg Catalog のスナップショット、ブランチ、データメンテナンス、メタデータ管理プロシージャ。"
 keywords: ['iceberg', 'procedures', 'fast forward', 'cherry pick', 'expire snapshots', 'rewrite data files', 'add files', 'register table', 'rollback to snapshot', 'remove orphan files']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Iceberg Procedures

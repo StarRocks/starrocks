@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "How prefix indexes work in StarRocks as automatically generated sort-key indexes that accelerate range queries and equality filters."
 keywords: ['suoyin']
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 前缀索引和排序键

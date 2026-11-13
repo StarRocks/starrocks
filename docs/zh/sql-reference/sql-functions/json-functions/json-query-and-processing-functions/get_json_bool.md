@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从 JSON 字符串中指定的 JSON 路径解析并获取布尔值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # get_json_bool

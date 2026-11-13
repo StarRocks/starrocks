@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "REVOKE removes specific privileges or roles from a user or role."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # REVOKE

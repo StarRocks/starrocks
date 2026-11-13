@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "1つ以上のパラメータのリストから最小の値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # least

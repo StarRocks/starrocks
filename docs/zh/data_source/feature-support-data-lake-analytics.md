@@ -3,6 +3,7 @@ sidebar_position: 60
 displayed_sidebar: docs
 description: "External Catalog 的功能边界和支持版本，包括存储系统、认证和权限等。"
 sidebar_label: "能力边界"
+products: [oss, enterprise, anywhere]
 ---
 
 # 数据湖分析能力边界

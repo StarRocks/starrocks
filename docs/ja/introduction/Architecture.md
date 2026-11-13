@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "StarRocks は FE・BE・CN コンポーネントで構成されるシンプルなアーキテクチャを持ち、外部依存なしで水平スケーリングが可能です。"
+products: [oss, enterprise, cloud]
 ---
 
 # アーキテクチャ

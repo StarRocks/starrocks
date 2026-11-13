@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "x を y で割ったアークタンジェント（x/y のアークタンジェント）を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # atan2

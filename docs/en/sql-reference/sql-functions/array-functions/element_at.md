@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the element at the specified position (index) from a given array."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # element_at

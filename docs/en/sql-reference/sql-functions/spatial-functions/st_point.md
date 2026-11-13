@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the corresponding Point with the given X-coordinate and Y-coordinate."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Point

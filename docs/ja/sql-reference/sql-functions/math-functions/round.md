@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "数値を指定された桁数に丸めます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # round, dround

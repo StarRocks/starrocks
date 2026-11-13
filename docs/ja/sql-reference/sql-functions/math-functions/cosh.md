@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "引数の双曲線余弦を計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # cosh

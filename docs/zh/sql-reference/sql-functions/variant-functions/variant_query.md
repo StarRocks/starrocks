@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "查询 VARIANT 对象中通过路径表达式定位的元素值，返回 VARIANT 值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # variant_query

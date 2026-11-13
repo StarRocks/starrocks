@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "有効なPoint型の場合、対応するX座標の値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_X

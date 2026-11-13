@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Queries roles that are activated for the current user."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # current_role

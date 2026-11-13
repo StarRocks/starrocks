@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the sample covariance of two expressions."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # covar_samp

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CloudCanal 导入常见问题。"
+products: [oss]
 ---
 
 # CloudCanal 导入常见问题

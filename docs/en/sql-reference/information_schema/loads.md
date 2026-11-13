@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "loads provides the results of load jobs."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # loads

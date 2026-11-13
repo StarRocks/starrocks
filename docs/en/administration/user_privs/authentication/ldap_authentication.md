@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 30
 description: "In addition to native password-based authentication, StarRocks also supports the LDAP authentication."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # LDAP Authentication

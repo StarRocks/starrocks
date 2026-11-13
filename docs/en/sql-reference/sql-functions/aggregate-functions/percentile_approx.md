@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the approximate value for a given percentile p, or an array of values for corresponding percentiles if p is an array."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_approx

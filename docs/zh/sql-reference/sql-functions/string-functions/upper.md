@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将字符串转换为大写形式。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # upper

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns true if at least one row for expr is true."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bool_or

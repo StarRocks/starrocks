@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks provides a self-developed connector named StarRocks Connector for Apache Spark™ (Spark connector for short) to help you read data from a StarRocks..."
+products: [oss, enterprise]
 ---
 
 # Read data from StarRocks using Spark connector

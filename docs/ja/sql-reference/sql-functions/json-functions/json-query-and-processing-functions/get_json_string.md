@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定されたパスからJSON文字列を解析して文字列を取得します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # get_json_string,get_json_object

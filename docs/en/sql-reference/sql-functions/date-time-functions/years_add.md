@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DATETIME YEARS_ADD(DATETIME expr1,INT expr2)"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # years_add

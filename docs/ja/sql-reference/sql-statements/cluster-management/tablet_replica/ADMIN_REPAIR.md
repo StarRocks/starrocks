@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN REPAIR は、指定されたテーブルまたはパーティションの修復を試行します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN REPAIR

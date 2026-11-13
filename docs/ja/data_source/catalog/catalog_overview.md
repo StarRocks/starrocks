@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks catalog を使用して、内部データと外部データを統一的に管理およびクエリする方法。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 概要

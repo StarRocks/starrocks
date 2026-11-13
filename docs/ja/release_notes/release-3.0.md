@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 3.0：新集約関数（percentile_disc）、GROUP BY 互換性改善、ストレージおよびクエリエンジン更新。"
+products: [oss]
 ---
 
 # StarRocks version 3.0

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Obtains an arbitrary row from each aggregated group."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # any_value

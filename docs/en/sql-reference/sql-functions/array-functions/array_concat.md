@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Concatenates multiple arrays into one array that contains all the elements in the arrays."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_concat

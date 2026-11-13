@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "BINARY(M)"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # BINARY/VARBINARY

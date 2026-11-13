@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "如何在StarRocks中编写关联和非关联子查询，包括[NOT] IN、EXISTS、标量和lateral join形式。"
 sidebar_label: "Subquery"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 子查询

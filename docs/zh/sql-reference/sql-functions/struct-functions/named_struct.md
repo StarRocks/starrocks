@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "根据给定的字段名和字段值来构建 STRUCT。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # named_struct

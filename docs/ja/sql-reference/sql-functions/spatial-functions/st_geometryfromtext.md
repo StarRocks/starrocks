@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "WKT(Well Known Text)を対応するメモリジオメトリに変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_GeometryFromText,ST_GeomFromText

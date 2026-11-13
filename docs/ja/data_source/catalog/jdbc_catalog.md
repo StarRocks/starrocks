@@ -3,6 +3,7 @@ sidebar_position: 70
 displayed_sidebar: docs
 description: "StarRocks v3.0 以降の JDBC catalog で、JDBC データソースからデータをインジェストせずにクエリおよび変換ロード。"
 toc_max_heading_level: 4
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'

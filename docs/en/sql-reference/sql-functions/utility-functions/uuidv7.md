@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns a time-ordered UUID v7 of the VARCHAR type."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # uuid_v7

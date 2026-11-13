@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将字符串转换为小写形式，与lower函数一致。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # lcase

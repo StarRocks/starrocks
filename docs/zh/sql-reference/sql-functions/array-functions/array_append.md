@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "在数组末尾添加一个新的元素。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_append

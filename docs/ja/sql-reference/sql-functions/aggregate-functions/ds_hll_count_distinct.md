@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DataSketches HyperLogLog を使用して近似重複除去カウントを返します。APPROX_COUNT_DISTINCT に似ていますが、精度が高くなります。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_hll_count_distinct

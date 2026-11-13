@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 description: "How to use list partitioning in StarRocks (from v3.1) to partition data by predefined enumeration values, accelerating queries and management on categorical..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # List partitioning (Legacy)

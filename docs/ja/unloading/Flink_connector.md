@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "StarRocks Connector for Apache Flink でテーブルデータを一括読み取りします。"
+products: [oss, enterprise]
 ---
 
 # Flink コネクタを使用して StarRocks からデータを読み取る

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 90
 description: "With file manager, you can create, view, and delete files, such as the files that are used to access external data sources: public key files, private key..."
+products: [oss, enterprise, anywhere]
 ---
 
 # File manager

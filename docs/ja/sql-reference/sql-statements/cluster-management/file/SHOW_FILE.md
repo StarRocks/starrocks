@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW FILE ステートメントを実行して、データベースに保存されているファイルの情報を表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW FILE

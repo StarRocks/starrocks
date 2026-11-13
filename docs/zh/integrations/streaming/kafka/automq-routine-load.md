@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 30
 description: "如何使用 StarRocks Routine Load 将 AutoMQ Kafka 中的数据持续导入 StarRocks。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 从 AutoMQ Kafka 持续导入

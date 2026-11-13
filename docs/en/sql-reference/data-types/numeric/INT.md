@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "INT is a 4-byte signed integer."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # INT

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回当前UTC日期时间。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # utc_timestamp

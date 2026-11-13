@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CASE is a conditional expression."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # case

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "查看指定仓库中的数据快照备份。"
+products: [oss, enterprise, anywhere]
 ---
 
 # SHOW SNAPSHOT

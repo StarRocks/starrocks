@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns a string of the specified number of spaces."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # space

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "入力されたマップの和集合を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # map_concat

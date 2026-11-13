@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回参数x的负数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # negative

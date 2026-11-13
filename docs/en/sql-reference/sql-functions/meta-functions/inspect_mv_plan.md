@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the logical plan of a materialized view as a string, optionally reading from the plan cache."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_mv_plan

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks クラスターの各 sys データベースは読み取り専用のシステム定義ビューを含み、メタデータへのアクセスを提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # システムメタデータベース

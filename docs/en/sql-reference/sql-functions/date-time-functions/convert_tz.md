@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a DATE or DATETIME value from one time zone to another."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # convert_tz

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "2つの日付式の時間差を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hours_diff

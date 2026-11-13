@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Right-pads a string with a pad string to reach the specified length."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # rpad

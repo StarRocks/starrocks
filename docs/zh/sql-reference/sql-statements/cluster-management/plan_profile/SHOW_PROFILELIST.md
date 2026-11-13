@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW PROFILELIST lists the query profile records cached in your StarRocks cluster."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW PROFILELIST

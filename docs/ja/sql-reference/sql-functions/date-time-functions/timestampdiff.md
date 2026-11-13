@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "datetime_expr2からdatetime_expr1までの間隔を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # timestampdiff

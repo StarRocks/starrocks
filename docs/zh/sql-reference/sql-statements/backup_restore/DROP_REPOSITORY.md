@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "删除一个仓库，仅删除仓库在 StarRocks 中的映射，不删除实际的仓库数据。"
 keywords: ['beifen']
+products: [oss, enterprise, anywhere]
 ---
 
 # DROP REPOSITORY

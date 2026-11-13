@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "如何在 StarRocks 中启用和配置表达式的 JIT 即时编译以加速表达式求值和查询执行。"
 sidebar_position: 130
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 表达式 JIT 编译

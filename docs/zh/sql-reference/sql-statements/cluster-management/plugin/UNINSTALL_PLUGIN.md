@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "UNINSTALL PLUGIN removes a plugin from StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # UNINSTALL PLUGIN

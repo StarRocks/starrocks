@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算单个 HLL 类型值的基数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hll_cardinality

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Boolean配列またはLambda式を使用して、マップ内のキーと値のペアをフィルタリングします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # map_filter

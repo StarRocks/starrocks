@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "DROP RESOURCE GROUP removes a specified resource group."
 keywords: ['ziyuanzu'] 
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP RESOURCE GROUP

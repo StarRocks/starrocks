@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定されたバイナリ形式に基づいてVARCHAR文字列をバイナリ値に変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # to_binary

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW ANALYZE JOB 查看自定义采集任务的信息和状态。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW ANALYZE JOB

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a geometric figure to WKT (Well Known Text) format."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_AsText,ST_AsWKT
