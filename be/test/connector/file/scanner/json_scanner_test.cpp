@@ -2588,11 +2588,15 @@ TEST_F(JsonScannerTruncatedDocTest, mid_document_syntax_error_positions) {
         EXPECT_EQ(1, single_cut_res.filtered) << single_cut;
     }
 
-    // 8. Mid-buffer unclosed container followed by a complete record (truncated_bytes() == 0): skipping the
-    // failed record in advance() hits INCOMPLETE_ARRAY_OR_OBJECT and surfaces a non-EOF parse error.
-    auto mid_unclosed_array = scan({v + "\n" + R"({"k1":"x","k2":[1,2})" + "\n" + v});
-    EXPECT_TRUE(mid_unclosed_array.status.is_data_quality_error()) << mid_unclosed_array.status;
-    EXPECT_EQ(2, mid_unclosed_array.filtered);
+    // 8. Mid-buffer unclosed container followed by complete record(s), with or without a stage-1-cut trailing
+    // record: skipping the failed record in advance() hits INCOMPLETE_ARRAY_OR_OBJECT across the remaining
+    // complete record(s) before the cut and surfaces a non-EOF parse error rather than silently dropping them.
+    for (const std::string& tail : {std::string(""), std::string("\n") + v + "\n" + R"({"k1":"tr)",
+                                    std::string("\n") + v + "\n" + R"({"k1":"x" "k2":9})"}) {
+        auto mid_unclosed_array = scan({v + "\n" + R"({"k1":"x","k2":[1,2})" + "\n" + v + tail});
+        EXPECT_TRUE(mid_unclosed_array.status.is_data_quality_error()) << tail << ": " << mid_unclosed_array.status;
+        EXPECT_EQ(2, mid_unclosed_array.filtered) << tail;
+    }
 
     // 9. Multi-batch stream with a mid-document error in the middle of the buffer recovers all remaining rows.
     config::json_parse_many_batch_size = 64;
