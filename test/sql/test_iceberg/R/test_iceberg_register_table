@@ -130,7 +130,7 @@ E: (1064, 'Getting analyzing error. Detail message: Missing required argument: m
 -- !result
 call register_table("iceberg_db_${uuid0}", "iceberg_register_table", "oss://${oss_bucket}/iceberg_ci_db/iceberg_register_table/metadata/00003-xxxxxx.metadata.json");
 -- result:
-[REGEX].*Failed to register table: File does not exist: oss://starrocks-ci-test/iceberg_ci_db/iceberg_register_table/metadata/00003-xxxxxx.metadata.json.*
+[REGEX].*Failed to register table: (File does not exist|Failed to open input stream for file): oss://starrocks-ci-test/iceberg_ci_db/iceberg_register_table/metadata/00003-xxxxxx.metadata.json.*
 -- !result
 call register_table(database_name="iceberg_db_${uuid0}", metadata_file="oss://${oss_bucket}/iceberg_ci_db/iceberg_register_table/metadata/00002-c1b32f52-4f2b-42cc-b251-1b2909a52ea6.metadata.json");
 -- result:
