@@ -155,16 +155,18 @@ public class GeneratedColumnTest extends PlanTestBase {
 
     // The generated column expression kept in Column is never analyzed, so collection constructors in it still
     // carry the parser's placeholder types: null for [...] and ANY_MAP for map{...} / map(k, v). SHOW CREATE TABLE
-    // must render them as valid SQL that can be executed again.
+    // must render them as valid SQL that can be executed again. Primary key tables render columns through another
+    // method of Column and must produce the same output as the other table types.
     @Test
     public void testShowCreateTableWithCollectionLiteralInGeneratedColumn() throws Exception {
         String[][] cases = {
-                // {column definition, expected rendering for non primary key tables}
+                // {column definition, expected rendering}
                 {"c boolean AS array_contains([a, b], 3)", "AS array_contains([`a`, `b`], 3)"},
                 {"m varchar(20) AS map{'k': s}['k']", "AS map{'k':`s`}['k']"},
                 {"m varchar(20) AS map('k', s)['k']", "AS map{'k':`s`}['k']"},
                 {"d2 boolean AS array_contains(ARRAY<DATE>['2020-01-01'], d)",
                         "AS array_contains(ARRAY<DATE>['2020-01-01'], `d`)"},
+                {"x int AS named_struct('f', a).f", "AS named_struct('f', `a`).`f`"},
         };
         String[] keyTypes = {"DUPLICATE KEY(id)", "PRIMARY KEY(id)"};
         int idx = 0;
@@ -179,9 +181,7 @@ public class GeneratedColumnTest extends PlanTestBase {
                 try {
                     String ddl = starRocksAssert.showCreateTable("show create table " + table);
                     Assertions.assertFalse(ddl.contains("PseudoType"), ddl);
-                    if (keyType.startsWith("DUPLICATE")) {
-                        assertContains(ddl, c[1]);
-                    }
+                    assertContains(ddl, c[1]);
 
                     // The rendered DDL must be executable and render the same way again.
                     starRocksAssert.withTable(ddl.replace("`" + table + "`", "`" + copy + "`"));
