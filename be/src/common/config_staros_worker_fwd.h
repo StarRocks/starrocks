@@ -176,6 +176,7 @@ CONF_Int32(remote_read_background_weight, "1");
 // when the blocks are fetched is the scheduler's decision. Loads, compaction and other background reads do not read
 // ahead. 0 turns the read-ahead off. Applies to the segment readers opened afterwards.
 CONF_mInt32(remote_prefetch_window_blocks, "128");
+
 // Bytes of finished read-ahead blocks of segment data files kept in memory while the reader that warmed them still
 // covers them, when the remote I/O scheduler is enabled: a reader of such a block copies it from memory instead of
 // reading it back from the local cache, which is still written. Once this many bytes are held, later blocks are not
@@ -184,6 +185,7 @@ CONF_mInt32(remote_prefetch_window_blocks, "128");
 // next read while the total is still over the budget, or when no reader covers it any more. The buffers are charged
 // to the process, not to a query. Must not be negative.
 CONF_mInt64(remote_read_retain_prefetched_bytes, "2147483648");
+
 // Whether starlet's remote I/O scheduler may skip the local-cache write of a block fill while the cache disk is
 // contended: 90% busy or more with reads taking at least 20% of its service time, for two 250 ms samples in a row. Only
 // a fill of the body of a big query scan qualifies, and only once its block is retained in memory (see
