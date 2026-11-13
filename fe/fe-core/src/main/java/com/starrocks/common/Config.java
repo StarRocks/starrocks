@@ -625,13 +625,68 @@ public class Config extends ConfigBase {
     public static int stream_load_task_keep_max_second = 3 * 24 * 3600; // 3 days
 
     /**
-     * The interval of the load history syncer.
+     * Minimum interval between runs of the backstop sync that copies finished loads from
+     * information_schema.loads into _statistics_.loads_history. Rows are normally written
+     * as loads finish; the backstop only runs when the FE becomes leader and after the
+     * writer left a load to it (a row dropped from the queue, or one that could not be
+     * queued). Values below 1 are treated as 1.
+     * Also the interval at which _statistics_.load_jobs is reconciled with the loads the
+     * leader tracks.
      */
     @ConfField(mutable = true)
     public static int loads_history_sync_interval_second = 60;
 
     /**
-     * The default retention days of load history.
+     * How long finished loads may wait in memory before they are written to
+     * _statistics_.loads_history when fewer than loads_history_flush_batch_rows are pending.
+     * Applies in the same way to the load state changes written to _statistics_.load_jobs.
+     */
+    @ConfField(mutable = true)
+    public static int loads_history_flush_interval_second = 10;
+
+    /**
+     * Number of pending finished loads that triggers an immediate write to
+     * _statistics_.loads_history, and the maximum rows per INSERT.
+     * Applies in the same way to the load state changes written to _statistics_.load_jobs.
+     */
+    @ConfField(mutable = true)
+    public static int loads_history_flush_batch_rows = 500;
+
+    /**
+     * Maximum number of finished loads kept in memory while waiting to be written to
+     * _statistics_.loads_history. When the queue is full the oldest rows are dropped and
+     * counted in the loads_history_dropped_total metric; after the value is lowered at
+     * runtime, the next load that finishes drops the oldest rows beyond the new limit.
+     * The queue of _statistics_.load_jobs has the same limit, separately, and counts its
+     * drops in load_jobs_dropped_total.
+     */
+    @ConfField(mutable = true)
+    public static int loads_history_queue_max_rows = 100000;
+
+    /**
+     * Maximum memory, in bytes, that the finished loads waiting to be written to
+     * _statistics_.loads_history may take. The oldest rows are dropped beyond it, like
+     * for loads_history_queue_max_rows. The queue of _statistics_.load_jobs has the same
+     * limit, separately.
+     */
+    @ConfField(mutable = true)
+    public static long loads_history_queue_max_bytes = 256L * 1024 * 1024;
+
+    /**
+     * How far back, in minutes, the backstop sync looks in information_schema.loads for
+     * finished loads that are missing from _statistics_.loads_history. For a load that the
+     * writer dropped it looks back as far as that load. After a leader change, loads that
+     * finished earlier than this and were not written are not recovered. A load that is
+     * finished while its transaction is not visible yet is written without its visible time
+     * after half of this time.
+     */
+    @ConfField(mutable = true)
+    public static int loads_history_backstop_lookback_minutes = 60;
+
+    /**
+     * The default retention days of load history: the daily partitions _statistics_.loads_history
+     * keeps, and the age after which the finished loads of _statistics_.load_jobs are removed
+     * (rows of loads that are still running stay).
      */
     @ConfField(mutable = true)
     public static int loads_history_retained_days = 30;

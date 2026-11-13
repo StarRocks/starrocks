@@ -220,6 +220,19 @@ public class StreamLoadMgr implements MemoryTrackable {
                                          TransactionResult resp, boolean isRoutineLoad,
                                          ComputeResource computeResource, long backendId)
             throws StarRocksException {
+        beginLoadTaskFromBackend(dbName, tableName, label, requestId, user, clientIp, clientIp, timeoutMillis, resp,
+                isRoutineLoad, computeResource, backendId);
+    }
+
+    /**
+     * @param clientIp  the address of the client that sent the load to the backend
+     * @param backendIp the address of the backend, which coordinates the transaction
+     */
+    public void beginLoadTaskFromBackend(String dbName, String tableName, String label, TUniqueId requestId,
+                                         String user, String clientIp, String backendIp, long timeoutMillis,
+                                         TransactionResult resp, boolean isRoutineLoad,
+                                         ComputeResource computeResource, long backendId)
+            throws StarRocksException {
         AbstractStreamLoadTask task = null;
         Database db = checkDbName(dbName);
         Table table = checkMeta(db, tableName);
@@ -231,7 +244,7 @@ public class StreamLoadMgr implements MemoryTrackable {
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
 
-            task.beginTxnFromBackend(requestId, clientIp, backendId, resp);
+            task.beginTxnFromBackend(requestId, backendIp, backendId, resp);
             addLoadTask(task);
         } finally {
             writeUnlock();
@@ -289,7 +302,7 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public void replayCreateLoadTask(AbstractStreamLoadTask loadJob) {
-        addLoadTask(loadJob);
+        putLoadTask(loadJob, true);
         LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, loadJob.getId())
                 .add("msg", "replay create load job")
                 .build());
@@ -329,6 +342,11 @@ public class StreamLoadMgr implements MemoryTrackable {
      * @param addTxnCallback whether to register the task as a transaction state change callback
      */
     public void addLoadTask(AbstractStreamLoadTask task, boolean addTxnCallback) {
+        putLoadTask(task, addTxnCallback);
+        task.recordCreated();
+    }
+
+    private void putLoadTask(AbstractStreamLoadTask task, boolean addTxnCallback) {
         if (task instanceof StreamLoadTask && ((StreamLoadTask) task).isSyncStreamLoad()) {
             txnIdToSyncStreamLoadTasks.put(task.getTxnId(), (StreamLoadTask) task);
         }
@@ -820,7 +838,8 @@ public class StreamLoadMgr implements MemoryTrackable {
                     return;
                 }
 
-                addLoadTask(loadTask);
+                // Loading an image is not a state change: no row is recorded for it.
+                putLoadTask(loadTask, true);
             });
         }
     }
@@ -833,21 +852,6 @@ public class StreamLoadMgr implements MemoryTrackable {
     @Override
     public long estimateSize() {
         return Estimator.estimate(idToStreamLoadTask, 20);
-    }
-
-    public long getLatestFinishTime() {
-        long latestTime = -1L;
-        readLock();
-        try {
-            for (AbstractStreamLoadTask task : idToStreamLoadTask.values()) {
-                if (task instanceof StreamLoadTask && ((StreamLoadTask) task).isFinal()) {
-                    latestTime = Math.max(latestTime, ((StreamLoadTask) task).getFinishTimestampMs());
-                }
-            }
-        } finally {
-            readUnlock();
-        }
-        return latestTime;
     }
 
     public Map<Long, Long> getRunningTaskCount() {

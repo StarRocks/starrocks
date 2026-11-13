@@ -61,6 +61,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
@@ -68,6 +69,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.load.loadv2.LoadJobsTable;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
@@ -101,6 +103,7 @@ import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
 import com.starrocks.thrift.TUniqueId;
@@ -272,6 +275,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     @SerializedName("c")
     protected long createTimestamp = System.currentTimeMillis();
+    // When the job last entered RUNNING; -1 until it first ran.
+    @SerializedName("lr")
+    protected long lastRunningTimestamp = -1;
     @SerializedName("pa")
     protected long pauseTimestamp = -1;
     @SerializedName("e")
@@ -626,6 +632,49 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public String getPauseReason() {
         return pauseReason == null ? "" : pauseReason.toString();
+    }
+
+    /**
+     * The JOB row of this job for {@code _statistics_.load_jobs}: the job's identity, state
+     * and the reason it paused or was cancelled. Its tasks write their own TASK rows with this
+     * job's id in {@code parent_id}; the cumulative counters stay with the tasks and are left
+     * unset here.
+     */
+    public TLoadInfo toLoadJobRow() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Table tbl = db == null ? null : GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        readLock();
+        try {
+            TLoadInfo info = new TLoadInfo();
+            info.setJob_id(id);
+            info.setLabel(name);
+            info.setDb(db == null ? String.valueOf(dbId) : db.getFullName());
+            info.setTable(tbl == null ? String.valueOf(tableId) : tbl.getName());
+            info.setTable_id(tableId);
+            info.setState(state.name());
+            info.setType(ProfileManager.LOAD_TYPE_ROUTINE_LOAD);
+            info.setCreate_time_ms(createTimestamp);
+            if (lastRunningTimestamp > 0) {
+                info.setLoad_start_time_ms(lastRunningTimestamp);
+            }
+            if (state.isFinalState() && endTimestamp > 0) {
+                info.setLoad_finish_time_ms(endTimestamp);
+            }
+            if (state == JobState.PAUSED && pauseReason != null) {
+                info.setError_msg(pauseReason.toString());
+            } else if (state == JobState.CANCELLED && cancelReason != null) {
+                info.setError_msg(cancelReason.toString());
+            }
+            info.setProperties(jobPropertiesToJsonString());
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
+                info.setWarehouse(warehouse == null ? String.format("Warehouse id: %d not exist.", warehouseId)
+                        : warehouse.getName());
+            }
+            return info;
+        } finally {
+            readUnlock();
+        }
     }
 
     public String getOtherMsg() {
@@ -1080,6 +1129,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             streamLoadTask.setTxnId(txnId);
             streamLoadTask.setLabel(label);
             streamLoadTask.setTUniqueId(loadId);
+            streamLoadTask.setRoutineLoadJobId(id);
+            streamLoadTask.setBeId(beId);
             streamLoadManager.addLoadTask(streamLoadTask);
             streamLoadTask.setCoordinator(coord);
 
@@ -1230,15 +1281,17 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     public void afterVisible(TransactionState txnState) {
         writeLock();
         try {
-            if (state != JobState.RUNNING) {
-                // job is not running, nothing need to be done
-                return;
-            }
-
+            // The transaction is visible whatever happened to the job since it committed, so the
+            // load task of it finishes, and gets its visible time, even when the job was paused.
             StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
                     getSyncSteamLoadTaskByTxnId(txnState.getTransactionId());
             if (streamLoadTask != null) {
                 streamLoadTask.afterVisible(txnState);
+            }
+
+            if (state != JobState.RUNNING) {
+                // job is not running, nothing need to be done
+                return;
             }
 
             Optional<RoutineLoadTaskInfo> routineLoadTaskInfoOptional = routineLoadTaskInfoList.stream().filter(
@@ -1582,6 +1635,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (MetricRepo.hasInit && JobState.PAUSED == jobState) {
             MetricRepo.COUNTER_ROUTINE_LOAD_PAUSED.increase(1L);
         }
+        LoadJobsTable.offer(this::toLoadJobRow);
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
                 .add("current_job_state", getState())
                 .add("msg", "job state has been changed")
@@ -1620,6 +1674,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     private void executeRunning() {
         state = JobState.RUNNING;
+        lastRunningTimestamp = System.currentTimeMillis();
     }
 
     private void executePause(ErrorReason reason) {

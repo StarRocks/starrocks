@@ -39,7 +39,7 @@ SHOW LOAD ステートメントは Broker Load、Insert Into、Spark Load タス
 
 #### information_schema.loads
 
-**information_schema.loads** システムビューは、最近のロードタスクに関する情報を保存し、アクティブなものと最近完了したものを含みます。StarRocks は定期的にデータを **statistics.loads_history** システムテーブルに同期し、永続的に保存します。
+**information_schema.loads** システムビューは、最近のロードタスクに関する情報を保存し、アクティブなものと最近完了したものを含みます。ロードタスクが完了またはキャンセルされると、StarRocks はその行を **statistics.loads_history** システムテーブルに書き込み、永続的に保存します。
 
 **information_schema.loads** は以下のフィールドを提供します：
 
@@ -135,6 +135,38 @@ SHOW LOAD ステートメントは Broker Load、Insert Into、Spark Load タス
 #### statistics.loads_history
 
 **statistics.loads_history** システムビューは、デフォルトで過去3か月間のロード記録を保存します。DBA はビューの `partition_ttl` を変更して保持期間を調整できます。**statistics.loads_history** は **information_schema.loads** と一貫したスキーマを持っています。
+
+:::note
+アップグレード後、StarRocks は新しいバージョンで **information_schema.loads** に追加された列を **statistics.loads_history** にも追加します。その後、これらの列を持たないバージョンにクラスターをダウングレードすると、そのバージョンは列の位置で行をコピーするため、**statistics.loads_history** への同期が失敗します。ダウングレード後に同期を再開するには、ALTER TABLE を使用して、追加された列（`txn_id`、`load_id`、`table_id`、`parent_id`、`statement`、`error_code`、`visible_time`、`sink_bytes`、`client_ip`、`be_ids`、`commit_throttle_ms`、`cpu_ns`、`peak_mem_bytes`）を `_statistics_.loads_history` から削除してください。アップグレード時は、FE より先にすべての BE と CN をアップグレードしてください。旧バージョンの BE または CN は新しい列を提供できないため、アップグレードされるまで **information_schema.loads** へのクエリと同期は失敗します。
+:::
+
+行は、ロードタスクが最終状態 (FINISHED、CANCELLED、または UNKNOWN) に達したときに書き込まれます。Leader FE は完了したタスクをメモリ内のキュー (最大 `loads_history_queue_max_rows` 行、デフォルト 100000、および `loads_history_queue_max_bytes`、デフォルト 256 MB。いずれかの上限に達すると最も古い行が破棄されます) に入れ、保留中の行数が `loads_history_flush_batch_rows` (デフォルト 500) に達するか、`loads_history_flush_interval_second` (デフォルト 10) 秒ごとにバッチで書き込みます。FE が Leader になったとき、およびキューから行が破棄された後 (キューの満杯、または行の書き込みが 3 回連続で失敗した場合) には、**information_schema.loads** からのバックストップ同期が実行され、完了時に書き込めなかった行もアーカイブされます。バックストップ同期は `loads_history_backstop_lookback_minutes` (デフォルト 60) 分遡り、テーブルに既にある行はスキップし、`loads_history_sync_interval_second` がその実行頻度を制限します。破棄された行については、バックストップ同期はその行のロードタスクの完了時刻まで遡ります。Leader の切り替え後は、遡る範囲より前に完了し、まだ書き込まれていないロードタスクはアーカイブされません。トランザクションが可視になる前に完了したロードタスク (たとえば Publish タイムアウトの場合) の行は、トランザクションが可視になった時点で書き込まれます。遡る時間の半分を超えて待った場合は、`visible_time` なしで書き込まれます。FE メトリクス `loads_history_queue_rows`、`loads_history_dropped_total`、`loads_history_flush_latency_ms` は、それぞれ書き込み待ちの行数、キューから破棄された行数、最後の書き込みにかかった時間を示します。
+
+#### statistics.load_jobs
+
+**statistics.load_jobs** システムテーブルは、すべてのエントリポイント (Broker Load、Spark Load、INSERT/UPDATE/DELETE、Stream Load、Routine Load、マージコミット) のロードジョブまたはタスクごとに 1 行を保持し、実行中のロードと完了したロードの両方を含みます。ロードの完了時にのみ行を受け取る **statistics.loads_history** とは異なり、**statistics.load_jobs** の行はロードの作成時に書き込まれ、状態が変わるたびに書き直されるため、常に Leader FE が最後に確認した状態を示します。このテーブルは (`create_day`、`entry`、`id`) をキーとする主キーテーブルで、`create_day` でパーティション分割されます。完了したロードは、実行時間の長さにかかわらず、完了 (`load_finish_time`) から `loads_history_retained_days` 日後に削除されます。まだ実行中のロードの行は、ロードが終了するまで保持されます。
+
+列は **information_schema.loads** の列に次の 3 列を加えたものです。
+
+| 列    | 説明 |
+| ----- | ---- |
+| create_day | ロードが最初に作成された日 (UTC)。キーの一部であり、同じロードでは変わりません。`time_zone` 変数には従わず、リトライされた Broker Load ジョブは最初の試行の日 (および `create_time`) を保持します。 |
+| entry | ロードを作成したエントリポイント: `BROKER`、`SPARK`、`INSERT`、`STREAM_LOAD`、`ROUTINE_LOAD`、または `MERGE_COMMIT`。 |
+| level | 単独で成り立つロード (Broker Load、Spark Load、INSERT、Stream Load、および Routine Load ジョブ) は `JOB`、ジョブが生成する実行単位 (Routine Load タスクまたはマージコミットタスク) は `TASK`。 |
+
+Routine Load には 2 種類の行があります。JOB 行 (`level` が `JOB`) は、`id` がジョブ ID、`label` がジョブ名、`state` がジョブの状態 (`NEED_SCHEDULE`、`RUNNING`、`PAUSED`、`STOPPED`、または `CANCELLED`) です。`load_start_time` は最後に `RUNNING` に遷移した時刻、`error_msg` はジョブが一時停止している間の一時停止理由で、行数のカウンタ列はカウンタがタスクに属するため NULL です。ジョブの各タスクは独自の TASK 行 (`level` が `TASK`) を持ち、その `parent_id` はジョブ ID です。マージコミットタスクは `parent_id` がマージコミットジョブである TASK 行で、マージコミットジョブに JOB 行はありません。
+
+行は **statistics.loads_history** の行と同じ方法でキューに入れられて書き込まれ、同じ `loads_history_queue_max_rows`、`loads_history_queue_max_bytes`、`loads_history_flush_batch_rows`、`loads_history_flush_interval_second` の設定と、FE メトリクス `load_jobs_queue_rows`、`load_jobs_dropped_total`、`load_jobs_flush_latency_ms` を使用します。行が書き込まれる前にロードの状態が再び変わった場合、新しい行がキュー内の行を置き換えるため、キューには各ロードの最新の状態だけが残ります。FE が Leader になった時点から、Leader は `loads_history_sync_interval_second` 秒ごとに、`state` が最終状態でない行を、追跡しているロードと照合します。Leader がそのロードをまだ追跡していて、ロードの状態が行の状態と異なる場合 (たとえば、最終状態の行がキューから破棄された場合や、前の Leader が停止した時点でまだキューに残っていた場合)、そのロードの現在の行が再度書き込まれます。Leader がそのロードを追跡しなくなっていて、ロードがそのタイムアウト (`properties` の `timeout`。なければ Stream Load とマージコミットの行は `stream_load_default_timeout_second`、Routine Load タスクの行は `routine_load_task_timeout_second`、Broker Load、Spark Load、INSERT は `max_load_timeout_second`) を過ぎている場合、その行の `state` が `UNKNOWN` に、`load_finish_time` がその処理の時刻に設定されます。Routine Load の JOB 行にはタイムアウトがなく、ジョブが Leader に認識されなくなった時点でマークされます。FE が Leader になったとき、1 時間に 1 回、およびキューから行が破棄された後には、Leader は追跡しているロードのうちテーブルに行がないものすべてについて、現在の行も書き込みます。たとえば、唯一の行が前の Leader の停止時にまだキューに残っていた短いロードや、このテーブルを持つバージョンへクラスターをアップグレードする前から存在していたロードです。
+
+:::note
+**statistics.load_jobs** と **statistics.loads_history** は、ロードの詳細をそのまま保存します。**information_schema.loads** がロードのターゲットテーブルに対する権限に応じて適用するルール (ユーザーに表示されるロード、およびそれらのテーブルに対する SELECT 権限を持たないユーザーから `error_msg`、`tracking_sql`、`rejected_record_path`、`properties`、`load_id`、`be_ids`、`runtime_details` の一部を隠すこと) は、この 2 つのテーブルには適用されません。これらのテーブルに対する SELECT 権限を付与されたユーザーは、Routine Load ジョブのプロパティや一時停止理由を含め、クラスター内のすべてのロードについてこれらのフィールドを読み取ることができます。この権限は、それらの情報の閲覧が許可されているユーザーにのみ付与してください。
+:::
+
+次の例は、まだ実行中のロードを一覧表示します。
+
+```SQL
+SELECT entry, level, id, label, db_name, table_name, state, create_time FROM _statistics_.load_jobs WHERE state NOT IN ('FINISHED', 'CANCELLED', 'UNKNOWN', 'STOPPED') ORDER BY create_time DESC;
+```
 
 ## Load Profiles でロードパフォーマンスの問題を特定する
 

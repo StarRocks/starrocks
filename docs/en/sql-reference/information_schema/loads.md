@@ -7,7 +7,7 @@ description: "loads provides the results of load jobs."
 
 `loads` provides the results of load jobs. This view is supported from StarRocks v3.1 onwards.
 
-`loads` shows a load job to users who hold at least one privilege on each table that the job loads data into, or the OPERATE privilege. Unless you hold the SELECT privilege on each of those tables, the fields that can reveal the loaded data are hidden: `TRACKING_SQL`, `REJECTED_RECORD_PATH`, and `PROPERTIES` are NULL, `ERROR_MSG` keeps only the failure type of a Broker Load or INSERT job (for example, `type:ETL_QUALITY_UNSATISFIED`) and is NULL for other jobs, and `RUNTIME_DETAILS` omits the load IDs, the backends, and the transaction error message. The `root` user can see all load jobs in full. A load job whose target table has been dropped is shown in full only to the `root` user, and with these fields hidden to users with the OPERATE privilege.
+`loads` shows a load job to users who hold at least one privilege on each table that the job loads data into, or the OPERATE privilege. Unless you hold the SELECT privilege on each of those tables, the fields that can reveal the loaded data are hidden: `TRACKING_SQL`, `REJECTED_RECORD_PATH`, `PROPERTIES`, `LOAD_ID`, and `BE_IDS` are NULL, `ERROR_MSG` keeps only the failure type of a Broker Load or INSERT job (for example, `type:ETL_QUALITY_UNSATISFIED`) and is NULL for other jobs, and `RUNTIME_DETAILS` omits the load IDs, the backends, and the transaction error message. The `root` user can see all load jobs in full. A load job whose target table has been dropped is shown in full only to the `root` user, and with these fields hidden to users with the OPERATE privilege.
 
 The following fields are provided in `loads`:
 
@@ -38,6 +38,19 @@ The following fields are provided in `loads`:
 | ERROR_MSG            | The error message of the load job. If the load job did not encounter any error, `NULL` is returned. |
 | TRACKING_SQL         | The SQL statement that can be used to query the tracking log of the load job. A SQL statement is returned only when the load job involves unqualified data rows. If the load job does not involve any unqualified data rows, `NULL` is returned. |
 | REJECTED_RECORD_PATH | The path from which you can access all the unqualified data rows that are filtered out in the load job. The number of unqualified data rows logged is determined by the `log_rejected_record_num` parameter configured in the load job. You can use the `wget` command to access the path. If the load job does not involve any unqualified data rows, `NULL` is returned. |
+| TXN_ID               | The ID of the load transaction. `NULL` if no transaction has been started. |
+| LOAD_ID              | The globally unique ID of the load execution plan.           |
+| TABLE_ID             | The ID of the target table. `NULL` when a Broker Load job targets more than one table. |
+| PARENT_ID            | For a Routine Load task, the ID of its Routine Load job. For a Merge Commit task, the ID of its merge commit job. `NULL` otherwise. |
+| STATEMENT            | For INSERT jobs, the statement that created the job: `INSERT_SELECT`, `INSERT_VALUES`, `INSERT_FILES`, `UPDATE`, `DELETE`, or `MERGE`. `NULL` otherwise. |
+| ERROR_CODE           | Reserved. Currently always `NULL`.                            |
+| VISIBLE_TIME         | The time at which the load transaction became visible. `NULL` for load jobs that have not finished or were cancelled. |
+| SINK_BYTES           | The number of bytes written to the target table. `NULL` when not tracked for the load type. |
+| CLIENT_IP            | The IP address of the client that submitted the load job. Available for INSERT and for Stream Load; `NULL` for other load types and for Stream Load transactions that are begun on the FE. |
+| BE_IDS               | The IDs of the BEs that executed the load, separated by commas. `NULL` when not tracked for the load type. |
+| COMMIT_THROTTLE_MS   | The time (in milliseconds) that ingestion slowdown required the commit to wait after the write finished, in shared-data clusters. A load that committed later than that for another reason, such as a two-phase commit, waited less. `0` when no wait was required, `NULL` when ingestion slowdown was not evaluated for the transaction. Recorded on the Leader FE only. |
+| CPU_NS               | Reserved. Currently always `NULL`.                            |
+| PEAK_MEM_BYTES       | Reserved. Currently always `NULL`.                            |
 
 :::note
 

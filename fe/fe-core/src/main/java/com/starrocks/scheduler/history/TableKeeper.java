@@ -14,11 +14,17 @@
 
 package com.starrocks.scheduler.history;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.load.loadv2.LoadJobsTable;
 import com.starrocks.load.loadv2.LoadsHistorySyncer;
 import com.starrocks.load.rejected.RejectedRecordsTable;
 import com.starrocks.qe.SimpleExecutor;
@@ -48,15 +54,29 @@ public class TableKeeper {
 
     private final boolean tableCorrected = false;
     private final Supplier<Integer> ttlSupplier;
+    // Every column the table is expected to have, as (name, type definition) pairs.
+    // Columns an existing table lacks (created by an older version) get added.
+    private final List<Pair<String, String>> expectedColumns;
+    // Set once we logged that a schema change holds back the column migration.
+    private boolean schemaChangePendingLogged = false;
 
     public TableKeeper(String database,
                        String table,
                        String createTable,
                        Supplier<Integer> ttlSupplier) {
+        this(database, table, createTable, ttlSupplier, Lists.newArrayList());
+    }
+
+    public TableKeeper(String database,
+                       String table,
+                       String createTable,
+                       Supplier<Integer> ttlSupplier,
+                       List<Pair<String, String>> expectedColumns) {
         this.databaseName = database;
         this.tableName = table;
         this.createTableSql = createTable;
         this.ttlSupplier = ttlSupplier;
+        this.expectedColumns = expectedColumns;
     }
 
     public synchronized void run() {
@@ -71,6 +91,7 @@ public class TableKeeper {
             }
             if (checkTableExists()) {
                 correctTable();
+                addMissingColumns();
                 changeTTL();
             }
         } catch (Exception e) {
@@ -115,6 +136,112 @@ public class TableKeeper {
         }
     }
 
+    /**
+     * Append the columns a newer version added to the schema when the existing table
+     * was created without them. Columns are added in declaration order so that a
+     * positional INSERT ... SELECT * from the matching system view keeps lining up.
+     */
+    public void addMissingColumns() {
+        if (expectedColumns == null || expectedColumns.isEmpty()) {
+            return;
+        }
+        // The lock is released before the ALTER below, which takes the table lock itself.
+        Optional<SchemaSnapshot> schema = readSchema();
+        if (schema.isEmpty()) {
+            return;
+        }
+        List<String> missing = schema.get().missingColumns;
+        if (missing.isEmpty()) {
+            schemaChangePendingLogged = false;
+            return;
+        }
+        // ADD COLUMN is asynchronous; while a schema change is running the table is not NORMAL
+        // and a second ALTER would be rejected, so wait for it instead of re-issuing every cycle.
+        if (schema.get().state != OlapTable.OlapTableState.NORMAL) {
+            if (!schemaChangePendingLogged) {
+                LOG.info("table {}.{} is in state {}, waiting to add columns {}", databaseName, tableName,
+                        schema.get().state, missing);
+                schemaChangePendingLogged = true;
+            }
+            return;
+        }
+        String sql = alterTableAddColumns(databaseName, tableName, missing);
+        try {
+            SimpleExecutor.getRepoExecutor().executeDDL(sql);
+            LOG.info("adding missing columns to table {}.{}: {}", databaseName, tableName, missing);
+        } catch (Throwable e) {
+            LOG.warn("add missing columns to table {}.{} failed", databaseName, tableName, e);
+        }
+    }
+
+    /**
+     * Whether the table exists, already has every expected column and is not being altered,
+     * so that statements naming those columns explicitly can run against it. A table under
+     * schema change already lists the columns it is adding, although they only exist in the
+     * shadow index until the job finishes, hence the state check.
+     */
+    public boolean isSchemaReady() {
+        if (expectedColumns == null || expectedColumns.isEmpty()) {
+            return mayGetTable().isPresent();
+        }
+        Optional<SchemaSnapshot> schema = readSchema();
+        return schema.isPresent() && schema.get().state == OlapTable.OlapTableState.NORMAL
+                && schema.get().missingColumns.isEmpty();
+    }
+
+    // The state of the table and the expected columns it lacks, as of one moment.
+    private static class SchemaSnapshot {
+        private final OlapTable.OlapTableState state;
+        private final List<String> missingColumns;
+
+        private SchemaSnapshot(OlapTable.OlapTableState state, List<String> missingColumns) {
+            this.state = state;
+            this.missingColumns = missingColumns;
+        }
+    }
+
+    /**
+     * Reads the table state and its columns under the table read lock. A schema change job
+     * flips both under the write lock, so reading them apart could pair the NORMAL state from
+     * before the job with the columns it has just added to the shadow index.
+     */
+    private Optional<SchemaSnapshot> readSchema() {
+        Optional<OlapTable> table = mayGetTable();
+        if (table.isEmpty()) {
+            return Optional.empty();
+        }
+        OlapTable olapTable = table.get();
+        return Optional.of(withTableReadLock(olapTable, () -> new SchemaSnapshot(olapTable.getState(),
+                missingColumnDefinitions(olapTable, expectedColumns))));
+    }
+
+    @VisibleForTesting
+    protected <T> T withTableReadLock(OlapTable table, Supplier<T> reader) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseName);
+        if (db == null) {
+            // dropped since the table was looked up: nothing left to be consistent with
+            return reader.get();
+        }
+        try (AutoCloseableLock ignored = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
+            return reader.get();
+        }
+    }
+
+    public static List<String> missingColumnDefinitions(OlapTable table, List<Pair<String, String>> expectedColumns) {
+        List<String> missing = Lists.newArrayList();
+        for (Pair<String, String> column : expectedColumns) {
+            if (table.getColumn(column.first) == null) {
+                missing.add("`" + column.first + "` " + column.second);
+            }
+        }
+        return missing;
+    }
+
+    public static String alterTableAddColumns(String databaseName, String tableName, List<String> columnDefinitions) {
+        return String.format("ALTER TABLE %s.%s ADD COLUMN (%s)", databaseName, tableName,
+                String.join(", ", columnDefinitions));
+    }
+
     public void changeTTL() {
         if (ttlSupplier == null) {
             return;
@@ -139,7 +266,8 @@ public class TableKeeper {
         }
     }
 
-    private Optional<OlapTable> mayGetTable() {
+    @VisibleForTesting
+    protected Optional<OlapTable> mayGetTable() {
         return GlobalStateMgr.getCurrentState()
                 .getLocalMetastore().mayGetTable(databaseName, tableName)
                 .flatMap(x -> Optional.of((OlapTable) x));
@@ -202,6 +330,7 @@ public class TableKeeper {
 
             keeperList.add(TaskRunHistoryTable.createKeeper());
             keeperList.add(LoadsHistorySyncer.createKeeper());
+            keeperList.add(LoadJobsTable.createKeeper());
             keeperList.add(com.starrocks.lake.TabletWriteLogHistorySyncer.createKeeper());
             keeperList.add(PredicateColumnsStorage.createKeeper());
             keeperList.add(ExternalPredicateColumnsStorage.createKeeper());

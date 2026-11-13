@@ -500,6 +500,24 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Total number of loading channels.
 
+## `load_jobs_dropped_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of load state changes that the Leader FE dropped before they could be written to `_statistics_.load_jobs`. A state change is dropped when the in-memory queue is full (`loads_history_queue_max_rows`, default 100000, or `loads_history_queue_max_bytes`) or when writing it failed three times in a row. While the Leader still tracks the load, a later reconciliation of the table writes the current state of the load again, also for a load that has no row left in the table.
+
+## `load_jobs_flush_latency_ms`
+
+- Unit: ms
+- Type: Instantaneous
+- Description: Duration of the last successful batch write of load state changes to `_statistics_.load_jobs`.
+
+## `load_jobs_queue_rows`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of load state changes waiting in the memory of the Leader FE to be written to `_statistics_.load_jobs`.
+
 ## `load_mem_bytes`
 
 - Unit: Bytes
@@ -556,6 +574,24 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Type: Instantaneous
 - Description: The maximum number of threads in the load sink close thread pool, set by `load_sink_close_thread_pool_num_max`.
+
+## `loads_history_dropped_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of finished load records that the Leader FE dropped before they could be written to `_statistics_.loads_history`. A record is dropped when the in-memory queue is full (`loads_history_queue_max_rows`, default 100000, or `loads_history_queue_max_bytes`) or when writing it failed three times in a row. Dropped records are copied later by the backstop sync (see `loads_history_sync_interval_second`).
+
+## `loads_history_flush_latency_ms`
+
+- Unit: ms
+- Type: Instantaneous
+- Description: Duration of the last successful batch write of finished load records to `_statistics_.loads_history`.
+
+## `loads_history_queue_rows`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of finished load records waiting in the memory of the Leader FE to be written to `_statistics_.loads_history`.
 
 ## `local_column_pool_bytes (Deprecated)`
 

@@ -39,7 +39,7 @@ SHOW LOAD 语句返回 Broker Load、Insert Into 和 Spark Load 任务的信息�
 
 #### information_schema.loads
 
-**information_schema.loads** 系统视图存储有关最近导入任务的信息，包括活动的和最近完成的任务。StarRocks 定期将数据同步到 **statistics.loads_history** 系统表以进行持久存储。
+**information_schema.loads** 系统视图存储有关最近导入任务的信息，包括活动的和最近完成的任务。导入任务完成或取消时，StarRocks 会将其记录写入 **statistics.loads_history** 系统表以进行持久存储。
 
 **information_schema.loads** 提供以下字段：
 
@@ -135,6 +135,38 @@ SHOW LOAD 语句返回 Broker Load、Insert Into 和 Spark Load 任务的信息�
 #### statistics.loads_history
 
 **statistics.loads_history** 系统视图默认存储最近三个月的导入记录。数据库管理员可以通过修改视图的 `partition_ttl` 来调整保留期。**statistics.loads_history** 的模式与 **information_schema.loads** 一致。
+
+:::note
+升级后，StarRocks 会把新版本在 **information_schema.loads** 中新增的列添加到 **statistics.loads_history**。如果之后将集群降级到没有这些列的版本，向 **statistics.loads_history** 的同步会失败，因为该版本按列的位置复制数据。降级后如需恢复同步，请使用 ALTER TABLE 从 `_statistics_.loads_history` 中删除新增的列（`txn_id`、`load_id`、`table_id`、`parent_id`、`statement`、`error_code`、`visible_time`、`sink_bytes`、`client_ip`、`be_ids`、`commit_throttle_ms`、`cpu_ns`、`peak_mem_bytes`）。升级时请先升级所有 BE 和 CN，再升级 FE：旧版本的 BE 或 CN 无法提供新增的列，在其升级之前，对 **information_schema.loads** 的查询和同步都会失败。
+:::
+
+记录在导入任务到达最终状态（FINISHED、CANCELLED 或 UNKNOWN）时写入。Leader FE 将已完成的任务放入内存队列（最多 `loads_history_queue_max_rows` 行，默认 100000，以及 `loads_history_queue_max_bytes`，默认 256 MB；达到任一上限时丢弃最旧的行）并分批写入：待写入行数达到 `loads_history_flush_batch_rows`（默认 500）或每隔 `loads_history_flush_interval_second`（默认 10）秒写入一次。当 FE 成为 Leader 时，以及有行被从队列中丢弃之后（队列已满，或某一行连续三次写入失败），会从 **information_schema.loads** 运行一次兜底同步，以归档未能在完成时写入的记录；它回溯 `loads_history_backstop_lookback_minutes`（默认 60）分钟，跳过表中已有的行，`loads_history_sync_interval_second` 限制其运行频率。对于被丢弃的行，兜底同步会回溯到该行对应的导入任务的完成时间。Leader 切换之后，完成时间早于回溯范围且尚未写入的导入任务不会被归档。如果导入任务在其事务可见之前就已完成（例如 Publish 超时），其记录会在事务可见后写入；如果等待超过回溯时间的一半，则写入不带 `visible_time` 的记录。FE 指标 `loads_history_queue_rows`、`loads_history_dropped_total` 和 `loads_history_flush_latency_ms` 分别表示等待写入的行数、从队列中丢弃的行数以及最近一次写入的耗时。
+
+#### statistics.load_jobs
+
+**statistics.load_jobs** 系统表为每种导入入口（Broker Load、Spark Load、INSERT/UPDATE/DELETE、Stream Load、Routine Load 和 Merge Commit）的每个导入作业或任务保存一行，既包括仍在运行的导入，也包括已完成的导入。与只在导入完成时才写入一行的 **statistics.loads_history** 不同，**statistics.load_jobs** 中的行在导入创建时写入，并在每次状态变化时重写，因此它始终显示 Leader FE 看到的最新状态。该表是以 (`create_day`、`entry`、`id`) 为主键的主键表，按 `create_day` 分区。已结束的导入在结束（`load_finish_time`）`loads_history_retained_days` 天后被删除，与其运行了多久无关；仍在运行的导入的行会一直保留到导入结束。
+
+其列为 **information_schema.loads** 的全部列再加三列：
+
+| 列名  | 说明 |
+| ----- | ---- |
+| create_day | 导入首次创建的日期（UTC）。它是主键的一部分，对同一个导入不会变化：不随 `time_zone` 变量变化，Broker Load 作业重试后仍保留首次尝试的日期（以及 `create_time`）。 |
+| entry | 创建该导入的入口：`BROKER`、`SPARK`、`INSERT`、`STREAM_LOAD`、`ROUTINE_LOAD` 或 `MERGE_COMMIT`。 |
+| level | 独立的导入（Broker Load、Spark Load、INSERT、Stream Load 以及 Routine Load 作业）为 `JOB`；由作业派生的执行单元（Routine Load 任务或 Merge Commit 任务）为 `TASK`。 |
+
+Routine Load 有两类行。JOB 行（`level` 为 `JOB`）的 `id` 为作业 ID，`label` 为作业名称，`state` 为作业状态（`NEED_SCHEDULE`、`RUNNING`、`PAUSED`、`STOPPED` 或 `CANCELLED`）；`load_start_time` 为最近一次进入 `RUNNING` 的时间，作业暂停期间 `error_msg` 为暂停原因，各行数计数列为 NULL，因为计数属于任务。作业的每个任务都有自己的 TASK 行（`level` 为 `TASK`），其 `parent_id` 为作业 ID。Merge Commit 任务为 TASK 行，其 `parent_id` 为 Merge Commit 作业；Merge Commit 作业没有 JOB 行。
+
+行的排队和写入方式与 **statistics.loads_history** 相同，使用同样的 `loads_history_queue_max_rows`、`loads_history_queue_max_bytes`、`loads_history_flush_batch_rows` 和 `loads_history_flush_interval_second` 设置，对应的 FE 指标为 `load_jobs_queue_rows`、`load_jobs_dropped_total` 和 `load_jobs_flush_latency_ms`。如果导入在其行写入之前再次发生状态变化，新的行会替换队列中的行，因此队列中只保留每个导入的最新状态。从 FE 成为 Leader 起，Leader 每隔 `loads_history_sync_interval_second` 秒把 `state` 不是最终状态的行与它跟踪的导入进行比对。如果 Leader 仍在跟踪该导入，且导入的状态与行中的状态不同（例如最终状态的行被队列丢弃，或在上一个 Leader 停止时仍在队列中），则重新写入该导入的当前行。如果 Leader 不再跟踪该导入，且导入已超过其超时时间（`properties` 中的 `timeout`；否则 Stream Load 和 Merge Commit 行为 `stream_load_default_timeout_second`，Routine Load 任务行为 `routine_load_task_timeout_second`，Broker Load、Spark Load 和 INSERT 为 `max_load_timeout_second`），则该行的 `state` 会被置为 `UNKNOWN`，`load_finish_time` 置为本次处理的时间。Routine Load 的 JOB 行没有超时时间：只要 Leader 不再知道该作业，就会立即被标记。在 FE 成为 Leader 时、每小时一次，以及有行被从队列中丢弃之后，Leader 还会为它跟踪的、但表中没有行的每个导入写入当前行，例如唯一的一行在上一个 Leader 停止时仍在队列中的短导入，或在集群升级到带有该表的版本之前就已存在的导入。
+
+:::note
+**statistics.load_jobs** 和 **statistics.loads_history** 按原样保存导入的详细信息。**information_schema.loads** 根据导入目标表上的权限所应用的规则（用户能看到哪些导入，以及对没有这些表 SELECT 权限的用户隐藏 `error_msg`、`tracking_sql`、`rejected_record_path`、`properties`、`load_id`、`be_ids` 和 `runtime_details` 的部分内容）不适用于这两张表。被授予这两张表 SELECT 权限的用户可以读取集群中所有导入的这些字段，包括 Routine Load 作业的属性和暂停原因。请只把该权限授予允许查看这些信息的用户。
+:::
+
+以下示例列出仍在运行的导入：
+
+```SQL
+SELECT entry, level, id, label, db_name, table_name, state, create_time FROM _statistics_.load_jobs WHERE state NOT IN ('FINISHED', 'CANCELLED', 'UNKNOWN', 'STOPPED') ORDER BY create_time DESC;
+```
 
 ## 使用 Load Profiles 识别导入性能问题
 
