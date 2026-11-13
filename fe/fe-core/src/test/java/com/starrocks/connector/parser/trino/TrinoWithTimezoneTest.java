@@ -80,13 +80,18 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
         Assertions.assertFalse(plan.contains("convert_tz"), plan);
     }
 
-    // Trino rounds a cast to TIMESTAMP(p) half up to p digits (TIMESTAMP is TIMESTAMP(3)): second() of this is 42
+    // Trino rounds a zoned value half up to p digits in a cast to TIMESTAMP(p) (TIMESTAMP is TIMESTAMP(3)), and to
+    // milliseconds when formatting it: second() of the first is 42, and the format gives 14:36:42
     @Test
-    public void testCastRoundsToPrecision() throws Exception {
+    public void testRoundsLikeTrino() throws Exception {
         assertPlanContains("select second(CAST(with_timezone(TIMESTAMP '2024-08-19 14:36:41.6', 'UTC') " +
                 "AS TIMESTAMP(0)))", "date_trunc('second', microseconds_add(", "500000)");
-        assertPlanContains("select CAST(with_timezone(TIMESTAMP '2024-08-19 14:36:41.6', 'UTC') AS TIMESTAMP)",
-                "date_trunc('millisecond', microseconds_add(", "500)");
+        assertPlanContains("select CAST(with_timezone(TIMESTAMP '2024-08-19 14:36:41.9996', 'UTC') AS TIMESTAMP)",
+                "time_slice(microseconds_add(", "500), 1, 'millisecond', 'floor')");
+        assertPlanContains("select date_format(with_timezone(TIMESTAMP '2024-08-19 14:36:41.9996', 'UTC'), " +
+                "'%H:%i:%s')", "time_slice(microseconds_add(");
+        assertPlanContains("select format_datetime(with_timezone(TIMESTAMP '2024-08-19 14:36:41.9996', 'UTC'), " +
+                "'HH:mm:ss')", "time_slice(microseconds_add(");
         String plan = getFragmentPlan("select CAST(with_timezone(TIMESTAMP '2024-08-19 14:36:41.6', 'UTC') " +
                 "AS TIMESTAMP(6))");
         Assertions.assertFalse(plan.contains("microseconds_add"), plan);
@@ -142,6 +147,8 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                         "'Australia/Lord_Howe')) AS TIMESTAMP)",
                 // A precision without a matching rounding unit
                 "select cast(with_timezone(TIMESTAMP '2024-08-19 14:36:41.66', 'UTC') AS TIMESTAMP(1))",
+                // Trino prints a Java-style mask as written; StarRocks formats it
+                "select date_format(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), 'yyyy-MM-dd')",
                 // A DST zone attached to a column, or to a literal it skips or repeats: Trino and convert_tz resolve
                 // those differently (Trino: 10:30, 08:30 and 01:30 UTC)
                 "select cast(with_timezone(ts, 'America/Los_Angeles') AT TIME ZONE 'UTC' AS TIMESTAMP)" + values,
