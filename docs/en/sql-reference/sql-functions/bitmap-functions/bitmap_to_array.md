@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a BITMAP into a BIGINT array."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_to_array

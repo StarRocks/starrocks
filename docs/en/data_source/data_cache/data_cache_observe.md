@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "How to monitor Data Cache performance, usage, and health in StarRocks using built-in observability metrics."
+products: [oss, enterprise, anywhere]
 ---
 
 # Data Cache observability

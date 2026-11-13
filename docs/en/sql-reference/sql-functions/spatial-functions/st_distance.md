@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the minimum distance between supported GEOGRAPHY or GEOMETRY values."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_DISTANCE

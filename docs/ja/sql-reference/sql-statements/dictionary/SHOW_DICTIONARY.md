@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW DICTIONARY は、辞書オブジェクトに関する情報を表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW DICTIONARY

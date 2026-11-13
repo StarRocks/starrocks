@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "StarRocks でテキストベースのクエリプロファイルを取得し、分析してクエリパフォーマンスを最適化する方法。"
 sidebar_position: 60
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Explain Analyze

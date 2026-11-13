@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "查看单个 AI provider 的完整配置。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DESC AI PROVIDER

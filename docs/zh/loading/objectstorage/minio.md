@@ -3,6 +3,7 @@ sidebar_position: 80
 displayed_sidebar: docs
 description: "从 MinIO 导入数据到 StarRocks，支持 INSERT+FILES()、Broker Load 和 Spark Load。"
 toc_max_heading_level: 4
+products: [oss, enterprise, anywhere]
 ---
 
 # 从 MinIO 导入

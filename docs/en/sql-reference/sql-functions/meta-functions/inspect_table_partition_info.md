@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns partition information for a table as a JSON string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_table_partition_info

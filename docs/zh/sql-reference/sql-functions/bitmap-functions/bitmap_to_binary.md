@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "根据 StarRocks 规则将 Bitmap 转换为二进制字符串。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_to_binary

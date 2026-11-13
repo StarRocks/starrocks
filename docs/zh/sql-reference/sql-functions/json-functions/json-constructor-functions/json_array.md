@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将SQL数组的每个元素转换为JSON值并返回由这些值组成的JSON数组。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # json_array

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ネイティブ XY ジオメトリの周囲に丸い直交座標バッファを生成します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Buffer

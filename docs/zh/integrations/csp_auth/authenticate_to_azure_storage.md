@@ -3,6 +3,7 @@ sidebar_position: 20
 displayed_sidebar: docs
 sidebar_label: Microsoft Azure Storage
 description: "本文介绍如何配置 StarRocks 访问 Azure Blob Storage 和 Azure Data Lake Storage 时使用的认证信息"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 配置 Microsoft Azure Storage 认证信息

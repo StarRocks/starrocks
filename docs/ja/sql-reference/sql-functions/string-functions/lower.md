@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列内のすべての文字を小文字に変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # lower

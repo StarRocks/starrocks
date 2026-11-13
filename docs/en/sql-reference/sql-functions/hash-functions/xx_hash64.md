@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the 64-bit XXH64 hash value of the input string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # xx_hash64

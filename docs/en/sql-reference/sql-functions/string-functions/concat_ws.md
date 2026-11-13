@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Concatenates strings using a specified separator between each argument."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # concat_ws

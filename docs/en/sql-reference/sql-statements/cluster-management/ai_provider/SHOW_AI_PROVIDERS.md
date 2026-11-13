@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "List registered AI providers, optionally filtered by name pattern or type."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW AI PROVIDERS

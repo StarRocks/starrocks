@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks Connector for Apache Kafka 的发布说明和更新日志。"
+products: [oss]
 ---
 
 # Kafka connector 版本发布

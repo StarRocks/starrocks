@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ヒストグラムのような棒グラフを描いてデータ分布を確認します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bar

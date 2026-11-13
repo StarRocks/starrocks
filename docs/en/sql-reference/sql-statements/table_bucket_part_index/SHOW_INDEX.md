@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW INDEX is used to show information related to index in a table."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW INDEX

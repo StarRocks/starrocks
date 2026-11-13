@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the length of the one-dimensional components of a native GEO value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Length

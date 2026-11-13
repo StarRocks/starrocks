@@ -3,6 +3,7 @@ sidebar_position: 70
 displayed_sidebar: docs
 toc_max_heading_level: 4
 description: "StarRocks supports JDBC catalogs from v3.0 onwards."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'

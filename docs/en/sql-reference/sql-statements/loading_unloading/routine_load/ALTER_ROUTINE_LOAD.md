@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ALTER ROUTINE LOAD alters a Routine Load job that is in the PAUSED state."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER ROUTINE LOAD

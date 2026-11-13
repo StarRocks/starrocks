@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "DISTINCT keyword removes duplicate rows from query results."
 sidebar_label: "DISTINCT"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DISTINCT

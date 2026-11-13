@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "根据正则表达式拆分字符串，返回最多指定数量的元素构成的ARRAY。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # regexp_split

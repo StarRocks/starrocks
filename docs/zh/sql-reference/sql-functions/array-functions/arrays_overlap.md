@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "检查两个数组的交集是否为空。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # arrays_overlap

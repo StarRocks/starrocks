@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "根据过滤条件返回数组中匹配的元素，支持Lambda函数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_filter

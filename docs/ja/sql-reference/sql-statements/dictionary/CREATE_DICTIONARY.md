@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE DICTIONARY は、元のオブジェクトに基づいて辞書オブジェクトを作成します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../../_assets/commonMarkdown/_beta.mdx'

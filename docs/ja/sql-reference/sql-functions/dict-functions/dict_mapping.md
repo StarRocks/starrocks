@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "辞書テーブルから指定されたキーにマップされた値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # dict_mapping

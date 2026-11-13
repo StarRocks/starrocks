@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Uses the MD5 Message-Digest Algorithm to calculate the 128-bit checksum of a string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # md5

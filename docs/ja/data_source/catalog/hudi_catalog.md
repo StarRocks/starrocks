@@ -3,6 +3,7 @@ sidebar_position: 50
 displayed_sidebar: docs
 description: "Hudi catalog は Apache Hudi からデータをインジェストせずにクエリおよび変換ロード。"
 toc_max_heading_level: 5
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Hudi catalog

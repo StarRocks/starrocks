@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Splits a string by a delimiter and returns the resulting parts as an ARRAY."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # split

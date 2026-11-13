@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the shared area, edges, and isolated contact points of two native planar polygons."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Intersection

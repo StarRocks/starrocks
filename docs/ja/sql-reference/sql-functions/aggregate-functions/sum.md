@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SUM関数は非NULL値の合計を返し、DISTINCTキーワードで異なる値の合計を計算できます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # sum

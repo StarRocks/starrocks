@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "使用七个 H3 网格和多边形函数为原生 GEOGRAPHY 建立索引。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # H3 函数

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "anchor フラグで行を 2 グループに振り分け、単一スキャンで 2 グループの Theta スケッチの積集合基数を計算する集計関数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_intersect_cond_agg

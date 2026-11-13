@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "Configure and use Data Cache in StarRocks to cache data blocks from remote storage (object storage, HDFS) on local disk, accelerating queries in shared-data clusters."
 toc_max_heading_level: 2
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 

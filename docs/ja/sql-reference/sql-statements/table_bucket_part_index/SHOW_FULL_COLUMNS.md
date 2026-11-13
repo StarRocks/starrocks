@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW FULL COLUMNS displays column content information for a specified table."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW FULL COLUMNS

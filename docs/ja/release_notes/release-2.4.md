@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 2.4：複数基本テーブル上の非同期マテリアライズドビュー、INSERT OVERWRITE、Kubernetes 上のステートレス Compute ノード、非等値結合。"
+products: [oss]
 ---
 
 # StarRocks バージョン 2.4

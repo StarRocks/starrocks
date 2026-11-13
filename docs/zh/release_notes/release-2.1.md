@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 2.1 版本发布说明：Iceberg 外部表预览、管道执行引擎、CREATE TABLE AS SELECT、SQL 改进。"
+products: [oss]
 ---
 
 # StarRocks version 2.1

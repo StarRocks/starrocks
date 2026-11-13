@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "ロール非アクティブ化やその他の StarRocks 権限・認可に関する一般的な質問と回答を提供します。"
 sidebar_position: 50
+products: [oss, enterprise, anywhere]
 ---
 
 # Privilege FAQ

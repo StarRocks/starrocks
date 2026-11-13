@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "在保留拓扑和 CRS 的同时简化原生 XY 几何。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_SimplifyPreserveTopology

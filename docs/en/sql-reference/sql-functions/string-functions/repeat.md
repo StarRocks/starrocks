@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns a string repeated a specified number of times."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # repeat

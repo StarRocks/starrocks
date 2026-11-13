@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the current status of all tasks in the FE TaskManager as a JSON string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_task_runs

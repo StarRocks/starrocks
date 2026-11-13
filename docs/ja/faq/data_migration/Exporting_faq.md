@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "Aliyun OSS / AWS S3 へのデータバックアップとリストア方法。"
+products: [oss, enterprise]
 ---
 
 # データエクスポート

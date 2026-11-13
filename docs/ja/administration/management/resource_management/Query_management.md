@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "ユーザー単位でクエリ接続数、タイムアウト、リソース割り当てなどのプロパティを設定します。"
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # クエリ管理

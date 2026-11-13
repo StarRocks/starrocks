@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW BACKENDS shows the information of all BE nodes in the cluster."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW BACKENDS

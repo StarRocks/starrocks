@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "STRUCT is widely used to express complex data types."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # STRUCT

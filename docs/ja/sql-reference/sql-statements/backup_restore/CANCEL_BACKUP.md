@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定されたデータベースで進行中の BACKUP タスクをキャンセルします。"
+products: [oss, enterprise, anywhere]
 ---
 
 # CANCEL BACKUP

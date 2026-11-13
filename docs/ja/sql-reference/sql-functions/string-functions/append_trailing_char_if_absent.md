@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列が末尾にtrailing_char文字を含まない場合、末尾に追加します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # append_trailing_char_if_absent

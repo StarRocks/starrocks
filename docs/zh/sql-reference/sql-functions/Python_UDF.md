@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "自 v3.4.0 起，StarRocks 支持创建 Python UDF，目前仅支持标量 UDF。"
 sidebar_position: 0.91
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Flink Connector のタイムゾーン処理、シンク設定に関するよくある質問。频繁"
+products: [oss, enterprise]
 ---
 
 # Flink Connector

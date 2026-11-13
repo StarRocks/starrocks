@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Stream Load での CSV ファイルのヘッダー行スキップと列名認識の制限事項について説明します。"
+products: [oss, enterprise]
 ---
 
 # Stream Load

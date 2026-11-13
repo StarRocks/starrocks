@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "StarRocks 系统变量可通过 SET 命令动态设置，支持全局和会话范围的配置。"
 keywords: ['session','variable']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 系统变量

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SPARK LOAD imports data into StarRocks using Spark for preprocessing, improving performance for large-scale initial data migrations."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SPARK LOAD

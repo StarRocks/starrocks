@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "非同期マテリアライズドビューまたはそのパーティションを手動でリフレッシュします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # REFRESH MATERIALIZED VIEW

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Obtains the current time zone and returns a value of the VARCHAR type."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # current_timezone

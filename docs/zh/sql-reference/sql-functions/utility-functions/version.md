@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回当前 MySQL 数据库的版本。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # version

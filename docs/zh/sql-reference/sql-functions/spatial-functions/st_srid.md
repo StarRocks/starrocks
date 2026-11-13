@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 50
 description: "返回原生 GEOMETRY 描述符中的数字 EPSG SRID。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_SRID

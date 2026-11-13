@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Creates a struct with the specified field names and values."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # named_struct

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定されたトークナイザに基づいてテキストをトークンに分割します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # tokenize

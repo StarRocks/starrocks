@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CANCEL DECOMMISSION 撤销一个节点下线操作。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CANCEL DECOMMISSION

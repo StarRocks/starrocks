@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SET PASSWORD changes the login password for users."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SET PASSWORD

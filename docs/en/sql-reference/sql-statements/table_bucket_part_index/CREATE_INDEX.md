@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Creates indexes."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE INDEX

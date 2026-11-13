@@ -3,6 +3,7 @@ sidebar_position: 40
 displayed_sidebar: docs
 description: "FE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
 sidebar_label: "存算分离、数据湖和其他"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 配置 - 存算分离、数据湖和其他

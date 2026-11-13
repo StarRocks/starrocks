@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the approximate distinct count using DataSketches HyperLogLog (HLL). Similar to APPROX_COUNT_DISTINCT but with higher precision."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_hll_count_distinct

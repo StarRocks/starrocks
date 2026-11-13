@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: "docs"
 description: "mann_whitney_u_test 对来自两个总体的样本执行 Mann-Whitney 非参数检验。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # mann_whitney_u_test

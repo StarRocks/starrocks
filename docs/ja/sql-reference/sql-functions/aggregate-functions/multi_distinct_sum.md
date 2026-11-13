@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "expr 内の異なる値の合計を返し、sum(distinct expr) と同等です。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # multi_distinct_sum

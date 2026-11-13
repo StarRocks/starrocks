@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "COUNT(DISTINCT) より高速で高カーディナリティ列のメモリ使用量が少ない、近似的な distinct count を返す集計関数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_count_distinct

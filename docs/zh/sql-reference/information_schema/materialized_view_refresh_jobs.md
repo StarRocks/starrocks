@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "materialized_view_refresh_jobs 提供物化视图刷新的作业级信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # materialized_view_refresh_jobs

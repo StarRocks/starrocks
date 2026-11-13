@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "FE/BE パラメーターと変数をコード内で追加・変更・削除する際のドキュメント記述テンプレート。"
 unlisted: True
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE/BE パラメーターと変数の記述テンプレート

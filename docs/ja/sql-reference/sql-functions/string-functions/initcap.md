@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列内の各単語の最初の文字を大文字に、残りを小文字に変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # initcap

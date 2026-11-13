@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "符号なし BIGINT を単一要素を含む BITMAP に変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # to_bitmap

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ネイティブ GEOGRAPHY または GEOMETRY 値のトポロジ妥当性を検査します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_IsValid

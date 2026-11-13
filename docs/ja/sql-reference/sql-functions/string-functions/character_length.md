@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "char_lengthのエイリアスで、文字列の文字数を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # character_length

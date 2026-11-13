@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列をセパレータで分割し、結果をARRAYで返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # split

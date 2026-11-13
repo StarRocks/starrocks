@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "カスタムコレクションタスクを削除します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP ANALYZE

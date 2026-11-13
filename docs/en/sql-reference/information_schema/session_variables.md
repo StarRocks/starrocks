@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "session_variables provides information about session variables."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # session_variables

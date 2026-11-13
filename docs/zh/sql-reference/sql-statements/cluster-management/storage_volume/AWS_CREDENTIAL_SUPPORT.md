@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "对比 FE 运行时与基于 StarOS 的存储卷对 AWS 凭证的支持情况。"
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 存储卷 AWS 凭证支持情况

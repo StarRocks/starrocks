@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "recyclebin_catalogsはFEリサイクルビンに一時的に保存された削除済みデータベース、テーブル、パーティションのメタデータ情報を提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # recyclebin_catalogs

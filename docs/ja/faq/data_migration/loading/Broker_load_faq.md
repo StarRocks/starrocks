@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Broker Load ジョブの再実行ポリシー、ラベルの再利用禁止、履歴確認方法。"
+products: [oss, enterprise]
 ---
 
 # Broker Load

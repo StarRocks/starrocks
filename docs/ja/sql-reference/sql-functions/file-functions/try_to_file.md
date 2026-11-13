@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "STRUCT 式から FILE 値を構築し、フィールド値が無効な行には NULL を返します。"
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

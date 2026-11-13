@@ -7,6 +7,7 @@ keywords:
   - sync
   - Flink CDC
 description: "Flink CDC パイプラインを使用して PostgreSQL の変更をキャプチャし、StarRocks の主キーテーブルにリアルタイムで同期する方法。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # PostgreSQL からのリアルタイム同期

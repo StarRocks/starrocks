@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "How to create, use, refresh, and manage asynchronous materialized views in StarRocks for accelerating multi-table queries with flexible refresh."
 sidebar_position: 10
 keywords: ['wuhua', 'Wuhuashitu', 'yibu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 异步物化视图

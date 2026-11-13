@@ -2,6 +2,7 @@
 sidebar_position: 40
 displayed_sidebar: docs
 description: "Querybook supports querying and visualizing both internal data and external data in StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Querybook

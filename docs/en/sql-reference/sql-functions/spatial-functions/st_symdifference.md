@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the symmetric difference of two native planar polygons or multipolygons."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_SymDifference

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a binary string with a specific format to a bitmap."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_from_binary

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "column_privilegesはStarRocksで実装されていないプレースホルダービューです。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # column_privileges

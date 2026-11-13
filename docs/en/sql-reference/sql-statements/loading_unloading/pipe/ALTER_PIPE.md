@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ALTER PIPE alters the settings of the properties of a pipe."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER PIPE

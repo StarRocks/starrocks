@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ネイティブ GEO 値のポリゴン要素の境界長を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Perimeter

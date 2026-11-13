@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "SHOW RESOURCES shows the resources that the users have permissions to use."
 keywords: ['ziyuan'] 
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW RESOURCES

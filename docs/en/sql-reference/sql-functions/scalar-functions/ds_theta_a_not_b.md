@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns a serialized Theta sketch whose distinct count estimates |A\\B|, the elements in sketch A that are not in sketch B."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_a_not_b

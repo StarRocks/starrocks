@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ARRAY_CONTAINS_SEQ関数はarray2のすべての要素が同じ順序でarray1に現れるか確認します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_contains_seq

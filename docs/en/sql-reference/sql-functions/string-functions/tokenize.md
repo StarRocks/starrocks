@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Splits and parses text into tokens based on the specified tokenizer."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # tokenize

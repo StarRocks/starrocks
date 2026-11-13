@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "時間値を秒数に変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # time_to_sec

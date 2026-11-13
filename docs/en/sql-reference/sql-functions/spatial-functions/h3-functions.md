@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Indexes native GEOGRAPHY with the seven H3 cell and polygon functions."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # H3 functions

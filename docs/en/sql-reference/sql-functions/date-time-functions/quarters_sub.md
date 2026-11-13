@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Subtracts a specified number of quarters from the date."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # quarters_sub

@@ -2,6 +2,7 @@
 sidebar_position: 50
 displayed_sidebar: docs
 description: "Query Cache を使用した SQL クエリパフォーマンス最適化とキャッシング機能。"
+products: [oss, enterprise]
 ---
 
 # SQL クエリ

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Extracts a substring that precedes or follows the count occurrences of the delimiter."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # substring_index

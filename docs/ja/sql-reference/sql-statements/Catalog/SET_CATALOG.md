@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Switches to a specified catalog in the current session."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SET CATALOG

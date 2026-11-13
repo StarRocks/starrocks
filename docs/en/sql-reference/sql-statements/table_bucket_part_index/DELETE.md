@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Deletes data rows from a table based on the specified conditions."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DELETE

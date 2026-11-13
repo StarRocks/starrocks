@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Exports the data of a table to a specified location."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # EXPORT

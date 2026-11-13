@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the union of two native planar polygons or multipolygons."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Union

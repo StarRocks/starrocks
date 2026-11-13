@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "VARIANT オブジェクト内のパス式で指定された要素の値をVARIANT型で返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # variant_query

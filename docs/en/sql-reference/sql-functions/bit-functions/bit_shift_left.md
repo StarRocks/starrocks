@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Shifts the binary representation of a numeric expression to the left by a specified number of bits."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bit_shift_left

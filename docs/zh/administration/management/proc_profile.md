@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 description: "收集并可视化 StarRocks FE 和 BE 进程的 CPU 与内存火焰图，用于诊断性能瓶颈和运行时问题。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 进程分析 (Proc Profile)

@@ -3,6 +3,7 @@ displayed_sidebar: docs
 sidebar_position: 50
 description: "Quick start guide for querying Apache Hudi data lakes with StarRocks."
 toc_max_heading_level: 3
+products: [oss]
 ---
 import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'

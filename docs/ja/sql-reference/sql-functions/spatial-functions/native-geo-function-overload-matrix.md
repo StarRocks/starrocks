@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ネイティブ GEOGRAPHY と GEOMETRY のオーバーロード、関数 ID、対応入力、実行時動作を示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ネイティブ GEO 関数のオーバーロードマトリックス

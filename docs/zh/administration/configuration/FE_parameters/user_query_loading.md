@@ -3,6 +3,7 @@ sidebar_position: 20
 displayed_sidebar: docs
 description: "FE configuration parameters for authentication, query execution, and data loading."
 sidebar_label: "用户管理、查询引擎和导入导出"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 配置 - 用户管理、查询引擎和导入导出

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回两个原生平面多边形共有的区域、边和孤立接触点。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Intersection

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the result of x raised to the power of y."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # pow, power, dpow, fpow

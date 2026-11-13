@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Calculate the equi-width histogram bucket."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # equiwidth_bucket

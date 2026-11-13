@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns a specified number of characters from the left of a string; alias of left."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # strleft
