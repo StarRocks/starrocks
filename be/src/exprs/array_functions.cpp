@@ -1898,11 +1898,13 @@ CalendarPoint to_calendar_point(const DateValue& value) {
     return point;
 }
 
+// Trino counts the months between timestamps at millisecond precision (DateDiff floors both values to milliseconds),
+// so the time of day is truncated to milliseconds here. The elements keep their microseconds.
 CalendarPoint to_calendar_point(const TimestampValue& value) {
     CalendarPoint point{};
     int hour, minute, second, usec;
     value.to_timestamp(&point.year, &point.month, &point.day, &hour, &minute, &second, &usec);
-    point.time_us = ((hour * 60L + minute) * 60L + second) * USECS_PER_SEC + usec;
+    point.time_us = ((hour * 60L + minute) * 60L + second) * USECS_PER_SEC + usec / 1000 * 1000;
     return point;
 }
 

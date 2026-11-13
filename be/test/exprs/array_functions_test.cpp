@@ -4105,9 +4105,11 @@ TEST_F(ArrayFunctionsTest, trino_sequence_bigint_errors) {
 
 template <typename ValueType>
 static std::vector<std::string> trino_sequence_strings(const ColumnPtr& column, size_t row) {
+    // Keep the row's Datum alive: get_array() returns a reference into it.
+    Datum datum = column->get(row);
     std::vector<std::string> values;
-    for (const auto& datum : column->get(row).get_array()) {
-        values.push_back(datum.get<ValueType>().to_string());
+    for (const auto& element : datum.get_array()) {
+        values.push_back(element.get<ValueType>().to_string());
     }
     return values;
 }
@@ -4198,6 +4200,18 @@ TEST_F(ArrayFunctionsTest, trino_sequence_datetime) {
     ASSERT_EQ((Strings{"2024-01-31 10:00:00", "2024-02-29 10:00:00"}),
               trino_sequence_strings<TimestampValue>(run(TimestampValue::create(2024, 1, 31, 10, 0, 0),
                                                          TimestampValue::create(2024, 3, 31, 9, 0, 0), 1, "month")
+                                                             .value(),
+                                                     0));
+    // As in Trino, months are counted at millisecond precision: a start a microsecond later in its month still
+    // completes the month, and the elements keep their microseconds.
+    ASSERT_EQ((Strings{"2024-01-01 00:00:00.000001", "2024-02-01 00:00:00.000001"}),
+              trino_sequence_strings<TimestampValue>(run(TimestampValue::create(2024, 1, 1, 0, 0, 0, 1),
+                                                         TimestampValue::create(2024, 2, 1, 0, 0, 0, 0), 1, "month")
+                                                             .value(),
+                                                     0));
+    ASSERT_EQ((Strings{"2024-01-01 00:00:00.001000"}),
+              trino_sequence_strings<TimestampValue>(run(TimestampValue::create(2024, 1, 1, 0, 0, 0, 1000),
+                                                         TimestampValue::create(2024, 2, 1, 0, 0, 0, 0), 1, "month")
                                                              .value(),
                                                      0));
     ASSERT_EQ((Strings{"2024-01-01 00:00:00", "2024-01-01 00:25:00", "2024-01-01 00:50:00"}),
