@@ -4724,7 +4724,7 @@ TEST_F(FileReaderTest, test_rle_boolean_values) {
         Utils::SlotDesc slot_descs[] = {{"id", TYPE_INT_DESC}, {"flag", TYPE_BOOLEAN_DESC}, {""}};
         auto ctx = _create_file_random_read_context(file_path, slot_descs);
         auto file_reader = _create_file_reader(file_path);
-        Status status = file_reader->init(&ctx->format_scan_context);
+        Status status = file_reader->init(ctx);
         ASSERT_TRUE(status.ok()) << name << ": " << status.to_string();
 
         size_t total_rows = 0;
