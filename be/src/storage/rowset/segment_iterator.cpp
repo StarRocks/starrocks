@@ -151,6 +151,13 @@ public:
     // Adds what the column files have read since the last flush to the stats; close() flushes the rest.
     void flush_io_stats();
 
+    // Prepares the read (as the first get_next would) and asks for the first blocks of the read-ahead window.
+    Status start_read_ahead(bool* started) override;
+    size_t read_ahead_blocks() const override {
+        return _prefetch_window != nullptr ? _prefetch_window->ahead_blocks() : 0;
+    }
+    bool read_ahead_done() const override { return _prefetch_window == nullptr || _prefetch_window->exhausted(); }
+
     // Public entry point used by the segment_seek_range_to_rowid_range() /
     // segment_seek_ranges_to_rowid_ranges() free functions. The caller
     // must ensure the segment's short-key index has already been loaded; this
@@ -1177,6 +1184,24 @@ Status SegmentIterator::_init_scan_range_and_context() {
         }
     }
     _init_prefetch_window(0);
+    return Status::OK();
+}
+
+Status SegmentIterator::start_read_ahead(bool* started) {
+    if (!_inited) {
+        RETURN_IF_ERROR(_init());
+        _inited = true;
+    }
+    // A reader with nothing left to read has nothing to fetch either; one without a window does not read ahead.
+    if (!_range_iter.has_more()) {
+        *started = true;
+        return Status::OK();
+    }
+    *started = _prefetch_window != nullptr && !_prefetch_window->disabled();
+    if (*started) {
+        _prefetch_window->advance(_range_iter.begin());
+        _opts.stats->segment_read_ahead_started++;
+    }
     return Status::OK();
 }
 

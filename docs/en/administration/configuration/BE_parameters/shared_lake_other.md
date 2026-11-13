@@ -352,6 +352,14 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Unit: -
 - Is mutable: Yes
 - Description: Whether a query scan in a shared-data cluster, split or not, asynchronously warms the index pages it reads next once it has opened the tablet's segments: the short key index of every segment, the zone map and bloom filter root pages of the predicate columns, and the ordinal index root pages of the read columns. Scans do not wait for the warming, and read as usual if it fails. Segments that the segment metadata filter (`enable_lake_segment_metadata_filter`) excludes from the scan are not warmed. This item takes effect only for queries, and only when the remote I/O scheduler is enabled (`remote_io_scheduler_enable`). It is independent of `lake_scan_parallel_segment_open`. The query profile reports the warming in `TabletPrepareIndexWarmSegments`, `TabletPrepareIndexWarmRanges`, `TabletPrepareIndexWarmBlocks`, `TabletPrepareIndexWarmSkipped`, and `TabletPrepareIndexWarmPrunedSegments`.
+
+### lake_scan_read_ahead_segments
+
+- Default: 16
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: With the remote I/O scheduler active, a lake query scan that reads a tablet's segments one after another (the tablet is not split across scan tasks) starts fetching the first blocks of the next segments while it is still reading the current one, once the current segment has asked for all of its own blocks. At most this many segments are read ahead. A next segment starts only while the blocks that all of them have asked for and not yet read are fewer than `remote_prefetch_window_blocks` cache blocks, so the segment started last can take that total to about twice the window. `0` disables it: each segment starts its read-ahead only when its turn comes. Split scans, loads, and compaction are not affected. The query profile reports SegmentReadAheadStarted.
 - Introduced in: -
 
 ### lake_segment_metadata_cache_limit_percent
