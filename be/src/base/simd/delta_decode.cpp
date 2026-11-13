@@ -16,6 +16,8 @@
 
 #if defined(__x86_64__)
 #include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
 #endif
 
 // The AVX2 / AVX-512 kernels below carry per-function `target` attributes, so the compiler makes
@@ -209,7 +211,96 @@ DD_TARGET_AVX512F void delta_decode_chain_int64_avx512(int64_t* buf, int n, int6
 #undef DD_TARGET_AVX512F
 #undef DD_TARGET_AVX512VL
 
-#endif // defined(__x86_64__)
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+
+void delta_decode_chain_int32_neon(int32_t* buf, int n, int32_t min_delta, int32_t& last_value) {
+    const int32x4_t v_min_delta = vdupq_n_s32(min_delta);
+    const int32x4_t v_zero = vdupq_n_s32(0);
+    int32x4_t s = vdupq_n_s32(last_value);
+
+    int i = 0;
+    for (; i + 8 <= n; i += 8) {
+        int32x4_t x0 = vld1q_s32(buf + i);
+        int32x4_t x1 = vld1q_s32(buf + i + 4);
+        x0 = vaddq_s32(x0, v_min_delta);
+        x1 = vaddq_s32(x1, v_min_delta);
+        x0 = vaddq_s32(x0, vextq_s32(v_zero, x0, 3));
+        x1 = vaddq_s32(x1, vextq_s32(v_zero, x1, 3));
+        x0 = vaddq_s32(x0, vextq_s32(v_zero, x0, 2));
+        x1 = vaddq_s32(x1, vextq_s32(v_zero, x1, 2));
+
+        // Combine x0's total sum into x1 BEFORE adding loop-carried s,
+        // shortening the cross-iteration dependency chain on s to 1 ADD + 1 DUP.
+        x1 = vaddq_s32(x1, vdupq_laneq_s32(x0, 3));
+        x0 = vaddq_s32(x0, s);
+        x1 = vaddq_s32(x1, s);
+        s = vdupq_laneq_s32(x1, 3);
+
+        vst1q_s32(buf + i, x0);
+        vst1q_s32(buf + i + 4, x1);
+    }
+    for (; i + 4 <= n; i += 4) {
+        int32x4_t x = vld1q_s32(buf + i);
+        x = vaddq_s32(x, v_min_delta);
+        x = vaddq_s32(x, vextq_s32(v_zero, x, 3));
+        x = vaddq_s32(x, vextq_s32(v_zero, x, 2));
+        x = vaddq_s32(x, s);
+        vst1q_s32(buf + i, x);
+        s = vdupq_laneq_s32(x, 3);
+    }
+    if (i > 0) {
+        last_value = vgetq_lane_s32(s, 0);
+    }
+    for (; i < n; ++i) {
+        uint32_t acc =
+                static_cast<uint32_t>(last_value) + static_cast<uint32_t>(buf[i]) + static_cast<uint32_t>(min_delta);
+        last_value = static_cast<int32_t>(acc);
+        buf[i] = last_value;
+    }
+}
+
+void delta_decode_chain_int64_neon(int64_t* buf, int n, int64_t min_delta, int64_t& last_value) {
+    const int64x2_t v_min_delta = vdupq_n_s64(min_delta);
+    const int64x2_t v_zero = vdupq_n_s64(0);
+    int64x2_t s = vdupq_n_s64(last_value);
+
+    int i = 0;
+    for (; i + 4 <= n; i += 4) {
+        int64x2_t x0 = vld1q_s64(buf + i);
+        int64x2_t x1 = vld1q_s64(buf + i + 2);
+        x0 = vaddq_s64(x0, v_min_delta);
+        x1 = vaddq_s64(x1, v_min_delta);
+        x0 = vaddq_s64(x0, vextq_s64(v_zero, x0, 1));
+        x1 = vaddq_s64(x1, vextq_s64(v_zero, x1, 1));
+
+        x1 = vaddq_s64(x1, vdupq_laneq_s64(x0, 1));
+        x0 = vaddq_s64(x0, s);
+        x1 = vaddq_s64(x1, s);
+        s = vdupq_laneq_s64(x1, 1);
+
+        vst1q_s64(buf + i, x0);
+        vst1q_s64(buf + i + 2, x1);
+    }
+    for (; i + 2 <= n; i += 2) {
+        int64x2_t x = vld1q_s64(buf + i);
+        x = vaddq_s64(x, v_min_delta);
+        x = vaddq_s64(x, vextq_s64(v_zero, x, 1));
+        x = vaddq_s64(x, s);
+        vst1q_s64(buf + i, x);
+        s = vdupq_laneq_s64(x, 1);
+    }
+    if (i > 0) {
+        last_value = vgetq_lane_s64(s, 0);
+    }
+    for (; i < n; ++i) {
+        uint64_t acc =
+                static_cast<uint64_t>(last_value) + static_cast<uint64_t>(buf[i]) + static_cast<uint64_t>(min_delta);
+        last_value = static_cast<int64_t>(acc);
+        buf[i] = last_value;
+    }
+}
+
+#endif // defined(__x86_64__) / defined(__ARM_NEON) && defined(__aarch64__)
 
 // ==========================================
 // Public entry points: pick the best kernel for the running CPU at runtime.
@@ -229,6 +320,9 @@ void delta_decode_chain_int32(int32_t* buf, int n, int32_t min_delta, int32_t& l
         delta_decode_chain_int32_avx2(buf, n, min_delta, last_value);
         return;
     }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    delta_decode_chain_int32_neon(buf, n, min_delta, last_value);
+    return;
 #endif
     delta_decode_chain_scalar_prefetch<int32_t>(buf, n, min_delta, last_value);
 }
@@ -239,6 +333,9 @@ void delta_decode_chain_int64(int64_t* buf, int n, int64_t min_delta, int64_t& l
         delta_decode_chain_int64_avx512(buf, n, min_delta, last_value);
         return;
     }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    delta_decode_chain_int64_neon(buf, n, min_delta, last_value);
+    return;
 #endif
     delta_decode_chain_scalar_prefetch<int64_t>(buf, n, min_delta, last_value);
 }
