@@ -19,6 +19,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import mockit.Mock;
 import mockit.MockUp;
@@ -171,58 +172,35 @@ public class IcebergCachingFileIOTest {
     }
 
     @Test
-    public void testDisableSharedFileSystemCache() throws StarRocksException {
+    public void testFileSystemCacheNotBypassed() throws StarRocksException {
+        // The FileSystem cache is keyed on the credential fingerprint now, so no scheme bypasses it - a
+        // bypass leaks an unclosed FileSystem per call.
         Map<String, String> vended = new HashMap<>();
         vended.put(ADLS_SAS_TOKEN + "account." + ADLS_ENDPOINT, "sas_token");
-
-        // vended-credentials-enabled=false yields no credential properties at all, so it matches none
-        // of the branches in buildConfFromProperties. That is the path that failed in production.
         Map<String, String> noCredential = new HashMap<>();
-
-        Assertions.assertTrue(buildConf(vended, "abfss://c@a.dfs.core.windows.net/p")
-                .getBoolean("fs.abfss.impl.disable.cache", false));
-        Assertions.assertTrue(buildConf(noCredential, "abfss://c@a.dfs.core.windows.net/p")
-                .getBoolean("fs.abfss.impl.disable.cache", false));
-        Assertions.assertTrue(buildConf(noCredential, "abfs://c@a.dfs.core.windows.net/p")
-                .getBoolean("fs.abfs.impl.disable.cache", false));
-        Assertions.assertTrue(buildConf(noCredential, "wasbs://c@a.blob.core.windows.net/p")
-                .getBoolean("fs.wasbs.impl.disable.cache", false));
-        Assertions.assertTrue(buildConf(noCredential, "gs://bucket/p")
-                .getBoolean("fs.gs.impl.disable.cache", false));
-        Assertions.assertTrue(buildConf(noCredential, "adl://a.azuredatalakestore.net/p")
-                .getBoolean("fs.adl.impl.disable.cache", false));
-
-        // s3* is served by S3FileIO and never reaches HadoopFileIO. oss/cosn do reach it and do carry
-        // their credential in the Configuration, but bypassing the cache leaks an unclosed FileSystem
-        // per call - enough to exhaust FE threads on an oss-backed workload - so they are left alone
-        // until the cache can be keyed on the credential instead.
-        Assertions.assertFalse(buildConf(noCredential, "s3a://bucket/p")
-                .getBoolean("fs.s3a.impl.disable.cache", false));
-        Assertions.assertFalse(buildConf(noCredential, "oss://bucket/p")
-                .getBoolean("fs.oss.impl.disable.cache", false));
-        Assertions.assertFalse(buildConf(noCredential, "cosn://bucket/p")
-                .getBoolean("fs.cosn.impl.disable.cache", false));
-        Assertions.assertFalse(buildConf(noCredential, "hdfs://nn/p")
-                .getBoolean("fs.hdfs.impl.disable.cache", false));
+        List<String> schemes = List.of("gs", "abfs", "abfss", "wasb", "wasbs", "adl", "s3a", "oss", "cosn", "hdfs");
+        for (Configuration conf : List.of(buildConf(vended, "abfss://c@a.dfs.core.windows.net/p"),
+                buildConf(noCredential, "abfss://c@a.dfs.core.windows.net/p"),
+                buildConf(noCredential, "wasbs://c@a.blob.core.windows.net/p"),
+                buildConf(noCredential, "gs://bucket/p"),
+                buildConf(noCredential, "oss://bucket/p"))) {
+            for (String scheme : schemes) {
+                Assertions.assertFalse(conf.getBoolean("fs." + scheme + ".impl.disable.cache", false), scheme);
+            }
+        }
     }
 
     @Test
     public void testSchemeLessPathUsesDefaultFs() throws StarRocksException {
         // Hadoop's Path keeps a scheme-less location as-is, so getScheme() is null. FileSystem.get()
-        // resolves such a path through fs.defaultFS and consults the flag only after that, so the flag
-        // has to follow the default scheme.
+        // resolves such a path through fs.defaultFS, so the fingerprint follows the default scheme.
         String schemeLess = "/warehouse/db/t/metadata/v1.metadata.json";
 
-        Assertions.assertFalse(buildConf(new HashMap<>(), schemeLess)
-                .getBoolean("fs.file.impl.disable.cache", false));
+        Assertions.assertEquals("", fingerprint(buildConf(new HashMap<>(), schemeLess)));
 
-        IcebergCachingFileIO onAzureDefaultFs = new IcebergCachingFileIO();
         Configuration baseConf = new Configuration();
         baseConf.set("fs.defaultFS", "abfss://c@a.dfs.core.windows.net");
-        onAzureDefaultFs.setConf(baseConf);
-
-        Assertions.assertTrue(onAzureDefaultFs.buildConfFromProperties(new HashMap<>(), schemeLess)
-                .getBoolean("fs.abfss.impl.disable.cache", false));
+        Assertions.assertFalse(fingerprint(buildConf(baseConf, new HashMap<>(), schemeLess)).isEmpty());
     }
 
     @Test
@@ -237,13 +215,100 @@ public class IcebergCachingFileIOTest {
 
         Assertions.assertEquals("OAuth",
                 configuration.get("fs.azure.account.auth.type.account.dfs.core.windows.net"));
-        Assertions.assertTrue(configuration.getBoolean("fs.abfss.impl.disable.cache", false));
+        Assertions.assertFalse(fingerprint(configuration).isEmpty());
     }
 
     private static Configuration buildConf(Map<String, String> properties, String path) throws StarRocksException {
         IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
         cachingFileIO.setConf(new Configuration());
         return cachingFileIO.buildConfFromProperties(properties, path);
+    }
+
+    private static Configuration buildConf(Configuration base, Map<String, String> properties, String path)
+            throws StarRocksException {
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(base);
+        return cachingFileIO.buildConfFromProperties(properties, path);
+    }
+
+    private static String fingerprint(Configuration conf) {
+        return HadoopExt.getInstance().getCredentialFingerprint(conf);
+    }
+
+    @Test
+    public void testCredentialFingerprintOnlyForCredentialKeyedSchemes() throws StarRocksException {
+        Map<String, String> none = new HashMap<>();
+        for (String path : List.of("gs://bucket/p", "abfss://c@a.dfs.core.windows.net/p", "abfs://c@a.dfs.core.windows.net/p",
+                "wasbs://c@a.blob.core.windows.net/p", "wasb://c@a.blob.core.windows.net/p",
+                "adl://a.azuredatalakestore.net/p")) {
+            Configuration conf = buildConf(none, path);
+            Assertions.assertFalse(fingerprint(conf).isEmpty(), path);
+            // The HadoopFileIO that ResolvingFileIO creates for the first path keeps this Configuration for
+            // every later path of its impl, so both families are fingerprinted whatever the path.
+            Assertions.assertNotNull(conf.get(HadoopExt.HADOOP_DYNAMIC_CREDENTIAL_PREFIX + "gs"), path);
+            Assertions.assertNotNull(conf.get(HadoopExt.HADOOP_DYNAMIC_CREDENTIAL_PREFIX + "azure"), path);
+        }
+        for (String path : List.of("s3a://bucket/p", "oss://bucket/p", "cosn://bucket/p", "hdfs://nn/p")) {
+            Assertions.assertEquals("", fingerprint(buildConf(none, path)), path);
+        }
+    }
+
+    @Test
+    public void testCredentialFingerprintSeparatesCredentials() throws StarRocksException {
+        String adls = "abfss://c@account.dfs.core.windows.net/p";
+        Map<String, String> sas1 = Map.of(ADLS_SAS_TOKEN + "account." + ADLS_ENDPOINT, "sas_one");
+        Map<String, String> sas2 = Map.of(ADLS_SAS_TOKEN + "account." + ADLS_ENDPOINT, "sas_two");
+        String f1 = fingerprint(buildConf(sas1, adls));
+        Assertions.assertEquals(f1, fingerprint(buildConf(sas1, adls)));
+        Assertions.assertNotEquals(f1, fingerprint(buildConf(sas2, adls)));
+        Assertions.assertNotEquals(f1, fingerprint(buildConf(new HashMap<>(), adls)));
+        Assertions.assertFalse(f1.contains("sas_one"));
+
+        String gcs = "gs://bucket/p";
+        Map<String, String> token1 = Map.of(GCS_ACCESS_TOKEN, "token_one",
+                GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT, "100");
+        Map<String, String> token1Later = Map.of(GCS_ACCESS_TOKEN, "token_one",
+                GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT, "200");
+        Map<String, String> token2 = Map.of(GCS_ACCESS_TOKEN, "token_two",
+                GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT, "100");
+        String g1 = fingerprint(buildConf(token1, gcs));
+        Assertions.assertNotEquals(g1, fingerprint(buildConf(token2, gcs)));
+        Assertions.assertNotEquals(g1, fingerprint(buildConf(token1Later, gcs)));
+        Assertions.assertFalse(g1.contains("token_one"));
+
+        // Raw catalog settings that CloudConfiguration's string does not carry still separate FileSystems.
+        Configuration keyfileA = new Configuration();
+        keyfileA.set("google.cloud.auth.service.account.json.keyfile", "/keys/a.json");
+        Configuration keyfileB = new Configuration();
+        keyfileB.set("google.cloud.auth.service.account.json.keyfile", "/keys/b.json");
+        Configuration endpointB = new Configuration();
+        endpointB.set("fs.gs.storage.root.url", "https://gcs.example.com");
+        Map<String, String> none = new HashMap<>();
+        String a = fingerprint(buildConf(keyfileA, none, gcs));
+        Assertions.assertNotEquals(a, fingerprint(buildConf(keyfileB, none, gcs)));
+        Assertions.assertNotEquals(fingerprint(buildConf(new Configuration(), none, gcs)),
+                fingerprint(buildConf(endpointB, none, gcs)));
+
+        Configuration accountKeyA = new Configuration();
+        accountKeyA.set("fs.azure.account.key.account.dfs.core.windows.net", "key_a");
+        Configuration accountKeyB = new Configuration();
+        accountKeyB.set("fs.azure.account.key.account.dfs.core.windows.net", "key_b");
+        Assertions.assertNotEquals(fingerprint(buildConf(accountKeyA, none, adls)),
+                fingerprint(buildConf(accountKeyB, none, adls)));
+
+        // Secrets kept in a Hadoop credential provider are read through Configuration.getPassword().
+        for (String path : List.of(adls, gcs)) {
+            Configuration providerA = new Configuration();
+            providerA.set("hadoop.security.credential.provider.path", "jceks://file/keys/a.jceks");
+            Configuration providerB = new Configuration();
+            providerB.set("hadoop.security.credential.provider.path", "jceks://file/keys/b.jceks");
+            Configuration clearTextOff = new Configuration();
+            clearTextOff.set("hadoop.security.credential.provider.path", "jceks://file/keys/a.jceks");
+            clearTextOff.setBoolean("hadoop.security.credential.clear-text-fallback", false);
+            String fa = fingerprint(buildConf(providerA, none, path));
+            Assertions.assertNotEquals(fa, fingerprint(buildConf(providerB, none, path)), path);
+            Assertions.assertNotEquals(fa, fingerprint(buildConf(clearTextOff, none, path)), path);
+        }
     }
 
     @Test
@@ -267,7 +332,8 @@ public class IcebergCachingFileIOTest {
                 configuration.get(GCPCloudConfigurationProvider.AUTH_TYPE_KEY));
         Assertions.assertEquals(ACCESS_TOKEN_PROVIDER_IMPL,
                 configuration.get(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_KEY));
-        Assertions.assertEquals("true", configuration.get(GCPCloudConfigurationProvider.DISABLE_FS_CACHE_KEY));
+        Assertions.assertNull(configuration.get(GCPCloudConfigurationProvider.DISABLE_FS_CACHE_KEY));
+        Assertions.assertFalse(fingerprint(configuration).isEmpty());
         // catalog-level impersonation must not ride on top of the vended token
         Assertions.assertNull(configuration.get(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY));
     }
