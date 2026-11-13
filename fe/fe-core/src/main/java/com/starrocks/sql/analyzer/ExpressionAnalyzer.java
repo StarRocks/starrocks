@@ -1289,6 +1289,18 @@ public class ExpressionAnalyzer {
             // 4 or 5 params: no conversion needed, validation will be done in checkFunction
         }
 
+        // trino_sequence keeps Trino's sequence signatures: integer bounds with an optional integer step. Implicit
+        // casts would otherwise pick it for other argument types and change the result, e.g. cast DATE bounds to
+        // BIGINT and return integers.
+        private static void checkTrinoSequenceArguments(Type[] argumentTypes) {
+            boolean valid = (argumentTypes.length == 2 || argumentTypes.length == 3) &&
+                    Arrays.stream(argumentTypes).allMatch(type -> type.isNull() || type.isIntegerType());
+            if (!valid) {
+                throw new SemanticException("Unexpected parameters (%s) for function sequence",
+                        Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
+            }
+        }
+
         private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {
             switch (fnName) {
                 case FunctionSet.AES_ENCRYPT:
@@ -1395,6 +1407,9 @@ public class ExpressionAnalyzer {
                             }
                         }
                     }
+                    break;
+                case FunctionSet.TRINO_SEQUENCE:
+                    checkTrinoSequenceArguments(argumentTypes);
                     break;
                 case FunctionSet.ARRAY_GENERATE:
                     if (node.getChildren().size() < 1 || node.getChildren().size() > 4) {

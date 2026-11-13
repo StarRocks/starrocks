@@ -73,6 +73,11 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         String plan = getFragmentPlan(sql);
         Assertions.assertEquals(1, StringUtils.countMatches(plan, "rand()"), plan);
         assertPlanContains("select sequence(1, (select max(v1) from t0))", "trino_sequence(1, ");
+
+        // Other bound types aren't cast to BIGINT: DATE bounds would otherwise return integers like 20240131.
+        analyzeFail("select sequence(date '2024-01-31', date '2024-02-01')",
+                "Unexpected parameters (date, date) for function sequence");
+        analyzeFail("select sequence('1', '3')", "Unexpected parameters (varchar, varchar) for function sequence");
     }
 
     @Test
