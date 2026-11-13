@@ -287,6 +287,7 @@ public class FunctionSet {
     // Json functions:
     public static final String JSON_ARRAY = "json_array";
     public static final String JSON_OBJECT = "json_object";
+    public static final String TO_JSON = "to_json";
     public static final String PARSE_JSON = "parse_json";
     public static final String JSON_QUERY = "json_query";
     public static final String JSON_EXISTS = "json_exists";
