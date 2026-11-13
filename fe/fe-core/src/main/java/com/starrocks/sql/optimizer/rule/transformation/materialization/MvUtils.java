@@ -1312,13 +1312,52 @@ public class MvUtils {
         return newQuery;
     }
 
+    /**
+     * Column refs of the inlined view which are used by the view scan(its projection and predicate), or null if
+     * they cannot be determined and the original plan has to be evaluated with all the view columns.
+     */
+    private static ColumnRefSet getUsedColumnsOfInlinedView(LogicalViewScanOperator viewScanOperator) {
+        Projection projection = viewScanOperator.getProjection();
+        if (projection == null) {
+            // the parents may use any output column
+            return null;
+        }
+        // original map: inlined view's column ref -> view scan's column ref
+        Map<Integer, ColumnRefOperator> viewScanRefToInlinedRef = Maps.newHashMap();
+        viewScanOperator.getOriginalColumnRefToInlinedColumnRefMap().forEach((inlinedRef, viewScanRef) -> {
+            if (viewScanRef instanceof ColumnRefOperator) {
+                viewScanRefToInlinedRef.put(((ColumnRefOperator) viewScanRef).getId(), inlinedRef);
+            }
+        });
+
+        ColumnRefSet used = new ColumnRefSet();
+        projection.getColumnRefMap().values().forEach(v -> used.union(v.getUsedColumns()));
+        if (viewScanOperator.getPredicate() != null) {
+            used.union(viewScanOperator.getPredicate().getUsedColumns());
+        }
+        ColumnRefSet inlinedColumns = new ColumnRefSet();
+        for (int id : used.getColumnIds()) {
+            ColumnRefOperator inlinedRef = viewScanRefToInlinedRef.get(id);
+            if (inlinedRef == null) {
+                return null;
+            }
+            inlinedColumns.union(inlinedRef);
+        }
+        return inlinedColumns.isEmpty() ? null : inlinedColumns;
+    }
+
     private static void doReplaceLogicalViewScanOperator(OptExpression parent,
                                                          int index,
                                                          OptExpression queryExpression) {
         LogicalOperator op = queryExpression.getOp().cast();
         if (op instanceof LogicalViewScanOperator) {
             LogicalViewScanOperator viewScanOperator = op.cast();
-            OptExpression inlineViewPlan = viewScanOperator.getOriginalPlanEvaluator();
+            // Only evaluate the original plan for the columns the view scan really uses: the view scan has been pruned
+            // together with the query, but the original plan is evaluated with all view columns by default, which
+            // brings the already pruned columns (e.g. aggregations nobody reads) back into the plan.
+            ColumnRefSet usedColumns = getUsedColumnsOfInlinedView(viewScanOperator);
+            OptExpression inlineViewPlan = usedColumns == null ? viewScanOperator.getOriginalPlanEvaluator()
+                    : viewScanOperator.getOriginalPlanEvaluator(usedColumns);
             // A view scan may carry a merged projection even without a predicate (e.g. an unfiltered
             // view usage, or the null-supplying side of an outer join). Keep the projection in that
             // case too; dropping it leaves parents referencing columns the inlined plan no longer
@@ -1347,7 +1386,11 @@ public class MvUtils {
                     // If viewScanOperator contains predicate, we need to rewrite them, otherwise predicate will be
                     // lost.
                     ScalarOperator rewrittenPredicate = rewriter.rewrite(viewScanOperator.getPredicate());
-                    builder.setPredicate(rewrittenPredicate);
+                    // The inlined plan may already carry a predicate (e.g. the filter of the view on a scan), and
+                    // both are in terms of the same input columns, so keep it instead of overwriting it.
+                    ScalarOperator inlinePredicate = inlineViewOp.getPredicate();
+                    builder.setPredicate(inlinePredicate == null ? rewrittenPredicate
+                            : Utils.compoundAnd(inlinePredicate, rewrittenPredicate));
                 }
                 // rewrite projection
                 if (viewScanOperator.getProjection() != null) {
