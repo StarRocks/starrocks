@@ -168,15 +168,7 @@ public class AuthenticationAnalyzer {
         public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
             UserRef user = statement.getUser();
             if (user != null) {
-<<<<<<< HEAD
                 analyzeUser(user);
-                checkUserExist(user, true);
-            } else if (!statement.isAll()) {
-                statement.setUser(new UserRef(context.getCurrentUserIdentity().getUser(),
-                        context.getCurrentUserIdentity().getHost(),
-                        context.getCurrentUserIdentity().isDomain()));
-=======
-                analyzeUser(user, true);
                 UserIdentity userIdent = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
                 if (!GlobalStateMgr.getCurrentState().getAuthenticationMgr().doesUserExist(userIdent)) {
                     // A user from a security integration is not stored, so FOR cannot name
@@ -186,7 +178,6 @@ public class AuthenticationAnalyzer {
                             + "it can view its own authentication information with SHOW AUTHENTICATION "
                             + "without FOR");
                 }
->>>>>>> aa7b3ba2a99... [BugFix][RB-1566] Count group roles and security-integration users in SHOW GRANTS FOR ROLE, SHOW AUTHENTICATION and the HTTP admin check (#69542)
             }
             return null;
         }

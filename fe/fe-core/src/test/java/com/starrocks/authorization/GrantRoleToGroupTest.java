@@ -18,12 +18,7 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.MockedLocalMetaStore;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.StarRocksException;
-import com.starrocks.epack.authorization.AuthorizationMgrEPack;
-import com.starrocks.epack.authorization.AuthorizationProviderEPack;
->>>>>>> aa7b3ba2a99... [BugFix][RB-1566] Count group roles and security-integration users in SHOW GRANTS FOR ROLE, SHOW AUTHENTICATION and the HTTP admin check (#69542)
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.UpdateGroupToRoleLog;
 import com.starrocks.persist.gson.GsonUtils;
@@ -604,7 +599,7 @@ public class GrantRoleToGroupTest {
     public void testShowGrantsForRoleHeldThroughGroup() throws Exception {
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        AuthorizationMgr authorizationMgr = new AuthorizationMgrEPack(new AuthorizationProviderEPack());
+        AuthorizationMgr authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
         GlobalStateMgr.getCurrentState().setAuthorizationMgr(authorizationMgr);
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
 
@@ -638,7 +633,7 @@ public class GrantRoleToGroupTest {
     public void testSetRoleOnGroupRoleExplainsWhy() throws Exception {
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        AuthorizationMgr authorizationMgr = new AuthorizationMgrEPack(new AuthorizationProviderEPack());
+        AuthorizationMgr authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
         GlobalStateMgr.getCurrentState().setAuthorizationMgr(authorizationMgr);
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
 

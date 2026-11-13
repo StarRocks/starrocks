@@ -17,11 +17,10 @@ package com.starrocks.http.rest;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.DefaultAuthorizationProvider;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
-import com.starrocks.epack.authorization.AuthorizationMgrEPack;
-import com.starrocks.epack.authorization.AuthorizationProviderEPack;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -61,7 +60,7 @@ public class AdminRoleCheckTest {
         ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         GlobalStateMgr.getCurrentState().setAuthorizationMgr(
-                new AuthorizationMgrEPack(new AuthorizationProviderEPack()));
+                new AuthorizationMgr(new DefaultAuthorizationProvider()));
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
     }
 
