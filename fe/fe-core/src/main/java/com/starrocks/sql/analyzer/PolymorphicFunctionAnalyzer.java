@@ -238,7 +238,7 @@ public class PolymorphicFunctionAnalyzer {
             if (!allScalarKv) {
                 throw new SemanticException("sum_map only support scalar KV");
             }
-            if (v.isDecimalOfAnyVersion() || v.isStringType() || v.isDateType()) {
+            if (v.isDecimalOfAnyVersion() || v.isStringType() || v.isDateType() || v.isGeoType()) {
                 throw new SemanticException("sum_map unsupported value type:" + v);
             }
             if (v.isIntegerType() || v.isBoolean()) {
