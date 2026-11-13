@@ -3970,15 +3970,29 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             res1 == res2, "assert two plans are different, plan1: {}, plan2: {}".format(res1["result"], res2["result"])
         )
 
+    @staticmethod
+    def _query_result_text(result):
+        """
+        Text of a query result to search expectations in: the cells as they are, joined by tab within a row and by
+        newline between rows, i.e. what a MySQL client shows. str() of the result tuple is not used, because it
+        escapes quotes (a cell holding both ' and " is printed as '...\\'...'), so an expectation with a single
+        quote would never match it.
+        """
+        if not isinstance(result, (list, tuple)):
+            return str(result)
+        rows = [row if isinstance(row, (list, tuple)) else (row,) for row in result]
+        return "\n".join("\t".join(str(cell) for cell in row) for row in rows)
+
     def assert_query_contains(self, query, *expects):
         """
         assert explain result contains expect string
         """
         res = self.execute_sql(query, True)
+        haystack = self._query_result_text(res["result"])
         for expect in expects:
             tools.assert_true(
-                str(res["result"]).find(expect) > 0,
-                "assert expect {} is not found in plan {}".format(expect, res["result"]),
+                expect in haystack,
+                "assert expect {} is not found in result:\n{}".format(expect, haystack),
             )
 
     def assert_query_not_contains(self, query, *expects):
@@ -3986,10 +4000,11 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         assert query result does not contain expect string
         """
         res = self.execute_sql(query, True)
+        haystack = self._query_result_text(res["result"])
         for expect in expects:
             tools.assert_true(
-                str(res["result"]).find(expect) < 0,
-                "assert expect {} is unexpectedly found in result {}".format(expect, res["result"]),
+                expect not in haystack,
+                "assert expect {} is unexpectedly found in result:\n{}".format(expect, haystack),
             )
 
     def print_query_columns(self, query, *columns):
@@ -4027,7 +4042,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         runs only once.
         """
         res = self.execute_sql(query, True)
-        haystack = str(res["result"])
+        haystack = self._query_result_text(res["result"])
         actual_times = haystack.count(str(expect))
         tools.assert_true(
             actual_times == int(expected_times),
