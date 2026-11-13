@@ -1902,7 +1902,19 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         //       |           |           |
         // SegmentIterator  ...    SegmentIterator
         //
-        _collect_iter = new_union_iterator(std::move(seg_iters));
+        // A query scan that walks all the segments of the tablet one after another starts the read-ahead of the
+        // next segments while it reads the current one (lake_scan_read_ahead_segments); a split scan reads its
+        // segments from several scan tasks at once already.
+        const bool read_ahead = params.reader_type == ReaderType::READER_QUERY && !_need_split &&
+                                params.rowid_range_option == nullptr && params.short_key_ranges_option == nullptr &&
+                                remote_io_scheduler_enabled() && config::lake_scan_read_ahead_segments > 0 &&
+                                config::remote_prefetch_window_blocks > 0;
+        if (read_ahead) {
+            _collect_iter = new_union_iterator(std::move(seg_iters), config::lake_scan_read_ahead_segments,
+                                               config::remote_prefetch_window_blocks);
+        } else {
+            _collect_iter = new_union_iterator(std::move(seg_iters));
+        }
     } else if ((keys_type == AGG_KEYS || keys_type == UNIQUE_KEYS) && !skip_aggr) {
         //                 Timer
         //                   |
