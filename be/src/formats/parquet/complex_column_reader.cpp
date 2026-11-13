@@ -2174,6 +2174,26 @@ public:
                 }
             }
         }
+        mark_variant_null_rows();
+    }
+
+    // The variant group is present (its metadata is set) but holds neither a value nor a typed value: the variant is
+    // a variant null, not a SQL NULL. A null metadata is what makes the whole variant SQL NULL.
+    void mark_variant_null_rows() {
+        const size_t num_rows = has_typed_value_bitmap.size();
+        for (size_t i = 0; i < num_rows; ++i) {
+            if (metadata_nulls[i] || has_typed_value_bitmap[i] || metadata_column->get_slice(i).size == 0) {
+                continue;
+            }
+            if (!value_nulls[i] && value_column->get_slice(i).size != 0) {
+                continue;
+            }
+            if (variant_null_row.empty()) {
+                variant_null_row.assign(num_rows, 0);
+            }
+            variant_null_row[i] = 1;
+            any_variant_null = true;
+        }
     }
 
     // Final output bindings after applying requested paths and per-batch materialization
@@ -2193,11 +2213,14 @@ public:
     // Per-row "any typed payload exists" summary over shredded fields plus root typed_value.
     // Used only for top-level row null/materialization decisions.
     std::vector<bool> has_typed_value_bitmap;
+    // Rows that are a variant null; empty unless the batch has one.
+    std::vector<uint8_t> variant_null_row;
+    bool any_variant_null = false;
     // Parallel to materialized_bindings: the batch ARRAY<VARIANT> column of each ARRAY binding, nullptr otherwise.
     std::vector<ColumnPtr> array_binding_columns;
 
     bool can_bulk_append_base_payload(bool has_outer_null_channel) const {
-        if (root_typed_value_column != nullptr) {
+        if (root_typed_value_column != nullptr || any_variant_null) {
             return false;
         }
         if (has_outer_null_channel) {
@@ -2241,8 +2264,20 @@ public:
 
     StatusOr<bool> prepare() {
         const bool has_typed_value = _batch_ctx.has_typed_value_bitmap[_row];
+        if (_batch_ctx.metadata_nulls[_row]) {
+            return false;
+        }
+        if (_batch_ctx.any_variant_null && _batch_ctx.variant_null_row[_row]) {
+            static constexpr char kVariantNull[] = {0x00};
+            const Slice metadata = _batch_ctx.metadata_column->get_slice(_row);
+            _raw_metadata = std::string_view(metadata.data, metadata.size);
+            _raw_value = std::string_view();
+            _row_metadata = _raw_metadata;
+            _row_value = std::string_view(kVariantNull, sizeof(kVariantNull));
+            return true;
+        }
         // Iceberg shredded rows may carry payload only in typed_value with base `value` null.
-        if (_batch_ctx.metadata_nulls[_row] || (_batch_ctx.value_nulls[_row] && !has_typed_value)) {
+        if (_batch_ctx.value_nulls[_row] && !has_typed_value) {
             return false;
         }
 
