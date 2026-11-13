@@ -5,9 +5,12 @@ description: "System view listing which objects reference row access policies an
 
 # policy_references
 
-import FeatureAvailability from '../../_assets/commonMarkdown/_feature_availability.mdx'
 
-<FeatureAvailability />
+:::note
+
+This view applies to a feature not available in StarRocks.
+
+:::
 
 You can view the objects row access policies and column masking policies reference by querying the view `policy_references`.
 

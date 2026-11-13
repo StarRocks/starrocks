@@ -7,7 +7,6 @@ toc_max_heading_level: 2
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import OperatorPrereqs from '../_assets/deployment/_OperatorPrereqs.mdx'
 import DDL from '../_assets/quick-start/_DDL.mdx'
 import Clients from '../_assets/quick-start/_clientsAllin1.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
@@ -47,7 +46,28 @@ There is a lot of information in this document, and it is presented with step-by
 
 ## Prerequisites
 
-<OperatorPrereqs />
+---
+---
+### Kubernetes environment
+
+The Kubernetes environment used while writing this guide consists of three nodes with four vCPUS, and 16GB RAM each (GCP `e2-standard-4` machines). The Kubernetes cluster was deployed with this `gcloud` command:
+
+:::tip
+This command is for your reference, if you are using AWS, Azure, or any other Kubernetes provider you will need to modify this for your environment. In Google Cloud you will need to specify your own project and an appropriate location.
+:::
+
+```bash
+gcloud container --project enterprise-demo-422514 \
+  clusters create ee-docs \
+  --location=southamerica-west1-b \
+  --machine-type e2-standard-4 --disk-size 80 --num-nodes 3
+```
+
+### Helm
+
+Helm is a package manager for Kubernetes that simplifies the deployment and management of applications. In this lab you will use Helm to deploy the CelerData Enterprise Edition Kubernetes operator and the sample StarRocks cluster.
+
+[Install helm](https://helm.sh/docs/intro/quickstart/)
 
 ### SQL client
 
