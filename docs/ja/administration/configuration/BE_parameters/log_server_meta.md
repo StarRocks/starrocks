@@ -396,7 +396,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: long
 - 単位: Percentage (0-100)
 - 変更可能: はい
-- 説明: プロセスのメモリ上限に対するパーセンテージで表現される緊急メモリ水位。プロセスのメモリ使用量が `(limit * memory_urgent_level / 100)` を超えると、BE は即時のメモリ回収をトリガーします。これによりデータキャッシュの縮小、update キャッシュの追い出しが行われ、persistent/lake の MemTable は「満杯」と見なされて早期にフラッシュ／コンパクションされます。コードではこの設定が `memory_high_level` より大きく、`memory_high_level` は `1` 以上かつ `100` 以下であることを検証します。値を低くするとより積極的で早期の回収（頻繁なキャッシュ追い出しとフラッシュ）を招きます。値を高くすると回収が遅れ、100 に近すぎると OOM のリスクが高まります。`memory_high_level` および Data Cache 関連の自動調整設定と合わせてチューニングしてください。
+- 説明: プロセスのメモリ上限に対するパーセンテージで表現される緊急メモリ水位。プロセスのメモリ使用量が `(limit * memory_urgent_level / 100)` を超えると、BE は即時のメモリ回収をトリガーします。これによりデータキャッシュと共有データのメタデータキャッシュの縮小、update キャッシュの追い出しが行われ、persistent/lake の MemTable は「満杯」と見なされて早期にフラッシュ／コンパクションされます。コードではこの設定が `memory_high_level` より大きく、`memory_high_level` は `1` 以上かつ `100` 以下であることを検証します。値を低くするとより積極的で早期の回収（頻繁なキャッシュ追い出しとフラッシュ）を招きます。値を高くすると回収が遅れ、100 に近すぎると OOM のリスクが高まります。`memory_high_level` および Data Cache 関連の自動調整設定と合わせてチューニングしてください。
 - 導入バージョン: v3.2.0
 
 ### net_use_ipv6_when_priority_networks_empty

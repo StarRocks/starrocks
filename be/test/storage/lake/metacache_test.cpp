@@ -243,6 +243,20 @@ TEST_F(LakeMetacacheTest, test_update_capacity) {
     ASSERT_EQ(segment_cap - 1024, metacache->segment_metadata_capacity());
 }
 
+TEST_F(LakeMetacacheTest, test_update_capacity_returns_the_evicted_charge) {
+    Metacache metacache(64 * 1024 * 1024, 64 * 1024 * 1024);
+    for (int i = 0; i < 256; ++i) {
+        metacache.cache_tablet_schema(MetacacheKey::TEST_from_string(fmt::format("schema_{}", i)), nullptr, 64 * 1024);
+    }
+    const size_t usage = metacache.segment_metadata_memory_usage();
+    ASSERT_GT(usage, 0u);
+    EXPECT_EQ(0u, metacache.update_segment_metadata_capacity(128 * 1024 * 1024));
+    const size_t evicted = metacache.update_segment_metadata_capacity(4 * 1024 * 1024);
+    EXPECT_GT(evicted, 0u);
+    EXPECT_EQ(usage - evicted, metacache.segment_metadata_memory_usage());
+    EXPECT_EQ(4u * 1024 * 1024, metacache.segment_metadata_capacity());
+}
+
 TEST_F(LakeMetacacheTest, test_metacache_capacity) {
     EXPECT_EQ(100, metacache_capacity(1000, 10));
     EXPECT_EQ(200, metacache_capacity(1000, 20));
