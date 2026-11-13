@@ -60,6 +60,8 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.NextIdLog;
 import com.starrocks.persist.WALApplier;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.BrokerDesc;
@@ -849,6 +851,115 @@ public class BrokerLoadJobTest {
     }
 
     @Test
+    public void testFailedLoadingTaskKeepsResourceUsage() {
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation, WALApplier walApplier) {
+                // the usage of the failed task is part of what the followers replay
+                Assertions.assertEquals(300L, loadJobFinalOperation.getLoadingStatus().getCpuNs());
+                Assertions.assertEquals(9000L, loadJobFinalOperation.getLoadingStatus().getPeakMemBytes());
+                walApplier.apply(loadJobFinalOperation);
+            }
+        };
+
+        // no retry left: the failure cancels the job
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        brokerLoadJob.retryTime = 0;
+        Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
+        idToTasks.put(1L, Mockito.mock(LoadTask.class));
+        FailMsg failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, "Memory of query exceed limit");
+        brokerLoadJob.onTaskFailed(1L, failMsg,
+                new BrokerLoadingTaskAttachment(1L, Lists.newArrayList(), 300L, 9000L));
+
+        Assertions.assertEquals(JobState.CANCELLED, brokerLoadJob.getState());
+        Assertions.assertEquals(300L, brokerLoadJob.getCpuNs());
+        Assertions.assertEquals(9000L, brokerLoadJob.getPeakMemBytes());
+    }
+
+    @Test
+    public void testFailedTaskOfAnEarlierAttemptAddsNoResourceUsage() {
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation, WALApplier walApplier) {
+                walApplier.apply(loadJobFinalOperation);
+            }
+        };
+
+        // Task 1 belongs to an attempt that was reset for a retry; the job now runs task 2.
+        // Task 1, cancelled when the retry began, reports its failure only now.
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        brokerLoadJob.retryTime = 0;
+        Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
+        idToTasks.put(2L, Mockito.mock(LoadTask.class));
+        brokerLoadJob.onTaskFailed(1L, new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, "cancelled"),
+                new BrokerLoadingTaskAttachment(1L, Lists.newArrayList(), 300L, 9000L));
+
+        Assertions.assertEquals(0L, brokerLoadJob.getCpuNs());
+        Assertions.assertEquals(0L, brokerLoadJob.getPeakMemBytes());
+    }
+
+    @Test
+    public void testCancelKeepsResourceUsageOfRunningLoadingTasks() throws Exception {
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation, WALApplier walApplier) {
+                // collected before the final operation is logged, so followers replay it too
+                Assertions.assertEquals(170L, loadJobFinalOperation.getLoadingStatus().getCpuNs());
+                Assertions.assertEquals(800L, loadJobFinalOperation.getLoadingStatus().getPeakMemBytes());
+                walApplier.apply(loadJobFinalOperation);
+            }
+        };
+
+        // one task finished earlier and handed in its usage; another is still running when the
+        // job times out or the user cancels it, and what it reports afterwards is ignored
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        EtlStatus loadingStatus = Deencapsulation.getField(brokerLoadJob, "loadingStatus");
+        loadingStatus.accumulateResourceUsage(100L, 500L);
+
+        TUniqueId runningLoadId = new TUniqueId(77001L, 77002L);
+        LoadLoadingTask runningTask = Mockito.mock(LoadLoadingTask.class);
+        Mockito.when(runningTask.getLoadId()).thenReturn(runningLoadId);
+        Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
+        idToTasks.put(5L, runningTask);
+        Coordinator runningCoordinator = Mockito.mock(Coordinator.class);
+        Mockito.when(runningCoordinator.getLoadCpuNs()).thenReturn(70L);
+        Mockito.when(runningCoordinator.getLoadPeakMemBytes()).thenReturn(800L);
+        QeProcessorImpl.INSTANCE.registerQuery(runningLoadId, runningCoordinator);
+        try {
+            brokerLoadJob.cancelJobWithoutCheck(
+                    new FailMsg(FailMsg.CancelType.TIMEOUT, "loading timeout to cancel"), false);
+        } finally {
+            QeProcessorImpl.INSTANCE.unregisterQuery(runningLoadId);
+        }
+
+        Assertions.assertEquals(JobState.CANCELLED, brokerLoadJob.getState());
+        Assertions.assertEquals(170L, brokerLoadJob.getCpuNs());
+        Assertions.assertEquals(800L, brokerLoadJob.getPeakMemBytes());
+        Mockito.verify(runningCoordinator).cancel("loading timeout to cancel");
+    }
+
+    @Test
+    public void testRetryStartsResourceUsageFromZero() {
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        EtlStatus loadingStatus = Deencapsulation.getField(brokerLoadJob, "loadingStatus");
+        loadingStatus.accumulateResourceUsage(100L, 5000L);
+        Assertions.assertEquals(100L, brokerLoadJob.getCpuNs());
+
+        // a retry clears what the failed attempt consumed, the next attempt accumulates again
+        brokerLoadJob.reset();
+        Assertions.assertEquals(0L, brokerLoadJob.getCpuNs());
+        Assertions.assertEquals(0L, brokerLoadJob.getPeakMemBytes());
+
+        loadingStatus.accumulateResourceUsage(40L, 2000L);
+        loadingStatus.accumulateResourceUsage(60L, 1500L);
+        Assertions.assertEquals(100L, brokerLoadJob.getCpuNs());
+        Assertions.assertEquals(2000L, brokerLoadJob.getPeakMemBytes());
+    }
+
+    @Test
     public void testTaskFailedUserCancelType(@Injectable long taskId, @Injectable FailMsg failMsg) {
         GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         new MockUp<EditLog>() {
@@ -1042,6 +1153,72 @@ public class BrokerLoadJobTest {
         int progress = Deencapsulation.getField(brokerLoadJob, "progress");
         Assertions.assertEquals(99, progress);
         Assertions.assertEquals(JobState.CANCELLED, Deencapsulation.getField(brokerLoadJob, "state"));
+    }
+
+    @Test
+    public void testLoadingTaskOnFinishedAccumulatesResourceUsage(@Injectable BrokerLoadingTaskAttachment attachment1,
+                                                                  @Injectable BrokerLoadingTaskAttachment attachment2,
+                                                                  @Injectable LoadTask loadTask1,
+                                                                  @Injectable LoadTask loadTask2,
+                                                                  @Mocked EditLog editLog,
+                                                                  @Mocked GlobalStateMgr globalStateMgr) {
+        new FakeEditLog();
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        Deencapsulation.setField(brokerLoadJob, "state", JobState.LOADING);
+        Map<Long, LoadTask> idToTasks = Maps.newHashMap();
+        idToTasks.put(1L, loadTask1);
+        idToTasks.put(2L, loadTask2);
+        Deencapsulation.setField(brokerLoadJob, "idToTasks", idToTasks);
+        new Expectations() {
+            {
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+                attachment1.getCounter(BrokerLoadJob.DPP_NORMAL_ALL);
+                minTimes = 0;
+                result = 10;
+                attachment2.getCounter(BrokerLoadJob.DPP_NORMAL_ALL);
+                minTimes = 0;
+                result = 20;
+                attachment1.getCounter(BrokerLoadJob.DPP_ABNORMAL_ALL);
+                minTimes = 0;
+                result = 1;
+                attachment2.getCounter(BrokerLoadJob.DPP_ABNORMAL_ALL);
+                minTimes = 0;
+                result = 2;
+                attachment1.getTaskId();
+                minTimes = 0;
+                result = 1L;
+                attachment2.getTaskId();
+                minTimes = 0;
+                result = 2L;
+                attachment1.getCpuNs();
+                minTimes = 0;
+                result = 100L;
+                attachment2.getCpuNs();
+                minTimes = 0;
+                result = 250L;
+                attachment1.getPeakMemBytes();
+                minTimes = 0;
+                result = 7000L;
+                attachment2.getPeakMemBytes();
+                minTimes = 0;
+                result = 5000L;
+            }
+        };
+
+        Assertions.assertEquals(0L, brokerLoadJob.getCpuNs());
+        Assertions.assertEquals(0L, brokerLoadJob.getPeakMemBytes());
+
+        brokerLoadJob.onTaskFinished(attachment1);
+        brokerLoadJob.onTaskFinished(attachment2);
+
+        // cpu time is summed over the loading tasks, peak memory is the largest one
+        Assertions.assertEquals(350L, brokerLoadJob.getCpuNs());
+        Assertions.assertEquals(7000L, brokerLoadJob.getPeakMemBytes());
+        EtlStatus loadingStatus = Deencapsulation.getField(brokerLoadJob, "loadingStatus");
+        Assertions.assertEquals(350L, loadingStatus.getCpuNs());
+        Assertions.assertEquals(7000L, loadingStatus.getPeakMemBytes());
     }
 
     @Test

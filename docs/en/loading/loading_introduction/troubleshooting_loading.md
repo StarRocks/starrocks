@@ -136,6 +136,10 @@ The **information_schema.loads** system view stores information about recent loa
 
 The **statistics.loads_history** system view stores load records for the last three months by default. DBAs can adjust the retention period by modifying the `partition_ttl` of the view. **statistics.loads_history** has the consistent schema with **information_schema.loads**.
 
+:::note
+After an upgrade, StarRocks adds to **statistics.loads_history** the columns that the new version introduces in **information_schema.loads**. If you later downgrade the cluster to a version that does not have these columns, the synchronization to **statistics.loads_history** fails, because that version copies the rows by column position. To resume the synchronization after the downgrade, use ALTER TABLE to drop the added columns (`txn_id`, `load_id`, `table_id`, `parent_id`, `statement`, `error_code`, `visible_time`, `sink_bytes`, `client_ip`, `be_ids`, `commit_throttle_ms`, `cpu_ns`, `peak_mem_bytes`) from `_statistics_.loads_history`. During an upgrade, upgrade all BEs and CNs before the FEs: a BE or CN of the earlier version cannot serve the new columns, so queries on **information_schema.loads** and the synchronization fail until it is upgraded.
+:::
+
 ## Identify loading performance issues with Load Profiles
 
 A **Load Profile** records execution details of all worker nodes involved in a data load. It helps you quickly pinpoint performance bottlenecks in the StarRocks cluster.

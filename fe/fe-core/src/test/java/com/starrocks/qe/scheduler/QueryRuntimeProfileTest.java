@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler;
 
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.RuntimeProfile;
@@ -358,6 +359,163 @@ public class QueryRuntimeProfileTest {
             pipeline.addChild(op);
         }
         return instance;
+    }
+
+    @Test
+    public void testUpdateLoadChannelPeakMemBytes() {
+        new Expectations() {
+            {
+                jobSpec.hasOlapTableSink();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
+        profile.initFragmentProfiles(1);
+        Assertions.assertEquals(0, profile.getLoadChannelPeakMemBytes());
+
+        // a report without the field leaves the value untouched
+        TReportExecStatusParams noPeak = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        profile.updateLoadInformation(null, noPeak);
+        Assertions.assertEquals(0, profile.getLoadChannelPeakMemBytes());
+
+        // the largest peak over all reporting instances is kept
+        TReportExecStatusParams first = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        first.setLoad_channel_peak_mem_bytes(100L);
+        profile.updateLoadInformation(null, first);
+        Assertions.assertEquals(100L, profile.getLoadChannelPeakMemBytes());
+
+        TReportExecStatusParams smaller = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        smaller.setLoad_channel_peak_mem_bytes(50L);
+        profile.updateLoadInformation(null, smaller);
+        Assertions.assertEquals(100L, profile.getLoadChannelPeakMemBytes());
+
+        TReportExecStatusParams larger = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        larger.setLoad_channel_peak_mem_bytes(300L);
+        profile.updateLoadInformation(null, larger);
+        Assertions.assertEquals(300L, profile.getLoadChannelPeakMemBytes());
+    }
+
+    @Test
+    public void testUpdateLoadResourceUsagePerBackend() {
+        new Expectations() {
+            {
+                jobSpec.hasOlapTableSink();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
+        profile.initFragmentProfiles(1);
+        Assertions.assertEquals(0L, profile.getLoadCpuNs());
+        Assertions.assertEquals(0L, profile.getLoadPeakMemBytes());
+
+        TReportExecStatusParams be1 = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        be1.setBackend_id(10L);
+        be1.setLoad_cpu_ns(100L);
+        be1.setLoad_peak_mem_bytes(1000L);
+        profile.updateLoadInformation(null, be1);
+        Assertions.assertEquals(100L, profile.getLoadCpuNs());
+        Assertions.assertEquals(1000L, profile.getLoadPeakMemBytes());
+
+        // another instance of the same backend: cumulative values replace, they do not add up
+        TReportExecStatusParams be1Again = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        be1Again.setBackend_id(10L);
+        be1Again.setLoad_cpu_ns(150L);
+        be1Again.setLoad_peak_mem_bytes(800L);
+        profile.updateLoadInformation(null, be1Again);
+        Assertions.assertEquals(150L, profile.getLoadCpuNs());
+        Assertions.assertEquals(1000L, profile.getLoadPeakMemBytes());
+
+        // a second backend adds its cpu time; the peak is the largest per-backend total
+        TReportExecStatusParams be2 = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        be2.setBackend_id(11L);
+        be2.setLoad_cpu_ns(25L);
+        be2.setLoad_peak_mem_bytes(900L);
+        profile.updateLoadInformation(null, be2);
+        Assertions.assertEquals(175L, profile.getLoadCpuNs());
+        Assertions.assertEquals(1000L, profile.getLoadPeakMemBytes());
+
+        // a write-only backend's load channel peak competes for the max
+        TReportExecStatusParams channel = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        channel.setBackend_id(11L);
+        channel.setLoad_channel_peak_mem_bytes(1200L);
+        profile.updateLoadInformation(null, channel);
+        Assertions.assertEquals(1200L, profile.getLoadPeakMemBytes());
+        Assertions.assertEquals(175L, profile.getLoadCpuNs());
+    }
+
+    @Test
+    public void testLoadPeakMemAddsHostedLoadChannelPerBackend() {
+        new Expectations() {
+            {
+                jobSpec.hasOlapTableSink();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
+        profile.initFragmentProfiles(1);
+
+        // backend 10 only runs a scan fragment, backend 11 runs the sink
+        TReportExecStatusParams scanOnly = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        scanOnly.setBackend_id(10L);
+        scanOnly.setLoad_cpu_ns(10L);
+        scanOnly.setLoad_peak_mem_bytes(1000L);
+        profile.updateLoadResourceUsage(null, scanOnly);
+        Assertions.assertEquals(1000L, profile.getLoadPeakMemBytes());
+
+        // the sink wrote to the load channels on backends 10, 11 and 12; 12 runs no fragment at all
+        TReportExecStatusParams sink = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        sink.setBackend_id(11L);
+        sink.setLoad_cpu_ns(20L);
+        sink.setLoad_peak_mem_bytes(300L);
+        sink.setLoad_channel_peak_mem_bytes(900L);
+        sink.setLoad_channel_peak_mem_bytes_by_backend(ImmutableMap.of(10L, 700L, 11L, 400L, 12L, 900L));
+        profile.updateLoadResourceUsage(null, sink);
+
+        // backend 10: 1000 + 700, backend 11: 300 + 400, backend 12: 900
+        Assertions.assertEquals(1700L, profile.getLoadPeakMemBytes());
+        Assertions.assertEquals(30L, profile.getLoadCpuNs());
+
+        // a second sink instance saw a larger peak on backend 12; applying a report twice changes nothing
+        TReportExecStatusParams secondSink = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        secondSink.setBackend_id(11L);
+        secondSink.setLoad_channel_peak_mem_bytes_by_backend(ImmutableMap.of(12L, 2500L, 10L, 100L));
+        profile.updateLoadResourceUsage(null, secondSink);
+        profile.updateLoadInformation(null, secondSink);
+        Assertions.assertEquals(2500L, profile.getLoadPeakMemBytes());
+        Assertions.assertEquals(30L, profile.getLoadCpuNs());
+    }
+
+    @Test
+    public void testLoadCpuSumsOnlyTheBackendsThatReportIt() {
+        new Expectations() {
+            {
+                jobSpec.hasOlapTableSink();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
+        profile.initFragmentProfiles(1);
+        Assertions.assertEquals(0L, profile.getLoadCpuNs());
+
+        // backend 10 is upgraded and reports its cpu time; backend 20 is not and reports none
+        TReportExecStatusParams upgraded = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        upgraded.setBackend_id(10L);
+        upgraded.setLoad_cpu_ns(100L);
+        profile.updateLoadResourceUsage(null, upgraded);
+        TReportExecStatusParams old = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        old.setBackend_id(20L);
+        profile.updateLoadResourceUsage(null, old);
+
+        // nothing is made up for backend 20: the coordinator compares this sum with the audit total
+        Assertions.assertEquals(100L, profile.getLoadCpuNs());
     }
 
     private TReportExecStatusParams buildReportStatus(long valueBase) {

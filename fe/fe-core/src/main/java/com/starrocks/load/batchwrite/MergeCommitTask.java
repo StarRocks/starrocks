@@ -66,6 +66,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.VisibleStateWaiter;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.arrow.util.VisibleForTesting;
@@ -81,6 +82,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -238,8 +240,18 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
     private volatile long txnId = -1;
     // The id of the target table, set once run() resolves it. -1 until then.
     private volatile long tableId = -1;
+    // When the transaction became visible; -1 until publish succeeded.
+    private volatile long visibleTimeMs = -1;
+    // Captured at commit: the transaction only keeps the value in memory and may be purged before the task.
+    private volatile long commitThrottleMs = -1;
+    // Id of the table-level MergeCommitJob that created this task; -1 when created standalone.
+    private volatile long mergeCommitJobId = -1;
     // Load statistics; set when entering COMMITTING in {@link #run()}.
     private volatile LoadStats loadStats = null;
+    // Resources the load consumed on the backends, read from the coordinator when the task ends.
+    // A failed execution produces no LoadStats, so these are kept on their own.
+    private volatile long cpuNs = 0;
+    private volatile long peakMemBytes = 0;
     // Observes state transitions for unit tests.
     private volatile StateTransitionObserver stateTransitionObserver = null;
 
@@ -357,6 +369,11 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
                         null, timeoutWatcher.getLeftTimeoutMillis());
                 loadTimeTrace.commitTimeMs.set(System.currentTimeMillis());
             }
+            TransactionState committedTxn = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionState(dbId, localTxnId);
+            if (committedTxn != null) {
+                this.commitThrottleMs = committedTxn.getCommitThrottleMs();
+            }
 
             // 5) Wait for publish/visibility.
             transitionToState(TaskState.COMMITTED, "", null, () -> {});
@@ -367,6 +384,10 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
                 if (timeout) {
                     throw new Exception(String.format("publish timed out after %sms", publishTimeoutMs));
                 }
+                TransactionState visibleTxn = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getTransactionState(dbId, localTxnId);
+                this.visibleTimeMs = visibleTxn != null && visibleTxn.getFinishTime() > 0
+                        ? visibleTxn.getFinishTime() : System.currentTimeMillis();
             } catch (Exception e) {
                 String error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
                 publishFailMsg = "publish failed: " + error;
@@ -407,6 +428,11 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             completionCallback.finish(this);
             updateMetrics();
             collectProfile(connectContext, loadPlanner, coordinator);
+            // executeLoad already recorded the usage and unregistered the query, so reports that
+            // arrive after that never reach this coordinator; this only keeps a value that was
+            // delivered in between. A failed load therefore shows what its backends had reported
+            // when the failure released the wait, which can be less than what they consumed.
+            recordResourceUsage(coordinator);
             // close tracer after profile collection
             Tracers.close();
             if (LOG.isDebugEnabled()) {
@@ -553,6 +579,8 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             LoadStats loadStats = getLoadDataStats(coordinator);
             return new LoadResult(tabletCommitInfos, tabletFailInfos, loadStats);
         } finally {
+            // also on a timeout or a failed status, where no LoadStats is built
+            recordResourceUsage(coordinator);
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
             ConnectContext.remove();
         }
@@ -581,7 +609,8 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
         long abnormalRows = Long.parseLong(loadCounters.getOrDefault(LoadEtlTask.DPP_ABNORMAL_ALL, "0"));
         long unselectedRows = Long.parseLong(loadCounters.getOrDefault(LoadJob.UNSELECTED_ROWS, "0"));
         return new LoadStats(normalRows, normalBytes, abnormalRows, unselectedRows,
-                coordinator.getTrackingUrl(), coordinator.getRejectedRecordPaths());
+                coordinator.getTrackingUrl(), coordinator.getRejectedRecordPaths(),
+                coordinator.getLoadCpuNs(), coordinator.getLoadPeakMemBytes());
     }
 
     @VisibleForTesting
@@ -799,6 +828,14 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
         return taskId;
     }
 
+    public long getMergeCommitJobId() {
+        return mergeCommitJobId;
+    }
+
+    public void setMergeCommitJobId(long mergeCommitJobId) {
+        this.mergeCommitJobId = mergeCommitJobId;
+    }
+
     @Override
     public void afterAborted(TransactionState txnState, String txnStatusChangeReason)
             throws StarRocksException {
@@ -890,6 +927,31 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
     }
 
     @Override
+    public long getCpuNs() {
+        LoadStats stats = this.loadStats;
+        return Math.max(cpuNs, stats == null ? 0 : stats.cpuNs);
+    }
+
+    @Override
+    public long getPeakMemBytes() {
+        LoadStats stats = this.loadStats;
+        return Math.max(peakMemBytes, stats == null ? 0 : stats.peakMemBytes);
+    }
+
+    // Only the task's own thread calls this, and a later call only ever raises the values.
+    private void recordResourceUsage(Coordinator coordinator) {
+        if (coordinator == null) {
+            return;
+        }
+        try {
+            cpuNs = Math.max(cpuNs, coordinator.getLoadCpuNs());
+            peakMemBytes = Math.max(peakMemBytes, coordinator.getLoadPeakMemBytes());
+        } catch (Exception e) {
+            LOG.warn("Failed to read load resource usage. label={}, loadId={}", label, DebugUtil.printId(loadId), e);
+        }
+    }
+
+    @Override
     public List<TLoadInfo> toThrift() {
         return getLoadInfoWithLock("toThrift", () -> {
             TLoadInfo info = new TLoadInfo();
@@ -900,7 +962,15 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             info.setUser(user);
             info.setLabel(label);
             info.setLoad_id(DebugUtil.printId(loadId));
-            info.setTxn_id(txnId);
+            if (txnId > 0) {
+                info.setTxn_id(txnId);
+            }
+            if (getCpuNs() > 0) {
+                info.setCpu_ns(getCpuNs());
+            }
+            if (getPeakMemBytes() > 0) {
+                info.setPeak_mem_bytes(getPeakMemBytes());
+            }
             if (ProfileManager.getInstance().hasProfile(DebugUtil.printId(loadId))) {
                 info.setProfile_id(DebugUtil.printId(loadId));
             }
@@ -969,6 +1039,36 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             double progress = taskState == TaskState.FINISHED ? 1.0
                     : (double) Math.max(0, Math.min(mergeCommitIntervalMs, mergeWindowElapsedMs)) / mergeCommitIntervalMs;
             info.setProgress(String.format("Merge Window %.2f%%", progress * 100));
+
+            if (tableId >= 0) {
+                info.setTable_id(tableId);
+            }
+            if (mergeCommitJobId >= 0) {
+                info.setParent_id(mergeCommitJobId);
+            }
+            if (stats != null) {
+                info.setSink_bytes(stats.normalBytes);
+            }
+            if (backendIds != null && !backendIds.isEmpty()) {
+                info.setBe_ids(LoadJob.joinForLoadsColumn(",", new TreeSet<>(backendIds)));
+            }
+            TransactionState txnState = txnId >= 0
+                    ? GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, txnId)
+                    : null;
+            if (commitThrottleMs >= 0) {
+                info.setCommit_throttle_ms(commitThrottleMs);
+            } else if (txnState != null && txnState.getCommitThrottleMs() >= 0) {
+                info.setCommit_throttle_ms(txnState.getCommitThrottleMs());
+            }
+            if (visibleTimeMs > 0) {
+                info.setVisible_time_ms(visibleTimeMs);
+            } else if (taskState == TaskState.FINISHED && txnState != null
+                    && txnState.getTransactionStatus() == TransactionStatus.VISIBLE
+                    && txnState.getFinishTime() > 0) {
+                // The publish wait timed out and the task finished without seeing the transaction
+                // become visible: trust the transaction, which did later.
+                info.setVisible_time_ms(txnState.getFinishTime());
+            }
             return info;
         });
     }
@@ -1265,15 +1365,19 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
         final long unselectedRows;
         final Optional<String> errorTrackingUrl;
         final Optional<List<String>> rejectedRecordPaths;
+        final long cpuNs;
+        final long peakMemBytes;
 
         public LoadStats(long normalRows, long normalBytes, long abnormalRows, long unselectedRows,
-                         String errorTrackingUrl, List<String> rejectedRecordPaths) {
+                         String errorTrackingUrl, List<String> rejectedRecordPaths, long cpuNs, long peakMemBytes) {
             this.normalRows = normalRows;
             this.normalBytes = normalBytes;
             this.abnormalRows = abnormalRows;
             this.unselectedRows = unselectedRows;
             this.errorTrackingUrl = Optional.ofNullable(errorTrackingUrl);
             this.rejectedRecordPaths = Optional.ofNullable(rejectedRecordPaths);
+            this.cpuNs = cpuNs;
+            this.peakMemBytes = peakMemBytes;
         }
     }
 

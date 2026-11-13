@@ -26,6 +26,7 @@ import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.BrokerDesc;
@@ -39,6 +40,7 @@ import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -72,6 +74,28 @@ public class LoadLoadingTaskTest {
 
         LoadJob.JSONOptions realJSONOptions =  Deencapsulation.getField(task, "jsonOptions");
         Assertions.assertEquals(jsonOptions, realJSONOptions);
+    }
+
+    @Test
+    public void testFailedTaskAttachmentCarriesResourceUsage(@Mocked GlobalStateMgr globalStateMgr) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNextId();
+                result = 1;
+                minTimes = 0;
+            }
+        };
+        LoadLoadingTask task = new LoadLoadingTask.Builder().build();
+
+        Coordinator coordinator = Mockito.mock(Coordinator.class);
+        Mockito.when(coordinator.getLoadCpuNs()).thenReturn(700L);
+        Mockito.when(coordinator.getLoadPeakMemBytes()).thenReturn(9000L);
+
+        // what a task that failed or timed out hands to the job
+        BrokerLoadingTaskAttachment attachment = task.failedTaskAttachment(coordinator);
+        Assertions.assertEquals(700L, attachment.getCpuNs());
+        Assertions.assertEquals(9000L, attachment.getPeakMemBytes());
+        Assertions.assertTrue(attachment.getFailInfoList().isEmpty());
     }
 
     @Test

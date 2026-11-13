@@ -48,11 +48,13 @@ public class BrokerLoadingTaskAttachment extends TaskAttachment {
     private final List<TabletFailInfo> failInfoList;
     private final List<String> rejectedRecordPaths;
     private final long writeDurationMs;
+    private final long cpuNs;
+    private final long peakMemBytes;
 
     public BrokerLoadingTaskAttachment(long taskId, Map<String, String> counters, String trackingUrl,
                                        List<TabletCommitInfo> commitInfoList, List<TabletFailInfo> failInfoList,
                                        List<String> rejectedRecordPaths,
-                                       long writeDurationMs) {
+                                       long writeDurationMs, long cpuNs, long peakMemBytes) {
         super(taskId);
         this.trackingUrl = trackingUrl;
         this.counters = counters;
@@ -60,11 +62,18 @@ public class BrokerLoadingTaskAttachment extends TaskAttachment {
         this.failInfoList = failInfoList;
         this.rejectedRecordPaths = rejectedRecordPaths;
         this.writeDurationMs = writeDurationMs;
+        this.cpuNs = cpuNs;
+        this.peakMemBytes = peakMemBytes;
     }
 
     // For failed loading task
     public BrokerLoadingTaskAttachment(long taskId, List<TabletFailInfo> failInfoList) {
-        this(taskId, null, null, null, failInfoList, null, -1L);
+        this(taskId, failInfoList, 0L, 0L);
+    }
+
+    // For failed loading task, with the resources it consumed before it failed
+    public BrokerLoadingTaskAttachment(long taskId, List<TabletFailInfo> failInfoList, long cpuNs, long peakMemBytes) {
+        this(taskId, null, null, null, failInfoList, null, -1L, cpuNs, peakMemBytes);
     }
 
     public String getCounter(String key) {
@@ -93,5 +102,13 @@ public class BrokerLoadingTaskAttachment extends TaskAttachment {
 
     public long getWriteDurationMs() {
         return writeDurationMs;
+    }
+
+    public long getCpuNs() {
+        return cpuNs;
+    }
+
+    public long getPeakMemBytes() {
+        return peakMemBytes;
     }
 }

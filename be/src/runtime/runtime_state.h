@@ -34,9 +34,12 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
+#include <ctime>
 #include <fstream>
 #include <limits>
+#include <map>
 #include <memory>
 #include <memory_resource>
 #include <mutex>
@@ -344,6 +347,33 @@ public:
     void update_num_bytes_load_sink(int64_t bytes_load) { _num_bytes_load_sink.fetch_add(bytes_load); }
 
     void update_num_rows_load_sink(int64_t num_rows) { _num_rows_load_sink.fetch_add(num_rows); }
+
+    int64_t load_channel_peak_mem_bytes() const noexcept { return _load_channel_peak_mem_bytes.load(); }
+
+    int64_t local_load_channel_peak_mem_bytes() const noexcept { return _local_load_channel_peak_mem_bytes.load(); }
+
+    // Keep the largest peak reported by any load channel this fragment wrote to.
+    void update_load_channel_peak_mem_bytes(int64_t peak_bytes) {
+        _update_max(_load_channel_peak_mem_bytes, peak_bytes);
+    }
+
+    // Same, restricted to the load channel hosted on this backend.
+    void update_local_load_channel_peak_mem_bytes(int64_t peak_bytes) {
+        _update_max(_local_load_channel_peak_mem_bytes, peak_bytes);
+    }
+
+    // Keep the largest peak reported by the load channel on each backend this fragment
+    // wrote to. Only called for eos responses, so the lock is off the per-chunk path.
+    void update_backend_load_channel_peak_mem_bytes(int64_t backend_id, int64_t peak_bytes) {
+        std::lock_guard<std::mutex> l(_backend_load_channel_peak_lock);
+        int64_t& peak = _backend_load_channel_peak_mem_bytes[backend_id];
+        peak = std::max(peak, peak_bytes);
+    }
+
+    std::map<int64_t, int64_t> backend_load_channel_peak_mem_bytes() const {
+        std::lock_guard<std::mutex> l(_backend_load_channel_peak_lock);
+        return _backend_load_channel_peak_mem_bytes;
+    }
 
     void update_num_rows_load_filtered(int64_t num_rows) { _num_rows_load_filtered.fetch_add(num_rows); }
 
@@ -753,6 +783,45 @@ private:
 
     std::atomic<int64_t> _num_rows_load_sink{0};  // total rows sink to storage
     std::atomic<int64_t> _num_bytes_load_sink{0}; // total bytes sink to storage
+
+public:
+    // CPU time the calling thread has consumed so far. The difference of two readings
+    // taken on the same thread is the CPU time that thread spent in between.
+    static int64_t thread_cpu_time_ns() {
+        timespec ts{};
+        if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) != 0) {
+            return 0;
+        }
+        return static_cast<int64_t>(ts.tv_sec) * 1000L * 1000L * 1000L + ts.tv_nsec;
+    }
+
+    // CPU time of the threads that run this fragment on the non-pipeline engine: the
+    // fragment thread and the scanner threads of its scan node. A pipeline fragment
+    // accounts its CPU in QueryRuntimeState and leaves this at 0.
+    void add_non_pipeline_cpu_ns(int64_t cpu_ns) {
+        if (cpu_ns > 0) {
+            _non_pipeline_cpu_ns.fetch_add(cpu_ns);
+        }
+    }
+
+    int64_t non_pipeline_cpu_ns() const noexcept { return _non_pipeline_cpu_ns.load(); }
+
+private:
+    static void _update_max(std::atomic<int64_t>& target, int64_t value) {
+        int64_t cur = target.load();
+        while (value > cur && !target.compare_exchange_weak(cur, value)) {
+        }
+    }
+
+    // max peak memory over the load channels written by this fragment, and over the
+    // one hosted on this backend only
+    std::atomic<int64_t> _load_channel_peak_mem_bytes{0};
+    std::atomic<int64_t> _local_load_channel_peak_mem_bytes{0};
+    // CPU time of the non-pipeline threads of this fragment, see add_non_pipeline_cpu_ns()
+    std::atomic<int64_t> _non_pipeline_cpu_ns{0};
+    // the same peaks keyed by the backend hosting the load channel
+    mutable std::mutex _backend_load_channel_peak_lock;
+    std::map<int64_t, int64_t> _backend_load_channel_peak_mem_bytes;
 
     std::atomic<int64_t> _num_rows_load_filtered{0};     // unqualified rows
     std::atomic<int64_t> _num_rows_load_unselected{0};   // rows filtered by predicates

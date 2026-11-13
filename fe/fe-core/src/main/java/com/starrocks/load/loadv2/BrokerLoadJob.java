@@ -896,6 +896,7 @@ public class BrokerLoadJob extends BulkLoadJob {
             loadingStatus.setRejectedRecordPaths(attachment.getRejectedRecordPaths());
         }
         writeDurationMs += attachment.getWriteDurationMs();
+        loadingStatus.accumulateResourceUsage(attachment.getCpuNs(), attachment.getPeakMemBytes());
         commitInfos.addAll(attachment.getCommitInfoList());
         failInfos.addAll(attachment.getFailInfoList());
         progress = (int) ((double) finishedTaskIds.size() / idToTasks.size() * 100);
@@ -960,7 +961,15 @@ public class BrokerLoadJob extends BulkLoadJob {
     @Override
     protected void updateTabletFailInfos(TaskAttachment attachment) {
         if (attachment instanceof BrokerLoadingTaskAttachment) {
-            failInfos.addAll(((BrokerLoadingTaskAttachment) attachment).getFailInfoList());
+            BrokerLoadingTaskAttachment brokerAttachment = (BrokerLoadingTaskAttachment) attachment;
+            failInfos.addAll(brokerAttachment.getFailInfoList());
+            // Keep what the failed task consumed: a cancelled job shows it, and a retry starts
+            // from zero again because reset() clears the loading status. A task of an earlier
+            // attempt, cancelled when the retry began, reports its failure after that reset; it
+            // is no longer among the tasks of the job and must not add to the new attempt.
+            if (idToTasks.containsKey(brokerAttachment.getTaskId())) {
+                loadingStatus.accumulateResourceUsage(brokerAttachment.getCpuNs(), brokerAttachment.getPeakMemBytes());
+            }
         }
     }
 }

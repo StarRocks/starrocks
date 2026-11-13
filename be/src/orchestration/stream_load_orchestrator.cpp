@@ -14,6 +14,7 @@
 
 #include "orchestration/stream_load_orchestrator.h"
 
+#include <algorithm>
 #include <atomic>
 #include <memory>
 #include <utility>
@@ -26,11 +27,13 @@
 #include "common/util/debug_util.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_metrics.h"
+#include "compute_env/query/query_runtime_state.h"
 #include "exec/exec_env.h"
 #include "exec/runtime/fragment_context.h"
 #include "orchestration/fragment_executor.h"
 #include "orchestration/fragment_mgr.h"
 #include "orchestration/plan_fragment_executor.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/message_body_sink.h"
 #include "runtime/runtime_state.h"
 
@@ -47,6 +50,8 @@ void bind_load_mem_trackers(StreamLoadContext* ctx, RuntimeState* rs) {
     ctx->instance_mem_tracker = rs->instance_mem_tracker_ptr();
 }
 
+} // namespace
+
 // Harvest a finished load fragment's results from its RuntimeState into the StreamLoadContext,
 // apply the max-filter-ratio check, update metrics, run error finalization (cancel the body
 // sink + reset the Kafka/Pulsar consumption offset), record error_url, and finally fulfill
@@ -56,6 +61,22 @@ void finish_stream_load(StreamLoadContext* ctx, RuntimeState* rs, Status status)
     bind_load_mem_trackers(ctx, rs);
     ctx->commit_infos = std::move(rs->tablet_commit_infos());
     ctx->fail_infos = std::move(rs->tablet_fail_infos());
+    // Resource usage is collected whatever the outcome: a load that fails, for example on a
+    // memory limit, is the one whose usage matters most, and it is sent with the rollback.
+    if (rs->query_runtime_state() != nullptr) {
+        ctx->cpu_ns = rs->query_runtime_state()->cpu_cost();
+    } else {
+        // The non-pipeline engine, the default for stream load and routine load, has no
+        // QueryRuntimeState: its CPU is the fragment thread plus the scanner threads.
+        ctx->cpu_ns = rs->non_pipeline_cpu_ns();
+    }
+    // peak of this backend (query tracker plus the load channel it hosts), or of a
+    // backend that only hosts a load channel for this load, whichever is larger
+    int64_t local_peak = rs->local_load_channel_peak_mem_bytes();
+    if (rs->query_mem_tracker_ptr() != nullptr) {
+        local_peak += rs->query_mem_tracker_ptr()->peak_consumption();
+    }
+    ctx->peak_mem_bytes = std::max(local_peak, rs->load_channel_peak_mem_bytes());
     if (status.ok()) {
         ctx->number_total_rows =
                 rs->num_rows_load_sink() + rs->num_rows_load_filtered() + rs->num_rows_load_unselected();
@@ -109,8 +130,6 @@ void finish_stream_load(StreamLoadContext* ctx, RuntimeState* rs, Status status)
     }
     ctx->promise.set_value(status);
 }
-
-} // namespace
 
 StreamLoadOrchestrator::StreamLoadOrchestrator(ExecEnv* exec_env, FragmentMgr* fragment_mgr)
         : _exec_env(exec_env), _fragment_mgr(fragment_mgr) {

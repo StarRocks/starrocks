@@ -288,6 +288,10 @@ public:
     int64_t number_filtered_rows = 0;
     int64_t number_unselected_rows = 0;
     int64_t loaded_bytes = 0;
+    // CPU time and peak memory of the load on this backend, reported with the commit or,
+    // when the load fails, with the rollback
+    int64_t cpu_ns = 0;
+    int64_t peak_mem_bytes = 0;
     int64_t start_nanos = 0;
     int64_t start_write_data_nanos = 0;
     int64_t load_cost_nanos = 0;

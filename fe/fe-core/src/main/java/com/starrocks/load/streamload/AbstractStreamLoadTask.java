@@ -65,6 +65,16 @@ public abstract class AbstractStreamLoadTask extends AbstractTxnStateChangeCallb
     public abstract List<TLoadInfo> toThrift();
     public abstract void init();
 
+    // Resources the load consumed on the backends, known once the task reaches a final state.
+    // Zero means nothing was reported.
+    public long getCpuNs() {
+        return 0;
+    }
+
+    public long getPeakMemBytes() {
+        return 0;
+    }
+
     // Common getters used by StreamLoadMgr
     public abstract long getId();
     public abstract String getLabel();

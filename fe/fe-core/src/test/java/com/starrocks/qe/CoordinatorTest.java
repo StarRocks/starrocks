@@ -36,6 +36,7 @@ import com.starrocks.planner.TupleId;
 import com.starrocks.proto.AIExecutionStatisticsPB;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.qe.scheduler.QueryRuntimeProfile;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.ExecutionSchedule;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
@@ -44,12 +45,14 @@ import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.FrontendServiceVersion;
 import com.starrocks.thrift.TAIExecutionStatistics;
 import com.starrocks.thrift.TAuditStatistics;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TReportAuditStatisticsParams;
+import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageType;
@@ -275,6 +278,127 @@ public class CoordinatorTest extends PlanTestBase {
         Assertions.assertTrue(rf.getBucketSeqToInstance() == null || rf.getBucketSeqToInstance().isEmpty());
         execFragment.setLayoutInfosForRuntimeFilters();
         Assertions.assertEquals(Arrays.asList(0, 1, 0, 2, 1, 2), rf.getBucketSeqToInstance());
+    }
+
+    @Test
+    public void testLoadResourceUsageFromExecStatusReports() {
+        Assertions.assertEquals(0, coordinator.getLoadCpuNs());
+        Assertions.assertEquals(0, coordinator.getLoadPeakMemBytes());
+
+        QueryRuntimeProfile queryProfile = coordinator.getQueryRuntimeProfile();
+        // backend 1 reports twice (two instances), the second report carries the larger
+        // cumulative values; backend 2 reports once
+        TReportExecStatusParams be1First = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        be1First.setBackend_id(1L);
+        be1First.setLoad_cpu_ns(100L);
+        be1First.setLoad_peak_mem_bytes(500L);
+        queryProfile.updateLoadInformation(null, be1First);
+        TReportExecStatusParams be1Second = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        be1Second.setBackend_id(1L);
+        be1Second.setLoad_cpu_ns(300L);
+        be1Second.setLoad_peak_mem_bytes(700L);
+        queryProfile.updateLoadInformation(null, be1Second);
+        TReportExecStatusParams be2 = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        be2.setBackend_id(2L);
+        be2.setLoad_cpu_ns(50L);
+        be2.setLoad_peak_mem_bytes(600L);
+        queryProfile.updateLoadInformation(null, be2);
+
+        // cpu: max per backend, summed over backends; peak: the largest per-backend total
+        Assertions.assertEquals(350L, coordinator.getLoadCpuNs());
+        Assertions.assertEquals(700L, coordinator.getLoadPeakMemBytes());
+
+        // a backend that only hosts a load channel shows up through the sink's observation
+        TReportExecStatusParams channelOnly = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        channelOnly.setBackend_id(1L);
+        channelOnly.setLoad_channel_peak_mem_bytes(900L);
+        queryProfile.updateLoadInformation(null, channelOnly);
+        Assertions.assertEquals(900L, coordinator.getLoadPeakMemBytes());
+        Assertions.assertEquals(350L, coordinator.getLoadCpuNs());
+
+        // audit statistics never lower what the reports established
+        TAuditStatistics audit = new TAuditStatistics();
+        audit.setCpu_cost_ns(1L);
+        audit.setMem_cost_bytes(1L);
+        TReportAuditStatisticsParams auditParams = new TReportAuditStatisticsParams();
+        auditParams.setAudit_statistics(audit);
+        coordinator.updateAuditStatistics(auditParams);
+        Assertions.assertEquals(350L, coordinator.getLoadCpuNs());
+        Assertions.assertEquals(900L, coordinator.getLoadPeakMemBytes());
+    }
+
+    @Test
+    public void testLoadResourceUsageFallsBackToAuditStatistics() {
+        Assertions.assertEquals(0, coordinator.getLoadCpuNs());
+        Assertions.assertEquals(0, coordinator.getLoadPeakMemBytes());
+
+        // two backends report audit statistics only: cpu time is summed, memory is the largest peak
+        TAuditStatistics first = new TAuditStatistics();
+        first.setCpu_cost_ns(100L);
+        first.setMem_cost_bytes(50L);
+        TReportAuditStatisticsParams firstParams = new TReportAuditStatisticsParams();
+        firstParams.setAudit_statistics(first);
+        coordinator.updateAuditStatistics(firstParams);
+
+        TAuditStatistics second = new TAuditStatistics();
+        second.setCpu_cost_ns(200L);
+        second.setMem_cost_bytes(30L);
+        TReportAuditStatisticsParams secondParams = new TReportAuditStatisticsParams();
+        secondParams.setAudit_statistics(second);
+        coordinator.updateAuditStatistics(secondParams);
+
+        Assertions.assertEquals(300L, coordinator.getLoadCpuNs());
+        Assertions.assertEquals(50L, coordinator.getLoadPeakMemBytes());
+    }
+
+    /**
+     * Rolling upgrade, a load with a scan backend and a sink backend where only one of them
+     * reports its own CPU time. The audit statistics the sink backend sends are already merged
+     * over the scan backend, so they are the total and must not be added to a backend's report.
+     */
+    @Test
+    public void testLoadCpuInMixedVersionsNeverCountsABackendTwice() {
+        long scanCpu = 400L;
+        long sinkCpu = 100L;
+        TAuditStatistics audit = new TAuditStatistics();
+        audit.setCpu_cost_ns(scanCpu + sinkCpu);
+        TReportAuditStatisticsParams auditParams = new TReportAuditStatisticsParams();
+        auditParams.setAudit_statistics(audit);
+        QueryRuntimeProfile queryProfile = coordinator.getQueryRuntimeProfile();
+
+        // only the scan backend is upgraded: its report is part of the audit total, not on top of it
+        TReportExecStatusParams scan = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        scan.setBackend_id(1L);
+        scan.setLoad_cpu_ns(scanCpu);
+        queryProfile.updateLoadResourceUsage(null, scan);
+        // before the audit statistics arrive the reported part is all that is known
+        Assertions.assertEquals(scanCpu, coordinator.getLoadCpuNs());
+        coordinator.updateAuditStatistics(auditParams);
+        Assertions.assertEquals(scanCpu + sinkCpu, coordinator.getLoadCpuNs());
+
+        // the sink backend reports too (every backend upgraded): still the same total
+        TReportExecStatusParams sink = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        sink.setBackend_id(2L);
+        sink.setLoad_cpu_ns(sinkCpu);
+        queryProfile.updateLoadResourceUsage(null, sink);
+        Assertions.assertEquals(scanCpu + sinkCpu, coordinator.getLoadCpuNs());
+    }
+
+    @Test
+    public void testLoadCpuInMixedVersionsKeepsTheOldBackendsShare() {
+        // only the sink backend is upgraded: its own report is 100, the audit total it sends
+        // also carries the old scan backend's 400
+        TReportExecStatusParams sink = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        sink.setBackend_id(2L);
+        sink.setLoad_cpu_ns(100L);
+        coordinator.getQueryRuntimeProfile().updateLoadResourceUsage(null, sink);
+        TAuditStatistics audit = new TAuditStatistics();
+        audit.setCpu_cost_ns(500L);
+        TReportAuditStatisticsParams auditParams = new TReportAuditStatisticsParams();
+        auditParams.setAudit_statistics(audit);
+        coordinator.updateAuditStatistics(auditParams);
+
+        Assertions.assertEquals(500L, coordinator.getLoadCpuNs());
     }
 
     @Test

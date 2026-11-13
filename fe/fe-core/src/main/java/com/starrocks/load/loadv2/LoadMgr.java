@@ -255,7 +255,9 @@ public class LoadMgr implements MemoryTrackable {
                                                long timeout,
                                                long warehouseId,
                                                Coordinator coordinator,
-                                               InsertLoadTxnCallback insertLoadTxnCallback) throws StarRocksException {
+                                               InsertLoadTxnCallback insertLoadTxnCallback,
+                                               String statementKind,
+                                               String clientIp) throws StarRocksException {
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
@@ -265,7 +267,8 @@ public class LoadMgr implements MemoryTrackable {
         InsertLoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
             loadJob = new InsertLoadJob(label, db.getId(), tableId, txnId, loadId, user,
-                    createTimestamp, timeout, warehouseId, coordinator, insertLoadTxnCallback);
+                    createTimestamp, timeout, warehouseId, coordinator, insertLoadTxnCallback,
+                    statementKind, clientIp);
             loadJob.setLoadFileInfo(estimateStats.estimateFileNum, estimateStats.estimateFileSize);
             loadJob.setEstimateScanRow(estimateStats.estimateScanRows);
             loadJob.setTransactionId(txnId);

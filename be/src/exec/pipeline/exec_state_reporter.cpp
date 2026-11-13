@@ -125,6 +125,19 @@ std::string to_http_path(const std::string& token, const std::string& file_name)
     return url.str();
 }
 
+void ExecStateReporter::set_load_resource_usage(QueryContext* query_ctx, RuntimeState* runtime_state,
+                                                TReportExecStatusParams* params) {
+    if (runtime_state->query_options().query_type != TQueryType::LOAD) {
+        return;
+    }
+    if (auto* query_runtime_state = runtime_state->query_runtime_state(); query_runtime_state != nullptr) {
+        params->__set_load_cpu_ns(query_runtime_state->cpu_cost());
+    }
+    if (query_ctx != nullptr && query_ctx->mem_tracker() != nullptr) {
+        params->__set_load_peak_mem_bytes(query_ctx->mem_cost_bytes());
+    }
+}
+
 std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_status_params(
         QueryContext* query_ctx, FragmentContext* fragment_ctx, RuntimeProfile* profile,
         RuntimeProfile* load_channel_profile, const Status& status, bool done) {
@@ -146,6 +159,7 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
         // this is a load plan, and load is not finished, just make a brief report
         RuntimeStateHelper::update_report_load_status(runtime_state, &params);
         params.__set_load_type(runtime_state->query_options().load_job_type);
+        set_load_resource_usage(query_ctx, runtime_state, &params);
 
         if (query_runtime_state->enable_profile()) {
             profile->to_thrift(&params.profile);
@@ -158,6 +172,17 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
             RuntimeStateHelper::update_report_load_status(runtime_state, &params);
             params.__set_load_type(runtime_state->query_options().load_job_type);
+            if (runtime_state->load_channel_peak_mem_bytes() > 0) {
+                params.__set_load_channel_peak_mem_bytes(runtime_state->load_channel_peak_mem_bytes());
+            }
+            auto channel_peaks = runtime_state->backend_load_channel_peak_mem_bytes();
+            if (!channel_peaks.empty()) {
+                params.__set_load_channel_peak_mem_bytes_by_backend(channel_peaks);
+            }
+            // This backend's share of the load: CPU over all its instances and the peak of
+            // its query memory. The load channels are reported per hosting backend above,
+            // because a backend can host one without running a fragment of the load.
+            set_load_resource_usage(query_ctx, runtime_state, &params);
         }
         if (query_runtime_state->enable_profile()) {
             profile->to_thrift(&params.profile);
