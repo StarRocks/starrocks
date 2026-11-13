@@ -26,6 +26,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -46,6 +47,13 @@ class CoordinatorPreprocessorCaptureWorkerProviderTest {
         UtFrameUtils.createMinStarRocksCluster();
     }
 
+    private static ConnectContext newCtx() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        // mockJobSpec requires a non-null execution id
+        ctx.setExecutionId(new TUniqueId(0xdeadbeef, 0xdeadbeef));
+        return ctx;
+    }
+
     private static DefaultWorkerProvider providerWithBackend(long id) {
         Backend be = new Backend(id, "127.0.0.1", 9050);
         be.setAlive(true);
@@ -61,7 +69,7 @@ class CoordinatorPreprocessorCaptureWorkerProviderTest {
         final long workerId = 42L;
         DefaultWorkerProvider fakeProvider = providerWithBackend(workerId);
 
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext ctx = newCtx();
         CoordinatorPreprocessor prep =
                 new CoordinatorPreprocessor(Collections.emptyList(), Collections.emptyList(), ctx);
         Deencapsulation.setField(prep, "lazyWorkerProvider", LazyWorkerProvider.of(() -> fakeProvider));
@@ -79,7 +87,7 @@ class CoordinatorPreprocessorCaptureWorkerProviderTest {
 
     @Test
     void testCaptureWorkerProviderDirectInvoke() {
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext ctx = newCtx();
         CoordinatorPreprocessor prep =
                 new CoordinatorPreprocessor(Collections.emptyList(), Collections.emptyList(), ctx);
 
@@ -93,7 +101,7 @@ class CoordinatorPreprocessorCaptureWorkerProviderTest {
         boolean saved = Config.enable_connector_location_worker_restriction;
         Config.enable_connector_location_worker_restriction = false;
         try {
-            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext ctx = newCtx();
             CoordinatorPreprocessor prep =
                     new CoordinatorPreprocessor(Collections.emptyList(), Collections.emptyList(), ctx);
             WorkerProvider provider = prep.captureWorkerProvider();
@@ -106,7 +114,7 @@ class CoordinatorPreprocessorCaptureWorkerProviderTest {
 
     @Test
     void testCaptureWorkerProviderSkipsRestrictionInSharedDataMode() {
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext ctx = newCtx();
         CoordinatorPreprocessor prep =
                 new CoordinatorPreprocessor(Collections.emptyList(), Collections.emptyList(), ctx);
         new MockUp<RunMode>() {
