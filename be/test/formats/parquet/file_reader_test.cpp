@@ -5639,8 +5639,6 @@ TEST_F(FileReaderTest, test_read_variant_shredding_keeps_empty_objects) {
     EXPECT_EQ(R"({"p":{}})", variant_row_json(variant_col, 3));
 }
 
-<<<<<<< HEAD
-=======
 // A shredded scalar field that has both `value` and `typed_value` set is invalid per the shredding spec. Reading it
 // must fail instead of silently dropping `value`.
 TEST_F(FileReaderTest, test_read_variant_shredding_rejects_value_and_typed_value_conflict) {
@@ -5686,27 +5684,6 @@ TEST_F(FileReaderTest, test_read_variant_shredding_rejects_non_object_value_with
             << status.message();
 }
 
-// A list of shredded variants whose typed_value is an object. The levels of the leaves below the variants have one entry
-// per element, so they cannot tell the presence of an object per row: the column must still read as before.
-TEST_F(FileReaderTest, test_read_variant_shredding_in_array_reads_objects_with_variant_null_rows) {
-    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding_in_array.parquet";
-    auto file_reader = _create_file_reader(variant_file_path);
-    TypeDescriptor array_of_variant = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
-    Utils::SlotDesc slot_descs[] = {{"arr", array_of_variant}, {""}};
-    auto ctx = _create_scan_context(slot_descs, variant_file_path);
-
-    Status status = file_reader->init(&ctx->format_scan_context);
-    ASSERT_TRUE(status.ok()) << status.message();
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(array_of_variant, true), chunk->num_columns());
-    status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok()) << status.message();
-    ASSERT_EQ(2, chunk->num_rows());
-    EXPECT_EQ(R"([{"x":1},{"x":2}])", chunk->get_column_by_index(0)->debug_item(0));
-    EXPECT_EQ(R"([{"x":3}])", chunk->get_column_by_index(0)->debug_item(1));
-}
-
->>>>>>> 9a755b9 ([BugFix] Reject shredded VARIANT data that breaks the value/typed_value rules (#83126))
 // A shredded BINARY and a shredded UUID leaf must not make the rebuild of the row drop the other fields. The exact
 // text of the binary/UUID values is not asserted; only that the fields are present and that n survives.
 TEST_F(FileReaderTest, test_read_variant_shredding_binary_uuid_keeps_other_fields) {
