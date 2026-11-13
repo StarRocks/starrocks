@@ -58,6 +58,10 @@ struct LakeSplitContext : public ScanSplitContext {
     // Optional metadata for Lake prepared physical split children.
     // prepared_segment_read_state and indices are set only when the rowid range maps to one segment.
     lake::PreparedTabletReadStatePtr prepared_tablet_read_state = nullptr;
+    // The segments a CLASSIC physical split opened in parallel (lake_scan_parallel_segment_open), shared by all of
+    // its splits so that they read the very Segment objects the splitter planned on. Kept apart from
+    // prepared_tablet_read_state so these ranges never enter prepared refinement or reader-reuse scheduling.
+    lake::PreparedTabletReadStatePtr classic_tablet_read_state = nullptr;
     lake::PreparedSegmentReadStatePtr prepared_segment_read_state = nullptr;
     size_t rowset_index = 0;
     size_t segment_index = 0;
