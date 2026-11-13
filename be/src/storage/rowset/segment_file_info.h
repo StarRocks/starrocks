@@ -42,9 +42,10 @@ struct SegmentFileInfo : public FileInfo {
     // compaction/merge.
     void to_proto(uint32_t segment_idx, SegmentMetadataPB* segment_meta) const;
 
-    // Writes the sort-key fields, and CLEARS the deprecated metadata samples rather than leaving
-    // whatever |segment_meta| already held: nothing maintains those samples any more, so a target
-    // reused from another segment must not carry them forward.
+    // Writes the sort-key fields (the encoded min/max bounds), and CLEARS the deprecated bounds and
+    // metadata samples rather than leaving whatever |segment_meta| already held: nothing writes the
+    // deprecated pair or maintains the samples any more, so a target reused from another segment
+    // must not carry them forward.
     void sort_key_fields_to_proto(SegmentMetadataPB* segment_meta) const;
 };
 
