@@ -21,10 +21,10 @@
 #include "base/container/raw_container.h"
 #include "base/testutil/assert.h"
 #include "base/uid_util.h"
-#include "base/utility/defer_op.h"
 #include "common/runtime_profile.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
+#include "fs/fs_memory.h"
 #include "fs/remote_read_context.h"
 
 namespace starrocks {
@@ -123,13 +123,19 @@ TEST_F(LoadSpillBlockManagerTest, test_clear_parent_path) {
 }
 
 namespace {
-std::vector<RemoteReadContext> g_load_spill_reads;
+// Records the read context each file is opened with.
+class RecordingFileSystem final : public MemoryFileSystem {
+public:
+    using MemoryFileSystem::new_sequential_file;
 
-Status record_load_spill_read(const RemoteReadContext& ctx, int64_t, const std::function<int64_t()>& read) {
-    g_load_spill_reads.push_back(ctx);
-    read();
-    return Status::OK();
-}
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                  const std::string& url) override {
+        opened_with.push_back(opts.remote_read);
+        return MemoryFileSystem::new_sequential_file(opts, url);
+    }
+
+    std::vector<RemoteReadContext> opened_with;
+};
 } // namespace
 
 // A load reads its spill on remote storage back as a load, one flow per load.
@@ -137,14 +143,11 @@ TEST_F(LoadSpillBlockManagerTest, test_remote_reads_are_the_loads) {
     TUniqueId load_id;
     load_id.hi = 12345;
     load_id.lo = 67890;
-    auto block_manager = std::make_unique<LoadSpillBlockManager>(load_id, TUniqueId(), kTestDir, nullptr,
+    auto fs = std::make_shared<RecordingFileSystem>();
+    ASSERT_OK(fs->create_dir_recursive("/load_spill_remote"));
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(load_id, TUniqueId(), "/load_spill_remote", fs,
                                                                  _local_spill_dir_mgr.get());
     ASSERT_OK(block_manager->init());
-    g_scheduled_remote_read.store(&record_load_spill_read);
-    DeferOp reset([]() {
-        g_scheduled_remote_read.store(nullptr);
-        g_load_spill_reads.clear();
-    });
 
     ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024, /*force_remote=*/true));
     ASSERT_TRUE(block->is_remote());
@@ -156,14 +159,11 @@ TEST_F(LoadSpillBlockManagerTest, test_remote_reads_are_the_loads) {
     ASSERT_OK(input_stream->read_fully(buffer.data(), 9));
     ASSERT_EQ(buffer, "test_data");
 
-    ASSERT_FALSE(g_load_spill_reads.empty());
-    for (const auto& ctx : g_load_spill_reads) {
-        EXPECT_TRUE(ctx.is_set);
-        EXPECT_EQ(RemoteReadContext::Workload::LOAD, ctx.workload);
-        EXPECT_EQ(RemoteReadContext::flow_id_of(load_id.hi, load_id.lo), ctx.flow_id);
-    }
-    block.reset();
-    ASSERT_OK(block_manager->clear_parent_path());
+    ASSERT_EQ(1u, fs->opened_with.size());
+    const auto& ctx = fs->opened_with[0];
+    EXPECT_TRUE(ctx.is_set);
+    EXPECT_EQ(RemoteReadContext::Workload::LOAD, ctx.workload);
+    EXPECT_EQ(RemoteReadContext::flow_id_of(load_id.hi, load_id.lo), ctx.flow_id);
 }
 
 // Test that destroying LoadSpillBlockManager does NOT clean up the spill parent directory.

@@ -302,8 +302,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     }
     runtime_state->set_desc_tbl(desc_tbl);
     if (query_options.__isset.enable_spill && query_options.enable_spill) {
-        // A spill read back from remote storage is a read of the query, in the flow and group of its scans.
-        RETURN_IF_ERROR(_query_ctx->init_spill_manager(query_options, query_remote_read_context(runtime_state)));
+        RETURN_IF_ERROR(_query_ctx->init_spill_manager(query_options));
     }
 
     for (const auto& action : request.debug_actions()) {

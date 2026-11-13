@@ -34,8 +34,9 @@ using FileBlockContainerPtr = std::shared_ptr<FileBlockContainer>;
 
 class FileBlockManager : public BlockManager {
 public:
-    // `remote_read` is whom the reads of its blocks on remote storage are for: the query or the load that spills.
-    FileBlockManager(const TUniqueId& query_id, DirManager* dir_manager, const RemoteReadContext& remote_read);
+    // `remote_read` is whom the reads of its blocks in starlet storage are for: the load that spills into its tablets'
+    // storage. Other file systems ignore it.
+    FileBlockManager(const TUniqueId& query_id, DirManager* dir_manager, const RemoteReadContext& remote_read = {});
     ~FileBlockManager() override = default;
 
     Status open() override;

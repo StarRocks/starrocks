@@ -14,11 +14,7 @@
 
 #pragma once
 
-#include <atomic>
 #include <cstdint>
-#include <functional>
-
-#include "common/status.h"
 
 namespace starrocks {
 
@@ -105,13 +101,5 @@ private:
     const RemoteReadContext _ctx;
     const RemoteReadContext* const _prev;
 };
-
-// Runs a remote read that does not go through starlet -- the spill of a query or a load to a remote storage volume
-// reads its object store through its own file system -- as one request of the remote read scheduler: it waits for its
-// turn with every other remote read, then runs `read`, which returns the bytes it read. Null unless the scheduler was
-// started, and such reads then run directly. Set at most once, at startup, before any query or load runs.
-using ScheduledRemoteRead = Status (*)(const RemoteReadContext& ctx, int64_t bytes,
-                                       const std::function<int64_t()>& read);
-inline std::atomic<ScheduledRemoteRead> g_scheduled_remote_read{nullptr};
 
 } // namespace starrocks

@@ -18,7 +18,6 @@
 
 #include "compute_env/spill/global_spill_manager.h"
 #include "compute_env/spill/log_block_manager.h"
-#include "fs/remote_read_context.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks {
@@ -31,8 +30,7 @@ public:
     QuerySpillManager(const TUniqueId& uid, GlobalSpillManager* global_spill_manager, DirManager* spill_dir_mgr)
             : _uid(uid), _global_spill_manager(global_spill_manager), _spill_dir_mgr(spill_dir_mgr) {}
 
-    // `remote_read` is the query's remote read context: its spill files on remote storage are read as the query.
-    Status init_block_manager(const TQueryOptions& query_options, const RemoteReadContext& remote_read);
+    Status init_block_manager(const TQueryOptions& query_options);
 
     void increase_spillable_operators() { _global_spill_manager->increase_spillable_operators(); }
     void decrease_spillable_operators() { _global_spill_manager->decrease_spillable_operators(); }

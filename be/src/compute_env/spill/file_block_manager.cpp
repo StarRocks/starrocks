@@ -26,37 +26,6 @@
 #include "gutil/casts.h"
 
 namespace starrocks::spill {
-namespace {
-// A spill file on remote storage outside starlet -- the spill of a query to a remote storage volume, or of a sink -- is
-// read through its own file system, such as S3, not through starlet. Its reads go through the remote I/O scheduler all
-// the same, as reads of the query or load that spilled, so that they wait their turn with the other remote reads of
-// the node.
-class ScheduledRemoteInputStream final : public io::InputStream {
-public:
-    ScheduledRemoteInputStream(std::unique_ptr<io::InputStreamWrapper> stream, const RemoteReadContext& ctx)
-            : _stream(std::move(stream)), _ctx(ctx) {}
-
-    StatusOr<int64_t> read(void* data, int64_t count) override {
-        auto run = g_scheduled_remote_read.load();
-        if (run == nullptr) {
-            return _stream->read(data, count);
-        }
-        StatusOr<int64_t> result = 0;
-        RETURN_IF_ERROR(run(_ctx, count, [&]() -> int64_t {
-            result = _stream->read(data, count);
-            return result.ok() ? *result : 0;
-        }));
-        return result;
-    }
-
-    Status skip(int64_t count) override { return _stream->skip(count); }
-
-private:
-    std::unique_ptr<io::InputStreamWrapper> _stream;
-    const RemoteReadContext _ctx;
-};
-} // namespace
-
 class FileBlockContainer {
 public:
     FileBlockContainer(DirPtr dir, const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
@@ -191,7 +160,7 @@ private:
     bool _flat_layout = false;
     // Caller-supplied prefix used in flat layout. Format: "<txn_id_hex>_<load_id>_<frag_id>".
     std::string _flat_name_prefix;
-    // Whom the reads of this container are for when it is on remote storage.
+    // Whom the reads of this container are for when it is in starlet storage.
     RemoteReadContext _remote_read;
 };
 
@@ -229,14 +198,7 @@ StatusOr<std::unique_ptr<io::InputStreamWrapper>> FileBlockContainer::get_readab
     SequentialFileOptions opts;
     opts.remote_read = _remote_read;
     ASSIGN_OR_RETURN(auto f, _dir->fs()->new_sequential_file(opts, path()));
-    // Starlet schedules the cache misses of a file itself, as reads of the context it is opened with, and serves cache
-    // hits locally: scheduling all its reads again here would queue cache hits as remote reads. Any other remote file
-    // system reads the object store directly, so its reads go through the scheduler here.
-    if (!_dir->is_remote() || _dir->fs()->type() == FileSystem::Type::STARLET) {
-        return f;
-    }
-    return std::make_unique<io::InputStreamWrapper>(
-            std::make_unique<ScheduledRemoteInputStream>(std::move(f), _remote_read));
+    return f;
 }
 
 StatusOr<FileBlockContainerPtr> FileBlockContainer::create(const DirPtr& dir, const TUniqueId& query_id,

@@ -31,7 +31,7 @@ Status QuerySpillManager::init_local_block_manager() {
     return Status::OK();
 }
 
-Status QuerySpillManager::init_block_manager(const TQueryOptions& query_options, const RemoteReadContext& remote_read) {
+Status QuerySpillManager::init_block_manager(const TQueryOptions& query_options) {
     const TSpillOptions& spill_options = query_options.spill_options;
     bool enable_spill_to_remote_storage =
             spill_options.__isset.enable_spill_to_remote_storage && spill_options.enable_spill_to_remote_storage;
@@ -62,13 +62,13 @@ Status QuerySpillManager::init_block_manager(const TQueryOptions& query_options,
     bool disable_spill_to_local_disk =
             options.__isset.disable_spill_to_local_disk && options.disable_spill_to_local_disk;
     if (disable_spill_to_local_disk) {
-        _block_manager = std::make_unique<FileBlockManager>(_uid, _remote_dir_manager.get(), remote_read);
+        _block_manager = std::make_unique<FileBlockManager>(_uid, _remote_dir_manager.get());
         return Status::OK();
     }
 
     // init block manager
     auto local_block_manager = std::make_unique<LogBlockManager>(_uid, _spill_dir_mgr);
-    auto remote_block_manager = std::make_unique<FileBlockManager>(_uid, _remote_dir_manager.get(), remote_read);
+    auto remote_block_manager = std::make_unique<FileBlockManager>(_uid, _remote_dir_manager.get());
     _block_manager =
             std::make_unique<HyBirdBlockManager>(_uid, std::move(local_block_manager), std::move(remote_block_manager));
 

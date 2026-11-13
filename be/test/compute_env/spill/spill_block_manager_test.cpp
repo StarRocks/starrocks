@@ -22,7 +22,6 @@
 
 #include "base/testutil/assert.h"
 #include "base/uid_util.h"
-#include "base/utility/defer_op.h"
 #include "common/config_storage_fwd.h"
 #include "compute_env/spill/dir_manager.h"
 #include "compute_env/spill/file_block_manager.h"
@@ -187,8 +186,7 @@ TEST_F(SpillBlockManagerTest, log_block_allocation_test) {
 }
 
 TEST_F(SpillBlockManagerTest, file_block_allocation_test) {
-    auto file_block_mgr =
-            std::make_shared<spill::FileBlockManager>(dummy_query_id, local_dir_mgr.get(), RemoteReadContext{});
+    auto file_block_mgr = std::make_shared<spill::FileBlockManager>(dummy_query_id, local_dir_mgr.get());
     ASSERT_OK(file_block_mgr->open());
 
     std::vector<spill::BlockPtr> blocks;
@@ -242,60 +240,6 @@ TEST_F(SpillBlockManagerTest, file_block_allocation_test) {
 }
 
 namespace {
-std::vector<RemoteReadContext> g_spill_reads;
-
-Status record_spill_read(const RemoteReadContext& ctx, int64_t, const std::function<int64_t()>& read) {
-    g_spill_reads.push_back(ctx);
-    read();
-    return Status::OK();
-}
-} // namespace
-
-// A block on remote storage is read through the remote I/O scheduler as whoever spilled it: the query, in the flow
-// and resource group of its scans, or the load.
-TEST_F(SpillBlockManagerTest, remote_file_block_reads_as_its_spiller) {
-    auto remote_store = std::make_shared<spill::RemoteDir>(remote_path, fs_handle, nullptr, INT64_MAX);
-    auto remote_store_mgr = create_spill_dir_manager({remote_store});
-    g_scheduled_remote_read.store(&record_spill_read);
-    DeferOp reset([]() {
-        g_scheduled_remote_read.store(nullptr);
-        g_spill_reads.clear();
-    });
-
-    const auto query = RemoteReadContext::for_query(
-            7, 16, /*group_config_version=*/3, RemoteReadContext::flow_id_of(dummy_query_id.hi, dummy_query_id.lo));
-    const auto load = RemoteReadContext::for_load(RemoteReadContext::flow_id_of(dummy_query_id.lo, dummy_query_id.hi));
-    for (const auto& ctx : {query, load}) {
-        g_spill_reads.clear();
-        spill::FileBlockManager block_mgr(dummy_query_id, remote_store_mgr.get(), ctx);
-        ASSERT_OK(block_mgr.open());
-        spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
-                                        .fragment_instance_id = dummy_query_id,
-                                        .plan_node_id = 1,
-                                        .name = "node1",
-                                        .block_size = 4};
-        ASSIGN_OR_ABORT(auto block, block_mgr.acquire_block(opts));
-        ASSERT_TRUE(block->is_remote());
-        ASSERT_OK(block->append({Slice("abcd")}));
-        ASSERT_OK(block_mgr.release_block(block));
-        ASSIGN_OR_ABORT(auto stream, block->get_readable());
-        char buf[4];
-        ASSERT_OK(stream->read_fully(buf, sizeof(buf)));
-        ASSERT_EQ("abcd", std::string(buf, sizeof(buf)));
-
-        ASSERT_FALSE(g_spill_reads.empty());
-        for (const auto& read : g_spill_reads) {
-            EXPECT_TRUE(read.is_set);
-            EXPECT_EQ(ctx.workload, read.workload);
-            EXPECT_EQ(ctx.group_id, read.group_id);
-            EXPECT_EQ(ctx.group_weight, read.group_weight);
-            EXPECT_EQ(ctx.group_config_version, read.group_config_version);
-            EXPECT_EQ(ctx.flow_id, read.flow_id);
-        }
-    }
-}
-
-namespace {
 // Stands in for starlet: records the read context a file is opened with, as passed in its options.
 class StarletLikeFileSystem final : public MemoryFileSystem {
 public:
@@ -313,20 +257,14 @@ public:
 };
 } // namespace
 
-// Starlet schedules the reads of a spill in its storage itself, as reads of whoever opened the file: the block is
-// opened as its spiller, and its reads, cache hits included, are not scheduled a second time.
+// Starlet schedules the reads of a spill in its storage as reads of whoever opened the file: a load's spill block is
+// opened with the load's context.
 TEST_F(SpillBlockManagerTest, starlet_file_block_is_opened_as_its_spiller) {
     StarletLikeFileSystem starlet_fs;
     std::shared_ptr<FileSystem> starlet_fs_handle(&starlet_fs, [](FileSystem*) {});
     ASSERT_OK(starlet_fs.create_dir_recursive(remote_path));
     auto remote_store = std::make_shared<spill::RemoteDir>(remote_path, starlet_fs_handle, nullptr, INT64_MAX);
     auto remote_store_mgr = create_spill_dir_manager({remote_store});
-    g_scheduled_remote_read.store(&record_spill_read);
-    DeferOp reset([]() {
-        g_scheduled_remote_read.store(nullptr);
-        g_spill_reads.clear();
-    });
-
     const auto load = RemoteReadContext::for_load(RemoteReadContext::flow_id_of(dummy_query_id.hi, dummy_query_id.lo));
     spill::FileBlockManager block_mgr(dummy_query_id, remote_store_mgr.get(), load);
     ASSERT_OK(block_mgr.open());
@@ -344,7 +282,6 @@ TEST_F(SpillBlockManagerTest, starlet_file_block_is_opened_as_its_spiller) {
     ASSERT_OK(stream->read_fully(buf, sizeof(buf)));
     ASSERT_EQ("abcd", std::string(buf, sizeof(buf)));
 
-    EXPECT_TRUE(g_spill_reads.empty());
     ASSERT_EQ(1u, starlet_fs.opened_with.size());
     const auto& opened = starlet_fs.opened_with[0];
     EXPECT_TRUE(opened.is_set);
@@ -358,8 +295,7 @@ TEST_F(SpillBlockManagerTest, hybird_block_allocation_test) {
         auto local_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id, local_dir_mgr.get());
         ASSERT_OK(local_block_mgr->open());
 
-        auto remote_block_mgr =
-                std::make_unique<spill::FileBlockManager>(dummy_query_id, remote_dir_mgr.get(), RemoteReadContext{});
+        auto remote_block_mgr = std::make_unique<spill::FileBlockManager>(dummy_query_id, remote_dir_mgr.get());
         ASSERT_OK(remote_block_mgr->open());
 
         hybird_block_mgr = std::make_shared<spill::HyBirdBlockManager>(dummy_query_id, std::move(local_block_mgr),
