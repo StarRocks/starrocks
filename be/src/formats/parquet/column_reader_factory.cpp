@@ -81,7 +81,52 @@ struct VariantNodeFields {
 };
 
 Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, const ParquetField* typed_group,
-                                       VariantPath* current_path, std::vector<ShreddedFieldNode>* output);
+                                       VariantPath* current_path, std::vector<ShreddedFieldNode>* output,
+                                       bool within_array = false);
+
+// The leaf to read an object group's definition levels from: a `value` leaf if there is one (always a binary), else
+// any scalar leaf. Only structs are crossed: a leaf under a list or map has one level per element, not per row.
+static const ParquetField* find_object_presence_leaf(const ParquetField& group, bool value_only) {
+    for (const auto& child : group.children) {
+        if (child.type == ColumnType::SCALAR) {
+            if (!value_only || child.name == "value") {
+                return &child;
+            }
+        } else if (child.type == ColumnType::STRUCT) {
+            if (const ParquetField* leaf = find_object_presence_leaf(child, value_only); leaf != nullptr) {
+                return leaf;
+            }
+        }
+    }
+    return nullptr;
+}
+
+// nullptr when the group cannot tell its presence: it is required (so it is present whenever its parent is), no leaf
+// below it carries its levels, or it sits below a repeated ancestor (a VARIANT in a LIST or MAP column): the levels of
+// its leaves then have one entry per element, not per row, and are not aligned with the rows of the read.
+static StatusOr<std::unique_ptr<ObjectPresenceSource>> make_object_presence_source(const ColumnReaderOptions& opts,
+                                                                                   const ParquetField* group) {
+    if (!group->is_nullable || group->max_rep_level() > 0) {
+        return std::unique_ptr<ObjectPresenceSource>();
+    }
+    const ParquetField* leaf = find_object_presence_leaf(*group, true);
+    if (leaf == nullptr) {
+        leaf = find_object_presence_leaf(*group, false);
+    }
+    if (leaf == nullptr || leaf->max_rep_level() > 0) {
+        return std::unique_ptr<ObjectPresenceSource>();
+    }
+    auto source = std::make_unique<ObjectPresenceSource>();
+    source->group_def_level = group->max_def_level();
+    source->read_type = std::make_unique<TypeDescriptor>(variant_typed_desc_from_parquet_field(leaf));
+    auto reader_or = ColumnReaderFactory::create(opts, leaf, *source->read_type);
+    if (!reader_or.ok()) {
+        return reader_or.status().clone_and_prepend(
+                strings::Substitute("build variant object presence reader failed, leaf=$0", leaf->name));
+    }
+    source->reader = std::move(reader_or).value();
+    return source;
+}
 
 static VariantNodeFields find_variant_node_fields(const ParquetField* struct_field) {
     VariantNodeFields fields;
@@ -198,7 +243,8 @@ static Status collect_array_element_shredded_children(const ColumnReaderOptions&
     const ParquetField* element_typed_value = element_fields.typed_value;
     if (element_typed_value != nullptr && element_typed_value->type == ColumnType::STRUCT) {
         VariantPath element_path;
-        RETURN_IF_ERROR(collect_variant_shredded_fields(opts, element_typed_value, &element_path, &node->children));
+        RETURN_IF_ERROR(
+                collect_variant_shredded_fields(opts, element_typed_value, &element_path, &node->children, true));
     }
     return Status::OK();
 }
@@ -289,7 +335,8 @@ static Status build_scalar_reader_for_variant_node(const ColumnReaderOptions& op
 }
 
 Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, const ParquetField* typed_group,
-                                       VariantPath* current_path, std::vector<ShreddedFieldNode>* output) {
+                                       VariantPath* current_path, std::vector<ShreddedFieldNode>* output,
+                                       bool within_array) {
     if (typed_group == nullptr || current_path == nullptr || output == nullptr) {
         return Status::InvalidArgument("typed_group/current_path/output should not be null");
     }
@@ -352,7 +399,11 @@ Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, const Pa
         if (typed_field->type == ColumnType::SCALAR) {
             RETURN_IF_ERROR(build_scalar_reader_for_variant_node(opts, typed_field, node.full_path, &node));
         } else if (typed_field->type == ColumnType::STRUCT) {
-            RETURN_IF_ERROR(collect_variant_shredded_fields(opts, typed_field, current_path, &node.children));
+            RETURN_IF_ERROR(
+                    collect_variant_shredded_fields(opts, typed_field, current_path, &node.children, within_array));
+            if (!within_array) {
+                ASSIGN_OR_RETURN(node.presence, make_object_presence_source(opts, typed_field));
+            }
         } else if (typed_field->type == ColumnType::ARRAY) {
             node.kind = ShreddedFieldNode::Kind::ARRAY;
             RETURN_IF_ERROR(
@@ -665,11 +716,13 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
     std::vector<ShreddedFieldNode> shredded_fields;
     ColumnReaderPtr root_typed_value_reader = nullptr;
     std::unique_ptr<TypeDescriptor> root_typed_value_type = nullptr;
+    std::unique_ptr<ObjectPresenceSource> root_presence;
     if (top_fields.typed_value != nullptr) {
         const ParquetField* typed_value_field = top_fields.typed_value;
         if (typed_value_field->type == ColumnType::STRUCT) {
             VariantPath root_path;
             RETURN_IF_ERROR(collect_variant_shredded_fields(opts, typed_value_field, &root_path, &shredded_fields));
+            ASSIGN_OR_RETURN(root_presence, make_object_presence_source(opts, typed_value_field));
         } else {
             TypeDescriptor file_type = variant_typed_desc_from_parquet_field(typed_value_field);
             root_typed_value_type = std::make_unique<TypeDescriptor>(file_type);
@@ -682,9 +735,12 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
             root_typed_value_reader = std::move(root_reader_or).value();
         }
     }
-    return std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
-                                                 std::move(shredded_fields), std::move(hints.parsed_shredded_paths),
-                                                 std::move(root_typed_value_reader), std::move(root_typed_value_type));
+    auto reader =
+            std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
+                                                  std::move(shredded_fields), std::move(hints.parsed_shredded_paths),
+                                                  std::move(root_typed_value_reader), std::move(root_typed_value_type));
+    reader->set_root_presence(std::move(root_presence));
+    return ColumnReaderPtr(std::move(reader));
 }
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr raw_reader, const GlobalDictMap* dict,
