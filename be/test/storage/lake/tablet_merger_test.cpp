@@ -20,6 +20,11 @@
 #include <string_view>
 
 #include "exec/exec_env.h"
+<<<<<<< HEAD
+=======
+#include "storage/lake/position_delete_test_util.h"
+#include "storage/lake/sort_key_bounds_test_util.h"
+>>>>>>> bb58fd57489... [BugFix][RB-1485] Store segment sort key bounds in a compact encoding (#69327)
 #include "storage/lake/tablet_reshard_test_base.h"
 
 namespace starrocks {
@@ -3887,8 +3892,8 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_delvec_compacts_only_live_page_
         set_range(split_rowset.mutable_range(), lower, lower + 50);
         auto* split_segment = split_rowset.mutable_segment_metas(0);
         split_segment->set_num_rows(50);
-        split_segment->mutable_sort_key_min()->CopyFrom(generate_sort_key(lower));
-        split_segment->mutable_sort_key_max()->CopyFrom(generate_sort_key(lower + 49));
+        split_segment->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(lower));
+        split_segment->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(lower + 49));
     }
     ASSERT_OK(put_tablet_metadata(split_parent));
     const int64_t split_left = next_id();
@@ -8313,6 +8318,87 @@ TEST_F(LakeTabletMergerTest, test_merge_then_split_keeps_the_delete_predicate_in
     }
     std::sort(regrouped_rows.begin(), regrouped_rows.end());
     EXPECT_EQ(expected_rows, regrouped_rows);
+}
+
+// Splitting a tablet and merging the children back gives the same merged tablet whether the source's segments carry
+// the deprecated or the encoded pair. A split that leaves one segment in both children keeps the source's
+// representation in both copies, so the merge finds two matching declarations of one physical segment and refuses
+// the merge only because the file is still shared; copies in different representations would be conflicting
+// declarations.
+TEST_F(LakeTabletMergerTest, MergeIdenticalAcrossRepresentations) {
+    const auto base = fixed_point_source(/*primary_key=*/false);
+    ASSIGN_OR_ABORT(auto expected_rows, read_two_column_rows(base));
+    const std::string spanning = base->rowsets(0).segment_metas(0).filename();
+    auto normalized_layout = [](const TabletMetadataPB& metadata) {
+        TabletMetadataPB normalized(metadata);
+        normalize_sort_key_bounds(&normalized);
+        std::string layout = normalized.range().SerializeAsString();
+        for (const auto& rowset : normalized.rowsets()) layout += rowset.SerializeAsString();
+        return layout;
+    };
+
+    std::string expected_layout;
+    for (const auto repr : {SortKeyBoundsRepr::kDeprecated, SortKeyBoundsRepr::kEncoded}) {
+        SCOPED_TRACE(repr == SortKeyBoundsRepr::kEncoded ? "encoded" : "deprecated");
+        auto source = std::make_shared<TabletMetadataPB>(*base);
+        convert_sort_key_bounds(source.get(), repr);
+        const auto& source_segment = source->rowsets(0).segment_metas(0);
+
+        // Children [0, 50) and [50, 100) each own one of the two segments and merge back into one tablet.
+        auto children_or = try_split_fixed_point_source(source, {0, 50, 100});
+        ASSERT_OK(children_or.status());
+        const auto children = std::move(children_or).value();
+        const int64_t merged_id = next_id();
+        std::unordered_map<int64_t, TabletMetadataPtr> published;
+        ASSERT_OK(publish_resharding_merge(children, merged_id, children[0]->version(), children[0]->version() + 1,
+                                           next_id(), published));
+        const auto& merged = published.at(merged_id);
+        ASSIGN_OR_ABORT(auto merged_rows, read_two_column_rows(merged));
+        EXPECT_EQ(expected_rows, merged_rows);
+        if (repr == SortKeyBoundsRepr::kEncoded) {
+            for (const auto& rowset : merged->rowsets()) {
+                for (const auto& segment : rowset.segment_metas()) {
+                    EXPECT_TRUE(segment.has_sort_key_min_encoded());
+                    EXPECT_TRUE(segment.has_sort_key_max_encoded());
+                    EXPECT_FALSE(segment.has_deprecated_sort_key_min());
+                }
+            }
+        }
+        if (repr == SortKeyBoundsRepr::kDeprecated) {
+            expected_layout = normalized_layout(*merged);
+        } else {
+            EXPECT_EQ(expected_layout, normalized_layout(*merged));
+        }
+
+        // Children [0, 25) and [25, 100) both keep the segment holding keys 0 to 49.
+        auto sharing_or = try_split_fixed_point_source(source, {0, 25, 100});
+        ASSERT_OK(sharing_or.status());
+        const auto sharing = std::move(sharing_or).value();
+        for (const auto& child : sharing) {
+            int copies = 0;
+            for (const auto& rowset : child->rowsets()) {
+                for (const auto& segment : rowset.segment_metas()) {
+                    if (segment.filename() != spanning) continue;
+                    ++copies;
+                    EXPECT_TRUE(segment.shared());
+                    EXPECT_EQ(source_segment.has_sort_key_min_encoded(), segment.has_sort_key_min_encoded());
+                    EXPECT_EQ(source_segment.has_deprecated_sort_key_min(), segment.has_deprecated_sort_key_min());
+                }
+            }
+            EXPECT_EQ(1, copies) << "both children must keep the spanning segment";
+        }
+        auto status = expect_merge_rejected_without_writes(sharing, next_id(), sharing[0]->version() + 1);
+        EXPECT_TRUE(status.message().contains("still holds shared data files")) << status;
+
+        if (repr == SortKeyBoundsRepr::kDeprecated) {
+            auto encoded_copy = std::make_shared<TabletMetadataPB>(*sharing[1]);
+            convert_sort_key_bounds(encoded_copy.get(), SortKeyBoundsRepr::kEncoded);
+            status = expect_merge_rejected_without_writes({sharing[0], encoded_copy}, next_id(),
+                                                          sharing[0]->version() + 1);
+            EXPECT_TRUE(status.message().contains(spanning + " at bundle offset")) << status;
+            EXPECT_TRUE(status.message().contains("has conflicting declarations")) << status;
+        }
+    }
 }
 
 // An .idx file holds the index of one segment, so it belongs to one index entry. Named by the entries of two
