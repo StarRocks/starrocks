@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.ast.CTERelation;
@@ -219,11 +220,13 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -245,7 +248,16 @@ import static com.starrocks.type.FloatType.FLOAT;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
+    private static final String WITH_TIMEZONE = "with_timezone";
+    private static final String AT_TIMEZONE = "at_timezone";
+    // Trino functions that read only the wall-clock fields of their first argument and return a value without a zone
+    private static final Set<String> WALL_CLOCK_FUNCTIONS = Set.of("date", "year", "quarter", "month", "week",
+            "week_of_year", "day", "day_of_month", "day_of_week", "dow", "day_of_year", "doy", "year_of_week", "yow",
+            "hour", "minute", "second", "last_day_of_month");
+
     private final long sqlMode;
+    // Expressions that their consumer reads only as a wall-clock time; Trino expressions compare by value, so by identity
+    private final Set<Expression> wallClockArguments = Collections.newSetFromMap(new IdentityHashMap<>());
 
     public AstBuilder(long sqlMode) {
         this.sqlMode = sqlMode;
@@ -799,6 +811,14 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitFunctionCall(FunctionCall node, ParseTreeContext context) {
+        if (isAtTimezoneOfWithTimezone(node)) {
+            return convertWithTimezone(node, (FunctionCall) node.getArguments().get(0), node.getArguments().get(1),
+                    context);
+        }
+        if (isWithTimezone(node)) {
+            return convertWithTimezone(node, node, null, context);
+        }
+        addWallClockArguments(node);
         List<Expr> arguments = visit(node.getArguments(), context, Expr.class);
 
         Expr callExpr;
@@ -845,6 +865,10 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             }
         } else {
             callExpr = new FunctionCallExpr(functionName, arguments);
+        }
+        if (functionName.equalsIgnoreCase("date_trunc") && node.getArguments().size() == 2
+                && wallClockArguments.contains(node.getArguments().get(1))) {
+            callExpr = resolveSkippedTruncation(callExpr, node.getArguments().get(1));
         }
         if (node.getWindow().isPresent()) {
             return visitWindow((FunctionCallExpr) callExpr, node.getWindow().get(), context);
@@ -1128,9 +1152,179 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitAtTimeZone(AtTimeZone node, ParseTreeContext context) {
+        if (isWithTimezone(node.getValue())) {
+            return convertWithTimezone(node, (FunctionCall) node.getValue(), node.getTimeZone(), context);
+        }
         Expr dt = (Expr) visit(node.getValue(), context);
         Expr tz = (Expr) visit(node.getTimeZone(), context);
         return new FunctionCallExpr("convert_tz", List.of(dt, new VariableExpr("time_zone"), tz));
+    }
+
+    /*
+     * StarRocks has no TIMESTAMP WITH TIME ZONE, so with_timezone is supported only where the result is exact without
+     * one: when a consumer reads the zoned value only as a wall-clock time (a CAST to TIMESTAMP or DATE, date(), field
+     * functions, EXTRACT, date_format or format_datetime without a zone pattern, or date_trunc directly under one of
+     * these). Then with_timezone(ts, z1) AT TIME ZONE z2 and at_timezone(with_timezone(ts, z1), z2) are
+     * convert_tz(ts, z1, z2), and with_timezone(ts, z1) itself is ts.
+     *
+     * Both are exact only when attaching z1 is: z1 has a fixed offset, or ts is a TIMESTAMP literal that z1 neither
+     * skips nor repeats, so its offset is resolved here. Trino and convert_tz resolve a skipped or repeated time in z1
+     * differently, which is why a column with a DST zone is rejected. Converting the instant to z2 is exact in any
+     * zone. Zones must be literals spelled as the BE resolves them: UTC, +HH:MM or a region ID. Every other use is
+     * rejected with an UnsupportedException, which skips the StarRocks-dialect fallback.
+     */
+    private Expr convertWithTimezone(Expression node, FunctionCall withTimezone, Expression toZone,
+                                     ParseTreeContext context) {
+        Expression timestamp = withTimezone.getArguments().get(0);
+        Optional<ZoneId> fromZone = backendZone(withTimezone.getArguments().get(1));
+        Optional<ZoneId> to = toZone == null ? fromZone : backendZone(toZone);
+        Optional<String> from = fromZone.flatMap(zone -> attachedOffset(timestamp, zone));
+        if (!wallClockArguments.contains(node) || from.isEmpty() || to.isEmpty()) {
+            throw unsupportedException(String.format("Trino parser on StarRocks does not support %s here: "
+                    + "with_timezone is supported only as a wall-clock time (CAST to TIMESTAMP or DATE, date and "
+                    + "field functions, EXTRACT, date_format or format_datetime without a zone pattern, or date_trunc "
+                    + "under one of these), with literal zones (UTC, +HH:MM or a region ID), and with a fixed-offset "
+                    + "zone or a TIMESTAMP literal that isn't in a DST transition of that zone", node));
+        }
+        Expr value = (Expr) visit(timestamp, context);
+        if (toZone == null) {
+            return value;
+        }
+        return new FunctionCallExpr("convert_tz", List.of(value,
+                new com.starrocks.sql.ast.expression.StringLiteral(from.get()),
+                new com.starrocks.sql.ast.expression.StringLiteral(to.get().getId())));
+    }
+
+    // The zone to attach to timestamp as convert_tz takes it, if attaching it is exact: a fixed offset, or the single
+    // offset of a TIMESTAMP literal in zone
+    private static Optional<String> attachedOffset(Expression timestamp, ZoneId zone) {
+        if (!(timestamp instanceof TimestampLiteral)) {
+            return zone.getRules().isFixedOffset() ? Optional.of(zone.getId()) : Optional.empty();
+        }
+        String value = ((TimestampLiteral) timestamp).getValue();
+        String formattedValue = value.length() <= 10 ? value + " 00:00:00" : value;
+        try {
+            // with_timezone takes a timestamp without a zone
+            if (TimeUtils.parseTimeZoneFromString(formattedValue) != null) {
+                return Optional.empty();
+            }
+            LocalDateTime dateTime = DateUtils.parseStrictDateTime(TimeUtils.parseDateTimeFromString(formattedValue));
+            List<ZoneOffset> offsets = zone.getRules().getValidOffsets(dateTime);
+            if (offsets.size() != 1 || !isBackendOffset(offsets.get(0))) {
+                return Optional.empty();
+            }
+            return Optional.of(offsets.get(0).equals(ZoneOffset.UTC) ? "UTC" : offsets.get(0).getId());
+        } catch (ParsingException | DateTimeException e) {
+            return Optional.empty();
+        }
+    }
+
+    // A literal zone in a spelling that Trino and the BE resolve to the same zone: UTC, +HH:MM within the offsets the
+    // BE takes, or a region ID as written. The returned ID is how the BE takes it
+    private static Optional<ZoneId> backendZone(Expression zone) {
+        if (!(zone instanceof StringLiteral)) {
+            return Optional.empty();
+        }
+        String id = ((StringLiteral) zone).getValue();
+        try {
+            if (id.equals("UTC")) {
+                return Optional.of(ZoneId.of(id));
+            }
+            if (id.matches("[+-]\\d{2}:\\d{2}")) {
+                ZoneOffset offset = ZoneOffset.of(id);
+                if (!isBackendOffset(offset)) {
+                    return Optional.empty();
+                }
+                return Optional.of(offset.getTotalSeconds() == 0 ? ZoneId.of("UTC") : offset);
+            }
+            if (id.contains("/") && ZoneId.getAvailableZoneIds().contains(id)) {
+                return Optional.of(ZoneId.of(id));
+            }
+        } catch (DateTimeException e) {
+            return Optional.empty();
+        }
+        return Optional.empty();
+    }
+
+    // convert_tz in the BE takes offsets in whole minutes from -12:59 to +14:59
+    private static boolean isBackendOffset(ZoneOffset offset) {
+        int seconds = offset.getTotalSeconds();
+        return seconds % 60 == 0 && seconds >= -(12 * 3600 + 59 * 60) && seconds <= 14 * 3600 + 59 * 60;
+    }
+
+    private static boolean isWithTimezone(Expression expression) {
+        return expression instanceof FunctionCall
+                && ((FunctionCall) expression).getName().toString().equalsIgnoreCase(WITH_TIMEZONE)
+                && ((FunctionCall) expression).getArguments().size() == 2;
+    }
+
+    // at_timezone(with_timezone(ts, from), to) as a plain call, without a window, FILTER, DISTINCT or ORDER BY
+    private static boolean isAtTimezoneOfWithTimezone(FunctionCall call) {
+        return call.getName().toString().equalsIgnoreCase(AT_TIMEZONE) && call.getArguments().size() == 2
+                && isWithTimezone(call.getArguments().get(0)) && call.getWindow().isEmpty()
+                && call.getFilter().isEmpty() && !call.isDistinct() && call.getOrderBy().isEmpty();
+    }
+
+    // Marks the arguments of node that it reads only as a wall-clock time. date_trunc keeps the zone in Trino, so it
+    // passes its consumer's reading on only to a with_timezone value it truncates directly
+    private void addWallClockArguments(FunctionCall node) {
+        String name = node.getName().toString().toLowerCase();
+        List<Expression> arguments = node.getArguments();
+        if (WALL_CLOCK_FUNCTIONS.contains(name) && arguments.size() == 1) {
+            wallClockArguments.add(arguments.get(0));
+        } else if ((name.equals("date_format") || name.equals("format_datetime")) && arguments.size() == 2
+                && arguments.get(1) instanceof StringLiteral
+                && !formatShowsZone(name, ((StringLiteral) arguments.get(1)).getValue())) {
+            wallClockArguments.add(arguments.get(0));
+        } else if (name.equals("date_trunc") && arguments.size() == 2 && wallClockArguments.contains(node)
+                && (isWithTimezone(arguments.get(1)) || (arguments.get(1) instanceof AtTimeZone
+                && isWithTimezone(((AtTimeZone) arguments.get(1)).getValue()))
+                || (arguments.get(1) instanceof FunctionCall
+                && isAtTimezoneOfWithTimezone((FunctionCall) arguments.get(1))))) {
+            wallClockArguments.add(arguments.get(1));
+        }
+    }
+
+    // Whether a date_format (MySQL-style) or format_datetime (Joda) format prints the time zone
+    private static boolean formatShowsZone(String function, String format) {
+        if (function.equals("date_format")) {
+            return format.contains("%z") || format.contains("%Z");
+        }
+        boolean quoted = false;
+        for (char c : format.toCharArray()) {
+            if (c == '\'') {
+                quoted = !quoted;
+            } else if (!quoted && (c == 'z' || c == 'Z')) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // date_trunc of a with_timezone value truncates its wall-clock time, which can land on a time its zone skips (e.g.
+    // midnight on a DST change at 00:00). Trino moves such a result to the end of the gap; a round trip through the
+    // zone does the same in FE folding and the BE, and leaves every other time as it is
+    private Expr resolveSkippedTruncation(Expr truncated, Expression argument) {
+        Expression zone = argument instanceof AtTimeZone ? ((AtTimeZone) argument).getTimeZone()
+                : ((FunctionCall) argument).getArguments().get(1);
+        ZoneId zoneId = backendZone(zone).orElseThrow();
+        if (zoneId.getRules().isFixedOffset()) {
+            return truncated;
+        }
+        Expr name = new com.starrocks.sql.ast.expression.StringLiteral(zoneId.getId());
+        Expr utc = new com.starrocks.sql.ast.expression.StringLiteral("UTC");
+        return new FunctionCallExpr("convert_tz", List.of(
+                new FunctionCallExpr("convert_tz", List.of(truncated, name, utc)), utc, name));
+    }
+
+    // TIMESTAMP without a time zone, or DATE: a cast to these keeps the wall-clock time and drops the zone
+    private static boolean isWallClockType(DataType dataType) {
+        if (dataType instanceof DateTimeDataType) {
+            DateTimeDataType dateTimeType = (DateTimeDataType) dataType;
+            return dateTimeType.getType() == DateTimeDataType.Type.TIMESTAMP && !dateTimeType.isWithTimeZone();
+        }
+        return dataType instanceof GenericDataType
+                && ((GenericDataType) dataType).getName().getValue().equalsIgnoreCase("date");
     }
 
     @Override
@@ -1141,6 +1335,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitExtract(Extract node, ParseTreeContext context) {
+        if (!node.getField().name().startsWith("TIMEZONE")) {
+            wallClockArguments.add(node.getExpression());
+        }
         String fieldString = node.getField().toString().toLowerCase();
         Expr expr = Trino2SRFunctionCallTransformer.convert(fieldString,
                 Lists.newArrayList((Expr) visit(node.getExpression(), context)));
@@ -1384,6 +1581,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitCast(Cast node, ParseTreeContext context) {
+        if (isWallClockType(node.getType())) {
+            wallClockArguments.add(node.getExpression());
+        }
         return new CastExpr(new TypeDef(getType(node.getType())), (Expr) visit(node.getExpression(), context));
     }
 
