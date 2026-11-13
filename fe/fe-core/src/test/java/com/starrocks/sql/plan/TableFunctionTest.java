@@ -287,6 +287,10 @@ public class TableFunctionTest extends PlanTestBase {
         plan = getFragmentPlan("select v1, x, y from t0, unnest([v2, v3], cast(null as array<int>)) as t(x, y)");
         assertContains(plan, "tableFunctionName: unnest", "<slot 6> : [2: v2,3: v3]", "<slot 7> : NULL");
 
+        // Arguments are still coerced like the arguments of a scalar call, e.g. a numeric string with spaces.
+        plan = getFragmentPlan("select * from TABLE(generate_series(' 1 ', 3))");
+        assertContains(plan, "tableFunctionName: generate_series");
+
         // Other table functions still reject a NULL argument.
         Exception e = Assertions.assertThrows(StarRocksPlannerException.class,
                 () -> getFragmentPlan("select v1, x from t0, generate_series(1, null) as t(x)"));
