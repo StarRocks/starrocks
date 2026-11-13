@@ -17,6 +17,7 @@ package com.starrocks.transaction;
 import com.starrocks.common.Config;
 import com.starrocks.metric.PrometheusMetricVisitor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.AfterEach;
@@ -30,10 +31,12 @@ import java.util.regex.Pattern;
 public class TransactionMetricRegistryTest {
 
     private String originalGroups;
+    private final WarehouseManager warehouseManager = new WarehouseManager();
 
     @BeforeEach
     public void setUp() {
         originalGroups = Config.txn_latency_metric_report_groups;
+        warehouseManager.initDefaultWarehouse();
     }
 
     @AfterEach
@@ -187,6 +190,39 @@ public class TransactionMetricRegistryTest {
     }
 
     @Test
+    public void testAbortedTransactionsRecordedUnderOwnStatus(@Mocked GlobalStateMgr globalStateMgr,
+                                                              @Mocked TransactionState visible,
+                                                              @Mocked TransactionState abortedWhileWriting,
+                                                              @Mocked TransactionState abortedAfterCommit) {
+        setLeader(true, globalStateMgr);
+        TransactionMetricRegistry registry = newRegistry();
+        setReportGroups(registry, "stream_load");
+        setupVisibleTxn(visible, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 10, 20, 30, 40, 45, 50);
+        // Timed out while writing: never committed, so only the write and total phases exist and the write
+        // phase ends at the abort.
+        setupTxn(abortedWhileWriting, TransactionStatus.ABORTED, TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                10, -1, -1, -1, -1, 70);
+        // Aborted after commit: the publish phase ran until the abort, but never got past scheduling.
+        setupTxn(abortedAfterCommit, TransactionStatus.ABORTED, TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                10, 20, 30, -1, -1, 80);
+        registry.update(visible);
+        registry.update(abortedWhileWriting);
+        registry.update(abortedAfterCommit);
+
+        String out = renderReport(registry);
+        Assertions.assertEquals(1, extractCount(out, "txn_total_latency_ms", "all", "visible", true));
+        Assertions.assertEquals(1, extractCount(out, "txn_publish_latency_ms", "all", "visible", true));
+        Assertions.assertEquals(2, extractCount(out, "txn_total_latency_ms", "all", "aborted", true));
+        Assertions.assertEquals(2, extractCount(out, "txn_write_latency_ms", "all", "aborted", true));
+        Assertions.assertEquals(1, extractCount(out, "txn_publish_latency_ms", "all", "aborted", true));
+        Assertions.assertEquals(1, extractCount(out, "txn_publish_schedule_latency_ms", "all", "aborted", true));
+        Assertions.assertEquals(0, extractCount(out, "txn_publish_execute_latency_ms", "all", "aborted", true));
+        Assertions.assertEquals(0, extractCount(out, "txn_publish_ack_latency_ms", "all", "aborted", true));
+        Assertions.assertEquals(2, extractCount(out, "txn_total_latency_ms", "stream_load", "aborted", true));
+        Assertions.assertEquals(1, extractCount(out, "txn_write_latency_ms", "stream_load", "visible", true));
+    }
+
+    @Test
     public void testLabelsAndLeaderToggle(@Mocked GlobalStateMgr globalStateMgr) {
         setLeader(true, globalStateMgr);
         TransactionMetricRegistry registry = newRegistry();
@@ -195,6 +231,8 @@ public class TransactionMetricRegistryTest {
         Assertions.assertTrue(out1.contains("type=\"insert\""), out1);
         Assertions.assertTrue(out1.contains("type=\"all\""), out1);
         Assertions.assertTrue(out1.contains("is_leader=\"true\""), out1);
+        Assertions.assertTrue(out1.contains("status=\"visible\""), out1);
+        Assertions.assertTrue(out1.contains("status=\"aborted\""), out1);
         setLeader(false, globalStateMgr);
         String out2 = renderReport(registry);
         Assertions.assertTrue(out2.contains("type=\"all\""), out2);
@@ -208,8 +246,43 @@ public class TransactionMetricRegistryTest {
                 result = globalStateMgr;
                 globalStateMgr.isLeader();
                 result = leader;
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
+                minTimes = 0;
             }
         };
+    }
+
+    @Test
+    public void testWarehouseSeriesOnlyForEnabledGroups(@Mocked GlobalStateMgr globalStateMgr,
+                                                        @Mocked TransactionState txn) {
+        setLeader(true, globalStateMgr);
+        TransactionMetricRegistry registry = newRegistry();
+
+        // Without an enabled group there is no warehouse series at all, the 'all' group never has one.
+        setReportGroups(registry, "");
+        setupVisibleTxn(txn, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 10, 20, 30, 40, 45, 50);
+        registry.update(txn);
+        String out0 = renderReport(registry);
+        Assertions.assertFalse(out0.contains("warehouse_name="), out0);
+
+        // An enabled group reports the cluster-wide series and one per warehouse, both fed by the update.
+        setReportGroups(registry, "stream_load");
+        registry.update(txn);
+        String out1 = renderReport(registry);
+        String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        Assertions.assertEquals(1, extractWarehouseCount(out1, "txn_total_latency_ms", "stream_load", null));
+        Assertions.assertEquals(1, extractWarehouseCount(out1, "txn_total_latency_ms", "stream_load", warehouse));
+        Assertions.assertEquals(1, extractWarehouseCount(out1, "txn_publish_latency_ms", "stream_load", warehouse));
+        Assertions.assertTrue(out1.contains("status=\"aborted\", warehouse_name=\"" + warehouse + "\""), out1);
+        // Both updates landed in 'all', which never splits by warehouse.
+        Assertions.assertEquals(2, extractWarehouseCount(out1, "txn_total_latency_ms", "all", null));
+        Assertions.assertEquals(-1, extractWarehouseCount(out1, "txn_total_latency_ms", "all", warehouse));
+
+        // Disabling the group drops its warehouse series with it.
+        setReportGroups(registry, "");
+        String out2 = renderReport(registry);
+        Assertions.assertFalse(out2.contains("warehouse_name="), out2);
     }
 
     private TransactionMetricRegistry newRegistry() {
@@ -231,10 +304,17 @@ public class TransactionMetricRegistryTest {
                                  TransactionState.LoadJobSourceType type,
                                  long prepare, long commit, long pub, long pubFinish,
                                  long readyToFinish, long finish) {
+        setupTxn(txn, TransactionStatus.VISIBLE, type, prepare, commit, pub, pubFinish, readyToFinish, finish);
+    }
+
+    private void setupTxn(@Mocked TransactionState txn, TransactionStatus status,
+                          TransactionState.LoadJobSourceType type,
+                          long prepare, long commit, long pub, long pubFinish,
+                          long readyToFinish, long finish) {
         new Expectations() {
             {
                 txn.getTransactionStatus();
-                result = TransactionStatus.VISIBLE;
+                result = status;
                 txn.getPrepareTime();
                 result = prepare;
                 txn.getCommitTime();
@@ -254,14 +334,37 @@ public class TransactionMetricRegistryTest {
     }
 
     private int extractCount(String output, String metric, String typeName, boolean leader) {
-        String leaderTag = leader ? "true" : "false";
-        String pattern =
-                ".*_(" + Pattern.quote(metric) + ")_count\\{([^}]*type=\"" + Pattern.quote(typeName) + "\"[^}]*)}\\s+(\\d+)";
-        Pattern p = Pattern.compile(pattern, Pattern.DOTALL);
+        return extractCount(output, metric, typeName, "visible", leader);
+    }
+
+    /** The visible leader _count of a metric/type series carrying the given warehouse label, or none when null. */
+    private int extractWarehouseCount(String output, String metric, String typeName, String warehouseName) {
+        Pattern p = Pattern.compile("_" + Pattern.quote(metric) + "_count\\{([^}]*)}\\s+(\\d+)");
         Matcher m = p.matcher(output);
         int last = -1;
         while (m.find()) {
-            if (m.group(2).contains("is_leader=\"" + leaderTag + "\"")) {
+            String labels = m.group(1);
+            boolean warehouseMatches = warehouseName == null
+                    ? !labels.contains("warehouse_name=")
+                    : labels.contains("warehouse_name=\"" + warehouseName + "\"");
+            if (labels.contains("type=\"" + typeName + "\"") && labels.contains("status=\"visible\"")
+                    && labels.contains("is_leader=\"true\"") && warehouseMatches) {
+                last = Integer.parseInt(m.group(2));
+            }
+        }
+        return last;
+    }
+
+    private int extractCount(String output, String metric, String typeName, String status, boolean leader) {
+        String leaderTag = leader ? "true" : "false";
+        String pattern =
+                "_(" + Pattern.quote(metric) + ")_count\\{([^}]*type=\"" + Pattern.quote(typeName) + "\"[^}]*)}\\s+(\\d+)";
+        Pattern p = Pattern.compile(pattern);
+        Matcher m = p.matcher(output);
+        int last = -1;
+        while (m.find()) {
+            if (m.group(2).contains("is_leader=\"" + leaderTag + "\"")
+                    && m.group(2).contains("status=\"" + status + "\"")) {
                 last = Integer.parseInt(m.group(3));
             }
         }

@@ -158,10 +158,22 @@ description: "Alphabetical q - r"
 - 単位: カウント
 - 説明: 結果バッファ内のブロック数。
 
+## `routine_load_schedule_blocked`
+
+- 単位: カウント
+- ラベル: `warehouse_name`
+- 説明: Routine Load のスケジューリング時に、そのウェアハウス内で空いている BE/CN タスクスロット（ノードあたり `max_routine_load_task_num_per_be` 個）が見つからなかった回数。タスクはジョブが属するウェアハウスでしか実行できないため、1 つのウェアハウスが満杯になると、他のウェアハウスに空きがあってもそのジョブはブロックされます。この値が増え続ける場合は、そのウェアハウスの Routine Load のスループットがロード経路ではなくタスクスロットによって制限されています。
+
 ## `routine_load_task_count`
 
 - 単位: カウント
 - 説明: 現在実行中のルーチンロードタスクの数。
+
+## `routine_load_task_slots`
+
+- 単位: カウント
+- ラベル: `warehouse_name`、`state`（`used` または `total`）
+- 説明: 各ウェアハウスの BE/CN ノード上の Routine Load タスクスロット。`total` はそのウェアハウスの稼働中ノード数に `max_routine_load_task_num_per_be` を掛けた値、`used` は実行中のタスクが占有しているスロット数です。`used` が `total` に達すると、そのウェアハウスの新しいタスクはスケジュールできません。
 
 ## `rowset_count_generated_and_in_use`
 

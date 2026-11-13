@@ -200,10 +200,22 @@ description: "Alphabetical q - r"
 - 单位：计数
 - 描述：结果缓冲区中的块数量。
 
+## `routine_load_schedule_blocked`
+
+- 单位: 计数
+- 标签: `warehouse_name`
+- 描述: Routine Load 调度时在该 warehouse 里找不到空闲 BE/CN task 槽位（每个节点 `max_routine_load_task_num_per_be` 个）的次数。task 只能在它所属 job 的 warehouse 里运行，所以一个 warehouse 满了就会卡住它的 job，即使其他 warehouse 还有空位。该值持续上涨说明这个 warehouse 里 Routine Load 的吞吐被 task 槽位卡住，而不是导入链路本身慢。
+
 ## `routine_load_task_count`
 
 - 单位：计数
 - 描述：当前正在运行的Routine Load任务数量。
+
+## `routine_load_task_slots`
+
+- 单位: 计数
+- 标签: `warehouse_name`、`state`（`used` 或 `total`）
+- 描述: 每个 warehouse 的 BE/CN 节点上的 Routine Load task 槽位。`total` 是该 warehouse 存活节点数乘以 `max_routine_load_task_num_per_be`，`used` 是运行中的 task 占用的槽位数。`used` 达到 `total` 时，该 warehouse 的新 task 无法调度。
 
 ## `rowset_count_generated_and_in_use`
 

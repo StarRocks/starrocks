@@ -694,9 +694,16 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             throws CommitRateExceededException {
         if (timeoutMs != 0 && e.getAllowCommitTime() > (startTimeMs + timeoutMs)) {
             throw e;
-        } else {
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(e.getAllowCommitTime() - System.currentTimeMillis());
         }
+        long delayMs = e.getAllowCommitTime() - System.currentTimeMillis();
+        // Charged here, where the wait really happens: a request that gave up above never waited, and a
+        // retry is charged only with the time it still has to wait, not the whole interval again.
+        if (delayMs > 0 && MetricRepo.hasInit) {
+            String warehouseName = MetricRepo.warehouseLabel(e.getWarehouseId());
+            MetricRepo.COUNTER_TXN_COMMIT_THROTTLED.getMetric(warehouseName).increase(1L);
+            MetricRepo.COUNTER_TXN_COMMIT_THROTTLE_DELAY_MS.getMetric(warehouseName).increase(delayMs);
+        }
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(delayMs);
     }
 
     private VisibleStateWaiter commitTransactionUnderDatabaseWLock(

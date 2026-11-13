@@ -54,6 +54,21 @@ description: "Alphabetical t - z"
 - Unit: Bytes
 - Description: Memory used by tablet schema.
 
+## `tablet_sink_rpc_failed_total`
+
+- Unit: Count
+- Description: Number of tablet writer rpcs (open and add_chunk) issued by the coordinator BE of a load that failed at the rpc layer, for example a timeout or a reset connection, as opposed to an error returned by the receiving load channel. Published as a bvar. The sink does not retry, so each failure can fail the load by the replica majority rule. Recorded when the rpc completes, so add_chunk rpcs the sink stopped waiting for after another one failed are still counted; rpcs the coordinator itself cancelled are not.
+
+## `tablet_sink_rpc_pending`
+
+- Unit: Count
+- Description: Number of add_chunk rpcs the coordinator BE of a load has issued to tablet writers and not yet received a response for. Published as a bvar. A value that stays high means the receiving BEs, or the network to them, are slow to take data.
+
+## `tablet_sink_send_chunk_latency`
+
+- Unit: us
+- Description: Time for one add_chunk rpc from the coordinator BE of a load to a tablet writer, from issue to response, published as a bvar latency series (average, percentiles, max, qps and count). Recorded when the rpc completes, so rpcs the sink stopped waiting for after another one failed are still sampled; rpcs the coordinator itself cancelled are not.
+
 ## `tablet_update_max_compaction_score`
 
 - Unit: -
@@ -133,10 +148,28 @@ description: "Alphabetical t - z"
 - Unit: Count
 - Description: Total number of transaction load requests.
 
+## `txn_commit_throttle_delay_ms_total`
+
+- Unit: ms
+- Type: Cumulative
+- Description: Total time, in milliseconds, that commits into shared-data (lake) tables actually waited because of the ingestion slowdown, which holds a commit back while the compaction score of a partition it writes to is above `lake_ingest_slowdown_threshold`. Each wait is charged with the time still left until the commit is allowed, so a retry does not charge the same interval twice and a request that gives up without waiting charges nothing. Carries a `warehouse_name` label with the warehouse the delayed load ran in, one series per warehouse. Divide by `txn_commit_throttled_total` with the same `warehouse_name` for the average wait per throttled commit. Only the Leader FE node counts (`is_leader="true"`).
+
+## `txn_commit_throttled_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of times a commit into a shared-data (lake) table actually waited because of the ingestion slowdown, that is, because the compaction score of a partition it writes to was above `lake_ingest_slowdown_threshold`. Counted where the wait happens: a commit request whose timeout cannot cover the delay fails without waiting and is not counted, and neither are commits rejected outright because the score was above `lake_compaction_score_upper_bound`; both fail the load. Carries a `warehouse_name` label with the warehouse the delayed load ran in, one series per warehouse. Only the Leader FE node counts (`is_leader="true"`).
+
 ## `txn_request`
 
 - Unit: -
 - Description: Transaction requests of BEGIN, COMMIT, ROLLBACK, and EXEC.
+
+## `txn_running_routine_load`
+
+- Unit: Count
+- Labels: `db`, `warehouse_name`
+- Description: The number of running Routine Load transactions in each database, split by the warehouse the task runs in; a series appears for each warehouse that has such transactions in the database, and `sum by (db)` gives the per-database total. Routine Load transactions are exempt from `max_running_txn_num_per_db` and are therefore not included in `txn_running`; their concurrency is bounded by BE/CN task slots instead (see `routine_load_task_slots`).
 
 ## `uint8_column_pool_bytes`
 

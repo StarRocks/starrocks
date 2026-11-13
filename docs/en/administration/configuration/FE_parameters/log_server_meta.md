@@ -1993,7 +1993,7 @@ This topic introduces the following types of FE configurations:
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: A comma-separated list of transaction latency metric groups to report. Load types are categorized into logical groups for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. Valid values: `stream_load`, `routine_load`, `broker_load`, `insert`, and `compaction` (available only for shared-data clusters). Example: `"stream_load,routine_load"`.
+- Description: A comma-separated list of transaction latency metric groups to report. Load types are categorized into logical groups for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. Valid values: `stream_load`, `routine_load`, `broker_load`, `insert`, and `compaction` (available only for shared-data clusters). Example: `"stream_load,routine_load"`. An enabled group also reports one extra series per warehouse, labelled `warehouse_name`.
 - Introduced in: v4.0
 
 ### `txn_rollback_limit`
