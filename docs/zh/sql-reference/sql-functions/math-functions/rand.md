@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "返回0（含）到1（不含）之间的随机浮点数。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # rand, random

@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 20
-<<<<<<< HEAD
-=======
-description: "How to create and use Primary Key tables in StarRocks for real-time upsert and delete with strong consistency, supporting efficient ad-hoc queries on the..."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 # Primary Key table
 

@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "若 expr1 不为 NULL，返回 expr1，否则返回 expr2。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ifnull

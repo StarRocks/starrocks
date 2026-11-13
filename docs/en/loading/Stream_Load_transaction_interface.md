@@ -2,11 +2,7 @@
 sidebar_position: 90
 displayed_sidebar: docs
 keywords: ['Stream Load']
-<<<<<<< HEAD
-=======
-description: "How to use the Stream Load transaction interface (two-phase commit) in StarRocks for highly concurrent stream loads from Flink or Kafka with multi-table..."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Load data using Stream Load transaction interface

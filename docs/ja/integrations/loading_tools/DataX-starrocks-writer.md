@@ -1,11 +1,7 @@
 ---
 sidebar_position: 20
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocksWriter プラグインは Stream Load を使用して CSV/JSON 形式でデータを StarRocks にバッチインポートして書き込みパフォーマンスを向上させます。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # DataX ライター

@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "SHOW CATALOGS queries all catalogs in the current StarRocks cluster, including the internal catalog and external catalogs."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # SHOW CATALOGS

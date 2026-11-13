@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "percentile_disc_lc 计算百分位数，使用 hash 表实现，低基数输入时内存占用少。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # percentile_disc_lc

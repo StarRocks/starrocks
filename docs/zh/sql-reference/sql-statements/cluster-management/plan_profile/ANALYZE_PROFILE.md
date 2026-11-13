@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "ANALYZE PROFILE 以 Fragment 为单位分析指定 Query Profile，以树形结构展示。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ANALYZE PROFILE

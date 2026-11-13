@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "group_concat 将分组中的多个非 NULL 值连接成字符串，支持 DISTINCT、ORDER BY 和自定义分隔符。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # group_concat

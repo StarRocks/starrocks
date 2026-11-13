@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
 products: [oss, enterprise, anywhere]
-description: "Backs up databases, tables, materialized views, logical views, and UDFs in StarRocks to a remote storage repository."
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # BACKUP

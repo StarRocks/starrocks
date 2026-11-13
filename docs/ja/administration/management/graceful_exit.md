@@ -1,11 +1,7 @@
 ---
 sidebar_position: 130
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocks v3.3 以降、ノード再起動やローリングアップグレード中の実行中クエリへの影響を最小化する Graceful Exit メカニズム。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Graceful Exit

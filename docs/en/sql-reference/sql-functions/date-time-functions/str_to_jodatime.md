@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "Converts a Joda-formatted string into a DATETIME value in the specified Joda DateTime format like yyyy-MM-dd HH:mm:ss."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # str_to_jodatime

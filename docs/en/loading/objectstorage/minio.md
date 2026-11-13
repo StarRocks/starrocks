@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 4
-<<<<<<< HEAD
-=======
-description: "How to load data from MinIO into StarRocks using INSERT+FILES(), Broker Load, or Spark Load."
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Load data from MinIO

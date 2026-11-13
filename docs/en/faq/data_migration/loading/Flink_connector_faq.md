@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "Frequently asked questions about the StarRocks Flink connector, including timezone handling and sink configuration issues."
 products: [oss, enterprise]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Flink Connector

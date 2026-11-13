@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 0.91
-<<<<<<< HEAD
-=======
-description: "Since v3.4.0, StarRocks supports creating Python UDFs."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'

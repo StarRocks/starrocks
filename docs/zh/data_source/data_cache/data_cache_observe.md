@@ -1,11 +1,7 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "如何使用内置可观测性指标监控 Data Cache 在 StarRocks 中的性能、使用情况和健康状态。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Data Cache 可观测性

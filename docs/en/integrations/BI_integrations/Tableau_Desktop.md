@@ -1,11 +1,7 @@
 ---
 sidebar_position: 70
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "How to connect StarRocks to Tableau Desktop and Tableau Server using the StarRocks Tableau JDBC Connector."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Tableau
@@ -68,7 +64,7 @@ Before proceeding, make sure the following requirements are met:
       sudo cp /<path_to_driver_file_name>.jar /opt/tableau/tableau_driver/jdbc
       ```
   
-   2. Grant permission to the the "Tableau" user.
+   2. Grant permission to the "Tableau" user.
 
       ```Bash
       # Replace <driver_file_name> with the name of the driver file.

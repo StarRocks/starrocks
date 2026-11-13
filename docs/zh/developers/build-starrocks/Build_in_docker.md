@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "使用 Docker 开发环境镜像编译 StarRocks 源代码。"
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 使用 Docker 编译 StarRocks

@@ -1,11 +1,7 @@
 ---
 sidebar_position: 60
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "Frequently asked questions about StarRocks table design: troubleshooting table creation, schema changes, partitioning, bucketing, and index configuration."
 products: [oss, enterprise]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 ## Troubleshooting Table Design

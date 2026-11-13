@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "ANALYZE PROFILE は、特定のクエリプロファイルをフラグメントごとに分析し、ツリー構造で表示します。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ANALYZE PROFILE

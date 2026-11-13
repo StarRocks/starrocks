@@ -1,11 +1,7 @@
 ---
 sidebar_position: 120
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocks 共有データクラスタで Compaction を管理・監視し、クエリ効率を向上させる方法。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 共有データクラスタの Compaction

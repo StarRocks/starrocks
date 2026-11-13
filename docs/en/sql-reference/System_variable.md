@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['session variable']
-<<<<<<< HEAD
-=======
-description: "StarRocks provides many system variables that can be set and modified to suit your requirements."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # System variables

@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "AWS CloudFormation 与 StarRocks 集成，支持在 AWS 上快速部署并管理 StarRocks 集群。"
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 在 AWS 上使用 AWS CloudFormation 部署 StarRocks 集群

@@ -2,11 +2,7 @@
 sidebar_position: 50
 displayed_sidebar: docs
 sidebar_label: "Troubleshooting"
-<<<<<<< HEAD
-=======
-description: "How to monitor data load job status via SQL interfaces, identify performance bottlenecks, and troubleshoot anomalies in StarRocks data loading operations."
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Troubleshooting Data Loading

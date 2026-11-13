@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "从阿里云 OSS 导入数据到 StarRocks，支持 Broker Load 和 INSERT 导入方式。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 从阿里云 OSS 导入

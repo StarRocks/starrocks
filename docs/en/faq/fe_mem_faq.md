@@ -2,11 +2,7 @@
 sidebar_position: 90
 displayed_sidebar: docs
 sidebar_label: "FE Memory FAQ"
-<<<<<<< HEAD
-=======
-description: "How to diagnose and troubleshoot FE heap memory issues in StarRocks."
 products: [oss, enterprise]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Troubleshooting FE Heap Memory

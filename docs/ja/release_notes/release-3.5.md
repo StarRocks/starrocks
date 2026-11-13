@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocks 3.5 リリースノート: Iceberg ビュー作成、OAuth 2.0/JWT 認証、複数パーティション列マテリアライズドビュー。"
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # StarRocks version 3.5

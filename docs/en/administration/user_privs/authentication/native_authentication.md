@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
-<<<<<<< HEAD
-=======
-description: "Create and manage users using the native authentication within StarRocks through SQL commands."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Native Authentication

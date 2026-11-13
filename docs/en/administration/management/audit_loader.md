@@ -1,11 +1,7 @@
 ---
 sidebar_position: 80
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocks stores its audit logs in the local file fe/log/fe.audit.log rather than an internal database."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Manage audit logs within StarRocks via AuditLoader

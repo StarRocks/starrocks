@@ -1,11 +1,7 @@
 ---
 sidebar_position: 80
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocks で複数の DML ステートメント（INSERT、UPDATE、DELETE）を複数テーブル間で原子的にコミットする SQL トランザクションの使用方法。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import Beta from '../_assets/commonMarkdown/_beta.mdx'

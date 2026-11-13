@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "Docker 開発イメージを使用して StarRocks ソースコードをコンパイルする方法。"
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Docker を使用して StarRocks をコンパイルする

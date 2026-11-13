@@ -1,11 +1,7 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "How to use BladePipe to replicate data in real time from databases and message queues into StarRocks."
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # BladePipe

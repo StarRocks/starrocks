@@ -1,11 +1,7 @@
 ---
 sidebar_position: 50
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "The StarRocks Cross-cluster Data Migration Tool is provided by StarRocks Community."
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Cross-cluster Data Migration Tool

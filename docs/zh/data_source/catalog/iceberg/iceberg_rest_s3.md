@@ -1,11 +1,7 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "在 StarRocks 创建 Iceberg REST Catalog 通过 AWS Glue 端点访问 S3 表。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 为 AWS S3 表创建 Iceberg REST Catalog

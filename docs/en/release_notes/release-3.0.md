@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocks 3.0 release notes: new aggregate functions (percentile_disc), GROUP BY compatibility improvements, and storage engine and query engine updates."
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # StarRocks version 3.0

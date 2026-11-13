@@ -1,11 +1,7 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "FE 节点异常时恢复 StarRocks 集群元数据的方法和步骤。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 恢复元数据

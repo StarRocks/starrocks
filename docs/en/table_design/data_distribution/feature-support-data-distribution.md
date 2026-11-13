@@ -2,11 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Feature Support"
 sidebar_position: 50
-<<<<<<< HEAD
-=======
-description: "Reference for partitioning and bucketing feature support in StarRocks, including expression partitioning, list partitioning, random bucketing, and colocate..."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Feature Support: Data Distribution

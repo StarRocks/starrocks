@@ -1,11 +1,7 @@
 ---
 sidebar_position: 80
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "AuditLoader 插件实现 StarRocks 审计日志的数据库存储和 SQL 查询管理。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 通过 AuditLoader 管理 StarRocks 中的审计日志

@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "为 StarRocks BE 节点启用和可视化 Jemalloc 堆内存分析以诊断内存使用问题。"
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Jemalloc 堆内存分析

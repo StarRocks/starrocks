@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 5
-<<<<<<< HEAD
-=======
-description: "Overview of StarRocks catalog, database, and table organization: internal vs external catalogs, database objects including tables, materialized views, and..."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Catalogs, databases, and tables

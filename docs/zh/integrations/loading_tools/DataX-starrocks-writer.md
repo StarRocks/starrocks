@@ -1,11 +1,7 @@
 ---
 sidebar_position: 20
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocksWriter 插件允许通过 DataX 将 MySQL、Oracle 等数据库的数据导入至 StarRocks。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 使用 DataX 导入

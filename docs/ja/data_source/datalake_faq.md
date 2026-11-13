@@ -1,11 +1,7 @@
 ---
 sidebar_position: 50
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocks データレイク分析の catalog 設定とクエリ問題に関する FAQ と解決策。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # データレイク FAQ

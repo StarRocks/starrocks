@@ -1,11 +1,7 @@
 ---
 sidebar_position: 20
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "共有なし StarRocks クラスタを手動でデプロイする方法（BE がストレージとコンピューティングの両方を担当）。"
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import ManualPrep from '../_assets/deployment/manual_prep.mdx'

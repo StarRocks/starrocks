@@ -1,11 +1,7 @@
 ---
 keywords: ['xiugai'] 
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "ALTER SYSTEM 管理 StarRocks 集群中的 FE、BE、CN 和 Broker 节点。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ALTER SYSTEM

@@ -1,11 +1,7 @@
 ---
 sidebar_position: 10
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "Query detail API 返回 FE 内存中缓存的最近查询执行详情。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Query detail API

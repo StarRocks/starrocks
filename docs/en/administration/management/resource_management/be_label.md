@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 80
-<<<<<<< HEAD
-=======
-description: "Since v3.2.8, StarRocks supports adding labels on BEs. When creating a table or an asynchronous materialized view, you can specify the label of a certain..."
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Add labels on BEs

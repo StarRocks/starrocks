@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 0.9
-<<<<<<< HEAD
-=======
-description: "From v2.2.0 onwards, you can compile user-defined functions (UDFs) to suit your specific business needs by using the Java programming language."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Java UDF

@@ -1,10 +1,6 @@
 ---
 sidebar_position: 40
-<<<<<<< HEAD
-=======
-description: "主键表使用了由 StarRocks 设计的新存储引擎。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 主键表

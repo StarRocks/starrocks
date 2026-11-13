@@ -1,11 +1,7 @@
 ---
 sidebar_position: 70
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "query_dump インターフェースで SQL クエリの詳細を取得してトラブルシューティングする方法。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # query_dump インターフェース

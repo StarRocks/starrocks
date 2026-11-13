@@ -2,12 +2,8 @@
 sidebar_position: 70
 displayed_sidebar: docs
 sidebar_label: Community Chat
-<<<<<<< HEAD
 description: Slack with the community
-=======
-description: "How to join the StarRocks community chat on Slack."
 products: [oss, enterprise]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Community Chat (via Slack)

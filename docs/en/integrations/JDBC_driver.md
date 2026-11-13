@@ -1,11 +1,7 @@
 ---
 sidebar_position: 90
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocks provides a native JDBC driver that enables direct connectivity from any JDBC-compatible client, IDE, or application."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # StarRocks JDBC Driver

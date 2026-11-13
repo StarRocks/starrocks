@@ -1,13 +1,7 @@
-<<<<<<< HEAD
-=======
 ---
-sidebar_position: 10
-displayed_sidebar: docs
-description: "Explains feature maturity levels: Experimental, Beta, Generally Available (GA), Deprecated, and End-of-Life, and what each means for production use."
 products: [oss, enterprise, cloud, anywhere]
 ---
 
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 # Beta and experimental features
 
 Features have five potential maturity levels:

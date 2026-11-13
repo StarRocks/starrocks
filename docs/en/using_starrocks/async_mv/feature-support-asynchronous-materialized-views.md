@@ -2,11 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 50
 sidebar_label: "Feature Support"
-<<<<<<< HEAD
-=======
-description: "Reference for feature support boundaries of asynchronous materialized views in StarRocks: supported join types, aggregate functions, query rewrite..."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Feature Support: Asynchronous Materialized Views

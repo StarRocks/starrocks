@@ -1,11 +1,7 @@
 ---
 sidebar_position: 170
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "严格模式控制导入过程中如何处理数据类型转换失败的行，决定是否过滤无效数据。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 严格模式

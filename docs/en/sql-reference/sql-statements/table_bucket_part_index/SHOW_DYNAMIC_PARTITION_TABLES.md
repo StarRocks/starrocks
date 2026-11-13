@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "SHOW DYNAMIC PARTITION TABLES is used to display the status of all the partitioned tables for which dynamic partitioning properties are configured in a..."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # SHOW DYNAMIC PARTITION TABLES

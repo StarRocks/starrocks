@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 50
-<<<<<<< HEAD
-=======
-description: "How to configure data compression in StarRocks using LZ4, Zstandard, zlib, or Snappy algorithms to reduce storage space and improve I/O performance."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Data compression

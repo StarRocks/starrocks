@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "v2.5 以降の BE debuginfo ファイルの別途ダウンロード・使用方法。"
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # デバッグのための debuginfo ファイルの使用

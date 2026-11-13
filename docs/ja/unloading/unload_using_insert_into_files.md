@@ -1,11 +1,7 @@
 ---
 sidebar_position: 60
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocks v3.2 以降は INSERT INTO FILES でテーブル関数 FILES() を使用してリモートストレージにデータをアンロードできます。"
 products: [oss, enterprise]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # INSERT INTO FILES を使用したデータのアンロード

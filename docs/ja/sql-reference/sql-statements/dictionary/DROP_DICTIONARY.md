@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "DROP DICTIONARY は、辞書オブジェクトを削除するか、辞書オブジェクト内のキャッシュデータをクリアします。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # DROP DICTIONARY

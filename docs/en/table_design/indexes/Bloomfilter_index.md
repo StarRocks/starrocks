@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 30
-<<<<<<< HEAD
-=======
-description: "How to create and manage Bloom filter indexes in StarRocks to skip data files that don't contain queried values, improving query performance on..."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Bloom filter indexes

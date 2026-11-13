@@ -1,11 +1,7 @@
 ---
 sidebar_position: 10
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "Data Cache はメモリ内とディスクキャッシュで内部・外部テーブルをキャッシュしクエリを高速化。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Data Cache

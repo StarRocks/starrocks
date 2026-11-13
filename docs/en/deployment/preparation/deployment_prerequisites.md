@@ -1,11 +1,7 @@
 ---
 sidebar_position: 10
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "Hardware and software requirements for servers before deploying StarRocks."
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Deployment Prerequisites

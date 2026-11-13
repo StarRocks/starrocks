@@ -1,11 +1,7 @@
 ---
 sidebar_position: 100
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "使用 Flink CDC 捕获 MySQL 变更数据，实时同步至 StarRocks 进行秒级更新。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 从 MySQL 实时同步

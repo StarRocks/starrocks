@@ -2,11 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 sidebar_label: "Related References"
-<<<<<<< HEAD
-=======
-description: "Reference index for asynchronous materialized view SQL statements (CREATE, ALTER, REFRESH, DROP) and system views for monitoring in StarRocks."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Asynchronous Materialized View References

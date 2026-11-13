@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "ALTER STORAGE VOLUME は、ストレージボリュームのクレデンシャルプロパティ、コメント、またはステータスを変更します。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ALTER STORAGE VOLUME

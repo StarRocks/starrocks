@@ -1,11 +1,7 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "JWT 認証と一時的な資格情報を使用した、Iceberg REST Catalog のセキュアなアクセス設定。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Iceberg REST Catalog のセキュリティ設定

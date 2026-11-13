@@ -1,11 +1,7 @@
 ---
 sidebar_position: 10
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "Data Cache 缓存内外部表数据，由内存缓存 Page Cache 和磁盘缓存 Block Cache 组成。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Data Cache

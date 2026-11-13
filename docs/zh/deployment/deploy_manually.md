@@ -1,11 +1,7 @@
 ---
 sidebar_position: 20
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "如何手动部署存算一体 StarRocks 集群，其中 BE 节点同时处理存储和计算。"
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import ManualPrep from '../_assets/deployment/manual_prep.mdx'

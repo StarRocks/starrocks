@@ -1,11 +1,7 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "如何手动部署存算分离 StarRocks 集群，数据存储在远程存储中，本地盘作为缓存。"
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import Tabs from '@theme/Tabs';

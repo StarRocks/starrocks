@@ -1,11 +1,7 @@
 ---
 sidebar_position: 20
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "使用 Spark Load 通过外部 Spark 资源预处理数据，支持 TB 级别的大数据量初次迁移和批量导入。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 使用 Spark Load 批量导入数据

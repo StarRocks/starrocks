@@ -1,11 +1,7 @@
 ---
 sidebar_position: 20
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "How to manually deploy a shared-nothing StarRocks cluster where BE nodes handle both storage and computing."
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import ManualPrep from '../_assets/deployment/manual_prep.mdx'

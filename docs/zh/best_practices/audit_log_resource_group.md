@@ -1,10 +1,6 @@
 ---
 sidebar_position: 120
-<<<<<<< HEAD
-=======
-description: "Analyze StarRocks audit logs to identify query patterns and configure resource groups for effective workload isolation and resource optimization."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 基于审计日志的资源组配置

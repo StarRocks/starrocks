@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocks 2.1：Iceberg 外部テーブル（プレビュー）、パイプライン実行エンジン、CREATE TABLE AS SELECT、SQL 改善。"
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # StarRocks version 2.1

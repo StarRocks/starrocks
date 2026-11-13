@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
-<<<<<<< HEAD
-=======
-description: "Comparison of capabilities across StarRocks table types: Duplicate Key, Aggregate, Unique Key, and Primary Key tables, including supported features and use..."
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Capabilities of different table types

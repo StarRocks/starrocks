@@ -1,12 +1,7 @@
-<<<<<<< HEAD
-=======
 ---
-displayed_sidebar: docs
-description: "Combines multiple serialized DataSketches HyperLogLog (HLL) sketches into a single serialized sketch for approximate distinct counting."
 products: [oss, enterprise, cloud, anywhere]
 ---
 
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 # ds_hll_combine
 
 Combines multiple serialized HyperLogLog sketches into a single serialized sketch. This function is part of the DataSketches HLL family of functions for approximate distinct counting.

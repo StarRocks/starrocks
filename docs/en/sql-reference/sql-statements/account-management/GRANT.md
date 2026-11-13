@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 4
-<<<<<<< HEAD
-=======
-description: "Grants roles or privileges on specific objects to a user, a role, or an external group."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # GRANT

@@ -1,11 +1,7 @@
 ---
 sidebar_position: 10
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "The query detail API returns recent query execution details that are cached in FE memory."
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Query detail API

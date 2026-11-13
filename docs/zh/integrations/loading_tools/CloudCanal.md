@@ -1,11 +1,7 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "CloudCanal 是可视化数据迁移和同步工具，支持将多种数据源的数据实时同步到 StarRocks。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 使用 CloudCanal 导入

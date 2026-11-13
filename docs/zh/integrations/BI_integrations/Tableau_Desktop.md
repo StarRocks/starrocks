@@ -1,11 +1,7 @@
 ---
 sidebar_position: 70
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "使用 StarRocks Tableau JDBC Connector 连接 StarRocks 与 Tableau Desktop 和 Tableau Server。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Tableau

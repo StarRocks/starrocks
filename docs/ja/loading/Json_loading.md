@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "Stream Load または Routine Load を使用して JSON データを StarRocks にロードする方法（JSON パス式とネストされたオブジェクト処理を含む）。"
 products: [oss, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # はじめに

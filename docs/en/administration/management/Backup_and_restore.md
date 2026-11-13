@@ -1,11 +1,7 @@
 ---
 sidebar_position: 50
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
 products: [oss, enterprise, anywhere]
-description: "StarRocks supports backing up data as snapshots into a remote storage system and restoring the data to any StarRocks clusters."
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Back up and restore data

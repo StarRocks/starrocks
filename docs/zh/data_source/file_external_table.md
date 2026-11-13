@@ -1,11 +1,7 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "文件外部表支持直接查询 HDFS、S3、OSS 和 COS 上的 Parquet 和 ORC 文件。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 文件外部表

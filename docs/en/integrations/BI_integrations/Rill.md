@@ -1,11 +1,7 @@
 ---
 sidebar_position: 60
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "Rill supports connecting to StarRocks as an OLAP connector to power Rill dashboards with external tables."
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Rill

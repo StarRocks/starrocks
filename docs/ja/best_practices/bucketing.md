@@ -1,10 +1,6 @@
 ---
 sidebar_position: 30
-<<<<<<< HEAD
-=======
-description: "StarRocks のハッシュ/ランダムバケット法の選択、仕組み、トレードオフ、推奨ユースケースを簡潔に説明します。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # バケット法

@@ -2,12 +2,8 @@
 sidebar_position: 10
 displayed_sidebar: docs
 sidebar_label: AWS
-<<<<<<< HEAD
 description: "This topic describes how to authenticate with AWS"
-=======
-description: "How to configure StarRocks to authenticate with AWS for accessing S3 and other AWS resources."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Authenticate to AWS resources

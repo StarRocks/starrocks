@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "DATE 类型用于存储日期，取值范围为 ['0000-01-01', '9999-12-31']，格式为 YYYY-MM-DD。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import DateTip from '../../../_assets/commonMarkdown/dateTimeTip.mdx'

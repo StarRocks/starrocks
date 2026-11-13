@@ -1,12 +1,8 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
-<<<<<<< HEAD
 description: Cloud based Kafka from AutoMQ
-=======
-description: "How to load data into StarRocks from AutoMQ Kafka using Routine Load."
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # AutoMQ Kafka

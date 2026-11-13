@@ -1,11 +1,7 @@
 ---
 sidebar_position: 140
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "Stream Load、Broker Load、Routine Load を使用して Primary Key テーブルで INSERT、UPDATE、DELETE、部分更新、条件付き更新を実行する方法。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ロードによるデータ変更

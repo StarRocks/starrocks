@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: "docs"
-<<<<<<< HEAD
-=======
-description: "mann_whitney_u_test performs the Mann-Whitney rank test on samples derived from two populations."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # mann_whitney_u_test

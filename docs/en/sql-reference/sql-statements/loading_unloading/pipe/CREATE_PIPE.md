@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "CREATE PIPE creates a new pipe for defining the INSERT INTO SELECT FROM FILES statement used by the system to load data from a specified source data file to..."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # CREATE PIPE

@@ -1,11 +1,7 @@
 ---
 sidebar_position: 40
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "FE ノードが例外に遭遇した場合に StarRocks クラスター内のメタデータをリカバリーする方法。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # メタデータのリカバリー

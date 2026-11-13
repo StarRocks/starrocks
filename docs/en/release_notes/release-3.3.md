@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocks 3.3 release notes: sub-second DDL via Fast Schema Evolution in shared-data, StarRocks Data Migration Tool, CACHE SELECT for data lake warmup,..."
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # StarRocks version 3.3

@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "ADMIN CANCEL REPAIR は、指定されたテーブルまたはパーティションに対する修復操作の優先スケジュールをキャンセルします。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ADMIN CANCEL REPAIR

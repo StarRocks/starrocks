@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['FE', 'Coordinator Node','memory', 'OOM', 'JVM', 'troubleshooting', 'heap']
-<<<<<<< HEAD
-=======
-description: "Prevent 'FE memory full' issues, quickly recover, and find out the cause as much as possible to prevent recurrence."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 

@@ -1,11 +1,7 @@
 ---
 sidebar_position: 80
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocks のリソース分離機能における CPU/メモリ制限設定とリソースグループの設定方法を説明します。"
 products: [oss, enterprise]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # リソース分離のトラブルシューティング

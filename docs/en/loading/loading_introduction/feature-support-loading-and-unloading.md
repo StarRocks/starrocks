@@ -2,11 +2,7 @@
 sidebar_position: 40
 displayed_sidebar: docs
 sidebar_label: "Feature Support"
-<<<<<<< HEAD
-=======
-description: "Reference for file format, data source, and feature support across StarRocks data loading and unloading methods."
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Feature Support: Data Loading and Unloading

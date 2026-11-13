@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 1
-<<<<<<< HEAD
-=======
-description: "Version naming is detailed in the versioning documentation."
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Version Release Guide

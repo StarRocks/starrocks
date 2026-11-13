@@ -2,11 +2,7 @@
 sidebar_position: 1
 sidebar_label: "Overview"
 keywords: ['S3 API', 'reduce cost', 'efficiency', 'efficient', 'performance']
-<<<<<<< HEAD
-=======
-description: "These best practices are written by experienced database engineers."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Best Practices

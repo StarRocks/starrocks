@@ -1,11 +1,7 @@
 ---
 sidebar_position: 90
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "启用基于完全限定域名（FQDN）访问 StarRocks 节点而非 IP 地址。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 启用 FQDN 访问

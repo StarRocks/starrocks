@@ -5,11 +5,7 @@ keywords:
   - broker
   - load
   - broker load
-<<<<<<< HEAD
-=======
-description: "StarRocks provides the MySQL-based loading method Broker Load."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 <head><meta name="docsearch:pagerank" content="100"/></head>

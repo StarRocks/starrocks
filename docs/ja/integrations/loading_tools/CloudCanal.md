@@ -1,11 +1,7 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "BladePipe はリアルタイムエンドツーエンドデータレプリケーションツールとして 30 以上のデータベースから StarRocks へ超低レイテンシーでデータを移動します。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # BladePipe

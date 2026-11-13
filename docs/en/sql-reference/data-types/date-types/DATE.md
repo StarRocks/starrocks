@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "DATE type. The value range is ['0000-01-01', '9999-12-31'] and the default format is YYYY-MM-DD."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import DateTip from '../../../_assets/commonMarkdown/dateTimeTip.mdx'

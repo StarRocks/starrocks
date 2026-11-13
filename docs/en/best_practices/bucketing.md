@@ -1,10 +1,6 @@
 ---
 sidebar_position: 30
-<<<<<<< HEAD
-=======
-description: "A concise field guide to choosing between Hash Bucketing and Random Bucketing in StarRocks, including their mechanics, trade‑offs, and recommended use cases."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Bucketing

@@ -6,11 +6,7 @@ keywords:
   - mysql
   - sync
   - Flink CDC
-<<<<<<< HEAD
-=======
-description: "How to use Flink CDC to capture MySQL change data in real time and synchronize it into StarRocks tables using the StarRocks Flink connector."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Realtime synchronization from MySQL

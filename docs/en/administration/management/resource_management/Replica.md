@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 70
-<<<<<<< HEAD
-=======
-description: "Manage data replicas in your StarRocks cluster."
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Manage replica

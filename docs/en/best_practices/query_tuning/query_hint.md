@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 70
-<<<<<<< HEAD
-=======
-description: "Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Query Hint

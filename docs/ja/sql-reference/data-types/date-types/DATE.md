@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "DATE 型の値の範囲と形式、テーブル作成時の使用方法。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import DateTip from '../../../_assets/commonMarkdown/dateTimeTip.mdx'

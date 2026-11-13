@@ -1,11 +1,7 @@
 ---
 sidebar_position: 90
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "Before 2.4, StarRocks supports access to FEs and BEs via IP address only."
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Enable FQDN access

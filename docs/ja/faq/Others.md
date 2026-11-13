@@ -1,11 +1,7 @@
 ---
 sidebar_position: 120
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "varchar、文字セット、JOIN 等に関する StarRocks 一般的な質問。"
 products: [oss, enterprise]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # その他

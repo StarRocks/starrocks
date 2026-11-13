@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 30
-<<<<<<< HEAD
-=======
-description: "How to use legacy range partitioning with dynamic partition strategy in StarRocks to automatically create and drop time-based partitions and manage..."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Range partitioning (Legacy)

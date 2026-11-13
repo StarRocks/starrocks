@@ -1,11 +1,7 @@
 ---
 sidebar_position: 30
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "ストレージとコンピューティングが分離されている共有データ StarRocks クラスタを手動でデプロイする方法。"
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import Tabs from '@theme/Tabs';

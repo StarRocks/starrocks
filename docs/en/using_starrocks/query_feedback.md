@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 11
-<<<<<<< HEAD
-=======
-description: "How to use Query Feedback in StarRocks to automatically analyze slow query plans, generate optimization guides via Query Plan Advisor, and improve..."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import Experimental from '../_assets/commonMarkdown/_experimental.mdx'

@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocks 2.5 版本发布说明：Delta Lake catalog、外部存储数据缓存、查询缓存、查询队列、STRUCT/MAP 类型。"
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # StarRocks version 2.5

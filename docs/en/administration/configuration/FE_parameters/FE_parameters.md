@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocks FE configuration reference: complete list of FE parameters configurable in fe.conf or via ADMIN SET FRONTEND CONFIG."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 import FEConfigMethod from '../../../_assets/commonMarkdown/FE_config_method.mdx'

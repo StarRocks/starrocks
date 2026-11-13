@@ -2,11 +2,7 @@
 displayed_sidebar: docs
 keywords: ['profile', 'query', 'slow']
 sidebar_position: 30
-<<<<<<< HEAD
-=======
-description: "Query Profile records execution information for all working nodes involved in a query, helping you quickly identify bottlenecks affecting query performance."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Query Profile Overview

@@ -1,13 +1,7 @@
-<<<<<<< HEAD
-=======
 ---
-sidebar_position: 100
-displayed_sidebar: docs
-description: "How to orchestrate and schedule StarRocks data workflows using Apache Airflow DAGs, SQLExecuteQueryOperator, and MySQLHook."
 products: [oss, anywhere]
 ---
 
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 # Apache Airflow
 
 Enables orchestration and scheduling of data workflows with StarRocks using DAGs (Directed Acyclic Graphs) and SQL operators. Use Airflow for data loading and transformation using the `SQLExecuteQueryOperator` and `MySQLHook` without any implementation or complex configuration. 

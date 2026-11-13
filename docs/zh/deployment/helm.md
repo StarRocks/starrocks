@@ -1,11 +1,7 @@
 ---
 sidebar_position: 50
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "使用 Helm 包管理工具在 Kubernetes 集群上自动化部署 StarRocks。"
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 使用 Helm 部署 StarRocks 集群

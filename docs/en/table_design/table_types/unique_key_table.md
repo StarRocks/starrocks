@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 50
-<<<<<<< HEAD
-=======
-description: "How to create and use Unique Key tables in StarRocks to deduplicate rows on a unique key, returning only the latest value per key. Largely superseded by..."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Unique Key table

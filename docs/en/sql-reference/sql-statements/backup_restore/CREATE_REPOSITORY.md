@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
 products: [oss, enterprise, anywhere]
-description: "Creates a repository in a remote storage system that is used to store data snapshots for backing up and restoring data."
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # CREATE REPOSITORY

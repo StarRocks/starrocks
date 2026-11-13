@@ -1,11 +1,7 @@
 ---
 sidebar_position: 150
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "Stream Load・Broker Load・Routine Load で列マッピング・フィルタ条件・派生列式を使用したロード時のデータ変換が可能です。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ロード時のデータ変換

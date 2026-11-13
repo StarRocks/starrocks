@@ -1,11 +1,7 @@
 ---
 sidebar_position: 80
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "Metabase を StarRocks に接続してデータベースを追加し、クエリと可視化を行う方法を説明します。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Metabase

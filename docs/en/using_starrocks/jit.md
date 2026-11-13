@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 130
-<<<<<<< HEAD
-=======
-description: "How to enable and configure JIT (just-in-time) compilation for expressions in StarRocks to accelerate expression evaluation in query execution."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # JIT Compilation for Expressions

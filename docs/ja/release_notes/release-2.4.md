@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocks 2.4：複数基本テーブル上の非同期マテリアライズドビュー、INSERT OVERWRITE、Kubernetes 上のステートレス Compute ノード、非等値結合。"
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # StarRocks バージョン 2.4

@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "How to load JSON data into StarRocks using Stream Load or Routine Load, with JSON path expressions for field mapping and nested object handling."
 products: [oss, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Introduction

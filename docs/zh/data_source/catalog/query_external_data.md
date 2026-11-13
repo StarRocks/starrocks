@@ -1,11 +1,7 @@
 ---
 sidebar_position: 160
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "External Catalog 方便访问并查询存储在各类外部数据源的数据，无需创建外部表。"
 products: [oss, enterprise, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 查询外部数据

@@ -1,10 +1,6 @@
 ---
 title: CURRENT_WAREHOUSE
-<<<<<<< HEAD
-=======
-description: "現在のセッションで有効なウェアハウス名を返します。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 現在のセッションで有効なウェアハウス名を返します。`SET WAREHOUSE` で明示的に設定したウェアハウス、または設定されていない場合はデフォルトのウェアハウスが返されます。

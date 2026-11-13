@@ -2,11 +2,7 @@
 sidebar_position: 50
 displayed_sidebar: docs
 toc_max_heading_level: 5
-<<<<<<< HEAD
-=======
-description: "A Hudi catalog is a kind of external catalog that enables you to query data from Apache Hudi without ingestion."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # Hudi catalog

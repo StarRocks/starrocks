@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "StarRocks 3.4 リリースノート: Iceberg Time Travel、Python UDF、ベクトルインデックス（IVFPQ/HNSW）、統一式最適化。"
 products: [oss]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # StarRocks version 3.4

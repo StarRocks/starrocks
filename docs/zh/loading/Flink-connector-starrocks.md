@@ -1,11 +1,7 @@
 ---
 sidebar_position: 110
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "通过 Apache Flink connector 持续加载数据到 StarRocks，支持 DataStream、Table API 和 Python API。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # 从 Apache Flink® 持续导入

@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "AWS IAM 策略声明对特定 AWS 资源的访问权限，用于 StarRocks 集成 AWS 的身份认证。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # AWS IAM 策略

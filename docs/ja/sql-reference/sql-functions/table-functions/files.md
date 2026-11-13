@@ -1,11 +1,8 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 5
-<<<<<<< HEAD
-description: "リモートストレージ内のデータファイルを定義し、データのロードおよびアンロードに使用します。"
-=======
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
+description: "リモートストレージ内のデータファイルを定義し、データのロードおよびアンロードに使用します。"
 ---
 
 # `FILES`
