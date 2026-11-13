@@ -9,8 +9,6 @@ import PostBEConfig from '../../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
-import EditionSpecificBEItem from '../../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
-
 # BE 配置项
 
 <BEConfigMethod />
