@@ -40,6 +40,11 @@ struct RewindableDocument : simdjson::ondemand::document {
     }
 };
 
+static_assert(sizeof(RewindableDocument) == sizeof(simdjson::ondemand::document),
+              "RewindableDocument must not add data members");
+static_assert(sizeof(RewindableDocument::RewindableJsonIterator) == sizeof(simdjson::ondemand::json_iterator),
+              "RewindableJsonIterator must not add data members");
+
 } // namespace
 
 const size_t MAX_RAW_JSON_LEN = 64;
@@ -51,6 +56,7 @@ JsonDocumentStreamParser::JsonDocumentStreamParser(simdjson::ondemand::parser* p
 }
 
 Status JsonDocumentStreamParser::parse(char* data, size_t len, size_t allocated) noexcept {
+    DCHECK_GE(allocated, len + simdjson::SIMDJSON_PADDING);
     try {
         _data = data;
         _len = len;

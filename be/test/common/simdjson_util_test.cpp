@@ -12,10 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef SIMDJSON_DEVELOPMENT_CHECKS
-#define SIMDJSON_DEVELOPMENT_CHECKS 1
-#endif
-
 #include "common/simdjson_util.h"
 
 #include <gtest/gtest.h>
