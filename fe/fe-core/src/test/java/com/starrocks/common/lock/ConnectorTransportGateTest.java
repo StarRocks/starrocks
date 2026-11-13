@@ -47,6 +47,7 @@ import com.starrocks.connector.kudu.KuduMetadata;
 import com.starrocks.connector.odps.OdpsMetadata;
 import com.starrocks.connector.odps.OdpsProperties;
 import com.starrocks.server.GlobalStateMgr;
+import io.delta.kernel.defaults.engine.hadoopio.HadoopFileIO;
 import io.delta.kernel.utils.CloseableIterator;
 import io.delta.kernel.utils.FileStatus;
 import org.apache.hadoop.conf.Configuration;
@@ -145,19 +146,19 @@ public class ConnectorTransportGateTest {
     @Test
     public void testDeltaLakeJsonReadIsGuarded() {
         assertRefusedUnderLock("remote-storage",
-                () -> DeltaLakeJsonHandler.readJsonFile("s3://bucket/_delta_log/1.json", new Configuration()));
+                () -> DeltaLakeJsonHandler.readJsonFile("s3://bucket/_delta_log/1.json", new HadoopFileIO(new Configuration())));
     }
 
     @Test
     public void testDeltaLakeCheckpointReadIsGuarded() {
         assertRefusedUnderLock("remote-storage",
                 () -> DeltaLakeParquetHandler.readParquetFile("s3://bucket/_delta_log/1.checkpoint.parquet",
-                        1L, 1L, null, new Configuration()));
+                        1L, 1L, null, new HadoopFileIO(new Configuration())));
     }
 
     @Test
     public void testDeltaLakeUncachedJsonReadIsGuarded() {
-        TraceDefaultJsonHandler handler = new TraceDefaultJsonHandler(new Configuration());
+        TraceDefaultJsonHandler handler = new TraceDefaultJsonHandler(new HadoopFileIO(new Configuration()));
         assertRefusedUnderLock("remote-storage", () -> {
             CloseableIterator<FileStatus> files =
                     oneFile(FileStatus.of("s3://bucket/_delta_log/1.json", 1L, 1L));
