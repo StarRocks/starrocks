@@ -6,7 +6,6 @@ description: "Enable Group Provider in StarRocks to authenticate, and authorize 
 
 # Authenticate User Groups
 
-import GroupProviderRangerLink from '../../_assets/user_priv/group_provider_ranger_link.mdx'
 
 Enable Group Provider in StarRocks to authenticate, and authorize user groups from external authentication systems.
 
@@ -425,4 +424,4 @@ GRANT example_role TO EXTERNAL GROUP analysts;
 
 Once you configure the associated group provider in the security integration, StarRocks will record the user's group information upon login. This group information will then be automatically included in the authorization process with Ranger, eliminating the need for additional configuration.
 
-<GroupProviderRangerLink />
+For more instructions on integrating StarRocks with Ranger, see [Manage permissions with Apache Ranger](./authorization/ranger_plugin.md).

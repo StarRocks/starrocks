@@ -6,7 +6,6 @@ sidebar_position: 30
 
 # 认证用户组
 
-import GroupProviderRangerLink from '../../_assets/user_priv/group_provider_ranger_link.mdx'
 
 在 StarRocks 中启用 Group Provider 以认证和授权来自外部认证系统的用户组。
 
@@ -420,4 +419,4 @@ GRANT example_role TO EXTERNAL GROUP analysts;
 
 一旦您在安全集成中配置了关联的 Group Provider，StarRocks 将在用户登录时记录用户的组信息。然后，这些组信息将自动包含在与 Ranger 的授权过程中，无需额外配置。
 
-<GroupProviderRangerLink />
+有关将 StarRocks 与 Ranger 集成的更多说明，请参见[使用 Apache Ranger 管理权限](./authorization/ranger_plugin.md)。
