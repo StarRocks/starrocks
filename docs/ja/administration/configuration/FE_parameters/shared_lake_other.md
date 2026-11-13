@@ -13,10 +13,6 @@ import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note
 
 import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 43416b8 ([Doc] Merge the configuration and variable partials into their pages (#83162))
 <FEConfigMethod />
 
 ## FE 設定項目の表示
@@ -838,11 +834,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：Seconds
 - 変更可能：Yes
 - 説明：`remove_orphan_files` プロシージャの `older_than` は `現在時刻 - この値` より前でなければなりません。これより新しい `older_than` は拒否されます。それほど新しいファイルを削除すると、並行する書き込みがまだコミットしていないデータを消してしまい、テーブルが読み取り不能になるためです。制限されるのは明示的に指定した `older_than` のみで、省略した場合はプロシージャ自身の 7 日のデフォルトが使われます。プロシージャの実行中にそのテーブルへの書き込みが一切ない場合にのみ、この値を小さくしてください。
-<<<<<<< HEAD
 - 導入時期：v4.1.5
-=======
-- 導入時期：v4.2.0
->>>>>>> 43416b8 ([Doc] Merge the configuration and variable partials into their pages (#83162))
 
 ## その他
 
