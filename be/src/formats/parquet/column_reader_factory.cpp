@@ -128,6 +128,32 @@ static StatusOr<std::unique_ptr<ObjectPresenceSource>> make_object_presence_sour
     return source;
 }
 
+// Why a scalar typed_value of this file type is not allowed in a shredded variant, or an empty string. The spec lists
+// the types; unsigned integers and fixed-length byte arrays that are neither decimals nor UUIDs are not among them.
+static std::string shredded_typed_value_unsupported_reason(const ParquetField& field) {
+    if (field.physical_type == tparquet::Type::INT32 || field.physical_type == tparquet::Type::INT64) {
+        if (is_unsigned_integer(field.schema_element)) {
+            const int bit_width =
+                    field.schema_element.__isset.logicalType && field.schema_element.logicalType.__isset.INTEGER
+                            ? field.schema_element.logicalType.INTEGER.bitWidth
+                            : (field.physical_type == tparquet::Type::INT32 ? 32 : 64);
+            return strings::Substitute("Unsupported shredded value type: INTEGER($0,false)", bit_width);
+        }
+    }
+    if (field.physical_type == tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
+        const auto& element = field.schema_element;
+        const bool is_decimal =
+                (element.__isset.logicalType && element.logicalType.__isset.DECIMAL) ||
+                (element.__isset.converted_type && element.converted_type == tparquet::ConvertedType::DECIMAL);
+        const bool is_uuid = element.__isset.logicalType && element.logicalType.__isset.UUID;
+        if (!is_decimal && !is_uuid) {
+            return strings::Substitute("Unsupported shredded value type: fixed_len_byte_array($0) typed_value",
+                                       field.type_length);
+        }
+    }
+    return "";
+}
+
 static VariantNodeFields find_variant_node_fields(const ParquetField* struct_field) {
     VariantNodeFields fields;
     if (struct_field == nullptr) {
@@ -320,6 +346,7 @@ static Status build_scalar_reader_for_variant_node(const ColumnReaderOptions& op
 
     TypeDescriptor file_type = variant_typed_desc_from_parquet_field(typed_field);
     node->kind = ShreddedFieldNode::Kind::SCALAR;
+    node->unsupported_reason = shredded_typed_value_unsupported_reason(*typed_field);
 
     // Keep the read type on heap before creating reader. ScalarColumnReader stores
     // a raw pointer to TypeDescriptor, so a stack-local cannot be referenced.
@@ -717,6 +744,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
     ColumnReaderPtr root_typed_value_reader = nullptr;
     std::unique_ptr<TypeDescriptor> root_typed_value_type = nullptr;
     std::unique_ptr<ObjectPresenceSource> root_presence;
+    std::string root_unsupported_reason;
     if (top_fields.typed_value != nullptr) {
         const ParquetField* typed_value_field = top_fields.typed_value;
         if (typed_value_field->type == ColumnType::STRUCT) {
@@ -733,6 +761,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
                                             file_type.debug_string(), root_reader_or.status().to_string()));
             }
             root_typed_value_reader = std::move(root_reader_or).value();
+            root_unsupported_reason = shredded_typed_value_unsupported_reason(*typed_value_field);
         }
     }
     auto reader =
@@ -740,6 +769,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
                                                   std::move(shredded_fields), std::move(hints.parsed_shredded_paths),
                                                   std::move(root_typed_value_reader), std::move(root_typed_value_type));
     reader->set_root_presence(std::move(root_presence));
+    reader->set_root_unsupported_reason(std::move(root_unsupported_reason));
     return ColumnReaderPtr(std::move(reader));
 }
 
