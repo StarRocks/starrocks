@@ -40,6 +40,11 @@ public class OptimizerOptions {
 
     private final BitSet ruleSwitches;
 
+    // Whether looking up an external table's column statistics during this run may queue a query-triggered
+    // analyze for the table. Off for the column pruning a column-level authorization check runs before the
+    // statement is authorized: that plan is thrown away, and the statement may still be denied.
+    private boolean queryTriggerAnalyzeEnabled = true;
+
     public OptimizerOptions() {
         this(OptimizerStrategy.COST_BASED);
     }
@@ -60,6 +65,14 @@ public class OptimizerOptions {
 
     public boolean isBaselinePlan() {
         return optimizerStrategy.equals(OptimizerStrategy.BASELINE_PLAN);
+    }
+
+    public boolean isQueryTriggerAnalyzeEnabled() {
+        return queryTriggerAnalyzeEnabled;
+    }
+
+    public void setQueryTriggerAnalyzeEnabled(boolean queryTriggerAnalyzeEnabled) {
+        this.queryTriggerAnalyzeEnabled = queryTriggerAnalyzeEnabled;
     }
 
     public void disableRule(RuleType ruleType) {
