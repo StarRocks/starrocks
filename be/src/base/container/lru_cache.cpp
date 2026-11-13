@@ -190,7 +190,7 @@ void LRUCache::set_capacity(size_t capacity) {
     }
 
     for (auto entry : last_ref_list) {
-        entry->free();
+        entry->free(_allocator);
     }
 }
 
@@ -277,7 +277,7 @@ void LRUCache::release(Cache::Handle* handle) {
 
     // free handle out of mutex
     if (last_ref) {
-        e->free();
+        e->free(_allocator);
     }
 }
 
@@ -327,7 +327,6 @@ LRUHandle* LRUCache::_alloc_handle(const CacheKey& key, uint32_t hash, void* val
     size_t key_mem_size = sizeof(LRUHandle) - 1 + key.size();
     auto* e = reinterpret_cast<LRUHandle*>(_allocator != nullptr ? _allocator->allocate(key_mem_size)
                                                                  : malloc(key_mem_size));
-    e->storage_allocator = _allocator;
     e->value = value;
     e->deleter = deleter;
     e->charge = value_size + key_mem_size;
@@ -386,7 +385,7 @@ Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value,
     // we free the entries here outside of mutex for
     // performance reasons
     for (auto entry : last_ref_list) {
-        entry->free();
+        entry->free(_allocator);
     }
 
     return reinterpret_cast<Cache::Handle*>(e);
@@ -408,11 +407,11 @@ Cache::Handle* LRUCache::insert_no_evict(const CacheKey& key, uint32_t hash, voi
 
     if (!fits) {
         // Only the handle is ours to release; `value` still belongs to the caller.
-        e->free_storage();
+        e->free_storage(_allocator);
         return nullptr;
     }
     for (auto entry : last_ref_list) {
-        entry->free();
+        entry->free(_allocator);
     }
 
     return reinterpret_cast<Cache::Handle*>(e);
@@ -445,10 +444,10 @@ Cache::Handle* LRUCache::insert_if_absent(const CacheKey& key, uint32_t hash, vo
     *inserted = (ret == e);
     if (!*inserted) {
         // Only the handle is ours to release; `value` still belongs to the caller.
-        e->free_storage();
+        e->free_storage(_allocator);
     }
     for (auto entry : last_ref_list) {
-        entry->free();
+        entry->free(_allocator);
     }
 
     return reinterpret_cast<Cache::Handle*>(ret);
@@ -479,7 +478,7 @@ bool LRUCache::replace_if(const CacheKey& key, uint32_t hash, void* value, size_
         }
     }
     for (auto* entry : last_ref_list) {
-        entry->free();
+        entry->free(_allocator);
     }
     if (replaced) {
         // Drop the temporary caller reference created by _alloc_handle. release()
@@ -487,7 +486,7 @@ bool LRUCache::replace_if(const CacheKey& key, uint32_t hash, void* value, size_
         release(reinterpret_cast<Cache::Handle*>(replacement));
     } else {
         // The cache never adopted value; only its unused handle belongs to us.
-        replacement->free_storage();
+        replacement->free_storage(_allocator);
     }
     return replaced;
 }
@@ -523,7 +522,7 @@ bool LRUCache::update_charge_if(const CacheKey& key, uint32_t hash, size_t new_v
         }
     }
     for (auto entry : last_ref_list) {
-        entry->free();
+        entry->free(_allocator);
     }
     return updated;
 }
@@ -548,7 +547,7 @@ void LRUCache::erase(const CacheKey& key, uint32_t hash) {
     }
     // free handle out of mutex, when last_ref is true, e must not be nullptr
     if (last_ref) {
-        e->free();
+        e->free(_allocator);
     }
 }
 
@@ -569,7 +568,7 @@ int LRUCache::prune() {
         }
     }
     for (auto entry : last_ref_list) {
-        entry->free();
+        entry->free(_allocator);
     }
     return last_ref_list.size();
 }

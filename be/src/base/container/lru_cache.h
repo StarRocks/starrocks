@@ -255,7 +255,6 @@ typedef struct LRUHandle {
     size_t charge;
     size_t key_length;
     bool in_cache; // Whether entry is in the cache.
-    const CacheStorageAllocator* storage_allocator;
     uint32_t refs;
     uint32_t hash; // Hash of key(); used for fast sharding and comparisons
     CachePriority priority = CachePriority::NORMAL;
@@ -272,16 +271,16 @@ typedef struct LRUHandle {
         }
     }
 
-    void free_storage() {
-        if (storage_allocator != nullptr)
-            storage_allocator->deallocate(this);
+    void free_storage(const CacheStorageAllocator* allocator) {
+        if (allocator != nullptr)
+            allocator->deallocate(this);
         else
             ::free(this);
     }
 
-    void free() {
+    void free(const CacheStorageAllocator* allocator) {
         (*deleter)(key(), value);
-        free_storage();
+        free_storage(allocator);
     }
 
 } LRUHandle;
