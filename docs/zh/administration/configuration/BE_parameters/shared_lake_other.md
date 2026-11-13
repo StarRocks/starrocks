@@ -318,6 +318,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 流水化读取 `.lcrm` 文件时使用的 sub-chunk 粒度。每个输出 segment 被切分为 `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 个 sub-chunk，独立流水化。值越小，少而大的输出 segment 能获得越高的并发度，但代价是更多的范围读取和消费时一次额外的 memcpy。默认 4 MiB，与 starcache 磁盘层 block 大小对齐。
 
+### lake_scan_read_ahead_segments
+
+- 默认值：16
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：远端 IO 调度器启用时，如果 lake 查询扫描逐个读取一个 Tablet 的 Segment（即该 Tablet 没有切分给多个扫描任务），那么当前 Segment 的块全部发出读取后，扫描会一边读当前 Segment，一边提前读取后面几个 Segment 开头的块。提前预读的 Segment 最多为该值。只有当这些 Segment 已发出读取但还没读的块合计少于 `remote_prefetch_window_blocks` 个缓存块时，才会开始预读下一个 Segment，因此最后开始的那个 Segment 可能让合计达到窗口的两倍左右。设为 `0` 表示关闭，每个 Segment 轮到时才开始预读。切分扫描、导入和 Compaction 不受影响。查询 profile 中的 SegmentReadAheadStarted 记录提前开始预读的 Segment 数。
+- 引入版本：-
+
 ### lake_segment_metadata_cache_limit_percent
 
 - 默认值：10
