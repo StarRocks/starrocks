@@ -80,6 +80,27 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
         Assertions.assertFalse(plan.contains("convert_tz"), plan);
     }
 
+    // Trino rounds a cast to TIMESTAMP(p) half up to p digits (TIMESTAMP is TIMESTAMP(3)): second() of this is 42
+    @Test
+    public void testCastRoundsToPrecision() throws Exception {
+        assertPlanContains("select second(CAST(with_timezone(TIMESTAMP '2024-08-19 14:36:41.6', 'UTC') " +
+                "AS TIMESTAMP(0)))", "date_trunc('second', microseconds_add(", "500000)");
+        assertPlanContains("select CAST(with_timezone(TIMESTAMP '2024-08-19 14:36:41.6', 'UTC') AS TIMESTAMP)",
+                "date_trunc('millisecond', microseconds_add(", "500)");
+        String plan = getFragmentPlan("select CAST(with_timezone(TIMESTAMP '2024-08-19 14:36:41.6', 'UTC') " +
+                "AS TIMESTAMP(6))");
+        Assertions.assertFalse(plan.contains("microseconds_add"), plan);
+    }
+
+    // Below a day, truncation is exact only in a fixed-offset zone; Trino promotes a DATE argument to TIMESTAMP
+    @Test
+    public void testSubDayTruncation() throws Exception {
+        assertPlanContains("select cast(date_trunc('hour', at_timezone(with_timezone(" +
+                "TIMESTAMP '2024-08-19 14:36:41', 'UTC'), '+05:30')) AS TIMESTAMP)", "'2024-08-19 20:00:00'");
+        assertPlanContains("select cast(date_trunc('hour', with_timezone(DATE '2024-08-19', 'UTC')) AS TIMESTAMP)",
+                "'2024-08-19 00:00:00'");
+    }
+
     // A literal's offset in a DST zone is resolved here, so the BE only converts from a fixed offset
     @Test
     public void testLiteralInDaylightSavingZone() throws Exception {
@@ -116,6 +137,11 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                         "as x) select cast(x AS TIMESTAMP) from t",
                 "select cast(at_timezone(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), 'Asia/Tokyo') " +
                         "over () AS TIMESTAMP)",
+                // Trino truncates below a day in the value's offset, which a 30-minute DST shift tells apart
+                "select cast(date_trunc('hour', with_timezone(TIMESTAMP '2024-10-06 02:45:00', " +
+                        "'Australia/Lord_Howe')) AS TIMESTAMP)",
+                // A precision without a matching rounding unit
+                "select cast(with_timezone(TIMESTAMP '2024-08-19 14:36:41.66', 'UTC') AS TIMESTAMP(1))",
                 // A DST zone attached to a column, or to a literal it skips or repeats: Trino and convert_tz resolve
                 // those differently (Trino: 10:30, 08:30 and 01:30 UTC)
                 "select cast(with_timezone(ts, 'America/Los_Angeles') AT TIME ZONE 'UTC' AS TIMESTAMP)" + values,

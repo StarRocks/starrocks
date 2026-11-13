@@ -1188,7 +1188,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         }
         Expr value = (Expr) visit(timestamp, context);
         if (toZone == null) {
-            return value;
+            // Trino promotes a DATE argument to TIMESTAMP
+            return new CastExpr(new TypeDef(DATETIME), value);
         }
         return new FunctionCallExpr("convert_tz", List.of(value,
                 new com.starrocks.sql.ast.expression.StringLiteral(from.get()),
@@ -1277,10 +1278,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 && !formatShowsZone(name, ((StringLiteral) arguments.get(1)).getValue())) {
             wallClockArguments.add(arguments.get(0));
         } else if (name.equals("date_trunc") && arguments.size() == 2 && wallClockArguments.contains(node)
-                && (isWithTimezone(arguments.get(1)) || (arguments.get(1) instanceof AtTimeZone
-                && isWithTimezone(((AtTimeZone) arguments.get(1)).getValue()))
-                || (arguments.get(1) instanceof FunctionCall
-                && isAtTimezoneOfWithTimezone((FunctionCall) arguments.get(1))))) {
+                && isTruncationExact(arguments.get(0), arguments.get(1))) {
             wallClockArguments.add(arguments.get(1));
         }
     }
@@ -1301,13 +1299,35 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return false;
     }
 
+    // The zone whose wall-clock time a with_timezone value is: z2 of a conversion, or z1
+    private static Optional<ZoneId> resultZone(Expression expression) {
+        if (expression instanceof AtTimeZone && isWithTimezone(((AtTimeZone) expression).getValue())) {
+            return backendZone(((AtTimeZone) expression).getTimeZone());
+        }
+        if (isWithTimezone(expression)
+                || (expression instanceof FunctionCall && isAtTimezoneOfWithTimezone((FunctionCall) expression))) {
+            return backendZone(((FunctionCall) expression).getArguments().get(1));
+        }
+        return Optional.empty();
+    }
+
+    // Whether truncating a with_timezone value to its wall-clock unit matches Trino. Below a day, Trino truncates in
+    // the value's offset, which differs from the round trip below when the truncation lands in a gap of a zone whose
+    // DST shift isn't a whole hour (e.g. Australia/Lord_Howe), so those units need a fixed-offset zone
+    private static boolean isTruncationExact(Expression unit, Expression value) {
+        Optional<ZoneId> zone = resultZone(value);
+        if (zone.isEmpty() || !(unit instanceof StringLiteral)) {
+            return false;
+        }
+        return zone.get().getRules().isFixedOffset() || Set.of("day", "week", "month", "quarter", "year")
+                .contains(((StringLiteral) unit).getValue().toLowerCase());
+    }
+
     // date_trunc of a with_timezone value truncates its wall-clock time, which can land on a time its zone skips (e.g.
     // midnight on a DST change at 00:00). Trino moves such a result to the end of the gap; a round trip through the
     // zone does the same in FE folding and the BE, and leaves every other time as it is
     private Expr resolveSkippedTruncation(Expr truncated, Expression argument) {
-        Expression zone = argument instanceof AtTimeZone ? ((AtTimeZone) argument).getTimeZone()
-                : ((FunctionCall) argument).getArguments().get(1);
-        ZoneId zoneId = backendZone(zone).orElseThrow();
+        ZoneId zoneId = resultZone(argument).orElseThrow();
         if (zoneId.getRules().isFixedOffset()) {
             return truncated;
         }
@@ -1584,7 +1604,40 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         if (isWallClockType(node.getType())) {
             wallClockArguments.add(node.getExpression());
         }
-        return new CastExpr(new TypeDef(getType(node.getType())), (Expr) visit(node.getExpression(), context));
+        Expr cast = new CastExpr(new TypeDef(getType(node.getType())), (Expr) visit(node.getExpression(), context));
+        Expression value = node.getExpression();
+        boolean zoned = resultZone(value).isPresent() || (value instanceof FunctionCall
+                && ((FunctionCall) value).getName().toString().equalsIgnoreCase("date_trunc")
+                && ((FunctionCall) value).getArguments().size() == 2
+                && resultZone(((FunctionCall) value).getArguments().get(1)).isPresent());
+        if (zoned && node.getType() instanceof DateTimeDataType) {
+            return roundToPrecision(cast, (DateTimeDataType) node.getType(), node);
+        }
+        return cast;
+    }
+
+    // Trino rounds a cast to TIMESTAMP(p) half up to p fractional digits, and TIMESTAMP is TIMESTAMP(3); a DATETIME
+    // keeps microseconds. Precisions without a matching date_trunc unit are rejected
+    private Expr roundToPrecision(Expr value, DateTimeDataType type, Cast node) {
+        int precision = 3;
+        if (type.getPrecision().isPresent()) {
+            if (!(type.getPrecision().get() instanceof NumericParameter)) {
+                throw unsupportedException(String.format("Trino parser on StarRocks does not support %s", node));
+            }
+            precision = Integer.parseInt(((NumericParameter) type.getPrecision().get()).getValue());
+        }
+        if (precision >= 6) {
+            return value;
+        }
+        if (precision != 0 && precision != 3) {
+            throw unsupportedException(String.format("Trino parser on StarRocks does not support %s: with_timezone "
+                    + "is supported only in a CAST to TIMESTAMP, TIMESTAMP(0), TIMESTAMP(3) or TIMESTAMP(6) and above",
+                    node));
+        }
+        String unit = precision == 0 ? "second" : "millisecond";
+        int half = precision == 0 ? 500_000 : 500;
+        return new FunctionCallExpr("date_trunc", List.of(new com.starrocks.sql.ast.expression.StringLiteral(unit),
+                new FunctionCallExpr(FunctionSet.MICROSECONDS_ADD, List.of(value, new IntLiteral(half)))));
     }
 
     @Override
