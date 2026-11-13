@@ -296,7 +296,7 @@ TEST_F(SpillBlockManagerTest, remote_file_block_reads_as_its_spiller) {
 }
 
 namespace {
-// Stands in for starlet: records the read context a file is opened with.
+// Stands in for starlet: records the read context a file is opened with, as passed in its options.
 class StarletLikeFileSystem final : public MemoryFileSystem {
 public:
     Type type() const override { return STARLET; }
@@ -305,7 +305,7 @@ public:
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
                                                                   const std::string& url) override {
-        opened_with.push_back(ScopedRemoteReadContext::or_current(RemoteReadContext{}));
+        opened_with.push_back(opts.remote_read);
         return MemoryFileSystem::new_sequential_file(opts, url);
     }
 

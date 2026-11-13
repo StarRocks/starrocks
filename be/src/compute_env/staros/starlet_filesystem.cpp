@@ -404,8 +404,8 @@ public:
         auto opt = ReadOptions();
         opt.cache.read_mode = to_fslib_read_mode(opts.skip_disk_cache, opts.skip_fill_local_cache);
         opt.buffer_size = opts.buffer_size;
-        // A sequential file has no context of its own: it takes the work running on this thread.
-        opt.remote_read = to_fslib_remote_read(ScopedRemoteReadContext::or_current(RemoteReadContext{}));
+        // A file opened without a context of its own takes the work running on this thread, if any.
+        opt.remote_read = to_fslib_remote_read(ScopedRemoteReadContext::or_current(opts.remote_read));
         auto file_st = (*fs_st)->open(pair.first, opt);
 
         if (!file_st.ok()) {

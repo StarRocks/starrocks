@@ -226,18 +226,13 @@ Status FileBlockContainer::flush() {
 }
 
 StatusOr<std::unique_ptr<io::InputStreamWrapper>> FileBlockContainer::get_readable() {
-    std::string file_path = path();
-    if (_dir->is_remote() && _dir->fs()->type() == FileSystem::Type::STARLET) {
-        // The spill of a load into its tablets' storage. Starlet schedules the reads its cache misses itself, as reads
-        // of the context the file is opened with, and serves the others locally: scheduling them all again here would
-        // queue cache hits as remote reads, and their millisecond latencies would pull the scheduler's latency
-        // baseline, and with it its in-flight window, down to the floor.
-        ScopedRemoteReadContext remote_read_scope(_remote_read);
-        ASSIGN_OR_RETURN(auto f, _dir->fs()->new_sequential_file(file_path));
-        return f;
-    }
-    ASSIGN_OR_RETURN(auto f, _dir->fs()->new_sequential_file(file_path));
-    if (!_dir->is_remote()) {
+    SequentialFileOptions opts;
+    opts.remote_read = _remote_read;
+    ASSIGN_OR_RETURN(auto f, _dir->fs()->new_sequential_file(opts, path()));
+    // Starlet schedules the cache misses of a file itself, as reads of the context it is opened with, and serves cache
+    // hits locally: scheduling all its reads again here would queue cache hits as remote reads. Any other remote file
+    // system reads the object store directly, so its reads go through the scheduler here.
+    if (!_dir->is_remote() || _dir->fs()->type() == FileSystem::Type::STARLET) {
         return f;
     }
     return std::make_unique<io::InputStreamWrapper>(

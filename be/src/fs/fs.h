@@ -51,6 +51,8 @@ struct SequentialFileOptions {
     int64_t buffer_size = -1;
     FileEncryptionInfo encryption_info;
     bool skip_disk_cache = false;
+    // Who the remote reads of this file are for; only the starlet filesystem uses it.
+    RemoteReadContext remote_read;
 };
 
 struct RandomAccessFileOptions {
