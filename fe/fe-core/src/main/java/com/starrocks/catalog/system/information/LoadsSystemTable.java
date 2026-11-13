@@ -16,6 +16,7 @@ package com.starrocks.catalog.system.information;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
@@ -88,7 +89,26 @@ public class LoadsSystemTable {
                         .column("TRACKING_SQL", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("REJECTED_RECORD_PATH", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("JOB_ID", IntegerType.BIGINT)
+                        .column("TXN_ID", IntegerType.BIGINT)
+                        .column("LOAD_ID", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TABLE_ID", IntegerType.BIGINT)
+                        .column("PARENT_ID", IntegerType.BIGINT)
+                        .column("STATEMENT", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("ERROR_CODE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("VISIBLE_TIME", DateType.DATETIME)
+                        .column("SINK_BYTES", IntegerType.BIGINT)
+                        .column("CLIENT_IP", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("BE_IDS", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("COMMIT_THROTTLE_MS", IntegerType.BIGINT)
+                        .column("CPU_NS", IntegerType.BIGINT)
+                        .column("PEAK_MEM_BYTES", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_LOADS);
+    }
+
+    // Schema of the view, in column order. The loads_history archive derives its table
+    // definition and its INSERT ... SELECT column lists from this single list.
+    public static List<Column> columns() {
+        return create().getBaseSchema();
     }
 
     public static TGetLoadsResult query(TGetLoadsParams request) {

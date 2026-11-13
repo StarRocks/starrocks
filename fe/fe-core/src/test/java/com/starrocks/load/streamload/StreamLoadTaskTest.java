@@ -39,9 +39,12 @@ import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -51,6 +54,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
 
@@ -312,6 +316,110 @@ public class StreamLoadTaskTest {
         Assertions.assertFalse(unsetInfo.isSetLoad_start_time_ms());
         Assertions.assertFalse(unsetInfo.isSetLoad_commit_time_ms());
         Assertions.assertFalse(unsetInfo.isSetLoad_finish_time_ms());
+    }
+
+    @Test
+    public void testToThrift_jobColumns() {
+        // Nothing set yet: the job-level columns that depend on runtime state stay unset so
+        // BE renders them as NULL; table id is always known from the constructor.
+        TLoadInfo info = streamLoadTask.toThrift().get(0);
+        Assertions.assertTrue(info.isSetTable_id());
+        Assertions.assertFalse(info.isSetParent_id());
+        Assertions.assertFalse(info.isSetBe_ids());
+        Assertions.assertFalse(info.isSetVisible_time_ms());
+        Assertions.assertFalse(info.isSetClient_ip());
+        Assertions.assertFalse(info.isSetSink_bytes());
+        Assertions.assertFalse(info.isSetStatement());
+        Assertions.assertFalse(info.isSetError_code());
+        Assertions.assertFalse(info.isSetCpu_ns());
+        Assertions.assertFalse(info.isSetPeak_mem_bytes());
+
+        streamLoadTask.setBeId(10001L);
+        streamLoadTask.setRoutineLoadJobId(77L);
+        TransactionState txnState = new TransactionState();
+        txnState.setFinishTime(1_700_000_000_000L);
+        streamLoadTask.replayOnVisible(txnState);
+
+        info = streamLoadTask.toThrift().get(0);
+        Assertions.assertEquals(77L, info.getParent_id());
+        Assertions.assertEquals("10001", info.getBe_ids());
+        Assertions.assertEquals(1_700_000_000_000L, info.getVisible_time_ms());
+    }
+
+    @Test
+    public void testToThrift_valuesOutliveTheTransaction() throws Exception {
+        // What the transaction only holds in memory is taken over by the task when it commits.
+        TransactionState txnState = new TransactionState();
+        txnState.setWriteEndTimeMs(1_700_000_000_000L);
+        txnState.setAllowCommitTimeMs(1_700_000_000_250L);
+        streamLoadTask.afterCommitted(txnState);
+        Deencapsulation.setField(streamLoadTask, "numLoadBytesTotal", 2048L);
+
+        // The transaction has been purged since.
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return null;
+            }
+        };
+        TLoadInfo info = streamLoadTask.toThrift().get(0);
+        Assertions.assertEquals(250L, info.getCommit_throttle_ms());
+        Assertions.assertEquals(2048L, info.getSink_bytes());
+        Assertions.assertFalse(info.isSetVisible_time_ms());
+
+        // A FINISHED task without a visible time of its own took its end time from the transaction.
+        Deencapsulation.setField(streamLoadTask, "state", StreamLoadTask.State.FINISHED);
+        Deencapsulation.setField(streamLoadTask, "visibleTimeMs", -1L);
+        Deencapsulation.setField(streamLoadTask, "endTimeMs", 1_700_000_000_900L);
+        Assertions.assertEquals(1_700_000_000_900L, streamLoadTask.toThrift().get(0).getVisible_time_ms());
+    }
+
+    @Test
+    public void testBeginTxnFromBackendKeepsTheBackendId() {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public long beginTransaction(long dbId, List<Long> tableIdList, String label, TUniqueId requestId,
+                                         TransactionState.TxnCoordinator coordinator,
+                                         TransactionState.LoadJobSourceType sourceType, long listenerId,
+                                         long timeoutSecond, ComputeResource computeResource) {
+                return 4242L;
+            }
+
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                // purged, or a follower that has no backend id on the coordinator
+                return null;
+            }
+        };
+        streamLoadTask.beginTxnFromBackend(new TUniqueId(1, 2), "192.168.1.9", 10007L, new TransactionResult());
+        Assertions.assertEquals(10007L, streamLoadTask.getBeId());
+        Assertions.assertEquals("10007", streamLoadTask.toThrift().get(0).getBe_ids());
+    }
+
+    @Test
+    public void testToThrift_visibleTimeFromTransaction() {
+        // A FINISHED task that carries no visible time of its own (restored from an image written
+        // before the field existed) reports the transaction's, once the transaction is VISIBLE.
+        TransactionState txnState = new TransactionState();
+        txnState.setFinishTime(1_700_000_000_400L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return txnState;
+            }
+        };
+        Deencapsulation.setField(streamLoadTask, "state", StreamLoadTask.State.FINISHED);
+        Deencapsulation.setField(streamLoadTask, "visibleTimeMs", -1L);
+
+        txnState.setTransactionStatus(TransactionStatus.COMMITTED);
+        Assertions.assertFalse(streamLoadTask.toThrift().get(0).isSetVisible_time_ms());
+
+        txnState.setTransactionStatus(TransactionStatus.VISIBLE);
+        Assertions.assertEquals(1_700_000_000_400L, streamLoadTask.toThrift().get(0).getVisible_time_ms());
+
+        // A task that is not FINISHED has no visible time whatever its transaction says.
+        Deencapsulation.setField(streamLoadTask, "state", StreamLoadTask.State.CANCELLED);
+        Assertions.assertFalse(streamLoadTask.toThrift().get(0).isSetVisible_time_ms());
     }
 
     @Test

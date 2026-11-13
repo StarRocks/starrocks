@@ -1594,6 +1594,17 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
         this.allowCommitTimeMs = allowCommitTimeMs;
     }
 
+    // Milliseconds the commit was held back by lake ingest slowdown, 0 when the
+    // limiter evaluated this transaction and let it through at once, and -1 when
+    // the limiter never evaluated it (shared-nothing, slowdown disabled, or the
+    // in-memory fields were lost on a restart).
+    public long getCommitThrottleMs() {
+        if (allowCommitTimeMs < 0 || writeEndTimeMs < 0) {
+            return -1;
+        }
+        return Math.max(0, allowCommitTimeMs - writeEndTimeMs);
+    }
+
     // A value of -1 indicates this field is not set.
     public long getWriteDurationMs() {
         return writeDurationMs;

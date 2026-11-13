@@ -3759,7 +3759,9 @@ public class StmtExecutor {
                         getExecTimeout(),
                         context.getCurrentWarehouseId(),
                         coord,
-                        insertLoadTxnCallback);
+                        insertLoadTxnCallback,
+                        InsertLoadJob.statementKindOf(stmt, execPlan),
+                        context.getRemoteIP());
                 loadJob.setJobProperties(stmt.getProperties());
                 jobId = loadJob.getId();
                 if (txnState != null) {

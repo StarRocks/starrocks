@@ -136,6 +136,10 @@ SHOW LOAD 语句返回 Broker Load、Insert Into 和 Spark Load 任务的信息�
 
 **statistics.loads_history** 系统视图默认存储最近三个月的导入记录。数据库管理员可以通过修改视图的 `partition_ttl` 来调整保留期。**statistics.loads_history** 的模式与 **information_schema.loads** 一致。
 
+:::note
+升级后，StarRocks 会把新版本在 **information_schema.loads** 中新增的列添加到 **statistics.loads_history**。如果之后将集群降级到没有这些列的版本，向 **statistics.loads_history** 的同步会失败，因为该版本按列的位置复制数据。降级后如需恢复同步，请使用 ALTER TABLE 从 `_statistics_.loads_history` 中删除新增的列（`txn_id`、`load_id`、`table_id`、`parent_id`、`statement`、`error_code`、`visible_time`、`sink_bytes`、`client_ip`、`be_ids`、`commit_throttle_ms`、`cpu_ns`、`peak_mem_bytes`）。升级时请先升级所有 BE 和 CN，再升级 FE：旧版本的 BE 或 CN 无法提供新增的列，在其升级之前，对 **information_schema.loads** 的查询和同步都会失败。
+:::
+
 ## 使用 Load Profiles 识别导入性能问题
 
 **Load Profile** 记录了参与数据导入的所有工作节点的执行细节。它帮助您快速定位 StarRocks 集群中的性能瓶颈。
