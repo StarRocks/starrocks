@@ -16,6 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include <climits>
+#include <limits>
+#include <vector>
+
 namespace starrocks {
 class DeltaDecodeTest : public testing::Test {
 public:
@@ -25,65 +29,327 @@ public:
 
 TEST_F(DeltaDecodeTest, test_int32) {
     std::vector<int32_t> values(233);
-    for (int i = 0; i < values.size(); i++) {
+    for (size_t i = 0; i < values.size(); i++) {
         values[i] = 1;
     }
-    [[maybe_unused]] std::vector<int32_t> avx2_values(values);
-    [[maybe_unused]] std::vector<int32_t> avx2x_values(values);
-    [[maybe_unused]] std::vector<int32_t> avx512_values(values);
 
+    // scalar reference
+    std::vector<int32_t> expected(values);
+    int32_t expected_last = 10;
+    delta_decode_chain_scalar_prefetch<int32_t>(expected.data(), expected.size(), 10, expected_last);
+    ASSERT_EQ(expected.back(), expected_last);
+
+    // public dispatcher must match on any CPU
     {
+        std::vector<int32_t> v(values);
         int32_t last_value = 10;
-        delta_decode_chain_scalar_prefetch<int32_t>(values.data(), values.size(), 10, last_value);
-        ASSERT_EQ(values.back(), last_value);
+        delta_decode_chain_int32(v.data(), v.size(), 10, last_value);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_value);
     }
-#ifdef __AVX2__
+
+    // scalar entry point
     {
+        std::vector<int32_t> v(values);
         int32_t last_value = 10;
-        delta_decode_chain_int32_avx2(avx2_values.data(), avx2_values.size(), 10, last_value);
-        ASSERT_EQ(avx2_values.back(), last_value);
-        ASSERT_EQ(avx2_values, values);
+        delta_decode_chain_int32_scalar(v.data(), v.size(), 10, last_value);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_value);
+    }
+
+#if defined(__x86_64__)
+#if defined(__AVX2__)
+    if (__builtin_cpu_supports("avx2")) {
+        std::vector<int32_t> v(values);
+        int32_t last_value = 10;
+        delta_decode_chain_int32_avx2(v.data(), v.size(), 10, last_value);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_value);
     }
 #endif
-
+#if !defined(ADDRESS_SANITIZER)
 #if defined(__AVX512F__) && defined(__AVX512VL__)
-    {
+    if (__builtin_cpu_supports("avx512f") && __builtin_cpu_supports("avx512vl")) {
+        std::vector<int32_t> v(values);
         int32_t last_value = 10;
-        delta_decode_chain_int32_avx2x(avx2x_values.data(), avx2x_values.size(), 10, last_value);
-        ASSERT_EQ(avx2x_values.back(), last_value);
-        ASSERT_EQ(avx2x_values, values);
+        delta_decode_chain_int32_avx2x(v.data(), v.size(), 10, last_value);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_value);
     }
 #endif
-
-#ifdef __AVX512F__
-    {
+#if defined(__AVX512F__)
+    if (__builtin_cpu_supports("avx512f")) {
+        std::vector<int32_t> v(values);
         int32_t last_value = 10;
-        delta_decode_chain_int32_avx512(avx512_values.data(), avx512_values.size(), 10, last_value);
-        ASSERT_EQ(avx512_values.back(), last_value);
-        ASSERT_EQ(avx512_values, values);
+        delta_decode_chain_int32_avx512(v.data(), v.size(), 10, last_value);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_value);
     }
+#endif
+#endif
 #endif
 }
 
 TEST_F(DeltaDecodeTest, test_int64) {
     std::vector<int64_t> values(223);
-    for (int i = 0; i < values.size(); i++) {
+    for (size_t i = 0; i < values.size(); i++) {
         values[i] = 1;
     }
-    [[maybe_unused]] std::vector<int64_t> avx512_values(values);
+
+    // scalar reference
+    std::vector<int64_t> expected(values);
+    int64_t expected_last = 10;
+    delta_decode_chain_scalar_prefetch<int64_t>(expected.data(), expected.size(), 10, expected_last);
+    ASSERT_EQ(expected.back(), expected_last);
+
+    // public dispatcher must match on any CPU
     {
+        std::vector<int64_t> v(values);
         int64_t last_value = 10;
-        delta_decode_chain_scalar_prefetch<int64_t>(values.data(), values.size(), 10, last_value);
-        ASSERT_EQ(values.back(), last_value);
+        delta_decode_chain_int64(v.data(), v.size(), 10, last_value);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_value);
     }
-#ifdef __AVX512F__
+
+    // scalar entry point
     {
+        std::vector<int64_t> v(values);
         int64_t last_value = 10;
-        delta_decode_chain_int64_avx512(avx512_values.data(), avx512_values.size(), 10, last_value);
-        ASSERT_EQ(avx512_values.back(), last_value);
-        ASSERT_EQ(avx512_values, values);
+        delta_decode_chain_int64_scalar(v.data(), v.size(), 10, last_value);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_value);
+    }
+
+#if defined(__x86_64__) && !defined(ADDRESS_SANITIZER)
+#if defined(__AVX512F__)
+    if (__builtin_cpu_supports("avx512f")) {
+        std::vector<int64_t> v(values);
+        int64_t last_value = 10;
+        delta_decode_chain_int64_avx512(v.data(), v.size(), 10, last_value);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_value);
     }
 #endif
+#endif
+}
+
+TEST_F(DeltaDecodeTest, test_boundary_sizes_and_negative_deltas) {
+    const std::vector<int> sizes = {0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 63, 64, 65};
+    for (int n : sizes) {
+        std::vector<int32_t> base32(n);
+        std::vector<int64_t> base64(n);
+        for (int i = 0; i < n; ++i) {
+            base32[i] = (i * 7) % 13;
+            base64[i] = (i * 11) % 19;
+        }
+
+        for (int32_t min_delta : {0, 5, -10}) {
+            std::vector<int32_t> expected(base32);
+            int32_t expected_last = -500;
+            delta_decode_chain_scalar_prefetch<int32_t>(expected.data(), n, min_delta, expected_last);
+
+            std::vector<int32_t> actual(base32);
+            int32_t actual_last = -500;
+            delta_decode_chain_int32(actual.data(), n, min_delta, actual_last);
+            ASSERT_EQ(actual, expected) << "n=" << n << " min_delta=" << min_delta;
+            ASSERT_EQ(actual_last, expected_last) << "n=" << n << " min_delta=" << min_delta;
+        }
+
+        for (int64_t min_delta : {int64_t{0}, int64_t{5}, int64_t{-10}}) {
+            std::vector<int64_t> expected(base64);
+            int64_t expected_last = -500;
+            delta_decode_chain_scalar_prefetch<int64_t>(expected.data(), n, min_delta, expected_last);
+
+            std::vector<int64_t> actual(base64);
+            int64_t actual_last = -500;
+            delta_decode_chain_int64(actual.data(), n, min_delta, actual_last);
+            ASSERT_EQ(actual, expected) << "n=" << n << " min_delta=" << min_delta;
+            ASSERT_EQ(actual_last, expected_last) << "n=" << n << " min_delta=" << min_delta;
+        }
+    }
+}
+
+TEST_F(DeltaDecodeTest, test_int32_wrapping_overflow) {
+    // Deliberately test values that wrap across INT32_MAX and INT32_MIN.
+    // In standard C++, signed overflow is UB unless unsigned cast is used.
+    // Under UBSan (-fsanitize=undefined), this verifies zero traps occur.
+    const size_t sz = 137;
+    std::vector<int32_t> values(sz);
+    int32_t start_val = std::numeric_limits<int32_t>::max() - 50;
+    int32_t min_delta = 100;
+    for (size_t i = 0; i < sz; i++) {
+        values[i] = static_cast<int32_t>(i * 1000);
+    }
+    // Force a signed underflow in the scalar tail (index 136) as well as the SIMD loop (index 0).
+    values[sz - 1] = std::numeric_limits<int32_t>::min();
+
+    std::vector<int32_t> expected(values);
+    int32_t expected_last = start_val;
+    delta_decode_chain_scalar_prefetch<int32_t>(expected.data(), expected.size(), min_delta, expected_last);
+    ASSERT_EQ(expected.back(), expected_last);
+
+    {
+        std::vector<int32_t> v(values);
+        int32_t last_val = start_val;
+        delta_decode_chain_int32(v.data(), v.size(), min_delta, last_val);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_val);
+    }
+
+    {
+        std::vector<int32_t> v(values);
+        int32_t last_val = start_val;
+        delta_decode_chain_int32_scalar(v.data(), v.size(), min_delta, last_val);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_val);
+    }
+
+#if defined(__x86_64__)
+#if defined(__AVX2__)
+    if (__builtin_cpu_supports("avx2")) {
+        std::vector<int32_t> v(values);
+        int32_t last_val = start_val;
+        delta_decode_chain_int32_avx2(v.data(), v.size(), min_delta, last_val);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_val);
+    }
+#endif
+#if !defined(ADDRESS_SANITIZER)
+#if defined(__AVX512F__) && defined(__AVX512VL__)
+    if (__builtin_cpu_supports("avx512f") && __builtin_cpu_supports("avx512vl")) {
+        std::vector<int32_t> v(values);
+        int32_t last_val = start_val;
+        delta_decode_chain_int32_avx2x(v.data(), v.size(), min_delta, last_val);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_val);
+    }
+#endif
+#if defined(__AVX512F__)
+    if (__builtin_cpu_supports("avx512f")) {
+        std::vector<int32_t> v(values);
+        int32_t last_val = start_val;
+        delta_decode_chain_int32_avx512(v.data(), v.size(), min_delta, last_val);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_val);
+    }
+#endif
+#endif
+#endif
+}
+
+TEST_F(DeltaDecodeTest, test_int64_wrapping_overflow) {
+    const size_t sz = 137;
+    std::vector<int64_t> values(sz);
+    int64_t start_val = std::numeric_limits<int64_t>::max() - 50;
+    int64_t min_delta = 100;
+    for (size_t i = 0; i < sz; i++) {
+        values[i] = static_cast<int64_t>(i * 1000);
+    }
+    // Force a signed underflow in the scalar tail (index 136) as well as the SIMD loop (index 0).
+    values[sz - 1] = std::numeric_limits<int64_t>::min();
+
+    std::vector<int64_t> expected(values);
+    int64_t expected_last = start_val;
+    delta_decode_chain_scalar_prefetch<int64_t>(expected.data(), expected.size(), min_delta, expected_last);
+    ASSERT_EQ(expected.back(), expected_last);
+
+    {
+        std::vector<int64_t> v(values);
+        int64_t last_val = start_val;
+        delta_decode_chain_int64(v.data(), v.size(), min_delta, last_val);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_val);
+    }
+
+    {
+        std::vector<int64_t> v(values);
+        int64_t last_val = start_val;
+        delta_decode_chain_int64_scalar(v.data(), v.size(), min_delta, last_val);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_val);
+    }
+
+#if defined(__x86_64__) && !defined(ADDRESS_SANITIZER)
+#if defined(__AVX512F__)
+    if (__builtin_cpu_supports("avx512f")) {
+        std::vector<int64_t> v(values);
+        int64_t last_val = start_val;
+        delta_decode_chain_int64_avx512(v.data(), v.size(), min_delta, last_val);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_val);
+    }
+#endif
+#endif
+}
+
+TEST_F(DeltaDecodeTest, test_scalar_various_sizes) {
+    const std::vector<size_t> sizes = {0, 1, 2, 7, 8, 9, 15, 16, 23, 24, 31, 32, 64, 127};
+    for (size_t sz : sizes) {
+        // int32
+        {
+            std::vector<int32_t> values(sz);
+            for (size_t i = 0; i < sz; i++) {
+                values[i] = static_cast<int32_t>(i + 1);
+            }
+            std::vector<int32_t> expected(values);
+            int32_t expected_last = 5;
+            delta_decode_chain_scalar_prefetch<int32_t>(expected.data(), expected.size(), 3, expected_last);
+
+            std::vector<int32_t> actual(values);
+            int32_t actual_last = 5;
+            delta_decode_chain_int32_scalar(actual.data(), actual.size(), 3, actual_last);
+
+            ASSERT_EQ(actual, expected);
+            ASSERT_EQ(actual_last, expected_last);
+        }
+        // int64
+        {
+            std::vector<int64_t> values(sz);
+            for (size_t i = 0; i < sz; i++) {
+                values[i] = static_cast<int64_t>(i + 1);
+            }
+            std::vector<int64_t> expected(values);
+            int64_t expected_last = 5;
+            delta_decode_chain_scalar_prefetch<int64_t>(expected.data(), expected.size(), 3, expected_last);
+
+            std::vector<int64_t> actual(values);
+            int64_t actual_last = 5;
+            delta_decode_chain_int64_scalar(actual.data(), actual.size(), 3, actual_last);
+
+            ASSERT_EQ(actual, expected);
+            ASSERT_EQ(actual_last, expected_last);
+        }
+    }
+}
+
+TEST_F(DeltaDecodeTest, test_contains_negative_value) {
+    const std::vector<size_t> sizes = {0, 1, 7, 8, 9, 15, 16, 23, 31, 32, 65, 128};
+    for (size_t sz : sizes) {
+        std::vector<int32_t> data(sz, 0);
+        for (size_t i = 0; i < sz; ++i) {
+            data[i] = (i % 2 == 0) ? 0 : ((i % 3 == 0) ? INT32_MAX : static_cast<int32_t>(i));
+        }
+        EXPECT_FALSE(contains_negative_value(data.data(), sz)) << "sz=" << sz;
+
+        for (size_t pos = 0; pos < sz; ++pos) {
+            int32_t saved = data[pos];
+            data[pos] = -1;
+            EXPECT_TRUE(contains_negative_value(data.data(), sz)) << "sz=" << sz << " pos=" << pos;
+            data[pos] = INT32_MIN;
+            EXPECT_TRUE(contains_negative_value(data.data(), sz)) << "sz=" << sz << " pos=" << pos;
+            data[pos] = saved;
+        }
+    }
+}
+
+TEST_F(DeltaDecodeTest, ContainsNegativeValueBenchmarkRegimes) {
+    for (int n : {4096, 4099, 8192, 8195, 16384, 32768}) {
+        std::vector<int32_t> buf(n, 42);
+        EXPECT_FALSE(contains_negative_value(buf.data(), n));
+
+        buf[n - 1] = -1;
+        EXPECT_TRUE(contains_negative_value(buf.data(), n));
+    }
 }
 
 } // namespace starrocks
