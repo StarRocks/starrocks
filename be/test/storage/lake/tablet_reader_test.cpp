@@ -38,9 +38,11 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "fs/remote_read_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
@@ -57,6 +59,7 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/predicate_tree/predicate_tree.hpp"
@@ -1400,6 +1403,101 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
     EXPECT_EQ(2, reader->stats().rowsets_read_count);
     EXPECT_EQ(1, reader->stats().segments_read_count);
     EXPECT_EQ(1, reader->stats().phy_segments_count);
+}
+
+// A non-split query scan reads ahead across the segments of a rowset, not only across rowsets. While the remote I/O
+// scheduler runs, every rowset hands each of its segments to the union of the tablet, which gets the next segment
+// ready (SegmentIterator::start_read_ahead initializes it) while it reads the current one. A local segment has no
+// read-ahead window, so the union starts only the first segment ahead and then reads on as usual.
+TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_across_segments_of_a_rowset) {
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    std::vector<int> expected;
+    // Writes a rowset whose segments do not overlap, 10 keys each from |first_key| up.
+    auto write_rowset = [&](uint32_t id, int segments, int first_key) {
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+        ASSERT_OK(writer->open());
+        for (int i = 0; i < segments; i++) {
+            std::vector<int> k(10);
+            std::iota(k.begin(), k.end(), first_key + 10 * i);
+            expected.insert(expected.end(), k.begin(), k.end());
+            auto c0 = Int32Column::create();
+            auto c1 = Int32Column::create();
+            c0->append_numbers(k.data(), k.size() * sizeof(int));
+            c1->append_numbers(k.data(), k.size() * sizeof(int));
+            ASSERT_OK(writer->write(Chunk({std::move(c0), std::move(c1)}, _schema)));
+            ASSERT_OK(writer->finish());
+        }
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_id(id);
+        for (const auto& file : writer->segments()) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
+        }
+        ASSERT_EQ(segments, rowset->segment_metas_size());
+        writer->close();
+        _tablet_metadata->set_version(_tablet_metadata->version() + 1);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    };
+
+    const bool scheduler_was_enabled = remote_io_scheduler_enabled();
+    DeferOp restore([&] { g_remote_io_scheduler_enabled.store(scheduler_was_enabled); });
+    ConfigResetGuard<int32_t> segments_guard(&config::lake_scan_read_ahead_segments, 16);
+    ConfigResetGuard<int32_t> window_guard(&config::remote_prefetch_window_blocks, 128);
+
+    // Reads the tablet, returning the keys and setting |early_inits| to the segment readers initialized by the
+    // first chunk beyond the one it is read from.
+    auto scan = [&](bool scheduler, bool asc, int64_t* early_inits) {
+        g_remote_io_scheduler_enabled.store(scheduler);
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        reader->set_is_asc_hint(asc);
+        CHECK_OK(reader->prepare());
+        TabletReaderParams params;
+        CHECK_OK(reader->open(params));
+        std::vector<int> keys;
+        auto chunk = ChunkFactory::new_chunk(*_schema, 1024);
+        auto& inits = StorageMetrics::instance()->segment_read_total;
+        const int64_t inits_before = inits.value();
+        for (bool first = true;; first = false) {
+            chunk->reset();
+            Status st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            if (first) {
+                *early_inits = inits.value() - inits_before - 1;
+            }
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                keys.push_back(chunk->get(i)[0].get_int32());
+            }
+        }
+        reader->close();
+        return keys;
+    };
+
+    for (int rowsets = 1; rowsets <= 2; rowsets++) {
+        // One compacted rowset of three segments, then a second rowset of two.
+        if (rowsets == 1) {
+            write_rowset(1, 3, 0);
+        } else {
+            write_rowset(2, 2, 100);
+        }
+        int64_t early_inits = -1;
+        EXPECT_EQ(expected, scan(true, true, &early_inits)) << rowsets;
+        EXPECT_EQ(1, early_inits) << rowsets;
+        EXPECT_EQ(expected, scan(false, true, &early_inits)) << rowsets;
+        EXPECT_EQ(0, early_inits) << rowsets;
+        // A descending scan does not read ahead, and keeps its order of the rowsets.
+        scan(true, false, &early_inits);
+        EXPECT_EQ(0, early_inits) << rowsets;
+        {
+            ConfigResetGuard<int32_t> off(&config::lake_scan_read_ahead_segments, 0);
+            EXPECT_EQ(expected, scan(true, true, &early_inits)) << rowsets;
+            EXPECT_EQ(0, early_inits) << rowsets;
+        }
+    }
 }
 
 // Regression: TabletReaderParams::has_predicate_above_iterator must reach SegmentReadOptions
