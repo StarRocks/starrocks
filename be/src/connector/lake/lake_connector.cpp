@@ -334,6 +334,8 @@ void LakeDataSource::release_for_reuse(RuntimeState* state) {
     if (_reader == nullptr) {
         return;
     }
+    // The reused segment iterators stay open across scans; report what this scan read through them.
+    _reader->flush_reusable_iterator_io_stats();
     update_counter(state);
     _reader->reset_stats();
     _num_rows_read = 0;
