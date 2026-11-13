@@ -1358,7 +1358,6 @@ StarRocks のバージョン。変更できません。
 * **単位**: 秒
 * **データ型**: Int
 
-<<<<<<< HEAD
 ### orc_use_column_names
 
 * **説明**: StarRocks が Hive から ORC ファイルを読み取る際に列がどのように一致するかを指定するために使用されます。デフォルト値は `false` で、ORC ファイル内の列は Hive テーブル定義内の順序位置に基づいて読み取られます。この変数が `true` に設定されている場合、列は名前に基づいて読み取られます。
@@ -1407,5 +1406,3 @@ StarRocks のバージョン。変更できません。
 * **デフォルト**: true
 * **導入バージョン**: v3.4
 
-=======
->>>>>>> 43416b8 ([Doc] Merge the configuration and variable partials into their pages (#83162))

@@ -12,10 +12,6 @@ import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note
 
 import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 43416b8 ([Doc] Merge the configuration and variable partials into their pages (#83162))
 <FEConfigMethod />
 
 ## 查看 FE 配置项
