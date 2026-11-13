@@ -490,6 +490,20 @@ public class Authorizer {
                 .getColumnMaskingPolicy(currentUser, tableName, columns);
     }
 
+    /** See {@link com.starrocks.authorization.AccessController#getColumnMaskingPolicyWithoutAudit}. */
+    public static Map<String, Expr> getColumnMaskingPolicyWithoutAudit(ConnectContext currentUser, TableName tableName,
+                                                                       List<Column> columns) {
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+        return getInstance().getAccessControlOrDefault(catalog)
+                .getColumnMaskingPolicyWithoutAudit(currentUser, tableName, columns);
+    }
+
+    /** See {@link com.starrocks.authorization.AccessController#getRowAccessPolicyWithoutAudit}. */
+    public static Expr getRowAccessPolicyWithoutAudit(ConnectContext currentUser, TableName tableName) {
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+        return getInstance().getAccessControlOrDefault(catalog).getRowAccessPolicyWithoutAudit(currentUser, tableName);
+    }
+
     public static Expr getRowAccessPolicy(ConnectContext currentUser, TableName tableName) {
         String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
         return getInstance().getAccessControlOrDefault(catalog).getRowAccessPolicy(currentUser, tableName);

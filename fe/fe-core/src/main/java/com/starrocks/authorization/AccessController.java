@@ -202,6 +202,21 @@ public interface AccessController {
     }
 
     /**
+     * The two lookups above for a caller that only wants to know what the policies read -- the planner's unlocked
+     * pre-pass, which locks the tables a policy references and then leaves applying it to the analyzer. A controller
+     * that audits a policy lookup (Ranger records a policy hit as an audit event) must not audit these, or the one
+     * query is audited twice. The defaults forward to the lookups above, which audit nothing.
+     */
+    default Map<String, Expr> getColumnMaskingPolicyWithoutAudit(ConnectContext context, TableName tableName,
+                                                                 List<Column> columns) {
+        return getColumnMaskingPolicy(context, tableName, columns);
+    }
+
+    default Expr getRowAccessPolicyWithoutAudit(ConnectContext context, TableName tableName) {
+        return getRowAccessPolicy(context, tableName);
+    }
+
+    /**
      * Whether a row access or column masking policy may apply to {@code tableName}, answered without asking the
      * catalog. The planner resolves an external table before the meta lock is taken when this says yes, so that the
      * tables its policies read can be locked; a controller that serves policies must not say no for a table it may

@@ -14,12 +14,9 @@
 
 package com.starrocks.authorization.ranger.starrocks;
 
-import com.google.common.collect.Maps;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.authorization.RejectedRecordsRowAccessPolicy;
 import com.starrocks.authorization.ranger.RangerAccessController;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
@@ -28,11 +25,8 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.pipe.PipeName;
-
-import java.util.List;
-import java.util.Map;
+import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;
 
 import static java.util.Locale.ENGLISH;
 
@@ -449,38 +443,22 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     }
 
     @Override
-    public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
-        Map<String, Expr> maskingExprMap = Maps.newHashMap();
-        for (Column column : columns) {
-            Expr columnMaskingExpression = getColumnMaskingExpression(RangerStarRocksResource.builder()
-                    .setCatalog(tableName.getCatalog())
-                    .setDatabase(tableName.getDb())
-                    .setTable(tableName.getTbl())
-                    .setColumn(column.getName())
-                    .build(), column, context);
-            if (columnMaskingExpression != null) {
-                maskingExprMap.put(column.getName(), columnMaskingExpression);
-            }
-        }
-
-        return maskingExprMap;
-    }
-
-    @Override
-    public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
-        // The built-in row access policy on _statistics_.rejected_records
-        // must apply regardless of whether the cluster runs Ranger or the
-        // native authorizer, so it takes precedence over any
-        // Ranger-defined policy for that one table. Every other table
-        // falls through to the usual Ranger resolution.
-        if (RejectedRecordsRowAccessPolicy.matches(tableName)) {
-            return RejectedRecordsRowAccessPolicy.buildPolicy(context, tableName);
-        }
-        return getRowAccessExpression(RangerStarRocksResource.builder()
+    protected RangerAccessResourceImpl tableResource(TableName tableName) {
+        return RangerStarRocksResource.builder()
                 .setCatalog(tableName.getCatalog())
                 .setDatabase(tableName.getDb())
                 .setTable(tableName.getTbl())
-                .build(), context);
+                .build();
+    }
+
+    @Override
+    protected RangerAccessResourceImpl columnResource(TableName tableName, String column) {
+        return RangerStarRocksResource.builder()
+                .setCatalog(tableName.getCatalog())
+                .setDatabase(tableName.getDb())
+                .setTable(tableName.getTbl())
+                .setColumn(column)
+                .build();
     }
 
     @Override
