@@ -1510,6 +1510,8 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
 Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters) {
     RowsetReadOptions rs_opts;
     RETURN_IF_ERROR(init_rowset_read_options(params, &rs_opts));
+    // A rowset's own union of its segments would hide them from the union that reads ahead.
+    rs_opts.union_segments = !_union_reads_ahead;
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
 
@@ -1836,7 +1838,23 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
     return Status::OK();
 }
 
+bool TabletReader::union_reads_ahead(const TabletReaderParams& params) const {
+    // A query scan that walks all the segments of the tablet one after another, in ascending order, through the
+    // union below starts the read-ahead of the next segments while it reads the current one; a split scan reads its
+    // segments from several scan tasks at once already. Only the key types that always take the union branch
+    // qualify, as the segments are known to reach it before they are read.
+    const KeysType keys_type = _tablet_schema->keys_type();
+    const bool union_branch =
+            !params.sorted_by_keys_per_tablet && (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
+                                                  (keys_type == UNIQUE_KEYS && params.skip_aggregation));
+    return union_branch && params.reader_type == ReaderType::READER_QUERY && !_need_split && _is_asc_hint &&
+           params.rowid_range_option == nullptr && params.short_key_ranges_option == nullptr &&
+           remote_io_scheduler_enabled() && config::lake_scan_read_ahead_segments > 0 &&
+           config::remote_prefetch_window_blocks > 0;
+}
+
 Status TabletReader::init_collector(const TabletReaderParams& params) {
+    _union_reads_ahead = union_reads_ahead(params);
     std::vector<ChunkIteratorPtr> seg_iters;
     RETURN_IF_ERROR(get_segment_iterators(params, &seg_iters));
 
@@ -1902,14 +1920,8 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         //       |           |           |
         // SegmentIterator  ...    SegmentIterator
         //
-        // A query scan that walks all the segments of the tablet one after another starts the read-ahead of the
-        // next segments while it reads the current one (lake_scan_read_ahead_segments); a split scan reads its
-        // segments from several scan tasks at once already.
-        const bool read_ahead = params.reader_type == ReaderType::READER_QUERY && !_need_split &&
-                                params.rowid_range_option == nullptr && params.short_key_ranges_option == nullptr &&
-                                remote_io_scheduler_enabled() && config::lake_scan_read_ahead_segments > 0 &&
-                                config::remote_prefetch_window_blocks > 0;
-        if (read_ahead) {
+        // With _union_reads_ahead, each child is one segment (see union_reads_ahead()).
+        if (_union_reads_ahead) {
             _collect_iter = new_union_iterator(std::move(seg_iters), config::lake_scan_read_ahead_segments,
                                                config::remote_prefetch_window_blocks);
         } else {
