@@ -66,11 +66,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
-<<<<<<< HEAD
-=======
 import java.util.concurrent.Executor;
-import java.util.concurrent.RejectedExecutionException;
->>>>>>> 3d42a79cdaf... [BugFix][RB-1621] Do not queue a query-triggered analyze from the authorization check's optimization (#69665)
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
