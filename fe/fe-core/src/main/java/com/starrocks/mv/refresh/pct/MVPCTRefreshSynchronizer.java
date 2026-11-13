@@ -166,6 +166,10 @@ public final class MVPCTRefreshSynchronizer {
             }
         }
 
+        // Tell the partitioner whether this refresh may reshape partitions. IVM paths retain the
+        // existing layout so a shape change cannot replace materialized history with empty partitions.
+        processor.getMvPctRefreshPartitioner()
+                .setRetainExistingLayout(processor.shouldRetainExistingPartitionLayout());
         boolean result = processor.getMvPctRefreshPartitioner().syncAddOrDropPartitions();
         if (result && processor.getMv().isPartitionedTable() && processor.getMvContext().getPartitionTopology() == null) {
             throw new DmlException("Materialized view %s.%s refresh failed: partition topology was not published "

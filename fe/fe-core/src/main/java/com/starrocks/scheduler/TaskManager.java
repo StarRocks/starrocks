@@ -589,6 +589,9 @@ public class TaskManager implements MemoryTrackable {
             case SCOPE_UP_TO_DATE -> "NO REFRESH NEEDED: the requested partitions are already up to date, "
                     + "other partitions of the materialized view may still be stale";
             case STALE_PINNED_BATCH -> "REFRESH SKIPPED: another refresh job owns the pinned partition ranges";
+            case PARTIAL_SHAPE_CHANGE -> "REFRESH SKIPPED: the requested range only partially covers a "
+                    + "pending partition shape change, which cannot be applied atomically; refresh a range "
+                    + "covering the whole shape change or the whole materialized view";
         };
     }
 

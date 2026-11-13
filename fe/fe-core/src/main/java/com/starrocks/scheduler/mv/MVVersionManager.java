@@ -25,6 +25,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionUtil;
@@ -151,6 +152,54 @@ public class MVVersionManager {
         // trigger timeless info event since mv version changed
         GlobalStateMgr.getCurrentState().getMaterializedViewMgr().triggerTimelessInfoEvent(mv,
                 MVTimelinessMgr.MVChangeEvent.MV_REFRESHED);
+    }
+
+    /**
+     * Persist that the mv's freshness state no longer describes its data, because this refresh is about to drop
+     * populated partitions for replacements whose rows only exist once its insert commits.
+     *
+     * <p>Both pieces of persisted state that would otherwise claim the mv is fresh are cleared:
+     * <ul>
+     *   <li>the IVM base-table checkpoint, because IVM only applies base-table deltas and would report the
+     *       replacements up to date while the base tables have not changed;</li>
+     *   <li>{@code lastFreshnessConfirmedAt}, because {@code MaterializedView#isStalenessSatisfied()} would
+     *       otherwise skip per-partition change detection inside {@code mv_rewrite_staleness_second} and let
+     *       queries rewrite to the empty replacements.</li>
+     * </ul>
+     *
+     * <p>The journaled write is a prerequisite for the replacement: a failure between the drop and the insert
+     * must be visible to the next refresh (and to a follower after failover), so it is done under the mv write
+     * lock rather than degraded to an in-memory clear.
+     */
+    public void invalidateFreshnessForPendingReplacement() throws LockTimeoutException {
+        MaterializedView.MvRefreshScheme scheme = mv.getRefreshScheme();
+        boolean hasIvmCheckpoint = !scheme.getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap().isEmpty();
+        boolean hasConfirmedFreshness = scheme.getLastFreshnessConfirmedAt() > 0;
+        if (!hasIvmCheckpoint && !hasConfirmedFreshness) {
+            // Nothing claims the mv is fresh: nothing to invalidate.
+            return;
+        }
+        Locker locker = new Locker();
+        if (!locker.tryLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.WRITE,
+                Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+            // Proceeding would either drop partitions with a marker that a concurrent publisher can overwrite,
+            // or leave no journaled recovery state at all. Fail the refresh before it reshapes anything.
+            throw new LockTimeoutException(String.format("Failed to acquire the write lock of materialized view "
+                    + "%s to invalidate its freshness before reshaping partitions, retry the refresh", mv.getName()));
+        }
+        try {
+            if (!mv.isInCatalog()) {
+                return;
+            }
+            logger.info("invalidate the freshness of materialized view {} because a partition shape replacement "
+                    + "is not materialized yet", mv.getName());
+            MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy();
+            copiedScheme.getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap().clear();
+            copiedScheme.setLastFreshnessConfirmedAt(0);
+            persistRefreshScheme(copiedScheme);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.WRITE);
+        }
     }
 
     // Persist freshness for a successful refresh that changed no version. Idempotent: a no-op when the version-change

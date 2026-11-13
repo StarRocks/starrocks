@@ -15,6 +15,7 @@
 
 package com.starrocks.scheduler.mv.pct;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
@@ -26,6 +27,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRun;
@@ -33,6 +35,7 @@ import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshParams;
 import com.starrocks.scheduler.mv.MVTraceUtils;
+import com.starrocks.scheduler.mv.MVVersionManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -71,6 +74,8 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     final Logger logger;
 
     private final RangePartitionDiffer differ;
+    private boolean retainExistingLayout = false;
+
     public MVPCTRefreshRangePartitioner(MvTaskRunContext mvContext,
                                         TaskRunContext context,
                                         Database db,
@@ -109,7 +114,12 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     }
 
     @Override
-    public boolean syncAddOrDropPartitions() throws AnalysisException {
+    public void setRetainExistingLayout(boolean retain) {
+        this.retainExistingLayout = retain;
+    }
+
+    @Override
+    public boolean syncAddOrDropPartitions() throws AnalysisException, LockTimeoutException {
         String start = context == null ? null : context.getProperties().get(TaskRun.PARTITION_START);
         String end = context == null ? null : context.getProperties().get(TaskRun.PARTITION_END);
         Optional<Column> partitionColumnOpt = mv.getRangePartitionFirstColumn();
@@ -117,6 +127,12 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         Column partitionColumn = partitionColumnOpt.get();
         Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
         differ.setPinnedRanges(mvContext.getRefreshRuntimeState().getPinnedTvrMap());
+        differ.setRetainExistingLayout(retainExistingLayout);
+        if (retainExistingLayout) {
+            logger.info("Materialized view {} retains the existing partition layout when the base table "
+                    + "partition shape changes because this refresh cannot rebuild partition history",
+                    mv.getName());
+        }
         PartitionDiffResult result = differ.computePartitionDiff(rangeToInclude);
         if (result == null) {
             logger.warn("compute range partition diff failed: mv: {}", mv.getName());
@@ -124,6 +140,19 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         }
         logger.info("Materialized view [{}] partition diff result: {}",
                 mv.getName(), result);
+
+        // A bounded refresh cannot apply a shape-change component partially. When the requested range
+        // intersects a component this diff kept untouched, the request cannot be satisfied: remember the
+        // conflict so the refresh reports it instead of claiming the range is already up to date.
+        recordDeferredShapeChangeRanges(rangeToInclude, result.diff.getDeferredReplacementRanges());
+
+        // This sync is about to drop populated partitions for their replacements, which only hold rows once the
+        // insert of this run commits (it may also never commit). Invalidate the persisted freshness first, before
+        // the first drop: a failure between the drop and the additions/insert (allocation failure, DDL error,
+        // crash) must not leave the mv claiming to be fresh over the empty replacements.
+        if (!mvContext.isExplain() && !result.diff.getReplacementAdds().isEmpty()) {
+            new MVVersionManager(mv, mvContext).invalidateFreshnessForPendingReplacement();
+        }
 
         // Delete old partitions and then add new partitions because the old and new partitions may overlap
         PCellSortedSet deletes = result.diff.getDeletes();
@@ -135,12 +164,20 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         // Create new added materialized views' ranges
         PCellSortedSet adds = result.diff.getAdds();
         PCellSortedSet mvPartitionToCells = result.mvPartitionToCells;
+        // Dropped cells no longer exist in the MV. Keeping them in the published topology would let
+        // potential-partition expansion add a nonexistent partition back to the insert targets.
+        for (String mvPartitionName : deletes.getPartitionNames()) {
+            mvPartitionToCells.removeByName(mvPartitionName);
+        }
         // filter partition ttl for all add ranges
         filterPartitionsByTTL(adds, true);
         Map<String, String> partitionProperties = MvUtils.getPartitionProperties(mv);
         DistributionDesc distributionDesc = MvUtils.getDistributionDesc(mv);
         addRangePartitions(db, mv, adds, partitionProperties, distributionDesc);
         mvPartitionToCells.addAll(adds);
+        // Remember the partitions created to replace dropped ones: they must be materialized in this
+        // task run, even when change detection cannot see them (e.g. only the partition mapping changed).
+        mvContext.getReplacementAddPartitions().addAll(result.diff.getReplacementAdds());
         logger.info("The process of synchronizing materialized view [{}] add partitions range [{}]",
                 mv.getName(), adds);
 
@@ -162,6 +199,40 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         return new PCTPredicateBuilder(this).buildPartitionPredicate(table, refBaseTablePartitionNames, mvPartitionSlotRefs);
     }
 
+    /**
+     * Remember the shape-change components this sync left untouched that overlap the requested range.
+     * The refresh planner reports them when no partition of the MV can cover the request, so a bounded
+     * refresh never claims a range it could not materialize is already up to date.
+     */
+    private void recordDeferredShapeChangeRanges(Range<PartitionKey> rangeToInclude,
+                                                 List<Range<PartitionKey>> deferredRanges) {
+        if (rangeToInclude == null || deferredRanges.isEmpty()) {
+            return;
+        }
+        List<Range<PartitionKey>> intersected = deferredRanges.stream()
+                .filter(deferred -> intersectsRequestedRange(rangeToInclude, deferred))
+                .collect(Collectors.toList());
+        if (intersected.isEmpty()) {
+            return;
+        }
+        mvContext.setDeferredShapeChangeRanges(intersected);
+        logger.warn("Materialized view {} cannot refresh the requested range {}: it only partially covers "
+                        + "the pending partition shape change {}, which cannot be applied atomically. "
+                        + "Refresh a range covering the whole component or the whole materialized view.",
+                mv.getName(), rangeToInclude, intersected);
+    }
+
+    /**
+     * Whether the requested range takes part in a deferred shape-change component. Guava's
+     * {@link Range#isConnected} is also true for merely adjacent ranges (e.g. {@code [Apr, May)} and
+     * {@code [May, Jun)}), which do not conflict at all: the request holds no part of the component, so only a
+     * non-empty intersection makes it unsatisfiable.
+     */
+    @VisibleForTesting
+    public static boolean intersectsRequestedRange(Range<PartitionKey> requested, Range<PartitionKey> component) {
+        return requested.isConnected(component) && !requested.intersection(component).isEmpty();
+    }
+
     @Override
     public Expr generateMVPartitionPredicate(TableName tableName,
                                              PCellSortedSet mvPartitionNames) throws AnalysisException {
@@ -175,6 +246,12 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         boolean isAutoRefresh = isAutomaticRefresh();
         boolean isRefreshMvBaseOnNonRefTables = needsRefreshBasedOnNonRefTables(snapshotBaseTables);
         PCellSortedSet result = getMVPartitionsToRefreshImpl(isRefreshMvBaseOnNonRefTables, isAutoRefresh);
+        // Partitions created by a shape change must be materialized in this run even when change
+        // detection cannot see them (e.g. only the mapper changed and no base data changed). Keep
+        // only the ones that still exist after this run's partition sync.
+        PCellSortedSet replacementAdds = PCellSortedSet.of(mvContext.getReplacementAddPartitions());
+        replacementAdds.retainAllNames(mv.getRangePartitionMap().getPartitionNames());
+        result.addAll(replacementAdds);
         logger.info("get mv partition to refresh, refresh params:{}, " +
                         "isAutoRefresh: {}, isRefreshMvBaseOnNonRefTables:{}, result:{}",
                 mvRefreshParams, isAutoRefresh, isRefreshMvBaseOnNonRefTables, result);
@@ -220,18 +297,34 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
 
     @Override
     public void filterMVToRefreshPartitionsByProperty(PCellSortedSet mvToRefreshedPartitions) {
+        PCellSortedSet replacementAdds = PCellSortedSet.of(mvContext.getReplacementAddPartitions());
+        replacementAdds.retainAllNames(mv.getRangePartitionMap().getPartitionNames());
+        // A partition created to replace a dropped one must be materialized in this run; otherwise
+        // the refresh would leave an empty partition where materialized history used to be.
+        mvToRefreshedPartitions.addAll(replacementAdds);
+
         // filter partitions by refresh partition limit
         int refreshPartitionLimit = getRefreshPartitionLimit();
-        if (mvRefreshParams.isCompleteRefresh() &&
-                refreshPartitionLimit > 0 && mvToRefreshedPartitions.size() > refreshPartitionLimit) {
-            // remove the oldest partitions
-            int toRemoveNum = mvToRefreshedPartitions.size() - refreshPartitionLimit;
-            mvToRefreshedPartitions.removeFromStart(toRemoveNum);
-            // The oldest changed partitions were excluded from this complete refresh, so the batch does
-            // not cover the whole MV; prevent it from advancing lastFreshnessConfirmedAt, which
-            // isStalenessSatisfied() trusts to skip per-partition change detection.
-            mvContext.setPartitionLimitExcludedPartitions(true);
+        if (!mvRefreshParams.isCompleteRefresh() ||
+                refreshPartitionLimit <= 0 || mvToRefreshedPartitions.size() <= refreshPartitionLimit) {
+            return;
         }
+        // Keep the replacement partitions and spend the remaining budget on the newest other
+        // partitions; only the oldest non-replacement partitions are excluded.
+        int toRemoveNum = mvToRefreshedPartitions.size() - refreshPartitionLimit;
+        Iterator<PCellWithName> iterator = mvToRefreshedPartitions.iterator();
+        while (iterator.hasNext() && toRemoveNum > 0) {
+            PCellWithName partition = iterator.next();
+            if (replacementAdds.containsName(partition.name())) {
+                continue;
+            }
+            iterator.remove();
+            toRemoveNum--;
+        }
+        // The batch still does not cover the whole MV, so prevent it from advancing
+        // lastFreshnessConfirmedAt, which isStalenessSatisfied() trusts to skip per-partition
+        // change detection.
+        mvContext.setPartitionLimitExcludedPartitions(true);
     }
 
     @Override
@@ -334,6 +427,16 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             mvPartitionsToRefresh.remove(cell);
         });
 
+        // The partitions created by a shape change must be refreshed together: their old partitions
+        // are already dropped, so deferring part of the component to a later batch would leave empty
+        // partitions that change detection may never pick up again. Keep them out of the batch budget.
+        PCellSortedSet replacementAdds = PCellSortedSet.of(mvContext.getReplacementAddPartitions());
+        replacementAdds.retainAllNames(mvPartitionsToRefresh.getPartitionNames());
+        if (!replacementAdds.isEmpty()) {
+            logger.info("Materialized view {} keeps replacement partitions {} in the current refresh batch",
+                    mv.getName(), replacementAdds.getPartitionNames());
+        }
+
         // dynamically get the number of partitions to be refreshed this time
         partitionRefreshNumber = getPartitionRefreshNumberAdaptive(mvPartitionsToRefresh, refreshStrategy);
         if (partitionRefreshNumber <= 0 || mvPartitionsToRefresh.size() <= partitionRefreshNumber) {
@@ -347,6 +450,10 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             PCellWithName pCell = iterator.next();
             // remove potential mv partitions from to-refresh partitions since they are added only for being affected.
             if (mvToRefreshPotentialPartitions.containsName(pCell.name())) {
+                continue;
+            }
+            // replacement partitions are always kept and do not consume the batch budget
+            if (replacementAdds.containsName(pCell.name())) {
                 continue;
             }
             i++;
@@ -365,13 +472,22 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             if (mvToRefreshPotentialPartitions.containsName(pCell.name())) {
                 continue;
             }
+            // replacement partitions are kept for the current batch instead of being deferred
+            if (replacementAdds.containsName(pCell.name())) {
+                continue;
+            }
             start = getNextPartitionVal(pCell, isAscending, true);
             endCell = pCell;
             iterator.remove();
             break;
         }
         while (iterator.hasNext()) {
-            endCell = iterator.next();
+            PCellWithName pCell = iterator.next();
+            // replacement partitions are kept for the current batch instead of being deferred
+            if (replacementAdds.containsName(pCell.name())) {
+                continue;
+            }
+            endCell = pCell;
             iterator.remove();
         }
 
