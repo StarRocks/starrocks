@@ -26,6 +26,7 @@
 #include "common/config.h"
 #include "formats/parquet/types.h"
 #include "util/byte_stream_split.h"
+#include "util/coding.h"
 
 namespace starrocks::parquet {
 class ParquetEncodingTest : public testing::Test {

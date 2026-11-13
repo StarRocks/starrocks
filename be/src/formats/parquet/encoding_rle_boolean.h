@@ -17,16 +17,15 @@
 #include <cstdint>
 #include <string>
 
-#include "base/bit/rle_encoding.h"
-#include "base/coding.h"
-#include "base/string/faststring.h"
-#include "base/string/slice.h"
 #include "column/column.h"
-#include "column/raw_data_visitor.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "gutil/strings/substitute.h"
+#include "util/coding.h"
+#include "util/faststring.h"
+#include "util/rle_encoding.h"
+#include "util/slice.h"
 
 namespace starrocks::parquet {
 
@@ -69,9 +68,7 @@ public:
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
         size_t original_size = dst->size();
         dst->resize(original_size + count);
-        MutableRawDataVisitor visitor;
-        RETURN_IF_ERROR(dst->accept_mutable(&visitor));
-        return _decode(count, visitor.result() + original_size);
+        return _decode(count, dst->mutable_raw_data() + original_size);
     }
 
     Status skip(size_t values_to_skip) override {
