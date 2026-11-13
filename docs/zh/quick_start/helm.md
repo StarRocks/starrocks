@@ -6,7 +6,6 @@ displayed_sidebar: docs
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import OperatorPrereqs from '../_assets/deployment/_OperatorPrereqs.mdx'
 import DDL from '../_assets/quick-start/_DDL.mdx'
 import Clients from '../_assets/quick-start/_clientsAllin1.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
@@ -46,7 +45,26 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 ## 前提条件
 
-<OperatorPrereqs />
+### Kubernetes 环境
+
+本指南编写时使用的 Kubernetes 环境由三个节点组成，每个节点配备四个 vCPU 和 16GB 内存（GCP `e2-standard-4` 机器）。Kubernetes 集群是通过以下 `gcloud` 命令部署的：
+
+:::tip
+这个命令仅供参考，如果你使用的是 AWS、Azure 或其他 Kubernetes 提供商，你需要根据自身环境进行修改。在 Google Cloud 中，你需要指定自己的项目和合适的位置。
+:::
+
+```bash
+gcloud container --project enterprise-demo-422514 \
+  clusters create ee-docs \
+  --location=southamerica-west1-b \
+  --machine-type e2-standard-4 --disk-size 80 --num-nodes 3
+```
+
+### Helm
+
+Helm 是一个用于 Kubernetes 的包管理器，简化了应用程序的部署和管理。在本实验中，你将使用 Helm 来部署 CelerData Enterprise Edition Kubernetes operator 和示例 StarRocks 集群。
+
+[Install helm](https://helm.sh/docs/intro/quickstart/)
 
 ### SQL 客户端
 

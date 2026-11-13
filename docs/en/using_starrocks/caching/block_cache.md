@@ -5,7 +5,6 @@ toc_max_heading_level: 2
 description: "How to configure and use Data Cache in StarRocks to cache data blocks from remote storage (object storage, HDFS) on local disk, accelerating queries in..."
 ---
 
-import CacheStats from '../../_assets/commonMarkdown/_cache_stats.mdx'
 
 # Data Cache
 
@@ -123,8 +122,6 @@ Follow these steps to clear the cached data on a CN node:
 
 - If the `datacache.enable` property is set to `false` for a cloud-native table, Data Cache will not be enabled for the table.
 - If the `datacache.partition_duration` property is set to a specific time range, data beyond the time range will not be cached.
-
-<CacheStats />
 
 ## Known issues
 

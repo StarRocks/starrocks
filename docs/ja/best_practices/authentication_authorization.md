@@ -5,7 +5,6 @@ description: "大企業向けに統一認証・認可ワークフロー構築の
 
 # 認証と授権
 
-import AuthSeeAlso from '../_assets/best_practices/auth_see_also.mdx'
 
 このトピックは、一貫的の認証と授権のワークフローを開発するためのベストプラクティスを提供することを目的としています。
 
@@ -328,4 +327,15 @@ Apache Ranger は、StarRocks のネイティブ授権システムと一緒に�
 
 ![Authentication and Authorization - Solution-3](../_assets/best_practices/auth_solution_3.png)
 
-<AuthSeeAlso />
+## 関連項目
+
+- **認証**
+  - [Native Authentication](../administration/user_privs/authentication/native_authentication.md)
+  - [Security Integration](../administration/user_privs/authentication/security_integration.md)
+  - [LDAP Authentication](../administration/user_privs/authentication/ldap_authentication.md)
+  - [OAuth 2.0 Authentication](../administration/user_privs/authentication/oauth2_authentication.md)
+  - [JSON Web Token Authentication](../administration/user_privs/authentication/jwt_authentication.md)
+- [**Group Provider**](../administration/user_privs/group_provider.md)
+- **授権**
+  - [Native Authorization](../administration/user_privs/authorization/User_privilege.md)
+  - [Apache Ranger Plugin](../administration/user_privs/authorization/ranger_plugin.md)
