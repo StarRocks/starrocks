@@ -24,6 +24,12 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.io.OutputFile;
+import org.apache.iceberg.io.ResolvingFileIO;
+import org.apache.iceberg.io.SeekableInputStream;
+>>>>>>> 42af33d ([BugFix][RB-225] Skip the storage stat on Iceberg metadata reads that do not need it (#83182))
 import org.apache.iceberg.util.SerializableSupplier;
 import org.apache.iceberg.util.SerializationUtil;
 import org.junit.jupiter.api.Assertions;
@@ -32,6 +38,7 @@ import org.junit.jupiter.api.Test;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -78,6 +85,120 @@ public class IcebergCachingFileIOTest {
         long cacheIOInputFileSize = cachingFileIOInputFile.getLength();
         Assertions.assertEquals(cacheIOInputFileSize, 39);
         cachingFileIO.deleteFile(path);
+    }
+
+    // An InputFile over a local file that counts the stats (getLength) issued against it.
+    private static InputFile countingInput(String localPath, AtomicInteger lengthCalls) {
+        InputFile local = Files.localInput(localPath);
+        return new InputFile() {
+            @Override
+            public long getLength() {
+                lengthCalls.incrementAndGet();
+                return local.getLength();
+            }
+
+            @Override
+            public SeekableInputStream newStream() {
+                return local.newStream();
+            }
+
+            @Override
+            public String location() {
+                return local.location();
+            }
+
+            @Override
+            public boolean exists() {
+                return local.exists();
+            }
+        };
+    }
+
+    private static String writeLocalFile(String name, String content) throws IOException {
+        java.io.File file = java.io.File.createTempFile(name, ".avro");
+        file.deleteOnExit();
+        try (BufferedWriter out = new BufferedWriter(new FileWriter(file))) {
+            out.write(content);
+        }
+        return file.getAbsolutePath();
+    }
+
+    private static String readAll(InputFile inputFile) throws IOException {
+        try (SeekableInputStream in = inputFile.newStream()) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static IcebergCachingFileIO newCachingFileIO(String localPath, AtomicInteger lengthCalls) {
+        new MockUp<ResolvingFileIO>() {
+            @Mock
+            public InputFile newInputFile(String location) {
+                return countingInput(localPath, lengthCalls);
+            }
+
+            @Mock
+            public InputFile newInputFile(String location, long length) {
+                return countingInput(localPath, lengthCalls);
+            }
+        };
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        cachingFileIO.initialize(new HashMap<>());
+        return cachingFileIO;
+    }
+
+    @Test
+    public void testCacheOffReadsWithoutStat() throws IOException {
+        String content = "manifest list bytes";
+        String localPath = writeLocalFile("snap-cache-off", content);
+        AtomicInteger lengthCalls = new AtomicInteger();
+        IcebergCachingFileIO cachingFileIO = newCachingFileIO(localPath, lengthCalls);
+
+        // the cache is off by default (iceberg_metadata_cache_max_entry_size = 0): a read without a known
+        // length, like the manifest list, must not stat the object just to decide not to cache it
+        String path = "s3://bucket/metadata/snap-cache-off-" + System.nanoTime() + ".avro";
+        Assertions.assertEquals(content, readAll(cachingFileIO.newInputFile(path)));
+        Assertions.assertEquals(0, lengthCalls.get());
+    }
+
+    @Test
+    public void testCacheOnUsesKnownLength() throws IOException {
+        new MockUp<IcebergCachingFileIO.ContentCache>() {
+            @Mock
+            public long maxContentLength() {
+                return 1024 * 1024;
+            }
+        };
+        String content = "manifest bytes";
+        String localPath = writeLocalFile("manifest-cache-on", content);
+        AtomicInteger lengthCalls = new AtomicInteger();
+        IcebergCachingFileIO cachingFileIO = newCachingFileIO(localPath, lengthCalls);
+
+        // a manifest opened with the length from the manifest list is cached without a stat
+        String path = "s3://bucket/metadata/manifest-cache-on-" + System.nanoTime() + ".avro";
+        InputFile inputFile = cachingFileIO.newInputFile(path, content.length());
+        Assertions.assertEquals(content.length(), inputFile.getLength());
+        Assertions.assertEquals(content, readAll(inputFile));
+        Assertions.assertEquals(0, lengthCalls.get());
+    }
+
+    @Test
+    public void testCacheOnWithoutLengthStatsOnce() throws IOException {
+        new MockUp<IcebergCachingFileIO.ContentCache>() {
+            @Mock
+            public long maxContentLength() {
+                return 1024 * 1024;
+            }
+        };
+        String content = "manifest list bytes";
+        String localPath = writeLocalFile("snap-cache-on", content);
+        AtomicInteger lengthCalls = new AtomicInteger();
+        IcebergCachingFileIO cachingFileIO = newCachingFileIO(localPath, lengthCalls);
+
+        // without a known length the cache needs the size: one stat decides and fills the entry, not two
+        String path = "s3://bucket/metadata/snap-cache-on-" + System.nanoTime() + ".avro";
+        Assertions.assertEquals(content, readAll(cachingFileIO.newInputFile(path)));
+        Assertions.assertEquals(1, lengthCalls.get());
     }
 
     @Test
