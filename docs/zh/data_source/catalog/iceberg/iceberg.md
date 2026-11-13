@@ -5,12 +5,12 @@ keywords: ['iceberg']
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
-import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
 
 # Iceberg catalog
 
-<QSTip />
+:::tip
+此示例使用了在 [StarRocks Basics](../../../quick_start/shared-nothing.md) 快速入门中介绍的本地气候数据 (LCD) 数据集。您可以导入数据并亲自尝试该示例。
+:::
 
 Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使用 Iceberg catalog，您可以：
 
@@ -138,7 +138,7 @@ Iceberg catalog 的描述。此参数是可选的。
 
 关于 StarRocks 如何管理 Catalog 数据访问的参数。
 
-<IcebergCatalogIcebergRestSecurityLink />
+有关管理 Iceberg REST Catalog 数据访问的详细说明，请参阅[Iceberg REST Catalog 的安全设置](./iceberg_rest_security.md)。
 
 ##### catalog.access.control
 

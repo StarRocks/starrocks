@@ -5,12 +5,15 @@ keywords: ['iceberg']
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
-import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
 
 # Iceberg catalog
 
-<QSTip />
+---
+---
+
+:::tip
+This example uses the Local Climatological Data(LCD) dataset featured in the [StarRocks Basics](../../../quick_start/shared-nothing.md) Quick Start. You can load the data and try the example yourself.
+:::
 
 An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards. With Iceberg catalogs, you can:
 
@@ -138,7 +141,7 @@ The type of your data source. Set the value to `iceberg`.
 
 Parameter(s) about how StarRocks manages data access to the catalog.
 
-<IcebergCatalogIcebergRestSecurityLink />
+For detailed instructions on managing data access for Iceberg Catalogs, see [Security Setup for Iceberg REST Catalog](./iceberg_rest_security.md).
 
 ##### catalog.access.control
 
