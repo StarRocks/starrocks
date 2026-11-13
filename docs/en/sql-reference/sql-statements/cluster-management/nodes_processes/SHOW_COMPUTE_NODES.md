@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW COMPUTE NODES shows the information of all CN nodes in the cluster."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW COMPUTE NODES

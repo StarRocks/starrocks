@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns an array of distinct values within the range specified by start and end, with an increment of step."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_generate

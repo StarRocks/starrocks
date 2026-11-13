@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "column_stats_usage provides information about the usage of column statistics."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # column_stats_usage

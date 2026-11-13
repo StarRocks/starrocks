@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "USE specifies the active database for your session."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # USE

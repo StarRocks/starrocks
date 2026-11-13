@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW PROC shows certain indicators of the StarRocks cluster."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW PROC

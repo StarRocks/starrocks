@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "columns contains information about all table columns (or view columns)."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # columns

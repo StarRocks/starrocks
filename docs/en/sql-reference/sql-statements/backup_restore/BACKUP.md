@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 description: "Backs up databases, tables, materialized views, logical views, and UDFs in StarRocks to a remote storage repository."
 ---
 

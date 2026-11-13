@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the second difference between two date expressions (expr1 − expr2), accurate to the second."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # seconds_diff

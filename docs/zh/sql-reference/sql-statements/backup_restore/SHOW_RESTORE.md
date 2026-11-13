@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "查看指定数据库中的最后一次恢复任务信息。"
+products: [oss, enterprise, anywhere]
 ---
 
 # SHOW RESTORE

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the value of x associated with the maximum value of y."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # max_by

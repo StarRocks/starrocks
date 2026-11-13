@@ -3,6 +3,7 @@ sidebar_position: 20
 displayed_sidebar: docs
 sidebar_label: "Authentication, Query, and Loading"
 description: "FE configuration parameters for authentication, query execution, and data loading."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE Configuration - Authentication, Query, and Loading

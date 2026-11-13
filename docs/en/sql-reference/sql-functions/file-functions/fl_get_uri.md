@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Extracts the uri field of a FILE value."
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

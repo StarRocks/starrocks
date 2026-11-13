@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "SSB flat-table benchmark on 100 GB dataset: StarRocks is 1.87x faster than ClickHouse and 4.75x faster than Apache Druid."
+products: [oss, enterprise, cloud]
 ---
 
 # SSB 扁平表基准测试

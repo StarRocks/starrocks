@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the total number of rows specified by an expression."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 

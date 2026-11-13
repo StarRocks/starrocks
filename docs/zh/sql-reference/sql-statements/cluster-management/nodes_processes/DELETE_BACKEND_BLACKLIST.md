@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DELETE BACKEND/COMPUTE NODE BLACKLIST 从黑名单中移除一个 BE/CN 节点。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DELETE BACKEND/COMPUTE NOT BLACKLIST

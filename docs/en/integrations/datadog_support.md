@@ -3,6 +3,7 @@ sidebar_position: 80
 displayed_sidebar: docs
 description: "How to integrate StarRocks with Datadog for cluster monitoring."
 sidebar_label: Datadog
+products: [oss, enterprise, anywhere]
 ---
 
 # Monitor with Datadog

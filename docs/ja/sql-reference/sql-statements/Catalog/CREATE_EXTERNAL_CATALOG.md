@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE EXTERNAL CATALOG creates an external catalog for querying external data sources."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE EXTERNAL CATALOG

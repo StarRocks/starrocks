@@ -3,6 +3,7 @@ sidebar_position: 20
 displayed_sidebar: docs
 description: "Kafka トピックからメッセージを継続的にストリーミングするための Routine Load ジョブの作成および管理方法。"
 keywords: ['Routine Load']
+products: [oss, enterprise, anywhere]
 ---
 
 # Routine Load を使用したデータのロード

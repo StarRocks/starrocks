@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列内のN番目のサブストリングの位置を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # strpos

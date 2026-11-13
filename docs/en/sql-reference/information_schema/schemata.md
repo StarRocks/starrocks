@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "schemata provides information about databases."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # schemata

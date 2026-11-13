@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Aggregate function that computes the intersection cardinality of two groups of Theta sketches in a single pass, routing rows by an anchor flag."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_intersect_cond_agg

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "自然対数の底である定数 e を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # e

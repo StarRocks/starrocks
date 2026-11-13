@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "以字符串形式返回 VARIANT 值的类型名称。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # variant_typeof

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "現在のUTC時刻を'HH:MM:SS'形式で返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # utc_time

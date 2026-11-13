@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ALTER LOAD changes the priority of a Broker Load job that is in the QUEUEING or LOADING state."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER LOAD

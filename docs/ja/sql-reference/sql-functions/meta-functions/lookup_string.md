@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "プライマリキーテーブルから値をクエリプランニング時にルックアップします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # lookup_string

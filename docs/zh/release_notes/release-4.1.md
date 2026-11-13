@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet 自动分裂、大容量 tablet 支持（目标 100 GB）、Fast Schema Evolution V2 等新特性……"
+products: [oss]
 ---
 
 # StarRocks 版本 4.1

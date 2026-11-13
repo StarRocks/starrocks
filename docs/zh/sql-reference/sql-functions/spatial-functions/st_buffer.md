@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "为原生 XY 几何对象生成圆角笛卡尔缓冲区。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Buffer

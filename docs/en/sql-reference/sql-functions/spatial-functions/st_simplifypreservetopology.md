@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Simplifies native XY geometry while preserving topology and its CRS."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_SimplifyPreserveTopology

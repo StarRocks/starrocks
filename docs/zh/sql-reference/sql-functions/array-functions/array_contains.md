@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "检查数组中是否包含某个指定元素。"
 keywords: ['shu zu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_contains

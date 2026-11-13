@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算两个日期表达式的分钟数差（expr1 − expr2），精确到分钟。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # minutes_diff

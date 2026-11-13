@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW VARIABLES shows the system variables of StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW VARIABLES

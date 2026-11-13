@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "XML-based configuration guide for defining Java type to StarRocks logical type mappings used by the JDBC type checker system in BE."
+products: [oss]
 ---
 
 # Type Checker XML Configuration Guide

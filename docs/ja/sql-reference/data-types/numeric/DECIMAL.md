@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "高精度固定小数点値で精度とスケールを指定可能。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DECIMAL

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the population variance of an expression."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # variance,var_pop,variance_pop

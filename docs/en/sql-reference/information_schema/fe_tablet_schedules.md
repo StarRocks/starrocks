@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "fe_tablet_schedules provides information about tablet scheduling tasks on FE nodes."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # fe_tablet_schedules

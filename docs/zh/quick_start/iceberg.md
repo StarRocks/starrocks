@@ -4,6 +4,7 @@ sidebar_position: 40
 description: "湖仓分析"
 toc_max_heading_level: 2
 keywords: ['iceberg']
+products: [oss]
 ---
 
 import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.mdx'

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW WARNINGS と SHOW ERRORS は、現在のセッションで直前に実行されたステートメントの診断情報を返します。INSERT がフィルタリングした行や NULL に置き換えた行などです。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW WARNINGS

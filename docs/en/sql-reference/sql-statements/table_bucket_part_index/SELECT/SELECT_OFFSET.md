@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "OFFSET"
 description: "The OFFSET clause causes the result set to skip the first few rows and return the following results directly."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # OFFSET

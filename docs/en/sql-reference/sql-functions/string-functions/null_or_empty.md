@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns true if the string is NULL or an empty string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # null_or_empty

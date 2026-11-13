@@ -2,6 +2,7 @@
 sidebar_position: 40
 displayed_sidebar: docs
 description: "ファイル外部テーブルでメタストアなしに、HDFS、S3 の Parquet、ORC ファイルをクエリ。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ファイル外部テーブル

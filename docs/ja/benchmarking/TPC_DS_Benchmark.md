@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "TPC-DS ベンチマーク 1TB データセット で OLAP・Iceberg Catalog テーブルの StarRocks パフォーマンス測定結果。"
+products: [oss, enterprise, cloud]
 ---
 
 # TPC-DS ベンチマーク

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "pipe_filesは指定されたパイプを介してロードされるデータファイルのステータスを提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # pipe_files

@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "Use AI functions to generate, embed, classify, extract, translate, summarize, and evaluate text."
 sidebar_position: 21
 toc_max_heading_level: 2
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # AI text functions

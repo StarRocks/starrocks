@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定されたX座標とY座標に対応するPointを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Point

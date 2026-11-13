@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ネイティブ GEO 値の 1 次元要素の長さを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Length

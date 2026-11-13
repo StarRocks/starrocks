@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "正規表現パターンに一致する文字列の部分を置換文字列に置き換えます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # regexp_replace

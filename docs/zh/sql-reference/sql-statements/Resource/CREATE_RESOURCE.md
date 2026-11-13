@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Creates resources."
 keywords: ['ziyuan'] 
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE RESOURCE

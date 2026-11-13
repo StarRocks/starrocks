@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "StarRocks Query Profile は、クエリ関連の全ワーカーノード実行情報を記録し、パフォーマンスボトルネックを特定。"
 sidebar_position: 30
 keywords: ['profile', 'query', 'スロー']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Query Profile 概要

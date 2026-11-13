@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回JSON值是否为标量（不是对象或数组）。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # `is_json_scalar`

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "column_stats_usageは列統計情報の使用状況に関する情報を提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # column_stats_usage

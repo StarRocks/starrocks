@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "FILE は、固定されたフィールドの組を通じてファイルまたはファイル内のバイト範囲を参照する読み取り専用のスカラー型です。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

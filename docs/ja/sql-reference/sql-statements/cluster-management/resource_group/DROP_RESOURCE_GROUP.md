@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP RESOURCE GROUP は、指定されたリソースグループを削除します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP RESOURCE GROUP

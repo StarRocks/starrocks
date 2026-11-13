@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "マテリアライズドビューのリフレッシュ情報をJSON形式で返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_mv_refresh_info

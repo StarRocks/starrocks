@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE DATABASE creates a new database in StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE DATABASE

@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "规划 StarRocks 生产集群的节点数、CPU、内存和存储资源配置。"
+products: [oss, enterprise]
 ---
 
 # 规划 StarRocks 集群

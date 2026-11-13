@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Computes the arc cosine of an argument."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # acos

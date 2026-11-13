@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "一時停止した Routine Load ジョブを再開します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # RESUME ROUTINE LOAD

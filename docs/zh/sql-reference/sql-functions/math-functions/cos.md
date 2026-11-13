@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算参数的余弦值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # cos

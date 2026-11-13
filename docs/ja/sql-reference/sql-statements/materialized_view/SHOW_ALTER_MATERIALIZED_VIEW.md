@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "同期マテリアライズドビューの構築状況を表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW ALTER MATERIALIZED VIEW

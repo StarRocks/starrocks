@@ -3,6 +3,7 @@ sidebar_position: 90
 displayed_sidebar: docs
 description: "使用 Stream Load 事务接口实现两阶段提交，支持 Flink 和 Kafka 等系统的高并发流式导入和多表事务。"
 keywords: ['Stream Load']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 使用 Stream Load 事务接口导入

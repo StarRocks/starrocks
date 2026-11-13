@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "根据指定模式计算给定日期属于一年中的第几周。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # week

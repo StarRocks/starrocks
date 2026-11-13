@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "BE および CN ブラックリストにある BE/CN ノードを表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW BACKEND/COMPUTE NODE BLACKLIST

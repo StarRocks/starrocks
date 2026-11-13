@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "corr 返回两个表达式的皮尔逊相关系数，支持作为窗口函数使用。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # corr

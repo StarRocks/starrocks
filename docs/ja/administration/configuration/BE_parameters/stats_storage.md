@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 description: "BE 設定パラメーター：統計情報収集とストレージエンジンに関連する設定項目。"
 sidebar_label: "統計とストレージ"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'

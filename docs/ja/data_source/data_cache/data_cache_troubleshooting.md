@@ -2,6 +2,7 @@
 sidebar_position: 40
 displayed_sidebar: docs
 description: "StarRocks Data Cache のキャッシュミスとパフォーマンス問題に関する FAQ とトラブルシューティング。"
+products: [oss, enterprise, anywhere]
 ---
 
 # Data Cache FAQ

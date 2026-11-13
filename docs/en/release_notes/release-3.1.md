@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 3.1 release notes: bug fixes and improvements to shared-data architecture, asynchronous materialized views, and cross-cluster data migration tool."
+products: [oss]
 ---
 
 # StarRocks version 3.1

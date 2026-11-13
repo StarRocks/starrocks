@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "PAUSE ROUTINE LOAD suspends a running Routine Load job without terminating it."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # PAUSE ROUTINE LOAD

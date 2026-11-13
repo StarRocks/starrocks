@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "BOOL, BOOLEAN"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # BOOLEAN

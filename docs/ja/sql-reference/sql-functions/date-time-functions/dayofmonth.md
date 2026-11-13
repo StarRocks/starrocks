@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "日付から日部分を取得し、1から31の範囲の値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # dayofmonth

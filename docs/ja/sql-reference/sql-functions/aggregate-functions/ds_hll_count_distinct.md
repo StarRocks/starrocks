@@ -1,3 +1,7 @@
+---
+products: [oss, enterprise, cloud, anywhere]
+---
+
 # ds_hll_count_distinct
 
 集計関数の近似値を返します。これは COUNT(DISTINCT col) の結果に似ています。APPROX_COUNT_DISTINCT(expr) も同様の関数です。

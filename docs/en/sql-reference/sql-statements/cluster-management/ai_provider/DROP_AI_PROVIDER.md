@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Remove an AI provider from the cluster."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP AI PROVIDER

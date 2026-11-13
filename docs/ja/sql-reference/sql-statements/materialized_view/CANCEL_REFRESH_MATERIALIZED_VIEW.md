@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "非同期マテリアライズドビューのリフレッシュタスクをキャンセルします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CANCEL REFRESH MATERIALIZED VIEW

@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 description: "curl コマンドを使用してローカルファイルシステムから CSV、JSON、Parquet、ORC 形式でデータをロードする Stream Load の方法。"
 keywords: ['Stream Load']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ローカルファイルシステムからデータをロードする

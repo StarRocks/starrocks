@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Subtracts the specified number of years from the specified datetime or date."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # years_sub

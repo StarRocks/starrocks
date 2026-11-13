@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "As the project involving, any fields may become optional."
+products: [oss]
 ---
 
 # Protobuf Guides

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Checks whether a JSON document contains a specific value or subdocument."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # json_contains

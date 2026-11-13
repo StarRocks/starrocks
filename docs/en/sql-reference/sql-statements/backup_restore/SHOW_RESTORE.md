@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 description: "Views the last RESTORE task in a specified database."
 ---
 

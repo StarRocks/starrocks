@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SQL配列の各要素をJSON値に変換し、JSON値からなるJSON配列を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # json_array

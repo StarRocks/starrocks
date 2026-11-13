@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Currently, only insert is supported."
+products: [oss, enterprise]
 ---
 
 # DataX

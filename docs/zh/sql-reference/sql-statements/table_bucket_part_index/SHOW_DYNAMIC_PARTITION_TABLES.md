@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "SHOW DYNAMIC PARTITION TABLES displays status of partitioned tables with dynamic partitioning configured."
 keywords: ['fenqu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW DYNAMIC PARTITION TABLES

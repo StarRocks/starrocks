@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 description: "From v2.5, StarRocks supports query queues."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Query queues

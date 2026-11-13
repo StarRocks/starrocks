@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Create partitioned materialized views in StarRocks with time-range or list partitioning for incremental refresh and partition-level query rewrite."
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # パーティション化されたマテリアライズドビューの作成

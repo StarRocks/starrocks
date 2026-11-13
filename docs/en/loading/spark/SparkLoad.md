@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "How to use Spark Load for bulk data import into StarRocks using external Spark resources for pre-processing, suited for TB-scale initial data migration."
+products: [oss, enterprise, anywhere]
 ---
 
 # Load data in bulk using Spark Load

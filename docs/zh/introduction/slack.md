@@ -3,6 +3,7 @@ sidebar_position: 70
 displayed_sidebar: docs
 sidebar_label: "支持渠道"
 description: "与社区互动"
+products: [oss, enterprise]
 ---
 
 # 技术支持渠道

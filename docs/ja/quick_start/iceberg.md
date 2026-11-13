@@ -2,6 +2,7 @@
 sidebar_position: 40
 description: "Apache Iceberg を使用したデータレイクハウス"
 displayed_sidebar: docs
+products: [oss]
 ---
 
 import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.mdx'

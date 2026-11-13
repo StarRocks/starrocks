@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Generates a series of values within the interval specified by start and end, and with an optional step."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # generate_series

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Accelerate your queries with generated columns"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Overview of JSON functions and operators

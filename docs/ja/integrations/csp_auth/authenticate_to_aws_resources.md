@@ -2,6 +2,7 @@
 sidebar_position: 10
 description: AWS で認証する方法について説明します
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # AWS リソースへの認証

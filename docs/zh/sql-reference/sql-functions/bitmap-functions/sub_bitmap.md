@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从 BITMAP 类型的值中按指定偏移位置截取指定个数的元素。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # sub_bitmap

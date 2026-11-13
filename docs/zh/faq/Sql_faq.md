@@ -2,6 +2,7 @@
 sidebar_position: 50
 displayed_sidebar: docs
 description: "StarRocks SQL 查询常见问题。"
+products: [oss, enterprise]
 ---
 
 # 查询常见问题

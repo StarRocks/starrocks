@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "HLL is used for approximate count distinct."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # HLL (HyperLogLog)

@@ -3,6 +3,7 @@ sidebar_position: 100
 displayed_sidebar: docs
 description: "StarRocks 从 v3.1 起支持 Paimon catalog，无导入直接查询 Apache Paimon 数据及转换导入。"
 toc_max_heading_level: 5
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'

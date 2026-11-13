@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Integrate StarRocks with external authentication systems using security integration to enable seamless user authentication without manual user creation."
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 通过安全集成认证用户

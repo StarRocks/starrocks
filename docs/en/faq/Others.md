@@ -2,6 +2,7 @@
 sidebar_position: 120
 displayed_sidebar: docs
 description: "General FAQ for miscellaneous StarRocks questions."
+products: [oss, enterprise]
 ---
 
 # Other FAQ

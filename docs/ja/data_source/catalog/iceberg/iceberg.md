@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "Iceberg catalog は Iceberg データを StarRocks に手動作成なしで直接クエリおよび変換ロード。"
 toc_max_heading_level: 5
 keywords: ['iceberg']
+products: [oss, enterprise, cloud, anywhere]
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

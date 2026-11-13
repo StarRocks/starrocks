@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "查看当前数据库或指定数据库下的 Pipe 信息和状态。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW PIPES

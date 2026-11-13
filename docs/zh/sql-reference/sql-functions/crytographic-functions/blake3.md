@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "使用 BLAKE3 摘要算法将字符串哈希为一个 256 位的十六进制字符串。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # blake3

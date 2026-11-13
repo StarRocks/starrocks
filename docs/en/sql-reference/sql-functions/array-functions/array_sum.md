@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Sums all the elements in an array."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_sum

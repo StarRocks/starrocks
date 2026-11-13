@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从字符串右侧移除连续出现的空格或指定字符。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # rtrim

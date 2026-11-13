@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "FILE 値の uri フィールドを取得します。"
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

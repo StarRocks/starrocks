@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "AI プロバイダーをそのタイプのデフォルトとして設定します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SET DEFAULT AI PROVIDER

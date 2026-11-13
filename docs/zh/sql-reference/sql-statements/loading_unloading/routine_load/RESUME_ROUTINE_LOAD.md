@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "恢复已暂停的 Routine Load 导入作业并继续消费数据。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # RESUME ROUTINE LOAD

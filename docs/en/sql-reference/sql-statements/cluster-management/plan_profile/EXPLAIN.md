@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "EXPLAIN shows the logical or physical execution plans for a query statement."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # EXPLAIN

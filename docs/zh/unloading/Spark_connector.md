@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "StarRocks provides a self-developed connector for Apache Spark to read StarRocks data for complex processing and machine learning."
+products: [oss, enterprise]
 ---
 
 # 使用 Spark Connector 读取数据

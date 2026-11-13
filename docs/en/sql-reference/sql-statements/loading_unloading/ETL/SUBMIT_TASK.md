@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SUBMIT TASK submits an ETL statement as an asynchronous task."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 

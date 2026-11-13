@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "对数组按自然降序排序并返回前n个元素。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_top_n

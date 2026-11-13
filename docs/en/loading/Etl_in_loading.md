@@ -2,6 +2,7 @@
 sidebar_position: 150
 displayed_sidebar: docs
 description: "How to transform data during loading in StarRocks: column mapping, filter conditions, and derived column expressions for Stream Load, Broker Load, and..."
+products: [oss, enterprise, anywhere]
 ---
 
 # Transform data at loading

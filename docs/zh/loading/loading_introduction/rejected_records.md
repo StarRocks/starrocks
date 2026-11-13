@@ -4,6 +4,7 @@ displayed_sidebar: docs
 sidebar_label: "拒绝行"
 keywords: ['rejected', 'records', 'max_filter_ratio', 'replay']
 description: "介绍当 max_filter_ratio > 0 时 StarRocks 如何将被过滤的行持久化到 _statistics_.rejected_records，以及如何查询和回放被拒绝的记录。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 拒绝行（Rejected Records）

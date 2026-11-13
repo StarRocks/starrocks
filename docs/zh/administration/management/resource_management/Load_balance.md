@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "多个 FE 节点上部署负载均衡实现 StarRocks 高可用和连接管理。"
 keywords: ['fuzai'] 
+products: [oss, enterprise, anywhere]
 ---
 
 # 负载均衡

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "判断多边形是否覆盖一个点，包括边界。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Covers

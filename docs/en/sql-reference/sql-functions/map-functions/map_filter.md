@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Filters key-value pairs in a map by applying a Boolean array or a Lambda expression to each key-value pair."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # map_filter

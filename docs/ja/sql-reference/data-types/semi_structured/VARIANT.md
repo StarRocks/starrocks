@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "VARIANTタイプは、Iceberg CatalogおよびPaimon Catalogのテーブルにのみサポートされています。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # VARIANT

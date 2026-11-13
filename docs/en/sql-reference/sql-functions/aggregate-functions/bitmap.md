@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Here is a simple example to illustrate the usage of several aggregate functions in Bitmap."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap

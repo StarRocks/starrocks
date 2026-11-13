@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "パイプを一時停止または再開します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SUSPEND または RESUME PIPE

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "列内の値（NULLを除く）をビットマップに集約します（複数の行を1つの行にまとめます）。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_agg

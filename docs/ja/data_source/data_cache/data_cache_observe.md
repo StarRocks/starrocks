@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "Data Cache のパフォーマンス、使用状況、健全性を監視するための StarRocks 組み込みメトリクス。"
+products: [oss, enterprise, anywhere]
 ---
 
 # Data Cache の可観測性

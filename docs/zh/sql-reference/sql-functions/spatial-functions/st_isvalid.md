@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "检查原生 GEOGRAPHY 或 GEOMETRY 值的拓扑有效性。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_IsValid

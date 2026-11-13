@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ARRAY_AVG関数はARRAY内のすべてのデータの平均値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_avg
