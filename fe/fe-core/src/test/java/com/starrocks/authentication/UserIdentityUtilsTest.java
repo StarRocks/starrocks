@@ -28,9 +28,12 @@ import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.thrift.TUserRoles;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.thrift.TDeserializer;
+import org.apache.thrift.TSerializer;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -74,6 +77,7 @@ public class UserIdentityUtilsTest {
         openRoleId = GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdByNameAllowNull("uiu_open_role");
         secretRoleId =
                 GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdByNameAllowNull("uiu_secret_role");
+        starRocksAssert.ddl("GRANT uiu_secret_role TO EXTERNAL GROUP uiu_group");
     }
 
     private static TUserIdentity userIdent(UserIdentity user, List<Long> roleIds) {
@@ -139,4 +143,40 @@ public class UserIdentityUtilsTest {
                 .getTables_infos().stream().map(TTableInfo::getTable_name).collect(Collectors.toList()));
         assertEquals(List.of("t_open"), tables);
     }
+
+    @Test
+    public void testCallerGroupsSurviveThriftRoundTripWithoutSession() throws Exception {
+        ConnectContext caller = new ConnectContext();
+        caller.setCurrentUserIdentity(new UserIdentity("uiu_native", "%"));
+        caller.setCurrentRoleIds(Set.of(secretRoleId));
+        Set<String> groups = new HashSet<>(Set.of("uiu_group"));
+        caller.setGroups(groups);
+        TUserIdentity sent = UserIdentityUtils.callerToThrift(caller);
+        groups.clear();
+        assertEquals(List.of("uiu_group"), sent.getGroups());
+        byte[] serialized = new TSerializer().serialize(sent);
+        TUserIdentity received = new TUserIdentity();
+        new TDeserializer().deserialize(received, serialized);
+        withoutSession(() -> {
+            ConnectContext restored = callerOf(received);
+            assertEquals(Set.of("uiu_group"), restored.getGroups());
+            // This role belongs to the native caller's group, rather than directly to the user.
+            assertEquals(Set.of(secretRoleId), restored.getCurrentRoleIds());
+            return null;
+        });
+    }
+
+    @Test
+    public void testLegacyCallerClearsGroupsWithoutSession() throws Exception {
+        TUserIdentity legacy = userIdent(new UserIdentity("uiu_native", "%"), List.of(openRoleId));
+        withoutSession(() -> {
+            ConnectContext restored = new ConnectContext();
+            restored.setGroups(Set.of("stale_group"));
+            UserIdentityUtils.setAuthInfoFromThrift(restored, legacy);
+            assertEquals(Set.of(), restored.getGroups());
+            assertEquals(Set.of(openRoleId), restored.getCurrentRoleIds());
+            return null;
+        });
+    }
+
 }
