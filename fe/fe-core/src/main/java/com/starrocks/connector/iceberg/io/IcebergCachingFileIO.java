@@ -207,12 +207,22 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
     @Override
     public InputFile newInputFile(String path) {
+        return newInputFile(path, -1);
+    }
+
+    // Iceberg opens manifests (and data/delete files) through this overload with the length it already
+    // knows from the manifest list. Keep it, so neither the cache decision nor the cache fill has to stat
+    // the object first.
+    @Override
+    public InputFile newInputFile(String path, long length) {
         try {
             String normalizedPath = AzurePathNormalizingFileIO.normalizeAzurePath(path);
             setWrappedConf(buildConfFromProperties(properties, normalizedPath));
+            InputFile wrappedInputFile = length >= 0 ? wrappedIO.newInputFile(normalizedPath, length)
+                    : wrappedIO.newInputFile(normalizedPath);
             // Keep the caller's path as location(): the content cache and the parsed-manifest caches
             // (seeded under ManifestFile.path()) are keyed by it. Only the storage access is normalized.
-            return new CachingInputFile(fileContentCache, wrappedIO.newInputFile(normalizedPath), path);
+            return new CachingInputFile(fileContentCache, wrappedInputFile, path, length);
         } catch (StarRocksException e) {
             String errorMessage = String.format("Failed to new input file for path: %s, properties: %s", path, properties);
             LOG.error(errorMessage, e);
@@ -708,17 +718,31 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         private final ContentCache contentCache;
         private final InputFile wrappedInputFile;
         private final String location;
+        // Length supplied by the caller or learned by the first stat, -1 if unknown. Kept so one open does
+        // not stat the object twice (once to decide to cache it, once more to fill the entry).
+        private volatile long knownLength;
 
-        private CachingInputFile(ContentCache cache, InputFile inFile, String location) {
+        private CachingInputFile(ContentCache cache, InputFile inFile, String location, long knownLength) {
             this.contentCache = cache;
             this.wrappedInputFile = inFile;
             this.location = location;
+            this.knownLength = knownLength;
         }
 
         @Override
         public long getLength() {
+            if (knownLength >= 0) {
+                return knownLength;
+            }
             long len = contentCache.getLength(location());
-            return len == -1 ? wrappedInputFile.getLength() : len;
+            if (len != -1) {
+                return len;
+            }
+            // Not in the cache, so the size is a stat against storage. Remember it so one open does not
+            // stat the object twice.
+            len = wrappedInputFile.getLength();
+            knownLength = len;
+            return len;
         }
 
         @Override
@@ -727,9 +751,13 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 // read-through cache if file length is less than or equal to maximum length allowed to cache.
                 // do not cache metadata json files because the name could be same, like "v1.metadata.json"
                 // when re-create table with same name.
+                // The length is asked last: without a known length it is a stat against storage, which is
+                // wasted when the file could not be cached anyway -- in particular when the cache is off
+                // (iceberg_metadata_cache_max_entry_size = 0, the default).
                 Path path = new Path(wrappedInputFile.location());
-                if (getLength() <= contentCache.maxContentLength() &&
-                        !HADOOP_CATALOG_METADATA_JSON_PATTERN.matcher(path.getName()).matches()) {
+                if (contentCache.maxContentLength() > 0 &&
+                        !HADOOP_CATALOG_METADATA_JSON_PATTERN.matcher(path.getName()).matches() &&
+                        getLength() <= contentCache.maxContentLength()) {
                     return cachedStream();
                 }
 
