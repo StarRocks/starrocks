@@ -24,6 +24,7 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "common/config_exec_fwd.h"
+#include "storage_primitive/projection_iterator.h"
 #include "types/type_info.h"
 
 namespace starrocks {
@@ -164,28 +165,30 @@ public:
     ReadAheadIntIterator(std::vector<int32_t> numbers, size_t blocks, bool has_read_ahead)
             : ChunkIterator(schema()), _numbers(std::move(numbers)), _blocks(blocks), _has_read_ahead(has_read_ahead) {}
 
-    Status do_get_next(Chunk* chunk) override {
-        _read = true;
-        if (_idx >= _numbers.size()) {
-            return Status::EndOfFile("eof");
-        }
-        size_t n = std::min(10LU, _numbers.size() - _idx);
-        (void)chunk->get_column_raw_ptr_by_index(0)->append_numbers(_numbers.data() + _idx, n * sizeof(int32_t));
-        _idx += n;
-        return Status::OK();
+    Status do_get_next(Chunk* chunk) override { return _fill(chunk, nullptr, nullptr); }
+    Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) override { return _fill(chunk, rowid, nullptr); }
+    Status do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) override {
+        return _fill(chunk, nullptr, rssid_rowids);
     }
 
     Status start_read_ahead(bool* started) override {
         _start_calls++;
         *started = _has_read_ahead;
-        return Status::OK();
+        return _start_status;
     }
     size_t read_ahead_blocks() const override { return (_start_calls > 0 || _read) ? _blocks : 0; }
-    bool read_ahead_done() const override { return true; }
+    bool read_ahead_done() const override { return _done; }
 
-    void close() override {}
+    void close() override { _close_calls++; }
 
     int start_calls() const { return _start_calls; }
+    int close_calls() const { return _close_calls; }
+    void set_read_ahead_done(bool done) { _done = done; }
+    // start_read_ahead() fails with |st|, and so does the first read.
+    void fail_with(Status st) {
+        _start_status = st;
+        _read_status = std::move(st);
+    }
 
     static Schema schema() {
         FieldPtr f = std::make_shared<Field>(0, "c1", get_type_info(TYPE_INT), false);
@@ -193,11 +196,35 @@ public:
     }
 
 private:
+    Status _fill(Chunk* chunk, std::vector<uint32_t>* rowid, std::vector<uint64_t>* rssid_rowids) {
+        _read = true;
+        RETURN_IF_ERROR(_read_status);
+        if (_idx >= _numbers.size()) {
+            return Status::EndOfFile("eof");
+        }
+        size_t n = std::min(10LU, _numbers.size() - _idx);
+        (void)chunk->get_column_raw_ptr_by_index(0)->append_numbers(_numbers.data() + _idx, n * sizeof(int32_t));
+        for (size_t i = 0; i < n; i++) {
+            if (rowid != nullptr) {
+                rowid->push_back(_idx + i);
+            }
+            if (rssid_rowids != nullptr) {
+                rssid_rowids->push_back(_idx + i);
+            }
+        }
+        _idx += n;
+        return Status::OK();
+    }
+
     std::vector<int32_t> _numbers;
     size_t _idx = 0;
     const size_t _blocks;
     const bool _has_read_ahead;
+    bool _done = true;
+    Status _start_status;
+    Status _read_status;
     int _start_calls = 0;
+    int _close_calls = 0;
     bool _read = false;
 };
 
@@ -272,6 +299,171 @@ TEST_F(UnionIteratorTest, no_read_ahead_by_default) {
     EXPECT_EQ((std::vector<int32_t>{0, 1, 2}), read_all(iter));
     for (auto& c : children) {
         EXPECT_EQ(0, c->start_calls());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(UnionIteratorTest, read_ahead_one_child) {
+    auto child = std::make_shared<ReadAheadIntIterator>(std::vector<int32_t>{0, 1}, 1, true);
+    // A single child is read as it is: nothing to read ahead of.
+    auto iter = new_union_iterator(std::vector<ChunkIteratorPtr>{child}, 4, 8);
+    EXPECT_EQ(child.get(), iter.get());
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    EXPECT_EQ((std::vector<int32_t>{0, 1}), read_all(iter));
+    EXPECT_EQ(0, child->start_calls());
+}
+
+// NOLINTNEXTLINE
+TEST_F(UnionIteratorTest, read_ahead_zero_children) {
+    std::vector<std::shared_ptr<ReadAheadIntIterator>> children;
+    std::vector<ChunkIteratorPtr> iters;
+    for (int i = 0; i < 3; i++) {
+        children.push_back(std::make_shared<ReadAheadIntIterator>(std::vector<int32_t>{i}, 1, true));
+        iters.push_back(children.back());
+    }
+    auto iter = new_union_iterator(std::move(iters), 0, 100);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    EXPECT_EQ((std::vector<int32_t>{0, 1, 2}), read_all(iter));
+    for (auto& c : children) {
+        EXPECT_EQ(0, c->start_calls());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(UnionIteratorTest, read_ahead_waits_for_current_child) {
+    std::vector<std::shared_ptr<ReadAheadIntIterator>> children;
+    std::vector<ChunkIteratorPtr> iters;
+    // Child 0 reads two chunks.
+    children.push_back(std::make_shared<ReadAheadIntIterator>(std::vector<int32_t>(15, 7), 1, true));
+    iters.push_back(children.back());
+    for (int i = 1; i < 4; i++) {
+        children.push_back(std::make_shared<ReadAheadIntIterator>(std::vector<int32_t>{i}, 1, true));
+        iters.push_back(children.back());
+    }
+    children[0]->set_read_ahead_done(false);
+    // Child 1 has not asked for everything it reads once started: the ones after it wait.
+    children[1]->set_read_ahead_done(false);
+    auto iter = new_union_iterator(std::move(iters), 8, 100);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), 1024);
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    EXPECT_EQ(0, children[1]->start_calls());
+
+    children[0]->set_read_ahead_done(true);
+    chunk->reset();
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    EXPECT_EQ(1, children[1]->start_calls());
+    EXPECT_EQ(0, children[2]->start_calls());
+
+    // Once it has, the next ones start while child 1 is read, each once.
+    children[1]->set_read_ahead_done(true);
+    chunk->reset();
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    EXPECT_EQ(1, children[2]->start_calls());
+    EXPECT_EQ(1, children[3]->start_calls());
+    EXPECT_EQ((std::vector<int32_t>{2, 3}), read_all(iter));
+    for (int i = 1; i < 4; i++) {
+        EXPECT_EQ(1, children[i]->start_calls()) << i;
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(UnionIteratorTest, read_ahead_error_returned_on_its_turn) {
+    std::vector<std::shared_ptr<ReadAheadIntIterator>> children;
+    std::vector<ChunkIteratorPtr> iters;
+    for (int i = 0; i < 4; i++) {
+        children.push_back(std::make_shared<ReadAheadIntIterator>(std::vector<int32_t>{i}, 1, true));
+        iters.push_back(children.back());
+    }
+    children[1]->fail_with(Status::IOError("injected"));
+    auto iter = new_union_iterator(std::move(iters), 8, 100);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), 1024);
+    // The failed read-ahead stops reading ahead without failing the read of child 0.
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    EXPECT_EQ(1, children[1]->start_calls());
+    EXPECT_EQ(0, children[2]->start_calls());
+    // Child 1 reports its error when its turn comes.
+    chunk->reset();
+    Status st = iter->get_next(chunk.get());
+    EXPECT_TRUE(st.is_io_error()) << st;
+    EXPECT_EQ(std::string("injected"), std::string(st.message()));
+    EXPECT_EQ(0, children[2]->start_calls());
+}
+
+// NOLINTNEXTLINE
+TEST_F(UnionIteratorTest, read_ahead_with_rowids) {
+    for (bool rssid : {false, true}) {
+        std::vector<std::shared_ptr<ReadAheadIntIterator>> children;
+        std::vector<ChunkIteratorPtr> iters;
+        for (int i = 0; i < 3; i++) {
+            children.push_back(std::make_shared<ReadAheadIntIterator>(std::vector<int32_t>{i, i}, 1, true));
+            iters.push_back(children.back());
+        }
+        auto iter = new_union_iterator(std::move(iters), 8, 100);
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), 1024);
+        std::vector<uint32_t> rowids;
+        std::vector<uint64_t> rssid_rowids;
+        auto next = [&]() {
+            return rssid ? iter->get_next(chunk.get(), &rssid_rowids) : iter->get_next(chunk.get(), &rowids);
+        };
+        ASSERT_TRUE(next().ok());
+        EXPECT_EQ(1, children[1]->start_calls()) << rssid;
+        EXPECT_EQ(1, children[2]->start_calls()) << rssid;
+        while (true) {
+            Status st = next();
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_TRUE(st.ok()) << st;
+        }
+        EXPECT_EQ(6, chunk->num_rows()) << rssid;
+        EXPECT_EQ(rssid ? 0 : 6, rowids.size());
+        EXPECT_EQ(rssid ? 6 : 0, rssid_rowids.size());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(UnionIteratorTest, read_ahead_through_wrappers) {
+    RuntimeProfile::Counter timer(TUnit::TIME_NS);
+    std::vector<std::shared_ptr<ReadAheadIntIterator>> children;
+    std::vector<ChunkIteratorPtr> iters;
+    for (int i = 0; i < 3; i++) {
+        children.push_back(std::make_shared<ReadAheadIntIterator>(std::vector<int32_t>{i}, 2, true));
+        // As a lake scan wraps its segment iterators.
+        iters.push_back(
+                timed_chunk_iterator(new_projection_iterator(ReadAheadIntIterator::schema(), children.back()), &timer));
+    }
+    auto iter = new_union_iterator(std::move(iters), 8, 3);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), 1024);
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    // Child 0 holds 2 blocks, child 1 brings 4: the budget of 3 stops before child 2.
+    EXPECT_EQ(1, children[1]->start_calls());
+    EXPECT_EQ(0, children[2]->start_calls());
+    EXPECT_EQ((std::vector<int32_t>{1, 2}), read_all(iter));
+}
+
+// NOLINTNEXTLINE
+TEST_F(UnionIteratorTest, close_after_read_ahead) {
+    std::vector<std::shared_ptr<ReadAheadIntIterator>> children;
+    std::vector<ChunkIteratorPtr> iters;
+    for (int i = 0; i < 4; i++) {
+        children.push_back(std::make_shared<ReadAheadIntIterator>(std::vector<int32_t>{i}, 1, true));
+        iters.push_back(children.back());
+    }
+    auto iter = new_union_iterator(std::move(iters), 2, 100);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), 1024);
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    EXPECT_EQ(1, children[1]->start_calls());
+    EXPECT_EQ(1, children[2]->start_calls());
+    EXPECT_EQ(0, children[3]->start_calls());
+    // Closing before the end, as a cancelled scan does, closes every child once: started, current or not.
+    iter->close();
+    for (int i = 0; i < 4; i++) {
+        EXPECT_EQ(1, children[i]->close_calls()) << i;
     }
 }
 
