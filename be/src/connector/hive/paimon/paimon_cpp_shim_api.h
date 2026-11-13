@@ -23,9 +23,23 @@
 // The shim compiles BE class layouts (HdfsScanner, Status, Chunk, ...), so it
 // is only valid together with the starrocks_be it was built and packaged with.
 
+#include <cstdint>
+#include <memory>
+#include <vector>
+
+#include "column/vectorized_fwd.h"
+#include "common/statusor.h"
+
 namespace starrocks {
 
+class ExprContext;
 class HdfsScanner;
+class TPaimonTableSink;
+
+namespace connector {
+class ConnectorSink;
+struct PaimonChunkSinkContext;
+} // namespace connector
 
 // Returns a heap-allocated PaimonScanner. Ownership passes to the caller,
 // which releases it through HdfsScanner's virtual destructor; that is safe
@@ -33,5 +47,11 @@ class HdfsScanner;
 // mem_hook malloc/free.
 #define STARROCKS_PAIMON_CREATE_SCANNER_SYMBOL "starrocks_paimon_create_scanner"
 using StarRocksPaimonCreateScannerFn = starrocks::HdfsScanner* (*)();
+
+// Independent, versioned capabilities: an older read-only shim must remain usable for scans.
+// These are BE C++ ABI entrypoints with C linkage for lookup, not a stable pure-C SDK ABI.
+#define STARROCKS_PAIMON_CREATE_SINK_SYMBOL "starrocks_paimon_create_sink_v1"
+using StarRocksPaimonCreateSinkFn = connector::ConnectorSink* (*)(std::shared_ptr<connector::PaimonChunkSinkContext>,
+                                                                  int32_t);
 
 } // namespace starrocks

@@ -25,7 +25,7 @@ Paimon クラスターで SQL ワークロードを成功させるには、StarR
 
 ## 使用上の注意
 
-Paimon catalog では、データのクエリと Paimon データベースおよびテーブルの作成・削除ができます。INSERT、UPDATE、DELETE によるデータの書き込み、および CREATE TABLE LIKE と CREATE TABLE AS SELECT はサポートされていません。
+Paimon catalog では、データのクエリ、Paimon データベースとテーブルの作成・削除、および INSERT INTO による書き込みができます。INSERT OVERWRITE、UPDATE、DELETE、CREATE TABLE LIKE、CREATE TABLE AS SELECT はサポートされていません。
 
 ## Paimon to StarRocks data types
 
@@ -792,7 +792,7 @@ PROPERTIES (
 
 - `DISTRIBUTED BY`、`ORDER BY`、`ROLLUP`、生成列、集約列、`AUTO_INCREMENT` はサポートされていません。
 - NULL 以外の列デフォルト値はサポートされていません。
-- `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`、および `INSERT`、`UPDATE`、`DELETE` によるデータの書き込みはサポートされていません。
+- `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`、および `INSERT OVERWRITE`、`UPDATE`、`DELETE` によるデータの書き込みはサポートされていません。
 
 ### DROP TABLE
 
@@ -828,6 +828,33 @@ DROP DATABASE [IF EXISTS] <catalog_name>.<database_name> [FORCE];
 ```SQL
 DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
 ```
+
+## Paimon へのデータ書き込み
+
+`INSERT INTO ... VALUES` または `INSERT INTO ... SELECT` を使用して、Paimon catalog のネイティブ file-store テーブルに書き込めます。Append-only テーブルは `bucket = -1` または正の固定バケット数をサポートします。主キーテーブルでは正の固定バケット数と `deduplicate` マージエンジンが必要です。既存の主キーへの書き込みは行全体の upsert になり、部分更新ではありません。
+
+```sql
+CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+CREATE TABLE paimon_catalog_fs.ddl_demo.write_demo (
+    id INT NOT NULL,
+    p VARCHAR(32),
+    value VARCHAR(64)
+)
+PARTITION BY (p)
+PROPERTIES ('bucket' = '-1', 'file.format' = 'parquet');
+
+INSERT INTO paimon_catalog_fs.ddl_demo.write_demo VALUES (1, 'a', 'one');
+INSERT INTO paimon_catalog_fs.ddl_demo.write_demo PARTITION (p = 'b')
+SELECT 2, 'two';
+```
+
+明示的な列リストと `BY NAME` をサポートします。静的パーティションを指定する場合は入力からパーティション列を除外します。ネイティブ schema 内での列の位置は問いません。省略した NULL 許容列には NULL が入り、必須列には値の指定が必要です。Paimon ネイティブのデフォルト値を持つ列は、値を明示的に指定してください。列の省略と `DEFAULT` はサポートされていません。
+
+書き込みには Pipeline エンジン、Parquet データファイル、同一バージョンの FE/BE、および BE のネイティブ Paimon writer が必要です。catalog のストレージ認証情報を使用します。`paimon_reader_mode` は読み取り方式のみを選択し、書き込み方式は変更しません。明示的トランザクション、部分更新、主キーテーブルの動的バケット、パーティションをまたぐ主キー更新、data evolution、row tracking、グローバルインデックス、外部データパスはサポートされていません。
+
+パーティション列には boolean、整数、文字列、日付型を使用できます。空文字列、空白のみの文字列、予約済みのデフォルトパーティション名は、ネイティブ SDK が NULL パーティションと区別して保存できないため拒否されます。各 Sink Driver のデフォルト上限は、アクティブなパーティション/バケット writer が 64 個、ネイティブ/Arrow メモリ割り当てが 256 MiB です。上限を超えると、公開前にステートメントが失敗します。テーブルオプション `starrocks.paimon.max-active-writers`（1–4096）と `starrocks.paimon.max-writer-memory-bytes`（2 MiB–4 GiB、バイト単位）で変更できます。クエリのメモリ制限も適用されます。
+
+FE が Paimon ネイティブスナップショットを公開するとデータが読み取り可能になります。入力が空の INSERT INTO はデータを変更しません。コミット結果が不明というエラーが返った場合は、再試行する前に操作結果を確認してください。スナップショットが既に公開されている可能性があり、再試行で追加行が重複することがあります。Query Profile の `PaimonOperationId` と `PaimonPublicationState` で操作を確認できます。
 
 ## Paimon テーブルのスキーマを表示
 
