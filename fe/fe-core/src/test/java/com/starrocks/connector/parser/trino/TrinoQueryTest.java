@@ -1241,6 +1241,12 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertOutputColumns(sql, List.of("v1", "x"));
         assertPlanContains(sql, "tableFunctionName: unnest", "[2: v2,3: v3]");
 
+        // A USING join on UNNEST joins and outputs the UNNEST column, not the one-row relation's column.
+        sql = "select x from unnest(array[1, 2]) as t(x) join (select 2 as x) s using (x)";
+        assertPlanContains(sql, "OUTPUT EXPRS:2: x", "predicates: 2: x = 2");
+        sql = "select a, b from unnest(array[row(1, 'x'), row(2, 'y')]) as t(a, b) join (select 2 as a) s using (a)";
+        assertPlanContains(sql, "OUTPUT EXPRS:3: a | 4: b", "predicates: 2: unnest.col1[true] = 2");
+
         analyzeFail("select * from unnest(array[1, 2]) as t(x, y)", "has 1 columns available but 2 columns specified");
     }
 

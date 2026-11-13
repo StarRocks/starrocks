@@ -44,3 +44,11 @@ select t.a, u.x from unnest(array[row(1, array[10, 20]), row(2, array[30])]) as 
 1	20
 2	30
 -- !result
+select x from unnest(array[1, 2]) as t(x) join (select 2 as x) s using (x);
+-- result:
+2
+-- !result
+select a, b from unnest(array[row(1, 'x'), row(2, 'y')]) as t(a, b) join (select 2 as a) s using (a);
+-- result:
+2	y
+-- !result
