@@ -479,6 +479,33 @@ public class StatisticSQLBuilder {
                 " where table_uuid = '" + SqlUtils.escapeSqlString(rawTableUUID) + "' and column_name in (" + columnsIn + ")";
     }
 
+    // Existence checks run before the raw-keyed cleanups above, over exactly the same rows. In shared-data mode the
+    // external statistics tables are UNIQUE KEY, where every DELETE adds a delete-predicate rowset to every tablet
+    // whether or not it matches anything, and those rowsets can only be cleared by compacting the tablet from its
+    // base rowset. Issuing the cleanup DELETE after every collection therefore keeps forcing rewrites of the whole
+    // statistics table even once no raw-keyed rows are left, so the DELETE is issued only when one exists.
+    // The filter is on key columns only, led by table_uuid, so the lookup reads very little.
+    public static String buildExistsExternalStatRawPartitionsSQL(String rawTableUUID, List<String> partitionNames,
+                                                                 List<String> columnNames) {
+        String partitionsIn = partitionNames.stream()
+                .map(p -> "'" + SqlUtils.escapeSqlString(p) + "'").collect(Collectors.joining(", "));
+        String columnsIn = columnNames.stream()
+                .map(c -> "'" + SqlUtils.escapeSqlString(c) + "'").collect(Collectors.joining(", "));
+        return "SELECT 1 FROM " + StatsConstants.STATISTICS_DB_NAME + "." + EXTERNAL_FULL_STATISTICS_TABLE_NAME +
+                " WHERE TABLE_UUID = '" + SqlUtils.escapeSqlString(rawTableUUID) + "'" +
+                " AND PARTITION_NAME IN (" + partitionsIn + ")" +
+                " AND COLUMN_NAME IN (" + columnsIn + ") LIMIT 1";
+    }
+
+    public static String buildExistsExternalHistogramRawColumnsSQL(String rawTableUUID, List<String> columnNames) {
+        String columnsIn = columnNames.stream()
+                .map(c -> "'" + SqlUtils.escapeSqlString(c) + "'").collect(Collectors.joining(", "));
+        return "SELECT 1 FROM " + StatsConstants.STATISTICS_DB_NAME + "." +
+                StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME +
+                " WHERE TABLE_UUID = '" + SqlUtils.escapeSqlString(rawTableUUID) + "'" +
+                " AND COLUMN_NAME IN (" + columnsIn + ") LIMIT 1";
+    }
+
     public static String buildDropExternalStatSQL(String catalogName, String dbName, String tableName) {
         return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME +
                 " WHERE CATALOG_NAME = '" + SqlUtils.escapeSqlString(catalogName) + "'" +

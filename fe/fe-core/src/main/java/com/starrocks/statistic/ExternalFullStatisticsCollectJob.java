@@ -690,6 +690,9 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     // the next collection retries it. Best-effort: must never fail a job whose actual stats write
     // already succeeded.
     protected void cleanupStaleRawKeyedRows(ConnectContext context, long jobId) {
+        if (isAnalyzeCancelled(jobId)) {
+            return;
+        }
         String rawTableUuid = table.getUUID();
         boolean ok = new StatisticExecutor().dropExternalStatRawPartitions(context, rawTableUuid, partitionNames, columnNames);
         if (!ok) {
