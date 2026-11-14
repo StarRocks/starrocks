@@ -33,6 +33,7 @@
 #include "common/thread/threadpool.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "fs/remote_read_context.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/persistent_index_sstable.h"
@@ -1769,6 +1770,39 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_multi_column
     ASSERT_EQ(output_sstables.size(), 1);
     ASSERT_EQ(output_sstables[0].range().start_key(), encode_key(100, "abc"));
     ASSERT_EQ(output_sstables[0].range().end_key(), encode_key(150, "mmm"));
+}
+
+// A merge task runs on the index compaction pool, whose threads carry no remote read context: it reads as the work that
+// created it -- a compaction, or the publish that compacts the index early -- and as a load of its own without one.
+TEST(LakePersistentIndexParallelCompactTaskTest, reads_as_the_work_that_created_it) {
+    const auto compaction = RemoteReadContext::for_background(RemoteReadContext::Workload::COMPACTION, 42);
+    std::unique_ptr<LakePersistentIndexParallelCompactTask> task;
+    {
+        ScopedRemoteReadContext scope(compaction);
+        task = std::make_unique<LakePersistentIndexParallelCompactTask>(
+                std::vector<std::vector<PersistentIndexSstablePB>>{}, nullptr, nullptr, false, UniqueId::gen_uid(),
+                SstSeekRange());
+    }
+    EXPECT_TRUE(task->_remote_read.is_set);
+    EXPECT_EQ(RemoteReadContext::Workload::COMPACTION, task->_remote_read.workload);
+    EXPECT_EQ(42, task->_remote_read.flow_id);
+
+    const auto publish = RemoteReadContext::for_load(7);
+    {
+        ScopedRemoteReadContext scope(publish);
+        task = std::make_unique<LakePersistentIndexParallelCompactTask>(
+                std::vector<std::vector<PersistentIndexSstablePB>>{}, nullptr, nullptr, false, UniqueId::gen_uid(),
+                SstSeekRange());
+    }
+    EXPECT_EQ(RemoteReadContext::Workload::LOAD, task->_remote_read.workload);
+    EXPECT_EQ(7, task->_remote_read.flow_id);
+
+    task = std::make_unique<LakePersistentIndexParallelCompactTask>(
+            std::vector<std::vector<PersistentIndexSstablePB>>{}, nullptr, nullptr, false, UniqueId::gen_uid(),
+            SstSeekRange());
+    EXPECT_TRUE(task->_remote_read.is_set);
+    EXPECT_EQ(RemoteReadContext::Workload::LOAD, task->_remote_read.workload);
+    EXPECT_EQ(0, task->_remote_read.flow_id);
 }
 
 } // namespace starrocks::lake

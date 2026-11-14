@@ -24,6 +24,8 @@
 #include "common/runtime_profile.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
+#include "fs/fs_memory.h"
+#include "fs/remote_read_context.h"
 
 namespace starrocks {
 
@@ -118,6 +120,50 @@ TEST_F(LoadSpillBlockManagerTest, test_clear_parent_path) {
     // The parent directory should have been deleted
     status = FileSystem::Default()->iterate_dir(parent_path, [](std::string_view) -> bool { return true; });
     ASSERT_TRUE(status.is_not_found()) << "Expected parent path to be deleted, but got: " << status;
+}
+
+namespace {
+// Records the read context each file is opened with.
+class RecordingFileSystem final : public MemoryFileSystem {
+public:
+    using MemoryFileSystem::new_sequential_file;
+
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                  const std::string& url) override {
+        opened_with.push_back(opts.remote_read);
+        return MemoryFileSystem::new_sequential_file(opts, url);
+    }
+
+    std::vector<RemoteReadContext> opened_with;
+};
+} // namespace
+
+// A load reads its spill on remote storage back as a load, one flow per load.
+TEST_F(LoadSpillBlockManagerTest, test_remote_reads_are_the_loads) {
+    TUniqueId load_id;
+    load_id.hi = 12345;
+    load_id.lo = 67890;
+    auto fs = std::make_shared<RecordingFileSystem>();
+    ASSERT_OK(fs->create_dir_recursive("/load_spill_remote"));
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(load_id, TUniqueId(), "/load_spill_remote", fs,
+                                                                 _local_spill_dir_mgr.get());
+    ASSERT_OK(block_manager->init());
+
+    ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024, /*force_remote=*/true));
+    ASSERT_TRUE(block->is_remote());
+    ASSERT_OK(block->append({Slice("test_data")}));
+    ASSERT_OK(block_manager->release_block(block));
+    ASSIGN_OR_ABORT(auto input_stream, block->get_readable());
+    raw::RawString buffer;
+    buffer.resize(9);
+    ASSERT_OK(input_stream->read_fully(buffer.data(), 9));
+    ASSERT_EQ(buffer, "test_data");
+
+    ASSERT_EQ(1u, fs->opened_with.size());
+    const auto& ctx = fs->opened_with[0];
+    EXPECT_TRUE(ctx.is_set);
+    EXPECT_EQ(RemoteReadContext::Workload::LOAD, ctx.workload);
+    EXPECT_EQ(RemoteReadContext::flow_id_of(load_id.hi, load_id.lo), ctx.flow_id);
 }
 
 // Test that destroying LoadSpillBlockManager does NOT clean up the spill parent directory.

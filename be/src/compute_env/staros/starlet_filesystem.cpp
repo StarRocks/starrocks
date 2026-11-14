@@ -37,6 +37,7 @@
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 #include "fs/fs_registry.h"
 #endif
+#include "compute_env/staros/starlet_remote_read_context.h"
 #include "compute_env/staros/staros_status.h"
 #include "compute_env/staros/staros_worker.h"
 #include "compute_env/staros/staros_worker_runtime.h"
@@ -229,7 +230,7 @@ public:
 
         const auto& read_stats = (*stream_st)->get_io_stats();
         auto stats = std::make_unique<io::NumericStatistics>();
-        stats->reserve(11);
+        stats->reserve(14);
         stats->append(kBytesReadLocalDisk, read_stats.bytes_read_local_disk);
         stats->append(kBytesWriteLocalDisk, read_stats.bytes_write_local_disk);
         stats->append(kBytesReadRemote, read_stats.bytes_read_remote);
@@ -241,6 +242,9 @@ public:
         stats->append(kPrefetchHitCount, read_stats.prefetch_hit_count);
         stats->append(kPrefetchWaitFinishNs, read_stats.prefetch_wait_finish_ns);
         stats->append(kPrefetchPendingNs, read_stats.prefetch_pending_ns);
+        stats->append(kRemoteQueueWaitNs, read_stats.remote_queue_wait_ns);
+        stats->append(kRemoteFillWaitNs, read_stats.remote_fill_wait_ns);
+        stats->append(kRemoteFillJoins, read_stats.remote_fill_joins);
         return std::move(stats);
     }
 
@@ -251,10 +255,10 @@ public:
         }
         const auto& s = (*stream_st)->get_io_stats();
         return {
-                s.bytes_read_local_disk,  s.bytes_read_remote,  s.bytes_write_local_disk, s.bytes_write_remote,
-                s.io_count_local_disk,    s.io_count_remote,    s.io_ns_read_local_disk,  s.io_ns_read_remote,
-                s.io_ns_write_local_disk, s.io_ns_write_remote, s.prefetch_hit_count,     s.prefetch_wait_finish_ns,
-                s.prefetch_pending_ns,
+                s.bytes_read_local_disk,  s.bytes_read_remote,    s.bytes_write_local_disk, s.bytes_write_remote,
+                s.io_count_local_disk,    s.io_count_remote,      s.io_ns_read_local_disk,  s.io_ns_read_remote,
+                s.io_ns_write_local_disk, s.io_ns_write_remote,   s.prefetch_hit_count,     s.prefetch_wait_finish_ns,
+                s.prefetch_pending_ns,    s.remote_queue_wait_ns, s.remote_fill_wait_ns,    s.remote_fill_joins,
         };
     }
 
@@ -369,6 +373,8 @@ public:
         auto opt = ReadOptions();
         opt.cache.read_mode = to_fslib_read_mode(opts.skip_disk_cache, opts.skip_fill_local_cache);
         opt.buffer_size = opts.buffer_size;
+        // A file opened without a context of its own takes the work running on this thread, if any.
+        opt.remote_read = to_fslib_remote_read(ScopedRemoteReadContext::or_current(opts.remote_read));
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }
@@ -398,6 +404,8 @@ public:
         auto opt = ReadOptions();
         opt.cache.read_mode = to_fslib_read_mode(opts.skip_disk_cache, opts.skip_fill_local_cache);
         opt.buffer_size = opts.buffer_size;
+        // A file opened without a context of its own takes the work running on this thread, if any.
+        opt.remote_read = to_fslib_remote_read(ScopedRemoteReadContext::or_current(opts.remote_read));
         auto file_st = (*fs_st)->open(pair.first, opt);
 
         if (!file_st.ok()) {

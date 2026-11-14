@@ -242,6 +242,7 @@ Status PersistentIndexMemtable::flush() {
 
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RandomAccessFileOptions opts;
+    opts.remote_read = ScopedRemoteReadContext::current_or_load();
     if (!encryption_meta.empty()) {
         opts.encryption_info = wopts.encryption_info;
     }

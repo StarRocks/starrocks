@@ -144,6 +144,8 @@ public:
 
     void close() override;
     Status reset_for_reuse(const SegmentReadOptions& options);
+    // Adds what the column files have read since the last flush to the stats; close() flushes the rest.
+    void flush_io_stats();
 
     // Public entry point used by the segment_seek_range_to_rowid_range() /
     // segment_seek_ranges_to_rowid_ranges() free functions. The caller
@@ -505,7 +507,11 @@ private:
 
     ColumnAccessPath* _lookup_access_path(ColumnId cid, const TabletColumn& col);
 
-    void _update_stats(io::SeekableInputStream* rfile);
+    // Adds what `rfile` read since its last flush to the stats. `keep_baseline` records what it has reported so far,
+    // for a file that is read again afterwards; a file read for the last time needs none.
+    void _update_stats(io::SeekableInputStream* rfile, bool keep_baseline);
+    // Installs the file of column `cid`, first flushing the statistics of the file it replaces.
+    void _set_column_file(ColumnId cid, std::unique_ptr<io::SeekableInputStream> file);
 
     //  This function will search and build the segment from delta column group.
     StatusOr<std::shared_ptr<Segment>> _get_dcg_segment(uint32_t ucid);
@@ -608,6 +614,8 @@ private:
 
     bool _inited = false;
     bool _one_time_setup_done = false;
+    // The cumulative statistics of each column file at its last flush, so that a flush adds only what was read since.
+    std::unordered_map<const io::SeekableInputStream*, std::unordered_map<std::string, int64_t>> _flushed_io_stats;
 
     std::unordered_map<ColumnId, ColumnAccessPath*> _column_access_paths;
     std::unordered_map<ColumnId, ColumnAccessPath*> _predicate_column_access_paths;
@@ -886,6 +894,10 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
           _bitmap_index_evaluator(_schema, _opts.pred_tree),
           _predicate_columns(_opts.pred_tree.num_columns()),
           _enable_predicate_col_late_materialize(_opts.enable_predicate_col_late_materialize) {
+    // A file is attributed when it is opened, and the column files are opened lazily, on whatever thread reads first
+    // -- a publish's partial update thread pool, say. Without a context of its own, the iterator takes the work that
+    // builds it.
+    _opts.lake_io_opts.remote_read = ScopedRemoteReadContext::or_current(_opts.lake_io_opts.remote_read);
     // Only a vector (ANN) query truncates the candidate set by rank, so only it needs deletes folded in
     // before the search. For the lake split-child path (precomputed scan range) this stays true because
     // the seed already applied it to the range the child inherits.
@@ -2004,7 +2016,8 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
 
     RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
                                  .buffer_size = _opts.lake_io_opts.buffer_size,
-                                 .skip_disk_cache = _opts.lake_io_opts.skip_disk_cache};
+                                 .skip_disk_cache = _opts.lake_io_opts.skip_disk_cache,
+                                 .remote_read = _opts.lake_io_opts.remote_read};
 
     std::string dcg_filename;
     FileEncryptionInfo dcg_encryption_info;
@@ -2036,11 +2049,11 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
             shared_buffered_input_stream->set_coalesce_options(options);
             iter_opts.read_file = shared_buffered_input_stream.get();
             iter_opts.is_io_coalesce = true;
-            _column_files[cid] = std::move(shared_buffered_input_stream);
+            _set_column_file(cid, std::move(shared_buffered_input_stream));
             _io_coalesce_column_index.emplace_back(cid);
         } else {
             iter_opts.read_file = rfile.get();
-            _column_files[cid] = std::move(rfile);
+            _set_column_file(cid, std::move(rfile));
         }
     } else {
         // create delta column iterator
@@ -2062,7 +2075,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         opts.encryption_info = dcg_encryption_info;
         ASSIGN_OR_RETURN(auto dcg_file, _opts.fs->new_random_access_file(opts, dcg_filename));
         iter_opts.read_file = dcg_file.get();
-        _column_files[cid] = std::move(dcg_file);
+        _set_column_file(cid, std::move(dcg_file));
     }
     RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
     return Status::OK();
@@ -4947,7 +4960,7 @@ Status SegmentIterator::_get_row_ranges_by_rowid_range() {
 }
 
 // Currently, update stats is only used for lake tablet, and numeric statistics is nullptr for local tablet.
-void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
+void SegmentIterator::_update_stats(io::SeekableInputStream* rfile, bool keep_baseline) {
     auto stats_or = rfile->get_numeric_statistics();
     if (!stats_or.ok()) {
         LOG(WARNING) << "failed to get statistics: " << stats_or.status();
@@ -4959,9 +4972,25 @@ void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
         return;
     }
 
+    // The statistics of a file are cumulative: subtract what an earlier flush already added. A file never flushed
+    // before -- every file of an iterator that is not reused -- has no baseline and adds its values as they are.
+    std::unordered_map<std::string, int64_t>* flushed = nullptr;
+    if (keep_baseline) {
+        flushed = &_flushed_io_stats[rfile];
+    } else if (auto it = _flushed_io_stats.find(rfile); it != _flushed_io_stats.end()) {
+        flushed = &it->second;
+    }
     for (int64_t i = 0, sz = stats->size(); i < sz; ++i) {
         auto&& name = stats->name(i);
-        auto&& value = stats->value(i);
+        int64_t value = stats->value(i);
+        if (flushed != nullptr) {
+            int64_t& last = (*flushed)[name];
+            value -= last;
+            last = stats->value(i);
+        }
+        if (value == 0) {
+            continue;
+        }
         if (name == kBytesReadLocalDisk) {
             _opts.stats->compressed_bytes_read_local_disk += value;
             _opts.stats->compressed_bytes_read += value;
@@ -4988,7 +5017,36 @@ void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
             _opts.stats->prefetch_wait_finish_ns += value;
         } else if (name == kPrefetchPendingNs) {
             _opts.stats->prefetch_pending_ns += value;
+        } else if (name == kRemoteQueueWaitNs) {
+            _opts.stats->remote_io_queue_wait_ns += value;
+        } else if (name == kRemoteFillWaitNs) {
+            _opts.stats->remote_io_fill_wait_ns += value;
+        } else if (name == kRemoteFillJoins) {
+            _opts.stats->remote_io_fill_joins += value;
         }
+    }
+}
+
+void SegmentIterator::_set_column_file(ColumnId cid, std::unique_ptr<io::SeekableInputStream> file) {
+    auto& slot = _column_files[cid];
+    if (slot != nullptr) {
+        _update_stats(slot.get(), /*keep_baseline=*/false);
+        _flushed_io_stats.erase(slot.get());
+    }
+    slot = std::move(file);
+}
+
+void SegmentIterator::flush_io_stats() {
+    for (auto& [cid, rfile] : _column_files) {
+        if (rfile != nullptr) {
+            _update_stats(rfile.get(), /*keep_baseline=*/true);
+        }
+    }
+}
+
+void flush_segment_iterator_io_stats(ChunkIterator* iter) {
+    if (auto* seg_iter = dynamic_cast<SegmentIterator*>(iter); seg_iter != nullptr) {
+        seg_iter->flush_io_stats();
     }
 }
 
@@ -5008,10 +5066,11 @@ void SegmentIterator::close() {
     for (auto& [cid, rfile] : _column_files) {
         // update statistics before reset column file
         if (rfile != nullptr) {
-            _update_stats(rfile.get());
+            _update_stats(rfile.get(), /*keep_baseline=*/false);
             rfile.reset();
         }
     }
+    _flushed_io_stats.clear();
 
     STLClearObject(&_selection);
     STLClearObject(&_selected_idx);
@@ -5112,6 +5171,8 @@ StatusOr<ChunkIteratorPtr> new_reusable_segment_iterator(const std::shared_ptr<S
         if (same_layout) {
             RETURN_IF_ERROR(seg_iter->reset_for_reuse(options));
         } else {
+            // The replaced iterator is dropped without close(): keep what it read.
+            seg_iter->flush_io_stats();
             *reusable_slot = std::make_shared<SegmentIterator>(segment, std::move(expected_schema), options);
         }
     }
