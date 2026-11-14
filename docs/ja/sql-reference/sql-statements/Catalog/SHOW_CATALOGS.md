@@ -29,9 +29,9 @@ SHOW CATALOGS [LIKE '<pattern>']
 ## 出力
 
 ```SQL
-+----------+--------+----------+
-| Catalog  | Type   | Comment  |
-+----------+--------+----------+
++----------+--------+----------+----------+
+| Catalog  | Type   | Comment  | Location |
++----------+--------+----------+----------+
 ```
 
 このステートメントによって返されるフィールドを以下の表で説明します。
@@ -41,6 +41,7 @@ SHOW CATALOGS [LIKE '<pattern>']
 | Catalog       | catalog 名。                                            |
 | Type          | catalog のタイプ。catalog が `default_catalog` の場合は `Internal` が返されます。catalog が external catalog の場合、例えば `Hive`、`Hudi`、`Iceberg` などの対応する catalog タイプが返されます。 |
 | Comment       | catalog のコメント。StarRocks は external catalog にコメントを追加することをサポートしていません。そのため、external catalog の場合、値は `NULL` です。catalog が `default_catalog` の場合、コメントはデフォルトで `An internal catalog contains this cluster's self-managed tables.` です。`default_catalog` は StarRocks クラスター内で唯一の内部 catalog です。 |
+| Location      | catalog プロパティ [`labels.location`](../../../administration/management/resource_management/be_label.md) の値。未設定の場合は空です。共有なしクラスターでは、コネクタ スキャンを一致するラベルの BE に割り当てるために使用されます。 |
 
 ## 例
 
@@ -49,17 +50,20 @@ SHOW CATALOGS [LIKE '<pattern>']
 ```SQL
 SHOW CATALOGS\G
 *************************** 1. row ***************************
-Catalog: default_catalog
-   Type: Internal
-Comment: An internal catalog contains this cluster's self-managed tables.
+ Catalog: default_catalog
+    Type: Internal
+ Comment: An internal catalog contains this cluster's self-managed tables.
+Location: 
 *************************** 2. row ***************************
-Catalog: hudi_catalog
-   Type: Hudi
-Comment: NULL
+ Catalog: hudi_catalog
+    Type: Hudi
+ Comment: NULL
+Location: 
 *************************** 3. row ***************************
-Catalog: iceberg_catalog
-   Type: Iceberg
-Comment: NULL
+ Catalog: iceberg_catalog
+    Type: Iceberg
+ Comment: NULL
+Location: rack:rack1
 ```
 
 名前が特定のパターンに一致する catalog をクエリします。
@@ -67,7 +71,8 @@ Comment: NULL
 ```SQL
 SHOW CATALOGS LIKE 'iceberg%'\G
 *************************** 1. row ***************************
-Catalog: iceberg_catalog
-   Type: Iceberg
-Comment: NULL
+ Catalog: iceberg_catalog
+    Type: Iceberg
+ Comment: NULL
+Location: rack:rack1
 ```

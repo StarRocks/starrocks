@@ -3348,6 +3348,15 @@ public class Config extends ConfigBase {
     public static long connector_table_analyze_dropped_partition_stats_cleanup_interval_second = 3600;
 
     /**
+     * When true (default), queries that scan an external catalog with {@code labels.location}
+     * are scheduled only on label-matched backends (L) union fixed-location scan backends (N)
+     * (OlapScan/MetaScan/SchemaScan/Kudu, etc.) in shared-nothing mode. Connector scans prefer L.
+     * Set false to disable and restore unrestricted worker scheduling for external catalog reads.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_connector_location_worker_restriction = true;
+
+    /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
      * This may reduce network transmission in following case:
      * 1. N hosts with N Backends and N Frontends deployed.

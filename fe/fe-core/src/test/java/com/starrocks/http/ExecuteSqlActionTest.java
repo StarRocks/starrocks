@@ -86,9 +86,10 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         respStr = Objects.requireNonNull(response.body()).string();
         expected =
                 "{\"meta\":[{\"name\":\"Catalog\",\"type\":\"varchar(256)\"},{\"name\":\"Type\",\"type\":\"varchar(20)\"}," +
-                        "{\"name\":\"Comment\",\"type\":\"varchar(30)\"}]," +
+                        "{\"name\":\"Comment\",\"type\":\"varchar(30)\"},{\"name\":\"Location\",\"type\":\"varchar(256)\"}]," +
                         "\"data\":[{\"Catalog\":\"default_catalog\",\"Type\":\"Internal\"," +
-                        "\"Comment\":\"An internal catalog contains this cluster's self-managed tables.\"}]," +
+                        "\"Comment\":\"An internal catalog contains this cluster's self-managed tables.\"," +
+                        "\"Location\":\"\"}]," +
                         "\"statistics\":{\"scanRows\":0,\"scanBytes\":0,\"returnRows\":1}}";
         Assertions.assertEquals(respStr, expected);
 

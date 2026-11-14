@@ -641,7 +641,7 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 ### enable_gather_fragment_child_affinity
 
-* **説明**: Gather Fragment（`DataPartition = UNPARTITIONED` の単一インスタンスの結果 Fragment）を、全 BE からのグローバルなラウンドロビンで選択する代わりに、その子 Fragment がすでに使用している BE に配置するかどうか。`labels.location` を使用する共有なしクラスタでは、有効にすると Gather Fragment がクエリの他の部分で使用されていない BE に配置されることを防ぎます。ただし、このパラメータ自体はラベル分離を保証しません。クエリの他の Fragment がラベル範囲外で実行される場合、Gather Fragment もそこで実行される可能性があります。既知のケースには、外部カタログテーブル（Hive や Iceberg など）のスキャン、`LOCALITY` 以外の `choose_execute_instances_mode`、`prefer_compute_node=true`、およびバケットプルーニングを伴う Right/Full Bucket Shuffle Join が含まれます。Gather Fragment に子 Fragment のインスタンスがない場合は、ラウンドロビンにフォールバックします。
+* **説明**: Gather Fragment（`DataPartition = UNPARTITIONED` の単一インスタンスの結果 Fragment）を、全 BE からのグローバルなラウンドロビンで選択する代わりに、その子 Fragment がすでに使用している BE に配置するかどうか。`labels.location` を使用する共有なしクラスタでは、有効にすると Gather Fragment がクエリの他の部分で使用されていない BE に配置されることを防ぎます。ただし、このパラメータ自体はラベル分離を保証しません。クエリの他の Fragment がラベル範囲外で実行される場合、Gather Fragment もそこで実行される可能性があります。既知のケースには、`LOCALITY` 以外の `choose_execute_instances_mode`、`prefer_compute_node=true`、およびバケットプルーニングを伴う Right/Full Bucket Shuffle Join が含まれます。外部 Catalog（Hive や Iceberg など）に Catalog プロパティ `labels.location` が設定され、かつ FE 設定 [`enable_connector_location_worker_restriction`](../administration/configuration/FE_parameters/user_query_loading.md#enable_connector_location_worker_restriction) が有効な場合、外部 Catalog スキャンは Worker 範囲が制限されます。そのプロパティがない場合、または設定が無効な場合、外部 Catalog スキャンは意図したラベルの外で実行される可能性があります。Gather Fragment に子 Fragment のインスタンスがない場合は、ラウンドロビンにフォールバックします。
 * **デフォルト**: false
 * **導入バージョン**: v4.2
 
