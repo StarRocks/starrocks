@@ -1377,4 +1377,448 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
         String plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan, "mv_hourly_events");
     }
+
+    /**
+     * Reproduce: aggregate join pushdown rewrite failed with "missed cols: {pt}" when:
+     * 1. query has two IN-subquery semi joins (one with GROUP BY, one with DISTINCT)
+     * 2. the group by key is the expression DATE_FORMAT(pt,'%Y%m%d')
+     * 3. mv groups by the same expression
+     */
+    @Test
+    public void testAggPushDown_GroupByExpr_TwoSemiJoins() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t_fact_traffic_di\n" +
+                "(\n" +
+                "    pt DATE NOT NULL,\n" +
+                "    spu_id INT NOT NULL,\n" +
+                "    brand_id INT,\n" +
+                "    prd_access_vs_pv BIGINT,\n" +
+                "    exp_pv BIGINT,\n" +
+                "    clk_pv BIGINT\n" +
+                ")\n" +
+                "ENGINE = olap\n" +
+                "PARTITION BY RANGE (pt)\n" +
+                "(\n" +
+                "    START (\"20260601\") END (\"20260701\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withTable("CREATE TABLE t_dim_spu\n" +
+                "(\n" +
+                "    spu_id INT NOT NULL,\n" +
+                "    ly_id INT\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withTable("CREATE TABLE t_dim_brand\n" +
+                "(\n" +
+                "    brand_id INT NOT NULL\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(brand_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 REFRESH MANUAL\n" +
+                "PARTITION BY pt\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "AS\n" +
+                "SELECT pt,\n" +
+                "       DATE_FORMAT(pt,'%Y%m%d') AS pt_day,\n" +
+                "       spu_id,\n" +
+                "       brand_id,\n" +
+                "       SUM(prd_access_vs_pv) AS itg_prd_access_pv,\n" +
+                "       SUM(exp_pv) AS exposure_pv,\n" +
+                "       SUM(clk_pv) AS itg_click_pv\n" +
+                "FROM t_fact_traffic_di\n" +
+                "GROUP BY pt, DATE_FORMAT(pt,'%Y%m%d'), spu_id, brand_id");
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+        String selectPrefix = "SELECT DATE_FORMAT(pt,'%Y%m%d') AS pt_day\n" +
+                "       ,SUM(prd_access_vs_pv) AS itg_prd_access_pv\n" +
+                "       ,SUM(exp_pv) AS exposure_pv\n" +
+                "       ,SUM(clk_pv) AS itg_click_pv\n" +
+                "FROM t_fact_traffic_di\n" +
+                "WHERE spu_id IN (\n" +
+                "    SELECT spu_id FROM t_dim_spu WHERE ly_id = 1471878 GROUP BY spu_id\n" +
+                ") AND pt BETWEEN '20260614' AND '20260615' AND brand_id IN (\n" +
+                "    SELECT DISTINCT brand_id FROM t_dim_brand\n" +
+                ")\n";
+        // Case 1: the grouping key is the expression itself; the join projection above the pushed-down aggregate
+        // must not keep referencing raw pt (the expression's input), which is pruned away, or the push down
+        // fails with missed columns.
+        String plan1 = sql(selectPrefix + "GROUP BY DATE_FORMAT(pt,'%Y%m%d')").getExecPlan();
+
+        // Case 2: the grouping key is the base column; pt is a grouping key from the start.
+        String plan2 = sql(selectPrefix + "GROUP BY pt").getExecPlan();
+
+        PlanTestBase.assertContains(plan1, "mv1");
+        PlanTestBase.assertContains(plan2, "mv1");
+        // The mv must be hit without the base table scan, so the plan is not falling back to the original table.
+        PlanTestBase.assertNotContains(plan1, "TABLE: t_fact_traffic_di");
+        PlanTestBase.assertNotContains(plan2, "TABLE: t_fact_traffic_di");
+    }
+
+    @Test
+    public void testAggPushDown_RangePredicate_BitmapAgg() throws Exception {
+        // Regression for review P1: a RANGE partition predicate (pt BETWEEN, multiple values) + a bitmap
+        // aggregation that goes through pushdown. The pushed-down aggregate keeps bitmap_union (mergeable),
+        // so the upper rollup collapses the partial bitmaps without changing semantics. Verifies MV is still
+        // hit with the bitmap agg pushed down.
+        starRocksAssert.withTable("CREATE TABLE t_fact_traffic_di\n" +
+                "(\n" +
+                "    pt DATE NOT NULL,\n" +
+                "    spu_id INT NOT NULL,\n" +
+                "    brand_id INT,\n" +
+                "    prd_access_vs_pv BIGINT\n" +
+                ")\n" +
+                "ENGINE = olap\n" +
+                "PARTITION BY RANGE (pt)\n" +
+                "(\n" +
+                "    START (\"20260601\") END (\"20260701\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withTable("CREATE TABLE t_dim_spu\n" +
+                "(\n" +
+                "    spu_id INT NOT NULL,\n" +
+                "    ly_id INT\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_bitmap REFRESH MANUAL\n" +
+                "PARTITION BY pt\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "AS\n" +
+                "SELECT pt,\n" +
+                "       DATE_FORMAT(pt,'%Y%m%d') AS pt_day,\n" +
+                "       spu_id,\n" +
+                "       BITMAP_UNION(TO_BITMAP(brand_id)) AS brand_bitmap\n" +
+                "FROM t_fact_traffic_di\n" +
+                "GROUP BY pt, DATE_FORMAT(pt,'%Y%m%d'), spu_id");
+        String query = "SELECT DATE_FORMAT(pt,'%Y%m%d') AS pt\n" +
+                "       ,BITMAP_UNION_COUNT(TO_BITMAP(brand_id)) AS cnt\n" +
+                "FROM t_fact_traffic_di\n" +
+                "WHERE pt BETWEEN '20260614' AND '20260615' AND spu_id IN (\n" +
+                "    SELECT spu_id FROM t_dim_spu WHERE ly_id = 1471878 GROUP BY spu_id\n" +
+                ")\n" +
+                "GROUP BY DATE_FORMAT(pt,'%Y%m%d')";
+        String plan = sql(query).getExecPlan();
+        // MV must be hit and the bitmap aggregation must keep its mergeable form on the upper rollup
+        // (bitmap_union_count over the merged bitmap), i.e. distinct semantics are preserved: the pushed-down
+        // aggregate groups by the expression column itself, so the join projection above it no longer keeps
+        // referencing the raw pt that the range predicate pruned away.
+        PlanTestBase.assertContains(plan, "mv_bitmap");
+        PlanTestBase.assertContains(plan, "bitmap_union_count");
+        PlanTestBase.assertNotContains(plan, "TABLE: t_fact_traffic_di");
+    }
+
+    /**
+     * A constant-list partition predicate (`pt IN (...)`) is classified as a *range* predicate by
+     * PredicateSplit and consumed by partition pruning, so its column is invisible to the PreVisitor
+     * (neither LogicalFilterOperator nor scan predicate). The join projection above the pushed-down aggregate
+     * used to keep reading raw pt to compute DATE_FORMAT(pt), which the pushed-down aggregate does not output;
+     * the rewrite then failed with "missed cols: {pt}" and the MV was not hit. This case fails as long as that
+     * stale reference survives the projection rebuild.
+     */
+    @Test
+    public void testAggPushDown_InPredicateGroupByExpr() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t_fact_traffic_di\n" +
+                "(\n" +
+                "    pt DATE NOT NULL,\n" +
+                "    spu_id INT NOT NULL,\n" +
+                "    brand_id INT,\n" +
+                "    prd_access_vs_pv BIGINT,\n" +
+                "    exp_pv BIGINT,\n" +
+                "    clk_pv BIGINT\n" +
+                ")\n" +
+                "ENGINE = olap\n" +
+                "PARTITION BY RANGE (pt)\n" +
+                "(\n" +
+                "    START (\"20260601\") END (\"20260701\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withTable("CREATE TABLE t_dim_spu\n" +
+                "(\n" +
+                "    spu_id INT NOT NULL,\n" +
+                "    ly_id INT\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withTable("CREATE TABLE t_dim_brand\n" +
+                "(\n" +
+                "    brand_id INT NOT NULL\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(brand_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 REFRESH MANUAL\n" +
+                "PARTITION BY pt\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "AS\n" +
+                "SELECT pt,\n" +
+                "       DATE_FORMAT(pt,'%Y%m%d') AS pt_day,\n" +
+                "       spu_id,\n" +
+                "       brand_id,\n" +
+                "       SUM(prd_access_vs_pv) AS itg_prd_access_pv,\n" +
+                "       SUM(exp_pv) AS exposure_pv,\n" +
+                "       SUM(clk_pv) AS itg_click_pv\n" +
+                "FROM t_fact_traffic_di\n" +
+                "GROUP BY pt, DATE_FORMAT(pt,'%Y%m%d'), spu_id, brand_id");
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+        String query = "SELECT DATE_FORMAT(pt,'%Y%m%d') AS pt\n" +
+                "       ,SUM(prd_access_vs_pv) AS itg_prd_access_pv\n" +
+                "       ,SUM(exp_pv) AS exposure_pv\n" +
+                "       ,SUM(clk_pv) AS itg_click_pv\n" +
+                "FROM t_fact_traffic_di\n" +
+                "WHERE spu_id IN (\n" +
+                "    SELECT spu_id FROM t_dim_spu WHERE ly_id = 1471878 GROUP BY spu_id\n" +
+                ") AND pt IN ('20260614','20260615') AND brand_id IN (\n" +
+                "    SELECT DISTINCT brand_id FROM t_dim_brand\n" +
+                ")\n" +
+                "GROUP BY pt";
+        // enable_groupby_use_output_alias makes `GROUP BY pt` resolve to the DATE_FORMAT(pt,'%Y%m%d')
+        // select alias, which is the query shape reported by the issue. Restore the shared session
+        // variable afterwards so later tests keep the default alias-resolution semantics.
+        boolean oldEnableGroupbyUseOutputAlias =
+                connectContext.getSessionVariable().getEnableGroupbyUseOutputAlias();
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(true);
+        String plan;
+        try {
+            plan = sql(query).getExecPlan();
+        } finally {
+            connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(oldEnableGroupbyUseOutputAlias);
+        }
+        PlanTestBase.assertContains(plan, "mv1");
+        PlanTestBase.assertNotContains(plan, "TABLE: t_fact_traffic_di");
+    }
+
+    /**
+     * LIST partition variant of {@link #testAggPushDown_GroupByExpr_TwoSemiJoins}: a {@code pt IN (...)} predicate
+     * over a LIST-partitioned column is consumed by partition pruning exactly like a RANGE one, so the join
+     * projection above the pushed-down aggregate must not keep referencing the raw column that computes the
+     * grouping expression, otherwise the push down fails with missed columns and the mv is not hit.
+     */
+    @Test
+    public void testAggPushDown_ListPartition_GroupByExpr() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t_fact_traffic_di\n" +
+                "(\n" +
+                "    pt VARCHAR(12) NOT NULL,\n" +
+                "    spu_id INT NOT NULL,\n" +
+                "    brand_id INT,\n" +
+                "    prd_access_vs_pv BIGINT\n" +
+                ")\n" +
+                "ENGINE = olap\n" +
+                "DUPLICATE KEY(pt, spu_id)\n" +
+                "PARTITION BY LIST (pt)\n" +
+                "(\n" +
+                "    PARTITION p20260614 VALUES IN (\"20260614\"),\n" +
+                "    PARTITION p20260615 VALUES IN (\"20260615\")\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withTable("CREATE TABLE t_dim_spu\n" +
+                "(\n" +
+                "    spu_id INT NOT NULL,\n" +
+                "    ly_id INT\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withTable("CREATE TABLE t_dim_brand\n" +
+                "(\n" +
+                "    brand_id INT NOT NULL\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(brand_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_list REFRESH MANUAL\n" +
+                "PARTITION BY pt\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "AS\n" +
+                "SELECT pt,\n" +
+                "       SUBSTR(pt, 1, 6) AS pt_month,\n" +
+                "       spu_id,\n" +
+                "       brand_id,\n" +
+                "       SUM(prd_access_vs_pv) AS itg_prd_access_pv\n" +
+                "FROM t_fact_traffic_di\n" +
+                "GROUP BY pt, SUBSTR(pt, 1, 6), spu_id, brand_id");
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+        String query = "SELECT SUBSTR(pt, 1, 6) AS pt_month, SUM(prd_access_vs_pv) AS itg_prd_access_pv\n" +
+                "FROM t_fact_traffic_di\n" +
+                "WHERE spu_id IN (\n" +
+                "    SELECT spu_id FROM t_dim_spu WHERE ly_id = 1471878 GROUP BY spu_id\n" +
+                ") AND pt IN ('20260614','20260615') AND brand_id IN (\n" +
+                "    SELECT DISTINCT brand_id FROM t_dim_brand\n" +
+                ")\n" +
+                "GROUP BY SUBSTR(pt, 1, 6)";
+        String plan = sql(query).getExecPlan();
+        PlanTestBase.assertContains(plan, "mv_list");
+        PlanTestBase.assertNotContains(plan, "TABLE: t_fact_traffic_di");
+    }
+
+    /**
+     * Regression for review P2 4025510643: a partition column that is referenced above the pushed-down aggregate
+     * only as an aggregate argument ({@code MAX(pt)}) must not end up as one of its group keys - the aggregate
+     * consumes that column as an input and nothing above reads the raw column, so the mv (which exposes only
+     * {@code MAX(pt)}) would be rejected for not being able to output it.
+     */
+    @Test
+    public void testAggPushDown_AggregateOnlyPartitionColumn() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t_fact_traffic_di\n" +
+                "(\n" +
+                "    pt DATE NOT NULL,\n" +
+                "    spu_id INT NOT NULL,\n" +
+                "    brand_id INT,\n" +
+                "    prd_access_vs_pv BIGINT\n" +
+                ")\n" +
+                "ENGINE = olap\n" +
+                "PARTITION BY RANGE (pt)\n" +
+                "(\n" +
+                "    START (\"20260601\") END (\"20260701\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withTable("CREATE TABLE t_dim_spu\n" +
+                "(\n" +
+                "    spu_id INT NOT NULL,\n" +
+                "    ly_id INT\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withTable("CREATE TABLE t_dim_brand\n" +
+                "(\n" +
+                "    brand_id INT NOT NULL\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(brand_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_aggonly REFRESH MANUAL\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "AS\n" +
+                "SELECT spu_id,\n" +
+                "       brand_id,\n" +
+                "       MAX(pt) AS max_pt,\n" +
+                "       SUM(prd_access_vs_pv) AS itg_prd_access_pv\n" +
+                "FROM t_fact_traffic_di\n" +
+                "WHERE pt BETWEEN '20260614' AND '20260615'\n" +
+                "GROUP BY spu_id, brand_id");
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+        String query = "SELECT MAX(pt) AS max_pt\n" +
+                "       ,SUM(prd_access_vs_pv) AS itg_prd_access_pv\n" +
+                "FROM t_fact_traffic_di\n" +
+                "WHERE spu_id IN (\n" +
+                "    SELECT spu_id FROM t_dim_spu WHERE ly_id = 1471878 GROUP BY spu_id\n" +
+                ") AND pt BETWEEN '20260614' AND '20260615' AND brand_id IN (\n" +
+                "    SELECT DISTINCT brand_id FROM t_dim_brand\n" +
+                ")\n" +
+                "GROUP BY spu_id, brand_id";
+        String plan = sql(query).getExecPlan();
+        PlanTestBase.assertContains(plan, "mv_aggonly");
+        PlanTestBase.assertNotContains(plan, "TABLE: t_fact_traffic_di");
+    }
+
+    /**
+     * The same grouping expression over a pruned-away column, but without any partition predicate: the raw
+     * column is still read by the join projection through the group by expression, and column pruning keeps it
+     * only because of that expression. The rewrite must not depend on a partition predicate to be able to
+     * drop that stale reference and hit the mv.
+     */
+    @Test
+    public void testAggPushDown_NoPartitionPredicate_GroupByExpr() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t_fact_traffic_di\n" +
+                "(\n" +
+                "    pt DATE NOT NULL,\n" +
+                "    spu_id INT NOT NULL,\n" +
+                "    brand_id INT,\n" +
+                "    prd_access_vs_pv BIGINT\n" +
+                ")\n" +
+                "ENGINE = olap\n" +
+                "PARTITION BY RANGE (pt)\n" +
+                "(\n" +
+                "    START (\"20260601\") END (\"20260701\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withTable("CREATE TABLE t_dim_spu\n" +
+                "(\n" +
+                "    spu_id INT NOT NULL,\n" +
+                "    ly_id INT\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withTable("CREATE TABLE t_dim_brand\n" +
+                "(\n" +
+                "    brand_id INT NOT NULL\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(brand_id) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_nopred REFRESH MANUAL\n" +
+                "PARTITION BY pt\n" +
+                "DISTRIBUTED BY HASH(spu_id) BUCKETS 8\n" +
+                "AS\n" +
+                "SELECT pt,\n" +
+                "       DATE_FORMAT(pt,'%Y%m%d') AS pt_day,\n" +
+                "       spu_id,\n" +
+                "       brand_id,\n" +
+                "       SUM(prd_access_vs_pv) AS itg_prd_access_pv\n" +
+                "FROM t_fact_traffic_di\n" +
+                "GROUP BY pt, DATE_FORMAT(pt,'%Y%m%d'), spu_id, brand_id");
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+        String query = "SELECT DATE_FORMAT(pt,'%Y%m%d') AS pt_day\n" +
+                "       ,SUM(prd_access_vs_pv) AS itg_prd_access_pv\n" +
+                "FROM t_fact_traffic_di\n" +
+                "WHERE spu_id IN (\n" +
+                "    SELECT spu_id FROM t_dim_spu WHERE ly_id = 1471878 GROUP BY spu_id\n" +
+                ") AND brand_id IN (\n" +
+                "    SELECT DISTINCT brand_id FROM t_dim_brand\n" +
+                ")\n" +
+                "GROUP BY DATE_FORMAT(pt,'%Y%m%d')";
+        String plan = sql(query).getExecPlan();
+        PlanTestBase.assertContains(plan, "mv_nopred");
+        PlanTestBase.assertNotContains(plan, "TABLE: t_fact_traffic_di");
+    }
 }
