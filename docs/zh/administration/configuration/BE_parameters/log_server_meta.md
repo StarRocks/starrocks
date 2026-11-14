@@ -100,7 +100,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：String
 - 单位：-
 - 是否动态：是（自 v3.3.0、v3.2.7 及 v3.1.12 起）
-- 描述：日志级别。有效值：INFO、WARNING、ERROR、FATAL。启动时，若配置文件中的取值不是上述取值之一，BE 会在日志中报告该值并改用 INFO，因此无效取值不会导致日志功能不可用。运行时设置无效取值则会被拒绝并返回错误，当前生效的级别保持不变。自 v3.3.0、v3.2.7 及 v3.1.12 起，该参数变为动态参数。
+- 描述：日志级别。有效值：INFO、WARNING、ERROR、FATAL。启动时，若配置文件中的取值不是上述取值之一，BE 会在日志中报告该值并改用 INFO，因此无效取值不会导致日志功能不可用。运行时设置无效取值则会被拒绝并返回错误，当前生效的级别保持不变。自 v3.3.0、v3.2.7 及 v3.1.12 起，该参数变为动态参数。但仅在 v3.1.12 至 v3.1.13、v3.2.7 至 v3.2.8、v3.3.0，以及自 v4.0.16 和 v4.1.6 起的版本中，运行时修改该参数才会改变当前生效的日志级别。在其他版本中，该参数可以在运行时修改，但当前生效的日志级别不会改变。
 - 引入版本：-
 
 ### sys_log_roll_mode
@@ -456,9 +456,9 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：`percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false`
 - 类型：string
 - 单位：-
-- 是否动态：是（仅部分选项）
+- 是否动态：是（仅部分选项；自 v4.0.16 和 v4.1.6 起。v4.1.3 和 v4.1.4 中为否）
 - 描述：BE 以普通模式启动时，由 `bin/start_backend.sh` 导出为 `JEMALLOC_CONF` 环境变量的 jemalloc 运行时选项。如果环境中已经设置了 `JEMALLOC_CONF`，或者 BE 以 `--jemalloc_debug`、`--check_mem_leak` 方式启动（这两种模式会强制使用各自的选项），则该配置项不生效。由于 jemalloc 在 BE 解析配置之前就已经读取了 `JEMALLOC_CONF`，运行时修改该配置项只会重新应用 jemalloc 本身允许在初始化之后修改的选项，即 `dirty_decay_ms`、`muzzy_decay_ms` 和 `prof_active`。新增、删除或修改其他任何选项都会报错并回滚配置值，这些选项只能通过重启 BE 生效。只有 BE 启动时带 `prof:true` 才能修改 `prof_active`。将 `dirty_decay_ms` 或 `muzzy_decay_ms` 设置为 `0` 会同步清理所有未使用的页面，本次修改可能因此耗时较长；设置为 `-1` 表示禁用清理。
-- 引入版本：v4.0.15, v4.1.3
+- 引入版本：v4.0.16, v4.1.3
 
 ### large_memory_alloc_report_threshold
 
@@ -493,7 +493,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100G"）。默认的硬限制为服务器内存大小的 90%，软限制为 80%。如果您希望在同一台服务器上同时部署 StarRocks 和其他内存密集型服务，则需要配置此参数。
+- 描述：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100G"）。默认值为服务器内存大小的 90%。BE 使用 `mem_limit` 的 90% 作为进程内存 Tracker 的上限，默认即服务器内存大小的 81%。如果您希望在同一台服务器上同时部署 StarRocks 和其他内存密集型服务，则需要配置此参数。
 - 引入版本：-
 
 ### memory_max_alignment
@@ -507,11 +507,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### num_cores
 
-- 默认值：-1
+- 默认值：0
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：逻辑 CPU 核心数上限。-1 表示使用机器实际核心数；可用于在多租场景下限制 BE 可用核心数。
+- 描述：逻辑 CPU 核心数上限。0 表示使用机器实际核心数；可用于在多租场景下限制 BE 可用核心数。
 - 引入版本：-
 ### memory_urgent_level
 

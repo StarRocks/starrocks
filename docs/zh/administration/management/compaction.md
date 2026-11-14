@@ -228,16 +228,16 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
 - 引入版本：v3.1.0
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_tables" = "11111;22222");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "11111;22222");
 ```
 
-##### lake_compaction_disable_tables
+##### lake_compaction_disable_ids
 
 - 默认值：""
 - 类型：String
 - 单位：-
 - 是否动态：是
-- 描述：禁止对指定表发起 Compaction 任务，已发起的任务不会受到影响。此项的值为 Table ID，如有多个值，需使用分号(;)隔开。
+- 描述：禁止对指定表或分区发起 Compaction 任务，已发起的任务不会受到影响。此项的值为 Table ID 或 Partition ID，如有多个值，需使用分号(;)隔开。在 v3.4.5 和 v3.5.0 之前的版本中，该参数名为 `lake_compaction_disable_tables`，且仅支持 Table ID。旧参数名仍可作为别名使用。
 - 引入版本：v3.2.7
 
 #### CN 参数

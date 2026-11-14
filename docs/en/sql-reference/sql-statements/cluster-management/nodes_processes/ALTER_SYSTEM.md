@@ -19,7 +19,7 @@ ALTER SYSTEM Manages FE, BE, CN, Broker nodes, and metadata snapshots in a clust
 - Add a Follower FE.
 
   ```SQL
-  ALTER SYSTEM ADD FOLLOWER "<fe_host>:<edit_log_port>"[, ...]
+  ALTER SYSTEM ADD FOLLOWER "<fe_host>:<edit_log_port>"
   ```
 
   You can check the status of the new Follower FE by executing `SHOW PROC '/frontends'\G`.
@@ -27,13 +27,13 @@ ALTER SYSTEM Manages FE, BE, CN, Broker nodes, and metadata snapshots in a clust
 - Drop a Follower FE.
 
   ```SQL
-  ALTER SYSTEM DROP FOLLOWER "<fe_host>:<edit_log_port>"[, ...]
+  ALTER SYSTEM DROP FOLLOWER "<fe_host>:<edit_log_port>"
   ```
 
 - Add an Observer FE.
 
   ```SQL
-  ALTER SYSTEM ADD OBSERVER "<fe_host>:<edit_log_port>"[, ...]
+  ALTER SYSTEM ADD OBSERVER "<fe_host>:<edit_log_port>"
   ```
 
   You can check the status of the new Observer FE by executing `SHOW PROC '/frontends'\G`.
@@ -41,7 +41,7 @@ ALTER SYSTEM Manages FE, BE, CN, Broker nodes, and metadata snapshots in a clust
 - Drop an Observer FE.
 
   ```SQL
-  ALTER SYSTEM DROP OBSERVER "<fe_host>:<edit_log_port>"[, ...]
+  ALTER SYSTEM DROP OBSERVER "<fe_host>:<edit_log_port>"
   ```
 
 - Transfer the Leader role to another Follower FE (graceful in-place handoff).
@@ -162,7 +162,7 @@ Create an image file. An image file is a snapshot of the FE metadata.
 ALTER SYSTEM CREATE IMAGE
 ```
 
-Creating an image is an asynchronous operation on the Leader FE. You can check the start time and end time of the operation in the FE log file **fe.log**. A log like `triggering a new checkpoint manually...` indicates that the image creation has started, and a log like `finished save image...` indicates the image has been created.
+Creating an image is an asynchronous operation triggered on the Leader FE. You can check the start time and end time of the operation in the FE log file **fe.log**. A log like `triggering a new checkpoint manually...` in the **fe.log** of the Leader FE indicates that the image creation has started, and a log like `finished save image...` indicates the image has been created. From v3.4.0 onwards, the Leader FE selects an FE as the checkpoint worker to create the image, preferring FEs with lower heap usage over the Leader FE (unless `checkpoint_only_on_leader` is set to `true`), so the `finished save image...` log is printed in the **fe.log** of that FE. In earlier versions, the image is created on the Leader FE.
 
 ## Usage notes
 
@@ -180,10 +180,10 @@ Example 1: Add a Follower FE node.
 ALTER SYSTEM ADD FOLLOWER "x.x.x.x:9010";
 ```
 
-Example 2: Drop two Observer FE nodes simultaneously.
+Example 2: Drop an Observer FE node.
 
 ```SQL
-ALTER SYSTEM DROP OBSERVER "x.x.x.x:9010","x.x.x.x:9010";
+ALTER SYSTEM DROP OBSERVER "x.x.x.x:9010";
 ```
 
 Example 3: Add a BE node.

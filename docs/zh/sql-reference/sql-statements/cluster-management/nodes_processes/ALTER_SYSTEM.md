@@ -22,25 +22,25 @@ products: [oss, enterprise, cloud, anywhere]
 - 添加 Follower FE。添加后，可使用 `SHOW PROC '/frontends'\G` 命令查看新增FE 的状态。
 
    ```SQL
-    ALTER SYSTEM ADD FOLLOWER "host:edit_log_port"[, ...]
+    ALTER SYSTEM ADD FOLLOWER "host:edit_log_port"
     ```
 
 - 删除 Follower FE。
 
     ```SQL
-    ALTER SYSTEM DROP FOLLOWER "host:edit_log_port"[, ...]
+    ALTER SYSTEM DROP FOLLOWER "host:edit_log_port"
     ```
 
 - 添加 Observer FE。添加后，可通过 `SHOW PROC '/frontends'\G` 命令查看新增FE 的状态。
 
     ```SQL
-    ALTER SYSTEM ADD OBSERVER "host:edit_log_port"[, ...]
+    ALTER SYSTEM ADD OBSERVER "host:edit_log_port"
     ```
 
 - 删除 Observer FE。
 
     ```SQL
-    ALTER SYSTEM DROP OBSERVER "host:edit_log_port"[, ...]
+    ALTER SYSTEM DROP OBSERVER "host:edit_log_port"
     ```
 
 - 将 Leader 角色优雅切换到另一个 Follower FE（原地交接，不重启进程）。
@@ -68,7 +68,7 @@ products: [oss, enterprise, cloud, anywhere]
     ALTER SYSTEM CREATE IMAGE
     ```
 
-    执行该语句会主动触发 Leader FE 创建新的 Image（元数据快照）文件。该操作异步执行，您可以通过查看 FE 日志文件 **fe.log** 确认操作何时开始执行及结束。`triggering a new checkpoint manually...` 表明操作开始执行，`finished save image...` 则表明 Image 创建完成。
+    执行该语句会通过 Leader FE 主动触发创建新的 Image（元数据快照）文件。该操作异步执行，您可以通过查看 FE 日志文件 **fe.log** 确认操作何时开始执行及结束。Leader FE 的 **fe.log** 中出现 `triggering a new checkpoint manually...` 表明操作开始执行，`finished save image...` 则表明 Image 创建完成。自 v3.4.0 起，Leader FE 会选择一个 FE 作为 Checkpoint Worker 来创建 Image，优先选择堆内存使用率较低的 FE 而非 Leader FE（除非将 `checkpoint_only_on_leader` 设置为 `true`），因此 `finished save image...` 会打印在该 FE 的 **fe.log** 中。在更早版本中，Image 由 Leader FE 创建。
 
 ### BE
 
@@ -165,10 +165,10 @@ products: [oss, enterprise, cloud, anywhere]
 ALTER SYSTEM ADD FOLLOWER "x.x.x.x:9010";
 ```
 
-示例二：同时删除两个 Observer FE。
+示例二：删除一个 Observer FE。
 
 ```SQL
-ALTER SYSTEM DROP OBSERVER "x.x.x.x:9010","x.x.x.x:9010";
+ALTER SYSTEM DROP OBSERVER "x.x.x.x:9010";
 ```
 
 示例三：添加一个 BE。

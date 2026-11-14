@@ -97,7 +97,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit:
 - Is mutable: Yes
-- Description: The maximum number of roles a user can have.
+- Description: The maximum number of roles a user can have, including the roles inherited through the roles granted to the user. This limit is checked when a role is granted to a user.
 - Introduced in: v3.0.0
 
 ### `ranger_hive_catalog_prefix_enabled`

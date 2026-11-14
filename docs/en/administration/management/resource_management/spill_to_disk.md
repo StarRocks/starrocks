@@ -27,12 +27,13 @@ Currently, StarRocks' spilling feature supports the following operators:
 - Sort operators
 - Hash join (LEFT JOIN, RIGHT JOIN, FULL JOIN, OUTER JOIN, SEMI JOIN, and INNER JOIN) operators
 - CTE operators (Supported from v3.3.4 onwards)
+- Nested loop join (CROSS JOIN) operators (Supported from v3.1.0 onwards, and only when `spill_mode` is set to `force`)
 
 ## Enable intermediate result spilling
 
 Follow these steps to enable intermediate result spilling:
 
-1. Specify the local spill directory `spill_local_storage_dir`, which stores the spilled intermediate result on the local disk, in the BE configuration file **be.conf** or the CN configuration file **cn.conf**, and restart the cluster to allow the modification to take effect.
+1. (Optional) Specify the local spill directory `spill_local_storage_dir`, which stores the spilled intermediate result on the local disk, in the BE configuration file **be.conf** or the CN configuration file **cn.conf**, and restart the cluster to allow the modification to take effect. If you do not specify it, the default directory `${STARROCKS_HOME}/spill` is used.
 
    ```Properties
    spill_local_storage_dir=/<dir_1>[;/<dir_2>]
@@ -62,7 +63,7 @@ Follow these steps to enable intermediate result spilling:
    | **Variable** | **Default** | **Description**                                              |
    | ------------ | ----------- | ------------------------------------------------------------ |
    | enable_spill | false       | Whether to enable intermediate result spilling. If it is set to `true`, StarRocks spills the intermediate results to disk to reduce the memory usage when processing aggregate, sort, or join operators in queries. |
-   | spill_mode   | auto        | The execution mode of intermediate result spilling. Valid values:<ul><li>`auto`: Spilling is automatically triggered when the memory usage threshold is reached.</li><li>`force`: StarRocks forcibly executes spilling for all relevant operators, regardless of memory usage.</li></ul>This variable takes effect only when the variable `enable_spill` is set to `true`. |
+   | spill_mode   | auto        | The execution mode of intermediate result spilling. Valid values:<ul><li>`auto`: Spilling is automatically triggered when the memory usage threshold is reached.</li><li>`force`: StarRocks forcibly executes spilling for all relevant operators, regardless of memory usage.</li></ul>The values `none` and `random` are also accepted, but they are intended for internal testing only. This variable takes effect only when the variable `enable_spill` is set to `true`. |
 
 ## [Preview] Spill intermediate result to object storage
 

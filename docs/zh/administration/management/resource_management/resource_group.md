@@ -136,10 +136,10 @@ WITH (
 
 该资源组触发落盘的内存占用阈值（百分比）。取值范围：(0,1)，默认值为 1，即不生效。该参数自 v3.1.7 版本引入。
 
-- 如果开启自动落盘功能（即系统变量 `spill_mode` 设置为 `auto`），但未开启资源组功能，系统将在查询的内存占用超过 `query_mem_limit` 的 80% 时触发中间结果落盘。其中 `query_mem_limit` 为单个查询可使用的内存上限，由系统变量 `query_mem_limit` 控制，默认值为 0，代表不设限制。
+- 如果开启自动落盘功能（即系统变量 `spill_mode` 设置为 `auto`），但未开启资源组功能，系统将在查询的内存占用超过其有效内存上限的 80% 时触发中间结果落盘。有效内存上限为 `query_mem_limit`（如已设置）与查询从 BE 继承的内存上限中的较小值。在 v4.0.16 和 v4.1.6 之前的版本中，该 80% 不考虑 `query_mem_limit`，仅根据从 BE 继承的内存上限计算。其中 `query_mem_limit` 为单个查询可使用的内存上限，由系统变量 `query_mem_limit` 控制，默认值为 0，代表不设限制。
 - 如果开启自动落盘功能且查询命中资源组（包括所有系统内建资源组）后，该查询满足以下任意情况时，都将触发中间结果落盘：
   - 当前资源组内所有查询使用的内存超过 `当前 BE 节点内存上限 * mem_limit * spill_mem_limit_threshold` 时
-  - 当前查询占用超过 `query_mem_limit` 的 80% 时。
+  - 当前查询占用超过其有效内存上限的 80% 时。有效内存上限为 `query_mem_limit`（如已设置）、`big_query_mem_limit`（如已设置）与资源组内存上限中的最小值。在 v4.0.16 和 v4.1.6 之前的版本中，仅考虑资源组的内存上限。
 
 #### 查询并发相关配置项
 
@@ -214,9 +214,9 @@ WITH (
 - `role`：用户所属的 Role。
 - `query_type`: 查询类型，目前支持 `SELECT` 与 `INSERT` (2.5及以后)。当 `query_type` 为 `insert` 的资源组有 INSERT INTO 或 Broker Load 导入任务正在运行时，当前 BE 节点会为其预留相应的计算资源。
 - `source_ip`：发起查询的 IP 地址，类型为 CIDR。
-- `db`：查询所访问的 Database，可以为 `,` 分割的字符串。
-- `plan_cpu_cost_range`：系统估计的查询 CPU 开销范围。格式为 `(DOUBLE, DOUBLE]`。默认为 NULL，表示没有该限制。fe.audit.log 的 `PlanCpuCost` 列为系统估计的该查询的 CPU 开销。自 v3.1.4 版本起，StarRocks 支持该参数。
-- `plan_mem_cost_range`：系统估计的查询内存开销范围。格式为 `(DOUBLE, DOUBLE]`。默认为 NULL，表示没有该限制。fe.audit.log 的 `PlanMemCost` 列为系统估计的该查询的内存开销。自 v3.1.4 版本起，StarRocks 支持该参数。
+- `db`：查询所访问的 Database，可以为 `,` 分割的字符串。只有当分类器的 `db` 包含查询所访问的所有 Database 时，该分类器才能匹配该查询。
+- `plan_cpu_cost_range`：系统估计的查询 CPU 开销范围。格式为 `[DOUBLE, DOUBLE)`。默认为 NULL，表示没有该限制。fe.audit.log 的 `PlanCpuCost` 列为系统估计的该查询的 CPU 开销。自 v3.1.4 版本起，StarRocks 支持该参数。
+- `plan_mem_cost_range`：系统估计的查询内存开销范围。格式为 `[DOUBLE, DOUBLE)`。默认为 NULL，表示没有该限制。fe.audit.log 的 `PlanMemCost` 列为系统估计的该查询的内存开销。自 v3.1.4 版本起，StarRocks 支持该参数。
 
 系统在为查询任务匹配分类器时，查询任务的信息与分类器的条件完全相同，才能视为匹配。如果存在多个分类器的条件与查询任务完全匹配，则需要计算不同分类器的匹配度。其中只有匹配度最高的分类器才会生效。
 
@@ -228,9 +228,9 @@ WITH (
 
 - 如果 `user` 一致，则该分类器匹配度增加 1。
 - 如果 `role` 一致，则该分类器匹配度增加 1。
-- 如果 `query_type` 一致，则该分类器匹配度增加 1 + 1/分类器的 `query_type` 数量。
-- 如果 `source_ip` 一致，则该分类器匹配度增加 1 + (32 - cidr_prefix)/64。
-- 如果查询的 `db` 匹配，则匹配度加 10。
+- 如果 `query_type` 一致，则该分类器匹配度增加 1 + 0.1/分类器的 `query_type` 数量。
+- 如果 `source_ip` 一致，则该分类器匹配度增加 1 + cidr_prefix/64。
+- 如果查询的 `db` 匹配，则匹配度增加 10 × 分类器中 `db` 的数量。
 - 如果查询的 CPU 开销在 `plan_cpu_cost_range` 范围内，则该分类器匹配度增加 1。
 - 如果查询的内存开销在 `plan_mem_cost_range` 范围内，则该分类器匹配度增加 1。
 
@@ -252,14 +252,6 @@ classifier B (user='Alice', source_ip = '192.168.1.0/24')
 -- 因为分类器 C 限定的查询类型数量更少，所以 C 的匹配度比 D 高。
 classifier C (user='Alice', query_type in ('select'))
 classifier D (user='Alice', query_type in ('insert','select')）
-```
-
-如果多个分类器的匹配度相同，那么会随机选择其中一个分类器。
-
-```Plain
--- 如果一个查询同时查询了 db1 和 db2，并且命中的分类器中 E 和 F 的匹配度最高，那么会从 E 和 F 中随机选择一个。
-classifier E (db='db1')
-classifier F (db='db2')
 ```
 
 ## 隔离计算资源

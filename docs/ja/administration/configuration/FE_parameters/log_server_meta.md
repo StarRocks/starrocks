@@ -319,7 +319,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：プロファイルロギングを有効にするかどうか。この機能が有効になっている場合、FE はクエリごとのプロファイルログ (ProfileManager によって生成されたシリアル化された `queryDetail` JSON) をプロファイルログシンクに書き込みます。このロギングは `enable_collect_query_detail_info` も有効になっている場合にのみ実行されます。`enable_profile_log_compress` が有効になっている場合、JSON はロギング前に gzipped されることがあります。プロファイルログファイルは `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` によって管理され、`profile_log_delete_age` ( `7d`、`10h`、`60m`、`120s` などの形式をサポート) に従ってローテーション/削除されます。この機能を無効にすると、プロファイルログの書き込みが停止します (ディスク I/O、圧縮 CPU、ストレージ使用量の削減)。
+- 説明：プロファイルロギングを有効にするかどうか。この機能が有効になっている場合、FE はクエリごとのプロファイルログ (ProfileManager によって生成されたシリアル化された `queryDetail` JSON) をプロファイルログシンクに書き込みます。このロギングは `enable_collect_query_detail_info` も有効になっている場合にのみ実行されます。プロファイルログファイルは `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` によって管理され、`profile_log_delete_age` ( `7d`、`10h`、`60m`、`120s` などの形式をサポート) に従ってローテーション/削除されます。この機能を無効にすると、プロファイルログの書き込みが停止します (ディスク I/O、圧縮 CPU、ストレージ使用量の削減)。
 - 導入時期：v3.2.5
 
 ### `enable_qe_slow_log`
@@ -609,7 +609,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：Milliseconds
 - 変更可能：Yes
 - 説明：`fe.profile.log` に書き込むクエリの最小レイテンシ（ミリ秒）。実行時間がこの値以上の場合にのみ profile を記録します。0 に設定するとすべての profile を記録します（しきい値なし）。正の値に設定すると、遅いクエリのみを記録してログ量を削減できます。
-- 導入時期：-
+- 導入時期：v4.2.0
 
 ### `profile_log_roll_file_index`
 
@@ -644,7 +644,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：MB
 - 変更可能：No
-- 説明：FE プロファイルログファイルのサイズベースのロールオーバーをトリガーするサイズしきい値 (メガバイト単位) を設定します。この値は、`ProfileFile` アペンダーの Log4j RollingFile SizeBasedTriggeringPolicy によって使用されます。プロファイルログが `profile_log_roll_size_mb` を超えると、ローテーションされます。ローテーションは、`profile_log_roll_interval` に達したときに時間によっても発生する可能性があります。いずれかの条件がロールオーバーをトリガーします。`profile_log_roll_num` と `profile_log_delete_age` と組み合わせることで、この項目は保持される履歴プロファイルファイルの数と古いファイルの削除時期を制御します。ローテーションされたファイルの圧縮は `enable_profile_log_compress` によって制御されます。
+- 説明：FE プロファイルログファイルのサイズベースのロールオーバーをトリガーするサイズしきい値 (メガバイト単位) を設定します。この値は、`ProfileFile` アペンダーの Log4j RollingFile SizeBasedTriggeringPolicy によって使用されます。プロファイルログが `profile_log_roll_size_mb` を超えると、ローテーションされます。ローテーションは、`profile_log_roll_interval` に達したときに時間によっても発生する可能性があります。いずれかの条件がロールオーバーをトリガーします。`profile_log_roll_num` と `profile_log_delete_age` と組み合わせることで、この項目は保持される履歴プロファイルファイルの数と古いファイルの削除時期を制御します。
 - 導入時期：v3.2.5
 
 ### `qe_slow_log_ms`
@@ -780,7 +780,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：No
-- 説明：システムログエントリが分類される重大度レベル。有効な値: `INFO`、`WARN`、`ERROR`、および `FATAL`。
+- 説明：システムログエントリが分類される重大度レベル。有効な値: `DEBUG`、`INFO`、`WARN`、`ERROR`、および `FATAL`。
 - 導入時期：-
 
 ### `sys_log_roll_file_index`
@@ -827,7 +827,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String[]
 - 単位：-
 - 変更可能：No
-- 説明：StarRocks がシステムログを生成するモジュール。このパラメーターが `org.apache.starrocks.catalog` に設定されている場合、StarRocks はカタログモジュールのみのシステムログを生成します。モジュール名をコンマ (,) とスペースで区切ります。
+- 説明：`sys_log_level` で指定されたレベルのログに加えて、StarRocks が DEBUG レベルのシステムログを生成するモジュール。このパラメーターが `com.starrocks.catalog` に設定されている場合、StarRocks はカタログモジュールについても DEBUG レベルのシステムログを生成します。モジュール名をコンマ (,) とスペースで区切ります。
 - 導入時期：-
 
 ### `sys_log_warn_modules`
@@ -1002,7 +1002,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：No
-- 導入時期：v4.2.0
+- 導入時期：v4.1.3
 - 説明：true の場合、ほとんどの外部 FE HTTP エンドポイントで HTTP Basic 認証が必要になります。資格情報は `AuthenticationHandler.authenticate()` を介してユーザーストアと照合されるため、LDAP / security integration による認証も MySQL プロトコルと同様に HTTP 経路で機能します。次のエンドポイントは常に除外されます：
   - 公開プローブ / 可観測性：`/api/bootstrap`、`/api/oauth2`。
   - ハンドラ内で IP ホワイトリストまたはトークンで認証する FE 間 / コントロールプレーン経路：`/image`、`/check`、`/journal_id`、`/info`、`/role`、`/static`、`/api/get_small_file`。

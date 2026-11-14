@@ -170,7 +170,8 @@ v3.3.0 以降、非同期キャッシュポピュレーションがデフォル�
 
 - `DataCacheReadBytes`: システムがメモリおよびディスクから直接読み取ったデータのサイズ。
 - `DataCacheWriteBytes`: リモートストレージシステムからメモリおよびディスクにロードされたデータのサイズ。
-- `BytesRead`: リモートストレージシステム、メモリ、およびディスクからシステムが読み取ったデータの総量。
+- `AppIOBytesRead`: リモートストレージシステム、メモリ、およびディスクからシステムが読み取ったデータの総量。
+- `FSIOBytesRead`: システムがリモートストレージシステムから読み取ったデータのサイズ。
 
 例1: この例では、システムがリモートストレージシステムから大量のデータ (7.65 GB) を読み取り、ディスクからは少量のデータ (518.73 MB) を読み取っています。これは、Block Cache がほとんどヒットしていないことを意味します。
 
@@ -192,12 +193,9 @@ v3.3.0 以降、非同期キャッシュポピュレーションがデフォル�
  - DataCacheWriteTimer: 23.467ms
    - __MAX_OF_DataCacheWriteTimer: 62.280ms
    - __MIN_OF_DataCacheWriteTimer: 0ns
- - BufferUnplugCount: 15
-   - __MAX_OF_BufferUnplugCount: 2
-   - __MIN_OF_BufferUnplugCount: 0
- - BytesRead: 7.65 GB
-   - __MAX_OF_BytesRead: 64.39 MB
-   - __MIN_OF_BytesRead: 0.00
+ - FSIOBytesRead: 7.65 GB
+   - __MAX_OF_FSIOBytesRead: 64.39 MB
+   - __MIN_OF_FSIOBytesRead: 0.00
 ```
 
 例2: この例では、システムがデータキャッシュから大量のデータ (46.08 GB) を読み取り、リモートストレージシステムからはデータを読み取っていません。これは、Block Cache からのみデータを読み取っていることを意味します。
@@ -216,12 +214,9 @@ Table: lineitem
 - DataCacheWriteBytes: 0.00 
 - DataCacheWriteCounter: 0
 - DataCacheWriteTimer: 0ns
-- BufferUnplugCount: 1.231K (1231)
- - __MAX_OF_BufferUnplugCount: 81
- - __MIN_OF_BufferUnplugCount: 35
-- BytesRead: 46.08 GB
- - __MAX_OF_BytesRead: 194.99 MB
- - __MIN_OF_BytesRead: 81.25 MB
+- AppIOBytesRead: 46.08 GB
+ - __MAX_OF_AppIOBytesRead: 194.99 MB
+ - __MIN_OF_AppIOBytesRead: 81.25 MB
 ```
 
 ## I/O アダプタ

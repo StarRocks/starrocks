@@ -53,7 +53,7 @@ StarRocks のバージョンは、**Major.Minor.Patch** の形式で表され、
 > 1. [ALTER SYSTEM CREATE IMAGE](../../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) を実行して新しいイメージを作成します。
 > 2. 新しいイメージがすべての Follower FE に同期されるのを待ちます。
 >
-> イメージファイルが同期されたかどうかは、Leader FE のログファイル **fe.log** を確認することで確認できます。"push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" のようなログ記録があれば、イメージファイルが正常に同期されたことを示しています。
+> イメージファイルが同期されたかどうかは、Leader FE のログファイル **fe.log** を確認することで確認できます。"push image.* from subdir [] to other nodes. totally xx nodes, push succeeded xx nodes" のようなログ記録があれば、イメージファイルが正常に同期されたことを示しています。
 
 ### アップグレード手順
 

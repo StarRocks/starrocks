@@ -53,7 +53,7 @@ SET pipeline_dop = 0;
 | enable_pipeline_engine              | 是否启用 Pipeline 执行引擎。true：启用（默认），false：不启用。 |
 | pipeline_dop                        | 一个 Pipeline 实例的并行数量。建议设为默认值 0，即系统自适应调整每个 pipeline 的并行度。您也可以设置为大于 0 的数值，通常为 BE 节点 CPU 物理核数的一半。 |
 
-您也可通过设置实例的并行数量调整查询并发度。
+如果关闭了 Pipeline 执行引擎（`enable_pipeline_engine` 为 `false`），您也可通过设置实例的并行数量调整查询并发度。开启 Pipeline 执行引擎时，该参数不会影响查询并发度。
 
 ```sql
 SET GLOBAL parallel_fragment_exec_instance_num = INT;

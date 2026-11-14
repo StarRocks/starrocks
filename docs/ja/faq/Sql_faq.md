@@ -43,13 +43,6 @@ show tablet from lineitem where State="ALTER";
 
 このエラーは、Apache Hive パーティションのメタデータを取得できない場合に発生します。この問題を解決するには、**core-sit.xml** と **hdfs-site.xml** を **fe.conf** ファイルと **be.conf** ファイルにコピーしてください。
 
-## データをクエリすると "planner use long time 3000 remaining task num 1" というエラーが発生する
-
-このエラーは通常、完全なガベジコレクション (full GC) によって発生し、バックエンドのモニタリングと **fe.gc** ログを使用して確認できます。この問題を解決するには、以下の操作のいずれかを実行します。
-
-- SQL のクライアントが複数のフロントエンド (FEs) に同時にアクセスできるようにして、負荷を分散します。
-- Java Virtual Machine (JVM) のヒープサイズを **fe.conf** ファイルで 8 GB から 16 GB に変更して、メモリを増やし、full GC の影響を軽減します。
-
 ## 列 A のカーディナリティが小さい場合、`select B from tbl order by A limit 10` のクエリ結果が毎回異なる
 
 SQL は列 A の順序を保証することしかできず、列 B の順序が各クエリで同じであることを保証できません。MySQL はスタンドアロンデータベースであるため、列 A と列 B の順序を保証できます。
@@ -312,7 +305,7 @@ Query Dump には次の情報が含まれます：
 メモリ分析方法：
 
 ```Bash
-curl -XGET -s http://BE_IP:BE_HTTP_PORT/metrics | grep "^starrocks_be_.*_mem_bytes\|^starrocks_be_tcmalloc_bytes_in_use"
+curl -XGET -s http://BE_IP:BE_HTTP_PORT/metrics | grep "^starrocks_be_.*_mem_bytes\|^starrocks_be_jemalloc_allocated_bytes"
 curl -XGET -s http://BE_IP:BE_HTTP_PORT/mem_tracker
 ```
 
@@ -320,7 +313,9 @@ curl -XGET -s http://BE_IP:BE_HTTP_PORT/mem_tracker
 
 ## `StarRocks planner use long time xxx ms in logical phase` エラーが発生した場合の対処法は？
 
-1. `fe.gc.log` を分析して、Full GC の発生を確認します。
+1. `fe.gc.log` を分析して、Full GC の発生を確認します。Full GC が頻繁に発生している場合は、以下の操作のいずれかを実行します。
+   - SQL のクライアントが複数のフロントエンド (FEs) に同時にアクセスできるようにして、負荷を分散します。
+   - Java Virtual Machine (JVM) のヒープサイズを **fe.conf** ファイルで 8 GB から 16 GB に変更して、メモリを増やし、Full GC の影響を軽減します。
 2. SQL 実行プランが複雑な場合、`new_planner_optimize_timeout`（単位: ms）を増やします：
 
    ```SQL

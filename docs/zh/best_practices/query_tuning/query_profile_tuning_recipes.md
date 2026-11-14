@@ -165,7 +165,7 @@ StarRocks 依赖于向量化、pipeline 友好的哈希 Join 核心，该核心�
             PROCESS
 ```
 
-**排序落盘 (Sort spilling)** – 当 `MaxBufferedBytes` 超过大约 2 GB 或 `SpillBytes` 不为零时，排序阶段将落盘到磁盘。如果机器有足够的内存，可以添加 `LIMIT`，预聚合上游数据，或提高 `sort_spill_threshold`。
+**排序落盘 (Sort spilling)** – 当 `MaxBufferedBytes` 超过大约 2 GB 或 `SpillBytes` 不为零时，排序阶段将落盘到磁盘。可以添加 `LIMIT` 或预聚合上游数据。
 
 **合并饥饿 (Merge starvation)** – 高 `PendingStageTime` 告诉您合并正在等待上游数据块。首先优化生产者 operator 或增大 pipeline 缓冲区。
 

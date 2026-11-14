@@ -230,7 +230,7 @@ You can create a new user account and then set the data permission by granting p
 
 ## Why does the profile fail to display after I set `enable_profile` to `true`?
 
-The report is only submitted to the leader FE for access.
+The profile is reported to and stored only on the FE that ran the query (usually the FE that the client is connected to). The `/query_profile` page of the FE web UI shows only the profiles stored on the current FE. From v4.0 onwards, you can retrieve a profile from any FE through the HTTP API `/api/v2/profile?query_id=<query_id>&is_request_all_frontend=true`, which also asks the other FEs when the current FE does not have the profile.
 
 ## How to check field annotations in the tables of StarRocks?
 

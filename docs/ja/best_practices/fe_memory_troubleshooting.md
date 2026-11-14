@@ -111,11 +111,12 @@ FEの状態において、ヒープモニタリングとGCモニタリングは�
 制御設定：
 
 ```properties
-proc_profile_collect_interval_s = 600
-proc_profile_collect_time_s = 300
+proc_profile_collect_time_s = 120
 proc_profile_cpu_enable = true
 proc_profile_mem_enable = true
 ```
+
+v3.4.5 および v3.5.0 以降では、CPU プロファイルとメモリプロファイルは間隔なしで交互に収集され、それぞれ `proc_profile_collect_time_s` 秒間収集されます。それより前のバージョンでは、`proc_profile_collect_time_s` のデフォルト値は `300` で、`proc_profile_collect_interval_s`（デフォルト：`600`）が収集間隔を制御します。
 
 3.3.6より前のバージョンでは、スクリプトを使用して定期的にプロファイルを出力できます。各FEのインストールディレクトリ配下に `mem_profiler.sh` という名前の新しいスクリプトファイルを作成し、以下の内容をファイルにコピーしてください。
 
@@ -300,24 +301,24 @@ jstat -gcutil $pid 1000 1000
 
 **5. FEのメモリトラッカー（3.3.7以降）を通じてリークがあるかどうかを観察する**
 
-`MemoryUsageTracker` のログを確認することで、どのモジュールにメモリリークがあるかを特定できます。このログは1時間ごとに各モジュールのメモリ消費量を出力します：
+`MemoryUsageTracker` のログを確認することで、どのモジュールにメモリリークがあるかを特定できます。このログは `memory_tracker_interval_seconds`（デフォルト：60）秒ごとに各モジュールのオブジェクト数を出力します。v4.0.7 および v4.1.0 以降、この定期ログには各モジュールの推定メモリサイズが含まれなくなりました。推定サイズは `sys.fe_memory_usage`（v4.0.17、v4.1.7 以降）をクエリして取得できます。それより前のバージョンでは、各ログ行にモジュールの推定メモリサイズも含まれます（例：`LocalMetastore estimated 3.8MB of memory`）。
 
-```
-2025-06-06 16:37:50.633+08:00 INFO (MemoryUsageTracker|74)
-[MemoryUsageTracker.trackMemory():161] (6ms) Module Dict -
-CacheDictManager estimated 0B of memory. Contains ColumnDict with 0 object(s).
+```plaintext
+2025-06-06 16:37:50.633+08:00 INFO (memory-usage-tracker|74)
+[MemoryUsageTracker.trackCount():236] Module Dict -
+CacheDictManager. Contains ColumnDict with 0 object(s).
 
-2025-06-06 16:37:50.657+08:00 INFO (MemoryUsageTracker|74)
-[MemoryUsageTracker.trackMemory():161] (21ms) Module LocalMetastore -
-LocalMetastore estimated 3.8MB of memory. Contains Partition with 17473 object(s).
+2025-06-06 16:37:50.657+08:00 INFO (memory-usage-tracker|74)
+[MemoryUsageTracker.trackCount():236] Module LocalMetastore -
+LocalMetastore. Contains Partition with 17473 object(s).
 
-2025-06-06 16:37:50.667+08:00 INFO (MemoryUsageTracker|74)
-[MemoryUsageTracker.trackMemory():161] (0ms) Module TabletInvertedIndex -
-TabletInvertedIndex estimated 37.7MB of memory. Contains TabletMeta with 353459 object(s).
+2025-06-06 16:37:50.667+08:00 INFO (memory-usage-tracker|74)
+[MemoryUsageTracker.trackCount():236] Module TabletInvertedIndex -
+TabletInvertedIndex. Contains TabletMeta with 353459 object(s).
 
-2025-06-06 16:37:50.741+08:00 INFO (MemoryUsageTracker|74)
-[MemoryUsageTracker.trackMemory():108] total tracked memory: 46.8MB,
-jvm: Process used: 18.6GB, heap used: 4.4GB, non heap used: 289.1MB, direct buffer used: 395.5MB
+2025-06-06 16:37:50.741+08:00 INFO (memory-usage-tracker|74)
+[MemoryUsageTracker.trackMemory():125] jvm: heap committed: 8.0GB,
+heap used: 4.4GB, non heap used: 289.1MB, direct buffer used: 395.5MB
 ```
 
 最近のログエントリ間で各モジュールのメモリ増加を比較し、どのモジュールが増加しているかを特定します。
@@ -404,21 +405,7 @@ jmap -dump:live,format=b,file=heap_$(date +%s).hprof <pid>
 FEがメモリ不足になったときに自動的にダンプファイルを生成するために、`fe.conf` のJVM設定に以下を追加します：
 
 ```bash
-JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true \
-  -Xmx8192m \
-  -XX:+UseG1GC \
-  -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time \
-  -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log \
-  -XX:+HeapDumpOnOutOfMemoryError \
-  -XX:HeapDumpPath=${LOG_DIR}/heap_dump_oom.hprof \
-  -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy \
-  -Djava.security.krb5.conf=/etc/krb5.conf \
-  -Dsun.security.krb5.debug=true \
-  -Dsun.security.spnego.debug=true \
-  -Dcom.sun.management.jmxremote \
-  -Dcom.sun.management.jmxremote.authenticate=false \
-  -Dcom.sun.management.jmxremote.ssl=false \
-  -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:8113"
+JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=${LOG_DIR}"
 ```
 
 注意：`HeapDumpPath` はファイル名ではなく、ディレクトリパスを指定します。
@@ -429,18 +416,18 @@ JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true \
 
 メモリ増加の時刻に対応するファイルを見つけ、解凍してブラウザで開くと、メモリ割り当てのフレームグラフが表示されます。スタックの幅が広い部分ほど、より多くのメモリが割り当てられています。
 
-メモリ増加の期間中にメモリプロファイルが出力されない場合は、CPUプロファイルをオフにして、出力間隔を5分に調整できます：
+メモリ増加の期間中にメモリプロファイルが出力されない場合は、CPUプロファイルをオフにして、メモリプロファイルのみを収集できます：
 
 ```properties
 proc_profile_cpu_enable = false
-proc_profile_collect_interval_s = 300
 ```
 
-これらは動的パラメータであり、再起動せずに直接変更できます：
+v3.4.5 より前のバージョンでは、`proc_profile_collect_interval_s` を `300` に設定して、出力間隔を5分に調整することもできます。
+
+これは動的パラメータであり、再起動せずに直接変更できます：
 
 ```sql
 ADMIN SET FRONTEND CONFIG ("proc_profile_cpu_enable" = "false");
-ADMIN SET FRONTEND CONFIG ("proc_profile_collect_interval_s" = "300");
 ```
 
 ## 緊急復旧
@@ -452,15 +439,7 @@ ADMIN SET FRONTEND CONFIG ("proc_profile_collect_interval_s" = "300");
 `fe.conf` 内の `-Xmx` の値を変更する：
 
 ```bash
-JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC \
-  -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time \
-  -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log \
-  -XX:+HeapDumpOnOutOfMemoryError \
-  -XX:HeapDumpPath=${LOG_DIR}/heap_dump_oom.hprof \
-  -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy \
-  -Dcom.sun.management.jmxremote.authenticate=false \
-  -Dcom.sun.management.jmxremote.ssl=false \
-  -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:8113"
+JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=${LOG_DIR}"
 ```
 
 **3. マシン自体のメモリが限られている場合**、再起動してもOOMの問題が発生する可能性があります。マシンのメモリを拡張してから、JVMの設定を増やして再起動することを検討してください。

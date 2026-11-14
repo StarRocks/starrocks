@@ -19,14 +19,14 @@ products: [oss, enterprise, cloud, anywhere]
 ## 構文
 
 ```SQL
-EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
+EXPLAIN [ LOGICAL | VERBOSE | COSTS | SCHEDULER ] <query>
 ```
 
 :::tip
 
 返される実行プランの詳細レベルは次の通りです: EXPLAIN LOGICAL < EXPLAIN < EXPLAIN VERBOSE < EXPLAIN COSTS。
 
-バージョン v3.3.5 から、デフォルトの詳細レベルは `COSTS` に変更されました。EXPLAIN によって返される詳細レベルは、動的 FE パラメータ `query_detail_explain_level` を使用して設定できます。
+レベルを指定しない場合、EXPLAIN はデフォルトのレベルで実行プランを返します。v3.5.11、v4.0.4、および v4.1.0 以降では、動的 FE パラメータ `query_explain_level`（デフォルト: `NORMAL`、つまり上記の順序における EXPLAIN のレベル）を使用してこのデフォルトのレベルを設定できます。v3.5.10、v4.0.2、および v4.0.3 では、このデフォルトのレベルは動的 FE パラメータ `query_detail_explain_level`（デフォルト: `COSTS`）に従います。その他のバージョンでは、このデフォルトのレベルは変更できません。
 
 ほとんどの場合、EXPLAIN を使用するだけで十分です。EXPLAIN VERBOSE と EXPLAIN COSTS は多くの内部情報を出力し、主に実行プランのデバッグに使用されます。
 
@@ -38,12 +38,13 @@ EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
 | ------------- | ---------------------------------------------------- |
 | LOGICAL       | シンプルな論理実行プランを表示します。               |
 | VERBOSE       | データ型、NULL 可能情報、最適化戦略を含む詳細な論理実行プランを表示します。 |
-| COSTS (デフォルト) | カラム統計を含む詳細な論理実行プランを表示します。 |
+| COSTS         | カラム統計を含む詳細な論理実行プランを表示します。 |
+| SCHEDULER     | クエリを実行せずに、クエリのフラグメントインスタンスがどのようにノードにスケジュールされるかを表示します。v3.2 からサポートされています。 |
 | query         | 実行プランを表示したいクエリステートメント。         |
 
 > **NOTE**
 >
-> EXPLAIN によって返される詳細レベルは、動的 FE パラメータ `query_detail_explain_level` を使用して設定できます。
+> 動的 FE パラメータ `query_detail_explain_level` は、EXPLAIN が返すレベルではなく、クエリ詳細に記録される実行プランのレベルを制御します（v3.5.10、v4.0.2、および v4.0.3 を除く）。
 
 ## 戻り値
 

@@ -63,7 +63,7 @@ Users with the system-defined role `user_admin` can create, grant, revoke, or dr
 
 ### Create a role
 
-You can create a role using [CREATE ROLE](../../../sql-reference/sql-statements/account-management/CREATE_ROLE.md). By default, a user can have a maximum of 64 roles. You can adjust this setting by using the FE dynamic parameter `privilege_max_total_roles_per_user`. A role can have a maximum of 16 inheritance levels. You can adjust this setting by using the FE dynamic parameter `privilege_max_role_depth`.
+You can create a role using [CREATE ROLE](../../../sql-reference/sql-statements/account-management/CREATE_ROLE.md). By default, a user can have a maximum of 64 roles, including the roles inherited through the roles granted to the user. This limit is checked when a role is granted to a user. You can adjust this setting by using the FE dynamic parameter `privilege_max_total_roles_per_user`. A role can have a maximum of 16 inheritance levels. You can adjust this setting by using the FE dynamic parameter `privilege_max_role_depth`.
 
 The following example creates the role `example_role`:
 

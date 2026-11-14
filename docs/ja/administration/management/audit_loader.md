@@ -75,7 +75,7 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
 
 :::note
 
-テーブルが以前のバージョンで作成済みの場合は、その後に追加されたカラムを追加してください。追加しないと、監査ログのロード時に該当フィールドが通知なく破棄されます。たとえば `errorMessage` は v4.2.0 で導入されました。
+テーブルが以前のバージョンで作成済みの場合は、その後に追加されたカラムを追加してください。追加しないと、監査ログのロード時に該当フィールドが通知なく破棄されます。たとえば `errorMessage` は v4.1.6 で導入されました。
 
 ```SQL
 ALTER TABLE starrocks_audit_db__.starrocks_audit_tbl__

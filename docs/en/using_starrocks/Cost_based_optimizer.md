@@ -106,7 +106,7 @@ column_names: id,name
 
 Data size and data distribution constantly change in a table. Statistics must be updated regularly to represent that data change. Before creating a statistics collection task, you must choose a collection type and method that best suit your business requirements.
 
-StarRocks supports full and sampled collection, both can be performed automatically and manually. By default, StarRocks automatically collects full statistics of a table. It checks for any data updates every 5 minutes. If data change is detected, data collection will be automatically triggered. If you do not want to use automatic full collection, you can customize a collection task.
+StarRocks supports full and sampled collection, both can be performed automatically and manually. By default, StarRocks automatically collects full statistics of a table. It checks for any data updates every 10 minutes (every 5 minutes in versions earlier than v3.5.0). If data change is detected, data collection will be automatically triggered. If you do not want to use automatic full collection, you can customize a collection task.
 
 | **Collection type** | **Collection method** | **Description**                                              | **Advantage and disadvantage**                               |
 | ------------------- | --------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
@@ -197,7 +197,8 @@ The following table describes the default settings. If you need to modify them, 
 | **FE** **configuration item**         | **Type** | **Default value** | **Description**                                              |
 | ------------------------------------- | -------- | ----------------- | ------------------------------------------------------------ |
 | enable_statistic_collect              | BOOLEAN  | TRUE              | Whether to turn on the default and user-defined auto collection tasks. This switch is turned on by default. |
-| enable_collect_full_statistic         | BOOLEAN  | TRUE              | Whether to enable the default auto collection. This switch is turned on by default. |
+| enable_auto_collect_statistics        | BOOLEAN  | TRUE              | Whether to turn on the default auto collection task. This switch is turned on by default. Supported from v3.5.0 onwards. |
+| enable_collect_full_statistic         | BOOLEAN  | TRUE              | Whether the default auto collection task uses full collection. If it is set to `false`, sampled collection is used instead. This switch is turned on by default. In versions earlier than v3.3.11 and v3.4.1, setting it to `false` disables the default auto collection task. |
 | statistic_collect_interval_sec        | LONG     | 600               | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_auto_analyze_start_time | STRING      | 00:00:00   | The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 | statistic_auto_analyze_end_time | STRING      | 23:59:59  | The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
@@ -391,7 +392,7 @@ Parameter description:
 - Collection type
   - FULL: indicates full collection.
   - SAMPLE: indicates sampled collection.
-  - If no collection type is specified, sample collection is used by default.
+  - If no collection type is specified, `CREATE ANALYZE TABLE` uses full collection, and `CREATE ANALYZE ALL` and `CREATE ANALYZE DATABASE` use sampled collection.
 
 - `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected.
 
@@ -410,10 +411,7 @@ Automatic full collection
 
 ```SQL
 -- Automatically collect full stats of all databases.
-CREATE ANALYZE ALL;
-
--- Automatically collect full stats of a database.
-CREATE ANALYZE DATABASE db_name;
+CREATE ANALYZE FULL ALL;
 
 -- Automatically collect full stats of all tables in a database.
 CREATE ANALYZE FULL DATABASE db_name;
@@ -454,7 +452,7 @@ CREATE ANALYZE SAMPLE TABLE tbl_name(c1, c2, c3) PROPERTIES (
 ```sql
 ADMIN SET FRONTEND CONFIG("enable_auto_collect_statistics"="false");
 DROP ALL ANALYZE JOB;
-CREATE ANALYZE FULL ALL db_name PROPERTIES (
+CREATE ANALYZE FULL ALL PROPERTIES (
    "statistic_exclude_pattern" = "db_name.tbl_name"
 );
 ```
@@ -755,13 +753,13 @@ This feature is enabled by default. You can control the above process with the f
 - Description: Maximum number of query-trigger ANALYZE tasks that are in Pending state on the FE.
 - Introduced in: v3.4.0
 
-##### connector_table_query_trigger_analyze_schedule_interval
+##### connector_table_query_trigger_task_schedule_interval
 
 - Default: 30
 - Type: Int
 - Unit: Second
 - Is mutable: Yes
-- Description: The interval at which the Scheduler thread schedules to query-trigger ANALYZE tasks.
+- Description: The interval at which the Scheduler thread schedules to query-trigger ANALYZE tasks. In v3.4.0 and v3.4.1, this item is named `connector_table_query_trigger_analyze_schedule_interval`.
 - Introduced in: v3.4.0
 
 ##### connector_table_query_trigger_analyze_max_running_task_num
@@ -859,13 +857,13 @@ You can view the task ID in the output of SHOW ANALYZE STATUS.
 
 ### Automatic collection
 
-For the system to automatically collect statistics of tables in an external data source, you can create an Analyze job. StarRocks automatically checks whether to run the task at the default check interval of 5 minutes. For Hive and Iceberg tables, StarRocks runs a collection task only when data in the tables are updated.
+For the system to automatically collect statistics of tables in an external data source, you can create an Analyze job. StarRocks automatically checks whether to run the task at the default check interval of 10 minutes (5 minutes in versions earlier than v3.5.0). For Hive and Iceberg tables, StarRocks runs a collection task only when data in the tables are updated.
 
 However, data changes in Hudi tables cannot be perceived and StarRocks periodically collects statistics based on the check interval and collection interval you specified. You can specify the following FE configuration items to control the collection behaviors:
 
 - statistic_collect_interval_sec
 
-  The interval for checking data updates during automatic collection. Unit: seconds. Default: 5 minutes.
+  The interval for checking data updates during automatic collection. Unit: seconds. Default: 10 minutes (5 minutes in versions earlier than v3.5.0).
 
 - statistic_auto_collect_small_table_rows (v3.2 and later)
 

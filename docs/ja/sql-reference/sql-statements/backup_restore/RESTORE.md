@@ -78,13 +78,13 @@ PROPERTIES ("key"="value", ...)
 RESTORE SNAPSHOT [<db_name>.]<snapshot_name> FROM <repository_name>
 { ALL EXTERNAL CATALOGS | EXTERNAL CATALOG[S] <catalog_name>[, EXTERNAL CATALOG[S] <catalog_name> ...] [ AS <alias> ] }
 [ DATABASE <db_name_in_snapshot> [AS <target_db>] ]
-[ PROPERTIES ("key"="value" [, ...] ) ]
+PROPERTIES ("key"="value" [, ...] )
 
 -- データベース、テーブル、パーティション、マテリアライズドビュー、ビュー、または UDF をリストアします。
 RESTORE SNAPSHOT [<db_name>.]<snapshot_name> FROM <repository_name>
 [ DATABASE <db_name_in_snapshot> [AS <target_db>] ]
 [ ON ( restore_object [, ...] ) ]
-[ PROPERTIES ("key"="value" [, ...] ) ]
+PROPERTIES ("key"="value" [, ...] )
 
 restore_object ::= [
     { ALL TABLE[S]             | TABLE[S] <table_name>[, TABLE[S] <table_name> ...] [AS <alias>] } |
@@ -329,5 +329,5 @@ PROPERTIES ("backup_timestamp" = "2024-12-09-10-52-10-940");
 - リストアされるテーブルと同じ名前の既存のテーブルがある場合、StarRocks はまず既存のテーブルのスキーマがリストアされるテーブルのスキーマと一致するかどうかを確認します。スキーマが一致する場合、StarRocks はスナップショット内のデータで既存のテーブルを上書きします。スキーマが一致しない場合、RESTORE ジョブは失敗します。`AS` キーワードを使用してリストアされるテーブルの名前を変更するか、データをリストアする前に既存のテーブルを削除することができます。
 - RESTORE ジョブが既存のデータベース、テーブル、またはパーティションを上書きする場合、ジョブが COMMIT フェーズに入った後、上書きされたデータはリストアできません。この時点で RESTORE ジョブが失敗またはキャンセルされた場合、データが破損しアクセスできなくなる可能性があります。この場合、RESTORE 操作を再度実行し、ジョブが完了するのを待つしかありません。したがって、現在のデータがもはや使用されていないことを確認していない限り、上書きによるデータのリストアはお勧めしません。上書き操作はまずスナップショットと既存のデータベース、テーブル、またはパーティション間のメタデータの一貫性をチェックします。一貫性が検出されない場合、RESTORE 操作は実行できません。
 - 現在、StarRocks はユーザーアカウント、権限、およびリソースグループに関連する設定データのバックアップとリストアをサポートしていません。
-- 現在、StarRocks はテーブル間の Colocate Join 関係のバックアップとリストアをサポートしていません。
+- デフォルトでは、StarRocks はテーブル間の Colocate Join 関係を復元しません。v3.2.10 および v3.3.2 以降、共有なしクラスターでは、FE 設定項目 `enable_colocate_restore` を `true` に設定することで、復元されたテーブルの Colocate Join 関係を保持できます。これは、ターゲットクラスターにまだ存在しないテーブルにのみ適用されます。
 - 増分マテリアライズドビュー（`refresh_mode` が `INCREMENTAL`、または `AUTO` で PCT として作成されていないもの）はリストアできず、RESTORE は既存の増分マテリアライズドビューを上書きしません。RESTORE でこのようなオブジェクトを指定するとエラーが返され、データベース全体またはすべてのマテリアライズドビューをリストアする場合はスキップされます。ベーステーブルのリストア後に増分マテリアライズドビューを再作成してください。

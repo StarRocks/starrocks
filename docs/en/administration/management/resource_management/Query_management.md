@@ -31,9 +31,9 @@ SHOW PROPERTY FOR 'root';
 
 The session variables can be set by 'key' = 'value', which can limit the concurrency, memory and other query parameters in the current session. For example:
 
-- parallel_fragment_exec_instance_num
+- pipeline_dop
 
-  The parallelism of the query with a default value of 1. It indicates the number of fragment instances on each BE. You can set this to half the number of CPU cores of the BE to improve query performance.
+  The parallelism of a pipeline instance, which is used to adjust the query concurrency. The default value `0` indicates that the system automatically adjusts the parallelism. You can also set it to a value greater than 0, generally half the number of physical CPU cores of the BE. Note that `parallel_fragment_exec_instance_num` takes effect only when the pipeline engine is disabled.
 
 - query_mem_limit
 
@@ -46,7 +46,7 @@ The session variables can be set by 'key' = 'value', which can limit the concurr
 Example 2:
 
 ```sql
-set parallel_fragment_exec_instance_num  = 8; 
+set pipeline_dop  = 8; 
 set query_mem_limit  = 137438953472;
 ```
 

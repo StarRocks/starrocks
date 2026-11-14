@@ -939,7 +939,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: BE ノードでのスナップショットリリースタスクの最大スレッド数。
+- 説明: BE ノードでのスナップショットリリースタスクの最大スレッド数。共有データクラスタでは、このスレッドプールは Vacuum、Full Vacuum、およびトランザクションログ削除タスクも実行します。
 - 導入バージョン: -
 
 ### repair_compaction_interval_seconds

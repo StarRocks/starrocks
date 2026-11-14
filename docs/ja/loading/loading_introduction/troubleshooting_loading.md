@@ -28,11 +28,11 @@ products: [oss, enterprise, anywhere]
 ロードタスクも2つの方法で監視できます：
 
 - SQL ステートメント **[SHOW LOAD](../../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md)** および **[SHOW ROUTINE LOAD TASK](../../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD_TASK.md)** を使用する。
-- システムビュー **[information_schema.loads](../../sql-reference/information_schema/loads.md)** および **statistics.loads_history** を使用する。
+- システムビュー **[information_schema.loads](../../sql-reference/information_schema/loads.md)** および **`_statistics_.loads_history`** を使用する。
 
 ### SQL ステートメント
 
-**SHOW** ステートメントは、現在のデータベースの進行中および最近完了したロードタスクを表示し、タスクのステータスを迅速に把握できます。取得される情報は、**statistics.loads_history** システムビューのサブセットです。
+**SHOW** ステートメントは、現在のデータベースの進行中および最近完了したロードタスクを表示し、タスクのステータスを迅速に把握できます。取得される情報は、**`_statistics_.loads_history`** システムビューのサブセットです。
 
 SHOW LOAD ステートメントは Broker Load、Insert Into、Spark Load タスクの情報を返し、SHOW ROUTINE LOAD TASK ステートメントは Routine Load タスクの情報を返します。
 
@@ -40,7 +40,7 @@ SHOW LOAD ステートメントは Broker Load、Insert Into、Spark Load タス
 
 #### information_schema.loads
 
-**information_schema.loads** システムビューは、最近のロードタスクに関する情報を保存し、アクティブなものと最近完了したものを含みます。StarRocks は定期的にデータを **statistics.loads_history** システムテーブルに同期し、永続的に保存します。
+**information_schema.loads** システムビューは、最近のロードタスクに関する情報を保存し、アクティブなものと最近完了したものを含みます。StarRocks は定期的にデータを **`_statistics_.loads_history`** システムテーブルに同期し、永続的に保存します。
 
 **information_schema.loads** は以下のフィールドを提供します：
 
@@ -55,7 +55,7 @@ SHOW LOAD ステートメントは Broker Load、Insert Into、Spark Load タス
 | WAREHOUSE            | ロードジョブが属するウェアハウス。                 |
 | STATE                | ロードジョブの状態。 有効な値:<ul><li>`PENDING`/`BEGIN`: ロードジョブが作成された。</li><li>`QUEUEING`/`BEFORE_LOAD`: ロードジョブがスケジュール待ちのキューにある。</li><li>`LOADING`: ロードジョブが実行中。</li><li>`PREPARING`: トランザクションが事前コミットされている。</li><li>`PREPARED`: トランザクションが事前コミットされた。</li><li>`COMMITED`: トランザクションがコミットされた。</li><li>`FINISHED`: ロードジョブが成功した。</li><li>`CANCELLED`: ロードジョブが失敗した。</li></ul> |
 | PROGRESS             | ロードジョブの ETL ステージと LOADING ステージの進捗。 |
-| TYPE                 | ロードジョブのタイプ。 Broker Load の場合、返される値は `BROKER`。INSERT の場合、返される値は `INSERT`。Stream Load の場合、返される値は `STREAM`。Routine Load の場合、返される値は `ROUTINE`。 |
+| TYPE                 | ロードジョブのタイプ。 Broker Load の場合、返される値は `BROKER`。INSERT の場合、返される値は `INSERT`。Spark Load の場合、返される値は `SPARK`。Stream Load の場合、返される値は `STREAM_LOAD`。Routine Load の場合、返される値は `ROUTINE_LOAD`。 |
 | PRIORITY             | ロードジョブの優先度。 有効な値: `HIGHEST`, `HIGH`, `NORMAL`, `LOW`, `LOWEST`。 |
 | SCAN_ROWS            | スキャンされたデータ行の数。                    |
 | SCAN_BYTES           | スキャンされたバイト数。                        |
@@ -133,9 +133,9 @@ SHOW LOAD ステートメントは Broker Load、Insert Into、Spark Load タス
 | task_num               | 実際に並行して実行されるサブタスクの数。          |
 | timeout                | ロードタスクのタイムアウト。                                    |
 
-#### statistics.loads_history
+#### `_statistics_.loads_history`
 
-**statistics.loads_history** システムビューは、デフォルトで過去3か月間のロード記録を保存します。DBA はビューの `partition_ttl` を変更して保持期間を調整できます。**statistics.loads_history** は **information_schema.loads** と一貫したスキーマを持っています。
+**`_statistics_.loads_history`** システムビューは、デフォルトで過去 30 日間のロード記録を保存します。DBA は FE 設定項目 [`loads_history_retained_days`](../../administration/configuration/FE_parameters/user_query_loading.md#loads_history_retained_days) を変更して保持期間を調整できます。StarRocks はテーブルの `partition_live_number` プロパティを `loads_history_retained_days` の値にリセットするため、このプロパティを直接変更しないでください。**`_statistics_.loads_history`** は **information_schema.loads** と一貫したスキーマを持っています。
 
 ## Load Profiles でロードパフォーマンスの問題を特定する
 
@@ -153,14 +153,14 @@ Broker Load と INSERT INTO の Load Profiles をセッションレベルで有�
 SET enable_profile = true;
 ```
 
-デフォルトでは、長時間実行されるジョブ（300 秒以上）に対してプロファイルが自動的に有効になります。このしきい値をカスタマイズするには：
+デフォルトでは、長時間実行されるジョブ（30 秒以上）に対してプロファイルが自動的に有効になります。このしきい値をカスタマイズするには：
 
 ```sql
 SET big_query_profile_threshold = 60s;
 ```
 
 :::note
-`big_query_profile_threshold` がデフォルト値 `0` に設定されている場合、デフォルトの動作はクエリのプロファイリングを無効にすることです。ただし、ロードタスクの場合、実行時間が 300 秒を超えるタスクには自動的にプロファイルが記録されます。
+v3.3.12、v3.4.2、および v3.5.0 以降、`big_query_profile_threshold` のデフォルト値は `30s` です。それ以前のバージョンでは、デフォルト値は `0` で、長時間実行されるジョブのプロファイルは自動的に記録されません。
 :::
 
 StarRocks は **Runtime Profiles** もサポートしており、長時間実行されるロードジョブの実行メトリクスを定期的に（30 秒ごとに）報告します。報告間隔をカスタマイズするには：
