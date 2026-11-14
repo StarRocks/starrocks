@@ -41,6 +41,7 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.List;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -80,6 +81,30 @@ public class AlterSystemStmtAnalyzerTest extends StarRocksTestBase {
             AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
             ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "fqdn");
             visitor.visitModifyFrontendHostClause(clause, null);
+        }
+    }
+
+    @Test
+    public void testVisitModifyBackendClauseUnresolvableSrcHost() {
+        InetAddress mockAddr = Mockito.mock(InetAddress.class);
+        try (MockedStatic<InetAddress> mocked = Mockito.mockStatic(InetAddress.class)) {
+            mocked.when(() -> InetAddress.getByName("test")).thenThrow(new UnknownHostException("test"));
+            mocked.when(() -> InetAddress.getByName("fqdn")).thenReturn(mockAddr);
+            AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+            ModifyBackendClause clause = new ModifyBackendClause("test", "fqdn");
+            Assertions.assertDoesNotThrow(() -> visitor.visitModifyBackendClause(clause, null));
+        }
+    }
+
+    @Test
+    public void testVisitModifyFrontendHostClauseUnresolvableSrcHost() {
+        InetAddress mockAddr = Mockito.mock(InetAddress.class);
+        try (MockedStatic<InetAddress> mocked = Mockito.mockStatic(InetAddress.class)) {
+            mocked.when(() -> InetAddress.getByName("test")).thenThrow(new UnknownHostException("test"));
+            mocked.when(() -> InetAddress.getByName("fqdn")).thenReturn(mockAddr);
+            AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+            ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "fqdn");
+            Assertions.assertDoesNotThrow(() -> visitor.visitModifyFrontendHostClause(clause, null));
         }
     }
 
