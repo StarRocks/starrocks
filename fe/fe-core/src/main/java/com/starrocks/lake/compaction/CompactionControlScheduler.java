@@ -190,6 +190,7 @@ public class CompactionControlScheduler {
                 .withSchedule(CronScheduleBuilder.cronSchedule("10 1/3 * * * ?"))
                 .build();
 
+        if (scheduler.checkExists(trigger.getKey())) return;
         scheduler.scheduleJob(jobDetail, trigger);
     }
 
@@ -206,6 +207,7 @@ public class CompactionControlScheduler {
                 .withSchedule(CronScheduleBuilder.cronSchedule("5 * * * * ?"))
                 .build();
 
+        if (scheduler.checkExists(trigger.getKey())) return;
         scheduler.scheduleJob(jobDetail, trigger);
     }
 
