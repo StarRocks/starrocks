@@ -365,12 +365,46 @@ ADMIN SET FRONTEND CONFIG (
 :::note
 - StarRocks はローカルユーザーのネイティブ認証を優先します。同じユーザー名を持つローカルユーザーが存在しない場合、`authentication_chain` で設定した順序で認証が行われます。ネイティブ認証方式でログインに失敗した場合、クラスタは指定された順序で次の認証方式を試行します。
 - OAuth 2.0 セキュリティインテグレーションを除いて、`authentication_chain` に複数のセキュリティインテグレーションを指定できます。複数の OAuth 2.0 セキュリティインテグレーションを指定することや、他のセキュリティインテグレーションと一緒に指定することはできません。
+- `authentication_chain` には LDAP と JWT のセキュリティインテグレーションを同時に含められますが、MySQL プロトコルでは部分的なサポートにとどまります。[LDAP と JWT のセキュリティインテグレーションを混在させる](#ldap-と-jwt-のセキュリティインテグレーションを混在させる)を参照してください。
 :::
 
 `authentication_chain` の値を確認するには、次のステートメントを使用します:
 
 ```SQL
 ADMIN SHOW FRONTEND CONFIG LIKE 'authentication_chain';
+```
+
+### LDAP と JWT のセキュリティインテグレーションを混在させる
+
+HTTP と Arrow Flight では、同じ `authentication_chain` 上の LDAP と JWT のセキュリティインテグレーションは並存できます。認証情報そのものが種類を示すためです。`Basic`（ユーザー名とパスワード）は LDAP セキュリティインテグレーションで、`Bearer`（トークン）は JWT と OAuth 2.0 セキュリティインテグレーションで検証されます。[HTTP と Arrow Flight から接続する](#http-と-arrow-flight-から接続する)を参照してください。
+
+MySQL プロトコルでは部分的なサポートにとどまります。StarRocks は認証情報を受け取る前に接続のクライアント認証プラグインを 1 つ決めなければならず、2 種類のセキュリティインテグレーションは異なるプラグインを必要とします。LDAP は `mysql_clear_password`、JWT は `authentication_openid_connect_client` です。StarRocks はクライアントがハンドシェイクで宣言したプラグインによって選びます。
+
+| クライアントが宣言するプラグイン | 使われるセキュリティインテグレーション |
+| --- | --- |
+| `authentication_openid_connect_client` | チェーン上の最初の JWT セキュリティインテグレーション |
+| `mysql_clear_password` | チェーン上の最初の LDAP セキュリティインテグレーション |
+| どちらも宣言しない（多くのクライアントはデフォルトで `mysql_native_password` を送る） | チェーン上の最初のセキュリティインテグレーション |
+
+したがって:
+
+- 追加の設定なしで大多数のクライアントが使うセキュリティインテグレーションを先頭に置いてください。
+- もう一方の種類のクライアントはプラグインを宣言する必要があります。MySQL クライアントでは `--default-auth=<plugin>`、MySQL Connector/J では `defaultAuthenticationPlugin=<plugin>` を使います。MySQL クライアントはバージョン 9.1 から `authentication_openid_connect_client` を同梱しており、コミュニティ版にも含まれます。それより古い MySQL クライアントと MariaDB クライアントにはこのプラグインがありません。
+- プラグインを宣言できないクライアント（PyMySQL など）は、常にチェーン上の最初のセキュリティインテグレーションを使います。
+
+```Bash
+# JWT セキュリティインテグレーションのユーザー（チェーンの先頭は LDAP セキュリティインテグレーション）
+mysql -h <fe_host> -P <query_port> --default-auth=authentication_openid_connect_client \
+    --authentication-openid-connect-client-id-token-file=<path_to_token_file> -u <username>
+
+# LDAP セキュリティインテグレーションのユーザー（チェーンの先頭は JWT セキュリティインテグレーション）
+mysql -h <fe_host> -P <query_port> --default-auth=mysql_clear_password --enable-cleartext-plugin -u <username> -p
+```
+
+JWT クライアントが OpenID Connect プラグインを読み込めない場合は、FE の設定項目 `authentication_chain_accept_jwt_as_password` を `true` にし、LDAP セキュリティインテグレーションを先頭に置いてください。JWT クライアントはトークンをパスワードとして渡します。MySQL ログインのパスワードが JWT の形をしている場合、StarRocks はまず JWT と OAuth 2.0 セキュリティインテグレーションで検証し、どれも受け入れなかった場合にのみパスワードとして LDAP セキュリティインテグレーションに渡します。トークンは平文パスワードと同じように送られるため、SSL 接続を使ってください。この設定項目は MySQL プロトコルにのみ適用されます。HTTP と Arrow Flight ではトークンを `Bearer` で送ってください。
+
+```Bash
+mysql -h <fe_host> -P <query_port> --ssl-mode=REQUIRED --enable-cleartext-plugin -u <username> -p"$(cat <path_to_token_file>)"
 ```
 
 ## HTTP と Arrow Flight から接続する
@@ -402,7 +436,7 @@ curl -H "Authorization: Bearer ${TOKEN}" -H "label:load_1" -H "column_separator:
 - セキュリティインテグレーションのユーザーの権限は [Group Provider](../group_provider.md) と `GRANT ... TO EXTERNAL GROUP` からのみ付与されます。ユーザーが解決されたグループはすべてのエントリポイントで有効です。
 - Arrow Flight SQL では、JWT はユーザー名とパスワードとまったく同じ方法で認証されます。サーバーは自身が発行するセッショントークンを返し、クライアントは接続の残りの間それを使います。セッションは JWT より長く生きられません。トークンの `exp` を過ぎると接続は拒否され、クライアントは新しい JWT で再認証する必要があります。
 - FE の設定項目 `enable_rest_bearer_authentication`（デフォルト `true`）は、HTTP と Arrow Flight エントリポイントの Bearer 認証を無効にします。MySQL プロトコルには影響せず、MySQL プロトコルのトークンログインは引き続き `authentication_openid_connect_client` と `authentication_oauth2_client` プラグインを使います。
-- MySQL プロトコルはクライアントに一度に 1 種類のトークンプラグインしか提示できず、`authentication_chain` で最初に現れる JWT または OAuth 2.0 インテグレーションがそれを決めます。HTTP と Arrow Flight にはこの制限はありません。トークン自体が issuer と audience でルーティングされるためです。
+- MySQL プロトコルはクライアントに一度に 1 つのプラグインしか提示できません。クライアントが宣言したプラグインが対応するセキュリティインテグレーションを選び、何も宣言しないクライアントは `authentication_chain` の最初のセキュリティインテグレーションを使います（[LDAP と JWT のセキュリティインテグレーションを混在させる](#ldap-と-jwt-のセキュリティインテグレーションを混在させる)を参照）。HTTP と Arrow Flight にはこの制限はありません。トークン自体が issuer と audience でルーティングされるためです。
 - HTTP 認証の失敗はすべて `401` を返し、`WWW-Authenticate` に `Basic` と `Bearer` の両方のチャレンジを含み、どのインテグレーションがなぜ拒否したかは示しません。原因の調査には FE のメトリクス `authentication_failure_total` と `authentication_failure_reason_total` を使ってください。
 
 ## セキュリティインテグレーションを管理する
