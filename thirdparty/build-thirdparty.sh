@@ -902,7 +902,7 @@ build_kerberos() {
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    CFLAGS="$(append_flags "-fPIC" "${TP_TARGET_ARCH_FLAGS}")" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit --with-dblib=none
+    CFLAGS="$(append_flags "-std=gnu17 -fPIC" "${TP_TARGET_ARCH_FLAGS}")" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit --with-dblib=none
     make -j$PARALLEL
     make install
 }
