@@ -1162,6 +1162,14 @@ CONF_mInt32(tablet_meta_checkpoint_min_interval_secs, "600");
 CONF_Int64(brpc_max_body_size, "2147483648");
 // Max unwritten bytes in each socket, if the limit is reached, Socket.Write fails with EOVERCROWDED.
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
+// Backoff in milliseconds between the retries of an RPC towards another backend that failed before
+// being sent (EHOSTDOWN/ECONNREFUSED). While a peer is restarting, its cached socket stays failed
+// until the next brpc health check (`-health_check_interval`, 3s by default), so retries without any
+// backoff are all spent within microseconds and the RPC fails even though the peer has been back.
+// brpc waits this long before every retry (the value is not multiplied by the retry index), so
+// with max_retry=3 the attempts land at 1x/2x/3x this value and the accumulated delay covers the
+// health check interval although a single backoff is shorter than it. 0 disables the backoff.
+CONF_mInt32(brpc_retry_backoff_ms, "2000");
 // brpc connection types, "single", "pooled", "short".
 CONF_String_enum(brpc_connection_type, "single", "single,pooled,short");
 // Only takes effect when brpc_connection_type is "pooled". Maps to brpc's -max_connection_pool_size.

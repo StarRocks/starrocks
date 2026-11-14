@@ -513,6 +513,7 @@
         "thrift_rpc_timeout_ms",
         "thrift_rpc_connection_max_valid_time_ms",
         "brpc_connection_type",
+        "brpc_retry_backoff_ms",
         "rpc_connect_timeout_ms",
         "thrift_connect_timeout_seconds"
       ]
