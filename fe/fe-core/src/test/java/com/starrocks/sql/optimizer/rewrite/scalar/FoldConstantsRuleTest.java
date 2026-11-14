@@ -249,6 +249,43 @@ public class FoldConstantsRuleTest {
     }
 
     @Test
+    public void applyBinaryNegativeZeroDouble() {
+        // Regression for #80066: folding a DOUBLE comparison against a negative zero must follow
+        // IEEE-754, i.e. match what the BE computes for the same value read from a column. Before the
+        // fix Double.compare ordered -0.0 below +0.0, so "-0.0 = 0.0" folded to false and "-0.0 < 0"
+        // to true -- the opposite of runtime evaluation.
+        ConstantOperator negZero = ConstantOperator.createDouble(-0.0);
+        ConstantOperator posZero = ConstantOperator.createDouble(0.0);
+
+        assertEquals(OB_TRUE, rule.apply(new BinaryPredicateOperator(BinaryType.EQ, negZero, posZero), null));
+        assertEquals(OB_FALSE, rule.apply(new BinaryPredicateOperator(BinaryType.NE, negZero, posZero), null));
+        assertEquals(OB_FALSE, rule.apply(new BinaryPredicateOperator(BinaryType.LT, negZero, posZero), null));
+        assertEquals(OB_TRUE, rule.apply(new BinaryPredicateOperator(BinaryType.LE, negZero, posZero), null));
+        assertEquals(OB_FALSE, rule.apply(new BinaryPredicateOperator(BinaryType.GT, negZero, posZero), null));
+        assertEquals(OB_TRUE, rule.apply(new BinaryPredicateOperator(BinaryType.GE, negZero, posZero), null));
+        assertEquals(OB_TRUE, rule.apply(new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL, negZero, posZero), null));
+        // -0.0 IN (0.0) must fold to true.
+        assertEquals(OB_TRUE, rule.apply(new InPredicateOperator(negZero, posZero), null));
+
+        // Non-zero values keep their normal ordering after the fix.
+        assertEquals(OB_TRUE, rule.apply(new BinaryPredicateOperator(BinaryType.LT,
+                ConstantOperator.createDouble(-1.0), posZero), null));
+        assertEquals(OB_TRUE, rule.apply(new BinaryPredicateOperator(BinaryType.GT,
+                ConstantOperator.createDouble(2.0), ConstantOperator.createDouble(1.0)), null));
+    }
+
+    @Test
+    public void applyBinaryNegativeZeroFloat() {
+        // Same as above but for FLOAT, which shares the double comparison path.
+        ConstantOperator negZero = ConstantOperator.createFloat(-0.0);
+        ConstantOperator posZero = ConstantOperator.createFloat(0.0);
+
+        assertEquals(OB_TRUE, rule.apply(new BinaryPredicateOperator(BinaryType.EQ, negZero, posZero), null));
+        assertEquals(OB_FALSE, rule.apply(new BinaryPredicateOperator(BinaryType.LT, negZero, posZero), null));
+        assertEquals(OB_TRUE, rule.apply(new BinaryPredicateOperator(BinaryType.GE, negZero, posZero), null));
+    }
+
+    @Test
     public void applyLikeFolding() {
         // Values below are what the FE Parser produces after the first layer of string-literal
         // escaping (AstBuilder.escapeBackSlash). Java string mapping:

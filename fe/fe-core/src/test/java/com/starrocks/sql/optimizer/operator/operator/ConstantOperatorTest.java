@@ -329,4 +329,25 @@ public class ConstantOperatorTest {
             Assertions.assertEquals(-10, var2.distance(var1));
         }
     }
+
+    @Test
+    public void testCompareToNegativeZero() {
+        // #80066: -0.0 and +0.0 must compare equal (IEEE-754), matching the BE's runtime evaluation.
+        // Double.compare used to order -0.0 below +0.0, which made the FE fold "-0.0 = 0.0" to false
+        // and "-0.0 < 0" to true.
+        Assertions.assertEquals(0,
+                ConstantOperator.createDouble(-0.0).compareTo(ConstantOperator.createDouble(0.0)));
+        Assertions.assertEquals(0,
+                ConstantOperator.createDouble(0.0).compareTo(ConstantOperator.createDouble(-0.0)));
+        Assertions.assertEquals(0,
+                ConstantOperator.createFloat(-0.0).compareTo(ConstantOperator.createFloat(0.0)));
+
+        // Ordering of ordinary values is unchanged.
+        Assertions.assertTrue(
+                ConstantOperator.createDouble(-1.0).compareTo(ConstantOperator.createDouble(0.0)) < 0);
+        Assertions.assertTrue(
+                ConstantOperator.createDouble(2.0).compareTo(ConstantOperator.createDouble(1.0)) > 0);
+        Assertions.assertEquals(0,
+                ConstantOperator.createDouble(1.5).compareTo(ConstantOperator.createDouble(1.5)));
+    }
 }
