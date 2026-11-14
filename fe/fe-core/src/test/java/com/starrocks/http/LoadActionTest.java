@@ -17,6 +17,7 @@ package com.starrocks.http;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ProcResult;
@@ -24,6 +25,7 @@ import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
 import com.starrocks.load.batchwrite.TableId;
 import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -110,6 +112,128 @@ public class LoadActionTest extends StarRocksHttpTestCase {
             assertEquals(307, response.code(), response.message());
             String location = response.header("Location");
             assertTrue(redirectLocations.contains(location));
+        }
+    }
+
+    @Test
+    public void testStreamLoadRedirectSchemeAndPortConfigurable() throws Exception {
+        // https scheme + custom port => the FE 307 Location uses them (e.g. a TLS sidecar/proxy
+        // in front of BE/CN), instead of the hardcoded http + the backend's real be_http_port.
+        assertBatchWriteRedirect("https", 8050, "https", 8050);
+    }
+
+    @Test
+    public void testRedirectDefaultsUnchanged() throws Exception {
+        // Defaults (http + port 0 => backend's real be_http_port 8040) reproduce original behavior.
+        assertBatchWriteRedirect("http", 0, "http", 8040);
+    }
+
+    @Test
+    public void testRedirectHttpsSchemeOnly() throws Exception {
+        // https scheme, port unset => https on the backend's real be_http_port.
+        assertBatchWriteRedirect("https", 0, "https", 8040);
+    }
+
+    @Test
+    public void testRedirectInvalidSchemeFallsBackToHttp() throws Exception {
+        // An unknown/empty scheme must not break Stream Load; it falls back to http.
+        assertBatchWriteRedirect("ftp", 0, "http", 8040);
+        // Invalid scheme degrades scheme AND port together to http + the backend's real port,
+        // so a custom (TLS) port is never kept with plaintext http against a TLS-only listener.
+        assertBatchWriteRedirect("", 8050, "http", 8040);
+    }
+
+    @Test
+    public void testRedirectInvalidPortFallsBackToBackendPort() throws Exception {
+        // An out-of-range port (> 65535 or negative) is invalid: the FE degrades scheme AND port
+        // together to http + the backend's real port (8040), so it never emits https against the
+        // backend's plaintext HTTP port (which would make the load fail).
+        assertBatchWriteRedirect("https", 70000, "http", 8040);
+        assertBatchWriteRedirect("https", -5, "http", 8040);
+    }
+
+    @Test
+    public void testRedirectForwardedProtoPreservesScheme() throws Exception {
+        // Scheme-preserving redirect: when honor-forwarded-proto is enabled, the inbound
+        // X-Forwarded-Proto (set by a TLS-terminating proxy in front of the FE) overrides the
+        // configured scheme per-request, so HTTP and HTTPS clients coexist without a cluster-wide flag.
+        String origScheme = Config.stream_load_redirect_scheme;
+        int origPort = Config.stream_load_redirect_port;
+        boolean origHonor = Config.stream_load_redirect_honor_forwarded_proto;
+        try {
+            Config.stream_load_redirect_scheme = "http";
+            Config.stream_load_redirect_port = 8050;
+
+            // Flag OFF (default): X-Forwarded-Proto is ignored -> configured scheme (http) used.
+            Config.stream_load_redirect_honor_forwarded_proto = false;
+            RestBaseAction.RedirectTarget t = RestBaseAction.resolveRedirectTarget(8040, "https");
+            Assertions.assertEquals("http", t.scheme);
+            Assertions.assertEquals(8050, t.port);
+
+            // Flag ON: X-Forwarded-Proto=https -> https; port resolution unchanged.
+            Config.stream_load_redirect_honor_forwarded_proto = true;
+            t = RestBaseAction.resolveRedirectTarget(8040, "https");
+            Assertions.assertEquals("https", t.scheme);
+            Assertions.assertEquals(8050, t.port);
+
+            // Flag ON, X-Forwarded-Proto=http -> http even though... (config is http here anyway).
+            t = RestBaseAction.resolveRedirectTarget(8040, "http");
+            Assertions.assertEquals("http", t.scheme);
+
+            // Chained header "https, http" -> left-most (original client scheme) wins -> https.
+            t = RestBaseAction.resolveRedirectTarget(8040, "https, http");
+            Assertions.assertEquals("https", t.scheme);
+
+            // Null / unknown header -> fall back to configured scheme (http).
+            Assertions.assertEquals("http", RestBaseAction.resolveRedirectTarget(8040, null).scheme);
+            Assertions.assertEquals("http", RestBaseAction.resolveRedirectTarget(8040, "spdy").scheme);
+        } finally {
+            Config.stream_load_redirect_scheme = origScheme;
+            Config.stream_load_redirect_port = origPort;
+            Config.stream_load_redirect_honor_forwarded_proto = origHonor;
+        }
+    }
+
+    /**
+     * Helper: run a batch-write Stream Load against 3 mocked compute nodes (http port 8040) with the
+     * given redirect scheme/port config, and assert the 307 Location matches expectedScheme/expectedPort.
+     */
+    private void assertBatchWriteRedirect(String cfgScheme, int cfgPort,
+                                          String expectedScheme, int expectedPort) throws Exception {
+        String originalScheme = Config.stream_load_redirect_scheme;
+        int originalPort = Config.stream_load_redirect_port;
+        try {
+            Config.stream_load_redirect_scheme = cfgScheme;
+            Config.stream_load_redirect_port = cfgPort;
+
+            Map<String, String> map = new HashMap<>();
+            map.put(HTTP_ENABLE_BATCH_WRITE, "true");
+            Request request = buildRequest(map);
+            List<ComputeNode> computeNodes = new ArrayList<>();
+            List<String> expectedLocations = new ArrayList<>();
+            for (int i = 1; i <= 3; i++) {
+                String host = "192.0.0." + i;
+                computeNodes.add(new ComputeNode(i, host, 9050));
+                computeNodes.get(i - 1).setHttpPort(8040);
+                expectedLocations.add(String.format(
+                        "%s://%s:%d/api/%s/%s/_stream_load", expectedScheme, host, expectedPort, DB_NAME, TABLE_NAME));
+            }
+            new MockUp<BatchWriteMgr>() {
+                @Mock
+                public RequestCoordinatorBackendResult requestCoordinatorBackends(
+                        TableId tableId, StreamLoadKvParams params, UserIdentity userIdentity) {
+                    return new RequestCoordinatorBackendResult(new TStatus(TStatusCode.OK), computeNodes);
+                }
+            };
+            try (Response response = noRedirectClient.newCall(request).execute()) {
+                assertEquals(307, response.code(), response.message());
+                String location = response.header("Location");
+                assertTrue(expectedLocations.contains(location),
+                        "cfgScheme=" + cfgScheme + " cfgPort=" + cfgPort + " -> unexpected Location: " + location);
+            }
+        } finally {
+            Config.stream_load_redirect_scheme = originalScheme;
+            Config.stream_load_redirect_port = originalPort;
         }
     }
 
