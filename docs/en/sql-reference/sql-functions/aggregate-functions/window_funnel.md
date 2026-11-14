@@ -21,14 +21,16 @@ This function works according to the following rules:
 ## Syntax
 
 ```Plain
-BIGINT window_funnel(BIGINT window, DATE|DATETIME time, INT mode, array[cond1, cond2, ..., condN])
+BIGINT window_funnel(BIGINT window, DATE|DATETIME|INT|BIGINT time, INT mode, array[cond1, cond2, ..., condN])
 ```
 
 ## Parameters
 
 - `window`: The length of the sliding window. The supported data type is BIGINT. The unit depends on the `time` parameter. If the data type of `time` is DATE, the unit is days. If the data type of `time` is DATETIME, the unit is seconds.
+  - Nonnegative windows retain the inclusive upper bound: `event_time <= first_event_time + window`. For INT and BIGINT inputs, the window uses the same unit as the input values.
+  - `-1` restricts each chain to the UTC calendar day of its first event. DATE inputs must have the same date. DATETIME values are interpreted as UTC without applying the session time zone. INT and BIGINT inputs must be Unix timestamps in milliseconds in this mode. Values below `-1` are invalid.
 
-- `time`: The column containing timestamps. DATE and DATETIME types are supported.
+- `time`: The column containing timestamps. DATE, DATETIME, INT, and BIGINT types are supported.
 
 - `mode`: The mode in which the event chain is filtered. The supported data type is INT. Value range: 0, 1, 2.
   - `0` is the default value, which indicates common funnel calculation.
@@ -37,6 +39,7 @@ BIGINT window_funnel(BIGINT window, DATE|DATETIME time, INT mode, array[cond1, c
   - `4` indicates the `INCREASE` mode, which means the filtered events must have strictly increasing timestamps. Duplicate timestamp disrupts the event chain. This mode is supported since version 2.5.
 
 - `array`: The defined event chain. It must be an array.
+  - With `mode = 4`, predicates can repeat, for example `[event_type = 'A', event_type = 'A']` or `[event_type = 'A', event_type = 'B', event_type = 'B']`. Each matched step requires a strictly later timestamp; one row, or multiple rows with the same timestamp, cannot satisfy consecutive steps. Two A events with increasing timestamps can therefore complete the first example. Other filtering modes retain their existing rules.
 
 ## Return value
 

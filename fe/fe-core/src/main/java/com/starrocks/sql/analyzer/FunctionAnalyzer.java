@@ -455,8 +455,8 @@ public class FunctionAnalyzer {
             if (windowArg instanceof IntLiteral) {
                 IntLiteral windowIntLiteral = (IntLiteral) windowArg;
                 long windowValue = windowIntLiteral.getValue();
-                if (windowValue < 0) {
-                    throw new SemanticException("window argument must >= 0", windowArg.getPos());
+                if (windowValue < -1) {
+                    throw new SemanticException("window argument must >= -1", windowArg.getPos());
                 }
             } else {
                 throw new SemanticException("window argument must be numerical type", windowArg.getPos());

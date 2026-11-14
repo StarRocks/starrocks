@@ -23,14 +23,16 @@ products: [oss, enterprise, cloud, anywhere]
 ## 语法
 
 ```Haskell
-BIGINT window_funnel(BIGINT window, DATE|DATETIME time, INT mode, array[cond1, cond2, ..., condN])
+BIGINT window_funnel(BIGINT window, DATE|DATETIME|INT|BIGINT time, INT mode, array[cond1, cond2, ..., condN])
 ```
 
 ## 参数说明
 
 - `window`：滑动窗口的大小，类型为 BIGINT。单位取决于 `time` 参数，如果 `time` 的取值类型为DATE，窗口单位为天；如果 `time` 的取值类型为 DATETIME，窗口单位为秒。
+  - 非负窗口保留包含上限的判断：`event_time <= first_event_time + window`。INT 和 BIGINT 输入的窗口单位与输入值一致。
+  - `-1` 表示事件链只能在第一个事件所在的 UTC 自然日内匹配。DATE 输入必须为同一日期；DATETIME 值按 UTC 解释，不进行会话时区转换；INT 和 BIGINT 输入在此模式下必须为 Unix 毫秒时间戳。不支持小于 `-1` 的值。
 
-- `time`：包含时间戳的列。目前支持 DATE 和 DATETIME 类型。
+- `time`：包含时间戳的列。支持 DATE、DATETIME、INT 和 BIGINT 类型。
 
 - `mode`：事件链的筛选模式，类型为 INT。取值范围：0，1，2，4。
   - 默认值为 `0`，表示执行最一般的漏斗计算。
@@ -39,6 +41,7 @@ BIGINT window_funnel(BIGINT window, DATE|DATETIME time, INT mode, array[cond1, c
   - 模式为 `4` 时（bits 设置第3位）表示 `INCREASE` 模式，即筛选出的事件链中，连续事件的时间戳必须严格递增。**此模式自 2.5 版本开始支持。**
 
 - `array`：定义的事件链，类型为 ARRAY 。
+  - 使用 `mode = 4` 时，条件可以重复，例如 `[event_type='A', event_type='A']` 或 `[event_type='A', event_type='B', event_type='B']`。每个匹配步骤都需要严格递增的时间戳；一行数据或多行相同时间戳的数据不能完成连续步骤。因此，两个时间戳递增的 A 事件可以完成第一个示例。其他筛选模式保留原有规则。
 
 ## 返回值说明
 
