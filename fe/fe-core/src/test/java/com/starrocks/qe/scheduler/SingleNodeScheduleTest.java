@@ -20,9 +20,14 @@ import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
+import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TNetworkAddress;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.thrift.TBase;
+import org.apache.thrift.TSerializer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -30,6 +35,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -89,6 +96,38 @@ public class SingleNodeScheduleTest extends SchedulerTestBase {
 
         Assertions.assertTrue(usedBatchInterface.get(),
                 "single node scheduler should call execBatchPlanFragmentsAsync");
+    }
+
+    @Test
+    public void testCommonParamSharesFragmentOfFirstRequest() throws Exception {
+        List<TExecBatchPlanFragmentsParams> batchRequests = new ArrayList<>();
+        new MockUp<TSerializer>() {
+            @Mock
+            public byte[] serialize(Invocation invocation, TBase<?, ?> base) {
+                if (base instanceof TExecBatchPlanFragmentsParams) {
+                    batchRequests.add((TExecBatchPlanFragmentsParams) base);
+                }
+                return invocation.proceed(base);
+            }
+        };
+
+        String sql = "select * from lineitem l join orders o on l.l_orderkey = o.o_orderkey";
+        DefaultCoordinator coordinator = startScheduling(sql);
+        Assertions.assertTrue(coordinator.getExecStatus().ok());
+
+        Assertions.assertEquals(1, batchRequests.size());
+        TExecPlanFragmentParams commonParam = batchRequests.get(0).getCommon_param();
+        TExecPlanFragmentParams firstRequest = batchRequests.get(0).getUnique_param_per_instance().get(0);
+        // A deep copy of the fragment would no longer share the TTypeDesc objects of its expr nodes.
+        Assertions.assertSame(firstRequest.getFragment(), commonParam.getFragment());
+        Assertions.assertSame(firstRequest.getParams(), commonParam.getParams());
+
+        // Only the common param carries the desc table, the rest is the same as the first request.
+        Assertions.assertFalse(commonParam.getDesc_tbl().getTupleDescriptors().isEmpty());
+        Assertions.assertTrue(firstRequest.getDesc_tbl().getTupleDescriptors().isEmpty());
+        TExecPlanFragmentParams expectedCommonParam = firstRequest.deepCopy();
+        expectedCommonParam.setDesc_tbl(commonParam.getDesc_tbl());
+        Assertions.assertEquals(expectedCommonParam, commonParam);
     }
 
     @Test

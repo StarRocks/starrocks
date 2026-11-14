@@ -74,7 +74,7 @@ public class ExecCast extends ExecExpr {
         Type childType = children.get(0).getType();
         if (childType.isComplexType() || childType.isDecimalOfAnyVersion()
                 || childType.isChar() || childType.isVarchar()) {
-            node.setChild_type_desc(TypeSerializer.toThrift(childType));
+            node.setChild_type_desc(TypeDescSharingScope.toThrift(childType));
         }
         if (!childType.isComplexType()) {
             node.setChild_type(TypeSerializer.toThrift(childType.getPrimitiveType()));
