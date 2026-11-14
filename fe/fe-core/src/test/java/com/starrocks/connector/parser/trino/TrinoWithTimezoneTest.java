@@ -99,7 +99,8 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                 "'America/Los_Angeles'), '%H:%i:%s')", "convert_tz(time_slice(microseconds_add(",
                 "'-08:00', 'America/Los_Angeles')");
         assertPlanContains("select cast(with_timezone(TIMESTAMP '2024-03-10 09:59:59.9996', 'UTC') " +
-                "AT TIME ZONE 'America/Los_Angeles' AS TIMESTAMP)", "time_slice(microseconds_add(convert_tz(");
+                "AT TIME ZONE 'America/Los_Angeles' AS TIMESTAMP)",
+                "time_slice(microseconds_add('2024-03-10 01:59:59.999600', 500), 1, 'millisecond', 'floor')");
         String plan = getFragmentPlan("select CAST(with_timezone(TIMESTAMP '2024-08-19 14:36:41.6', 'UTC') " +
                 "AS TIMESTAMP(6))");
         Assertions.assertFalse(plan.contains("microseconds_add"), plan);
