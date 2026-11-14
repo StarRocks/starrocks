@@ -522,7 +522,12 @@ Status LevelBuilder::_write_byte_array_column_chunk(const LevelBuilderContext& c
         const auto* __restrict offsets = offsets_buf.data();
         for (size_t i = 0; i < col->size(); i++) {
             values[i].len = static_cast<uint32_t>(offsets[i + 1] - offsets[i]);
-            values[i].ptr = reinterpret_cast<const uint8_t*>(vb.data() + offsets[i]);
+            // Empty strings in a column whose bytes buffer is completely empty carry a nullptr data pointer.
+            // parquet-cpp treats a nullptr ptr as "no value" when it updates the min/max statistics
+            // (BinaryLikeCompareHelperBase::Min/Max), which drops empty strings from the column chunk statistics
+            // and makes min/max pruning skip the row group for `col = ''`. Use a valid pointer.
+            values[i].ptr = values[i].len == 0 ? reinterpret_cast<const uint8_t*>("")
+                                               : reinterpret_cast<const uint8_t*>(vb.data() + offsets[i]);
         }
     });
 
