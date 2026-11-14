@@ -16,12 +16,15 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
 #include <string>
 
 #include "common/config_exec_fwd.h"
 #include "common/util/thrift_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
+#include "runtime/java/jni_env.h"
+#include "runtime/java/jvm_helper.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -493,6 +496,53 @@ TEST_F(JniScannerTest, test_close_without_jni_init) {
 
     // If we reach here, the test passed (no crash occurred)
     ASSERT_TRUE(true);
+}
+
+// Regression test for a scan-executor thread observing a stale pending Java exception.
+// The scan-executor thread that runs do_close() is reused by unrelated scan tasks, and the JVM
+// may crash with a native SIGSEGV when a later JNI call sees an exception that close() raised
+// and nobody cleared.
+TEST_F(JniScannerTest, test_close_clears_pending_java_exception_from_close) {
+    if (std::getenv("JAVA_HOME") == nullptr) {
+        GTEST_SKIP() << "JAVA_HOME is not set";
+    }
+    JNIEnv* env = getJNIEnv();
+    if (env == nullptr) {
+        GTEST_SKIP() << "JVM is unavailable";
+    }
+
+    // An empty ArrayList's iterator has a `remove()V` that throws IllegalStateException, which
+    // matches the ()V signature that JniScanner uses for the scanner's close() method.
+    jclass list_cls = env->FindClass("java/util/ArrayList");
+    ASSERT_NE(list_cls, nullptr);
+    LOCAL_REF_GUARD_ENV(env, list_cls);
+    jmethodID list_constructor = env->GetMethodID(list_cls, "<init>", "()V");
+    ASSERT_NE(list_constructor, nullptr);
+    jobject list = env->NewObject(list_cls, list_constructor);
+    ASSERT_NE(list, nullptr);
+    LOCAL_REF_GUARD_ENV(env, list);
+    jmethodID iterator_method = env->GetMethodID(list_cls, "iterator", "()Ljava/util/Iterator;");
+    ASSERT_NE(iterator_method, nullptr);
+    jobject iterator = env->CallObjectMethod(list, iterator_method);
+    ASSERT_NE(iterator, nullptr);
+    LOCAL_REF_GUARD_ENV(env, iterator);
+    jclass iterator_cls = env->GetObjectClass(iterator);
+    ASSERT_NE(iterator_cls, nullptr);
+    LOCAL_REF_GUARD_ENV(env, iterator_cls);
+    jmethodID remove_method = env->GetMethodID(iterator_cls, "remove", "()V");
+    ASSERT_NE(remove_method, nullptr);
+    ASSERT_FALSE(env->ExceptionCheck());
+
+    std::map<std::string, std::string> params = {{"test_key", "test_value"}};
+    auto scanner = std::make_unique<JniScanner>("com/test/TestFactory", params);
+    scanner->_jni_scanner_obj = env->NewGlobalRef(iterator);
+    scanner->_jni_scanner_close = remove_method;
+
+    // close() throws, so do_close() must observe and clear the exception before it returns.
+    scanner->do_close(_runtime_state);
+
+    ASSERT_FALSE(env->ExceptionCheck()) << "do_close() left a pending Java exception on the JNIEnv";
+    ASSERT_EQ(scanner->_jni_scanner_obj, nullptr);
 }
 
 } // namespace starrocks
