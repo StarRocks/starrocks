@@ -25,6 +25,7 @@ import org.apache.arrow.memory.RootAllocator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
 public class ArrowFlightSqlService {
@@ -52,22 +53,38 @@ public class ArrowFlightSqlService {
             return;
         }
 
+        // Throws if TLS is enabled but misconfigured, so that the FE doesn't come up serving plaintext.
+        ArrowFlightSqlTlsConfig tls = ArrowFlightSqlTlsConfig.fromConfig();
+
         // Memory allocator: A memory allocator is needed to manage memory.
         BufferAllocator allocator = new RootAllocator();
-        this.location = Location.forGrpcInsecure("0.0.0.0", port);
-        this.feEndpoint = Location.forGrpcInsecure(FrontendOptions.getLocalHostAddress(), port);
+        if (tls == null) {
+            this.location = Location.forGrpcInsecure("0.0.0.0", port);
+            this.feEndpoint = Location.forGrpcInsecure(FrontendOptions.getLocalHostAddress(), port);
+        } else {
+            this.location = Location.forGrpcTls("0.0.0.0", port);
+            this.feEndpoint = Location.forGrpcTls(FrontendOptions.getLocalHostAddress(), port);
+        }
 
         ArrowFlightSqlSessionManager sessionManager = new ArrowFlightSqlSessionManager();
         ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
 
         // Request handler: Processing client SQL requests.
-        this.producer = new ArrowFlightSqlServiceImpl(sessionManager, feEndpoint);
+        this.producer = new ArrowFlightSqlServiceImpl(sessionManager, feEndpoint, tls);
 
         // Constructs the server object of the Arrow Flight SQL.
-        this.flightServer = FlightServer.builder(allocator, location, producer)
+        FlightServer.Builder serverBuilder = FlightServer.builder(allocator, location, producer)
                 .headerAuthenticator(authenticator)
-                .setMaxHeaderListSize(Config.arrow_flight_max_header_size)
-                .build();
+                .setMaxHeaderListSize(Config.arrow_flight_max_header_size);
+        if (tls != null) {
+            try {
+                tls.configure(serverBuilder);
+            } catch (IOException e) {
+                throw new IllegalStateException("Failed to set up TLS for the Arrow Flight SQL server [" + tls + "]", e);
+            }
+            LOG.info("[ARROW] Arrow Flight SQL server uses TLS [{}].", tls);
+        }
+        this.flightServer = serverBuilder.build();
     }
 
     public void start() {
