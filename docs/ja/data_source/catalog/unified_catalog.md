@@ -456,7 +456,7 @@ StarRocks が Hive、Hudi、および Delta Lake のキャッシュされたメ�
 | metastore_cache_refresh_interval_sec   | いいえ | StarRocks が自身にキャッシュされた Hive、Hudi、または Delta Lake テーブルまたはパーティションのメタデータを非同期で更新する時間間隔。単位：秒。デフォルト値：`7200`（2 時間）。 |
 | remote_file_cache_refresh_interval_sec | いいえ | StarRocks が自身にキャッシュされた Hive、Hudi、または Delta Lake テーブルまたはパーティションの基礎データファイルのメタデータを非同期で更新する時間間隔。単位：秒。デフォルト値：`60`。 |
 | metastore_cache_ttl_sec                | いいえ | StarRocks が自身にキャッシュされた Hive、Hudi、または Delta Lake テーブルまたはパーティションのメタデータを自動的に破棄する時間間隔。単位：秒。デフォルト値：`86400`（24 時間）。 |
-| remote_file_cache_ttl_sec              | いいえ | StarRocks が自身にキャッシュされた Hive、Hudi、または Delta Lake テーブルまたはパーティションの基礎データファイルのメタデータを自動的に破棄する時間間隔。単位：秒。デフォルト値：`129600`（36 時間）。 |
+| remote_file_cache_ttl_sec              | いいえ | StarRocks が自身にキャッシュされた Hive、Hudi、または Delta Lake テーブルまたはパーティションの基礎データファイルのメタデータを自動的に破棄する時間間隔。単位：秒。デフォルト値：v3.5.7 および v4.0.0 以降は `86400`（24 時間）、それ以前のバージョンでは `129600`（36 時間）。 |
 
 #### PaimonCatalogParams
 

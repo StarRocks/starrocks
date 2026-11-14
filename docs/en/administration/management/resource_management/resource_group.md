@@ -137,10 +137,10 @@ WITH (
 
 Defines the memory usage threshold that triggers spilling to disk. The value range is (0,1), with the default being 1 (inactive). Introduced in v3.1.7.
 
-- When automatic spilling is enabled (`spill_mode` set to `auto`), but resource groups are disabled, the system will spill intermediate results to disk when a query’s memory usage exceeds 80% of `query_mem_limit`.
+- When automatic spilling is enabled (`spill_mode` set to `auto`), but resource groups are disabled, the system will spill intermediate results to disk when a query’s memory usage exceeds 80% of its effective memory limit, which is the smaller of `query_mem_limit` (if it is set) and the memory limit that the query inherits from the BE. In versions earlier than v4.0.16 and v4.1.6, `query_mem_limit` is not taken into account, and the 80% is calculated based only on the memory limit inherited from the BE.
 - When resource groups are enabled, spilling will occur if:
   - The total memory usage of all queries in the group exceeds `current BE memory limit * mem_limit * spill_mem_limit_threshold`, or
-  - The memory usage of the current query exceeds 80% of `query_mem_limit`.
+  - The memory usage of the current query exceeds 80% of its effective memory limit, which is the smallest of `query_mem_limit` (if it is set), `big_query_mem_limit` (if it is set), and the memory limit of the resource group. In versions earlier than v4.0.16 and v4.1.6, only the memory limit of the resource group is taken into account.
 
 #### Query concurrency parameters
 
@@ -215,9 +215,9 @@ Classifiers support the following conditions:
 - `role`: the role of the user.
 - `query_type`: the type of the query. `SELECT` and `INSERT` (from v2.5) are supported. When INSERT INTO or BROKER LOAD tasks hit a resource group with `query_type` as `insert`, the BE node reserves the specified CPU resources for the tasks.
 - `source_ip`: the CIDR block from which the query is initiated.
-- `db`: the database which the query accesses. It can be specified by strings separated by commas `,`.
-- `plan_cpu_cost_range`: The estimated CPU cost range of the query. The format is `(DOUBLE, DOUBLE]`. The default value is NULL, indicating no such restriction. The `PlanCpuCost` column in `fe.audit.log` represents the system's estimate of the CPU cost for the query. This parameter is supported from v3.1.4 onwards.
-- `plan_mem_cost_range`: The system-estimated memory cost range of a query. The format is `(DOUBLE, DOUBLE]`. The default value is NULL, indicating no such restriction. The `PlanMemCost` column in `fe.audit.log` represents the system's estimate of the memory cost for the query. This parameter is supported from v3.1.4 onwards.
+- `db`: the database which the query accesses. It can be specified by strings separated by commas `,`. A classifier with `db` matches a query only when it includes all the databases that the query accesses.
+- `plan_cpu_cost_range`: The estimated CPU cost range of the query. The format is `[DOUBLE, DOUBLE)`. The default value is NULL, indicating no such restriction. The `PlanCpuCost` column in `fe.audit.log` represents the system's estimate of the CPU cost for the query. This parameter is supported from v3.1.4 onwards.
+- `plan_mem_cost_range`: The system-estimated memory cost range of a query. The format is `[DOUBLE, DOUBLE)`. The default value is NULL, indicating no such restriction. The `PlanMemCost` column in `fe.audit.log` represents the system's estimate of the memory cost for the query. This parameter is supported from v3.1.4 onwards.
 
 A classifier matches a query only when one or all conditions of the classifier match the information about the query. If multiple classifiers match a query, StarRocks calculates the degree of matching between the query and each classifier and identifies the classifier with the highest degree of matching.
 
@@ -229,9 +229,9 @@ StarRocks calculates the degree of matching between a query and a classifier by 
 
 - If the classifier has the same value of `user` as the query, the degree of matching of the classifier increases by 1.
 - If the classifier has the same value of `role` as the query, the degree of matching of the classifier increases by 1.
-- If the classifier has the same value of `query_type` as the query, the degree of matching of the classifier increases by 1 plus the number obtained from the following calculation: 1/Number of `query_type` fields in the classifier.
-- If the classifier has the same value of `source_ip` as the query, the degree of matching of the classifier increases by 1 plus the number obtained from the following calculation: (32 - `cidr_prefix`)/64.
-- If the classifier has the same value of `db` as the query, the degree of matching of the classifier increases by 10.
+- If the classifier has the same value of `query_type` as the query, the degree of matching of the classifier increases by 1 plus the number obtained from the following calculation: 0.1/Number of `query_type` fields in the classifier.
+- If the classifier has the same value of `source_ip` as the query, the degree of matching of the classifier increases by 1 plus the number obtained from the following calculation: `cidr_prefix`/64.
+- If the classifier has the same value of `db` as the query, the degree of matching of the classifier increases by 10 multiplied by the number of databases specified in the classifier.
 - If the query's CPU cost falls within the `plan_cpu_cost_range`, the degree of matching of the classifier increases by 1.
 - If the query's memory cost falls within the `plan_mem_cost_range`, the degree of matching of the classifier increases by 1.
 
@@ -257,15 +257,6 @@ classifier B (user='Alice', source_ip = '192.168.1.0/24')
 -- Classifier C has fewer query types specified in it than Classifier D. Therefore, Classifier C has a higher degree of matching than Classifier D.
 classifier C (user='Alice', query_type in ('select'))
 classifier D (user='Alice', query_type in ('insert','select'))
-```
-
-If multiple classifiers have the same degree of matching, one of the classifiers will be randomly selected.
-
-```Plain
--- If a query simultaneously queries both db1 and db2 and the classifiers E and F have the 
--- highest degree of matching among the hit classifiers, one of E and F will be randomly selected.
-classifier E (db='db1')
-classifier F (db='db2')
 ```
 
 ## Isolate computing resources

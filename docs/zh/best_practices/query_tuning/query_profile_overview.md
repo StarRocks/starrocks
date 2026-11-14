@@ -57,7 +57,7 @@ SET runtime_profile_report_interval = 30;
 | enable_profile                   | Session Var  | true/false      | false   | 启用 Query Profile                                                                       |
 | pipeline_profile_level           | Session Var  | 1/2             | 1       | 1: 合并指标；2: 保留原始结构（禁用可视化工具）                                           |
 | runtime_profile_report_interval  | Session Var  | 正整数          | 10      | 运行时 Query Profile 报告间隔（秒）                                                      |
-| big_query_profile_threshold      | Session Var  | 字符串          | 0s      | 启用 Query Profile 的查询超过此持续时间（例如，'30s'，'500ms'，'60m'）                    |
+| big_query_profile_threshold      | Session Var  | 字符串          | 30s     | 启用 Query Profile 的查询超过此持续时间（例如，'30s'，'500ms'，'60m'）。自 v3.3.12、v3.4.2 和 v3.5.0 起默认值为 `30s`，更早版本中默认值为 `0s`（不启用）。 |
 | enable_statistics_collect_profile| FE Dynamic   | true/false      | false   | 启用与统计信息收集相关的查询的 Query Profile                                              |
 
 ## 如何获取 Query Profile

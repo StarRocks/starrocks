@@ -272,7 +272,7 @@ StarRocks 会自动进行集群内的副本均衡。
 
 #### BE 负载
 
-StarRocks 通过 `ClusterLoadStatistics` (CLS) 展示集群中每个 BE 节点的负载统计信息。Tablet Scheduler 基于 ClusterLoadStatistics 触发副本均衡。StarRocks 会评估每个 BE 节点的**磁盘利用率**和**副本数量**，并计算相应的负载分数。BE 节点的负载分数越高，该节点的负载越大。Tablet Scheduler 每一分钟更新一次 `ClusterLoadStatistics`。
+StarRocks 通过 `ClusterLoadStatistics` (CLS) 展示集群中每个 BE 节点的负载统计信息。StarRocks 会评估每个 BE 节点的**磁盘利用率**和**副本数量**，并计算相应的负载分数。BE 节点的负载分数越高，该节点的负载越大。Tablet Scheduler 每一分钟更新一次 `ClusterLoadStatistics`。
 
 `capacityCoefficient` 和 `replicaNumCoefficient` 是磁盘利用率和副本数量的权重系数，两者的和为 `1`。`capacityCoefficient` 会根据实际磁盘使用情况动态调整。当 BE 节点的整体磁盘利用率低于 50% 时，`capacityCoefficient` 值为 `0.5`。当磁盘利用率超过 `75%` 时，该值为 `1`。您可以通过 FE 配置项`capacity_used_percent_high_water` 配置此限制。如果利用率在 `50%` 和 `75%` 之间，`capacityCoefficient` 根据以下公式平滑增加：
 
@@ -283,6 +283,8 @@ capacityCoefficient= 2 * Disk utilization - 0.5
 `capacityCoefficient` 保证了当磁盘使用率过高时，该 BE 节点的负载分数会增加，从而迫使系统尽快减轻该 BE 节点的负载。
 
 #### 均衡策略
+
+StarRocks 会先在 BE 节点之间均衡副本，再在单个 BE 节点的各磁盘之间均衡副本。副本均衡不依赖负载分数。如果所有 BE 节点的磁盘利用率都低于 FE 配置项 `tablet_sched_balance_load_disk_safe_threshold` 的值（默认：50%），或者最高与最低磁盘利用率之差小于 `tablet_sched_balance_load_score_threshold` 的值（默认：10%），StarRocks 会在 BE 节点之间均衡每个分区的 Tablet 数量。否则，StarRocks 会将副本从磁盘利用率高的 BE 节点迁移到磁盘利用率低的 BE 节点。
 
 Tablet Scheduler 调度 Tablet 时，会选择一定数量的正常 Tablet 作为候选 Tablet。调度 Tablet 时，Tablet Scheduler 会通过 Load Balancer 平衡这些正常的 Tablet。
 

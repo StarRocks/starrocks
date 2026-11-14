@@ -168,7 +168,8 @@ Block Cache 支持两种模式，即同步填充和异步填充。您可以根�
 
 - `DataCacheReadBytes`：系统直接从内存和磁盘读取的数据大小。
 - `DataCacheWriteBytes`：从远程存储系统加载到内存和磁盘的数据大小。
-- `BytesRead`：读取的总数据量，包括系统从远程存储系统、内存和磁盘读取的数据。
+- `AppIOBytesRead`：读取的总数据量，包括系统从远程存储系统、内存和磁盘读取的数据。
+- `FSIOBytesRead`：系统从远程存储系统读取的数据大小。
 
 示例 1：在此示例中，系统从远程存储系统读取了大量数据（7.65 GB），而从磁盘读取的数据很少（518.73 MB）。这意味着很少有 Block Cache 被命中。
 
@@ -190,12 +191,9 @@ Block Cache 支持两种模式，即同步填充和异步填充。您可以根�
  - DataCacheWriteTimer: 23.467ms
    - __MAX_OF_DataCacheWriteTimer: 62.280ms
    - __MIN_OF_DataCacheWriteTimer: 0ns
- - BufferUnplugCount: 15
-   - __MAX_OF_BufferUnplugCount: 2
-   - __MIN_OF_BufferUnplugCount: 0
- - BytesRead: 7.65 GB
-   - __MAX_OF_BytesRead: 64.39 MB
-   - __MIN_OF_BytesRead: 0.00
+ - FSIOBytesRead: 7.65 GB
+   - __MAX_OF_FSIOBytesRead: 64.39 MB
+   - __MIN_OF_FSIOBytesRead: 0.00
 ```
 
 示例 2：在此示例中，系统从数据缓存中读取了大量数据（46.08 GB），而没有从远程存储系统读取数据，这意味着它仅从 Block Cache 中读取数据。
@@ -214,12 +212,9 @@ Table: lineitem
 - DataCacheWriteBytes: 0.00 
 - DataCacheWriteCounter: 0
 - DataCacheWriteTimer: 0ns
-- BufferUnplugCount: 1.231K (1231)
- - __MAX_OF_BufferUnplugCount: 81
- - __MIN_OF_BufferUnplugCount: 35
-- BytesRead: 46.08 GB
- - __MAX_OF_BytesRead: 194.99 MB
- - __MIN_OF_BytesRead: 81.25 MB
+- AppIOBytesRead: 46.08 GB
+ - __MAX_OF_AppIOBytesRead: 194.99 MB
+ - __MIN_OF_AppIOBytesRead: 81.25 MB
 ```
 
 ## I/O 自适配

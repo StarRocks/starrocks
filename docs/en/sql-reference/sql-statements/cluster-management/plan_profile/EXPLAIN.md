@@ -17,14 +17,14 @@ This operation does not require privileges.
 ## Syntax
 
 ```SQL
-EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
+EXPLAIN [ LOGICAL | VERBOSE | COSTS | SCHEDULER ] <query>
 ```
 
 :::tip
 
 The level of execution plan detail returned: EXPLAIN LOGICAL < EXPLAIN < EXPLAIN VERBOSE < EXPLAIN COSTS.
 
-From v3.3.5, the default detail level is changed to `COSTS`. You can configure the level of details returned by EXPLAIN using the dynamic FE parameter `query_detail_explain_level`.
+If no level is specified, EXPLAIN returns the plan at the default level. From v3.5.11, v4.0.4, and v4.1.0 onwards, you can configure this default level using the dynamic FE parameter `query_explain_level` (default: `NORMAL`, that is, the level of EXPLAIN in the order above). In v3.5.10, v4.0.2, and v4.0.3, the default level follows the dynamic FE parameter `query_detail_explain_level` (default: `COSTS`). In other versions, the default level cannot be changed.
 
 In most cases, using EXPLAIN is sufficient. EXPLAIN VERBOSE and EXPLAIN COSTS will print a lot of internal information, which is mainly used for debugging the execution plan.
 
@@ -36,12 +36,13 @@ In most cases, using EXPLAIN is sufficient. EXPLAIN VERBOSE and EXPLAIN COSTS wi
 | ------------- | ---------------------------------------------------------- |
 | LOGICAL       | Shows the simple logical execution plans.                  |
 | VERBOSE       | Shows the detailed logical execution plans, including data types, nullable information, and optimization strategy. |
-| COSTS (Default) | Shows the detailed logical execution plans, including column statistics. |
+| COSTS         | Shows the detailed logical execution plans, including column statistics. |
+| SCHEDULER     | Shows how the fragment instances of the query are scheduled to nodes, without executing the query. Supported from v3.2. |
 | query         | The query statement whose execution plan you want to view. |
 
 > **NOTE**
 >
-> You can configure the level of details returned by EXPLAIN using the dynamic FE parameter `query_detail_explain_level`.
+> The dynamic FE parameter `query_detail_explain_level` controls the level of the execution plan recorded in query details, not the level returned by EXPLAIN (except in v3.5.10, v4.0.2, and v4.0.3).
 
 ## Return value
 

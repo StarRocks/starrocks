@@ -111,11 +111,12 @@ products: [oss, enterprise, cloud, anywhere]
 控制配置：
 
 ```properties
-proc_profile_collect_interval_s = 600
-proc_profile_collect_time_s = 300
+proc_profile_collect_time_s = 120
 proc_profile_cpu_enable = true
 proc_profile_mem_enable = true
 ```
+
+自 v3.4.5 和 v3.5.0 起，CPU profile 与内存 profile 轮流采集，中间无间隔，每次采集 `proc_profile_collect_time_s` 秒。在更早版本中，`proc_profile_collect_time_s` 的默认值为 `300`，并由 `proc_profile_collect_interval_s`（默认值：`600`）控制两次采集之间的间隔。
 
 对于 3.3.6 之前的版本，可以通过脚本定期打印 profile。在每个 FE 的安装目录下新建一个名为 `mem_profiler.sh` 的脚本文件，并将以下内容复制到该文件中。
 
@@ -300,24 +301,24 @@ jstat -gcutil $pid 1000 1000
 
 **5. 通过 FE 的内存追踪器（3.3.7+）观察是否存在泄漏**
 
-可以通过查看 `MemoryUsageTracker` 的日志来定位哪个模块存在内存泄漏，该日志每小时打印一次各模块的内存消耗：
+可以通过查看 `MemoryUsageTracker` 的日志来定位哪个模块存在内存泄漏，该日志每隔 `memory_tracker_interval_seconds`（默认 60）秒打印一次各模块的对象数量。自 v4.0.7 和 v4.1.0 起，这些周期性日志不再包含各模块的预估内存大小，可以通过查询 `sys.fe_memory_usage`（v4.0.17、v4.1.7 及以后版本）获取预估大小。在更早版本中，每条日志还包含该模块的预估内存大小，例如 `LocalMetastore estimated 3.8MB of memory`。
 
-```
-2025-06-06 16:37:50.633+08:00 INFO (MemoryUsageTracker|74)
-[MemoryUsageTracker.trackMemory():161] (6ms) Module Dict -
-CacheDictManager estimated 0B of memory. Contains ColumnDict with 0 object(s).
+```plaintext
+2025-06-06 16:37:50.633+08:00 INFO (memory-usage-tracker|74)
+[MemoryUsageTracker.trackCount():236] Module Dict -
+CacheDictManager. Contains ColumnDict with 0 object(s).
 
-2025-06-06 16:37:50.657+08:00 INFO (MemoryUsageTracker|74)
-[MemoryUsageTracker.trackMemory():161] (21ms) Module LocalMetastore -
-LocalMetastore estimated 3.8MB of memory. Contains Partition with 17473 object(s).
+2025-06-06 16:37:50.657+08:00 INFO (memory-usage-tracker|74)
+[MemoryUsageTracker.trackCount():236] Module LocalMetastore -
+LocalMetastore. Contains Partition with 17473 object(s).
 
-2025-06-06 16:37:50.667+08:00 INFO (MemoryUsageTracker|74)
-[MemoryUsageTracker.trackMemory():161] (0ms) Module TabletInvertedIndex -
-TabletInvertedIndex estimated 37.7MB of memory. Contains TabletMeta with 353459 object(s).
+2025-06-06 16:37:50.667+08:00 INFO (memory-usage-tracker|74)
+[MemoryUsageTracker.trackCount():236] Module TabletInvertedIndex -
+TabletInvertedIndex. Contains TabletMeta with 353459 object(s).
 
-2025-06-06 16:37:50.741+08:00 INFO (MemoryUsageTracker|74)
-[MemoryUsageTracker.trackMemory():108] total tracked memory: 46.8MB,
-jvm: Process used: 18.6GB, heap used: 4.4GB, non heap used: 289.1MB, direct buffer used: 395.5MB
+2025-06-06 16:37:50.741+08:00 INFO (memory-usage-tracker|74)
+[MemoryUsageTracker.trackMemory():125] jvm: heap committed: 8.0GB,
+heap used: 4.4GB, non heap used: 289.1MB, direct buffer used: 395.5MB
 ```
 
 对比最近几条日志中各模块的内存增长情况，找出持续增长的模块。
@@ -404,21 +405,7 @@ jmap -dump:live,format=b,file=heap_$(date +%s).hprof <pid>
 在 `fe.conf` 的 JVM 配置中添加以下内容，以便在 FE 内存耗尽时自动生成 dump 文件：
 
 ```bash
-JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true \
-  -Xmx8192m \
-  -XX:+UseG1GC \
-  -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time \
-  -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log \
-  -XX:+HeapDumpOnOutOfMemoryError \
-  -XX:HeapDumpPath=${LOG_DIR}/heap_dump_oom.hprof \
-  -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy \
-  -Djava.security.krb5.conf=/etc/krb5.conf \
-  -Dsun.security.krb5.debug=true \
-  -Dsun.security.spnego.debug=true \
-  -Dcom.sun.management.jmxremote \
-  -Dcom.sun.management.jmxremote.authenticate=false \
-  -Dcom.sun.management.jmxremote.ssl=false \
-  -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:8113"
+JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=${LOG_DIR}"
 ```
 
 注意：`HeapDumpPath` 指定的是目录路径，而非文件名。
@@ -429,18 +416,18 @@ JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true \
 
 找到与内存增长时间对应的文件，解压后在浏览器中打开，即可查看内存分配的火焰图。堆栈中较宽的部分表示分配了更多内存。
 
-如果在内存增长期间未打印内存分析文件，可以关闭 CPU 分析并将打印间隔调整为 5 分钟：
+如果在内存增长期间未打印内存分析文件，可以关闭 CPU 分析，只采集内存分析文件：
 
 ```properties
 proc_profile_cpu_enable = false
-proc_profile_collect_interval_s = 300
 ```
 
-这些是动态参数，可直接修改而无需重启：
+在 v3.4.5 之前的版本中，还可以将 `proc_profile_collect_interval_s` 设置为 `300`，将打印间隔调整为 5 分钟。
+
+该参数为动态参数，可直接修改而无需重启：
 
 ```sql
 ADMIN SET FRONTEND CONFIG ("proc_profile_cpu_enable" = "false");
-ADMIN SET FRONTEND CONFIG ("proc_profile_collect_interval_s" = "300");
 ```
 
 ## 紧急恢复
@@ -452,15 +439,7 @@ ADMIN SET FRONTEND CONFIG ("proc_profile_collect_interval_s" = "300");
 修改 `fe.conf` 中的 `-Xmx` 值：
 
 ```bash
-JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC \
-  -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time \
-  -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log \
-  -XX:+HeapDumpOnOutOfMemoryError \
-  -XX:HeapDumpPath=${LOG_DIR}/heap_dump_oom.hprof \
-  -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy \
-  -Dcom.sun.management.jmxremote.authenticate=false \
-  -Dcom.sun.management.jmxremote.ssl=false \
-  -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:8113"
+JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=${LOG_DIR}"
 ```
 
 **3. 如果机器本身内存有限**，重启后仍可能出现 OOM 问题。请考虑扩充机器内存，然后增大 JVM 配置后再重启。

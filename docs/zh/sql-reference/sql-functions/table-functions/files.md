@@ -384,9 +384,10 @@ StarRocks 目前支持使用简单身份验证访问 HDFS，使用基于 IAM 用
 
 | 参数                           | 是否必需 | 描述                                                      |
 | --------------------------- | -------- | ------------------------------------------------------------ |
+| `aws.s3.use_aws_sdk_default_behavior` | 否 | 是否使用 AWS SDK 默认的认证凭证。有效值：`true` 和 `false` (默认)。 |
 | `aws.s3.use_instance_profile` | 是      | 指定是否启用凭证方法实例配置文件和假设角色。有效值：`true` 和 `false`。默认值：`false`。 |
 | `aws.s3.iam_role_arn`         | 否       | 在您的 AWS S3 存储桶上具有权限的 IAM 角色的 ARN。如果您选择假设角色作为访问 AWS S3 的凭证方法，您必须指定此参数。 |
-| `aws.s3.region`               | 是      | 您的 AWS S3 存储桶所在的区域。示例：`us-west-1`。 |
+| `aws.s3.region`               | 否      | 您的 AWS S3 存储桶所在的区域。示例：`us-west-1`。如果不指定该参数，则使用 `us-east-1`。 |
 | `aws.s3.access_key`           | 否       | 您的 IAM 用户的访问密钥。如果您选择 IAM 用户作为访问 AWS S3 的凭证方法，您必须指定此参数。 |
 | `aws.s3.secret_key`           | 否       | 您的 IAM 用户的密钥。如果您选择 IAM 用户作为访问 AWS S3 的凭证方法，您必须指定此参数。 |
 

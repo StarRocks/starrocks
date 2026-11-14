@@ -25,7 +25,7 @@ products: [oss, enterprise, anywhere]
 - `sys_log_delete_age`: 控制旧日志文件在删除前保留的时间。默认是7天
 - `sys_log_roll_file_index`: 滚动文件索引策略（`min`、`max` 或 `nomax`）。默认是 `min`
 - `sys_log_delete_count`: 磁盘上保留的滚动归档文件数量的硬性上限，由 Delete 动作强制执行。默认是 `-1`（禁用）。
-- `sys_log_roll_mode`: 日志轮换模式。默认是`SIZE-MB-1024`，意味着当前日志文件达到1024 MB时将创建新文件。与sys_log_roll_interval结合使用，表示FE日志可以按天或文件大小轮换
+- `log_roll_size_mb`: 单个日志文件的最大大小。默认是1024，意味着当前日志文件达到1024 MB时将创建新文件。与sys_log_roll_interval结合使用，表示FE日志可以按天或文件大小轮换
 - `sys_log_enable_compress`: 控制是否启用日志压缩。默认是false，意味着压缩未启用
 
 ### `fe.warn.log`
@@ -133,7 +133,7 @@ products: [oss, enterprise, anywhere]
 - `audit_log_dir`: 控制此日志的存储目录
 - `audit_log_roll_num`: 保留的文件数量。默认是90
 - `audit_log_roll_interval`: 指定轮换频率。默认是DAY，意味着每天轮换。当满足轮换条件时，保留最新的90个文件，删除旧文件
-- `audit_log_delete_age`: 控制旧文件在删除前保留的时间。默认是7天
+- `audit_log_delete_age`: 控制旧文件在删除前保留的时间。默认是30天
 - `audit_log_roll_file_index`: 滚动文件索引策略（`min`、`max` 或 `nomax`）。默认是 `min`
 - `audit_log_delete_count`: 磁盘上保留的滚动归档文件数量的硬性上限，由 Delete 动作强制执行。默认是 `-1`（禁用）。
 - `audit_log_json_format`: 是否以JSON格式记录。默认是false
@@ -192,7 +192,7 @@ SET enable_query_dump = true;
 
 #### 配置
 
-- `dump_log_dir`: 控制此日志的存储目录
+- `dump_log_dir`: 控制此日志的存储目录。自 v3.5.16、v4.0.9 和 v4.1.0 起，该参数已被移除，`fe.dump.log` 写入 `sys_log_dir` 指定的目录。
 - `dump_log_roll_num`: 保留的文件数量。默认是10
 - `dump_log_modules`: 内部日志模块类型。默认是query
 - `dump_log_roll_interval`: 指定轮换频率。默认是DAY，意味着每天轮换。当满足轮换条件时，保留最新的10个文件，删除旧文件

@@ -19,14 +19,14 @@ products: [oss, enterprise, cloud, anywhere]
 ## 语法
 
 ```SQL
-EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
+EXPLAIN [ LOGICAL | VERBOSE | COSTS | SCHEDULER ] <query>
 ```
 
 :::tip
 
 执行计划详细程度：EXPLAIN LOGICAL < EXPLAIN < EXPLAIN VERBOSE < EXPLAIN COSTS。
 
-自 v3.3.5 起，默认的执行计划详细级别改为 `COSTS`。您可以使用动态 FE 参数 `query_detail_explain_level` 配置 EXPLAIN 返回的信息详细级别。
+如未指定级别，EXPLAIN 按默认级别返回执行计划。自 v3.5.11、v4.0.4 和 v4.1.0 起，您可以使用动态 FE 参数 `query_explain_level` 配置该默认级别（默认值：`NORMAL`，即上述顺序中 EXPLAIN 的级别）。在 v3.5.10、v4.0.2 和 v4.0.3 中，该默认级别由动态 FE 参数 `query_detail_explain_level`（默认值：`COSTS`）决定。在其他版本中，该默认级别不可修改。
 
 通常情况下使用 EXPLAIN 即可，EXPLAIN VERBOSE 和 EXPLAIN COSTS 会打印大量冗余信息，主要用于调试计划。
 
@@ -39,6 +39,7 @@ EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
 | LOGICAL  | 显示简要的逻辑执行计划。                  |
 | VERBOSE  | 显示详细的逻辑执行计划，包括数据类型，nullable 信息，优化策略等。 |
 | COSTS    | 显示详细的逻辑执行计划，包括统计信息。 |
+| SCHEDULER | 显示查询的 Fragment 实例如何被调度到各节点，不实际执行查询。自 v3.2 起支持。 |
 | query    | 需要查看执行计划的查询语句。                                  |
 
 ## 返回

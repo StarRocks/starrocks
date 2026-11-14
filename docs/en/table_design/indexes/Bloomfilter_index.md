@@ -9,7 +9,7 @@ products: [oss, enterprise, cloud, anywhere]
 
 This topic describes how to create and modify bloom filter indexes, along with how they works.
 
-A bloom filter index is a space-efficiency data structure that is used to detect the possible presence of filtered data in data files of a table. If the bloom filter index detects that the data to be filtered are not in a certain data file, StarRocks skips scanning the data file. Bloom filter indexes can reduce response time when the column (such as ID) has a relatively high cardinality.
+A bloom filter index is a space-efficiency data structure that is used to detect the possible presence of filtered data in data pages of a table. If the bloom filter index detects that the data to be filtered are not in a certain data page, StarRocks skips scanning the data page. Bloom filter indexes can reduce response time when the column (such as ID) has a relatively high cardinality.
 
 If a query hits a sort key column, StarRocks efficiently returns the query result by using the [prefix index](./Prefix_index_sort_key.md). However, the prefix index entry for a data block cannot exceed 36 bytes in length. If you want to improve the query performance on a column, which is not used as a sort key and has a relatively high cardinality, you can create a bloom filter index for the column.
 
@@ -17,8 +17,8 @@ If a query hits a sort key column, StarRocks efficiently returns the query resul
 
 For example, you create a bloom filter index on a `column1` of a given table `table1` and run a query such as `Select xxx from table1 where column1 = something;`. Then the following situations happen when StarRocks scans the data files of `table1`.
 
-- If the bloom filter index detects that a data file does not contain the data to be filtered, StarRocks skips the data file to improve query performance.
-- If the bloom filter index detects that a data file may contain the data to be filtered, StarRocks reads the data file to check whether the data exists. Note that the bloom filter can tell you for sure if a value is not present, but it cannot say for sure that a value is present, only that it may be present. Using a bloom filter index to determine whether a value is present may give false positives, which means that a bloom filter index detects that a data file contains the data to be filtered, but the data file does not actually contain the data.
+- If the bloom filter index detects that a data page does not contain the data to be filtered, StarRocks skips the data page to improve query performance.
+- If the bloom filter index detects that a data page may contain the data to be filtered, StarRocks reads the data page to check whether the data exists. Note that the bloom filter can tell you for sure if a value is not present, but it cannot say for sure that a value is present, only that it may be present. Using a bloom filter index to determine whether a value is present may give false positives, which means that a bloom filter index detects that a data page contains the data to be filtered, but the data page does not actually contain the data.
 
 ## Usage notes
 
@@ -27,7 +27,7 @@ For example, you create a bloom filter index on a `column1` of a given table `ta
   - Numeric types: SMALLINT, INT, BIGINT, and LARGEINT.
   - String types: CHAR, STRING, and VARCHAR.
   - Date types: DATE and DATETIME.
-- Bloom filter indexes can only improve the performance of queries that contain the `in` and `=` operators, such as `Select xxx from table where x in {}` and `Select xxx from table where column = xxx`.
+- Bloom filter indexes can only improve the performance of queries that contain the `in`, `=`, and `IS NULL` operators, such as `Select xxx from table where x in {}`, `Select xxx from table where column = xxx`, and `Select xxx from table where column IS NULL`.
 - You can check whether a query uses bloom filter indexes by viewing the `BloomFilterFilterRows` field of the query's profile.
 
 ## Create bloom filter indexes

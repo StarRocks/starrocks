@@ -170,7 +170,8 @@ You can check whether a query hits Data Cache by analyzing the following metrics
 
 - `DataCacheReadBytes`: the size of data that the system reads directly from the memory and disks.
 - `DataCacheWriteBytes`: the size of data loaded from the remote storage system to the memory and disks.
-- `BytesRead`: the total amount of data that is read, including data that the system reads from the remote storage system, and its memory and disks.
+- `AppIOBytesRead`: the total amount of data that is read, including data that the system reads from the remote storage system, and its memory and disks.
+- `FSIOBytesRead`: the size of data that the system reads from the remote storage system.
 
 Example 1: In this example, the system reads a large amount of data (7.65 GB) from the remote storage system and only a few data (518.73 MB) from the disks. This means that few Block Caches were hit.
 
@@ -192,12 +193,9 @@ Example 1: In this example, the system reads a large amount of data (7.65 GB) fr
  - DataCacheWriteTimer: 23.467ms
    - __MAX_OF_DataCacheWriteTimer: 62.280ms
    - __MIN_OF_DataCacheWriteTimer: 0ns
- - BufferUnplugCount: 15
-   - __MAX_OF_BufferUnplugCount: 2
-   - __MIN_OF_BufferUnplugCount: 0
- - BytesRead: 7.65 GB
-   - __MAX_OF_BytesRead: 64.39 MB
-   - __MIN_OF_BytesRead: 0.00
+ - FSIOBytesRead: 7.65 GB
+   - __MAX_OF_FSIOBytesRead: 64.39 MB
+   - __MIN_OF_FSIOBytesRead: 0.00
 ```
 
 Example 2: In this example, the system reads a large amount of data (46.08 GB) from data cache and no data from the remote storage system, which means it reads data only from Block Cache.
@@ -216,12 +214,9 @@ Table: lineitem
 - DataCacheWriteBytes: 0.00 
 - DataCacheWriteCounter: 0
 - DataCacheWriteTimer: 0ns
-- BufferUnplugCount: 1.231K (1231)
- - __MAX_OF_BufferUnplugCount: 81
- - __MIN_OF_BufferUnplugCount: 35
-- BytesRead: 46.08 GB
- - __MAX_OF_BytesRead: 194.99 MB
- - __MIN_OF_BytesRead: 81.25 MB
+- AppIOBytesRead: 46.08 GB
+ - __MAX_OF_AppIOBytesRead: 194.99 MB
+ - __MIN_OF_AppIOBytesRead: 81.25 MB
 ```
 
 ## I/O Adaptor

@@ -97,7 +97,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - Unit:
 - 変更可能：Yes
-- 説明：ユーザーが持つことができるロールの最大数。
+- 説明：ユーザーが持つことができるロールの最大数（付与されたロールを通じて継承されるロールを含む）。この制限は、ロールをユーザーに付与する際にチェックされます。
 - 導入時期：v3.0.0
 
 ### `ranger_hive_catalog_prefix_enabled`

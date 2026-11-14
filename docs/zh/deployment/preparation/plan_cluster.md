@@ -81,7 +81,7 @@ BE 节点所需的总存储空间 = 原始数据大小 * 数据副本数/数据�
 
 - 在 BE 节点上添加额外的存储卷
 
-  您还可以在已有 BE 节点上添加额外的存储卷。有关详细说明，请参阅 [扩容 StarRocks - 扩容 BE 集群](../../administration/management/Scale_up_down.md)。
+  您还可以在已有 BE 节点上添加额外的存储卷。为此，请将新存储卷的路径添加到 BE 配置项 [`storage_root_path`](../../administration/configuration/BE_parameters/stats_storage.md#storage_root_path) 中。
 
   添加额外的存储卷后，StarRocks 会自动重新平衡所有表中的数据。
 

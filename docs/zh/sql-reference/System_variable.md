@@ -249,8 +249,8 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：用于设定大查询的阈值。当会话变量 `enable_profile` 设置为 `false` 且查询时间超过 `big_query_profile_threshold` 设定的阈值时，则会生成 Profile。
 
   NOTE：在 v3.1.5 至 v3.1.7 以及 v3.2.0 至 v3.2.2 中，引入了 `big_query_profile_second_threshold` 参数，用于设定大查询的阈值。而在 v3.1.8、v3.2.3 及后续版本中，此参数被 `big_query_profile_threshold` 替代，以便提供更加灵活的配置选项。
-* 默认值：0
-* 单位：秒
+* 默认值：从 v3.3.12、v3.4.2 和 v3.5.0 开始为 `30s`。更早版本为 `0`，即不启用该功能。
+* 单位：在取值中指定时间单位，例如 `30s`、`500ms` 或 `1m`。
 * 类型：String
 * 引入版本：v3.1
 
@@ -550,8 +550,10 @@ FROM test;
 
 ### enable_adaptive_sink_dop
 
-* 描述：是否开启导入自适应并行度。开启后 INSERT INTO 和 Broker Load 自动设置导入并行度，保持和 `pipeline_dop` 一致。默认值为 `true`。如果集群持久化的元数据中已保存该变量的值，则保留该值。例如，从 v2.4 及更早版本升级上来的集群保持 `false`。执行 `SET enable_adaptive_sink_dop = DEFAULT` 或 `SET GLOBAL enable_adaptive_sink_dop = DEFAULT` 会将该变量设为 `true`，即使集群当前的值为 `false`。
-* 默认值：true
+* 描述：是否开启导入自适应并行度。开启后 INSERT INTO 和 Broker Load 自动设置导入并行度，保持和 `pipeline_dop` 一致。默认行为因版本而异：
+  * v4.2.0 之后的版本：默认值为 `true`。如果集群持久化的元数据中已保存该变量的值，则保留该值。例如，从 v2.4 及更早版本升级上来的集群保持 `false`。执行 `SET enable_adaptive_sink_dop = DEFAULT` 或 `SET GLOBAL enable_adaptive_sink_dop = DEFAULT` 会将该变量设为 `true`，即使集群当前的值为 `false`。
+  * v4.2.0 及更早版本：默认值为 `false`，但新部署的集群会在首次启动时将该变量的全局值设为 `true`。从 v2.4 及更早版本升级上来的集群保持 `false`。
+* 默认值：true（v4.2.0 及更早版本：false）
 * 引入版本：v2.5
 
 ### enable_bucket_aware_execution_on_lake
@@ -915,7 +917,7 @@ FROM test;
 
 用于设置是否需要查看查询的 profile。默认为 `false`，即不需要查看 profile。2.5 版本之前，该变量名称为 `is_report_success`，2.5 版本之后更名为 `enable_profile`。
 
-默认情况下，只有在查询发生错误时，BE 才会发送 profile 给 FE，用于查看错误。正常结束的查询不会发送 profile。发送 profile 会产生一定的网络开销，对高并发查询场景不利。当用户希望对一个查询的 profile 进行分析时，可以将这个变量设为 `true` 后，发送查询。查询结束后，可以通过在当前连接的 FE 的 web 页面（地址：fe_host:fe_http_port/query）查看 profile。该页面会显示最近 100 条开启了 `enable_profile` 的查询的 profile。
+默认情况下，只有在查询发生错误时，BE 才会发送 profile 给 FE，用于查看错误。正常结束的查询不会发送 profile。发送 profile 会产生一定的网络开销，对高并发查询场景不利。当用户希望对一个查询的 profile 进行分析时，可以将这个变量设为 `true` 后，发送查询。查询结束后，可以通过在当前连接的 FE 的 web 页面（地址：fe_host:fe_http_port/query）查看 profile。该页面会列出该 FE 上缓存的最近的 profile，数量上限由 FE 配置项 `profile_info_reserved_num`（默认值：500）指定。
 
 ### enable_explain_in_profile
 
@@ -933,6 +935,7 @@ FROM test;
 * **默认值**: -1
 * **类型**: long
 * **单位**: 毫秒
+* **引入版本**: v4.2
 
 ### enable_query_cache
 
@@ -1123,31 +1126,26 @@ FROM test;
 
 用于设置是否将一些命令转发到 Leader FE 节点执行。默认为 `false`，即不转发。StarRocks 中存在多个 FE 节点，其中一个为 Leader 节点。通常用户可以连接任意 FE 节点进行全功能操作。但部分信息查看指令只有从 Leader FE 节点才能获取详细信息。别名 `forward_to_master`。
 
-如 `SHOW BACKENDS;` 命令，如果不转发到 Leader FE 节点，则仅能看到节点是否存活等一些基本信息，而转发到 Leader FE 则可以获取包括节点启动时间、最后一次心跳时间等更详细的信息。
+`SHOW FRONTENDS;`、`SHOW BACKENDS;` 和 `SHOW COMPUTE NODES;` 无论该参数如何设置，始终会转发到 Leader FE 节点执行。
 
 当前受该参数影响的命令如下：
-
-* SHOW FRONTENDS;
-
-  转发到 Leader 可以查看最后一次心跳信息。
-
-* SHOW BACKENDS;
-
-  转发到 Leader 可以查看启动时间、最后一次心跳信息、磁盘容量信息。
 
 * SHOW BROKER;
 
   转发到 Leader 可以查看启动时间、最后一次心跳信息。
 
 * SHOW TABLET;
+* SHOW RESOURCES;
 * ADMIN SHOW REPLICA DISTRIBUTION;
 * ADMIN SHOW REPLICA STATUS;
 
   转发到 Leader 可以查看 Leader FE 元数据中存储的 tablet 信息。正常情况下，不同 FE 元数据中 tablet 信息应该是一致的。当出现问题时，可以通过这个方法比较当前 FE 和 Leader FE 元数据的差异。
 
+* ADMIN SHOW TABLET STATUS;
+* ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT;
 * SHOW PROC;
 
-  转发到 Leader 可以查看 Leader FE 元数据中存储的相关 PROC 的信息。主要用于元数据比对。
+  转发到 Leader 可以查看 Leader FE 元数据中存储的相关 PROC 的信息。主要用于元数据比对。部分 PROC 路径（如 `/transactions` 和 `/routine_loads`）无论该参数如何设置，始终会转发到 Leader FE。
 
 ### group_concat_max_len
 
@@ -1431,6 +1429,8 @@ FROM test;
 
 针对扫描节点，设置其在每个 BE 节点上执行实例的个数。默认为 1。
 
+该变量仅在关闭 Pipeline 引擎（`enable_pipeline_engine` 为 `false`）时生效。开启 Pipeline 引擎时（默认），StarRocks 不使用该变量设置查询并行度，请使用 [pipeline_dop](#pipeline_dop)。唯一的例外是：当 `enable_adaptive_sink_dop` 为 `false` 时，INSERT INTO、UPDATE 和 DELETE 作业的 Sink 并行度取该变量的值。
+
 一个查询计划通常会产生一组 scan range，即需要扫描的数据范围。这些数据分布在多个 BE 节点上。一个 BE 节点会有一个或多个 scan range。默认情况下，每个 BE 节点的一组 scan range 只由一个执行实例处理。当机器资源比较充裕时，可以将增加该变量，让更多的执行实例同时处理一组 scan range，从而提升查询效率。
 
 而 scan 实例的数量决定了上层其他执行节点，如聚合节点，join 节点的数量。因此相当于增加了整个查询计划执行的并发度。修改该参数会对大查询效率提升有帮助，但较大数值会消耗更多的机器资源，如CPU、内存、磁盘I/O。
@@ -1474,9 +1474,10 @@ FROM test;
 ### pipeline_profile_level
 
 * 描述：用于控制 profile 的等级。一个 profile 通常有 5 个层级：Fragment、FragmentInstance、Pipeline、PipelineDriver、Operator。不同等级下，profile 的详细程度有所区别：
-  * 0：在此等级下，StarRocks 会合并 profile，只显示几个核心指标。
   * 1：默认值。在此等级下，StarRocks 会对 profile 进行简化处理，将同一个 pipeline 的指标做合并来缩减层级。
   * 2：在此等级下，StarRocks 会保留 Profile 所有的层级，不做简化。该设置下 profile 的体积会非常大，特别是 SQL 较复杂时，因此不推荐该设置。
+
+  从 v3.1.3 开始，不再支持等级 0，除 `2` 以外的取值均按 `1` 处理。
 * 默认值：1
 * 类型：Int
 
@@ -1516,6 +1517,12 @@ FROM test;
 * **默认值**：`1`
 * **数据类型**：Double
 * **作用域**：Session
+
+### prefer_compute_node
+
+* 描述：将部分执行计划调度到 CN 节点执行。该变量仅在存算一体集群中生效。无论该变量如何设置，只要有存活的 CN 节点，外表的扫描都只会在 CN 节点上执行。
+* 默认值：false
+* 引入版本：v2.4
 
 ### query_cache_agg_cardinality_limit
 
@@ -1836,6 +1843,13 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 * **默认值**: `10`
 * **类型**: long
 * **引入版本**: v3.2.0
+
+### use_compute_nodes
+
+* 描述：用于设置使用 CN 节点的数量上限。该变量仅在存算一体集群中生效，用于限制 `prefer_compute_node=true` 时使用的 CN 节点以及扫描外表时使用的 CN 节点。小于或等于 `0` 的值（如 `-1`）表示使用所有 CN 节点。正整数表示最多使用该数量的 CN 节点。
+* 默认值：-1
+* 类型：Int
+* 引入版本：v2.4
 
 ### version (global)
 
