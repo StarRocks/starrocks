@@ -318,6 +318,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 流水化读取 `.lcrm` 文件时使用的 sub-chunk 粒度。每个输出 segment 被切分为 `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 个 sub-chunk，独立流水化。值越小，少而大的输出 segment 能获得越高的并发度，但代价是更多的范围读取和消费时一次额外的 memcpy。默认 4 MiB，与 starcache 磁盘层 block 大小对齐。
 
+### lake_scan_read_ahead_segments
+
+- 默认值：16
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：远端 IO 调度器启用时，如果 lake 查询扫描逐个读取一个 Tablet 的 Segment（即该 Tablet 没有切分给多个扫描任务），那么当前 Segment 的块全部发出读取后，扫描会一边读当前 Segment，一边提前读取后面几个 Segment 开头的块。提前预读的 Segment 最多为该值。只有当这些 Segment 已发出读取但还没读的块合计少于 `remote_prefetch_window_blocks` 个缓存块时，才会开始预读下一个 Segment，因此最后开始的那个 Segment 可能让合计达到窗口的两倍左右。设为 `0` 表示关闭，每个 Segment 轮到时才开始预读。切分扫描、导入和 Compaction 不受影响。查询 profile 中的 SegmentReadAheadStarted 记录提前开始预读的 Segment 数。
+- 引入版本：-
+
+### lake_scan_parallel_segment_open
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，查询扫描是否一次性打开 Tablet 所有 Rowset 的 Segment（在 Segment 加载线程池中每个 Segment 一个任务），而不是逐个 Rowset 依次打开，并并行构建各 Rowset 的迭代器。仅对查询扫描生效，且仅当 `remote_io_scheduler_enable` 为 `true` 时生效。导入、Compaction 及其他读取仍由 `enable_load_segment_parallel` 控制。Footer 已在 Segment 元数据缓存中打开的 Segment 直接复用，不再提交任务。Query Profile 中，这类 Segment 计入 `TabletPrepareCachedSegments`，Footer 读取计入其他 `TabletPrepare*` 指标。
+- 引入版本：-
+
+### lake_scan_warm_index
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，查询扫描（无论是否切分）打开 Tablet 的 Segment 后，是否异步预热随后要读取的索引页，包括每个 Segment 的短键索引、谓词列的 zone map 和 bloom filter 根页，以及读取列的 ordinal index 根页。扫描不等待预热完成；预热失败时照常读取。被 Segment 元数据过滤（`enable_lake_segment_metadata_filter`）排除的 Segment 不预热。该项只对查询生效，且仅在启用远程 I/O 调度器（`remote_io_scheduler_enable`）时有效，与 `lake_scan_parallel_segment_open` 相互独立。预热情况记录在 Query Profile 的 `TabletPrepareIndexWarmSegments`、`TabletPrepareIndexWarmRanges`、`TabletPrepareIndexWarmBlocks`、`TabletPrepareIndexWarmSkipped` 和 `TabletPrepareIndexWarmPrunedSegments` 中。
+- 引入版本：-
+
 ### lake_segment_metadata_cache_limit_percent
 
 - 默认值：10
@@ -432,6 +459,132 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态配置: 是
 - 描述: 存算分离集群中主键索引缓存的占用上限，以缓存容量的百分比表示。每次 Publish 结束后（因超出内存限制而失败的除外）都会检查一次：占用超过该比例时，按最近最少使用的顺序淘汰未在使用的主键索引，直至占用回落到该比例以内。缓存增长快于后台线程将其回收到 `primary_key_index_memory_high_percent` 的速度时，由该配置项兜底，因此应设置为大于该配置项的值。
 - 引入版本: -
+
+### remote_io_scheduler_enable
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：存算分离集群中是否启用远程 I/O 调度器。启用后，读请求未命中 Data Cache 而向对象存储发出的 GET 请求，都在每个 CN 上唯一的调度器中排队，由调度器按权重放行：查询、导入、Compaction 和其他后台任务按 `remote_read_query_weight`、`remote_read_load_weight`、`remote_read_compaction_weight` 和 `remote_read_background_weight` 分配对象存储的读取能力；查询之间先按资源组的 `cpu_weight` 分配，同一资源组内，查询读得越多份额越低，大查询因此会让位于新来的小查询。查询扫描还会预读即将读取的页面所在的缓存块（见 `remote_prefetch_window_blocks`）。调度器要求 `datacache_enable` 和 `starlet_use_star_cache` 均为 `true`，否则 CN 打印告警日志，按未启用调度器的方式读取。启用期间，`io_coalesce_lake_read_enable` 在启动时被设为 `false`，`starlet_fs_read_prefetch_enable` 不改配置值但强制不生效，动态开启这两项都会被拒绝。配置文件不会被修改，关闭调度器并重启 CN 后两项即恢复。调度器参数取值非法时，CN 拒绝启动。
+- 引入版本：-
+
+### remote_prefetch_late_read_ahead_ratio
+
+- 默认值：0.5
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：启用延迟物化时，只为通过谓词的行读取的列，会在这些行确定后按 Chunk 逐批读取。从 Segment Reader 的第四个 Chunk 起，如果这些行已经触及其所跨页面的比例达到该值，这些列改为与谓词列一样预读。取值大于 1 时从不切换。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_prefetch_window_blocks
+
+- 默认值：128
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：查询的 Segment Reader 最多提前请求多少个 Data Cache 缓存块，包括排队中、读取中以及已读取但尚未消费的缓存块。该参数限制 Reader 超前的距离，缓存块何时读取由调度器决定。导入、Compaction 等后台读取不预读。设为 `0` 关闭预读。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_adaptive_limit
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：远程 I/O 调度器是否根据通往对象存储的链路实际能承载的并发，在 `remote_read_io_threads` 以内控制在途 GET 请求数。超出部分在调度器中等待并按权重决定先后，而不是堵在网络上。设为 `false` 时，在途请求最多为 `remote_read_io_threads` 个。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_adaptive_min_inflight
+
+- 默认值：16
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：自适应并发上限的下限，也是调度器测量空载请求延迟时短暂保持的并发数。必须为正数。仅当 `remote_io_scheduler_enable` 和 `remote_read_adaptive_limit` 均为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_background_weight
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：多方同时等待时，Compaction 以外的后台任务读取对象存储的份额，与 `remote_read_query_weight`、`remote_read_load_weight`、`remote_read_compaction_weight` 相对。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_compaction_weight
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：多方同时等待时，Compaction 读取对象存储的份额，与 `remote_read_query_weight`、`remote_read_load_weight`、`remote_read_background_weight` 相对。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_io_threads
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：发出调度后 GET 请求的线程数，即 CN 上在途 GET 请求数的上限。设为 `0` 时取存算分离扫描线程数，即 `pipeline_connector_scan_thread_num_per_cpu` 乘以 CPU 核数。不能为负数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_load_weight
+
+- 默认值：5
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：多方同时等待时，导入读取对象存储的份额，与 `remote_read_query_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` 相对。导入的读取包括 Publish、主键索引、删除文件以及导入的落盘。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_query_weight
+
+- 默认值：9
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：多方同时等待时，查询读取对象存储的份额，与 `remote_read_load_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` 相对。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_weight_decay_ios
+
+- 默认值：1024
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：查询在资源组内的份额随读取量下降的速度。查询或后台任务读取的第 n 个缓存块，权重为 `max(remote_read_weight_decay_min, 2^(-n / remote_read_weight_decay_ios))`，大查询因此越来越多地让位于同一资源组中新来的查询。设为 `0` 关闭衰减。不能为负数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_weight_decay_min
+
+- 默认值：0.03125
+- 类型：Double
+- 单位：-
+- 是否动态：否
+- 描述：`remote_read_weight_decay_ios` 衰减后的最低权重。取值范围为 (0, 1]。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_retain_prefetched_bytes
+
+- 默认值：2147483648
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离集群中，节点在内存中保留的 Segment 文件预读完成 Block 的总大小上限。开启 Remote I/O 调度器（`remote_io_scheduler_enable`）后，调度器为查询扫描预读的 Block 读取完成后，只要扫描仍覆盖该 Block，就保留在内存中，扫描直接从内存复制所需的 Page，不再从 Data Cache 读回。该 Block 仍会写入 Data Cache。内存中保留的 Block 总大小达到该值后，之后完成的 Block 不再保留。设置为 `0` 表示关闭该功能。Remote I/O 调度器未开启时，该项不生效。只保留不会被覆盖写的 Segment 文件，元数据等其他文件不保留。这部分内存计入进程，不计入任何查询。调大该值后，对之后完成的 Block 生效。调小后，在保留总量降到新值以下之前不再保留新的 Block，已保留的 Block 若在下次被读取时总量仍超过新值，读取后即释放；扫描不再覆盖时也会释放。不会在后台主动淘汰。不允许设置为负数。
+- 引入版本：-
+
+### remote_read_skip_contended_cache_writes
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，缓存盘繁忙时远端 IO 调度器是否可以不把拉取到的数据块写入 Data Cache。缓存盘繁忙指连续两次 250 ms 采样中，磁盘利用率都不低于 90%，且读请求占服务时间的比例不低于 20%。只有大查询扫描后段拉取的数据块才可能跳过写入，且该数据块必须已按 `remote_read_retain_prefetched_bytes` 保留在内存中，由内存中的副本供读取方使用。跳过写入的数据块再次被读取时，会重新从对象存储拉取。如果缓存盘比网络慢，且后续扫描经常回读前面扫描刚写入缓存的数据，开启该参数可能有帮助。`remote_io_scheduler_enable` 为 `false` 或 `remote_read_retain_prefetched_bytes` 为 `0` 时不生效。修改后对之后拉取的数据块生效。
+- 引入版本：-
 
 ### s3_multipart_equal_part_size
 

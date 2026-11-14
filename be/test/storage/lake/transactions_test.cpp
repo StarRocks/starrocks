@@ -9,8 +9,11 @@
 #include <vector>
 
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "fs/remote_read_context.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/types.pb.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -748,6 +751,126 @@ TEST_F(CalNewBaseVersionTest, index_version_beyond_new_version_unloads_index) {
     auto txns = make_txns();
     ASSERT_EQ(1, cal_new_base_version(tablet_id, _tablet_mgr.get(), 1, 3, txns));
     ASSERT_EQ(0, _primary_key_mgr->get_primary_index_data_version(tablet_id));
+}
+
+// ===========================================================================
+// Remote read attribution of a publish: it reads as a load, one flow per
+// transaction (see fs/remote_read_context.h).
+// ===========================================================================
+
+class PublishRemoteReadContextTest : public TestBase {
+public:
+    PublishRemoteReadContextTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    }
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    void TearDown() override {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+        remove_test_dir_ignore_error();
+    }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_publish_remote_read_context";
+
+    // Writes an empty txn log of a new transaction and drops it from the cache, so that the publish reads it from
+    // storage. Returns the transaction.
+    TxnInfoPB write_txn_log(const PUniqueId* load_id = nullptr) {
+        const int64_t txn_id = next_id();
+        auto txn_log = std::make_shared<TxnLogPB>();
+        txn_log->set_tablet_id(_tablet_metadata->id());
+        txn_log->set_txn_id(txn_id);
+        auto info = TEST_txn_info(txn_id, time(nullptr));
+        std::string path;
+        if (load_id != nullptr) {
+            txn_log->mutable_load_id()->CopyFrom(*load_id);
+            info.add_load_ids()->CopyFrom(*load_id);
+            path = _tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id, *load_id);
+        } else {
+            path = _tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id);
+        }
+        CHECK_OK(_tablet_mgr->put_txn_log(txn_log, path));
+        _tablet_mgr->metacache()->erase(MetacacheKey::txn_log(path));
+        return info;
+    }
+
+    // Records the remote read context of the thread at each pass of `point`.
+    void record_context_at(const std::string& point, std::vector<RemoteReadContext>* out) {
+        SyncPoint::GetInstance()->SetCallBack(
+                point, [out](void*) { out->push_back(ScopedRemoteReadContext::or_current(RemoteReadContext{})); });
+        SyncPoint::GetInstance()->EnableProcessing();
+    }
+
+    std::shared_ptr<TabletMetadataPB> _tablet_metadata;
+};
+
+// In a batch, the steps of one transaction -- loading and applying its txn log -- read as that transaction; the rest
+// of the batch, such as writing the new metadata, as the first one. Nothing is left on the thread afterwards.
+TEST_F(PublishRemoteReadContextTest, batch_publish_reads_as_its_transactions) {
+    std::vector<TxnInfoPB> txns{write_txn_log(), write_txn_log()};
+    std::vector<RemoteReadContext> txn_log_reads;
+    std::vector<RemoteReadContext> metadata_writes;
+    record_context_at("TabletManager::load_txn_log", &txn_log_reads);
+    record_context_at("TabletManager::put_tablet_metadata", &metadata_writes);
+
+    ASSIGN_OR_ABORT(auto metadata, publish_version(_tablet_mgr.get(), PublishTabletInfo(_tablet_metadata->id()), 1, 3,
+                                                   txns, /*skip_write_tablet_metadata=*/false));
+    ASSERT_EQ(3, metadata->version());
+
+    ASSERT_EQ(2, txn_log_reads.size());
+    for (size_t i = 0; i < txn_log_reads.size(); i++) {
+        EXPECT_TRUE(txn_log_reads[i].is_set) << i;
+        EXPECT_EQ(RemoteReadContext::Workload::LOAD, txn_log_reads[i].workload) << i;
+        EXPECT_EQ(static_cast<uint64_t>(txns[i].txn_id()), txn_log_reads[i].flow_id) << i;
+    }
+    ASSERT_FALSE(metadata_writes.empty());
+    for (const auto& ctx : metadata_writes) {
+        EXPECT_EQ(RemoteReadContext::Workload::LOAD, ctx.workload);
+        EXPECT_EQ(static_cast<uint64_t>(txns[0].txn_id()), ctx.flow_id);
+    }
+    EXPECT_FALSE(ScopedRemoteReadContext::or_current(RemoteReadContext{}).is_set);
+}
+
+// A failed publish keeps its original error and leaves no context on the thread.
+TEST_F(PublishRemoteReadContextTest, failed_publish_keeps_its_error) {
+    std::vector<TxnInfoPB> txns{write_txn_log()};
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_txn_log",
+                                          [](void* arg) { *static_cast<Status*>(arg) = Status::IOError("injected"); });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    auto res = publish_version(_tablet_mgr.get(), PublishTabletInfo(_tablet_metadata->id()), 1, 2, txns,
+                               /*skip_write_tablet_metadata=*/false);
+    ASSERT_FALSE(res.ok());
+    EXPECT_TRUE(res.status().is_io_error()) << res.status();
+    EXPECT_NE(std::string::npos, res.status().message().find("injected")) << res.status();
+    EXPECT_FALSE(ScopedRemoteReadContext::or_current(RemoteReadContext{}).is_set);
+}
+
+// publish_log_version reads the txn logs of each transaction as that transaction.
+TEST_F(PublishRemoteReadContextTest, publish_log_version_reads_as_each_transaction) {
+    std::vector<TxnInfoPB> txns;
+    for (int i = 0; i < 2; i++) {
+        PUniqueId load_id;
+        load_id.set_hi(next_id());
+        load_id.set_lo(i);
+        txns.push_back(write_txn_log(&load_id));
+    }
+    std::vector<RemoteReadContext> txn_log_reads;
+    record_context_at("TabletManager::load_txn_log", &txn_log_reads);
+
+    const int64_t log_versions[] = {2, 3};
+    ASSERT_OK(publish_log_version(_tablet_mgr.get(), _tablet_metadata->id(), txns, log_versions));
+
+    ASSERT_EQ(2, txn_log_reads.size());
+    for (size_t i = 0; i < txn_log_reads.size(); i++) {
+        EXPECT_EQ(RemoteReadContext::Workload::LOAD, txn_log_reads[i].workload) << i;
+        EXPECT_EQ(static_cast<uint64_t>(txns[i].txn_id()), txn_log_reads[i].flow_id) << i;
+    }
 }
 
 } // namespace starrocks::lake

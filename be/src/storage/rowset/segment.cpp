@@ -286,6 +286,7 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     SegmentFooterPB footer;
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                  .buffer_size = lake_io_opts.buffer_size};
+    opts.remote_read = lake_io_opts.remote_read;
 
     if (!_segment_file_info.encryption_meta.empty()) {
         ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_segment_file_info.encryption_meta));
@@ -448,6 +449,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> Segment::new_segment_read_file(const
     // the right offset on bundled/encrypted segments. Don't cache into _encryption_info here (OnceFlag owns it).
     RandomAccessFileOptions file_opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                       .buffer_size = lake_io_opts.buffer_size};
+    file_opts.remote_read = lake_io_opts.remote_read;
     if (_encryption_info) {
         file_opts.encryption_info = *_encryption_info;
     } else if (!_segment_file_info.encryption_meta.empty()) {
@@ -461,6 +463,7 @@ Status Segment::_load_index(const LakeIOOptions& lake_io_opts, OlapReaderStatist
     // read and parse short key index page
     RandomAccessFileOptions file_opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                       .buffer_size = lake_io_opts.buffer_size};
+    file_opts.remote_read = lake_io_opts.remote_read;
     if (_encryption_info) {
         file_opts.encryption_info = *_encryption_info;
     } else if (!_segment_file_info.encryption_meta.empty()) {

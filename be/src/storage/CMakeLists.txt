@@ -134,6 +134,7 @@ set(STORAGE_FILES
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
     rowset/segment_iterator.cpp
+    rowset/segment_prefetch_window.cpp
     rowset/options.cpp
     rowset/segment_options.cpp
     rowset/rowid_range_option.cpp

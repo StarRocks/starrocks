@@ -463,6 +463,10 @@ public:
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, const LakeIOOptions& lake_io_opts,
                                       bool fill_meta_cache, TabletSchemaPtr tablet_schema,
                                       OlapReaderStatistics* stats = nullptr);
+    // The metadata cache entry load_segment() would return without reading anything: one whose footer is already
+    // open and that was opened with |tablet_schema|. nullptr otherwise, including for an entry still being opened.
+    // Does not block and does not count a miss: the caller loads the segment then.
+    SegmentPtr lookup_opened_segment(const FileInfo& segment_info, const TabletSchemaPtr& tablet_schema);
 
     StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
 

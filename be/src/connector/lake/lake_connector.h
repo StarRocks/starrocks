@@ -295,6 +295,13 @@ private:
     RuntimeProfile::Counter* _lake_tablet_prepare_io_remote_timer = nullptr;
     RuntimeProfile::Counter* _lake_tablet_prepare_io_count_remote_counter = nullptr;
     RuntimeProfile::Counter* _lake_tablet_prepare_bytes_read_remote_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_cached_segments_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_warm_index_segments_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_warm_index_ranges_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_warm_index_blocks_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_warm_index_skipped_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_warm_index_pruned_segments_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_inline_rowsets_counter = nullptr;
     RuntimeProfile::Counter* _lake_initial_coarse_counter = nullptr;
     RuntimeProfile::Counter* _lake_refined_counter = nullptr;
     // SeedPrepareTime breakdown (children of SeedPrepareTime): the seed's one-time per-segment prune cost.
@@ -350,6 +357,16 @@ private:
     RuntimeProfile::Counter* _prefetch_hit_counter = nullptr;
     RuntimeProfile::Counter* _prefetch_wait_finish_timer = nullptr;
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
+    RuntimeProfile::Counter* _remote_io_queue_wait_timer = nullptr;
+    RuntimeProfile::Counter* _remote_io_fill_wait_timer = nullptr;
+    RuntimeProfile::Counter* _remote_io_fill_join_counter = nullptr;
+    RuntimeProfile::Counter* _segment_first_chunk_counter = nullptr;
+    RuntimeProfile::Counter* _segment_read_ahead_counter = nullptr;
+    RuntimeProfile::Counter* _segment_first_chunk_timer = nullptr;
+    RuntimeProfile::Counter* _remote_prefetch_block_counter = nullptr;
+    RuntimeProfile::Counter* _remote_prefetch_rejected_block_counter = nullptr;
+    RuntimeProfile::Counter* _remote_prefetch_range_counter = nullptr;
+    RuntimeProfile::Counter* _remote_prefetch_late_read_ahead_counter = nullptr;
 
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
 };

@@ -576,7 +576,10 @@
         "orc_coalesce_read_enable",
         "orc_natural_read_size",
         "enable_orc_libdeflate_decompression",
-        "orc_writer_version"
+        "orc_writer_version",
+        "remote_prefetch_window_blocks",
+        "remote_prefetch_late_read_ahead_ratio",
+        "starlet_star_cache_block_size_bytes"
       ]
     },
     {
@@ -685,6 +688,8 @@
         "lake_shard_info_cache_ttl_sec",
         "object_storage_max_connection",
         "object_storage_request_timeout_ms",
+        "remote_read_retain_prefetched_bytes",
+        "remote_read_skip_contended_cache_writes",
         "s3_multipart_equal_part_size",
         "s3_use_list_objects_v1",
         "starlet_cache_dir",
@@ -715,7 +720,21 @@
         "starlet_star_cache_mem_size_percent",
         "starlet_star_cache_skip_fresh_block_checksum_verification",
         "starlet_starmgr_client_compression_type",
-        "starlet_use_star_cache"
+        "starlet_use_star_cache",
+        "datacache_enable",
+        "pipeline_connector_scan_thread_num_per_cpu",
+        "io_coalesce_lake_read_enable",
+        "remote_io_scheduler_enable",
+        "remote_read_io_threads",
+        "remote_read_adaptive_limit",
+        "remote_read_adaptive_min_inflight",
+        "remote_read_weight_decay_ios",
+        "remote_read_weight_decay_min",
+        "remote_read_query_weight",
+        "remote_read_load_weight",
+        "remote_read_compaction_weight",
+        "remote_read_background_weight",
+        "remote_prefetch_window_blocks"
       ]
     },
     {
@@ -917,7 +936,10 @@
         "lake_replication_parallel_copy_min_file_count",
         "lake_replication_enable_light_schema_change",
         "enable_lake_segment_metadata_filter",
+        "lake_scan_warm_index",
         "enable_lake_prepared_split_pre_refinement",
+        "lake_scan_read_ahead_segments",
+        "lake_scan_parallel_segment_open",
         "lake_flush_thread_num_per_store",
         "lake_tablet_rows_splitted_ratio",
         "lake_tablet_ignore_invalid_delete_predicate",

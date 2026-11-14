@@ -96,7 +96,8 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_horizontal_compaction_fill_data_cache,
                                   .buffer_size = _stream_buffer_size,
                                   .fill_metadata_cache = reuse_via_shared_cache,
-                                  .hold_segments = _hold_input_segments};
+                                  .hold_segments = _hold_input_segments,
+                                  .remote_read = remote_read_context()};
     reader_params.column_access_paths = &_column_access_paths;
 
     // Apply range filter for range-split parallel compaction. TabletReader requires
@@ -313,7 +314,8 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         LakeIOOptions lake_io_opts{.fill_data_cache = false,
                                    .buffer_size = _stream_buffer_size,
                                    .fill_metadata_cache = reuse_via_shared_cache,
-                                   .hold_segments = _hold_input_segments};
+                                   .hold_segments = _hold_input_segments,
+                                   .remote_read = remote_read_context()};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         // Ask the rowset what it actually pins rather than re-measuring the vector: a rowset that
         // could not hold (segment-range / partial compaction) or that has given holding up reports

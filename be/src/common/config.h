@@ -886,6 +886,14 @@ CONF_Int32(load_segment_thread_pool_queue_size, "10240");
 // When enabled, segments whose sort key range does not intersect with query predicates will be skipped.
 CONF_mBool(enable_lake_segment_metadata_filter, "true");
 
+// Once a query scan of a lake tablet has opened its segments, split or not, start filling the local cache with the
+// index pages its reads need next -- the short key index of every segment, the zone map and bloom filter roots of the
+// predicate columns and the ordinal index roots of the read columns -- asynchronously, without waiting for them. The
+// reads then join those fills instead of fetching one page after another. Takes effect only for queries and only
+// while the remote I/O scheduler is enabled and initialized (remote_io_scheduler_enable); otherwise, and when a file
+// cannot be warmed, the scan reads its index pages as before. Independent of lake_scan_parallel_segment_open.
+CONF_mBool(lake_scan_warm_index, "true");
+
 // When a prepared-split scan's main morsel queue is momentarily empty (its seed page-pruning is still
 // running), it issues an extra PRE_REFINEMENT_COARSE morsel over an un-pruned segment range to keep
 // otherwise-idle drivers busy until the refined ranges land. Set to false to disable that pre-refinement
@@ -893,6 +901,19 @@ CONF_mBool(enable_lake_segment_metadata_filter, "true");
 // range is always a superset that the refined ranges subtract from) -- it only trades early parallelism
 // for less redundant coarse scanning. Only affects the enable_lake_prepared_physical_split_scan path.
 CONF_mBool(enable_lake_prepared_split_pre_refinement, "true");
+
+// When a query scan reads a tablet's segments one after another (a tablet not split across scan tasks), the next
+// segments start fetching the first blocks they will read while the current one is still read, once it has asked for
+// all of its own: up to this many segments ahead. A next segment starts only while they all hold fewer than
+// remote_prefetch_window_blocks blocks not read yet, so the segment started last can take that to about twice the
+// window. 0 starts each segment's read-ahead only when its turn comes.
+CONF_mInt32(lake_scan_read_ahead_segments, "16");
+
+// While the remote I/O scheduler is enabled (remote_io_scheduler_enable), a lake query scan opens the segments of all
+// rowsets of a tablet at once on the load segment thread pool, one task per segment, instead of one rowset after
+// another, and builds the rowsets' iterators in parallel. Has no effect while the scheduler is off. Loads, compaction
+// and the other readers keep following enable_load_segment_parallel.
+CONF_mBool(lake_scan_parallel_segment_open, "true");
 
 // Fragment thread pool
 CONF_Int32(fragment_pool_thread_num_min, "64");
@@ -1642,6 +1663,68 @@ CONF_Int32(starlet_s3_client_num_instances_per_cache, "1");
 CONF_mBool(starlet_fs_read_prefetch_enable, "false");
 // prefetch threadpool size
 CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
+// Remote I/O scheduler for shared-data reads (off by default). When enabled, every GET that a lake read issues to the
+// object store after a local cache miss is queued in one process-wide scheduler, which hands out the IOs -- one IO is a
+// GET of a cache block -- by weight: queries, loads, compaction and other background work share by
+// remote_read_*_weight, the resource groups of the queries share by their cpu_weight, and the queries of a group share
+// by a weight that decays with the blocks they have read, so that a big scan yields to newer, smaller ones. Inside a query the reads it waits for go
+// before its read-ahead. Query scans also read ahead the cache blocks of the pages they will read
+// (remote_prefetch_window_blocks). Needs datacache_enable=true and starlet_use_star_cache=true; without them the node
+// logs a warning and the remote reads keep their old paths. While enabled, io_coalesce_lake_read_enable is set to false
+// at startup and starlet_fs_read_prefetch_enable is forced off without changing its value; be.conf is not changed, so
+// a restart with the scheduler disabled restores both. Read once at startup.
+CONF_Bool(remote_io_scheduler_enable, "false");
+// Threads that run the scheduled remote GETs. The pool size caps how many GETs are in flight on the node. 0 (the
+// default) means as many as the lake scan threads (pipeline_connector_scan_thread_num_per_cpu x cores). Read once at
+// startup; only used when remote_io_scheduler_enable is true.
+CONF_Int32(remote_read_io_threads, "0");
+// Whether the scheduler holds the GETs in flight, below the pool size, to what the path to the object store delivers:
+// what does not fit waits in the scheduler, where the weights decide who goes next, instead of in the network. Off
+// means up to remote_read_io_threads GETs in flight. Read once at startup; only used when remote_io_scheduler_enable
+// is true.
+CONF_Bool(remote_read_adaptive_limit, "true");
+// The fewest GETs in flight the adaptive limit holds, and the limit it uses to measure the unloaded latency of a GET.
+// Must be positive. Read once at startup; only used when remote_io_scheduler_enable and remote_read_adaptive_limit
+// are true.
+CONF_Int32(remote_read_adaptive_min_inflight, "16");
+// The n-th cache block a query (or a background task) reads weighs max(remote_read_weight_decay_min,
+// 2^(-n / remote_read_weight_decay_ios)) of it, so that a big scan yields more and more to newer queries of its
+// resource group. remote_read_weight_decay_ios = 0 turns the decay off; remote_read_weight_decay_min must be in
+// (0, 1]. Read once at startup; only used when remote_io_scheduler_enable is true.
+CONF_Int64(remote_read_weight_decay_ios, "1024");
+CONF_Double(remote_read_weight_decay_min, "0.03125");
+// Shares of the remote reads of queries, of loads (publish, primary key indexes, delete files and the spill of a
+// load), of compaction and of the other background work while all of them wait: 9:5:1:1 by default. Each must be
+// positive. Read once at startup; only used when remote_io_scheduler_enable is true.
+CONF_Int32(remote_read_query_weight, "9");
+CONF_Int32(remote_read_load_weight, "5");
+CONF_Int32(remote_read_compaction_weight, "1");
+CONF_Int32(remote_read_background_weight, "1");
+// Cache blocks a query's segment reader keeps asked for ahead of what it is consuming -- queued, in flight, or filled
+// and not read yet -- while the remote I/O scheduler is enabled. It bounds how far a reader runs ahead of itself;
+// when the blocks are fetched is the scheduler's decision. Loads, compaction and other background reads do not read
+// ahead. 0 turns the read-ahead off. Applies to the segment readers opened afterwards.
+CONF_mInt32(remote_prefetch_window_blocks, "128");
+// With late materialization, the columns read only for the rows that pass the predicates are fetched per chunk once
+// those rows are known. From the fourth chunk of a segment reader on, once those rows have touched at least this
+// share of the pages they span, these columns are read ahead like the predicate columns. Above 1, never. Applies to
+// the segment readers opened afterwards; only used while the remote I/O scheduler is enabled.
+CONF_mDouble(remote_prefetch_late_read_ahead_ratio, "0.5");
+// Bytes of finished read-ahead blocks of segment data files kept in memory while the reader that warmed them still
+// covers them, when the remote I/O scheduler is enabled: a reader of such a block copies it from memory instead of
+// reading it back from the local cache, which is still written. Once this many bytes are held, later blocks are not
+// kept. 0 turns it off. Has no effect while the remote I/O scheduler is disabled. A raise applies to the blocks
+// finished afterwards; a lowered value keeps new blocks out at once, and a block already held is released when it is
+// next read while the total is still over the budget, or when no reader covers it any more. The buffers are charged
+// to the process, not to a query. Must not be negative.
+CONF_mInt64(remote_read_retain_prefetched_bytes, "2147483648");
+// Whether starlet's remote I/O scheduler may skip the local-cache write of a block fill while the cache disk is
+// contended: 90% busy or more with reads taking at least 20% of its service time, for two 250 ms samples in a row. Only
+// a fill of the body of a big query scan qualifies, and only once its block is retained in memory (see
+// remote_read_retain_prefetched_bytes), which then serves its readers; a later reader fetches the block again. Helps when
+// the cache disk is slower than the network and a later scan reads back what an earlier one just cached. Has no effect
+// while the remote I/O scheduler is disabled or retains nothing. Forwarded to the starlet gflag of the same name.
+CONF_mBool(remote_read_skip_contended_cache_writes, "false");
 CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");
 CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");
 CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");

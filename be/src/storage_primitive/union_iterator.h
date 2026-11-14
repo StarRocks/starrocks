@@ -24,4 +24,11 @@ namespace starrocks {
 // |children| must not empty and iterators in it must have the same schema.
 ChunkIteratorPtr new_union_iterator(std::vector<ChunkIteratorPtr> children);
 
+// As above, and while a child is being read, the next ones start fetching the first data they will read (see
+// ChunkIterator::start_read_ahead) once the child has asked for everything it will read: up to
+// |read_ahead_children| children ahead, while all of them together hold fewer than |read_ahead_blocks| blocks
+// not read yet. 0 children reads ahead no further than the current child.
+ChunkIteratorPtr new_union_iterator(std::vector<ChunkIteratorPtr> children, size_t read_ahead_children,
+                                    size_t read_ahead_blocks);
+
 } // namespace starrocks
