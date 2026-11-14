@@ -38,7 +38,24 @@ public:
 
     void add(float value, int64_t weight) { _tdigest.add(value, static_cast<float>(weight)); }
 
+    void add(float value, float weight) { _tdigest.add(value, weight); }
+
     void merge(const PercentileValue* other) { _tdigest.merge(&other->_tdigest); }
+
+    // Fast-path probe for the very common shape produced by
+    // PercentileApproxAggregateFunction::convert_to_serialize_format in
+    // PASS_THROUGH / streaming: one unprocessed centroid, no processed.
+    // Caller can then add(mean, weight) directly to the target and skip
+    // the priority-queue merge path in TDigest::add(iter, end).
+    bool try_extract_singleton(float* mean, float* weight) const {
+        if (!_tdigest.processed().empty() || _tdigest.unprocessed().size() != 1) {
+            return false;
+        }
+        const Centroid& c = _tdigest.unprocessed().front();
+        *mean = c.mean();
+        *weight = c.weight();
+        return true;
+    }
 
     uint64_t serialize_size() const {
         //_type 1 bytes
@@ -63,6 +80,16 @@ public:
     }
 
     Value quantile(Value q) { return _tdigest.quantile(q); }
+
+    // True iff the digest received zero total weight. Used by the
+    // percentile_approx null predicate to return SQL NULL instead of a
+    // silent NaN when the digest is empty (e.g. weighted variant with all
+    // w <= 0, or input values rejected as non-finite by TDigest::add).
+    // Test the centroid vectors directly rather than TDigest::totalWeight(),
+    // which narrows the accumulated float weight to long (UB once a weighted
+    // sum exceeds the long range). A digest holds a centroid iff some w > 0
+    // was added, so emptiness == both vectors empty.
+    bool is_empty() const { return _tdigest.processed().empty() && _tdigest.unprocessed().empty(); }
 
 private:
     enum PercentileDataType { TDIGEST = 0 };
