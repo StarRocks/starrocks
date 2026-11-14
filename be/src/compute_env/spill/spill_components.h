@@ -59,6 +59,17 @@ public:
     template <class TaskExecutor = spill::IOTaskExecutor, class MemGuard>
     Status trigger_restore(RuntimeState* state, MemGuard&& guard);
 
+    // Re-arm a restore task only when this reader has neither a buffered chunk nor an in-flight
+    // task. restore() is the only other caller of trigger_restore(), so once that state is reached
+    // nothing would pull the chain again: has_output_data() stays false and the source that gates
+    // on it is never scheduled, which hangs the query without an error. Sources call this right
+    // before reporting "no output".
+    //
+    // A buffered chunk means the next restore() will re-arm on its own, and an in-flight task means
+    // a completion is coming, so both cases are left alone.
+    template <class TaskExecutor = spill::IOTaskExecutor, class MemGuard>
+    Status rearm_if_stalled(RuntimeState* state, MemGuard&& guard);
+
     bool has_output_data() { return _stream && _stream->is_ready(); }
 
     bool restore_finished() const { return _running_restore_tasks == 0; }

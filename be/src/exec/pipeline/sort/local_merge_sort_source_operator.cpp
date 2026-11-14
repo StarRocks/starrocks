@@ -75,8 +75,17 @@ bool LocalMergeSortSourceOperator::has_output() const {
     if (!_sort_context->spiller_task_status().ok()) {
         return true;
     }
-    return _sort_context->is_partition_sort_finished() && !_sort_context->is_output_finished() &&
-           _sort_context->is_partition_ready();
+    if (_sort_context->is_partition_sort_finished() && !_sort_context->is_output_finished() &&
+        _sort_context->is_partition_ready()) {
+        return true;
+    }
+    // Not ready to output. A spilled partition may have drained its buffer without reaching EOF, in which
+    // case nothing re-arms its restore task (SpillerReader only re-arms from a pull) and this source would
+    // stay parked WAIT_RESTORE forever. Re-arm before reporting "no output".
+    if (_sort_context->is_partition_sort_finished() && !_sort_context->is_output_finished()) {
+        _sort_context->rearm_stalled_restores();
+    }
+    return false;
 }
 
 bool LocalMergeSortSourceOperator::is_finished() const {
