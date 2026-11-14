@@ -41,13 +41,15 @@ public class LoadJobStatsListener implements LoadJobListener {
 
     @Override
     public void onStreamLoadTransactionFinish(TransactionState transactionState) {
-        onTransactionFinish(transactionState, false);
+        // Stream-load callbacks run after the publisher releases its table and transaction locks.
+        onTransactionFinish(transactionState, false, true);
     }
 
     @Override
     public void onLoadJobTransactionFinish(TransactionState transactionState) {
         // For compatibility reasons, broker load still uses async collect.
-        onTransactionFinish(transactionState, false);
+        // Its afterVisible callback already holds the publisher's table WRITE lock.
+        onTransactionFinish(transactionState, false, false);
     }
 
     @Override
@@ -79,7 +81,7 @@ public class LoadJobStatsListener implements LoadJobListener {
         return true;
     }
 
-    private void onTransactionFinish(TransactionState transactionState, boolean sync) {
+    private void onTransactionFinish(TransactionState transactionState, boolean sync, boolean useLock) {
         if (!needTrigger()) {
             return;
         }
@@ -105,8 +107,7 @@ public class LoadJobStatsListener implements LoadJobListener {
                     .filter(t -> !t.isMaterializedView()) // skip mvs since its stats will be triggered after refresh
                     .collect(Collectors.toList());
             for (Table table : tables) {
-                // stream load and broker load do not need lock
-                StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, sync, false,
+                StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, sync, useLock,
                         DmlType.INSERT_INTO);
             }
         } catch (Exception t) {
