@@ -151,6 +151,13 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
         RETURN_IF_ERROR(_stream_aggregator->evaluate_groupby_exprs(chunk.get()));
         RETURN_IF_ERROR(_stream_aggregator->evaluate_agg_fn_exprs(chunk.get(), true));
         ASSIGN_OR_RETURN(res, _stream_aggregator->streaming_compute_agg_state(chunk->num_rows(), false));
+        // _stream_aggregator is a SortedStreamingAggregator built by this operator's own
+        // StreamingAggregatorFactory, so no other operator ever polls its FunctionContexts. Without
+        // this call an error recorded by an aggregate function during the spill-restore merge
+        // (is_update_phase=false, i.e. merge_batch) would be dropped and the query would return the
+        // partially merged result instead of failing. Same idiom as the sink operators use, e.g.
+        // sorted_aggregate_streaming_sink_operator.cpp:95.
+        RETURN_IF_ERROR(_stream_aggregator->check_has_error());
         _accumulator.push(res);
 
     } else if (_has_last_chunk) {
