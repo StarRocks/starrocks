@@ -87,6 +87,26 @@ public class Log4jConfigTest {
     }
 
     @Test
+    public void testLogLayoutsDisableLocationLookup() throws IOException {
+        Config.sys_log_format = "plaintext";
+        String plaintextConfig = Log4jConfig.generateActiveLog4jXmlConfig();
+        Assertions.assertFalse(plaintextConfig.contains("%C"));
+        Assertions.assertFalse(plaintextConfig.contains("%M"));
+        Assertions.assertFalse(plaintextConfig.contains("%L"));
+        Assertions.assertTrue(plaintextConfig.contains("%c{1}"));
+
+        Config.sys_log_format = "json";
+        String jsonConfig = Log4jConfig.generateActiveLog4jXmlConfig();
+        Assertions.assertTrue(jsonConfig.contains("locationInfoEnabled=\"false\""));
+        Assertions.assertFalse(jsonConfig.contains("\"$resolver\":\"source\""));
+        Assertions.assertFalse(jsonConfig.contains("\"field\":\"lineNumber\""));
+        Assertions.assertFalse(jsonConfig.contains("\"field\":\"fileName\""));
+        Assertions.assertFalse(jsonConfig.contains("\"field\":\"methodName\""));
+        Assertions.assertTrue(jsonConfig.contains("\"thread.id\":{\"$resolver\":\"thread\",\"field\":\"id\"}"));
+        Assertions.assertTrue(jsonConfig.contains("\"logger\":{\"$resolver\":\"logger\",\"field\":\"name\"}"));
+    }
+
+    @Test
     public void testJsonLogOutputFormat() throws IOException {
         // enable logging with json format to console
         // with `sys_log_to_console = true`, the log will be written to System.err
@@ -116,8 +136,10 @@ public class Log4jConfigTest {
         Reader reader = new InputStreamReader(new ByteArrayInputStream(byteOs.toByteArray()));
         JsonObject jsonObject = Streams.parse(new JsonReader(reader)).getAsJsonObject();
 
-        Assertions.assertEquals("testJsonLogOutputFormat", jsonObject.get("method").getAsString());
-        Assertions.assertEquals("Log4jConfigTest.java", jsonObject.get("file").getAsString());
+        Assertions.assertFalse(jsonObject.has("method"));
+        Assertions.assertFalse(jsonObject.has("file"));
+        Assertions.assertFalse(jsonObject.has("line"));
+        Assertions.assertEquals(Log4jConfigTest.class.getName(), jsonObject.get("logger").getAsString());
         Assertions.assertEquals("WARN", jsonObject.get("level").getAsString());
         Assertions.assertEquals(logMessage, jsonObject.get("message").getAsString());
     }
