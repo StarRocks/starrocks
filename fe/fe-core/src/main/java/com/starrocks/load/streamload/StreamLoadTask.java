@@ -300,22 +300,24 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         return endTimeMs();
     }
 
-    public void beginTxnFromBackend(TUniqueId requestId, String clientIp, long backendId, TransactionResult resp) {
+    public void beginTxnFromBackend(TUniqueId requestId, String clientIp, long backendId, TransactionResult resp)
+            throws DuplicatedRequestException {
         beginTxn(0, 1, requestId, TxnCoordinator.fromBackend(clientIp, backendId), resp);
     }
 
     @Override
-    public void beginTxnFromFrontend(TransactionResult resp) {
+    public void beginTxnFromFrontend(TransactionResult resp) throws DuplicatedRequestException {
         beginTxnFromFrontend(0, 1, resp);
     }
 
-    public void beginTxnFromFrontend(int channelId, int channelNum, TransactionResult resp) {
+    public void beginTxnFromFrontend(int channelId, int channelNum, TransactionResult resp)
+            throws DuplicatedRequestException {
         beginTxn(channelId, channelNum, null,
                 new TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()), resp);
     }
 
     public void beginTxn(int channelId, int channelNum, TUniqueId requestId, TxnCoordinator txnCoordinator,
-                         TransactionResult resp) {
+                         TransactionResult resp) throws DuplicatedRequestException {
         long startTimeMs = System.currentTimeMillis();
         Exception exception = null;
         writeLock();
@@ -378,14 +380,9 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 }
             }
         } catch (DuplicatedRequestException e) {
-            // this is a duplicate request, considered a normal request,
-            LOG.info("duplicate request for stream load. request id: {}, txn_id: {}", e.getDuplicatedRequestId(),
-                    e.getTxnId());
-            // only begin state will throw duplciate request exception
-            resp.addResultEntry("Label", this.label);
-            resp.addResultEntry("TxnId", this.txnId);
-            resp.addResultEntry("BeginChannel", channelNum);
-            resp.addResultEntry("BeginTxnTimeMs", this.beforeLoadTimeMs - this.createTimeMs);
+            // Let the caller return the existing transaction ID without registering this new task
+            // or replacing the original task that owns the transaction's callbacks.
+            throw e;
         } catch (Exception e) {
             exception = e;
         } finally {
