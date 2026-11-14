@@ -489,7 +489,7 @@ public abstract class MVPCTRefreshPartitioner {
 
             // check the updated partition names in the ref base table
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, baseTable,
-                    false, queryRewriteParams);
+                    false, queryRewriteParams, pinnedRangeFor(baseTable));
             if (mvBaseTableUpdateInfo == null) {
                 throw new DmlException(String.format("Find the updated partition info of ref base table %s of mv " +
                         "%s failed, current mv partitions:%s", baseTable.getName(), mv.getName(), toRefreshPartitions));
@@ -554,7 +554,8 @@ public abstract class MVPCTRefreshPartitioner {
             if (tableColumnMap.containsKey(snapshotTable)) {
                 continue;
             }
-            if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
+            if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams,
+                    pinnedRangeFor(snapshotTable))) {
                 return true;
             }
             // A non-ref base table is not partition-aligned with the mv, so losing a partition invalidates all of it.
@@ -571,18 +572,18 @@ public abstract class MVPCTRefreshPartitioner {
      * - its base table has updated.
      * - its base table has deleted partitions.
      */
-    public static boolean isNonPartitionedMVNeedToRefresh(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
-                                                          MaterializedView mv,
-                                                          MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
+    public boolean isNonPartitionedMVNeedToRefresh(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
         for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
             Table snapshotTable = snapshotInfo.getBaseTable();
             if (!isPartitionRefreshSupported(snapshotTable)) {
                 return true;
             }
-            if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
+            TvrVersionRange pinnedRange = pinnedRangeFor(snapshotTable);
+            if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams,
+                    pinnedRange)) {
                 return true;
             }
-            if (hasDeletedPartitions(mv, snapshotTable, /* pinnedVersionRange */ null)) {
+            if (hasDeletedPartitions(mv, snapshotTable, pinnedRange)) {
                 return true;
             }
             if (hasUntrackedRows(mv, snapshotTable)) {
@@ -633,7 +634,7 @@ public abstract class MVPCTRefreshPartitioner {
 
     /** The snapshot the scan reads: a pinned run must answer base-state questions from it, not from live. */
     private TvrVersionRange pinnedRangeFor(Table baseTable) {
-        return mvContext.getRefreshRuntimeState().getPinnedTvrMap().get(baseTable.getUUID());
+        return mvContext.getRefreshRuntimeState().getPinnedRange(baseTable);
     }
 
     public void dropPartition(Database db, MaterializedView materializedView, String mvPartitionName) {

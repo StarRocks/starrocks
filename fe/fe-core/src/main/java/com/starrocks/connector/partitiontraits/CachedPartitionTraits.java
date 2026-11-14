@@ -66,12 +66,16 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     /**
-     * Construct the cache key: cache_{prefix}_{tableId}
+     * Construct the cache key: cache_{prefix}_{mvId}_{tableId}, suffixed with the pinned snapshot when
+     * this instance reads one.
      * @param prefix use the prefix to distinguish different cache keys, please check the unique usage of this method
      * @return the cache key
      */
     private String buildCacheKey(String prefix) {
-        return String.format("cache_%s_%s_%s", prefix, (mv == null) ? "0" : mv.getId(), table.getId());
+        String key = String.format("cache_%s_%s_%s", prefix, (mv == null) ? "0" : mv.getId(), table.getId());
+        // A pinned answer and a live answer for the same base table must not share an entry. The unpinned
+        // key stays unsuffixed: it is reported per-key in the refresh runtime profile.
+        return pinnedVersionRange == null ? key : key + "_" + pinnedVersionRange;
     }
 
     /**
