@@ -97,6 +97,12 @@ Routine Load は、Pulsar 用の以下のカスタムパラメータをサポー
 | property.pulsar_default_initial_position | No       | トピックのパーティションがサブスクライブされたときのデフォルトの初期位置。このパラメータは `pulsar_initial_positions` が指定されていない場合に有効です。その有効な値は `pulsar_initial_positions` の有効な値と同じです。例: `"``property.pulsar_default_initial_position" = "POSITION_EARLIEST"` |
 | property.auth.token                      | No       | Pulsar がセキュリティトークンを使用してクライアントを認証する場合、あなたの身元を確認するためにトークン文字列が必要です。例: `"p``roperty.auth.token" = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUJzdWIiOiJqaXV0aWFuY2hlbiJ9.lulGngOC72vE70OW54zcbyw7XdKSOxET94WT_hIqD"` |
 
+### コンシューマーの接続失敗
+
+Pulsar コンシューマーの作成時に `ConnectError` または `Timeout` が返された場合、Routine Load はそのタスクを中止し、既存のタスクスケジューリング間隔で代替タスクをスケジュールします。ジョブは `RUNNING` のままです。繰り返される失敗は、`OtherMsg`、タスクメッセージ、BE ログ、および中止タスクの統計に記録されます。コンシューマーの作成に失敗した場合、この再試行経路はメッセージを確認応答せず、ロードの進捗を進めません。再試行はスケジューリング間隔で継続するため、長期的な障害については調査が必要です。認証、認可、無効な設定など、その他のコンシューマー作成エラーでは、引き続きジョブが一時停止されます。
+
+タスクの自動再試行は、初期位置の指定がないタスクにのみ適用されます。いずれかのパーティションをまだ初期化している場合、代替タスクで `POSITION_EARLIEST` または `POSITION_LATEST` へのシークを繰り返さないよう、失敗時にジョブを一時停止します。
+
 ## ロードジョブとタスクを確認する
 
 ### ロードジョブを確認する

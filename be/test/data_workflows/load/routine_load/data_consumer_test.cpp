@@ -15,6 +15,7 @@
 #include "data_workflows/load/routine_load/data_consumer.h"
 
 #include <chrono>
+#include <functional>
 #include <map>
 #include <thread>
 #include <vector>
@@ -24,6 +25,7 @@
 // Routine load dependencies.
 #include "base/concurrency/stopwatch.hpp"
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "data_workflows/load/routine_load/data_consumer_group.h"
 #include "exec/exec_env.h"
 #include "librdkafka/rdkafka.h"
@@ -428,6 +430,73 @@ TEST_F(KafkaDataConsumerTest, build_kafka_message_meta_absent_key_headers) {
 }
 
 #ifndef __APPLE__
+class PulsarConsumerCreationTest : public testing::Test {
+protected:
+    void SetUp() override {
+        TPulsarLoadInfo info;
+        info.service_url = "pulsar://localhost:6650";
+        info.topic = "persistent://public/default/recovery";
+        info.subscription = "recovery-test";
+        _context = std::make_unique<StreamLoadContext>(nullptr);
+        _context->pulsar_info = std::make_unique<PulsarLoadInfo>(info);
+        _consumer = std::make_unique<PulsarDataConsumer>(_context.get());
+        ASSERT_OK(_consumer->init(_context.get()));
+        SyncPoint::GetInstance()->SetCallBack("PulsarDataConsumer::subscribe", [&](void* arg) {
+            *static_cast<std::function<pulsar::Result()>*>(arg) = [&] { return _result; };
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+    }
+
+    void TearDown() override {
+        SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+    }
+
+    Status assign() { return _consumer->assign_partition(_context->pulsar_info->topic, _context.get()); }
+
+    pulsar::Result _result = pulsar::ResultOk;
+    std::unique_ptr<StreamLoadContext> _context;
+    std::unique_ptr<PulsarDataConsumer> _consumer;
+};
+
+TEST_F(PulsarConsumerCreationTest, transient_failure_allows_task_retry) {
+    for (auto result : {pulsar::ResultConnectError, pulsar::ResultTimeout}) {
+        _result = result;
+        auto status = assign();
+        ASSERT_FALSE(status.ok());
+        EXPECT_EQ(std::string::npos, status.message().find("PAUSE:"));
+        EXPECT_NE(std::string::npos, status.message().find(pulsar::strResult(result)));
+
+        // No seek or acknowledgement is needed when using the existing subscription cursor.
+        _result = pulsar::ResultOk;
+        ASSERT_OK(assign());
+    }
+}
+
+TEST_F(PulsarConsumerCreationTest, permanent_failure_still_pauses) {
+    for (auto result : {pulsar::ResultAuthenticationError, pulsar::ResultAuthorizationError, pulsar::ResultInvalidUrl,
+                        pulsar::ResultInvalidConfiguration, pulsar::ResultUnknownError}) {
+        _result = result;
+        auto status = assign();
+        ASSERT_FALSE(status.ok());
+        EXPECT_EQ(0, status.message().find("PAUSE:"));
+        EXPECT_NE(std::string::npos, status.message().find(pulsar::strResult(result)));
+    }
+}
+
+TEST_F(PulsarConsumerCreationTest, initial_position_assignment_still_pauses) {
+    for (int64_t position : {0, 1}) {
+        // Another partition may already have been seeked before this consumer fails.
+        _context->pulsar_info->initial_positions = {{"another-partition", position}};
+        for (auto result : {pulsar::ResultConnectError, pulsar::ResultTimeout}) {
+            _result = result;
+            auto status = assign();
+            ASSERT_FALSE(status.ok());
+            EXPECT_EQ(0, status.message().find("PAUSE:"));
+        }
+    }
+}
+
 // build_pulsar_message_meta over a locally-built message: topic is the configured logical topic, the
 // PARTITION index is parsed out of the per-message name, key/properties are surfaced, and to_string()
 // exercises the PULSAR rendering branch. The message topic name is passed in rather than read via
