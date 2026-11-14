@@ -38,17 +38,28 @@ static const size_t max_merge_chunk_size = 65535;
 //    should return rows in an ascending order based on the key columns.
 // one typical usage of this iterator is merging rows of the segments in the same `rowset`.
 //
-ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children);
+struct MergeIteratorOptions {
+    // Set by compaction readers only. It opts the merge into the parallel prefill that
+    // enable_compaction_parallel_merge_init controls. Query, load and other merges share this
+    // iterator and never opt in, so the compaction switch cannot change their behavior or send
+    // their reads to the compaction pool.
+    bool compaction_merge = false;
+};
 
 ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
-                                         const std::string& merge_condition);
+                                         const MergeIteratorOptions& opts = {});
 
-ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children, const bool need_rssid_rowids);
+ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
+                                         const std::string& merge_condition, const MergeIteratorOptions& opts = {});
+
+ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children, const bool need_rssid_rowids,
+                                         const MergeIteratorOptions& opts = {});
 
 // new_mask_merge_iterator create a merge iterator based on source masks.
 // the order of rows is determined by mask sequence.
 ChunkIteratorPtr new_mask_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
                                          RowSourceMaskBuffer* mask_buffer,
-                                         RowSourceMaskBuffer* selection_buffer = nullptr);
+                                         RowSourceMaskBuffer* selection_buffer = nullptr,
+                                         const MergeIteratorOptions& opts = {});
 
 } // namespace starrocks

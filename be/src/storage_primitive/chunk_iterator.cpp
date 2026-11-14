@@ -31,6 +31,8 @@ public:
 
     size_t merged_rows() const override { return _iter->merged_rows(); }
 
+    OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) override { return _iter->set_read_stats(stats); }
+
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         RETURN_IF_ERROR(_iter->init_encoded_schema(dict_maps));
