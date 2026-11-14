@@ -14,6 +14,8 @@
 
 #include "formats/parquet/parquet_file_writer.h"
 
+#include <arrow/buffer.h>
+#include <arrow/io/memory.h>
 #include <gtest/gtest.h>
 #include <parquet/file_reader.h>
 #include <parquet/metadata.h>
@@ -244,6 +246,58 @@ TEST_F(ParquetFileWriterTest, TestWriteIntegralTypes) {
     ASSERT_TRUE(read_chunk != nullptr);
     ASSERT_EQ(read_chunk->num_rows(), 4);
     parquet::Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
+TEST_F(ParquetFileWriterTest, TestWriteEmptyStringMinMaxStatistics) {
+    // An entire write batch of empty strings leaves BinaryColumn's bytes buffer unallocated, so the empty values used
+    // to carry nullptr ByteArray pointers. parquet-cpp treats a nullptr ptr as "no value" when it updates the min/max
+    // statistics, which dropped '' from the column chunk statistics and made min/max pruning skip the row group for
+    // `col = ''`.
+    std::vector<TypeDescriptor> type_descs{TYPE_VARCHAR_DESC};
+    ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs, {false}));
+
+    // the first chunk only has empty strings, the second one has non-empty strings, both are in the same row group
+    auto chunk1 = std::make_shared<Chunk>();
+    {
+        auto col = BinaryColumn::create();
+        col->append("");
+        col->append("");
+        chunk1->append_column(std::move(col), chunk1->num_columns());
+    }
+    auto chunk2 = std::make_shared<Chunk>();
+    {
+        auto col = BinaryColumn::create();
+        col->append("hello");
+        col->append("world");
+        chunk2->append_column(std::move(col), chunk2->num_columns());
+    }
+    ASSERT_OK(writer->write(chunk1.get()));
+    ASSERT_OK(writer->write(chunk2.get()));
+    auto result = writer->close();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
+
+    // the empty strings must round trip
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    ASSERT_EQ(read_chunk->num_rows(), 4);
+
+    // and the column chunk statistics must include the empty string as the minimum
+    ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_file_path));
+    ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
+    std::string content(file_size, '\0');
+    ASSERT_OK(file->read_at_fully(0, content.data(), file_size));
+    auto parquet_reader = ::parquet::ParquetFileReader::Open(
+            std::make_shared<::arrow::io::BufferReader>(::arrow::Buffer::FromString(content)));
+    auto metadata = parquet_reader->metadata();
+    ASSERT_EQ(1, metadata->num_row_groups());
+    auto stats = metadata->RowGroup(0)->ColumnChunk(0)->statistics();
+    ASSERT_TRUE(stats != nullptr);
+    ASSERT_TRUE(stats->HasMinMax());
+    auto* typed_stats = dynamic_cast<::parquet::TypedStatistics<::parquet::ByteArrayType>*>(stats.get());
+    ASSERT_TRUE(typed_stats != nullptr);
+    ASSERT_EQ(0, typed_stats->min().len);
+    ASSERT_EQ("world", std::string(reinterpret_cast<const char*>(typed_stats->max().ptr), typed_stats->max().len));
 }
 
 TEST_F(ParquetFileWriterTest, TestWriteDecimal) {

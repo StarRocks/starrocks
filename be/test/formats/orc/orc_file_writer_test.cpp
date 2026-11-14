@@ -389,6 +389,66 @@ TEST_F(OrcFileWriterTest, TestWriteStringsNullable) {
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
+TEST_F(OrcFileWriterTest, TestWriteEmptyStringMinMaxStatistics) {
+    // An entire write batch of empty strings leaves BinaryColumn's _bytes buffer unallocated, so the empty values
+    // used to carry nullptr data pointers. The ORC library skips nullptr values when it updates the min/max
+    // statistics, which dropped '' from the stripe/file statistics and made min/max pruning skip the data for
+    // `col = ''`.
+    std::vector<TypeDescriptor> type_descs{TYPE_VARCHAR_DESC};
+    auto column_names = _make_type_names(type_descs);
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(_orc_stream), column_names, type_descs,
+                                                           std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, _write_options, []() {});
+    ASSERT_OK(writer->init());
+
+    // the first chunk only has empty strings, the second one has non-empty strings, both are in the same stripe
+    auto chunk1 = std::make_shared<Chunk>();
+    {
+        auto col = BinaryColumn::create();
+        col->append("");
+        col->append("");
+        chunk1->append_column(std::move(col), chunk1->num_columns());
+    }
+    auto chunk2 = std::make_shared<Chunk>();
+    {
+        auto col = BinaryColumn::create();
+        col->append("hello");
+        col->append("world");
+        chunk2->append_column(std::move(col), chunk2->num_columns());
+    }
+    ASSERT_OK(writer->write(chunk1.get()));
+    ASSERT_OK(writer->write(chunk2.get()));
+    auto result = writer->close();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
+
+    // the data must round trip
+    auto expected = std::make_shared<Chunk>();
+    {
+        auto col = BinaryColumn::create();
+        col->append("");
+        col->append("");
+        col->append("hello");
+        col->append("world");
+        expected->append_column(std::move(col), expected->num_columns());
+    }
+    ChunkPtr read_chunk;
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, false));
+    assert_equal_chunk(expected.get(), read_chunk.get());
+
+    // and the file statistics must include the empty string as the minimum (column 0 is the root struct)
+    auto reader = orc::createReader(orc::readLocalFile(_file_path), orc::ReaderOptions{});
+    auto stats = reader->getStatistics();
+    const auto* str_stats = dynamic_cast<const orc::StringColumnStatistics*>(stats->getColumnStatistics(1));
+    ASSERT_TRUE(str_stats != nullptr);
+    ASSERT_EQ(4, str_stats->getNumberOfValues());
+    ASSERT_TRUE(str_stats->hasMinimum());
+    ASSERT_TRUE(str_stats->hasMaximum());
+    ASSERT_EQ("", str_stats->getMinimum());
+    ASSERT_EQ("world", str_stats->getMaximum());
+}
+
 TEST_F(OrcFileWriterTest, TestWriteStringsNotNull) {
     std::vector<TypeDescriptor> type_descs{TYPE_VARCHAR_DESC, TYPE_CHAR_DESC};
 
