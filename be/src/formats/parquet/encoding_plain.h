@@ -247,16 +247,12 @@ public:
                 offsets[prev_offsets + i] = offset;
             }
 
-<<<<<<< HEAD
-            binary_column->get_bytes().reserve(offset);
-=======
-            // This runs once per page into the same column. An exact reserve(final_offset) would
+            // This runs once per page into the same column. An exact reserve(offset) would
             // reallocate and copy the whole column on every page (quadratic for large values),
             // so grow geometrically like the vector itself would.
-            if (bytes.capacity() < final_offset) {
-                bytes.reserve(std::max(final_offset, 2 * bytes.capacity()));
+            if (bytes.capacity() < offset) {
+                bytes.reserve(std::max(offset, 2 * bytes.capacity()));
             }
->>>>>>> 72c16b0 ([BugFix][RB-1649] Grow the parquet plain binary decode buffer geometrically across pages (#83259))
         }
 
         if (read_count == 0) {
