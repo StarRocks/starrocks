@@ -709,7 +709,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
             }
         }
     }
-    if (segment_iterators.size() > 1 && !is_overlapped()) {
+    if (segment_iterators.size() > 1 && !is_overlapped() && options.union_segments) {
         // union non-overlapped segment iterators
         auto iter = new_union_iterator(std::move(segment_iterators));
         return std::vector<ChunkIteratorPtr>{iter};
@@ -1313,6 +1313,9 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
 
         std::string segment_path;
         auto lake_io_opts = seg_options.lake_io_opts;
+        // A parallel load opens the segment on the load segment pool, where the caller's scoped remote read context
+        // does not reach: take it along explicitly.
+        lake_io_opts.remote_read = ScopedRemoteReadContext::or_current(lake_io_opts.remote_read);
         if (lake_io_opts.location_provider) {
             segment_path = lake_io_opts.location_provider->segment_location(tablet_id(), seg_name);
         } else {

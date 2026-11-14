@@ -23,6 +23,7 @@
 #include "base/statusor.h"
 #include "common/config_lake_fwd.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/query/query_remote_read.h"
 #include "connector/lake/lake_global_late_materialization_context.h"
 #include "exec/exec_env.h"
 #include "exec/olap_scan_node.h"
@@ -302,6 +303,9 @@ Status LakeScanTabletAdaptor::init_schema(RuntimeState* state) {
     _lake_io_opts.fill_data_cache = cache_options.fill_data_cache;
     _lake_io_opts.fill_metadata_cache = cache_options.fill_metadata_cache;
     _lake_io_opts.skip_disk_cache = cache_options.skip_disk_cache;
+    // The rows are fetched for this query: its remote reads, here and in the lookups that follow, are the query's.
+    _lake_io_opts.remote_read = query_remote_read_context(state);
+    ScopedRemoteReadContext remote_read_scope(_lake_io_opts.remote_read);
     auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     const auto& lake_scan_node = _glm_ctx->scan_node();
 

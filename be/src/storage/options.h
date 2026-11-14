@@ -85,6 +85,8 @@ struct LakeIOOptions {
     std::shared_ptr<std::atomic<bool>> sst_warmup_done;
     std::shared_ptr<FileSystem> fs;
     std::shared_ptr<starrocks::lake::LocationProvider> location_provider;
+    // Who the remote reads are for (query, load, compaction), handed to every file opened for the read.
+    RemoteReadContext remote_read;
 };
 
 } // namespace starrocks

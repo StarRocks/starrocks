@@ -24,6 +24,7 @@
 #include "base/uid_util.h"
 #include "common/status.h"
 #include "common/thread/threadpool.h"
+#include "fs/remote_read_context.h"
 #include "gutil/ref_counted.h"
 #include "storage/lake/sst_seek_range.h"
 #include "storage/lake/tablet_metadata.h"
@@ -77,7 +78,8 @@ public:
               _metadata(std::move(metadata)),
               _merge_base_level(merge_base_level),
               _output_fileset_id(fileset_id),
-              _seek_range(std::move(seek_range)) {}
+              _seek_range(std::move(seek_range)),
+              _remote_read(ScopedRemoteReadContext::current_or_load()) {}
 
     void set_cb(AsyncCompactCB* cb) { _cb = cb; }
 
@@ -108,6 +110,9 @@ private:
     bool _merge_base_level = false;
     UniqueId _output_fileset_id;
     SstSeekRange _seek_range;
+    // Whom the task's reads are for: the work that created it (a compaction, or the publish that compacts the index
+    // early), since the pool thread that runs it has no context of its own.
+    RemoteReadContext _remote_read;
     AsyncCompactCB* _cb = nullptr;
     // output sstable pb
     std::vector<PersistentIndexSstablePB> _output_sstables;

@@ -93,6 +93,7 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
                 return Status::InvalidArgument("tablet_mgr is null when loading sst file");
             }
             RandomAccessFileOptions opts;
+            opts.remote_read = ScopedRemoteReadContext::current_or_load();
             if (!sstable_pb.encryption_meta().empty()) {
                 ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
                 opts.encryption_info = std::move(info);
@@ -125,6 +126,7 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
             }
             // otherwise, load delvec from file
             LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
+            lake_io_opts.remote_read = ScopedRemoteReadContext::current_or_load();
             auto delvec_loader =
                     std::make_unique<LakeDelvecLoader>(tablet_mgr, nullptr, true /* fill cache */, lake_io_opts);
             RETURN_IF_ERROR(delvec_loader->load_from_meta(metadata, _sstable_pb.delvec(), &_delvec));
@@ -220,6 +222,7 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     // A fresh handle also starts its IO counters at 0, so the deltas below are the absolute IO done
     // by this multi_get.
     RandomAccessFileOptions opts;
+    opts.remote_read = ScopedRemoteReadContext::current_or_load();
     if (!_sstable_pb.encryption_meta().empty()) {
         ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
         opts.encryption_info = std::move(info);
@@ -387,6 +390,7 @@ StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
         const DelVectorPtr& delvec, const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RandomAccessFileOptions opts;
+    opts.remote_read = ScopedRemoteReadContext::current_or_load();
     if (!sstable_pb.encryption_meta().empty()) {
         ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
         opts.encryption_info = std::move(info);

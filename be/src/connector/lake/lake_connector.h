@@ -350,6 +350,16 @@ private:
     RuntimeProfile::Counter* _prefetch_hit_counter = nullptr;
     RuntimeProfile::Counter* _prefetch_wait_finish_timer = nullptr;
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
+    RuntimeProfile::Counter* _remote_io_queue_wait_timer = nullptr;
+    RuntimeProfile::Counter* _remote_io_fill_wait_timer = nullptr;
+    RuntimeProfile::Counter* _remote_io_fill_join_counter = nullptr;
+    RuntimeProfile::Counter* _segment_first_chunk_counter = nullptr;
+    RuntimeProfile::Counter* _segment_read_ahead_counter = nullptr;
+    RuntimeProfile::Counter* _segment_first_chunk_timer = nullptr;
+    RuntimeProfile::Counter* _remote_prefetch_block_counter = nullptr;
+    RuntimeProfile::Counter* _remote_prefetch_rejected_block_counter = nullptr;
+    RuntimeProfile::Counter* _remote_prefetch_range_counter = nullptr;
+    RuntimeProfile::Counter* _remote_prefetch_late_read_ahead_counter = nullptr;
 
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
 };

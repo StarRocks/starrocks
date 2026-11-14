@@ -72,6 +72,7 @@ set(COMPUTE_ENV_QUERY_FILES
     query/file_scan_split_context.cpp
     query/global_late_materialization_context.cpp
     query/partition_scan_range_pruner.cpp
+    query/query_remote_read.cpp
     query/query_runtime_state.cpp
     query/query_scan_metrics.cpp
     query/scan_conjuncts_manager.cpp

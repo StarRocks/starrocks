@@ -92,6 +92,18 @@ public:
 
     virtual std::size_t merged_rows() const { return 0; }
 
+    // Read-ahead across iterators read one after another (see new_union_iterator): an iterator whose turn
+    // has not come yet may be asked to get ready to read and to start fetching the first data it will read.
+    // `*started` is false when the iterator has no read-ahead of its own.
+    virtual Status start_read_ahead(bool* started) {
+        *started = false;
+        return Status::OK();
+    }
+    // Data blocks this iterator has asked to have fetched and has not read yet.
+    virtual size_t read_ahead_blocks() const { return 0; }
+    // Whether this iterator has asked for every block it will read, so that the next one may start.
+    virtual bool read_ahead_done() const { return true; }
+
     const Schema& schema() const { return _schema; }
 
     // Returns the Schema of the result.

@@ -716,6 +716,18 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
     return Status::OK();
 }
 
+void TabletReader::flush_reusable_iterator_io_stats() {
+    for (const auto& [rowset_idx, segment_idx] : _used_reusable_slots) {
+        if (rowset_idx < _reusable_rowset_iterators.size() &&
+            segment_idx < _reusable_rowset_iterators[rowset_idx].size()) {
+            if (const auto& iter = _reusable_rowset_iterators[rowset_idx][segment_idx]; iter != nullptr) {
+                flush_segment_iterator_io_stats(iter.get());
+            }
+        }
+    }
+    _used_reusable_slots.clear();
+}
+
 void TabletReader::close() {
     if (_collect_iter != nullptr) {
         _collect_iter->close();
@@ -730,6 +742,7 @@ void TabletReader::close() {
         }
     }
     _reusable_rowset_iterators.clear();
+    _used_reusable_slots.clear();
     STLDeleteElements(&_predicate_free_list);
     _rowsets.clear();
     _obj_pool.clear();
@@ -1123,6 +1136,8 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
 Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters) {
     RowsetReadOptions rs_opts;
     RETURN_IF_ERROR(init_rowset_read_options(params, &rs_opts));
+    // A rowset's own union of its segments would hide them from the union that reads ahead.
+    rs_opts.union_segments = !_union_reads_ahead;
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
 
@@ -1161,6 +1176,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                          enhance_error_prompt(rowset->read_prepared_segment(
                                  schema(), rs_opts, prepared_segments, segment_idx, params.prepared_segment_read_state,
                                  &_reusable_rowset_iterators[rowset_idx])));
+        _used_reusable_slots.emplace_back(rowset_idx, segment_idx);
         iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
         _stats.rowsets_read_count++;
         return Status::OK();
@@ -1349,7 +1365,23 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
     return Status::OK();
 }
 
+bool TabletReader::union_reads_ahead(const TabletReaderParams& params) const {
+    // A query scan that walks all the segments of the tablet one after another, in ascending order, through the
+    // union below starts the read-ahead of the next segments while it reads the current one; a split scan reads its
+    // segments from several scan tasks at once already. Only the key types that always take the union branch
+    // qualify, as the segments are known to reach it before they are read.
+    const KeysType keys_type = _tablet_schema->keys_type();
+    const bool union_branch =
+            !params.sorted_by_keys_per_tablet && (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
+                                                  (keys_type == UNIQUE_KEYS && params.skip_aggregation));
+    return union_branch && params.reader_type == ReaderType::READER_QUERY && !_need_split && _is_asc_hint &&
+           params.rowid_range_option == nullptr && params.short_key_ranges_option == nullptr &&
+           remote_io_scheduler_enabled() && config::lake_scan_read_ahead_segments > 0 &&
+           config::remote_prefetch_window_blocks > 0;
+}
+
 Status TabletReader::init_collector(const TabletReaderParams& params) {
+    _union_reads_ahead = union_reads_ahead(params);
     std::vector<ChunkIteratorPtr> seg_iters;
     RETURN_IF_ERROR(get_segment_iterators(params, &seg_iters));
 
@@ -1415,7 +1447,13 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         //       |           |           |
         // SegmentIterator  ...    SegmentIterator
         //
-        _collect_iter = new_union_iterator(std::move(seg_iters));
+        // With _union_reads_ahead, each child is one segment (see union_reads_ahead()).
+        if (_union_reads_ahead) {
+            _collect_iter = new_union_iterator(std::move(seg_iters), config::lake_scan_read_ahead_segments,
+                                               config::remote_prefetch_window_blocks);
+        } else {
+            _collect_iter = new_union_iterator(std::move(seg_iters));
+        }
     } else if ((keys_type == AGG_KEYS || keys_type == UNIQUE_KEYS) && !skip_aggr) {
         //                 Timer
         //                   |

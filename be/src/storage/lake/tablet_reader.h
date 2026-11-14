@@ -17,6 +17,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "common/column_id.h"
@@ -96,6 +97,11 @@ public:
     // Precondition: the last method called must have been `prepare()`.
     Status open(const TabletReaderParams& read_params);
 
+    // Adds what the reused segment iterators of the scans since the last call have read to stats(): they are not
+    // closed between the scans they serve. Only the slots those scans used are visited; the others have not read since
+    // their own last flush.
+    void flush_reusable_iterator_io_stats();
+
     void close() override;
 
     const OlapReaderStatistics& stats() const;
@@ -158,6 +164,8 @@ private:
     Status init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
 
     Status init_collector(const TabletReaderParams& read_params);
+    // Whether init_collector() unions the segment iterators with lake_scan_read_ahead_segments.
+    bool union_reads_ahead(const TabletReaderParams& params) const;
     Status init_compaction_column_paths(const TabletReaderParams& read_params);
 
     static Status to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
@@ -172,6 +180,8 @@ private:
     std::vector<RowsetPtr> _rowsets;
     std::vector<SegmentSharedPtr> _segments;
     std::vector<std::vector<ChunkIteratorPtr>> _reusable_rowset_iterators;
+    // (rowset, segment) of the reusable slots used since the last flush_reusable_iterator_io_stats().
+    std::vector<std::pair<size_t, size_t>> _used_reusable_slots;
     std::shared_ptr<ChunkIterator> _collect_iter;
 
     DeletePredicates _delete_predicates;
@@ -193,6 +203,9 @@ private:
     std::optional<std::vector<SeekRange>> _cached_seek_ranges;
 
     bool _is_asc_hint = true;
+    // Set by init_collector() from union_reads_ahead(): the union reads ahead across the segments, so every rowset
+    // returns one iterator per segment.
+    bool _union_reads_ahead = false;
 
     // used for vertical compaction
     bool _is_vertical_merge = false;

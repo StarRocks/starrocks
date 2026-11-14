@@ -194,6 +194,28 @@ struct OlapReaderStatistics {
     int64_t prefetch_wait_finish_ns = 0;
     int64_t prefetch_pending_ns = 0;
 
+    // Shared-data remote read scheduler, while it runs: time the reads of this scan waited for their remote reads to be
+    // admitted, time they waited for a cache block fill another read had started, and how many joined such a fill.
+    // The fill wait overlaps the remote read time of the read that started the fill; neither wait is remote IO.
+    int64_t remote_io_queue_wait_ns = 0;
+    int64_t remote_io_fill_wait_ns = 0;
+    int64_t remote_io_fill_joins = 0;
+    // Read-ahead of the segment readers while the remote I/O scheduler is enabled (see SegmentPrefetchWindow): cache
+    // blocks queued for fetching, blocks the scheduler refused because its queue was full, and page ranges handed to
+    // warm_cache_async().
+    int64_t remote_prefetch_blocks = 0;
+    int64_t remote_prefetch_rejected_blocks = 0;
+    int64_t remote_prefetch_ranges = 0;
+    // Segment readers that started to read their late-materialized columns ahead.
+    int64_t remote_prefetch_late_read_ahead = 0;
+    // The first chunk of each segment reader, from its first get_next after it was opened or reused: how many, and
+    // their wall time, so that starting readers cold shows apart from the steady read.
+    int64_t segment_first_chunks = 0;
+    int64_t segment_first_chunk_ns = 0;
+    // Segment readers that started fetching their first blocks while the reader before them was still read
+    // (ChunkIterator::start_read_ahead).
+    int64_t segment_read_ahead_started = 0;
+
     // Segments whose footer was read on behalf of this reader, i.e. that were not already open. Only the
     // callers that pass their statistics to Segment::open count them.
     int64_t segments_opened = 0;
@@ -370,6 +392,16 @@ struct OlapReaderStatistics {
         prefetch_hit_count += other.prefetch_hit_count;
         prefetch_wait_finish_ns += other.prefetch_wait_finish_ns;
         prefetch_pending_ns += other.prefetch_pending_ns;
+        remote_io_queue_wait_ns += other.remote_io_queue_wait_ns;
+        remote_io_fill_wait_ns += other.remote_io_fill_wait_ns;
+        remote_io_fill_joins += other.remote_io_fill_joins;
+        remote_prefetch_blocks += other.remote_prefetch_blocks;
+        remote_prefetch_rejected_blocks += other.remote_prefetch_rejected_blocks;
+        remote_prefetch_ranges += other.remote_prefetch_ranges;
+        remote_prefetch_late_read_ahead += other.remote_prefetch_late_read_ahead;
+        segment_first_chunks += other.segment_first_chunks;
+        segment_first_chunk_ns += other.segment_first_chunk_ns;
+        segment_read_ahead_started += other.segment_read_ahead_started;
         lake_prepared_rowsets += other.lake_prepared_rowsets;
         lake_prepared_segments += other.lake_prepared_segments;
         lake_prepared_scan_rows += other.lake_prepared_scan_rows;
@@ -451,5 +483,10 @@ const char* const kIONsWriteRemote = "io_ns_write_remote";
 const char* const kPrefetchHitCount = "prefetch_hit_count";
 const char* const kPrefetchWaitFinishNs = "prefetch_wait_finish_ns";
 const char* const kPrefetchPendingNs = "prefetch_pending_ns";
+const char* const kRemoteQueueWaitNs = "remote_queue_wait_ns";
+const char* const kRemoteFillWaitNs = "remote_fill_wait_ns";
+const char* const kRemoteFillJoins = "remote_fill_joins";
+const char* const kPrefetchBlocksSubmitted = "prefetch_blocks_submitted";
+const char* const kPrefetchBlocksRejected = "prefetch_blocks_rejected";
 
 } // namespace starrocks
