@@ -14,7 +14,7 @@
 
 package com.starrocks.qe.feedback.skeleton;
 
-import com.google.common.collect.Sets;
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.qe.feedback.NodeExecStats;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
@@ -22,13 +22,18 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 public class BlockingAggNode extends SkeletonNode {
     private final List<ColumnRefOperator> groupBys;
 
+    // The order of the group by keys does not matter, so equals and hashCode both use them as a set
+    private final Set<ColumnRefOperator> groupBySet;
+
     public BlockingAggNode(OptExpression optExpression, NodeExecStats nodeExecStats, SkeletonNode parent) {
         super(optExpression, nodeExecStats, parent);
         groupBys = ((PhysicalHashAggregateOperator) optExpression.getOp()).getGroupBys();
+        groupBySet = ImmutableSet.copyOf(groupBys);
     }
 
     public List<ColumnRefOperator> getGroupBys() {
@@ -37,7 +42,7 @@ public class BlockingAggNode extends SkeletonNode {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), groupBys);
+        return Objects.hash(super.hashCode(), groupBySet);
     }
 
     @Override
@@ -55,6 +60,6 @@ public class BlockingAggNode extends SkeletonNode {
         }
 
         BlockingAggNode that = (BlockingAggNode) o;
-        return Objects.equals(Sets.newHashSet(groupBys), Sets.newHashSet(that.groupBys));
+        return groupBySet.equals(that.groupBySet);
     }
 }

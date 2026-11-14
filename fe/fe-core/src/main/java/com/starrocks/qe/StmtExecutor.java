@@ -1392,6 +1392,9 @@ public class StmtExecutor {
             context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
+            // The record is added when the query is planned with tuning guides. analyzePlanWithExecStats removes it only
+            // for a query that finishes with exec stats, so drop it here for EXPLAIN, failed and cancelled queries too.
+            PlanTuningAdvisor.getInstance().removeOptimizedQueryRecord(context.getQueryId());
             if (context.getState().isError()) {
                 // Surface the failing statement's error as a session diagnostic so SHOW ERRORS /
                 // SHOW WARNINGS can read it back. The code mirrors the ERR packet (default 1064).
