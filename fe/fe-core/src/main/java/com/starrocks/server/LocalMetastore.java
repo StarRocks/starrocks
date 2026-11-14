@@ -270,6 +270,8 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -1007,12 +1009,27 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     @Override
     public void addPartitions(ConnectContext ctx, Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException {
-        // NOTE: no need to do the CatalogUtils.checkTableExist and CatalogUtils.checkNativeTable here,
-        // it will be checked in the following method.
-        addPartitions(ctx, db, tableName,
+        addPartitions(ctx, db, checkTableForAddPartitions(db, tableName),
                 addPartitionClause.getResolvedPartitionDescList(),
                 addPartitionClause.isTempPartition(),
-                addPartitionClause.getDistributionDesc());
+                addPartitionClause.getDistributionDesc(), null);
+    }
+
+    public void addPartitionsForDynamicOverwrite(ConnectContext ctx, Database db, long tableId,
+                                                  AddPartitionClause clause, TransactionState txnState)
+            throws DdlException {
+        Preconditions.checkArgument(clause.isTempPartition());
+        Preconditions.checkNotNull(txnState);
+        addPartitions(ctx, db, checkTableForAddPartitions(db, tableId), clause.getResolvedPartitionDescList(), true,
+                clause.getDistributionDesc(), txnState);
+    }
+
+    /** Requires the target table lock followed by the transaction lock. */
+    public boolean canCreateDynamicOverwritePartition(long dbId, long tableId, TransactionState txnState) {
+        long txnId = txnState.getTransactionId();
+        return stateMgr.getGlobalTransactionMgr().getTransactionState(dbId, txnId) == txnState
+                && txnState.getTransactionStatus() == TransactionStatus.PREPARE
+                && stateMgr.getInsertOverwriteJobMgr().isDynamicOverwriteRunning(dbId, tableId, txnId);
     }
 
     private OlapTable checkTable(Database db, String tableName) throws DdlException {
@@ -1379,10 +1396,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
-    private void addPartitions(ConnectContext ctx, Database db, String tableName, List<PartitionDesc> partitionDescs,
-                               boolean isTempPartition, DistributionDesc distributionDesc) throws DdlException {
+    private void addPartitions(ConnectContext ctx, Database db, OlapTable olapTable, List<PartitionDesc> partitionDescs,
+                               boolean isTempPartition, DistributionDesc distributionDesc, TransactionState txnState)
+            throws DdlException {
         DistributionInfo distributionInfo;
-        OlapTable olapTable = checkTableForAddPartitions(db, tableName);
+        String tableName = olapTable.getName();
         OlapTable copiedTable;
         ColocateTableIndex.GroupId metaGroupColocateGroupId;
 
@@ -1491,15 +1509,28 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         db, olapTable, partitionsToAdd, partitionInfo, checkResult, isTempPartition);
                 AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoV2List);
                 OlapTable finalOlapTable = olapTable;
-                GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos, wal -> {
-                    updatePartitionInfo(partitionInfo, partitionsToAdd, isTempPartition, finalOlapTable, checkResult);
+                EditLog editLog = stateMgr.getEditLog();
+                if (txnState == null) {
+                    editLog.logAddPartitions(infos, wal -> {
+                        updatePartitionInfo(partitionInfo, partitionsToAdd, isTempPartition, finalOlapTable, checkResult);
+                        updatePartitionColocation(finalOlapTable);
+                    });
+                } else {
+                    // Cleanup journals FAILED under the table lock, then aborts the transaction outside it.
+                    // Recheck both states before journaling, and serialize the journal/apply with abort.
+                    txnState.writeLock();
                     try {
-                        colocateTableIndex.updateLakeTableColocationInfo(finalOlapTable, true, null);
-                    } catch (DdlException e) {
-                        LOG.info("table {} update colocation info failed when add partition, {}",
-                                finalOlapTable.getId(), e.getMessage());
+                        if (!canCreateDynamicOverwritePartition(db.getId(), finalOlapTable.getId(), txnState)) {
+                            throw new DdlException("Dynamic overwrite transaction " + txnState.getTransactionId()
+                                    + " is no longer allowed to create temporary partitions");
+                        }
+                        editLog.logAddPartitions(infos, wal ->
+                                updatePartitionInfo(partitionInfo, partitionsToAdd, true, finalOlapTable, checkResult));
+                    } finally {
+                        txnState.writeUnlock();
                     }
-                });
+                    updatePartitionColocation(finalOlapTable);
+                }
 
                 for (PartitionPersistInfoV2 infoV2 : partitionInfoV2List) {
                     LOG.info("succeed in creating partition[{}], name: {}, temp: {}", infoV2.getPartition().getId(),
@@ -1512,6 +1543,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         } catch (DdlException e) {
             cleanTabletIdSetForAll(tabletIdSetForAll);
             throw e;
+        }
+    }
+
+    private void updatePartitionColocation(OlapTable table) {
+        try {
+            colocateTableIndex.updateLakeTableColocationInfo(table, true, null);
+        } catch (DdlException e) {
+            LOG.info("table {} update colocation info failed when add partition, {}", table.getId(), e.getMessage());
         }
     }
 
