@@ -96,6 +96,7 @@ import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.statistics.StatisticsLoadBudget;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.spm.SQLPlanStorage;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
@@ -1721,6 +1722,48 @@ public class ConnectContext {
 
     public int getAliveComputeNumber() {
         return globalStateMgr.getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
+    }
+
+    /**
+     * Whether the planner counts the alive execution nodes of the query's warehouse
+     * ({@link #getQueryExecNodeNumber()}) instead of the alive backends. It only applies in shared-data mode, where a
+     * cluster usually has no backends at all, and session variable enable_cbo_warehouse_exec_nodes can turn it off.
+     */
+    public boolean isUseWarehouseExecNodes() {
+        return RunMode.isSharedDataMode() && sessionVariable.isEnableCboWarehouseExecNodes();
+    }
+
+    /**
+     * The number of alive execution nodes that can run the current query. In shared-data mode these are the alive
+     * backends and compute nodes of the session's warehouse, whatever compute node groups it has. In shared-nothing mode
+     * these are the alive backends. A positive cbo_debug_alive_backend_number replaces the result.
+     *
+     * <p>It only reads node states kept in FE memory and never calls StarMgr, because the optimizer asks for it while
+     * it costs every join.
+     */
+    public int getQueryExecNodeNumber() {
+        int debugNodeNumber = sessionVariable.getCboDebugAliveBackendNumber();
+        if (debugNodeNumber > 0) {
+            return debugNodeNumber;
+        }
+        SystemInfoService clusterInfo = globalStateMgr.getNodeMgr().getClusterInfo();
+        if (!RunMode.isSharedDataMode()) {
+            return Math.max(1, clusterInfo.getAliveBackendNumber());
+        }
+
+        long nodeNumber = 0;
+        Long warehouseId = getCurrentWarehouseIdAllowNull();
+        if (warehouseId != null) {
+            long warehouse = warehouseId;
+            nodeNumber = clusterInfo.backendAndComputeNodeStream()
+                    .filter(node -> node.isAlive() && node.getWarehouseId() == warehouse)
+                    .count();
+        }
+        if (nodeNumber == 0) {
+            // The warehouse has no alive node this FE knows of; fall back to every alive compute node.
+            nodeNumber = clusterInfo.getAliveComputeNodeNumber() + clusterInfo.getAliveBackendNumber();
+        }
+        return (int) Math.max(1, nodeNumber);
     }
 
     /**

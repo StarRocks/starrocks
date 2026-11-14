@@ -38,6 +38,7 @@ import com.starrocks.common.Version;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
@@ -78,6 +79,13 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         ConnectContext ctx = ConnectContext.get();
         long beNum = ctx.getAliveBackendNumber();
         dumpJson.addProperty("be_number", beNum);
+        // With enable_cbo_warehouse_exec_nodes on, a shared-data cluster costs broadcasts and hash joins with the alive
+        // execution nodes of the query's warehouse rather than its backends, which it usually has none of, so record
+        // that number too. With it off the planner used the backends, so be_number alone replays the plan. Check the
+        // session variables the query was planned with, which a SET_VAR hint may have changed for the query only.
+        if (RunMode.isSharedDataMode() && dumpInfo.getSessionVariable().isEnableCboWarehouseExecNodes()) {
+            dumpJson.addProperty("exec_node_number", ctx.getQueryExecNodeNumber());
+        }
         // backend core stat
         BackendResourceStat.getInstance().dump(dumpJson, ctx);
         // exception
