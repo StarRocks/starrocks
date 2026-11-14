@@ -192,6 +192,27 @@ public class AlterJobV2Test extends StarRocksTestBase {
     }
 
     @Test
+    public void testModifyColumnInheritsDefaultValueWhenOmitted() throws Exception {
+        try {
+            starRocksAssert.withTable("CREATE TABLE modify_column_keep_default(" +
+                        "k1 int, v1 varchar(8) NOT NULL DEFAULT 'abc') ENGINE = OLAP " +
+                        "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
+
+            String alterStmtStr = "alter table test.modify_column_keep_default modify column v1 varchar(16) not null";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr,
+                        connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+
+            waitForSchemaChangeAlterJobFinish();
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getDb("test").getTable("modify_column_keep_default");
+            Assertions.assertEquals("abc", table.getBaseColumn("v1").getDefaultValue());
+        } finally {
+            starRocksAssert.dropTable("modify_column_keep_default");
+        }
+    }
+
+    @Test
     public void testModifyRelatedColumnWithStr2DatePartitionTable() {
         try {
             // modify column which define in mv
