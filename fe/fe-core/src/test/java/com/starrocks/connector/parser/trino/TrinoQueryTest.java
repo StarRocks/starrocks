@@ -14,10 +14,22 @@
 
 package com.starrocks.connector.parser.trino;
 
+import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 public class TrinoQueryTest extends TrinoTestBase {
     @BeforeAll
@@ -1180,21 +1192,22 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "    array[24,25,26] as bid\n" +
                 ") a\n" +
                 "cross join unnest(array[row(1, aid), row(2, bid)]) as plat(plat, pid)";
-        assertPlanContains(sql, "[1,2]", "[10: expr,11: expr]");
+        // the ROW array stays intact and its fields are extracted after the UNNEST
+        assertPlanContains(sql, "[row(1, 10: expr),row(2, 11: expr)]", "unnest.col1", "unnest.col2");
 
         sql = "select * from (\n" +
                 "select 1 gid, array[11,12,13] aid, array[14,15,16] as bid union all select 2 gid, array[21,22,23] as aid, " +
                 "array[24,25,26] as bid\n" +
                 ") a\n" +
                 "cross join unnest(array[row(1,2), row(3,4)],array[2,3]) as plat(a,b,c);";
-        assertPlanContains(sql, "[1,3]", "[2,4]", "[2,3]");
+        assertPlanContains(sql, "row(1, 2)", "row(3, 4)", "[2,3]");
 
         sql = "select * from (\n" +
                 "select 1 gid, array[11,12,13] aid, array[14,15,16] as bid union all select 2 gid, array[21,22,23] as aid, " +
                 "array[24,25,26] as bid\n" +
                 ") a\n" +
                 "cross join unnest(array[0,0], array[row(1,2), row(3,4)],array[2,3]) as plat(a,b,c,d);";
-        assertPlanContains(sql, "[0,0]", "[1,3]", "[2,4]", "[2,3]");
+        assertPlanContains(sql, "[0,0]", "row(1, 2)", "row(3, 4)", "[2,3]");
 
         sql = "select * from (\n" +
                 "    select 1 gid, array[11,12,13] aid, array[14,15,16] as bid union all select 2 gid, array[21,22,23] as aid, " +
@@ -1202,8 +1215,96 @@ public class TrinoQueryTest extends TrinoTestBase {
                 ") a\n" +
                 "cross join unnest(array[row(1, aid), row(2, bid)]) as plat(plat, pid)\n" +
                 "cross join unnest(plat.pid) as t(plat_id);";
-        assertPlanContains(sql, "[1,2]", "[10: expr,11: expr]", "returnTypes: [TINYINT, ARRAY<TINYINT>]",
-                "returnTypes: [TINYINT]");
+        assertPlanContains(sql, "[row(1, 10: expr),row(2, 11: expr)]",
+                "returnTypes: [struct<`col1` tinyint(4), `col2` array<tinyint(4)>>]", "returnTypes: [TINYINT]");
+    }
+
+    @Test
+    public void testStandaloneUnnest() throws Exception {
+        // Only the UNNEST columns are visible, not the one-row relation it is joined to.
+        assertOutputColumns("select * from unnest(array[1, 2])", List.of("unnest"));
+        assertOutputColumns("select * from unnest(array[1, 2]) as t(x)", List.of("x"));
+        assertOutputColumns("select t.* from unnest(array[1, 2], array['a', 'b']) as t(x, y)", List.of("x", "y"));
+        assertPlanContains("select x from unnest(array[1, 2]) as t(x)", "tableFunctionName: unnest");
+
+        // UNNEST on the left side of a join
+        String sql = "select t.x, t0.v2 from unnest(array[1, 2]) as t(x) join t0 on t.x = t0.v1";
+        assertOutputColumns(sql, List.of("x", "v2"));
+        assertPlanContains(sql, "tableFunctionName: unnest");
+
+        // UNNEST in a CTE
+        sql = "with xs as (select x from unnest(array[1, 2, 3]) as t(x)) select count(*) from xs";
+        assertPlanContains(sql, "tableFunctionName: unnest");
+
+        // UNNEST on the right side of a join still references its left input.
+        sql = "select t0.v1, t.x from t0 cross join unnest(array[t0.v2, t0.v3]) as t(x)";
+        assertOutputColumns(sql, List.of("v1", "x"));
+        assertPlanContains(sql, "tableFunctionName: unnest", "[2: v2,3: v3]");
+
+        // A USING join on UNNEST joins and outputs the UNNEST column, not the one-row relation's column.
+        sql = "select x from unnest(array[1, 2]) as t(x) join (select 2 as x) s using (x)";
+        assertPlanContains(sql, "OUTPUT EXPRS:2: x", "predicates: 2: x = 2");
+        sql = "select a, b from unnest(array[row(1, 'x'), row(2, 'y')]) as t(a, b) join (select 2 as a) s using (a)";
+        assertPlanContains(sql, "OUTPUT EXPRS:3: a | 4: b", "predicates: 2: unnest.col1[true] = 2");
+
+        analyzeFail("select * from unnest(array[1, 2]) as t(x, y)", "has 1 columns available but 2 columns specified");
+    }
+
+    @Test
+    public void testUnnestRowExpansion() throws Exception {
+        // An array of ROWs exposes each immediate ROW field as a column, whatever produces the array.
+        assertOutputColumns("select * from unnest(array[row(1, 'x'), row(2, 'y')]) as t(a, b)",
+                List.of("a", "b"), List.of(IntegerType.TINYINT, VarcharType.VARCHAR));
+        assertOutputColumns("select t.* from unnest(cast(array[row(1, 'x')] as array(row(a integer, b varchar(8))))) t",
+                List.of("A", "B"), List.of(IntegerType.INT, TypeFactory.createVarcharType(8)));
+        assertOutputColumns("select t.* from test_struct s cross join unnest(s.c1.a) as t(b)",
+                List.of("b"), List.of(IntegerType.INT));
+        // Arrays keep their alignment: a ROW array next to a scalar array of a different length.
+        assertOutputColumns("select t.* from (select array[row(1, 'x'), row(2, 'y')] as arr) s " +
+                        "cross join unnest(s.arr, array[9]) as t(a, b, c)",
+                List.of("a", "b", "c"), List.of(IntegerType.TINYINT, VarcharType.VARCHAR, IntegerType.TINYINT));
+        // Only the immediate fields are expanded; a nested ROW stays a ROW column.
+        assertOutputColumns("select * from unnest(array[row(1, row(2, 'x'))]) as t(a, b)",
+                List.of("a", "b"), List.of(IntegerType.TINYINT,
+                        new StructType(List.of(IntegerType.TINYINT, VarcharType.VARCHAR))));
+
+        // The fields are extracted after the UNNEST, which keeps the array intact.
+        String plan = getFragmentPlan("select a, b from unnest(array[row(1, 'x'), row(2, 'y')]) as t(a, b)");
+        assertContains(plan, "tableFunctionName: unnest", "[row(1, 'x'),row(2, 'y')]", "returnTypes: [struct<");
+
+        // In a left join the fields are extracted after the NULL padding.
+        String sql = "select t.a, t.b from (select array[row(v1, v2)] as arr from t0) s " +
+                "left join unnest(s.arr) as t(a, b) on true";
+        JoinRelation join = (JoinRelation) ((SelectRelation) ((QueryStatement) analyzeSuccess(sql))
+                .getQueryRelation()).getRelation();
+        Assertions.assertTrue(((TableFunctionRelation) join.getRight()).getIsLeftJoin());
+        plan = getFragmentPlan(sql);
+        Assertions.assertTrue(plan.indexOf("unnest.col1") < plan.indexOf("tableFunctionName: unnest"), plan);
+
+        // A second UNNEST consumes an expanded array field.
+        assertOutputColumns("select t.a, u.x from unnest(array[row(1, array[10, 20])]) as t(a, arr) " +
+                        "cross join unnest(t.arr) as u(x)",
+                List.of("a", "x"), List.of(IntegerType.TINYINT, IntegerType.TINYINT));
+
+        analyzeFail("select * from unnest(array[row(1, 'x')]) as t(a)", "has 2 columns available but 1 columns specified");
+    }
+
+    private static void assertOutputColumns(String sql, List<String> expected) {
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        Assertions.assertEquals(expected, statement.getQueryRelation().getColumnOutputNames());
+    }
+
+    private static void assertOutputColumns(String sql, List<String> names, List<Type> types) {
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        Assertions.assertEquals(names, statement.getQueryRelation().getColumnOutputNames());
+        Assertions.assertEquals(types,
+                statement.getQueryRelation().getOutputExpression().stream().map(Expr::getType).toList());
+    }
+
+    private static void assertContains(String plan, String... expected) {
+        for (String text : expected) {
+            Assertions.assertTrue(plan.contains(text), "expected " + text + " in\n" + plan);
+        }
     }
 
     @Test

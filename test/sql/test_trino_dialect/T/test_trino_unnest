@@ -1,0 +1,12 @@
+-- name: testTrinoStandaloneUnnest
+set sql_dialect='trino';
+select x from unnest(array[1, 2, 3]) as t(x) order by x;
+select * from unnest(array[1, 2], array['a', 'b', 'c']) as t(x, y) order by y;
+select t.x, s.v from unnest(array[1, 2]) as t(x) join (select 2 as k, 'two' as v) s on t.x = s.k;
+select a, b from unnest(array[row(1, 'x'), row(2, 'y')]) as t(a, b) order by a;
+select a, b, c from unnest(array[row(1, 'x'), row(2, 'y')], array[9]) as t(a, b, c) order by a;
+select a, b from unnest(array[row(1, 'x'), null]) as t(a, b) order by a;
+select s.id, t.a, t.b from (select id, if(id = 1, array[row(1, 'x')], null) as arr from unnest(array[1, 2]) as u(id)) s left join unnest(s.arr) as t(a, b) on true order by s.id;
+select t.a, u.x from unnest(array[row(1, array[10, 20]), row(2, array[30])]) as t(a, arr) cross join unnest(t.arr) as u(x) order by u.x;
+select x from unnest(array[1, 2]) as t(x) join (select 2 as x) s using (x);
+select a, b from unnest(array[row(1, 'x'), row(2, 'y')]) as t(a, b) join (select 2 as a) s using (a);
