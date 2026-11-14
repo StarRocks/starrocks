@@ -293,6 +293,9 @@ public class OptExpressionDuplicator {
             }
 
             processCommon(opBuilder);
+            if (scanOperator.hasPredicateForMvRewrite()) {
+                scanBuilder.setPredicateForMvRewrite(rewriter.rewrite(scanOperator.getPredicateForMvRewrite()));
+            }
 
             if (partialPartitionRewrite
                     && optExpression.getOp() instanceof LogicalOlapScanOperator
