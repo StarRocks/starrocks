@@ -323,6 +323,10 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
 
                         updateCodeCompr(updateProperties, FileFormat.fromString(currentFileFormat), entry.getValue());
                         break;
+                    case IcebergApiConverter.IDENTIFIER_FIELDS:
+                        // stored as a property it would be silently ignored; it is schema metadata
+                        throw new StarRocksConnectorException(
+                                "Property " + IcebergApiConverter.IDENTIFIER_FIELDS + " can only be set by CREATE TABLE");
                     default:
                         updateProperties.set(entry.getKey(), entry.getValue());
                 }

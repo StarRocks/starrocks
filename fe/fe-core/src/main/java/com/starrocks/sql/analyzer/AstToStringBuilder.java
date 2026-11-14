@@ -44,6 +44,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ParseNode;
@@ -507,6 +508,13 @@ public class AstToStringBuilder {
         if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
             properties.put("format-version", String.valueOf(icebergTable.getFormatVersion()));
+            // render from the schema; a stale table property of the same name carries no meaning
+            properties.remove(IcebergApiConverter.IDENTIFIER_FIELDS);
+            String identifierFields = IcebergApiConverter.toIdentifierFieldsProperty(
+                    icebergTable.getNativeTable().schema());
+            if (identifierFields != null) {
+                properties.put(IcebergApiConverter.IDENTIFIER_FIELDS, identifierFields);
+            }
         }
 
         if (!properties.isEmpty()) {
