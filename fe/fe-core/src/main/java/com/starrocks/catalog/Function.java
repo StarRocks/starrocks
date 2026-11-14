@@ -61,6 +61,8 @@ import com.starrocks.type.InvalidType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 import org.apache.commons.lang.ArrayUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -74,7 +76,13 @@ import java.util.stream.Collectors;
 /**
  * Base class for all functions.
  */
+<<<<<<< HEAD
 public class Function implements Writable {
+=======
+public class Function implements Writable, GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(Function.class);
+    private static final String MASKED_LOCATION = "***";
+>>>>>>> 3854d533a33... [BugFix][RB-892] Keep malformed UDF cloud metadata from blocking FE replay (#67688)
 
     // Enum for how to compare function signatures.
     // For decimal types, the type in the function can be a wildcard, i.e. decimal(*,*).
@@ -312,6 +320,36 @@ public class Function implements Writable {
 
     public void setCloudConfiguration(CloudConfiguration cloudConfiguration) {
         this.cloudConfiguration = cloudConfiguration;
+<<<<<<< HEAD
+=======
+        if (cloudConfiguration == null) {
+            cloudConfigurationProperties = null;
+            return;
+        }
+        TCloudConfiguration thrift = new TCloudConfiguration();
+        cloudConfiguration.toThrift(thrift);
+        cloudConfigurationProperties = new HashMap<>(thrift.getCloud_properties());
+        // This is derived from the other properties and can contain credentials in a second form.
+        cloudConfigurationProperties.remove(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING);
+    }
+
+    @Override
+    public void gsonPostProcess() {
+        if (cloudConfigurationProperties != null) {
+            cloudConfiguration = null;
+            try {
+                CloudConfiguration restored =
+                        CloudConfigurationFactory.buildCloudConfigurationForStorage(cloudConfigurationProperties);
+                if (restored != null && restored.getCloudType() != CloudType.DEFAULT) {
+                    cloudConfiguration = restored;
+                    return;
+                }
+            } catch (RuntimeException e) {
+                // A malformed function must not prevent the FE from loading its image or edit log.
+            }
+            LOG.warn("Cannot restore cloud configuration for UDF {}; recreate the function before using it", name);
+        }
+>>>>>>> 3854d533a33... [BugFix][RB-892] Keep malformed UDF cloud metadata from blocking FE replay (#67688)
     }
 
     public TFunctionBinaryType getBinaryType() {
@@ -792,6 +830,19 @@ public class Function implements Writable {
     }
 
     public TFunction toThrift() {
+<<<<<<< HEAD
+=======
+        if (cloudConfiguration == null) {
+            if (legacyCloudConfiguration != null) {
+                throw new IllegalStateException("UDF cloud configuration was saved in an unsupported format; "
+                        + "recreate the function");
+            }
+            if (cloudConfigurationProperties != null) {
+                throw new IllegalStateException("UDF cloud configuration could not be restored from persisted properties; "
+                        + "recreate the function");
+            }
+        }
+>>>>>>> 3854d533a33... [BugFix][RB-892] Keep malformed UDF cloud metadata from blocking FE replay (#67688)
         TFunction fn = new TFunction();
         fn.setName(name.toThrift());
         fn.setBinary_type(binaryType);
