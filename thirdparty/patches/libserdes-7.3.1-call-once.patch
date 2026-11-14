@@ -1,0 +1,30 @@
+diff --git a/src/tinycthread.h b/src/tinycthread.h
+index 9d215fe..bf9524f 100644
+--- a/src/tinycthread.h
++++ b/src/tinycthread.h
+@@ -464,8 +464,14 @@ int tss_set(tss_t key, void *val);
+   } once_flag;
+   #define ONCE_FLAG_INIT {0,}
+ #else
+-  #define once_flag pthread_once_t
+-  #define ONCE_FLAG_INIT PTHREAD_ONCE_INIT
++  #include <stdlib.h>
++  /* glibc's <stdlib.h> declares C23 once_flag and call_once in ISOC23 mode. */
++  #if defined(__once_flag_defined)
++    #define _TTHREAD_LIBC_CALL_ONCE_
++  #else
++    #define once_flag pthread_once_t
++    #define ONCE_FLAG_INIT PTHREAD_ONCE_INIT
++  #endif
+ #endif
+ 
+ /** Invoke a callback exactly once
+@@ -475,7 +481,7 @@ int tss_set(tss_t key, void *val);
+  */
+ #if defined(_TTHREAD_WIN32_)
+   void call_once(once_flag *flag, void (*func)(void));
+-#else
++#elif !defined(_TTHREAD_LIBC_CALL_ONCE_)
+   #define call_once(flag,func) pthread_once(flag,func)
+ #endif
+ 
