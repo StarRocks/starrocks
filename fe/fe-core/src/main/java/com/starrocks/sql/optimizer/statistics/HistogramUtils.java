@@ -35,6 +35,24 @@ import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 public class HistogramUtils {
     private static final Logger LOG = LogManager.getLogger(HistogramUtils.class);
 
+    /**
+     * When loading data via e.g. CSV upload, columns can contain NaN values.
+     * The string that is generated for NaN values differs between c++ and Java.
+     * While c++ uses "nan" (https://en.cppreference.com/cpp/types/numeric_limits/quiet_NaN),
+     * Java's string representation is "NaN"
+     * (https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Double.html#valueOf(java.lang.String)).
+     *
+     * Therefore the result when querying columns that contain NaN with `histogram`, a bucket can contain "-nan" or "nan".
+     * When using only the native Java double-parsing, this would fail.
+     */
+    private static Double parseDouble(String value) {
+        final var lower = value.toLowerCase();
+        if (lower.equals("-nan") || lower.equals("nan")) {
+            return Double.NaN;
+        }
+        return Double.parseDouble(value);
+    }
+
     public static List<Bucket> convertBuckets(String histogramString, Type type) throws AnalysisException {
         JsonObject jsonObject = JsonParser.parseString(histogramString).getAsJsonObject();
 
@@ -61,8 +79,8 @@ public class HistogramUtils {
                     high = (double) getLongFromDateTime(DateUtils.parseDatTimeString(
                             bucketJsonArray.get(1).getAsString()));
                 } else {
-                    low = Double.parseDouble(bucketJsonArray.get(0).getAsString());
-                    high = Double.parseDouble(bucketJsonArray.get(1).getAsString());
+                    low = HistogramUtils.parseDouble(bucketJsonArray.get(0).getAsString());
+                    high = HistogramUtils.parseDouble(bucketJsonArray.get(1).getAsString());
                 }
 
                 if (bucketJsonArray.size() == 5) {
