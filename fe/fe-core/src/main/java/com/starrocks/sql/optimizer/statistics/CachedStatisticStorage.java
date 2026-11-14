@@ -187,6 +187,32 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         } catch (Exception e) {
             LOG.warn("Failed to refresh getColumnStatistics", e);
         }
+        refreshCachedPartitionStatistics(cacheKeys, isSync);
+    }
+
+    private void refreshCachedPartitionStatistics(List<ColumnStatsCacheKey> cacheKeys, boolean isSync) {
+        // Recollecting a column also changes its partition NDV and null fraction. Include in-flight loads,
+        // which the synchronous view hides, so they cannot later cache pre-collection statistics.
+        // Inspect the async map without recording hits/misses or loading cold, analyzed columns.
+        List<ColumnStatsCacheKey> cachedKeys = cacheKeys.stream().filter(partitionStatistics.asMap()::containsKey)
+                .collect(Collectors.toList());
+        if (cachedKeys.isEmpty()) {
+            return;
+        }
+        try {
+            PartitionStatsCacheLoader loader = new PartitionStatsCacheLoader();
+            CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> future =
+                    loader.asyncLoadAll(cachedKeys, statsCacheRefresherExecutor);
+            CompletableFuture<Void> applied = applyRefresh(partitionStatistics, cachedKeys, future);
+            if (isSync) {
+                applied.get();
+            }
+        } catch (InterruptedException e) {
+            LOG.warn("Failed to refresh partition statistics", e);
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            LOG.warn("Failed to refresh partition statistics", e);
+        }
     }
 
     @Override
@@ -563,6 +589,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             allKeys.add(key);
         }
         columnStatistics.synchronous().invalidateAll(allKeys);
+        partitionStatistics.synchronous().invalidateAll(allKeys);
     }
 
     @Override
