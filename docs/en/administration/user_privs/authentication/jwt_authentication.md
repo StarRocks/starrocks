@@ -76,6 +76,47 @@ Example:
 mysql -h 127.0.0.1 -P 9030 --authentication-openid-connect-client-id-token-file=/path/to/token/file -u tom
 ```
 
+## Connect from a custom MySQL client with JWT
+
+The `mysql` command-line client builds the authentication response for you. If you connect with a driver or your own client code (for example Node.js, Python, Go, or a custom JDBC plugin), your client must build it itself.
+
+When a user authenticated by JWT connects, StarRocks asks the client to switch to the `authentication_openid_connect_client` client plugin. Your client must answer the switch request with the following payload:
+
+| Part | Size | Description |
+| --- | --- | --- |
+| Capability flag | 1 byte | Client capability flag. Send `0x00`. |
+| JWT | MySQL length-encoded string | The token, prefixed by its length in bytes. |
+
+The length prefix of the token follows the standard MySQL length-encoded integer format:
+
+| Token length | Prefix |
+| --- | --- |
+| Less than 251 bytes | 1 byte holding the length |
+| 251 to 65,535 bytes | `0xFC`, then the length as a 2-byte little-endian integer |
+| 65,536 to 16,777,215 bytes | `0xFD`, then the length as a 3-byte little-endian integer |
+| 16,777,216 bytes or more | `0xFE`, then the length as an 8-byte little-endian integer |
+
+Do not send the raw token bytes. StarRocks reads the first byte after the capability flag as the length prefix, so a raw token is cut short or rejected as malformed, and the authentication fails with an invalid-token error.
+
+The following Python function builds the payload for a token:
+
+```Python
+def jwt_auth_response(token: str) -> bytes:
+    data = token.encode("utf-8")
+    n = len(data)
+    if n < 251:
+        prefix = bytes([n])
+    elif n < 1 << 16:
+        prefix = b"\xfc" + n.to_bytes(2, "little")
+    elif n < 1 << 24:
+        prefix = b"\xfd" + n.to_bytes(3, "little")
+    else:
+        prefix = b"\xfe" + n.to_bytes(8, "little")
+    return b"\x00" + prefix + data
+```
+
+For example, a token of 1,300 bytes produces a payload that starts with `00 fc 14 05` and is 1,304 bytes long.
+
 ## Connect over HTTP or Arrow Flight with JWT
 
 Users of a JWT security integration can also send the token as `Authorization: Bearer <token>` to the HTTP API (SQL API, Stream Load, Web UI) and to Arrow Flight SQL, with no user name. See [Connect over HTTP and Arrow Flight](./security_integration.md#connect-over-http-and-arrow-flight).
