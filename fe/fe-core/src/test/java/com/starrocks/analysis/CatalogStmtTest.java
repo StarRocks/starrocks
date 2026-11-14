@@ -237,4 +237,26 @@ public class CatalogStmtTest {
                 "\"aws.glue.region\"  =  \"us-west-2\", \"type\"  =  \"deltalake\", " +
                 "\"aws.glue.access_key\"  =  \"***\")", AstToStringBuilder.toString(stmt));
     }
+
+    @Test
+    public void testToStringMasksIcebergCatalogCredentials() {
+        String sql = "CREATE EXTERNAL CATALOG iceberg_rest PROPERTIES(\"type\" = \"iceberg\"," +
+                "\"iceberg.catalog.type\" = \"rest\"," +
+                "\"iceberg.catalog.oauth2.credential\" = \"client-id:oauth2-client-secret\"," +
+                "\"iceberg.catalog.oauth2.token\" = \"oauth2-bearer-token\"," +
+                "\"iceberg.catalog.rest.access-key-id\" = \"rest-access-key-id\"," +
+                "\"iceberg.catalog.rest.secret-access-key\" = \"rest-secret-access-key\"," +
+                "\"iceberg.catalog.jdbc.password\" = \"jdbc-password\"," +
+                "\"iceberg.catalog.oauth2.scope\" = \"catalog-scope\")";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateCatalogStmt stmt =
+                (CreateCatalogStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        String rendered = AstToStringBuilder.toString(stmt);
+        Assertions.assertTrue(rendered.contains("\"iceberg.catalog.oauth2.credential\"  =  \"***\""), rendered);
+        Assertions.assertTrue(rendered.contains("\"iceberg.catalog.oauth2.token\"  =  \"***\""), rendered);
+        Assertions.assertTrue(rendered.contains("\"iceberg.catalog.rest.access-key-id\"  =  \"***\""), rendered);
+        Assertions.assertTrue(rendered.contains("\"iceberg.catalog.rest.secret-access-key\"  =  \"***\""), rendered);
+        Assertions.assertTrue(rendered.contains("\"iceberg.catalog.jdbc.password\"  =  \"***\""), rendered);
+        Assertions.assertTrue(rendered.contains("\"iceberg.catalog.oauth2.scope\"  =  \"catalog-scope\""), rendered);
+    }
 }

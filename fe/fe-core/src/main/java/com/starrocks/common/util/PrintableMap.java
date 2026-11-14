@@ -74,6 +74,12 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("fs.obs.secret_key");
         SENSITIVE_KEY.add("fs.obs.access.key");
         SENSITIVE_KEY.add("fs.obs.secret.key");
+        // Iceberg catalog keys that CredentialUtil.maskCredential already hides in SHOW CREATE CATALOG
+        SENSITIVE_KEY.add("iceberg.catalog.oauth2.credential");
+        SENSITIVE_KEY.add("iceberg.catalog.oauth2.token");
+        SENSITIVE_KEY.add("iceberg.catalog.rest.access-key-id");
+        SENSITIVE_KEY.add("iceberg.catalog.rest.secret-access-key");
+        SENSITIVE_KEY.add("iceberg.catalog.jdbc.password");
     }
 
     public PrintableMap(Map<K, V> map, String keyValueSaperator,
