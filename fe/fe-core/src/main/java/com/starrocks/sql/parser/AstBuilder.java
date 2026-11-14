@@ -437,6 +437,7 @@ import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
+import com.starrocks.sql.ast.UnsetCatalogPropertiesClause;
 import com.starrocks.sql.ast.UnsupportedStmt;
 import com.starrocks.sql.ast.UpdateFailPointStatusStatement;
 import com.starrocks.sql.ast.UpdateStmt;
@@ -2625,8 +2626,22 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitAlterCatalogStatement(com.starrocks.sql.parser.StarRocksParser.AlterCatalogStatementContext context) {
         String catalogName = normalizeName(((Identifier) visit(context.catalogName)).getValue());
-        AlterClause alterClause = (AlterClause) visit(context.modifyPropertiesClause());
+        AlterClause alterClause;
+        if (context.modifyPropertiesClause() != null) {
+            alterClause = (AlterClause) visit(context.modifyPropertiesClause());
+        } else {
+            alterClause = (AlterClause) visit(context.unsetCatalogPropertiesClause());
+        }
         return new AlterCatalogStmt(catalogName, alterClause, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitUnsetCatalogPropertiesClause(
+            com.starrocks.sql.parser.StarRocksParser.UnsetCatalogPropertiesClauseContext context) {
+        List<String> properties = context.stringList().string().stream()
+                .map(c -> ((StringLiteral) visit(c)).getStringValue().trim())
+                .collect(toList());
+        return new UnsetCatalogPropertiesClause(properties, createPos(context));
     }
 
     // ------------------------------------------- DML Statement -------------------------------------------------------
