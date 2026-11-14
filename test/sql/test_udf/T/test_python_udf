@@ -108,6 +108,100 @@ select get_type([]);
 select get_type([1,2,3]);
 select get_type(named_struct('a', 1,'b','value'));
 select get_type(map(1,2));
+
+-- nested scalar python udf inline: array<array<int>>
+CREATE FUNCTION nested_arr_arr(array<array<int>>) RETURNS string
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS
+$$
+def echo(x):
+    # x must be a list of lists of ints, sum total
+    return str(sum(sum(inner) for inner in x))
+$$;
+select nested_arr_arr([[1,2,3],[4,5]]);
+
+-- nested scalar python udf inline: array<map<string,int>>
+CREATE FUNCTION nested_arr_map(array<map<string,int>>) RETURNS string
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS
+$$
+def echo(x):
+    # x must be a list of dicts (not list of tuples)
+    return ",".join(sorted(str(type(e).__name__) for e in x))
+$$;
+select nested_arr_map([map('a', 1), map('b', 2)]);
+
+-- nested scalar python udf inline: map<string,array<int>>
+CREATE FUNCTION nested_map_arr(map<string,array<int>>) RETURNS int
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS
+$$
+def echo(x):
+    # x must be a dict whose values are lists
+    return sum(sum(v) for v in x.values())
+$$;
+select nested_map_arr(map('k1', [1,2,3], 'k2', [4,5]));
+
+-- nested scalar python udf inline: struct<a array<int>, b map<string,int>>
+CREATE FUNCTION nested_struct(struct<a array<int>, b map<string,int>>) RETURNS string
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS
+$$
+def echo(x):
+    # x must be a dict with keys 'a' (list) and 'b' (dict)
+    return "a={};b={}".format(sum(x['a']), sorted(x['b'].items()))
+$$;
+select nested_struct(named_struct('a', [10,20,30], 'b', map('x', 1, 'y', 2)));
+
+-- nested scalar python udf inline: returning array<map<string,int>>
+CREATE FUNCTION return_arr_map(int) RETURNS array<map<string,int>>
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS
+$$
+def echo(x):
+    return [{"a": x}, {"b": x + 1}]
+$$;
+select return_arr_map(7);
+
+-- nested scalar python udf inline: returning struct<x int, y array<int>>
+CREATE FUNCTION return_struct_arr(int) RETURNS struct<x int, y array<int>>
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "inline",
+    "input" = "scalar"
+)
+AS
+$$
+def echo(x):
+    return {"x": x, "y": [x, x + 1, x + 2]}
+$$;
+select return_struct_arr(3);
 -- scalar udf add one 
 CREATE FUNCTION add_one(int) RETURNS 
 int 
