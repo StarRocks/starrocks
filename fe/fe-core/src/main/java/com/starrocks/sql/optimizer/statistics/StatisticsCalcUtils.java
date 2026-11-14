@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.rule.tree.JsonPathRewriteRule;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
@@ -38,7 +39,6 @@ import org.apache.commons.collections4.MapUtils;
 import org.jetbrains.annotations.Nullable;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -65,29 +65,32 @@ public class StatisticsCalcUtils {
                                                           Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                                           OptimizerContext optimizerContext) {
         Statistics.Builder builder = Statistics.builder();
-        List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(colRefToColumnMetaMap.keySet());
-        List<String> columns = new ArrayList<>(colRefToColumnMetaMap.values())
-                .stream().map(Column::getName).collect(Collectors.toList());
+        // JSON subfields are per-query columns with no collected statistics or catalog entry.
+        List<String> columns = colRefToColumnMetaMap.entrySet().stream()
+                .filter(entry -> !entry.getKey().getHints().contains(JsonPathRewriteRule.COLUMN_REF_HINT))
+                .map(entry -> entry.getValue().getName()).collect(Collectors.toList());
         List<ColumnStatistic> columnStatisticList =
                 GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table, columns);
 
         Map<String, Histogram> histogramStatistics =
                 GlobalStateMgr.getCurrentState().getStatisticStorage().getHistogramStatistics(table, columns);
 
-        for (int i = 0; i < requiredColumnRefs.size(); ++i) {
-            ColumnStatistic columnStatistic;
-            if (histogramStatistics.containsKey(requiredColumnRefs.get(i).getName())) {
-                columnStatistic = ColumnStatistic.buildFrom(columnStatisticList.get(i)).setHistogram(
-                        histogramStatistics.get(requiredColumnRefs.get(i).getName())).build();
-            } else {
-                columnStatistic = columnStatisticList.get(i);
+        int statisticIndex = 0;
+        for (ColumnRefOperator columnRef : colRefToColumnMetaMap.keySet()) {
+            ColumnStatistic columnStatistic = ColumnStatistic.unknown();
+            if (!columnRef.getHints().contains(JsonPathRewriteRule.COLUMN_REF_HINT)) {
+                columnStatistic = columnStatisticList.get(statisticIndex++);
+                if (histogramStatistics.containsKey(columnRef.getName())) {
+                    columnStatistic = ColumnStatistic.buildFrom(columnStatistic)
+                            .setHistogram(histogramStatistics.get(columnRef.getName())).build();
+                }
             }
-            builder.addColumnStatistic(requiredColumnRefs.get(i), columnStatistic);
+            builder.addColumnStatistic(columnRef, columnStatistic);
             if (optimizerContext != null && optimizerContext.getDumpInfo() != null) {
                 // Dump the histogram-merged statistic (not the base columnStatisticList entry), so the
                 // histogram is captured in the query dump and can be replayed. See QueryDumpSerializer.
                 optimizerContext.getDumpInfo()
-                        .addTableStatistics(table, requiredColumnRefs.get(i).getName(), columnStatistic);
+                        .addTableStatistics(table, columnRef.getName(), columnStatistic);
             }
         }
         return builder;
@@ -154,6 +157,10 @@ public class StatisticsCalcUtils {
     public static Map<Long, Statistics> getPartitionStatistics(Operator node, OlapTable table,
                                                                Map<ColumnRefOperator, Column> columns,
                                                                Statistics.Builder statistics) {
+        // JSON subfields cannot satisfy the requirement that every column has partition statistics.
+        if (columns.keySet().stream().anyMatch(ref -> ref.getHints().contains(JsonPathRewriteRule.COLUMN_REF_HINT))) {
+            return null;
+        }
 
         // 1. only FULL statistics has partition-level info
         BasicStatsMeta basicStatsMeta =
