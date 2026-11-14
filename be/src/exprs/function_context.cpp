@@ -78,6 +78,7 @@ FunctionContext* FunctionContext::clone() {
     FunctionContext* new_context = create_context(_state, nullptr, _return_type, _arg_types);
 
     new_context->_constant_columns = _constant_columns;
+    new_context->_cloud_configuration = _cloud_configuration;
     new_context->_fragment_local_fn_state = _fragment_local_fn_state;
     return new_context;
 }

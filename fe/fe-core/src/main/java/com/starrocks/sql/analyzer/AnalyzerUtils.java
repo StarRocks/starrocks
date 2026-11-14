@@ -59,12 +59,15 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PartitionTimeUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudType;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.service.PartitionMeasure;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AstTraverser;
@@ -111,6 +114,7 @@ import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
@@ -133,6 +137,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
@@ -162,6 +167,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -332,6 +338,127 @@ public class AnalyzerUtils {
             }
         }
         return fn;
+    }
+
+    public static boolean isPresignedBuiltin(Function fn) {
+        return fn != null && fn.getBinaryType() == TFunctionBinaryType.BUILTIN
+                && (FunctionSet.GET_PRESIGNED_URL.equalsIgnoreCase(fn.functionName())
+                || FunctionSet.GET_PRESIGNED_FILE.equalsIgnoreCase(fn.functionName()));
+    }
+
+    public static boolean containsPresignedFunction(ParseNode node) {
+        PresignedFunctionFinder finder = new PresignedFunctionFinder();
+        finder.visit(node);
+        return finder.found;
+    }
+
+    private static class PresignedFunctionFinder extends AstTraverser<Void, Void> {
+        private boolean found;
+
+        @Override
+        public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
+            if (isPresignedBuiltin(expr.getFn())) {
+                found = true;
+            }
+            // SQL UDF bodies are not expression children; inspect them too so cached plans cannot skip
+            // storage volume authorization or retain stale credentials for nested presign calls.
+            if (expr.getFn() instanceof SqlFunction sqlFunction
+                    && sqlFunction.getAnalyzeExpr() != null) {
+                visit(sqlFunction.getAnalyzeExpr(), context);
+            }
+            return super.visitExpression(expr, context);
+        }
+    }
+
+    /**
+     * Looks up the builtin GET_PRESIGNED_URL or GET_PRESIGNED_FILE for a call. Both sign with the credentials of a
+     * storage volume, so, like {@link #getUdfFunction}, the lookup also authorizes: the volume is resolved, the
+     * caller needs USAGE on it, and its cloud configuration is bound to a per-call copy of the function, which
+     * carries it to the BE in {@code TFunction.cloud_configuration}.
+     *
+     * <p>The volume's LOCATIONS are deliberately not consulted: the functions sign any absolute object URI with the
+     * volume's credentials.
+     *
+     * <p>This has to run before the generic builtin lookup, which would return the shared, unbound builtin. The
+     * presign builtins declare no named arguments, so the named-argument lookups cannot resolve them either.
+     *
+     * @return the bound function, or null if the call is not a presign call or matches no presign overload, in
+     * which case a user function that shares the name can still be found
+     */
+    public static Function getPresignedFunction(ConnectContext context, FunctionCallExpr node, Type[] argTypes) {
+        String fnName = node.getFunctionName();
+        if (!FunctionSet.GET_PRESIGNED_URL.equalsIgnoreCase(fnName)
+                && !FunctionSet.GET_PRESIGNED_FILE.equalsIgnoreCase(fnName)) {
+            return null;
+        }
+        Function fn = ExprUtils.getBuiltinFunction(fnName, argTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        if (fn == null) {
+            return null;
+        }
+        String displayName = fn.functionName().toUpperCase(Locale.ROOT);
+
+        // The lookup accepts anything that can be cast implicitly; these functions are stricter about it.
+        Type targetType = argTypes[1];
+        if (FunctionSet.GET_PRESIGNED_FILE.equalsIgnoreCase(fnName)) {
+            // GET_PRESIGNED_FILE
+            if (!targetType.isFileType() && !targetType.isNull()) {
+                throw new SemanticException(String.format("%s requires a FILE as its second argument, but got %s",
+                        displayName, targetType.toSql()), node.getPos());
+            }
+        } else {
+            // GET_PREDIGNED_URL
+            if (!targetType.isStringType() && !targetType.isNull()) {
+                throw new SemanticException(String.format("%s requires a string URI as its second argument, but got %s",
+                        displayName, targetType.toSql()), node.getPos());
+            }
+        }
+
+        // check expiration argument
+        if (argTypes.length > 2 && !argTypes[2].isIntegerType() && !argTypes[2].isNull()) {
+            throw new SemanticException(String.format(
+                    "%s requires an integer expiration time in seconds, but got %s; use CAST to convert it",
+                    displayName, argTypes[2].toSql()), node.getPos());
+        }
+
+        Expr volumeExpr = node.getChild(0);
+        if (!(volumeExpr instanceof StringLiteral)) {
+            throw new SemanticException(String.format(
+                    "%s requires the storage volume name to be a non-NULL string literal", displayName),
+                    node.getPos());
+        }
+        String volumeName = ((StringLiteral) volumeExpr).getStringValue();
+
+        StorageVolume volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(volumeName);
+        if (volume == null) {
+            throw new SemanticException(String.format("%s: storage volume '%s' does not exist",
+                    displayName, volumeName), node.getPos());
+        }
+        if (StorageVolumeMgr.BUILTIN_STORAGE_VOLUME.equals(volumeName)) {
+            throw new SemanticException(String.format("%s cannot use the builtin storage volume '%s'",
+                    displayName, volumeName), node.getPos());
+        }
+        try {
+            Authorizer.checkStorageVolumeAction(context, volumeName, PrivilegeType.USAGE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(null, context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.USAGE.name(), ObjectType.STORAGE_VOLUME.name(), volumeName);
+        }
+        if (!Boolean.TRUE.equals(volume.getEnabled())) {
+            throw new SemanticException(String.format("%s: storage volume '%s' is disabled",
+                    displayName, volumeName), node.getPos());
+        }
+        CloudConfiguration cloudConfiguration = volume.getCloudConfiguration();
+        if (!StorageVolume.StorageVolumeType.S3.toString().equals(volume.getType()) || cloudConfiguration == null
+                || cloudConfiguration.getCloudType() != CloudType.AWS) {
+            throw new SemanticException(String.format(
+                    "%s only supports S3 storage volumes, but storage volume '%s' has type %s",
+                    displayName, volumeName, volume.getType()), node.getPos());
+        }
+
+        // The builtin is a shared singleton: bind the credentials to a copy that belongs to this call.
+        Function bound = fn.copy();
+        bound.setCloudConfiguration(cloudConfiguration);
+        return bound;
     }
 
     // Get all the db used, the query needs to add locks to them
