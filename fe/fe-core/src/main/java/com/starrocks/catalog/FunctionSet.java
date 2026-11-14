@@ -470,6 +470,7 @@ public class FunctionSet {
     public static final String ARRAY_TOP_N = "array_top_n";
     public static final String ANY_MATCH = "any_match";
     public static final String ALL_MATCH = "all_match";
+    public static final String NONE_MATCH = "none_match";
 
     public static final String ARRAY_GENERATE = "array_generate";
     public static final String ARRAY_REPEAT = "array_repeat";

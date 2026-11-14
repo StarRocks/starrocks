@@ -3453,6 +3453,45 @@ select all_match([[]]);
 -- result:
 E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: all_match's input [[]] can't cast from array<array<NULL_TYPE>> to ARRAY<BOOL>.")
 -- !result
+select none_match([true,false]);
+-- result:
+0
+-- !result
+select none_match([false,null]);
+-- result:
+None
+-- !result
+select none_match([false,false]);
+-- result:
+1
+-- !result
+select none_match([]);
+-- result:
+1
+-- !result
+select none_match(null);
+-- result:
+None
+-- !result
+select none_match([0],x->1);
+-- result:
+0
+-- !result
+select none_match((x,y) -> x < y, [1,2,8], [4,5,6]);
+-- result:
+0
+-- !result
+select none_match((x,y) -> x < y, [11,12,8], [4,5,6]);
+-- result:
+1
+-- !result
+select s_1, none_match(s_1, x->x like 'a%'), not any_match(s_1, x->x like 'a%') from array_test order by pk;
+-- result:
+["a","b","c"]	0	0
+["-1","10","1","100","2"]	1	1
+None	None	None
+["a",null,"c","e","d"]	0	0
+-- !result
 select array_sum(array_map(x->not like(x, 'starRocks'),s_1)) from array_test order by 1;
 -- result:
 None
