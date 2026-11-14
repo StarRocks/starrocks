@@ -36,4 +36,12 @@ public interface TaskRunProcessor {
      * @throws Exception: if any error occurs during the post-processing of the task run.
      */
     void postTaskRun(TaskRunContext context) throws Exception;
+
+    /**
+     * Called when the task run failed, after its consecutive-failure count went up.
+     * @return the exception the task run reports
+     */
+    default Exception onFailure(Task task, Exception e) {
+        return e;
+    }
 }

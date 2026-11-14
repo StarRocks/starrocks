@@ -1,0 +1,111 @@
+-- name: test_mv_consecutive_failures_keep_inactive_reason
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE cf_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO cf_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20);
+-- result:
+-- !result
+[UC]ADMIN SET FRONTEND CONFIG ("materialized_view_min_refresh_interval" = "1");
+CREATE MATERIALIZED VIEW mv_cf
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED ASYNC EVERY(INTERVAL 2 SECOND)
+PROPERTIES ('replication_num' = '1')
+AS SELECT dt, k, v FROM cf_base;
+-- result:
+-- !result
+[UC]ADMIN SET FRONTEND CONFIG ("materialized_view_min_refresh_interval" = "60");
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'mv_cf';
+ALTER TABLE cf_base DROP COLUMN v;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE cf_base ADD COLUMN v varchar(16);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'mv_cf';
+-- result:
+false
+-- !result
+ALTER TASK `${TASK_NAME}` RESUME;
+-- result:
+-- !result
+LOOP {
+  PROPERTY: {"timeout": 300, "interval": 3, "desc": "the task failed max_task_consecutive_fail_count times"}
+  result=SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'FAILED';
+  CHECK: int(${result}) >= 10
+} END LOOP
+
+LOOP {
+  PROPERTY: {"timeout": 60, "interval": 2, "desc": "no run of the view is left pending or running"}
+  result=SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE IN ('PENDING', 'RUNNING');
+  CHECK: int(${result}) == 0
+} END LOOP
+
+[UC]RUNS=SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}';
+shell: sleep 10
+-- result:
+0
+
+-- !result
+SELECT COUNT(*) - ${RUNS} FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}';
+-- result:
+0
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE 'mv consecutive failures%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'mv_cf';
+-- result:
+false	0
+-- !result
+ALTER TABLE cf_base DROP COLUMN v;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE cf_base ADD COLUMN v bigint;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER MATERIALIZED VIEW mv_cf ACTIVE;
+-- result:
+-- !result
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'mv_cf';
+-- result:
+true
+-- !result
+[UC]OK_RUNS=SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'SUCCESS';
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 2, "desc": "the schedule refreshes the view again"}
+  result=SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'SUCCESS';
+  CHECK: int(${result}) > int(${OK_RUNS})
+} END LOOP
+
+SELECT dt, k FROM mv_cf ORDER BY k;
+-- result:
+2026-10-01	1
+2026-10-02	2
+-- !result
+DROP MATERIALIZED VIEW mv_cf;
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

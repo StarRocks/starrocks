@@ -14,15 +14,24 @@
 
 package com.starrocks.scheduler.mv.ivm;
 
+import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.metric.IMaterializedViewMetricsEntity;
+import com.starrocks.metric.MaterializedViewMetricsRegistry;
+import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterTaskInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.WALApplier;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.MVActiveChecker;
+import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -31,8 +40,11 @@ import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
+import com.starrocks.scheduler.mv.MVRefreshSchemaChecker;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.DmlException;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
@@ -40,6 +52,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -48,6 +61,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -61,6 +76,7 @@ import java.util.stream.Stream;
 public class IvmBreakingInactivationTaskTest extends MVIVMIcebergTestBase {
     // Without START the first scheduled run fires within minutes of CREATE and races the case's own runs.
     private static final String SCHEDULED = "ASYNC START('2122-12-31') EVERY(INTERVAL 1 DAY)";
+    private static final String DB = "test";
     private static final AtomicInteger VIEWS = new AtomicInteger();
 
     enum Breakage {
@@ -83,7 +99,13 @@ public class IvmBreakingInactivationTaskTest extends MVIVMIcebergTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         MVIVMIcebergTestBase.beforeClass();
-        starRocksAssert.useDatabase("test");
+        starRocksAssert.useDatabase(DB);
+    }
+
+    @BeforeEach
+    public void restoreConnectContext() {
+        // an activation attempt on this thread, such as a run's prepare makes, removes the thread's context
+        connectContext.setThreadLocalInfo();
     }
 
     static Stream<Arguments> breakages() {
@@ -175,12 +197,18 @@ public class IvmBreakingInactivationTaskTest extends MVIVMIcebergTestBase {
     @Test
     public void testAnActivationCannotLandBetweenInactivatingAndSuspending() throws Exception {
         MaterializedView mv = incrementalView(SCHEDULED);
+        Task ownTask = taskOf(mv);
         breakIncrementalRefresh(Breakage.NON_APPEND_ONLY_DELTA);
         AtomicBoolean suspended = new AtomicBoolean();
         AtomicBoolean activationGotTheLock = new AtomicBoolean();
         new MockUp<TaskManager>() {
             @Mock
             public void suspendTaskWithoutKilling(Invocation invocation, Task task) throws InterruptedException {
+                // a scheduled run of another test's view breaks on the same mock, under that view's lock
+                if (task != ownTask) {
+                    invocation.proceed();
+                    return;
+                }
                 suspended.set(true);
                 // the lock ALTER ... ACTIVE takes
                 Thread activation = new Thread(() -> {
@@ -203,6 +231,382 @@ public class IvmBreakingInactivationTaskTest extends MVIVMIcebergTestBase {
         Assertions.assertFalse(activationGotTheLock.get(), "the suspension would pause the view it activated");
     }
 
+    @Test
+    public void testAViewActivatedAfterPartitionSyncFoundItInactiveIsNotBroken() throws Exception {
+        MaterializedView mv = pctView();
+        Task task = taskOf(mv);
+        Constants.TaskState taskState = task.getState();
+        // a base column change lands after the run's prepare, before its partition sync
+        new MockUp<MVRefreshSchemaChecker>() {
+            @Mock
+            public void checkExternalBaseSchemaCompat(MaterializedView view) {
+                view.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForColumnChanged(Set.of("v")));
+            }
+        };
+        activateWhenTheFailureIsHandled(mv);
+
+        Exception e = Assertions.assertThrows(Exception.class, () -> runFirstBatch(mv));
+        Assertions.assertTrue(e.getMessage().contains("is not active due to base table schema changed for columns: v"),
+                e.getMessage());
+        Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+        Assertions.assertEquals(taskState, task.getState());
+    }
+
+    @Test
+    public void testAViewActivatedAfterPrepareFoundItInactiveIsNotBroken() throws Exception {
+        MaterializedView mv = pctView();
+        Task task = taskOf(mv);
+        Constants.TaskState taskState = task.getState();
+        mv.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForColumnChanged(Set.of("v")));
+        // the run's own activation fails, as it does while the column is still missing
+        new MockUp<MVActiveChecker>() {
+            @Mock
+            public void tryToActivate(MaterializedView view) {
+            }
+        };
+        activateWhenTheFailureIsHandled(mv);
+
+        Exception e = Assertions.assertThrows(Exception.class, () -> runFirstBatch(mv));
+        Assertions.assertTrue(e.getMessage().contains("is not active due to base table schema changed for columns: v"),
+                e.getMessage());
+        Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+        Assertions.assertEquals(taskState, task.getState());
+    }
+
+    @Test
+    public void testAReloadChangesTheStatusEpochBeforeItEnds() throws Exception {
+        MaterializedView mv = incrementalView(SCHEDULED);
+        long epochBefore = mv.getStatusSnapshot().epoch();
+        CountDownLatch inWindow = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Thread reload = new Thread(mv::onReload);
+        pauseReloadInItsWindow(reload, inWindow, release);
+        reload.start();
+        MaterializedView.StatusSnapshot inTheWindow;
+        try {
+            Assertions.assertTrue(inWindow.await(30, TimeUnit.SECONDS));
+            inTheWindow = mv.getStatusSnapshot();
+        } finally {
+            release.countDown();
+            reload.join();
+        }
+        Assertions.assertFalse(inTheWindow.active());
+        Assertions.assertNotEquals(epochBefore, inTheWindow.epoch());
+        Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+    }
+
+    @Test
+    public void testABreakAfterTheViewWasInactivatedAndActivatedAgainIsDropped() throws Exception {
+        MaterializedView mv = incrementalView(SCHEDULED);
+        Task task = taskOf(mv);
+        Constants.TaskState taskState = task.getState();
+        new MockUp<MVIVMRefreshProcessor>() {
+            @Mock
+            public MVRefreshProcessor.ProcessExecPlan getProcessExecPlan(TaskRunContext taskRunContext) {
+                mv.setInactiveAndReason("inactivated while the refresh ran");
+                mv.setActive();
+                throw new SemanticException("Cannot incrementally refresh materialized view: "
+                        + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
+            }
+        };
+
+        Assertions.assertThrows(Exception.class, () -> runFirstBatch(mv));
+        Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+        Assertions.assertEquals(taskState, task.getState());
+    }
+
+    @Test
+    public void testAFailureHandledWhileTheViewReloadsLeavesItAndItsTaskAlone() throws Exception {
+        MaterializedView mv = incrementalView(SCHEDULED);
+        Task task = taskOf(mv);
+        Constants.TaskState taskState = task.getState();
+        presetConsecutiveFailures(task, Config.max_task_consecutive_fail_count - 1);
+        CountDownLatch inWindow = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Thread reload = new Thread(mv::onReload);
+        pauseReloadInItsWindow(reload, inWindow, release);
+        new MockUp<MVIVMRefreshProcessor>() {
+            @Mock
+            public MVRefreshProcessor.ProcessExecPlan getProcessExecPlan(TaskRunContext taskRunContext)
+                    throws InterruptedException {
+                reload.start();
+                Assertions.assertTrue(inWindow.await(30, TimeUnit.SECONDS));
+                throw new SemanticException("Cannot incrementally refresh materialized view: "
+                        + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
+            }
+        };
+
+        try {
+            Assertions.assertThrows(Exception.class, () -> runFirstBatch(mv));
+        } finally {
+            release.countDown();
+            reload.join();
+        }
+        Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+        Assertions.assertEquals(taskState, task.getState());
+        Assertions.assertEquals(Config.max_task_consecutive_fail_count, task.getConsecutiveFailCount());
+    }
+
+    @Test
+    public void testAReloadBetweenTheTwoChecksOfPrepareLeavesTheViewAndItsTaskAlone() throws Exception {
+        MaterializedView mv = incrementalView(SCHEDULED);
+        Task task = taskOf(mv);
+        Constants.TaskState taskState = task.getState();
+        presetConsecutiveFailures(task, Config.max_task_consecutive_fail_count - 1);
+        CountDownLatch inWindow = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Thread reload = new Thread(mv::onReload);
+        pauseReloadInItsWindow(reload, inWindow, release);
+        AtomicBoolean started = new AtomicBoolean();
+        // prepare asks for the metrics entity between its two activity checks
+        new MockUp<MaterializedViewMetricsRegistry>() {
+            @Mock
+            public IMaterializedViewMetricsEntity getMetricsEntity(Invocation invocation, MvId mvId)
+                    throws InterruptedException {
+                if (started.compareAndSet(false, true)) {
+                    reload.start();
+                    Assertions.assertTrue(inWindow.await(30, TimeUnit.SECONDS));
+                }
+                return invocation.proceed();
+            }
+        };
+
+        try {
+            Exception e = Assertions.assertThrows(Exception.class, () -> runFirstBatch(mv));
+            Assertions.assertTrue(e.getMessage().contains("is not active"), e.getMessage());
+        } finally {
+            release.countDown();
+            reload.join();
+        }
+        Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+        Assertions.assertEquals(taskState, task.getState());
+    }
+
+    @Test
+    public void testConsecutiveFailuresKeepTheReasonAnInactiveViewHas() throws Exception {
+        OlapTable fact = createFact();
+        MaterializedView mv = pctView(fact);
+        Task task = taskOf(mv);
+        // v comes back as a string: every activation attempt fails on the incompatible column and records that,
+        // which changes the view's status epoch -- unlike a column that is simply missing
+        alterTable(fact, "ALTER TABLE " + fact.getName() + " DROP COLUMN v");
+        alterTable(fact, "ALTER TABLE " + fact.getName() + " ADD COLUMN v VARCHAR(16)");
+        Assertions.assertFalse(mv.isActive());
+        // a view inactivated in memory keeps its task scheduled; resuming it stands for that
+        taskManager().resumeTask(task, false);
+
+        for (int i = 0; i < Config.max_task_consecutive_fail_count; i++) {
+            Assertions.assertThrows(Exception.class, () -> runFirstBatch(mv));
+        }
+
+        Assertions.assertEquals(Constants.TaskState.PAUSE, task.getState());
+        Assertions.assertFalse(mv.isActive());
+        String reason = mv.getInactiveReason();
+        Assertions.assertFalse(reason.startsWith(MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES),
+                reason);
+        Assertions.assertFalse(MVActiveChecker.isNonAutoActivatableReason(reason), reason);
+
+        alterTable(fact, "ALTER TABLE " + fact.getName() + " DROP COLUMN v");
+        alterTable(fact, "ALTER TABLE " + fact.getName() + " ADD COLUMN v BIGINT");
+        new MVActiveChecker().runForTest(true);
+        Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+        Assertions.assertEquals(Constants.TaskState.ACTIVE, task.getState());
+    }
+
+    @Test
+    public void testConsecutiveFailuresInactivateAnActiveView() throws Exception {
+        MaterializedView mv = pctView();
+        Task task = taskOf(mv);
+        presetConsecutiveFailures(task, Config.max_task_consecutive_fail_count - 1);
+        new MockUp<MVPCTRefreshProcessor>() {
+            @Mock
+            public MVRefreshProcessor.ProcessExecPlan getProcessExecPlan(TaskRunContext taskRunContext) {
+                throw new RuntimeException("transient failure (simulated)");
+            }
+        };
+
+        Assertions.assertThrows(Exception.class, () -> runFirstBatch(mv));
+        Assertions.assertEquals(Constants.TaskState.PAUSE, task.getState());
+        Assertions.assertFalse(mv.isActive());
+        Assertions.assertTrue(mv.getInactiveReason().startsWith(
+                MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES), mv.getInactiveReason());
+    }
+
+    @Test
+    public void testARunThatInactivatesItsOwnViewAtTheThresholdLeavesTheTaskRunning() throws Exception {
+        MaterializedView mv = pctView();
+        Task task = taskOf(mv);
+        Constants.TaskState taskState = task.getState();
+        presetConsecutiveFailures(task, Config.max_task_consecutive_fail_count - 1);
+        new MockUp<MVPCTRefreshProcessor>() {
+            @Mock
+            public MVRefreshProcessor.ProcessExecPlan getProcessExecPlan(TaskRunContext taskRunContext) {
+                // what MVRefreshProcessor does when a base table disappeared during the refresh
+                mv.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForBaseTableNotExists("t"));
+                throw new DmlException("base table t does not exist (simulated)");
+            }
+        };
+
+        Assertions.assertThrows(Exception.class, () -> runFirstBatch(mv));
+        Assertions.assertEquals(taskState, task.getState());
+        Assertions.assertEquals(MaterializedViewExceptions.inactiveReasonForBaseTableNotExists("t"),
+                mv.getInactiveReason());
+    }
+
+    @Test
+    public void testConsecutiveFailuresBeforeTheRunResolvedItsView() throws Exception {
+        MaterializedView active = pctView();
+        MaterializedView inactive = pctView();
+        String reason = MaterializedViewExceptions.inactiveReasonForBaseTableNotExists("t");
+        inactive.setInactiveAndReason(reason);
+        new MockUp<MVTaskRunProcessor>() {
+            @Mock
+            public TaskRunContext prepare(TaskRunContext context) {
+                throw new DmlException("database of the view does not exist (simulated)");
+            }
+        };
+
+        for (MaterializedView mv : List.of(active, inactive)) {
+            presetConsecutiveFailures(taskOf(mv), Config.max_task_consecutive_fail_count - 1);
+            Assertions.assertThrows(Exception.class, () -> runFirstBatch(mv));
+            Assertions.assertEquals(Constants.TaskState.PAUSE, taskOf(mv).getState(), mv.getName());
+            Assertions.assertFalse(mv.isActive(), mv.getName());
+        }
+        Assertions.assertTrue(active.getInactiveReason().startsWith(
+                MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES), active.getInactiveReason());
+        Assertions.assertEquals(reason, inactive.getInactiveReason());
+    }
+
+    @Test
+    public void testABreakOfAViewDroppedMeanwhileJournalsNothingForIt() throws Exception {
+        assertAFailureAfterTheViewWasDroppedJournalsNothing(0, new SemanticException(
+                "Cannot incrementally refresh materialized view: " + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER));
+    }
+
+    @Test
+    public void testConsecutiveFailuresOfAViewDroppedMeanwhileJournalNothingForIt() throws Exception {
+        assertAFailureAfterTheViewWasDroppedJournalsNothing(Config.max_task_consecutive_fail_count - 1,
+                new DmlException("refresh failed (simulated)"));
+    }
+
+    @Test
+    public void testConsecutiveFailuresOfARunThatFoundItsViewDroppedJournalNothing() throws Exception {
+        MaterializedView mv = incrementalView(SCHEDULED);
+        Task task = taskOf(mv);
+        presetConsecutiveFailures(task, Config.max_task_consecutive_fail_count - 1);
+        List<AlterTaskInfo> taskJournal = captureTaskJournal();
+        DmlException failure = new DmlException("materialized view does not exist (simulated)");
+        new MockUp<MVTaskRunProcessor>() {
+            @Mock
+            public TaskRunContext prepare(TaskRunContext context) throws Exception {
+                starRocksAssert.dropMaterializedView(DB + "." + mv.getName());
+                throw failure;
+            }
+        };
+
+        Exception thrown = Assertions.assertThrows(Exception.class, () -> runFirstBatch(mv));
+        Assertions.assertSame(failure, ExceptionUtils.getRootCause(thrown), String.valueOf(thrown));
+        Assertions.assertTrue(taskJournal.stream().noneMatch(info -> info.getName().equals(task.getName())
+                && info.getState() == Constants.TaskState.PAUSE), "a pause of a dropped task cannot be replayed");
+    }
+
+    private static void assertAFailureAfterTheViewWasDroppedJournalsNothing(int failuresBefore, RuntimeException failure)
+            throws Exception {
+        MaterializedView mv = incrementalView(SCHEDULED);
+        presetConsecutiveFailures(taskOf(mv), failuresBefore);
+        List<AlterMaterializedViewStatusLog> statusJournal = captureStatusJournal();
+        new MockUp<MVIVMRefreshProcessor>() {
+            @Mock
+            public MVRefreshProcessor.ProcessExecPlan getProcessExecPlan(TaskRunContext taskRunContext) throws Exception {
+                starRocksAssert.dropMaterializedView(DB + "." + mv.getName());
+                throw failure;
+            }
+        };
+
+        Exception thrown = Assertions.assertThrows(Exception.class, () -> runFirstBatch(mv));
+        Assertions.assertSame(failure, ExceptionUtils.getRootCause(thrown), String.valueOf(thrown));
+        Assertions.assertTrue(statusJournal.isEmpty(), statusJournal.toString());
+    }
+
+    private static List<AlterMaterializedViewStatusLog> captureStatusJournal() {
+        List<AlterMaterializedViewStatusLog> journal = new ArrayList<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAlterMvStatus(Invocation invocation, AlterMaterializedViewStatusLog log, WALApplier applier) {
+                journal.add(log);
+                invocation.proceed();
+            }
+        };
+        return journal;
+    }
+
+    private static OlapTable createFact() throws Exception {
+        String name = "fact_breaking_task_" + VIEWS.incrementAndGet();
+        starRocksAssert.withTable("CREATE TABLE " + name + " (k INT NOT NULL, v BIGINT) DUPLICATE KEY(k) " +
+                "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
+        return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(DB, name);
+    }
+
+    private static MaterializedView pctView() throws Exception {
+        return pctView(createFact());
+    }
+
+    private static MaterializedView pctView(OlapTable fact) throws Exception {
+        String name = "mv_" + fact.getName();
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + name + " DISTRIBUTED BY HASH(k) BUCKETS 1 " +
+                "REFRESH DEFERRED MANUAL AS SELECT k, v FROM " + fact.getName());
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(DB, name);
+        Assertions.assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
+        return mv;
+    }
+
+    /** An ALTER ... ACTIVE that lands between the run seeing the view inactive and its failure being handled. */
+    private static void activateWhenTheFailureIsHandled(MaterializedView mv) {
+        new MockUp<Task>() {
+            @Mock
+            public int incConsecutiveFailCount(Invocation invocation) {
+                mv.setActive();
+                return invocation.proceed();
+            }
+        };
+    }
+
+    /** Runs a schema change on {@code table} and waits for its jobs; jobs other tests left behind are not ours. */
+    private static void alterTable(OlapTable table, String sql) throws Exception {
+        starRocksAssert.alterTable(sql);
+        for (AlterJobV2 job : GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().values()) {
+            if (job.getTableId() != table.getId()) {
+                continue;
+            }
+            while (!job.getJobState().isFinalState()) {
+                Thread.sleep(200);
+            }
+            Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        }
+    }
+
+    private static void presetConsecutiveFailures(Task task, int count) {
+        task.resetConsecutiveFailCount();
+        for (int i = 0; i < count; i++) {
+            task.incConsecutiveFailCount();
+        }
+    }
+
+    /** Holds {@code reloadThread} inside onReload, after the view went inactive and before its activation is derived. */
+    private static void pauseReloadInItsWindow(Thread reloadThread, CountDownLatch inWindow, CountDownLatch release) {
+        new MockUp<MaterializedView>() {
+            @Mock
+            public void changeReloadState(Invocation invocation, int state) throws InterruptedException {
+                // 0 is RELOAD_STATE_ING, set right after onReload marks the view inactive
+                if (state == 0 && Thread.currentThread() == reloadThread) {
+                    inWindow.countDown();
+                    release.await();
+                }
+                invocation.proceed();
+            }
+        };
+    }
+
     /** An incremental view over an Iceberg table whose next refresh runs the incremental processor. */
     private static MaterializedView incrementalView(String refresh) throws Exception {
         String name = "mv_breaking_task_" + VIEWS.incrementAndGet();
@@ -210,7 +614,7 @@ public class IvmBreakingInactivationTaskTest extends MVIVMIcebergTestBase {
                 " PROPERTIES ('refresh_mode' = 'INCREMENTAL') " +
                 "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`");
         MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable("test", name);
+                .getTable(DB, name);
         seedTvrBaselineAtVersionZero(mv);
         return mv;
     }

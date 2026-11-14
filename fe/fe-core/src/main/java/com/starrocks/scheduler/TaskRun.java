@@ -21,7 +21,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.OptimizeTask;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.AuthorizationMgr;
@@ -34,8 +33,6 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.MaterializedViewExceptions;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.LogUtil;
@@ -508,34 +505,7 @@ public class TaskRun implements Comparable<TaskRun> {
             task.incConsecutiveFailCount();
             LOG.warn("Failed to execute task run, task_id: {}, task_run_id: {}, failCount:{}",
                     taskId, taskRunId, task.getConsecutiveFailCount(), e);
-            if (Constants.TaskSource.MV.equals(task.getSource())
-                    && MaterializedViewExceptions.isIncrementalBreakingFailure(e)) {
-                MaterializedView mv = TaskBuilder.getMvFromTask(task);
-                // Permanent breakage: inactivate for its own reason, not through the consecutive-failure path.
-                if (mv != null && mv.isActive()) {
-                    AlterMVJobExecutor.inactiveMvAndSuspendTask(mv,
-                            MaterializedViewExceptions.inactiveReasonForBreakingFailure(e, mv.getName()));
-                    throw e;
-                }
-            }
-            if (Constants.TaskSource.MV.equals(task.getSource()) && Config.max_task_consecutive_fail_count > 0 &&
-                    task.getConsecutiveFailCount() >= Config.max_task_consecutive_fail_count) {
-                LOG.warn("Task {} has failed {} times continuously, so we disable it",
-                        task.getName(), task.getConsecutiveFailCount());
-                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-                taskManager.suspendTask(task, false);
-                String mvName = "";
-                MaterializedView mv = TaskBuilder.getMvFromTask(task);
-                if (mv != null) {
-                    // If the task is an mv task, inactive the mv
-                    AlterMVJobExecutor.inactiveForConsecutiveFailures(mv);
-                    mvName = mv.getName();
-                }
-                throw new StarRocksException(String.format("Task %s has continuously failed %d times " +
-                                "and has been suspended. If you want active it again, try `ALTER MATERIALIZED VIEW %s ACTIVE`.",
-                        task.getName(), task.getConsecutiveFailCount(), mvName), e);
-            }
-            throw e;
+            throw processor == null ? e : processor.onFailure(task, e);
         }
     }
 
