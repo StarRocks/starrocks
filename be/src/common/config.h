@@ -1783,7 +1783,7 @@ CONF_mBool(lake_vacuum_enable_task_timeout, "true");
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
-CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
+CONF_mInt64(lake_pk_compaction_max_input_rowsets, "200");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 // Lake primary-key size-tiered compaction picks the size level with the highest score, and the level of the
 // newest, smallest rowsets wins every round while loads keep arriving. A level of larger rowsets (outputs of
