@@ -1080,6 +1080,9 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
 
             Table table = tableInfo.getTable();
             db.registerTableUnlocked(table);
+            if (table instanceof OlapTable olapTable) {
+                olapTable.analyzeRollupIndexMetasBestEffort();
+            }
             LOG.info("Recovered table '{}' to database '{}'. tableId: {} dbId: {}", table.getName(),
                     db.getOriginName(), table.getId(), dbId);
             iterator.remove();
@@ -1123,6 +1126,9 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         RecoverInfo recoverInfo = new RecoverInfo(dbId, table.getId(), -1L);
         GlobalStateMgr.getCurrentState().getEditLog().logRecoverTable(recoverInfo, wal -> {
             db.registerTableUnlocked(table);
+            if (table instanceof OlapTable olapTable) {
+                olapTable.analyzeRollupIndexMetasBestEffort();
+            }
             nameToTableInfoDbLevel.remove(tableName);
             idToTableInfo.row(dbId).remove(table.getId());
             removeRecycleMarkers(table.getId());
@@ -1139,6 +1145,9 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         Preconditions.checkState(tableInfo.getDbId() == db.getId());
         Table table = tableInfo.getTable();
         db.registerTableUnlocked(table);
+        if (table instanceof OlapTable olapTable) {
+            olapTable.analyzeRollupIndexMetasBestEffort();
+        }
         nameToTableInfo.row(dbId).remove(table.getName());
         idToTableInfoDbLevel.remove(tableId);
         idToRecycleTime.remove(tableInfo.getTable().getId());
