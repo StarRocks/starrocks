@@ -24,6 +24,7 @@
 #include "column/nullable_column.h"
 #include "common/config.h"
 #include "formats/parquet/types.h"
+#include "testutil/assert.h"
 #include "util/byte_stream_split.h"
 
 namespace starrocks::parquet {
@@ -1242,6 +1243,56 @@ TEST_F(ParquetEncodingTest, PlainByteArrayLargeBatchWithNulls) {
     auto* binary_column = down_cast<BinaryColumn*>(dst->data_column().get());
     ASSERT_EQ(read_count * value.size(), binary_column->get_bytes().size());
     ASSERT_EQ(value, binary_column->get_slice(1).to_string());
+}
+
+// A chunk is filled page by page into the same column. Large values mean few rows per page and many
+// pages, so the byte buffer must grow geometrically across pages instead of reallocating on each one.
+TEST_F(ParquetEncodingTest, PlainStringWithNullsGrowsGeometricallyAcrossPages) {
+    const EncodingInfo* encoding = nullptr;
+    ASSERT_OK(EncodingInfo::get(tparquet::Type::BYTE_ARRAY, tparquet::Encoding::PLAIN, &encoding));
+    std::unique_ptr<Decoder> decoder;
+    ASSERT_OK(encoding->create_decoder(&decoder));
+
+    constexpr size_t kNumPages = 256;
+    constexpr size_t kValueSize = 1000; // > 128, so values go through BinaryColumn::append_bytes
+    const std::vector<uint8_t> nulls = {0, 1};
+
+    auto dst = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto* binary = down_cast<BinaryColumn*>(dst->data_column().get());
+    std::vector<std::string> expected;
+    size_t num_reallocs = 0;
+    NullInfos infos;
+    for (size_t page = 0; page < kNumPages; page++) {
+        std::string value(kValueSize, static_cast<char>('a' + page % 26));
+        value[0] = static_cast<char>(page % 251);
+        Slice slice(value);
+        std::unique_ptr<Encoder> encoder;
+        ASSERT_OK(encoding->create_encoder(&encoder));
+        ASSERT_OK(encoder->append(reinterpret_cast<const uint8_t*>(&slice), 1));
+        Slice data = encoder->build();
+        ASSERT_OK(decoder->set_data(data));
+
+        infos.reset_with_capacity(nulls.size());
+        memcpy(infos.nulls_data(), nulls.data(), nulls.size());
+        infos.num_nulls = 1;
+        infos.num_ranges = 2;
+        size_t capacity = binary->get_bytes().capacity();
+        ASSERT_OK(decoder->next_batch_with_nulls(nulls.size(), infos, ColumnContentType::VALUE, dst.get(), nullptr));
+        num_reallocs += binary->get_bytes().capacity() != capacity;
+        expected.push_back(std::move(value));
+    }
+
+    ASSERT_EQ(kNumPages * nulls.size(), dst->size());
+    for (size_t i = 0; i < dst->size(); i++) {
+        if (i % 2 == 1) {
+            ASSERT_TRUE(dst->is_null(i)) << "row " << i;
+        } else {
+            ASSERT_FALSE(dst->is_null(i)) << "row " << i;
+            ASSERT_EQ(Slice(expected[i / 2]), binary->get_slice(i)) << "row " << i;
+        }
+    }
+    // An exact reserve reallocates on every page (256 times); geometric growth needs about log2(256).
+    ASSERT_LE(num_reallocs, 16);
 }
 
 } // namespace starrocks::parquet
