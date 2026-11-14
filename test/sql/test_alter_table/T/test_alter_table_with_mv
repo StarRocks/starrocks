@@ -1,25 +1,72 @@
 -- name: test_alter_table_with_mv
+-- Test Point: Rejected column drops preserve nonempty filtered rollups and base schema/data.
+-- Method: Keep all dependency errors, then read both indexes and recheck schema/data after each rejection.
+
+create database alter_table_with_mv_${uuid0};
+
+use alter_table_with_mv_${uuid0};
 
 CREATE TABLE t0(k0 BIGINT, k1 DATETIME, v0 INT, v1 VARCHAR(100))
  distributed by hash(k0)
  order by (v0)
  properties('replication_num'='1');
 
-INSERT INTO t0 VALUES(0, '2024-01-01 00:00:00', 10, '100');
+INSERT INTO t0 VALUES(0, '2024-01-01 00:00:00', 10, '100'),
+(1, '2024-01-01 00:00:00', 20, '200'),
+(2, '2024-01-02 00:00:00', 30, '300');
 
 CREATE MATERIALIZED VIEW test_mv1 AS SELECT k0, v1 FROM t0 WHERE v0 > 10;
+
 function: wait_table_rollup_finish()
+
 CREATE MATERIALIZED VIEW test_mv2 AS SELECT k0, v1, k1, v0 FROM t0 WHERE v0 > 10 and k1 = '2024-01-01 00:00:00';
+
 function: wait_table_rollup_finish()
+
+[ORDER]SELECT k0, v1 FROM test_mv1 [_SYNC_MV_] ORDER BY k0;
+
+[ORDER]SELECT k0, v1, k1, v0 FROM test_mv2 [_SYNC_MV_] ORDER BY k0;
+
+[UC]function: initial_rollup_schema=execute_sql("DESC t0", True)["result"]
 
 ALTER TABLE t0 DROP COLUMN k1;
 
+function: execute_sql("DESC t0", True)["result"] == ${initial_rollup_schema}
+
+[ORDER]SELECT * from t0 order by k0;
+
 ALTER TABLE t0 DROP COLUMN v0;
+
+function: execute_sql("DESC t0", True)["result"] == ${initial_rollup_schema}
+
+[ORDER]SELECT * from t0 order by k0;
 
 ALTER TABLE t0 DROP COLUMN v1, DROP COLUMN v0;
 
+function: execute_sql("DESC t0", True)["result"] == ${initial_rollup_schema}
+
+[ORDER]SELECT * from t0 order by k0;
+
 ALTER TABLE t0 DROP COLUMN v1, DROP COLUMN v100;
+
+function: execute_sql("DESC t0", True)["result"] == ${initial_rollup_schema}
+
+[ORDER]SELECT * from t0 order by k0;
 
 DESC t0;
 
-SELECT * from t0 order by k0;
+[ORDER]SELECT k0, v1 FROM test_mv1 [_SYNC_MV_] ORDER BY k0;
+
+[ORDER]SELECT k0, v1, k1, v0 FROM test_mv2 [_SYNC_MV_] ORDER BY k0;
+
+drop materialized view test_mv2;
+
+drop materialized view test_mv1;
+
+drop table t0;
+
+drop database alter_table_with_mv_${uuid0};
+
+CLEANUP {
+  drop database if exists alter_table_with_mv_${uuid0} force;
+} END CLEANUP
