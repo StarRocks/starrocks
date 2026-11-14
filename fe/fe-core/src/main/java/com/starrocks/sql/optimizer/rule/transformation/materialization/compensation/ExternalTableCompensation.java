@@ -39,7 +39,6 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
-import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -52,9 +51,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTransparentState;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
@@ -174,7 +171,6 @@ public final class ExternalTableCompensation extends TableCompensation {
                     .allMatch(field -> field.transform().dedupName().equalsIgnoreCase("identity"));
             return convertRangeCellsToPredicate(refPartitionColRefs, compensations, canConvertToInPredicate);
         }
-        List<Column> mvPartitionCols = mv.getPartitionColumns();
         // to iceberg, `partitionKeys` are using LocalTime as partition values which cannot be used to prune iceberg
         // partitions directly because iceberg uses UTC time in its partition metadata.
         // convert `partitionKeys` to iceberg utc time here.
@@ -205,25 +201,18 @@ public final class ExternalTableCompensation extends TableCompensation {
             Preconditions.checkState(literalExprs.size() == refPartitionColRefs.size());
             List<ScalarOperator> predicates = Lists.newArrayList();
             for (int i = 0; i < literalExprs.size(); i++) {
-                Column mvColumn = mvPartitionCols.get(i);
                 LiteralExpr literalExpr = literalExprs.get(i);
-                ColumnRefOperator refPartitionColRef = refPartitionColRefs.get(i);
-                ConstantOperator expectPartitionVal =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
-                if (!mvColumn.isGeneratedColumn()) {
-                    ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ, refPartitionColRef,
-                            expectPartitionVal);
-                    predicates.add(eq);
-                } else {
-                    SlotRef refBaseTablePartitionExpr = refBaseTableSlotRefs.get(i);
-                    Column refColumn = refBaseTablePartitionCols.get(i);
-                    Expr predicateExpr = getIcebergTablePartitionPredicateExpr(icebergTable,
-                            refColumn.getName(), refBaseTablePartitionExpr, literalExpr);
-                    ExpressionAnalyzer.analyzeExpression(predicateExpr, analyzeState, scope, ConnectContext.get());
-                    ScalarOperator predicate = SqlToScalarOperatorTranslator.translate(predicateExpr, expressionMapping,
-                            optimizerContext.getColumnRefFactory());
-                    predicates.add(predicate);
-                }
+                SlotRef refBaseTablePartitionExpr = refBaseTableSlotRefs.get(i);
+                Column refColumn = refBaseTablePartitionCols.get(i);
+                // Derive the predicate from the base table's partition transform, same as the refresh path in
+                // MVPCTRefreshListPartitioner: identity -> `col = v`, time transforms -> `col >= start AND col < end`.
+                // A plain equality would only match the first instant of a time partition (eg. midnight for `day(ts)`).
+                Expr predicateExpr = getIcebergTablePartitionPredicateExpr(icebergTable,
+                        refColumn.getName(), refBaseTablePartitionExpr, literalExpr);
+                ExpressionAnalyzer.analyzeExpression(predicateExpr, analyzeState, scope, ConnectContext.get());
+                ScalarOperator predicate = SqlToScalarOperatorTranslator.translate(predicateExpr, expressionMapping,
+                        optimizerContext.getColumnRefFactory());
+                predicates.add(predicate);
             }
             externalPredicates.add(Utils.compoundAnd(predicates));
         }
