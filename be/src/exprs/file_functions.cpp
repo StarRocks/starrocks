@@ -290,8 +290,8 @@ StatusOr<ColumnPtr> presigned_url_impl(FunctionContext* context, const Columns& 
     const PresignExpiration<HasExpiration> expirations(columns);
     ColumnBuilder<TYPE_VARCHAR> builder(num_rows);
     for (size_t row = 0; row < num_rows; ++row) {
-        // A NULL URI yields NULL without validating the expiration time of that row.
-        if (uri_viewer.is_null(row)) {
+        // A NULL or empty URI yields NULL without validating the expiration time of that row.
+        if (uri_viewer.is_null(row) || uri_viewer.value(row).empty()) {
             builder.append_null();
             continue;
         }
@@ -339,9 +339,9 @@ StatusOr<ColumnPtr> presigned_file_impl(FunctionContext* context, const Columns&
             continue;
         }
         const Slice uri = uri_viewer.value(row);
-        // An http(s) URI can already be consumed as it is, so the row passes through unchanged and its
-        // expiration time is not validated.
-        if (is_http_uri(std::string_view(uri.data, uri.size))) {
+        // Empty URIs need no signing, and http(s) URIs can already be consumed as they are.
+        // These rows pass through unchanged without validating their expiration time.
+        if (uri.empty() || is_http_uri(std::string_view(uri.data, uri.size))) {
             builder.append(uri);
             continue;
         }

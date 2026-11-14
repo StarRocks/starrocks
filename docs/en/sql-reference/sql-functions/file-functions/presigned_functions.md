@@ -42,13 +42,13 @@ FILE get_presigned_file(VARCHAR storage_volume, FILE file_expr [, BIGINT expirat
 
 ## get_presigned_url
 
-`uri` accepts a constant, column, or expression of the CHAR or VARCHAR type. Returns a VARCHAR value containing the presigned URL. If `uri` is NULL, returns NULL. If `uri` is an `http://` or `https://` URL, presigning fails.
+`uri` accepts a constant, column, or expression of the CHAR or VARCHAR type. Returns a VARCHAR value containing the presigned URL. If `uri` is NULL or an empty string, returns NULL. If `uri` is an `http://` or `https://` URL, presigning fails.
 
 ## get_presigned_file
 
 `file_expr` accepts a [FILE](../../data-types/other-data-types/FILE.md) expression, such as the result of [to_file](to_file.md) or [try_to_file](try_to_file.md). Returns a FILE value. If `file_expr` is NULL, returns NULL.
 
-Returns a new FILE with only its `uri` replaced by the presigned URL. All other fields remain unchanged. If `uri` is NULL or an HTTP/HTTPS URL, returns the FILE unchanged.
+Returns a new FILE with only its `uri` replaced by the presigned URL. All other fields remain unchanged. If `uri` is NULL, an empty string, or an HTTP/HTTPS URL, returns the FILE unchanged.
 
 ## Examples
 

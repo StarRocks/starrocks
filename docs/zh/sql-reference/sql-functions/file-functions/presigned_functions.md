@@ -42,13 +42,13 @@ FILE get_presigned_file(VARCHAR storage_volume, FILE file_expr [, BIGINT expirat
 
 ## get_presigned_url
 
-`uri` 可以是 CHAR 或 VARCHAR 类型的常量、列或表达式。返回包含预签名 URL 的 VARCHAR 值。`uri` 为 NULL 时直接返回 NULL。`uri` 为 `http://` 或 `https://` URL 时，预签名会失败。
+`uri` 可以是 CHAR 或 VARCHAR 类型的常量、列或表达式。返回包含预签名 URL 的 VARCHAR 值。`uri` 为 NULL 或空字符串时直接返回 NULL。`uri` 为 `http://` 或 `https://` URL 时，预签名会失败。
 
 ## get_presigned_file
 
 `file_expr` 接受 [FILE](../../data-types/other-data-types/FILE.md) 表达式，例如 [to_file](to_file.md) 或 [try_to_file](try_to_file.md) 的结果。返回 FILE 值。`file_expr` 为 NULL 时直接返回 NULL。
 
-返回新的 FILE，仅将 uri 替换为预签名 URL，其他属性保持不变。`uri` 为 NULL 或 HTTP/HTTPS URL 时，原样返回 FILE。
+返回新的 FILE，仅将 uri 替换为预签名 URL，其他属性保持不变。`uri` 为 NULL、空字符串或 HTTP/HTTPS URL 时，原样返回 FILE。
 
 ## 示例
 

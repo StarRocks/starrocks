@@ -195,6 +195,14 @@ public class PresignedFunctionTest {
         Assertions.assertFalse(thrift.contains("presign_ak_3"), thrift);
     }
 
+    @Test
+    public void testNullExpirationIsNotFolded() throws Exception {
+        String sql = "select get_presigned_url('presign_vol', 's3://bucket/key', NULL)";
+        String plan = UtFrameUtils.getFragmentPlan(AnalyzeTestUtil.getConnectContext(), sql);
+        // A NULL expiration selects the BE default instead of making the whole call NULL.
+        Assertions.assertTrue(plan.contains("get_presigned_url("), plan);
+    }
+
     // Each call fails at analysis with the given message; an empty message accepts any failure. Only the checks
     // of the presign functions are listed here, not those of the generic function lookup.
     @Test

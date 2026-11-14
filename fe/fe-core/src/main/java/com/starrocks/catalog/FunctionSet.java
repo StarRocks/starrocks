@@ -787,6 +787,7 @@ public class FunctionSet {
                     .add(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, BITMAP_HASH64,
                             PERCENTILE_HASH, HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, AES_ENCRYPT,
                             AES_DECRYPT, ENCODE_FINGERPRINT_SHA256, ENCODE_FINGERPRINT_SHA256_V2, ENCODE_SORT_KEY)
+                    .add(GET_PRESIGNED_URL, GET_PRESIGNED_FILE)
                     .addAll(VectorizedBuiltinFunctions.AI_FUNCTION_NAMES)
                     .build();
 

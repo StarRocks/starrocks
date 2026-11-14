@@ -573,18 +573,19 @@ protected:
 };
 
 TEST_F(PresignedFileFunctionsTest, UrlSignsEachRow) {
-    auto uris = string_column({kStoredUri, kStoredUri, std::nullopt, "s3a://my.dotted.bucket/图片/b c.png"});
-    // A NULL expiration time selects the default, and a NULL URI yields NULL without validating its expiration time.
+    auto uris = string_column({kStoredUri, kStoredUri, std::nullopt, "s3a://my.dotted.bucket/图片/b c.png", ""});
+    // A NULL expiration selects the default; NULL and empty URIs skip expiration validation.
     auto signed_urls = call(FileFunctions::get_presigned_url_with_expiration,
-                            {volume_column(4), uris, expiration_column({60, std::nullopt, 0, 1})});
+                            {volume_column(5), uris, expiration_column({60, std::nullopt, 0, 1, 0})});
     ASSERT_NE(nullptr, signed_urls);
-    ASSERT_EQ(4, signed_urls->size());
+    ASSERT_EQ(5, signed_urls->size());
     EXPECT_FALSE(signed_urls->is_constant());
     EXPECT_TRUE(is_signed_for(url_at(signed_urls, 0), kStoredPath, 60));
     EXPECT_TRUE(is_signed_for(url_at(signed_urls, 1), kStoredPath, 3600));
     EXPECT_TRUE(signed_urls->is_null(2));
     // A dotted bucket stays whole under the s3 schemes, and the key is percent-encoded.
     EXPECT_TRUE(is_signed_for(url_at(signed_urls, 3), "/my.dotted.bucket/%E5%9B%BE%E7%89%87/b%20c.png?", 1));
+    EXPECT_TRUE(signed_urls->is_null(4));
 
     // The planner appends a constant to non-deterministic calls. Without an expiration argument it lands where one
     // would be, and must not be taken for one.
@@ -674,19 +675,20 @@ TEST_F(PresignedFileFunctionsTest, FileReplacesOnlyTheUri) {
         file->append_datum(reference_file("HTTPS://example.com/a.png?X-Amz-Signature=old"));
         file->append_default();
         file->append_datum(reference_file("oss://my-bucket/b.png"));
+        file->append_datum(reference_file(""));
         ColumnPtr input = std::move(file);
         if (outer_null) {
-            auto nulls = NullColumn::create(5, 0);
+            auto nulls = NullColumn::create(6, 0);
             nulls->get_data()[4] = 1;
             input = NullableColumn::create(input, std::move(nulls));
         }
-        const std::array<std::string, 5> before = {input->debug_item(0), input->debug_item(1), input->debug_item(2),
-                                                   input->debug_item(3), input->debug_item(4)};
+        const std::array<std::string, 6> before = {input->debug_item(0), input->debug_item(1), input->debug_item(2),
+                                                   input->debug_item(3), input->debug_item(4), input->debug_item(5)};
         // Rows that pass through unchanged do not validate their expiration time either.
         auto result = call(FileFunctions::get_presigned_file_with_expiration,
-                           {volume_column(5), input, expiration_column({60, 0, -1, 3601, outer_null ? 0 : 120})});
+                           {volume_column(6), input, expiration_column({60, 0, -1, 3601, outer_null ? 0 : 120, 0})});
         ASSERT_NE(nullptr, result);
-        ASSERT_EQ(5, result->size());
+        ASSERT_EQ(6, result->size());
         result->check_or_die();
 
         auto signed_file = result->get(0).get_struct();
@@ -697,7 +699,7 @@ TEST_F(PresignedFileFunctionsTest, FileReplacesOnlyTheUri) {
         EXPECT_EQ("checksum", signed_file[FileColumn::CHECKSUM].get_slice().to_string());
         EXPECT_TRUE(signed_file[FileColumn::INLINE].is_null());
 
-        for (size_t row : {1, 2, 3}) {
+        for (size_t row : {1, 2, 3, 5}) {
             EXPECT_EQ(before[row], result->debug_item(row)) << row;
         }
         if (outer_null) {

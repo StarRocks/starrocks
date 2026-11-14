@@ -42,13 +42,13 @@ FILE get_presigned_file(VARCHAR storage_volume, FILE file_expr [, BIGINT expirat
 
 ## get_presigned_url
 
-`uri` には CHAR 型または VARCHAR 型の定数、列、式を指定できます。署名付き URL を含む VARCHAR 値を返します。`uri` が NULL の場合は NULL を返します。`uri` が `http://` または `https://` の URL の場合、署名付き URL の生成は失敗します。
+`uri` には CHAR 型または VARCHAR 型の定数、列、式を指定できます。署名付き URL を含む VARCHAR 値を返します。`uri` が NULL または空文字列の場合は NULL を返します。`uri` が `http://` または `https://` の URL の場合、署名付き URL の生成は失敗します。
 
 ## get_presigned_file
 
 `file_expr` には [FILE](../../data-types/other-data-types/FILE.md) 式を指定できます。[to_file](to_file.md) や [try_to_file](try_to_file.md) の結果などです。FILE 値を返します。`file_expr` が NULL の場合は NULL を返します。
 
-`uri` のみを署名付き URL に置き換えた新しい FILE を返します。その他のフィールドは変更されません。`uri` が NULL または HTTP/HTTPS URL の場合、FILE をそのまま返します。
+`uri` のみを署名付き URL に置き換えた新しい FILE を返します。その他のフィールドは変更されません。`uri` が NULL、空文字列、または HTTP/HTTPS URL の場合、FILE をそのまま返します。
 
 ## 例
 
