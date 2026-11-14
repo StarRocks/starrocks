@@ -28,6 +28,7 @@
 #include "formats/utils.h"
 #include "runtime/mem_pool.h"
 #include "runtime/type_info_allocator_adapter.h"
+#include "types/geo_srid.h"
 #include "types/type_info.h"
 
 namespace starrocks::parquet {
@@ -36,35 +37,54 @@ DEFINE_FAIL_POINT(parquet_reader_returns_global_dict_not_match_status);
 
 namespace {
 
-Status validate_native_iceberg_geography(const ParquetField& field, const TypeDescriptor& col_type,
-                                         const TIcebergSchemaField& lake_field) {
+Status validate_native_iceberg_geo(const ParquetField& field, const TypeDescriptor& col_type,
+                                   const TIcebergSchemaField& lake_field) {
+    const bool geography = col_type.type == TYPE_GEOGRAPHY;
+    const auto* type_name = logical_type_to_string(col_type.type);
     if (!lake_field.__isset.geo_metadata || !col_type.geo_type) {
-        return Status::NotSupported("Native Iceberg GEOGRAPHY requires GEO metadata: " + field.name);
+        return Status::NotSupported(
+                strings::Substitute("Native Iceberg $0 requires GEO metadata: $1", type_name, field.name));
     }
     const auto& source = lake_field.geo_metadata;
     const auto& planned = *col_type.geo_type;
+    const auto kind = geography ? TIcebergGeoKind::GEOGRAPHY : TIcebergGeoKind::GEOMETRY;
+    const auto logical_type = geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY;
     constexpr std::string_view edge_prefix = "GEO_EDGE_ALGORITHM_";
     const std::string edge = GeoEdgeAlgorithmPB_Name(planned.edge_algorithm);
-    if (source.kind != TIcebergGeoKind::GEOGRAPHY || planned.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY ||
-        source.crs != planned.crs || edge.compare(0, edge_prefix.size(), edge_prefix) != 0 ||
+    if (source.kind != kind || planned.logical_type != logical_type || source.crs != planned.crs ||
+        edge.compare(0, edge_prefix.size(), edge_prefix) != 0 ||
         source.edge_algorithm != edge.substr(edge_prefix.size())) {
         return Status::InvalidArgument("Iceberg/plan geo schema mismatch: " + field.name);
     }
+    if (!geography) {
+        const auto srid = derive_geo_srid(planned.crs);
+        if (planned.coordinate_system != GEO_COORDINATE_SYSTEM_CARTESIAN ||
+            planned.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR || !srid || *srid <= 0 || planned.srid != srid) {
+            return Status::InvalidArgument("Unsupported Iceberg GEOMETRY descriptor: " + field.name);
+        }
+    }
     if (field.physical_type != tparquet::Type::BYTE_ARRAY) {
-        return Status::InvalidArgument("Native Iceberg GEOGRAPHY requires Parquet BYTE_ARRAY: " + field.name);
+        return Status::InvalidArgument(
+                strings::Substitute("Native Iceberg $0 requires Parquet BYTE_ARRAY: $1", type_name, field.name));
     }
     // Older writers may omit the annotation. When present, it must agree with Iceberg;
     // WKB payload bytes cannot establish logical kind, CRS or edge semantics.
     const auto& schema = field.schema_element;
     if (schema.__isset.logicalType) {
         const auto& logical = schema.logicalType;
-        if (!logical.__isset.GEOGRAPHY || logical.__isset.GEOMETRY) {
+        if (logical.__isset.GEOGRAPHY != geography || logical.__isset.GEOMETRY == geography) {
             return Status::InvalidArgument("Iceberg/Parquet geo logical type mismatch: " + field.name);
         }
-        const auto& geography = logical.GEOGRAPHY;
-        const std::string_view crs = geography.__isset.crs ? geography.crs : std::string_view("OGC:CRS84");
+        if (!geography) {
+            const auto& geometry = logical.GEOMETRY;
+            const std::string_view crs = geometry.__isset.crs ? geometry.crs : std::string_view("OGC:CRS84");
+            return crs == source.crs ? Status::OK()
+                                     : Status::InvalidArgument("Iceberg/Parquet geo schema mismatch: " + field.name);
+        }
+        const auto& annotation = logical.GEOGRAPHY;
+        const std::string_view crs = annotation.__isset.crs ? annotation.crs : std::string_view("OGC:CRS84");
         const auto algorithm =
-                geography.__isset.algorithm ? geography.algorithm : tparquet::EdgeInterpolationAlgorithm::SPHERICAL;
+                annotation.__isset.algorithm ? annotation.algorithm : tparquet::EdgeInterpolationAlgorithm::SPHERICAL;
         const auto algorithm_name = tparquet::_EdgeInterpolationAlgorithm_VALUES_TO_NAMES.find(algorithm);
         if (crs != source.crs || algorithm_name == tparquet::_EdgeInterpolationAlgorithm_VALUES_TO_NAMES.end() ||
             algorithm_name->second != source.edge_algorithm) {
@@ -583,8 +603,9 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
     }
     if (lake_schema_field != nullptr && col_type.is_complex_type()) {
         for (const auto& child : col_type.children) {
-            if (child.type == TYPE_GEOGRAPHY) {
-                return Status::NotSupported("Nested GEOGRAPHY is not supported");
+            if (child.is_geo_type()) {
+                return Status::NotSupported(
+                        strings::Substitute("Nested $0 is not supported", logical_type_to_string(child.type)));
             }
         }
     }
@@ -682,11 +703,13 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
         }
         return nullptr;
     } else {
-        if (col_type.type == TYPE_GEOGRAPHY) {
+        if (col_type.is_geo_type()) {
             if (lake_schema_field == nullptr) {
-                return Status::NotSupported("Native GEOGRAPHY reads require Iceberg field IDs and semantic metadata");
+                return Status::NotSupported(
+                        strings::Substitute("Native $0 reads require Iceberg field IDs and semantic metadata",
+                                            logical_type_to_string(col_type.type)));
             }
-            RETURN_IF_ERROR(validate_native_iceberg_geography(*field, col_type, *lake_schema_field));
+            RETURN_IF_ERROR(validate_native_iceberg_geo(*field, col_type, *lake_schema_field));
         }
         return std::make_unique<ScalarColumnReader>(field, &opts.row_group_meta->columns[field->physical_column_index],
                                                     &col_type, opts);
