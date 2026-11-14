@@ -81,6 +81,11 @@ public:
                                  ::starrocks::PTransmitRuntimeFilterResult* response,
                                  ::google::protobuf::Closure* done) override;
 
+    void update_exchange_senders(::google::protobuf::RpcController* controller,
+                                 const ::starrocks::PUpdateExchangeSendersRequest* request,
+                                 ::starrocks::PUpdateExchangeSendersResult* response,
+                                 ::google::protobuf::Closure* done) override;
+
     void exec_plan_fragment(google::protobuf::RpcController* controller, const PExecPlanFragmentRequest* request,
                             PExecPlanFragmentResult* result, google::protobuf::Closure* done) override;
 
