@@ -98,6 +98,38 @@ public class CatalogConnectorMetadataTest {
     }
 
     @Test
+    void testGetViewTypeAndListViewNames(@Mocked ConnectorMetadata connectorMetadata) {
+        new Expectations() {
+            {
+                connectorMetadata.getViewType();
+                result = Table.TableType.VIEW;
+                times = 1;
+                connectorMetadata.listViewNames((ConnectContext) any, "test_db");
+                result = List.of("view1");
+                times = 1;
+            }
+        };
+
+        CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
+                connectorMetadata,
+                informationSchemaMetadata,
+                metaMetadata
+        );
+
+        assertEquals(Table.TableType.VIEW, catalogConnectorMetadata.getViewType());
+        assertEquals(List.of("view1"),
+                catalogConnectorMetadata.listViewNames(new ConnectContext(), "test_db"));
+    }
+
+    @Test
+    void testConnectorMetadataViewDefaults() {
+        ConnectorMetadata metadata = new ConnectorMetadata() {
+        };
+        assertNull(metadata.getViewType());
+        assertTrue(metadata.listViewNames(new ConnectContext(), "test_db").isEmpty());
+    }
+
+    @Test
     void testGetDb(@Mocked ConnectorMetadata connectorMetadata) {
         new Expectations() {
             {

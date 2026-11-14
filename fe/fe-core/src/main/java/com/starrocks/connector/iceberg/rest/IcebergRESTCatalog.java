@@ -337,6 +337,15 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             throw new StarRocksConnectorException("Failed to list tables using REST Catalog", re);
         }
 
+        List<String> names = tableIdentifiers.stream().map(TableIdentifier::name)
+                .collect(Collectors.toCollection(ArrayList::new));
+        names.addAll(listViews(context, dbName));
+        return names;
+    }
+
+    @Override
+    public List<String> listViews(ConnectContext context, String dbName) {
+        Namespace ns = convertDbNameToNamespace(dbName);
         List<TableIdentifier> viewIdentifiers = new ArrayList<>();
         if (viewEndpointsEnabled) {
             try {
@@ -353,12 +362,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             LOG.debug("View endpoints are disabled for catalog, skipping view list operations");
         }
 
-        final List<TableIdentifier> finalIdentifiers = ImmutableList.<TableIdentifier>builder()
-                .addAll(tableIdentifiers)
-                .addAll(viewIdentifiers)
-                .build();
-
-        return finalIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
+        return viewIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
     }
 
     @Override

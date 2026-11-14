@@ -206,6 +206,7 @@ import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+import static com.starrocks.catalog.Table.TableType.ICEBERG_VIEW;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.PartitionUtil.createPartitionKeyWithType;
@@ -314,6 +315,11 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Table.TableType getViewType() {
+        return ICEBERG_VIEW;
+    }
+
+    @Override
     public List<String> listDbNames(ConnectContext context) {
         return icebergCatalog.listAllDatabases(context);
     }
@@ -359,6 +365,11 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public List<String> listTableNames(ConnectContext context, String dbName) {
         return icebergCatalog.listTables(context, dbName);
+    }
+
+    @Override
+    public List<String> listViewNames(ConnectContext context, String dbName) {
+        return icebergCatalog.listViews(context, dbName);
     }
 
     @Override

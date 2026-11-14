@@ -120,6 +120,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     }
 
     @Override
+    public Table.TableType getViewType() {
+        return normal.getViewType();
+    }
+
+    @Override
     public List<String> listDbNames(ConnectContext context) {
         return ImmutableList.<String>builder()
                 .addAll(this.normal.listDbNames(context))
@@ -131,6 +136,12 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     public List<String> listTableNames(ConnectContext context, String dbName) {
         ConnectorMetadata metadata = metadataOfDb(dbName);
         return metadata.listTableNames(context, dbName);
+    }
+
+    @Override
+    public List<String> listViewNames(ConnectContext context, String dbName) {
+        ConnectorMetadata metadata = metadataOfDb(dbName);
+        return metadata.listViewNames(context, dbName);
     }
 
     @Override
