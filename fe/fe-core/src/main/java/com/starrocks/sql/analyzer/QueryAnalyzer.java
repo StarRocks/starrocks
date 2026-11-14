@@ -117,6 +117,7 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
+import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 
@@ -2054,33 +2055,40 @@ public class QueryAnalyzer {
             node.setTableFunction(tableFunction);
             node.setChildExpressions(childExpressions);
 
+            // The visible columns: one per return column, or with Trino UNNEST, one per immediate ROW field.
+            List<Type> outputTypes = node.getOutputTypes();
             if (node.getColumnOutputNames() == null) {
                 if (tableFunction.getFunctionName().getFunction().equals("unnest")) {
                     // If the unnest variadic function does not explicitly specify column name,
                     // all column names are `unnest`. This refers to the return column name of postgresql.
+                    // Expanded ROW fields keep their field names.
                     List<String> columnNames = new ArrayList<>();
-                    for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
-                        columnNames.add("unnest");
+                    for (Type type : tableFunction.getTableFnReturnTypes()) {
+                        if (node.expandsToRowFields(type)) {
+                            ((StructType) type).getFields().forEach(field -> columnNames.add(field.getName()));
+                        } else {
+                            columnNames.add("unnest");
+                        }
                     }
                     node.setColumnOutputNames(columnNames);
                 } else {
                     node.setColumnOutputNames(new ArrayList<>(tableFunction.getDefaultColumnNames()));
                 }
             } else {
-                if (node.getColumnOutputNames().size() != tableFunction.getTableFnReturnTypes().size()) {
+                if (node.getColumnOutputNames().size() != outputTypes.size()) {
                     throw new SemanticException("table %s has %s columns available but %s columns specified",
                             node.getAlias().getTbl(),
-                            tableFunction.getTableFnReturnTypes().size(),
+                            outputTypes.size(),
                             node.getColumnOutputNames().size());
                 }
             }
 
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
-            for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
+            for (int i = 0; i < outputTypes.size(); ++i) {
                 String colName = node.getColumnOutputNames().get(i);
 
                 Field field = new Field(colName,
-                        tableFunction.getTableFnReturnTypes().get(i),
+                        outputTypes.get(i),
                         node.getResolveTableName(),
                         new SlotRef(node.getResolveTableName(), colName, colName));
                 fields.add(field);

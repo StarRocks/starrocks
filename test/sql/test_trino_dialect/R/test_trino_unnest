@@ -1,0 +1,46 @@
+-- name: testTrinoStandaloneUnnest
+set sql_dialect='trino';
+-- result:
+-- !result
+select x from unnest(array[1, 2, 3]) as t(x) order by x;
+-- result:
+1
+2
+3
+-- !result
+select * from unnest(array[1, 2], array['a', 'b', 'c']) as t(x, y) order by y;
+-- result:
+1	a
+2	b
+None	c
+-- !result
+select t.x, s.v from unnest(array[1, 2]) as t(x) join (select 2 as k, 'two' as v) s on t.x = s.k;
+-- result:
+2	two
+-- !result
+select a, b from unnest(array[row(1, 'x'), row(2, 'y')]) as t(a, b) order by a;
+-- result:
+1	x
+2	y
+-- !result
+select a, b, c from unnest(array[row(1, 'x'), row(2, 'y')], array[9]) as t(a, b, c) order by a;
+-- result:
+1	x	9
+2	y	None
+-- !result
+select a, b from unnest(array[row(1, 'x'), null]) as t(a, b) order by a;
+-- result:
+None	None
+1	x
+-- !result
+select s.id, t.a, t.b from (select id, if(id = 1, array[row(1, 'x')], null) as arr from unnest(array[1, 2]) as u(id)) s left join unnest(s.arr) as t(a, b) on true order by s.id;
+-- result:
+1	1	x
+2	None	None
+-- !result
+select t.a, u.x from unnest(array[row(1, array[10, 20]), row(2, array[30])]) as t(a, arr) cross join unnest(t.arr) as u(x) order by u.x;
+-- result:
+1	10
+1	20
+2	30
+-- !result

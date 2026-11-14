@@ -78,3 +78,38 @@ select * from student_score left join unnest(scores, []) on true order by 1, 3;
 5	[90,92]	90	None
 5	[90,92]	92	None
 -- !result
+select id, x from student_score, unnest(cast(null as array<int>)) as t(x) order by 1, 2;
+-- result:
+-- !result
+select id, x from student_score left join unnest(cast(null as array<int>)) as t(x) on true order by 1, 2;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+-- !result
+select id, x, y from student_score, unnest(scores, cast(null as array<int>)) as t(x, y) order by 1, 2;
+-- result:
+1	80	None
+1	85	None
+1	87	None
+2	None	None
+2	77	None
+2	89	None
+5	90	None
+5	92	None
+-- !result
+select id, x, y from student_score left join unnest(scores, cast(null as array<int>)) as t(x, y) on true order by 1, 2;
+-- result:
+1	80	None
+1	85	None
+1	87	None
+2	None	None
+2	77	None
+2	89	None
+3	None	None
+4	None	None
+5	90	None
+5	92	None
+-- !result
