@@ -20,6 +20,8 @@
 #include <memory>
 #include <optional>
 
+#include "common/status.h"
+
 namespace starcache {
 class StarCache;
 } // namespace starcache
@@ -50,6 +52,11 @@ void set_starlet_in_shutdown();
 // with starlet's own predicate, and s3_multipart_equal_part_size to the starlet gflag that decides
 // how those parts are cut. Called during worker init; exposed for tests.
 void apply_starlet_upload_threshold_configs();
+
+// Applies remote_read_retain_prefetched_bytes to the starlet gflag of the same name, which budgets the finished
+// read-ahead blocks starlet keeps in memory. A negative value is refused and the effective budget stays as it was.
+// Called during worker init and on a dynamic config update, which rolls the config back on an error.
+Status update_remote_read_retain_prefetched_bytes();
 
 #ifdef BE_TEST
 void set_staros_worker_for_test(std::shared_ptr<StarOSWorker> worker);

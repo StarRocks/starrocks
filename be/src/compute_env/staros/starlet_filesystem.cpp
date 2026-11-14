@@ -369,6 +369,7 @@ public:
         auto opt = ReadOptions();
         opt.cache.read_mode = to_fslib_read_mode(opts.skip_disk_cache, opts.skip_fill_local_cache);
         opt.buffer_size = opts.buffer_size;
+        opt.remote_read_retainable = opts.remote_read_retainable;
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }
