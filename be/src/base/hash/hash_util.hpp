@@ -26,6 +26,8 @@
 // the code that is built and the runtime checks to control what code is run.
 #ifdef __SSE4_2__
 #include <nmmintrin.h>
+#elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
+#include <arm_acle.h>
 #endif
 #include <zlib.h>
 
@@ -35,7 +37,35 @@ namespace starrocks {
 class HashUtil {
 public:
     static uint32_t zlib_crc_hash(const void* data, int32_t bytes, uint32_t hash) {
+        if (UNLIKELY(data == nullptr)) {
+            return 0;
+        }
+        if (UNLIKELY(bytes <= 0)) {
+            return hash;
+        }
+#if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
+        uint32_t crc = ~hash;
+        const auto* p = reinterpret_cast<const uint8_t*>(data);
+        while (bytes >= static_cast<int32_t>(sizeof(uint64_t))) {
+            crc = __crc32d(crc, unaligned_load<uint64_t>(p));
+            p += sizeof(uint64_t);
+            bytes -= sizeof(uint64_t);
+        }
+        if (bytes & 4) {
+            crc = __crc32w(crc, unaligned_load<uint32_t>(p));
+            p += sizeof(uint32_t);
+        }
+        if (bytes & 2) {
+            crc = __crc32h(crc, unaligned_load<uint16_t>(p));
+            p += sizeof(uint16_t);
+        }
+        if (bytes & 1) {
+            crc = __crc32b(crc, *p);
+        }
+        return ~crc;
+#else
         return crc32(hash, (const unsigned char*)data, bytes);
+#endif
     }
 
     // Compute the Crc32 hash for data. Uses SSE4 instructions when available, otherwise falls back to zlib.

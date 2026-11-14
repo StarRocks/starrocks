@@ -144,6 +144,40 @@ TEST(HashUtilTest, ZlibCrcHash) {
     EXPECT_EQ(HashUtil::zlib_crc_hash(data.data(), static_cast<int32_t>(data.size()), seed), expected);
 }
 
+TEST(HashUtilTest, ZlibCrcHashNullptrZeroAndNegativeLength) {
+    EXPECT_EQ(HashUtil::zlib_crc_hash(nullptr, 0, 0u), 0u);
+    EXPECT_EQ(HashUtil::zlib_crc_hash(nullptr, 0, 0x12345678u), 0u);
+    EXPECT_EQ(HashUtil::zlib_crc_hash(nullptr, 16, 0x12345678u), 0u);
+
+    std::vector<uint8_t> exact(4, 0xab);
+    EXPECT_EQ(HashUtil::zlib_crc_hash(exact.data(), 0, 0x12345678u), 0x12345678u);
+    EXPECT_EQ(HashUtil::zlib_crc_hash(exact.data(), -5, 0x12345678u), 0x12345678u);
+}
+
+TEST(HashUtilTest, ZlibCrcHashParityAcrossLengthsAndAlignments) {
+    const auto buf = make_pattern(1024 + 16);
+    std::vector<int32_t> lens;
+    for (int32_t l = 0; l <= 130; ++l) lens.push_back(l);
+    lens.push_back(255);
+    lens.push_back(1024);
+
+    for (uint32_t seed : {0u, 1u, 0x811C9DC5u, 0xdeadbeefu, 0xffffffffu}) {
+        for (int32_t offset = 0; offset <= 7; ++offset) {
+            const uint8_t* p = buf.data() + offset;
+            for (int32_t len : lens) {
+                const uint32_t expected = static_cast<uint32_t>(::crc32(seed, reinterpret_cast<const Bytef*>(p), len));
+                EXPECT_EQ(HashUtil::zlib_crc_hash(p, len, seed), expected)
+                        << "len=" << len << " offset=" << offset << " seed=" << seed;
+                if (len > 0) {
+                    std::vector<uint8_t> exact(p, p + len);
+                    EXPECT_EQ(HashUtil::zlib_crc_hash(exact.data(), len, seed), expected)
+                            << "exact len=" << len << " offset=" << offset << " seed=" << seed;
+                }
+            }
+        }
+    }
+}
+
 TEST(HashUtilTest, FnvHash) {
     const std::string_view data = "hello";
     EXPECT_EQ(HashUtil::fnv_hash(data.data(), static_cast<int32_t>(data.size()), 0u), 0x1840de38u);
@@ -423,6 +457,59 @@ TEST(HashUtilTest, CrcHashUnalignedAllSizes) {
                     << "len=" << len << " offset=" << offset;
         }
     }
+}
+
+TEST(HashUtilTest, CrcHashNegativeBytesDoesNotOverread) {
+    std::vector<uint8_t> exact(4, 0x5a);
+    const uint32_t seed = 0x811C9DC5u;
+    const uint64_t seed64 = 0x1234567890abcdefULL;
+    for (int32_t neg_len : {-1, -3, -4, -5, -17}) {
+        if (hardware_crc_available()) {
+            EXPECT_EQ(HashUtil::crc_hash(exact.data(), neg_len, seed), ref_half_swap(seed));
+        } else {
+            EXPECT_EQ(HashUtil::crc_hash(exact.data(), neg_len, seed), seed);
+        }
+        EXPECT_EQ(HashUtil::crc_hash64(exact.data(), neg_len, seed64), HashUtil::crc_hash64(exact.data(), 0, seed64));
+        EXPECT_EQ(HashUtil::hash64(exact.data(), neg_len, seed64), HashUtil::hash64(exact.data(), 0, seed64));
+        EXPECT_EQ(HashUtil::xx_hash3_64(exact.data(), neg_len, seed64), HashUtil::xx_hash3_64(exact.data(), 0, seed64));
+        EXPECT_EQ(HashUtil::xx_hash32(exact.data(), neg_len, seed), HashUtil::xx_hash32(exact.data(), 0, seed));
+        EXPECT_EQ(HashUtil::xx_hash64(exact.data(), neg_len, seed64), HashUtil::xx_hash64(exact.data(), 0, seed64));
+    }
+}
+
+TEST(HashUtilTest, CrcHashArm64EightByteStepParity) {
+    if (!hardware_crc_available()) {
+        GTEST_SKIP() << "Hardware CRC-32C not available in this build/CPU";
+    }
+    const auto buf = make_pattern(4096 + 16);
+    std::vector<int32_t> lens;
+    for (int32_t len = 0; len <= 130; ++len) {
+        lens.push_back(len);
+    }
+    for (int32_t len : {255, 1024, 4096}) {
+        lens.push_back(len);
+    }
+    for (uint32_t seed : {0u, 1u, 0x811C9DC5u, 0xdeadbeefu, 0xffffffffu}) {
+        for (int32_t offset = 0; offset <= 7; ++offset) {
+            const uint8_t* p = buf.data() + offset;
+            for (int32_t len : lens) {
+                std::vector<uint8_t> exact(p, p + len);
+                const uint8_t* ptr = len > 0 ? exact.data() : p;
+                EXPECT_EQ(HashUtil::crc_hash(ptr, len, seed), ref_crc_hash(ptr, len, seed))
+                        << "len=" << len << " offset=" << offset << " seed=" << seed;
+            }
+        }
+    }
+#if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
+    for (int32_t offset = 0; offset <= 7; ++offset) {
+        const uint8_t* p = buf.data() + offset;
+        const uint64_t u64 = HashUtil::unaligned_load<uint64_t>(p);
+        const uint32_t lo32 = HashUtil::unaligned_load<uint32_t>(p);
+        const uint32_t hi32 = HashUtil::unaligned_load<uint32_t>(p + 4);
+        const uint32_t seed = 0x811C9DC5u;
+        EXPECT_EQ(__crc32cd(seed, u64), __crc32cw(__crc32cw(seed, lo32), hi32));
+    }
+#endif
 }
 
 #if (defined(__x86_64__) && defined(__SSE4_2__)) || (defined(__aarch64__) && defined(__ARM_FEATURE_CRC32))
