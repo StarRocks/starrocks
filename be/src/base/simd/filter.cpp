@@ -14,6 +14,7 @@
 
 #include "base/simd/filter.h"
 
+#include <cassert>
 #include <cstring>
 
 #include "base/simd/multi_version.h"
@@ -232,14 +233,16 @@ size_t scan_neon(Elem* dst, const Elem* src, const uint8_t* selector, size_t fro
     size_t start = from;
     size_t result = from;
     const uint8_t* sel = selector + from;
-    while (start + kBatchNums < to) {
+    while (start + kBatchNums <= to) {
         const uint8x16_t vsel = vld1q_u8(sel);
         // nibble_mask[i] != 0 ? 0xF : 0x0
         uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(vsel, vsel));
         if (nibble_mask == 0) {
             // whole batch dropped
         } else if (nibble_mask == 0xffff'ffff'ffff'ffffull) {
-            memmove(dst + result, src + start, kBatchNums * sizeof(Elem));
+            if (dst + result != src + start) {
+                std::memmove(dst + result, src + start, kBatchNums * sizeof(Elem));
+            }
             result += kBatchNums;
         } else {
             // Keep only the high bit of each nibble: 0b1111 -> 0b1000.
@@ -285,11 +288,119 @@ MFV_AVX512VLBW(size_t filter_impl(void* dst, const void* src, size_t element_siz
 
 } // namespace
 
+#if defined(__ARM_NEON) && defined(__aarch64__)
+namespace detail {
+
+inline constexpr size_t kNeonBatchNums = 16;
+inline constexpr uint64_t kAllNibblesMask = 0xffff'ffff'ffff'ffffull;
+inline constexpr uint64_t kNibbleHighBitsMask = 0x8888'8888'8888'8888ull;
+
+size_t compress_neon_w4(uint32_t* dst, const uint32_t* src, const uint8_t* selector, size_t from, size_t to) {
+    size_t start = from;
+    size_t result = from;
+    while (start + kNeonBatchNums <= to) {
+        const uint8x16_t vsel = vld1q_u8(selector + start);
+        uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(vsel, vsel));
+
+        if (nibble_mask == 0) {
+            // All 16 dropped
+        } else if (nibble_mask == kAllNibblesMask) {
+            if (dst + result != src + start) {
+                std::memmove(dst + result, src + start, kNeonBatchNums * sizeof(uint32_t));
+            }
+            result += kNeonBatchNums;
+        } else if (uint64_t m = nibble_mask & kNibbleHighBitsMask; __builtin_popcountll(m) < kNeonCompressMinBitsW4) {
+            // Sparse guard: for 1-2 survivors across 16 elements, a scalar CTZ bit-walk
+            // (1-2 indexed copies) beats 4 sub-batch mask extractions + 128-bit TBLs.
+            for (; m != 0; m &= m - 1) {
+                dst[result++] = src[start + (__builtin_ctzll(m) >> 2)];
+            }
+        } else {
+            for (int k = 0; k < 4; ++k) {
+                uint32_t mask4 = extract_neon_mask4(nibble_mask, k);
+                if (mask4 == 0) continue;
+
+                uint8x16_t vdata = vld1q_u8(reinterpret_cast<const uint8_t*>(src + start + k * 4));
+                uint8x16_t vidx = vld1q_u8(kPermuteLut4B[mask4]);
+                uint8x16_t compacted = vqtbl1q_u8(vdata, vidx);
+
+                vst1q_u8(reinterpret_cast<uint8_t*>(dst + result), compacted);
+                result += kPopcountLut4B[mask4];
+            }
+        }
+        start += kNeonBatchNums;
+    }
+    for (; start < to; ++start) {
+        if (selector[start]) {
+            dst[result++] = src[start];
+        }
+    }
+    return result;
+}
+
+size_t compress_neon_w8(uint64_t* dst, const uint64_t* src, const uint8_t* selector, size_t from, size_t to) {
+    size_t start = from;
+    size_t result = from;
+    while (start + kNeonBatchNums <= to) {
+        const uint8x16_t vsel = vld1q_u8(selector + start);
+        uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(vsel, vsel));
+
+        if (nibble_mask == 0) {
+            // All 16 dropped
+        } else if (nibble_mask == kAllNibblesMask) {
+            if (dst + result != src + start) {
+                std::memmove(dst + result, src + start, kNeonBatchNums * sizeof(uint64_t));
+            }
+            result += kNeonBatchNums;
+        } else if (uint64_t m = nibble_mask & kNibbleHighBitsMask; __builtin_popcountll(m) < kNeonCompressMinBitsW8) {
+            // Sparse guard (mirrors x86 compress_w8 kCompressMinBits): 2-lane TBL steps are barely better than
+            // scalar copies, so sparse batches (< 6 survivors) use the ctz bit-walk.
+            for (; m != 0; m &= m - 1) {
+                dst[result++] = src[start + (__builtin_ctzll(m) >> 2)];
+            }
+        } else {
+            for (int k = 0; k < 8; ++k) {
+                uint32_t mask2 = extract_neon_mask2(nibble_mask, k);
+                if (mask2 == 0) continue;
+
+                uint8x16_t vdata = vld1q_u8(reinterpret_cast<const uint8_t*>(src + start + k * 2));
+                uint8x16_t vidx = vld1q_u8(kPermuteLut8B[mask2]);
+                uint8x16_t compacted = vqtbl1q_u8(vdata, vidx);
+
+                vst1q_u8(reinterpret_cast<uint8_t*>(dst + result), compacted);
+                result += kPopcountLut8B[mask2];
+            }
+        }
+        start += kNeonBatchNums;
+    }
+    for (; start < to; ++start) {
+        if (selector[start]) {
+            dst[result++] = src[start];
+        }
+    }
+    return result;
+}
+
+} // namespace detail
+#endif // __ARM_NEON && __aarch64__
+
 size_t detail::filter_range(void* dst, const void* src, size_t element_size, const uint8_t* selector, size_t from,
                             size_t to) {
+    assert(from <= to);
 #if defined(__x86_64__)
     return filter_impl(dst, src, element_size, selector, from, to);
 #elif defined(__ARM_NEON) && defined(__aarch64__)
+    // Note: 128-bit SVE2 svcompact_u32/u64 + predicated svst1 was evaluated at Gate G2 on Arm Neoverse-V2 (c4a)
+    // and pruned because 4-pipe NEON vqtbl1q_u8 LUT compaction outperforms 1-pipe 128-bit COMPACT across mixed
+    // selectivities (914 ns vs 1325 ns at 50% 4B; 1529 ns vs 3297 ns at 50% 8B).
+    if (element_size == 4) {
+        return compress_neon_w4(reinterpret_cast<uint32_t*>(dst), reinterpret_cast<const uint32_t*>(src), selector,
+                                from, to);
+    }
+    if (element_size == 8) {
+        return compress_neon_w8(reinterpret_cast<uint64_t*>(dst), reinterpret_cast<const uint64_t*>(src), selector,
+                                from, to);
+    }
     FILTER_WIDTH_DISPATCH(scan_neon)
 #else
     return scan_scalar_any(dst, src, element_size, selector, from, to);
