@@ -32,6 +32,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.AnalyzedConnectorView;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.Function;
@@ -167,6 +168,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -976,6 +978,21 @@ public class AnalyzerUtils {
         return tableRelations;
     }
 
+    public static boolean hasPolicyRewrite(ParseNode parseNode) {
+        AtomicBoolean rewritten = new AtomicBoolean(false);
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitSubqueryRelation(SubqueryRelation node, Void context) {
+                if (node.isCreateByPolicyRewritten()) {
+                    rewritten.set(true);
+                    return null;
+                }
+                return super.visitSubqueryRelation(node, context);
+            }
+        }.visit(parseNode);
+        return rewritten.get();
+    }
+
     public static List<TableRelation> collectTableRelations(StatementBase statementBase) {
         List<TableRelation> tableRelations = Lists.newArrayList();
         new AnalyzerUtils.TableRelationsCollector(tableRelations).visit(statementBase);
@@ -1005,6 +1022,21 @@ public class AnalyzerUtils {
         List<ViewRelation> viewRelations = Lists.newArrayList();
         new AnalyzerUtils.ViewRelationsCollector(viewRelations).visit(statementBase);
         return viewRelations;
+    }
+
+    public static Set<AnalyzedConnectorView> collectConnectorViewsForMvRewrite(ParseNode parseNode) {
+        Set<AnalyzedConnectorView> views = new HashSet<>();
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitView(ViewRelation node, Void context) {
+                if (node.getView() instanceof AnalyzedConnectorView connectorView) {
+                    views.add(connectorView.withReferencedViewDefinitions(node.getQueryStatement()));
+                    return null;
+                }
+                return super.visitView(node, context);
+            }
+        }.visit(parseNode);
+        return views;
     }
 
     public static Map<TableName, Relation> collectAllTableAndViewRelations(ParseNode parseNode) {
