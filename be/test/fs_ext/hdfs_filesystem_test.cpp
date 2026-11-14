@@ -166,6 +166,11 @@ void HdfsFileSystemTest::create_file_and_destroy() {
 
     // done the file, check if there is any memory leak
     (*wfile).reset();
+    const auto checksum = std::filesystem::path(_root_path) / ".create_file_and_destroy_file.crc";
+    ASSERT_TRUE(std::filesystem::exists(checksum));
+    ASSERT_TRUE(fs->delete_file(filepath).ok());
+    EXPECT_TRUE(fs->path_exists(filepath).is_not_found());
+    EXPECT_FALSE(std::filesystem::exists(checksum));
 
     // error injection during HDFSWritableFile::close, it is hard to simulate a close failure with a POSIX filesystem.
     // HDFS FileSystem close operation will fail if the file is removed from remote name node.

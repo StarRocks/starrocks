@@ -17,6 +17,7 @@
 #include <algorithm>
 
 #include "base/failpoint/fail_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "formats/file_writer.h"
 #include "formats/io/async_flush_stream_poller.h"
@@ -42,12 +43,20 @@ Status PartitionChunkWriter::create_file_writer_if_needed() {
     if (!_file_writer) {
         std::string path = _is_default_partition ? _location_provider->get() : _location_provider->get(_partition);
         ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->create(path));
-        _file_writer = std::move(new_writer_and_stream.writer);
-        _out_stream = std::move(new_writer_and_stream.stream);
-        RETURN_IF_ERROR(_file_writer->init());
-
+        CancelableDefer cleanup_on_failure([&] {
+            WARN_IF_ERROR(new_writer_and_stream.stream->abort_before_flush(), "Failed to close " + path);
+            new_writer_and_stream.writer.reset();
+            new_writer_and_stream.stream.reset();
+            if (new_writer_and_stream.rollback_action) {
+                new_writer_and_stream.rollback_action();
+            }
+        });
+        RETURN_IF_ERROR(new_writer_and_stream.writer->init());
         FAIL_POINT_TRIGGER_EXECUTE(parquet_chunk_writer_init_failed,
                                    { return Status::InternalError("Create file writer failed due to fail point"); });
+        cleanup_on_failure.cancel();
+        _out_stream = std::move(new_writer_and_stream.stream);
+        _file_writer = std::move(new_writer_and_stream.writer);
         _io_poller->enqueue(_out_stream);
     }
     return Status::OK();

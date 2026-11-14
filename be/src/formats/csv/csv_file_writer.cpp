@@ -295,7 +295,7 @@ StatusOr<WriterAndStream> CSVFileWriterFactory::create(const std::string& path) 
                      _fs->new_writable_file(
                              WritableFileOptions{.direct_write = true, .content_type = http::ContentType::CSV}, path));
     auto rollback_action = [fs = _fs, path = path]() {
-        WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
+        WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "Failed to delete " + path);
     };
     // Use CancelableDefer to ensure cleanup on any failure after file creation
     CancelableDefer cleanup_on_failure([&rollback_action]() { rollback_action(); });
@@ -328,6 +328,7 @@ StatusOr<WriterAndStream> CSVFileWriterFactory::create(const std::string& path) 
     return WriterAndStream{
             .stream = std::move(async_output_stream),
             .writer = std::move(writer),
+            .rollback_action = std::move(rollback_action),
     };
 }
 
