@@ -12,336 +12,250 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
+"""CREATE, DROP and ALTER VIEW compilation.
 
-from sqlalchemy import Column, Table, select
-from sqlalchemy.dialects import registry
-from sqlalchemy.schema import MetaData
+The dialect puts the column list, each view clause and ``AS`` on lines of their own; ``assert_compile`` drops the
+line breaks, so each expected string literal below is one line of the generated DDL.
+"""
+
+from sqlalchemy import Column, MetaData, Table, select, testing
+from sqlalchemy.testing import eq_, fixtures
+from sqlalchemy.testing.assertions import AssertsCompiledSQL
 
 from starrocks.datatype import INTEGER, VARCHAR
+from starrocks.dialect import StarRocksDialect
 from starrocks.sql.ddl import AlterView, CreateView, DropView
 from starrocks.sql.schema import View
-from test.test_utils import normalize_sql
 
 
-class TestViewCompilerBase:
-    """Base class for view compiler tests with shared setup."""
-
-    @classmethod
-    def setup_class(cls):
-        cls.logger = logging.getLogger(__name__)
-        cls.dialect = registry.load("starrocks")()
-        cls.metadata = MetaData()
-
-
-class TestCreateViewCompiler(TestViewCompilerBase):
-    """Tests for CREATE VIEW statements."""
+class CreateViewCompileTest(fixtures.TestBase, AssertsCompiledSQL):
+    __dialect__ = StarRocksDialect()
+    __requires__ = ("sqlalchemy_2",)
 
     def test_create_view(self):
-        view = View("my_view", self.metadata, definition="SELECT * FROM my_table")
-        sql = str(CreateView(view).compile(dialect=self.dialect))
-        expected = "CREATE VIEW my_view AS SELECT * FROM my_table"
-        assert normalize_sql(sql) == normalize_sql(expected)
+        view = View("my_view", MetaData(), definition="SELECT * FROM my_table")
+        self.assert_compile(CreateView(view), "CREATE VIEW my_view" "AS" "SELECT * FROM my_table")
 
     def test_create_view_from_selectable(self):
-        """Test CREATE VIEW with SQLAlchemy Selectable object."""
-        # Create a source table
-        users = Table('users', self.metadata,
-                     Column('id', INTEGER),
-                     Column('name', VARCHAR(50)),
-                     Column('email', VARCHAR(100)))
-
-        # Create a select statement
-        stmt = select(users.c.id, users.c.name).where(users.c.id > 100)
-
-        # Create view from selectable
-        view = View("active_users", self.metadata, definition=stmt)
-        sql = str(CreateView(view).compile(dialect=self.dialect))
-
-        # Verify the SQL contains the expected elements
-        normalized = normalize_sql(sql)
-        assert "CREATE VIEW active_users AS" in normalized
-        assert "SELECT" in normalized
-        assert "users.id" in normalized or "id" in normalized
-        assert "users.name" in normalized or "name" in normalized
-        assert "users.id > 100" in normalized or "id > 100" in normalized
-
-    def test_create_view_variations(self):
-        view = View("simple_view", self.metadata, definition="SELECT c1, c2, c3 FROM test_table")
-        sql = str(CreateView(view).compile(dialect=self.dialect))
-        assert normalize_sql(sql) == normalize_sql(
-            "CREATE VIEW simple_view AS SELECT c1, c2, c3 FROM test_table"
+        users = Table(
+            "users", MetaData(), Column("id", INTEGER), Column("name", VARCHAR(50)), Column("email", VARCHAR(100))
         )
-
-        view = View("simple_view_or_replace", self.metadata, definition="SELECT c1, c2, c3 FROM test_table")
-        sql = str(CreateView(view, or_replace=True).compile(dialect=self.dialect))
-        assert normalize_sql(sql) == normalize_sql(
-            "CREATE OR REPLACE VIEW simple_view_or_replace AS SELECT c1, c2, c3 FROM test_table"
-        )
-
-        view = View("simple_view_if_not_exists", self.metadata, definition="SELECT c1 FROM test_table")
-        sql = str(CreateView(view, if_not_exists=True).compile(dialect=self.dialect))
-        assert normalize_sql(sql) == normalize_sql(
-            "CREATE VIEW IF NOT EXISTS simple_view_if_not_exists AS SELECT c1 FROM test_table"
-        )
-
-        view = View("simple_view_with_schema", self.metadata, definition="SELECT c1 FROM test_table", schema="test_db")
-        sql = str(CreateView(view).compile(dialect=self.dialect))
-        assert normalize_sql(sql) == normalize_sql(
-            "CREATE VIEW test_db.simple_view_with_schema AS SELECT c1 FROM test_table"
-        )
-
         view = View(
-            "commented_view",
-            self.metadata,
-            definition="SELECT c1, c2 FROM test_table",
-            comment="This is a view with a comment",
+            "active_users", MetaData(), definition=select(users.c.id, users.c.name).where(users.c.id > 100)
         )
-        sql = str(CreateView(view).compile(dialect=self.dialect))
-        assert normalize_sql(sql) == normalize_sql(
-            "CREATE VIEW commented_view COMMENT 'This is a view with a comment' AS SELECT c1, c2 FROM test_table"
+        self.assert_compile(
+            CreateView(view),
+            "CREATE VIEW active_users" "AS" "SELECT users.id, users.name FROM users WHERE users.id > 100",
         )
 
-    def test_create_view_with_security(self):
-        view = View("secure_view", self.metadata, definition="SELECT 1", starrocks_security="INVOKER")
-        sql = str(CreateView(view).compile(dialect=self.dialect))
-        assert normalize_sql(sql) == normalize_sql(
-            "CREATE VIEW secure_view SECURITY INVOKER AS SELECT 1"
+    @testing.combinations(
+        ("plain", {}, {}, "CREATE VIEW v" "AS" "SELECT c1 FROM test_table"),
+        ("or_replace", {}, {"or_replace": True}, "CREATE OR REPLACE VIEW v" "AS" "SELECT c1 FROM test_table"),
+        ("if_not_exists", {}, {"if_not_exists": True}, "CREATE VIEW IF NOT EXISTS v" "AS" "SELECT c1 FROM test_table"),
+        ("schema", {"schema": "test_db"}, {}, "CREATE VIEW test_db.v" "AS" "SELECT c1 FROM test_table"),
+        (
+            "comment",
+            {"comment": "This is a view with a comment"},
+            {},
+            "CREATE VIEW v" "COMMENT 'This is a view with a comment'" "AS" "SELECT c1 FROM test_table",
+        ),
+        (
+            "security",
+            {"starrocks_security": "INVOKER"},
+            {},
+            "CREATE VIEW v" "SECURITY INVOKER" "AS" "SELECT c1 FROM test_table",
+        ),
+        argnames="view_kwargs, create_kwargs, expected",
+        id_="iaaa",
+    )
+    def test_create_view_option(self, view_kwargs, create_kwargs, expected):
+        view = View("v", MetaData(), definition="SELECT c1 FROM test_table", **view_kwargs)
+        self.assert_compile(CreateView(view, **create_kwargs), expected)
+
+    def test_create_view_with_column_names(self):
+        view = View("v", MetaData(), definition="SELECT c1, c2 FROM test_table", columns=["col_a", "col_b"])
+        self.assert_compile(
+            CreateView(view),
+            "CREATE VIEW v ("
+            "    col_a,"
+            "    col_b"
+            ")"
+            "AS"
+            "SELECT c1, c2 FROM test_table",
         )
 
-    def test_create_view_with_column_definitions(self):
-        """Test CREATE VIEW with various ways to define columns."""
-        # 1. Columns as a list of strings
+    def test_create_view_with_column_dicts(self):
         view = View(
-            "view_with_str_cols",
-            self.metadata,
-            definition="SELECT c1, c2 FROM test_table",
-            columns=["col_a", "col_b"],
-        )
-        sql = str(CreateView(view).compile(dialect=self.dialect))
-        assert normalize_sql(sql) == normalize_sql(
-            "CREATE VIEW view_with_str_cols(col_a, col_b) AS SELECT c1, c2 FROM test_table"
-        )
-
-        # 2. Columns as a list of dictionaries with comments
-        view = View(
-            "view_with_dict_cols",
-            self.metadata,
+            "v",
+            MetaData(),
             definition="SELECT c1, c2 FROM test_table",
             columns=[
                 {"name": "col_a", "comment": "This is the first column"},
                 {"name": "col_b", "comment": "This is the second column"},
             ],
         )
-        sql = str(CreateView(view).compile(dialect=self.dialect))
-        expected = (
-            "CREATE VIEW view_with_dict_cols("
-            "col_a COMMENT 'This is the first column', "
-            "col_b COMMENT 'This is the second column') "
-            "AS SELECT c1, c2 FROM test_table"
+        self.assert_compile(
+            CreateView(view),
+            "CREATE VIEW v ("
+            "    col_a COMMENT 'This is the first column',"
+            "    col_b COMMENT 'This is the second column'"
+            ")"
+            "AS"
+            "SELECT c1, c2 FROM test_table",
         )
-        assert normalize_sql(sql) == normalize_sql(expected)
 
-        # 3. Columns as SQLAlchemy Column objects (with and without comments)
-        cols = [
-            Column('id', INTEGER),
-            Column('name', VARCHAR(50), comment='User name'),
-            Column('email', VARCHAR(100))
-        ]
-        view = View("user_view_sqla_cols", self.metadata, *cols, definition="SELECT id, name, email FROM users")
-        sql = str(CreateView(view).compile(dialect=self.dialect))
-        expected = (
-            "CREATE VIEW user_view_sqla_cols "
-            "(id, name COMMENT 'User name', email) "
-            "AS SELECT id, name, email FROM users"
+    def test_create_view_with_column_objects(self):
+        view = View(
+            "v",
+            MetaData(),
+            Column("id", INTEGER),
+            Column("name", VARCHAR(50), comment="User name"),
+            Column("email", VARCHAR(100)),
+            definition="SELECT id, name, email FROM users",
         )
-        assert normalize_sql(sql) == normalize_sql(expected)
+        self.assert_compile(
+            CreateView(view),
+            "CREATE VIEW v ("
+            "    id,"
+            "    name COMMENT 'User name',"
+            "    email"
+            ")"
+            "AS"
+            "SELECT id, name, email FROM users",
+        )
 
     def test_create_view_with_combined_attributes(self):
-        """Test CREATE VIEW with a combination of columns, comment, and security."""
-        cols = [
-            Column('id', INTEGER, comment='User ID'),
-            Column('name', VARCHAR(50), comment='User name')
-        ]
         view = View(
             "user_view_combined",
-            self.metadata,
-            *cols,
+            MetaData(),
+            Column("id", INTEGER, comment="User ID"),
+            Column("name", VARCHAR(50), comment="User name"),
             definition="SELECT id, name FROM users",
-            schema='test_db',
-            comment='A comprehensive user view',
-            starrocks_security='INVOKER'
+            schema="test_db",
+            comment="A comprehensive user view",
+            starrocks_security="INVOKER",
         )
-        sql = str(CreateView(view).compile(dialect=self.dialect))
-        expected = (
-            "CREATE VIEW test_db.user_view_combined "
-            "(id COMMENT 'User ID', name COMMENT 'User name') "
-            "COMMENT 'A comprehensive user view' "
-            "SECURITY INVOKER "
-            "AS SELECT id, name FROM users"
+        self.assert_compile(
+            CreateView(view),
+            "CREATE VIEW test_db.user_view_combined ("
+            "    id COMMENT 'User ID',"
+            "    name COMMENT 'User name'"
+            ")"
+            "COMMENT 'A comprehensive user view'"
+            "SECURITY INVOKER"
+            "AS"
+            "SELECT id, name FROM users",
         )
-        assert normalize_sql(sql) == normalize_sql(expected)
 
 
-class TestDropViewCompiler(TestViewCompilerBase):
-    """Tests for DROP VIEW statements."""
+class DropViewCompileTest(fixtures.TestBase, AssertsCompiledSQL):
+    __dialect__ = StarRocksDialect()
+    __requires__ = ("sqlalchemy_2",)
 
     def test_drop_view(self):
-        view = View("my_view", self.metadata, definition="SELECT * FROM my_table")
-        sql = str(DropView(view).compile(dialect=self.dialect))
-        assert normalize_sql(sql) == normalize_sql("DROP VIEW my_view")
+        view = View("my_view", MetaData(), definition="SELECT * FROM my_table")
+        self.assert_compile(DropView(view), "DROP VIEW my_view")
 
     def test_drop_view_if_exists(self):
-        view = View("my_view", self.metadata, definition="SELECT * FROM my_table")
-        sql = str(DropView(view, if_exists=True).compile(dialect=self.dialect))
-        assert normalize_sql(sql) == normalize_sql("DROP VIEW IF EXISTS my_view")
+        view = View("my_view", MetaData(), definition="SELECT * FROM my_table")
+        self.assert_compile(DropView(view, if_exists=True), "DROP VIEW IF EXISTS my_view")
 
 
-class TestAlterViewCompiler(TestViewCompilerBase):
-    """Tests for ALTER VIEW statements."""
+class AlterViewCompileTest(fixtures.TestBase, AssertsCompiledSQL):
+    __dialect__ = StarRocksDialect()
+    __requires__ = ("sqlalchemy_2",)
 
-    def test_alter_view(self):
-        view = View("my_view", self.metadata, definition="SELECT 2", comment="New Comment", starrocks_security="DEFINER")
-        sql = str(AlterView(view).compile(dialect=self.dialect))
-        expected = """
-        ALTER VIEW my_view
-        AS
-        SELECT 2
-        """
-        assert normalize_sql(sql) == normalize_sql(expected)
+    def test_alter_view_ignores_comment_and_security(self):
+        """StarRocks cannot change a view's COMMENT or SECURITY with ALTER VIEW, so only the definition is rendered."""
+        view = View("my_view", MetaData(), definition="SELECT 2", comment="New Comment", starrocks_security="DEFINER")
+        self.assert_compile(AlterView(view), "ALTER VIEW my_view" "AS" "SELECT 2")
 
     def test_alter_view_with_schema(self):
-        """Test ALTER VIEW with schema qualification."""
-        view = View("my_view", self.metadata, definition="SELECT id, name FROM users", schema="test_db")
-        sql = str(AlterView(view).compile(dialect=self.dialect))
-        expected = """
-        ALTER VIEW test_db.my_view
-        AS
-        SELECT id, name FROM users
-        """
-        assert normalize_sql(sql) == normalize_sql(expected)
+        view = View("my_view", MetaData(), definition="SELECT id, name FROM users", schema="test_db")
+        self.assert_compile(AlterView(view), "ALTER VIEW test_db.my_view" "AS" "SELECT id, name FROM users")
 
-    def test_alter_view_complex_query(self):
-        """Test ALTER VIEW with complex SELECT query."""
-        complex_query = """
-        SELECT u.id, u.name, COUNT(o.id) as order_count
-        FROM users u
-        LEFT JOIN orders o ON u.id = o.user_id
-        WHERE u.active = true
-        GROUP BY u.id, u.name
-        HAVING COUNT(o.id) > 0
-        ORDER BY order_count DESC
-        """
-        view = View("user_order_summary", self.metadata, definition=complex_query)
-        sql = str(AlterView(view).compile(dialect=self.dialect))
-        expected = f"""
-        ALTER VIEW user_order_summary
-        AS
-        {complex_query.strip()}
-        """
-        assert normalize_sql(sql) == normalize_sql(expected)
-
-    def test_alter_view_with_subquery(self):
-        """Test ALTER VIEW with subqueries and CTEs."""
-        query_with_subquery = """
-        WITH monthly_stats AS (
-            SELECT user_id, COUNT(*) as monthly_orders
-            FROM orders
-            WHERE order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 MONTH)
-            GROUP BY user_id
-        )
-        SELECT u.name, COALESCE(ms.monthly_orders, 0) as orders
-        FROM users u
-        LEFT JOIN monthly_stats ms ON u.id = ms.user_id
-        """
-        view = View("user_monthly_stats", self.metadata, definition=query_with_subquery)
-        sql = str(AlterView(view).compile(dialect=self.dialect))
-        expected = f"""
-        ALTER VIEW user_monthly_stats
-        AS
-        {query_with_subquery.strip()}
-        """
-        assert normalize_sql(sql) == normalize_sql(expected)
-
-    def test_alter_view_with_special_chars(self):
-        """Test ALTER VIEW with special characters in column names and values."""
-        special_query = """
-        SELECT `user-id`, `user name`, `email@domain.com`
-        FROM `user-table`
-        WHERE `status` = 'active' AND `created-at` > '2023-01-01'
-        """
-        view = View("special_chars_view", self.metadata, definition=special_query)
-        sql = str(AlterView(view).compile(dialect=self.dialect))
-        expected = f"""
-        ALTER VIEW special_chars_view
-        AS
-        {special_query.strip()}
-        """
-        assert normalize_sql(sql) == normalize_sql(expected)
-
-    def test_alter_view_with_window_functions(self):
-        """Test ALTER VIEW with window functions."""
-        window_query = """
-        SELECT
-            user_id,
-            order_date,
-            amount,
-            ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY order_date DESC) as rn,
-            SUM(amount) OVER (PARTITION BY user_id ORDER BY order_date) as running_total
-        FROM orders
-        """
-        view = View("user_order_window", self.metadata, definition=window_query)
-        sql = str(AlterView(view).compile(dialect=self.dialect))
-        expected = f"""
-        ALTER VIEW user_order_window
-        AS
-        {window_query.strip()}
-        """
-        assert normalize_sql(sql) == normalize_sql(expected)
-
-    def test_alter_view_with_joins(self):
-        """Test ALTER VIEW with various JOIN types."""
-        join_query = """
-        SELECT
-            u.id,
-            u.name,
-            p.title as product_name,
-            o.quantity,
-            o.price
-        FROM users u
-        INNER JOIN orders o ON u.id = o.user_id
-        LEFT JOIN products p ON o.product_id = p.id
-        RIGHT JOIN categories c ON p.category_id = c.id
-        """
-        view = View("user_order_details", self.metadata, definition=join_query)
-        sql = str(AlterView(view).compile(dialect=self.dialect))
-        expected = f"""
-        ALTER VIEW user_order_details
-        AS
-        {join_query.strip()}
-        """
-        assert normalize_sql(sql) == normalize_sql(expected)
-
-    def test_alter_view_with_aggregation(self):
-        """Test ALTER VIEW with aggregation functions."""
-        agg_query = """
-        SELECT
-            category_id,
-            COUNT(*) as product_count,
-            AVG(price) as avg_price,
-            MIN(price) as min_price,
-            MAX(price) as max_price,
-            SUM(stock_quantity) as total_stock
-        FROM products
-        GROUP BY category_id
-        """
-        view = View("category_summary", self.metadata, definition=agg_query)
-        sql = str(AlterView(view).compile(dialect=self.dialect))
-        expected = f"""
-        ALTER VIEW category_summary
-        AS
-        {agg_query.strip()}
-        """
-        assert normalize_sql(sql) == normalize_sql(expected)
-
-
+    @testing.combinations(
+        (
+            "group_by_having",
+            (
+                "SELECT u.id, u.name, COUNT(o.id) as order_count",
+                "FROM users u",
+                "LEFT JOIN orders o ON u.id = o.user_id",
+                "WHERE u.active = true",
+                "GROUP BY u.id, u.name",
+                "HAVING COUNT(o.id) > 0",
+                "ORDER BY order_count DESC",
+            ),
+        ),
+        (
+            "cte",
+            (
+                "WITH monthly_stats AS (",
+                "    SELECT user_id, COUNT(*) as monthly_orders",
+                "    FROM orders",
+                "    WHERE order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 MONTH)",
+                "    GROUP BY user_id",
+                ")",
+                "SELECT u.name, COALESCE(ms.monthly_orders, 0) as orders",
+                "FROM users u",
+                "LEFT JOIN monthly_stats ms ON u.id = ms.user_id",
+            ),
+        ),
+        (
+            "quoted_identifiers",
+            (
+                "SELECT `user-id`, `user name`, `email@domain.com`",
+                "FROM `user-table`",
+                "WHERE `status` = 'active' AND `created-at` > '2023-01-01'",
+            ),
+        ),
+        (
+            "window_functions",
+            (
+                "SELECT",
+                "    user_id,",
+                "    order_date,",
+                "    amount,",
+                "    ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY order_date DESC) as rn,",
+                "    SUM(amount) OVER (PARTITION BY user_id ORDER BY order_date) as running_total",
+                "FROM orders",
+            ),
+        ),
+        (
+            "joins",
+            (
+                "SELECT",
+                "    u.id,",
+                "    u.name,",
+                "    p.title as product_name,",
+                "    o.quantity,",
+                "    o.price",
+                "FROM users u",
+                "INNER JOIN orders o ON u.id = o.user_id",
+                "LEFT JOIN products p ON o.product_id = p.id",
+                "RIGHT JOIN categories c ON p.category_id = c.id",
+            ),
+        ),
+        (
+            "aggregation",
+            (
+                "SELECT",
+                "    category_id,",
+                "    COUNT(*) as product_count,",
+                "    AVG(price) as avg_price,",
+                "    MIN(price) as min_price,",
+                "    MAX(price) as max_price,",
+                "    SUM(stock_quantity) as total_stock",
+                "FROM products",
+                "GROUP BY category_id",
+            ),
+        ),
+        argnames="definition_lines",
+        id_="ia",
+    )
+    def test_alter_view_keeps_definition_verbatim(self, definition_lines):
+        """assert_compile ignores line breaks, so the exact text, line breaks included, is compared as well."""
+        definition = "\n".join(definition_lines)
+        view = View("v", MetaData(), definition=definition)
+        self.assert_compile(AlterView(view), "ALTER VIEW v" "AS" + "".join(definition_lines))
+        eq_(str(AlterView(view).compile(dialect=self.__dialect__)), "ALTER VIEW v\nAS\n" + definition)
