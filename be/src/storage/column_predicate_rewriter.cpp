@@ -147,6 +147,7 @@ struct RewritePredicateTreeVisitor {
 };
 
 Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool, PredicateTree& pred_tree) {
+    RuntimeFilterPredicatesRewriter::set_static_dict_mask(pool, std::numeric_limits<ColumnId>::max(), Filter{}, false);
     std::unordered_map<ColumnId, const FieldPtr&> cid_to_field;
     for (size_t i = 0; i < _column_size; i++) {
         const FieldPtr& field = _schema.field(i);
@@ -154,6 +155,7 @@ Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool, PredicateTre
         cid_to_field.emplace(cid, field);
     }
 
+    const std::unordered_set<ColumnId> orig_cids = pred_tree.column_ids();
     auto root = pred_tree.release_root();
     PredicateAndNode new_root;
     ASSIGN_OR_RETURN(auto rewrite_status, root.visit(RewritePredicateTreeVisitor{*this, cid_to_field, pool}, new_root));
@@ -174,6 +176,82 @@ Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool, PredicateTre
     default:
         pred_tree = PredicateTree::create(std::move(root));
         break;
+    }
+
+    if (_rf_preds == nullptr || _rf_preds->empty()) {
+        return Status::OK();
+    }
+
+    const auto& immediate_col_preds = pred_tree.get_immediate_column_predicate_map();
+    for (size_t i = 0; i < _column_size; i++) {
+        const FieldPtr& field = _schema.field(i);
+        const ColumnId cid = field->id();
+        if (!_need_rewrite[cid] || !_column_iterators[cid]->all_page_dict_encoded()) {
+            continue;
+        }
+        if (orig_cids.count(cid) == 0 || _rf_preds->preds(cid).empty()) {
+            continue;
+        }
+        const int dict_size = _column_iterators[cid]->dict_size();
+        if (dict_size < 0) {
+            continue;
+        }
+        bool can_contain_null = field->is_nullable();
+        if (can_contain_null) {
+            if (auto* scalar_iter = dynamic_cast<ScalarColumnIterator*>(_column_iterators[cid].get());
+                scalar_iter != nullptr && scalar_iter->get_column_reader() != nullptr &&
+                scalar_iter->get_column_reader()->segment_zone_map() != nullptr &&
+                !scalar_iter->get_column_reader()->segment_zone_map()->has_null()) {
+                can_contain_null = false;
+            }
+        }
+        if (rewrite_status == RewriteStatus::ALWAYS_FALSE) {
+            Filter static_mask(dict_size, 0);
+            RuntimeFilterPredicatesRewriter::set_static_dict_mask(pool, cid, static_mask, false);
+            if (_rf_preds != nullptr) {
+                _rf_preds->set_static_dict_mask(cid, static_mask, false);
+            }
+            continue;
+        }
+        auto it = immediate_col_preds.find(cid);
+        if (it == immediate_col_preds.end() || it->second.empty()) {
+            continue;
+        }
+        if (dict_size <= std::numeric_limits<uint16_t>::max()) {
+            auto code_col = Int32Column::create();
+            code_col->resize(dict_size);
+            std::iota(code_col->get_data().begin(), code_col->get_data().end(), 0);
+            Filter static_mask(dict_size, 1);
+            MutableColumnPtr null_col;
+            uint8_t null_sel[1] = {1};
+            if (can_contain_null) {
+                auto nc = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                nc->append_nulls(1);
+                null_col = std::move(nc);
+            }
+            bool evaluated_any = false;
+            for (const auto* pred : it->second) {
+                if (pred->type() == PredicateType::kPlaceHolder || pred->type() == PredicateType::kGinFallback ||
+                    (pred->is_index_filter_only() && pred->is_expr_predicate())) {
+                    continue;
+                }
+                RETURN_IF_ERROR(
+                        pred->evaluate_and(code_col.get(), static_mask.data(), 0, static_cast<uint16_t>(dict_size)));
+                if (can_contain_null && null_sel[0] != 0) {
+                    RETURN_IF_ERROR(pred->evaluate_and(null_col.get(), null_sel, 0, 1));
+                    if (null_sel[0] == 0) {
+                        can_contain_null = false;
+                    }
+                }
+                evaluated_any = true;
+            }
+            if (evaluated_any) {
+                RuntimeFilterPredicatesRewriter::set_static_dict_mask(pool, cid, static_mask, can_contain_null);
+                if (_rf_preds != nullptr) {
+                    _rf_preds->set_static_dict_mask(cid, static_mask, can_contain_null);
+                }
+            }
+        }
     }
     return Status::OK();
 }
@@ -327,7 +405,7 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
     }
 
     if (PredicateType::kPlaceHolder == pred->type()) {
-        return RewriteStatus::ALWAYS_TRUE;
+        return RewriteStatus::UNCHANGED;
     }
 
     return RewriteStatus::UNCHANGED;

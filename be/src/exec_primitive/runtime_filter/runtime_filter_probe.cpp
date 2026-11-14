@@ -36,6 +36,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     _build_plan_node_id = desc.build_plan_node_id;
     _runtime_filter.store(nullptr);
     _join_mode = desc.build_join_mode;
+    _is_topn_filter = desc.__isset.filter_type && desc.filter_type == TRuntimeFilterBuildType::TOPN_FILTER;
     _is_stream_build_filter = desc.__isset.filter_type && (desc.filter_type == TRuntimeFilterBuildType::TOPN_FILTER ||
                                                            desc.filter_type == TRuntimeFilterBuildType::AGG_FILTER);
     _skip_wait = _is_stream_build_filter;

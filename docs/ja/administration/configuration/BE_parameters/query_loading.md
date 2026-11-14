@@ -284,6 +284,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: プレフィックスベースの最小/最大値を使用して、文字列 (CHAR/VARCHAR) 列にZoneMapを有効にするかどうか。非キー文字列列の場合、最小/最大値は`string_prefix_zonemap_prefix_len`で設定された固定プレフィックス長に切り詰められます。
 - 導入バージョン: -
 
+### enable_topn_runtime_filter_storage_pushdown
+
+- デフォルト: true
+- 型: 真偽値
+- 単位: -
+- 変更可能: はい
+- 説明: Top-N Runtime Filter（`ORDER BY ... LIMIT N`）をストレージレイヤー（`SegmentIterator`）へプッシュダウンし、セグメントおよびページレベルのZoneMapプルーニング、辞書境界プルーニング、および遅延マテリアライゼーション前の述語列の早期フィルタリングを有効にするかどうかを制御します。`true` はプッシュダウンを有効にし、`false` は無効にします。この動作はセッションレベルのシステム変数 `enable_join_runtime_filter_pushdown` によっても制御されます。
+- 導入バージョン: -
+
 ### ゾーンマップインデックスメモリページキャッシュの有効化
 
 - デフォルト：true

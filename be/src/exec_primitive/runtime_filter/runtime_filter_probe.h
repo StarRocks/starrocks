@@ -61,6 +61,7 @@ public:
     bool skip_wait() const { return _skip_wait; }
     // RF is built by stream
     bool is_stream_build_filter() const { return _is_stream_build_filter; }
+    bool is_topn_filter() const { return _is_topn_filter; }
     ExprContext* probe_expr_ctx() const { return _probe_expr_ctx; }
     bool is_bound(const std::vector<TupleId>& tuple_ids) const { return _probe_expr_ctx->root()->is_bound(tuple_ids); }
     // Disable pushing down runtime filters when:
@@ -127,6 +128,7 @@ private:
     int64_t _ready_timestamp = 0;
     int8_t _join_mode;
     bool _is_stream_build_filter = false;
+    bool _is_topn_filter = false;
 
     bool _skip_wait = false;
     // Indicates that the runtime filter was built from the colocate group execution build side.

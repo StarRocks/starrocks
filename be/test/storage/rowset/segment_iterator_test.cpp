@@ -33,16 +33,22 @@
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/object_pool.h"
+#include "compute_env/runtime_range_pruner.hpp"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_memory.h"
+#include "gen_cpp/RuntimeFilter_types.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gtest/gtest.h"
+#include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/delta_column_group.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
+#include "storage/predicate_parser.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
@@ -51,6 +57,7 @@
 #include "storage/seek_range.h"
 #include "storage/seek_tuple.h"
 #include "storage/tablet_schema_helper.h"
+#include "testutil/exprs_test_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -2766,6 +2773,1451 @@ TEST_F(SegmentIteratorTest, GroupedRowidChildrenPreserveSparseQueryAndOwnershipI
     EXPECT_EQ((std::vector<int64_t>{24}), read_rows());
     opts.rowid_range_option = std::make_shared<SparseRange<>>();
     EXPECT_TRUE(read_rows().empty());
+}
+
+TEST_F(SegmentIteratorTest, DictColumnRuntimeFilterPredicateVersionRefresh) {
+    ObjectPool pool;
+    auto dict_words = BinaryColumn::create();
+    dict_words->append(Slice(""));
+    dict_words->append(Slice("m_word"));
+    dict_words->append(Slice("z_word"));
+
+    auto* rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("z_word"), true, false);
+    ASSERT_NE(rf, nullptr);
+    EXPECT_EQ(rf->rf_version(), 0);
+
+    DictColumnRuntimeFilterPredicate pred(0, dict_words, rf, /*is_nullable=*/false);
+    ASSERT_OK(pred.init());
+    EXPECT_FALSE(pred.is_always_false());
+    ASSERT_EQ(pred._dict_codes_selection.size(), 3);
+    EXPECT_EQ(pred._dict_codes_selection[0], 1);
+    EXPECT_EQ(pred._dict_codes_selection[1], 1);
+    EXPECT_EQ(pred._dict_codes_selection[2], 1);
+
+    auto* narrower = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("a_word"), true, false);
+    rf->intersect(narrower);
+    EXPECT_GT(rf->rf_version(), 0);
+
+    ASSERT_OK(pred.refresh_if_updated());
+    EXPECT_FALSE(pred.is_always_false());
+    ASSERT_EQ(pred._dict_codes_selection.size(), 3);
+    EXPECT_EQ(pred._dict_codes_selection[0], 1);
+    EXPECT_EQ(pred._dict_codes_selection[1], 0);
+    EXPECT_EQ(pred._dict_codes_selection[2], 0);
+}
+
+TEST_F(SegmentIteratorTest, DictColumnRuntimeFilterStaticMaskAndNullableSemantics) {
+    ObjectPool pool;
+    auto dict_words = BinaryColumn::create();
+    dict_words->append(Slice(""));
+    dict_words->append(Slice("m_word"));
+    dict_words->append(Slice("z_word"));
+
+    auto* rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("z_word"), true, false);
+    DictColumnRuntimeFilterPredicate pred(0, dict_words, rf, /*is_nullable=*/false);
+    // Static dict mask representing `SearchPhrase <> ''` (excludes code 0 = "").
+    Filter static_mask = {0, 1, 1};
+    pred.set_static_dict_mask(static_mask, /*is_nullable=*/false);
+    ASSERT_OK(pred.init());
+    EXPECT_FALSE(pred.is_always_false());
+    ASSERT_EQ(pred._dict_codes_selection.size(), 3);
+    EXPECT_EQ(pred._dict_codes_selection[0], 0);
+    EXPECT_EQ(pred._dict_codes_selection[1], 1);
+    EXPECT_EQ(pred._dict_codes_selection[2], 1);
+
+    // Tighten RF to <= "a_word" (has_null == false).
+    // RF alone matches code 0 (""), and static_mask matches codes {1, 2}, so their intersection is [0, 0, 0].
+    auto* narrower = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("a_word"), true, false);
+    rf->intersect(narrower);
+    ASSERT_OK(pred.refresh_if_updated());
+    EXPECT_TRUE(pred.is_always_false());
+    EXPECT_EQ(pred._dict_codes_selection[0], 0);
+    EXPECT_EQ(pred._dict_codes_selection[1], 0);
+    EXPECT_EQ(pred._dict_codes_selection[2], 0);
+
+    auto code_col = Int32Column::create();
+    code_col->append(0);
+    code_col->append(1);
+    code_col->append(2);
+    Filter sel = {1, 1, 1};
+    ASSERT_OK(pred.evaluate(code_col.get(), sel.data(), 0, 3));
+    EXPECT_EQ(sel[0], 0);
+    EXPECT_EQ(sel[1], 0);
+    EXPECT_EQ(sel[2], 0);
+
+    // Nullable column with rf->insert_null() (rf->has_null() == true):
+    // Even when 0 dictionary words survive [0, 0, 0], is_always_false() MUST be false because NULL rows pass.
+    auto* null_rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("a_word"), true, true);
+    ASSERT_TRUE(null_rf->has_null());
+    DictColumnRuntimeFilterPredicate nullable_pred(0, dict_words, null_rf, /*is_nullable=*/true);
+    nullable_pred.set_static_dict_mask(static_mask, /*is_nullable=*/true);
+    ASSERT_OK(nullable_pred.init());
+    EXPECT_FALSE(nullable_pred.is_always_false());
+
+    auto nullable_codes = Int32Column::create();
+    nullable_codes->append(0);
+    nullable_codes->append(1);
+    nullable_codes->append(0); // backing code for NULL row
+    auto null_map = NullColumn::create();
+    null_map->append(0);
+    null_map->append(0);
+    null_map->append(1);
+    auto nullable_col = NullableColumn::create(std::move(nullable_codes), std::move(null_map));
+
+    Filter nullable_sel = {1, 1, 1};
+    ASSERT_OK(nullable_pred.evaluate(nullable_col.get(), nullable_sel.data(), 0, 3));
+    EXPECT_EQ(nullable_sel[0], 0);
+    EXPECT_EQ(nullable_sel[1], 0);
+    EXPECT_EQ(nullable_sel[2], 1);
+
+    // End-to-end ColumnPredicateRewriter -> RuntimeFilterPredicatesRewriter static mask propagation
+    // on a NULLABLE schema column with null-rejecting static predicate `c0 != ""` and `null_rf->has_null() == true`:
+    using namespace starrocks::test;
+    std::string file_name = kSegmentDir + "/dict_rf_rewriter_static_mask";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, /*is_nullable=*/true, TYPE_VARCHAR).set_length(32).build();
+    SegmentWriterOptions writer_opts;
+    writer_opts.num_rows_per_block = 10;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, writer_opts);
+    const std::vector<std::string> seg_words = {"", "m_word", "z_word"};
+    TabletDataBuilder data_builder(writer, tablet_schema, 32, 30);
+    ASSERT_OK(data_builder.append(0, [&](int32_t i) { return Slice(seg_words[i % seg_words.size()]); }));
+    ASSERT_OK(data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSIGN_OR_ABORT(auto col_iter, segment->new_column_iterator(tablet_schema->column(0), nullptr));
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    OlapReaderStatistics stats;
+    ColumnIteratorOptions iter_opts;
+    iter_opts.read_file = rfile.get();
+    iter_opts.stats = &stats;
+    iter_opts.check_dict_encoding = true;
+    iter_opts.is_nullable = true;
+    ASSERT_OK(col_iter->init(iter_opts));
+    ASSERT_TRUE(col_iter->all_page_dict_encoded());
+
+    std::vector<std::unique_ptr<ColumnIterator>> col_iters;
+    col_iters.emplace_back(std::move(col_iter));
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_VARCHAR, /*nullable=*/true);
+    auto vec_schema = schema_builder.build();
+    std::vector<uint8_t> need_rewrite = {1};
+    SparseRange<> scan_range(0, 30);
+
+    // 1. When ColumnPredicateRewriter is invoked without runtime filter predicates (rf_preds == nullptr),
+    // it must skip static dictionary-mask construction completely.
+    {
+        auto* ne_empty_no_rf = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+        PredicateAndNode pred_root_no_rf;
+        pred_root_no_rf.add_child(PredicateColumnNode{ne_empty_no_rf});
+        PredicateTree pred_tree_no_rf = PredicateTree::create(std::move(pred_root_no_rf));
+
+        ColumnPredicateRewriter pred_rewriter_no_rf(col_iters, vec_schema, need_rewrite, 1, scan_range);
+        ASSERT_OK(pred_rewriter_no_rf.rewrite_predicate(&pool, pred_tree_no_rf));
+
+        RuntimeFilterProbeDescriptor rf_desc_no_consumer;
+        rf_desc_no_consumer.set_runtime_filter(null_rf);
+        RuntimeFilterPredicates rf_preds_no_consumer;
+        rf_preds_no_consumer.add_predicate(pool.add(new RuntimeFilterPredicate(&rf_desc_no_consumer, 0)));
+        ASSERT_OK(RuntimeFilterPredicatesRewriter::rewrite(&pool, rf_preds_no_consumer, col_iters, vec_schema));
+        ASSERT_OK(rf_preds_no_consumer.refresh_dict_filters());
+        EXPECT_FALSE(rf_preds_no_consumer.has_always_false_dict_filter());
+    }
+
+    // 2. When ColumnPredicateRewriter is provided &rf_preds targeting c0, it constructs the static mask
+    // and propagates it to DictColumnRuntimeFilterPredicate.
+    auto* ne_empty = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{ne_empty});
+    PredicateTree pred_tree = PredicateTree::create(std::move(pred_root));
+
+    RuntimeFilterProbeDescriptor rf_desc;
+    rf_desc.set_runtime_filter(null_rf); // null_rf is <= "a_word" with has_null() == true (ORDER BY ASC NULLS FIRST)
+    RuntimeFilterPredicates rf_preds;
+    rf_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&rf_desc, 0)));
+
+    ColumnPredicateRewriter pred_rewriter(col_iters, vec_schema, need_rewrite, 1, scan_range, &rf_preds);
+    ASSERT_OK(pred_rewriter.rewrite_predicate(&pool, pred_tree));
+
+    ASSERT_OK(RuntimeFilterPredicatesRewriter::rewrite(&pool, rf_preds, col_iters, vec_schema));
+    ASSERT_OK(rf_preds.refresh_dict_filters());
+    EXPECT_TRUE(rf_preds.has_always_false_dict_filter());
+}
+
+TEST_F(SegmentIteratorTest, TopNDictBoundsSegmentPruneTest) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+
+    std::string file_name = kSegmentDir + "/topn_dict_bounds_prune";
+    TabletSchemaBuilder schema_builder;
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/true, TYPE_VARCHAR)
+                                                          .set_length(32)
+                                                          .create(2, /*nullable=*/false, TYPE_INT)
+                                                          .build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto write_chunk = ChunkFactory::new_chunk(full_schema, 1000);
+    const std::vector<std::string> non_empty_words = {"m_0", "m_1", "z_0"};
+    for (int i = 0; i < 1000; ++i) {
+        if (i == 500) {
+            write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_nulls(1);
+        } else if (i > 500 && i < 510) {
+            write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(Slice("")));
+        } else {
+            write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(
+                    Datum(Slice(non_empty_words[i % non_empty_words.size()])));
+        }
+        write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *write_chunk, 1000);
+
+    OlapReaderStatistics stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.chunk_size = 100;
+    seg_opts.enable_join_runtime_filter_pushdown = true;
+
+    auto* ne_empty = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{ne_empty});
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    // Use need_null = true (simulating ORDER BY c0 ASC NULLS FIRST LIMIT N) on a nullable column with NULL rows.
+    // Because static predicate `c0 != ""` rejects NULLs, the whole segment must still be pruned!
+    auto* rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("a_9"), true, true);
+    ASSERT_TRUE(rf->has_null());
+    RuntimeFilterProbeDescriptor rf_desc;
+    rf_desc.set_runtime_filter(rf);
+    seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&rf_desc, 0)));
+
+    ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+    auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+    Status st = iter->get_next(read_chunk.get());
+    EXPECT_TRUE(st.is_end_of_file()) << st;
+    EXPECT_EQ(stats.blocks_load, 0);
+    EXPECT_EQ(stats.raw_rows_read, 0);
+    EXPECT_EQ(stats.decode_dict_count, 0);
+    EXPECT_EQ(stats.runtime_stats_filtered, 1000);
+    iter->close();
+}
+
+TEST_F(SegmentIteratorTest, TopNDictBoundsVersionUpdateTest) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+
+    std::string file_name = kSegmentDir + "/topn_dict_bounds_version_update";
+    TabletSchemaBuilder schema_builder;
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/false, TYPE_VARCHAR)
+                                                          .set_length(32)
+                                                          .create(2, /*nullable=*/false, TYPE_INT)
+                                                          .build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto write_chunk = ChunkFactory::new_chunk(full_schema, 1000);
+    const std::vector<std::string> non_empty_words = {"m_0", "m_1", "z_0"};
+    for (int i = 0; i < 1000; ++i) {
+        if (i >= 500 && i < 510) {
+            write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(Slice("")));
+        } else {
+            write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(
+                    Datum(Slice(non_empty_words[i % non_empty_words.size()])));
+        }
+        write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *write_chunk, 1000);
+
+    OlapReaderStatistics stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.chunk_size = 100;
+    seg_opts.enable_join_runtime_filter_pushdown = true;
+
+    auto* ne_empty = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{ne_empty});
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto* rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("z_9"), true, false);
+    RuntimeFilterProbeDescriptor rf_desc;
+    rf_desc.set_runtime_filter(rf);
+    seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&rf_desc, 0)));
+
+    ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+    auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+    ASSERT_OK(iter->get_next(read_chunk.get()));
+    EXPECT_EQ(read_chunk->num_rows(), 100);
+    EXPECT_EQ(stats.raw_rows_read, 100);
+
+    // Tighten RF mid-scan to <= "a_9": intersection with c0 <> '' leaves 0 valid dict words.
+    auto* narrower = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("a_9"), true, false);
+    rf->intersect(narrower);
+    EXPECT_GT(rf->rf_version(), 0);
+
+    read_chunk->reset();
+    Status st = iter->get_next(read_chunk.get());
+    EXPECT_TRUE(st.is_end_of_file()) << st;
+    EXPECT_EQ(stats.raw_rows_read, 100);
+    EXPECT_EQ(stats.runtime_stats_filtered, 900);
+    iter->close();
+}
+
+TEST_F(SegmentIteratorTest, TopNRfOnlySortColumnAndZoneMapUpdateTest) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+    RuntimeState runtime_state;
+
+    int32_t old_data_page_size = config::data_page_size;
+    config::data_page_size = 400;
+    DeferOp restore_page_size([&] { config::data_page_size = old_data_page_size; });
+
+    std::string file_name = kSegmentDir + "/topn_rf_only_sort_col_zonemap";
+    TabletSchemaBuilder schema_builder;
+    // Column 0 (id=1, name="1"): SearchPhrase (TYPE_VARCHAR, dict-encoded)
+    // Column 1 (id=2, name="2"): EventTime (TYPE_INT, non-dict, 100 rows per page = 10 pages)
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/false, TYPE_VARCHAR)
+                                                          .set_length(32)
+                                                          .create(2, /*nullable=*/false, TYPE_INT)
+                                                          .build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto write_chunk = ChunkFactory::new_chunk(full_schema, 1000);
+    for (int i = 0; i < 1000; ++i) {
+        std::string phrase = "phrase_" + std::to_string(i % 50);
+        write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(Slice(phrase)));
+        write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *write_chunk, 100);
+
+    auto make_int_rf_desc = [&](MinMaxRuntimeFilter<TYPE_INT>* rf) {
+        TRuntimeFilterDescription desc;
+        desc.__set_filter_id(1);
+        desc.__set_has_remote_targets(false);
+        desc.__set_build_plan_node_id(0);
+        desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
+        desc.__set_filter_type(TRuntimeFilterBuildType::TOPN_FILTER);
+        desc.__isset.plan_node_id_to_target_expr = true;
+        desc.plan_node_id_to_target_expr.emplace(0, ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(1, false));
+        auto* rf_desc = pool.add(new RuntimeFilterProbeDescriptor());
+        CHECK_OK(rf_desc->init(&pool, desc, 0, &runtime_state));
+        rf_desc->set_runtime_filter(rf);
+        return rf_desc;
+    };
+
+    SlotDescriptor slot_c1(1, "2", TYPE_INT_DESC);
+    OlapPredicateParser pred_parser(tablet_schema);
+
+    // Case 1: ClickBench Q25 shape: c0 != "" AND PlaceHolderPredicate(c1) + MinMaxRuntimeFilter(c1 <= 25).
+    // ZoneMap prunes pages 1..9 (900 rows) at segment init, and row-level RF filters rows 26..99 on page 0.
+    {
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 100;
+        seg_opts.enable_join_runtime_filter_pushdown = true;
+
+        auto* ne_empty = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+        auto* placeholder_c1 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_INT), 1));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{ne_empty});
+        pred_root.add_child(PredicateColumnNode{placeholder_c1});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        auto* rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 25, true, false);
+        auto* rf_desc = make_int_rf_desc(rf);
+        seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(rf_desc, 1)));
+
+        UnarrivedRuntimeFilterList unarrived_rfs;
+        unarrived_rfs.add_unarrived_rf(rf_desc, &slot_c1, -1);
+        seg_opts.runtime_range_pruner = RuntimeScanRangePruner(&pred_parser, unarrived_rfs);
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+        size_t total_rows = 0;
+        while (true) {
+            read_chunk->reset();
+            Status st = iter->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            for (size_t r = 0; r < read_chunk->num_rows(); ++r) {
+                EXPECT_EQ(read_chunk->get(r)[1].get_int32(), static_cast<int32_t>(total_rows + r));
+            }
+            total_rows += read_chunk->num_rows();
+        }
+        EXPECT_EQ(total_rows, 26);
+        EXPECT_EQ(stats.runtime_stats_filtered, 900);
+        EXPECT_EQ(stats.raw_rows_read, 100);
+        EXPECT_EQ(stats.decode_dict_count, 26);
+        iter->close();
+    }
+
+    // Case 2: RF-only column where ONLY PlaceHolderPredicate(c1) is in pred_tree (so _non_expr_pred_tree is
+    // empty after _init_column_predicates strips kPlaceHolder). Using chunk_size = 10 exercises both
+    // _sample_predicate_columns (chunk 0) and _predicate_evaluate_late_materialize_read_first_column (chunks 1..2)
+    // when late_mat=true, and _predicate_evaluate_without_late_materialize + _filter_by_non_expr_predicates when
+    // late_mat=false.
+    for (bool late_mat : {false, true}) {
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 10;
+        seg_opts.enable_join_runtime_filter_pushdown = true;
+        seg_opts.enable_predicate_col_late_materialize = late_mat;
+
+        auto* placeholder_c1 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_INT), 1));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{placeholder_c1});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        auto* rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 25, true, false);
+        auto* rf_desc = make_int_rf_desc(rf);
+        seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(rf_desc, 1)));
+
+        UnarrivedRuntimeFilterList unarrived_rfs;
+        unarrived_rfs.add_unarrived_rf(rf_desc, &slot_c1, -1);
+        seg_opts.runtime_range_pruner = RuntimeScanRangePruner(&pred_parser, unarrived_rfs);
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 10);
+        size_t total_rows = 0;
+        while (true) {
+            read_chunk->reset();
+            Status st = iter->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            total_rows += read_chunk->num_rows();
+        }
+        EXPECT_EQ(total_rows, 26) << "late_mat=" << late_mat;
+        EXPECT_EQ(stats.runtime_stats_filtered, 900) << "late_mat=" << late_mat;
+        EXPECT_EQ(stats.raw_rows_read, 100) << "late_mat=" << late_mat;
+        EXPECT_EQ(stats.late_materialize_rows, 10) << "late_mat=" << late_mat;
+        iter->close();
+    }
+
+    // Case 3: Mid-scan RF arrival prunes remaining pages via ZoneMap.
+    {
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 50;
+        seg_opts.enable_join_runtime_filter_pushdown = true;
+
+        auto* ne_empty = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+        auto* placeholder_c1 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_INT), 1));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{ne_empty});
+        pred_root.add_child(PredicateColumnNode{placeholder_c1});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        auto* rf_desc = make_int_rf_desc(nullptr);
+        seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(rf_desc, 1)));
+
+        UnarrivedRuntimeFilterList unarrived_rfs;
+        unarrived_rfs.add_unarrived_rf(rf_desc, &slot_c1, -1);
+        seg_opts.runtime_range_pruner = RuntimeScanRangePruner(&pred_parser, unarrived_rfs);
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 50);
+        ASSERT_OK(iter->get_next(read_chunk.get()));
+        EXPECT_EQ(read_chunk->num_rows(), 50);
+        EXPECT_EQ(stats.runtime_stats_filtered, 0);
+
+        // Now RF c1 <= 150 arrives mid-scan: pages 2..9 (rows 200..999, 800 rows) are pruned via ZoneMap.
+        auto* rf_150 = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 150, true, false);
+        rf_desc->set_runtime_filter(rf_150);
+
+        size_t total_rows = 50;
+        while (true) {
+            read_chunk->reset();
+            Status st = iter->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            total_rows += read_chunk->num_rows();
+        }
+        EXPECT_EQ(total_rows, 151);
+        EXPECT_EQ(stats.runtime_stats_filtered, 800);
+        EXPECT_EQ(stats.raw_rows_read, 200);
+        iter->close();
+    }
+}
+
+TEST_F(SegmentIteratorTest, TopNLateMaterializationPruneTest) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+    RuntimeState runtime_state;
+
+    int32_t old_data_page_size = config::data_page_size;
+    config::data_page_size = 400;
+    DeferOp restore_page_size([&] { config::data_page_size = old_data_page_size; });
+
+    std::string file_name = kSegmentDir + "/topn_late_mat_prune";
+    TabletSchemaBuilder schema_builder;
+    // Column 0 (id=1, name="1"): SearchPhrase (TYPE_VARCHAR, dict-encoded)
+    // Column 1 (id=2, name="2"): sort column (TYPE_INT, 0..999)
+    // Column 2 (id=3, name="3"): unpredicated lazy payload column (TYPE_VARCHAR)
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/false, TYPE_VARCHAR)
+                                                          .set_length(32)
+                                                          .create(2, /*nullable=*/false, TYPE_INT)
+                                                          .create(3, /*nullable=*/false, TYPE_VARCHAR)
+                                                          .set_length(64)
+                                                          .build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto write_chunk = ChunkFactory::new_chunk(full_schema, 1000);
+    for (int i = 0; i < 1000; ++i) {
+        std::string phrase;
+        if (i % 100 == 0) {
+            phrase = "";
+        } else {
+            phrase = (i % 2 == 0 ? "m_" : "z_") + std::to_string(i % 25);
+        }
+        std::string payload = "payload_" + std::to_string(i);
+        write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(Slice(phrase)));
+        write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        write_chunk->get_column_by_index(2)->as_mutable_ptr()->append_datum(Datum(Slice(payload)));
+    }
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *write_chunk, 100);
+
+    auto make_int_rf_desc = [&](MinMaxRuntimeFilter<TYPE_INT>* rf) {
+        TRuntimeFilterDescription desc;
+        desc.__set_filter_id(1);
+        desc.__set_has_remote_targets(false);
+        desc.__set_build_plan_node_id(0);
+        desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
+        desc.__set_filter_type(TRuntimeFilterBuildType::TOPN_FILTER);
+        desc.__isset.plan_node_id_to_target_expr = true;
+        desc.plan_node_id_to_target_expr.emplace(0, ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(1, false));
+        auto* rf_desc = pool.add(new RuntimeFilterProbeDescriptor());
+        CHECK_OK(rf_desc->init(&pool, desc, 0, &runtime_state));
+        rf_desc->set_runtime_filter(rf);
+        return rf_desc;
+    };
+
+    SlotDescriptor slot_c1(1, "2", TYPE_INT_DESC);
+    OlapPredicateParser pred_parser(tablet_schema);
+
+    // Subcase A: c0 != "" static predicate + c1 MinMaxRuntimeFilter (<= 15) with PlaceHolderPredicate on c1
+    // and enable_predicate_col_late_materialize = true.
+    // Pages 1..9 (900 rows) are pruned via ZoneMap; row 0 has c0 == "" and rows 16..99 fail c1 <= 15 (85 rows
+    // filtered in page 0); only 15 rows (1..15) survive into _finish_late_materialization for c2.
+    {
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 100;
+        seg_opts.enable_join_runtime_filter_pushdown = true;
+        seg_opts.enable_predicate_col_late_materialize = true;
+
+        auto* ne_empty = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+        auto* placeholder_c1 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_INT), 1));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{ne_empty});
+        pred_root.add_child(PredicateColumnNode{placeholder_c1});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        auto* rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 15, true, false);
+        auto* rf_desc = make_int_rf_desc(rf);
+        seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(rf_desc, 1)));
+
+        UnarrivedRuntimeFilterList unarrived_rfs;
+        unarrived_rfs.add_unarrived_rf(rf_desc, &slot_c1, -1);
+        seg_opts.runtime_range_pruner = RuntimeScanRangePruner(&pred_parser, unarrived_rfs);
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+        size_t total_rows = 0;
+        while (true) {
+            read_chunk->reset();
+            Status st = iter->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            for (size_t r = 0; r < read_chunk->num_rows(); ++r) {
+                int32_t expected_id = static_cast<int32_t>(total_rows + r + 1);
+                EXPECT_EQ(read_chunk->get(r)[1].get_int32(), expected_id);
+                EXPECT_EQ(read_chunk->get(r)[2].get_slice().to_string(), "payload_" + std::to_string(expected_id));
+            }
+            total_rows += read_chunk->num_rows();
+        }
+        EXPECT_EQ(total_rows, 15);
+        EXPECT_EQ(stats.runtime_stats_filtered, 900);
+        EXPECT_EQ(stats.rows_vec_cond_filtered, 85);
+        EXPECT_EQ(stats.late_materialize_rows, 15);
+        iter->close();
+    }
+
+    // Subcase B: c0's MinMaxRuntimeFilter (<= "b_000") makes DictColumnRuntimeFilterPredicate::is_always_false()
+    // true when intersected with static predicate c0 != "". 0 rows returned, all 1000 rows pruned before page I/O.
+    {
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 100;
+        seg_opts.enable_join_runtime_filter_pushdown = true;
+        seg_opts.enable_predicate_col_late_materialize = true;
+
+        auto* ne_empty = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{ne_empty});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        auto* rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("b_000"), true, false);
+        RuntimeFilterProbeDescriptor rf_desc_c0;
+        rf_desc_c0.set_runtime_filter(rf);
+        seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&rf_desc_c0, 0)));
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+        Status st = iter->get_next(read_chunk.get());
+        EXPECT_TRUE(st.is_end_of_file()) << st;
+        EXPECT_EQ(read_chunk->num_rows(), 0);
+        EXPECT_EQ(stats.runtime_stats_filtered, 1000);
+        EXPECT_EQ(stats.raw_rows_read, 0);
+        EXPECT_EQ(stats.late_materialize_rows, 0);
+        iter->close();
+    }
+
+    // Subcase C: Storage kill-switch disabled (seg_opts.enable_join_runtime_filter_pushdown = false).
+    // Runtime filter predicates are ignored at the storage layer and all 990 rows matching c0 != "" are returned.
+    {
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 100;
+        seg_opts.enable_join_runtime_filter_pushdown = false;
+        seg_opts.enable_predicate_col_late_materialize = true;
+
+        auto* ne_empty = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{ne_empty});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        auto* rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("b_000"), true, false);
+        RuntimeFilterProbeDescriptor rf_desc_c0;
+        rf_desc_c0.set_runtime_filter(rf);
+        seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&rf_desc_c0, 0)));
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+        size_t total_rows = 0;
+        while (true) {
+            read_chunk->reset();
+            Status st = iter->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            total_rows += read_chunk->num_rows();
+        }
+        EXPECT_EQ(total_rows, 990);
+        EXPECT_EQ(stats.runtime_stats_filtered, 0);
+        iter->close();
+    }
+}
+
+TEST_F(SegmentIteratorTest, TopNPlainVarcharRuntimeFilterPruneTest) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+    RuntimeState runtime_state;
+
+    int32_t old_data_page_size = config::data_page_size;
+    config::data_page_size = 256;
+    DeferOp restore_page_size([&] { config::data_page_size = old_data_page_size; });
+
+    std::string file_name = kSegmentDir + "/topn_plain_varchar_prune";
+    TabletSchemaBuilder schema_builder;
+    // Column 0 (id=1, name="1"): high-cardinality VARCHAR (plain/mixed-encoded across pages)
+    // Column 1 (id=2, name="2"): nullable high-cardinality VARCHAR
+    // Column 2 (id=3, name="3"): lazy payload column (TYPE_INT)
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/false, TYPE_VARCHAR)
+                                                          .set_length(64)
+                                                          .create(2, /*nullable=*/true, TYPE_VARCHAR)
+                                                          .set_length(64)
+                                                          .create(3, /*nullable=*/false, TYPE_INT)
+                                                          .build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto write_chunk = ChunkFactory::new_chunk(full_schema, 1000);
+    for (int i = 0; i < 1000; ++i) {
+        // Interleave "a_..." and "z_..." within every page so page ZoneMaps span ["a_...", "z_..."]
+        // and cannot prune whole pages when the Top-N bound tightens to <= "b_000", forcing row-level
+        // RuntimeFilterPredicate::evaluate on plain-encoded BinaryColumn data.
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%s_%04d_unique_suffix_%04d", (i % 2 == 0 ? "a" : "z"), i, i * 17);
+        write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(Slice(buf)));
+        if (i % 10 == 0) {
+            write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_nulls(1);
+        } else {
+            write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(Slice(buf)));
+        }
+        write_chunk->get_column_by_index(2)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *write_chunk, 100);
+
+    // 1. Direct unit test of both RuntimeFilterPredicate::evaluate overloads (selection uint8_t* and branchless
+    // uint16_t*) on non-null and nullable BinaryColumn with MinMaxRuntimeFilter<TYPE_VARCHAR>.
+    {
+        auto* rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("b_0000"), true, false);
+        RuntimeFilterProbeDescriptor rf_desc;
+        rf_desc.set_runtime_filter(rf);
+
+        RuntimeFilterPredicate pred_c0(&rf_desc, 0);
+        ASSERT_TRUE(pred_c0.init(0));
+        RuntimeFilterPredicate pred_c1(&rf_desc, 1);
+        ASSERT_TRUE(pred_c1.init(0));
+
+        // Selection vector (uint8_t*) overload on non-null and nullable BinaryColumn
+        std::vector<uint8_t> sel_c0(100, 1);
+        ASSERT_OK(pred_c0.evaluate(write_chunk.get(), sel_c0.data(), 0, 100));
+        EXPECT_EQ(SIMD::count_nonzero(sel_c0), 50); // Only even rows ("a_...") <= "b_0000"
+
+        std::vector<uint8_t> sel_c1(100, 1);
+        ASSERT_OK(pred_c1.evaluate(write_chunk.get(), sel_c1.data(), 0, 100));
+        EXPECT_EQ(SIMD::count_nonzero(sel_c1), 40); // Even rows except multiples of 10 which are NULL
+
+        // Branchless (uint16_t*) overload on non-null and nullable BinaryColumn
+        std::vector<uint16_t> idx_in(100);
+        std::vector<uint16_t> idx_out(100);
+        for (uint16_t i = 0; i < 100; ++i) idx_in[i] = i;
+        ASSIGN_OR_ABORT(uint16_t out_c0, pred_c0.evaluate(write_chunk.get(), idx_in.data(), 100, idx_out.data()));
+        EXPECT_EQ(out_c0, 50);
+        ASSIGN_OR_ABORT(uint16_t out_c1, pred_c1.evaluate(write_chunk.get(), idx_in.data(), 100, idx_out.data()));
+        EXPECT_EQ(out_c1, 40);
+    }
+
+    // 2. End-to-end SegmentIterator scan on plain-encoded VARCHAR with mid-scan Top-N tightening and late
+    // materialization of payload column c2.
+    {
+        TRuntimeFilterDescription desc;
+        desc.__set_filter_id(1);
+        desc.__set_has_remote_targets(false);
+        desc.__set_build_plan_node_id(0);
+        desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
+        desc.__set_filter_type(TRuntimeFilterBuildType::TOPN_FILTER);
+        desc.__isset.plan_node_id_to_target_expr = true;
+        desc.plan_node_id_to_target_expr.emplace(0, ExprsTestHelper::create_column_ref_t_expr<TYPE_VARCHAR>(0, false));
+        auto* rf_desc = pool.add(new RuntimeFilterProbeDescriptor());
+        ASSERT_OK(rf_desc->init(&pool, desc, 0, &runtime_state));
+
+        auto* rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("z_9999"), true, false);
+        rf_desc->set_runtime_filter(rf);
+
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 100;
+        seg_opts.enable_join_runtime_filter_pushdown = true;
+        seg_opts.enable_predicate_col_late_materialize = true;
+
+        auto* placeholder_c0 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_VARCHAR), 0));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{placeholder_c0});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+        seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(rf_desc, 0)));
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+        // Chunk 0 (first 100 rows): bound is "z_9999", all 100 rows pass.
+        ASSERT_OK(iter->get_next(read_chunk.get()));
+        EXPECT_EQ(read_chunk->num_rows(), 100);
+
+        // Tighten Top-N bound mid-scan to <= "b_0000": for the remaining 900 rows (100..999), only the 450
+        // even-indexed "a_..." rows should pass and be late-materialized for column c2.
+        rf->update_min_max<false>(Slice("b_0000"));
+
+        size_t remaining_rows = 0;
+        while (true) {
+            read_chunk->reset();
+            Status st = iter->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            for (size_t r = 0; r < read_chunk->num_rows(); ++r) {
+                EXPECT_LE(read_chunk->get(r)[0].get_slice(), Slice("b_0000"));
+                EXPECT_EQ(read_chunk->get(r)[2].get_int32() % 2, 0);
+            }
+            remaining_rows += read_chunk->num_rows();
+        }
+        EXPECT_EQ(remaining_rows, 450);
+        EXPECT_EQ(stats.rows_vec_cond_filtered, 450);
+        iter->close();
+
+        // Also verify late materialization in the initial sampling chunk when the tightened bound (<= "b_0000")
+        // is active from chunk 0: only the 50 matching rows in chunk 0 (instead of all 100) are late-materialized
+        // for lazy payload columns c1 and c2, and 500 rows total are filtered across the segment.
+        OlapReaderStatistics stats_late;
+        seg_opts.stats = &stats_late;
+        ASSIGN_OR_ABORT(auto iter_late, segment->new_iterator(full_schema, seg_opts));
+        size_t total_late_rows = 0;
+        while (true) {
+            read_chunk->reset();
+            Status st = iter_late->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            total_late_rows += read_chunk->num_rows();
+        }
+        EXPECT_EQ(total_late_rows, 500);
+        EXPECT_EQ(stats_late.rows_vec_cond_filtered, 500);
+        EXPECT_EQ(stats_late.late_materialize_rows, 50);
+        iter_late->close();
+    }
+}
+
+TEST_F(SegmentIteratorTest, TopNAndHighSelectivityJoinRuntimeFilterTest) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+    RuntimeState runtime_state;
+
+    int32_t old_sample_rows = config::rf_sample_rows;
+    int32_t old_sample_ratio = config::rf_sample_ratio;
+    config::rf_sample_rows = 10;
+    config::rf_sample_ratio = 100;
+    DeferOp restore_rf_cfg([&] {
+        config::rf_sample_rows = old_sample_rows;
+        config::rf_sample_ratio = old_sample_ratio;
+    });
+
+    TabletSchemaBuilder schema_builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            schema_builder.create(1, /*nullable=*/false, TYPE_INT).create(2, /*nullable=*/false, TYPE_INT).build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+
+    auto make_rf_desc = [&](int filter_id, TRuntimeFilterBuildType::type filter_type, MinMaxRuntimeFilter<TYPE_INT>* rf,
+                            SlotId slot_id) {
+        TRuntimeFilterDescription desc;
+        desc.__set_filter_id(filter_id);
+        desc.__set_has_remote_targets(false);
+        desc.__set_build_plan_node_id(0);
+        desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
+        desc.__set_filter_type(filter_type);
+        desc.__isset.plan_node_id_to_target_expr = true;
+        desc.plan_node_id_to_target_expr.emplace(0,
+                                                 ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(slot_id, false));
+        auto* rf_desc = pool.add(new RuntimeFilterProbeDescriptor());
+        CHECK_OK(rf_desc->init(&pool, desc, 0, &runtime_state));
+        rf_desc->set_runtime_filter(rf);
+        return rf_desc;
+    };
+
+    // Join RF on c0 filters >= 95% of rows during SAMPLE (only c0 == 0 passes out of 0..99).
+    // Top-N RF on c1 starts loose (c1 <= 1000, 0% filtered during SAMPLE), then tightens to c1 < 0 before NORMAL.
+    auto* join_rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 0, true, false);
+    auto* join_desc = make_rf_desc(1, TRuntimeFilterBuildType::JOIN_FILTER, join_rf, 0);
+
+    auto* topn_rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 1000, true, false);
+    auto* topn_desc = make_rf_desc(2, TRuntimeFilterBuildType::TOPN_FILTER, topn_rf, 1);
+
+    RuntimeFilterPredicates rf_preds;
+    rf_preds.add_predicate(pool.add(new RuntimeFilterPredicate(join_desc, 0)));
+    rf_preds.add_predicate(pool.add(new RuntimeFilterPredicate(topn_desc, 1)));
+
+    auto chunk = ChunkFactory::new_chunk(full_schema, 100);
+    for (int i = 0; i < 100; ++i) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+
+    // 1st evaluation (SAMPLE): join_rf filters 99/100 rows (filter_ratio = 0.99 >= 0.95), topn_rf filters 0/100 rows.
+    // _sample_rows (100) >= rf_sample_rows (10), transitioning rf_preds into NORMAL mode.
+    std::vector<uint8_t> sel1(100, 1);
+    ASSERT_OK(rf_preds.evaluate(chunk.get(), sel1.data(), 0, 100));
+    EXPECT_EQ(SIMD::count_nonzero(sel1), 1);
+
+    // Tighten topn_rf to c1 <= -1 so that even row 0 (where c0 == 0, c1 == 0) is rejected by topn_rf.
+    topn_rf->update_min_max<false>(-1);
+
+    // 2nd evaluation (NORMAL mode): even though join_rf had filter_ratio = 0.99 >= 0.95 during SAMPLE,
+    // topn_rf MUST still be evaluated in NORMAL mode and filter out row 0.
+    std::vector<uint8_t> sel2(100, 1);
+    ASSERT_OK(rf_preds.evaluate(chunk.get(), sel2.data(), 0, 100));
+    EXPECT_EQ(SIMD::count_nonzero(sel2), 0);
+
+    // 3. Two Top-N filters with equal sampled selectivity (both filter_ratio == 0.0 during SAMPLE)
+    // must both be retained in _selectivity_map so that when the second Top-N filter tightens before
+    // NORMAL mode, it still filters rows.
+    {
+        auto* topn_rf0 = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 1000, true, false);
+        auto* topn_desc0 = make_rf_desc(3, TRuntimeFilterBuildType::TOPN_FILTER, topn_rf0, 0);
+        auto* topn_rf1 = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 1000, true, false);
+        auto* topn_desc1 = make_rf_desc(4, TRuntimeFilterBuildType::TOPN_FILTER, topn_rf1, 1);
+
+        RuntimeFilterPredicates multi_topn_preds;
+        multi_topn_preds.add_predicate(pool.add(new RuntimeFilterPredicate(topn_desc0, 0)));
+        multi_topn_preds.add_predicate(pool.add(new RuntimeFilterPredicate(topn_desc1, 1)));
+
+        // SAMPLE mode: both filters pass all 100 rows (filter_ratio == 0.0 for both).
+        std::vector<uint8_t> sel_sample(100, 1);
+        ASSERT_OK(multi_topn_preds.evaluate(chunk.get(), sel_sample.data(), 0, 100));
+        EXPECT_EQ(SIMD::count_nonzero(sel_sample), 100);
+
+        // Tighten the second Top-N filter to c1 <= 9 before NORMAL mode.
+        topn_rf1->update_min_max<false>(9);
+
+        std::vector<uint8_t> sel_normal(100, 1);
+        ASSERT_OK(multi_topn_preds.evaluate(chunk.get(), sel_normal.data(), 0, 100));
+        EXPECT_EQ(SIMD::count_nonzero(sel_normal), 10);
+    }
+
+    // 4. When _enable_predicate_col_late_materialize is active and every column in _predicate_order has
+    // only kPlaceHolder / index-filter-only predicates and no active row-level runtime filters,
+    // _sample_predicate_columns() must not filter the chunk using an uninitialized _selection buffer.
+    {
+        const std::string file_name = kSegmentDir + "/sample_placeholder_only_late_materialize";
+        DeferOp defer([&] { (void)_fs->delete_file(file_name); });
+
+        TabletSchemaBuilder seg_schema_builder;
+        std::shared_ptr<TabletSchema> seg_tablet_schema = seg_schema_builder.create(1, /*nullable=*/false, TYPE_INT)
+                                                                  .create(2, /*nullable=*/false, TYPE_INT)
+                                                                  .create(3, /*nullable=*/false, TYPE_INT)
+                                                                  .build();
+        Schema seg_schema = ChunkHelper::convert_schema(seg_tablet_schema);
+        auto write_chunk = ChunkFactory::new_chunk(seg_schema, 200);
+        for (int i = 0; i < 200; ++i) {
+            write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i + 1000)));
+            write_chunk->get_column_by_index(2)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i + 2000)));
+        }
+        auto segment = write_and_open_segment(_fs, file_name, seg_tablet_schema, *write_chunk, 100);
+
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = seg_tablet_schema;
+        seg_opts.chunk_size = 100;
+        seg_opts.enable_join_runtime_filter_pushdown = true;
+        seg_opts.enable_predicate_col_late_materialize = true;
+
+        // c0 and c1 have only kPlaceHolder / index-only predicates and no runtime_filter_preds, while c2 is lazy.
+        auto* placeholder_c0 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_INT), 0));
+        auto* index_only_c1 = pool.add(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "0"));
+        index_only_c1->set_index_filter_only(true);
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{placeholder_c0});
+        pred_root.add_child(PredicateColumnNode{index_only_c1});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(seg_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(seg_schema, 100);
+        size_t total_rows = 0;
+        while (true) {
+            read_chunk->reset();
+            Status st = iter->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            total_rows += read_chunk->num_rows();
+        }
+        EXPECT_EQ(total_rows, 200);
+        EXPECT_EQ(stats.rows_vec_cond_filtered, 0);
+        iter->close();
+    }
+}
+
+TEST_F(SegmentIteratorTest, RuntimeFilterPredicatesFastPathTest) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+
+    auto dict_words = BinaryColumn::create();
+    dict_words->append(Slice("a_word"));
+    dict_words->append(Slice("z_word"));
+
+    auto* str_rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("m_word"), true, false);
+    RuntimeFilterProbeDescriptor str_rf_desc;
+    str_rf_desc.set_runtime_filter(str_rf);
+
+    auto* int_rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 100, true, false);
+    RuntimeFilterProbeDescriptor int_rf_desc;
+    int_rf_desc.set_runtime_filter(int_rf);
+
+    RuntimeFilterPredicate base_pred(&int_rf_desc, 1);
+    DictColumnRuntimeFilterPredicate dict_pred(0, dict_words, str_rf, /*is_nullable=*/false);
+    EXPECT_FALSE(base_pred.is_dict_filter());
+    EXPECT_TRUE(dict_pred.is_dict_filter());
+
+    RuntimeFilterPredicates rf_preds;
+    EXPECT_FALSE(rf_preds.has_dict_filters());
+
+    rf_preds.add_predicate(&base_pred);
+    EXPECT_FALSE(rf_preds.has_dict_filters());
+    ASSERT_OK(rf_preds.refresh_dict_filters());
+    EXPECT_FALSE(rf_preds.has_always_false_dict_filter());
+
+    rf_preds.add_predicate(&dict_pred);
+    EXPECT_TRUE(rf_preds.has_dict_filters());
+    ASSERT_OK(rf_preds.refresh_dict_filters());
+    EXPECT_FALSE(rf_preds.has_always_false_dict_filter());
+
+    // Also verify RuntimeFilterPredicatesRewriter::rewrite sets has_dict_filters() only when a column is
+    // dictionary-encoded.
+    std::string file_name = kSegmentDir + "/rf_fast_path_rewriter_test";
+    DeferOp defer([&] { (void)_fs->delete_file(file_name); });
+    TabletSchemaBuilder schema_builder;
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/false, TYPE_VARCHAR)
+                                                          .set_length(32)
+                                                          .create(2, /*nullable=*/false, TYPE_INT)
+                                                          .build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto write_chunk = ChunkFactory::new_chunk(full_schema, 30);
+    for (int i = 0; i < 30; ++i) {
+        write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(
+                Datum(Slice(i % 2 == 0 ? "a_word" : "z_word")));
+        write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *write_chunk, 30);
+
+    ASSIGN_OR_ABORT(auto col_iter0, segment->new_column_iterator(tablet_schema->column(0), nullptr));
+    ASSIGN_OR_ABORT(auto col_iter1, segment->new_column_iterator(tablet_schema->column(1), nullptr));
+    ASSIGN_OR_ABORT(auto rfile0, _fs->new_random_access_file(file_name));
+    ASSIGN_OR_ABORT(auto rfile1, _fs->new_random_access_file(file_name));
+    OlapReaderStatistics stats;
+    ColumnIteratorOptions iter_opts0;
+    iter_opts0.read_file = rfile0.get();
+    iter_opts0.stats = &stats;
+    iter_opts0.check_dict_encoding = true;
+    ASSERT_OK(col_iter0->init(iter_opts0));
+    ColumnIteratorOptions iter_opts1;
+    iter_opts1.read_file = rfile1.get();
+    iter_opts1.stats = &stats;
+    iter_opts1.check_dict_encoding = false;
+    ASSERT_OK(col_iter1->init(iter_opts1));
+
+    std::vector<std::unique_ptr<ColumnIterator>> col_iters;
+    col_iters.emplace_back(std::move(col_iter0));
+    col_iters.emplace_back(std::move(col_iter1));
+
+    // Non-dict INT runtime filter remains has_dict_filters() == false after rewrite.
+    RuntimeFilterPredicates int_only_preds;
+    int_only_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&int_rf_desc, 1)));
+    ASSERT_OK(RuntimeFilterPredicatesRewriter::rewrite(&pool, int_only_preds, col_iters, full_schema));
+    EXPECT_FALSE(int_only_preds.has_dict_filters());
+
+    // Dict VARCHAR runtime filter transitions to has_dict_filters() == true after rewrite.
+    RuntimeFilterPredicates dict_rewritten_preds;
+    dict_rewritten_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&str_rf_desc, 0)));
+    EXPECT_FALSE(dict_rewritten_preds.has_dict_filters());
+    ASSERT_OK(RuntimeFilterPredicatesRewriter::rewrite(&pool, dict_rewritten_preds, col_iters, full_schema));
+    EXPECT_TRUE(dict_rewritten_preds.has_dict_filters());
+}
+
+TEST_F(SegmentIteratorTest, SegmentIteratorDictFilterFastPathDeduplicationTest) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+
+    class CountingDictRuntimeFilterPredicate final : public DictColumnRuntimeFilterPredicate {
+    public:
+        CountingDictRuntimeFilterPredicate(ColumnId cid, const ColumnPtr& dict_words, const RuntimeFilter* rf,
+                                           bool is_nullable, size_t* refresh_count)
+                : DictColumnRuntimeFilterPredicate(cid, dict_words, rf, is_nullable), _refresh_count(refresh_count) {}
+
+        Status refresh_if_updated(int32_t driver_sequence = -1, int64_t* rf_eval_timer_ns = nullptr) override {
+            if (_refresh_count != nullptr) {
+                ++(*_refresh_count);
+            }
+            return DictColumnRuntimeFilterPredicate::refresh_if_updated(driver_sequence, rf_eval_timer_ns);
+        }
+
+    private:
+        size_t* _refresh_count = nullptr;
+    };
+
+    std::string file_name = kSegmentDir + "/seg_iter_dict_rf_fast_path_dedup";
+    DeferOp defer([&] { (void)_fs->delete_file(file_name); });
+
+    TabletSchemaBuilder schema_builder;
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/false, TYPE_VARCHAR)
+                                                          .set_length(32)
+                                                          .create(2, /*nullable=*/false, TYPE_INT)
+                                                          .build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto write_chunk = ChunkFactory::new_chunk(full_schema, 100);
+    for (int i = 0; i < 100; ++i) {
+        write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(
+                Datum(Slice(i % 2 == 0 ? "a_word" : "z_word")));
+        write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i % 2)));
+    }
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *write_chunk, 100);
+
+    auto dict_words = BinaryColumn::create();
+    dict_words->append(Slice("a_word"));
+    dict_words->append(Slice("z_word"));
+
+    auto* str_rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("z_word"), true, false);
+
+    // 1. When enable_join_runtime_filter_pushdown == false, refresh_if_updated() must be called 0 times.
+    {
+        size_t refresh_count = 0;
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 100;
+        seg_opts.enable_join_runtime_filter_pushdown = false;
+        seg_opts.runtime_filter_preds.add_predicate(
+                pool.add(new CountingDictRuntimeFilterPredicate(1, dict_words, str_rf, false, &refresh_count)));
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+        ASSERT_OK(iter->get_next(read_chunk.get()));
+        EXPECT_EQ(read_chunk->num_rows(), 100);
+        EXPECT_EQ(refresh_count, 0u);
+        iter->close();
+    }
+
+    // 2. When enable_join_runtime_filter_pushdown == true, reading a single 100-row chunk must not execute
+    // redundant back-to-back _prune_by_dict_runtime_filter_bounds() calls at chunk_start == 0.
+    {
+        size_t refresh_count = 0;
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 100;
+        seg_opts.enable_join_runtime_filter_pushdown = true;
+        seg_opts.enable_predicate_col_late_materialize = false;
+
+        auto* ne_empty = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+        auto* placeholder_c1 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_INT), 1));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{ne_empty});
+        pred_root.add_child(PredicateColumnNode{placeholder_c1});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+        seg_opts.runtime_filter_preds.add_predicate(
+                pool.add(new CountingDictRuntimeFilterPredicate(1, dict_words, str_rf, false, &refresh_count)));
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+        ASSERT_OK(iter->get_next(read_chunk.get()));
+        EXPECT_EQ(read_chunk->num_rows(), 100);
+        EXPECT_GT(refresh_count, 0u);
+        EXPECT_LE(refresh_count, 4u);
+        iter->close();
+    }
+
+    // 3. Reusable segment iterator: transitioning from a scan with a dictionary RF to a scan without RFs
+    // resets _has_dict_runtime_filters and returns all 100 rows.
+    {
+        ChunkIteratorPtr reusable_slot;
+        auto* prune_all_rf =
+                MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("0_none"), true, false);
+        RuntimeFilterProbeDescriptor prune_all_desc;
+        prune_all_desc.set_runtime_filter(prune_all_rf);
+        auto* placeholder_c0 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_VARCHAR), 0));
+
+        OlapReaderStatistics stats1;
+        SegmentReadOptions opts1;
+        opts1.fs = _fs;
+        opts1.stats = &stats1;
+        opts1.tablet_schema = tablet_schema;
+        opts1.chunk_size = 100;
+        opts1.enable_join_runtime_filter_pushdown = true;
+        PredicateAndNode pred_root1;
+        pred_root1.add_child(PredicateColumnNode{placeholder_c0});
+        opts1.pred_tree = PredicateTree::create(std::move(pred_root1));
+        opts1.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&prune_all_desc, 0)));
+
+        ASSIGN_OR_ABORT(auto iter1,
+                        new_reusable_segment_iterator(segment, full_schema, full_schema, opts1, &reusable_slot));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+        Status st1 = iter1->get_next(read_chunk.get());
+        EXPECT_TRUE(st1.is_end_of_file()) << st1;
+        EXPECT_EQ(stats1.runtime_stats_filtered, 100);
+        iter1->close();
+
+        // Reuse the same slot with no runtime filters.
+        OlapReaderStatistics stats2;
+        SegmentReadOptions opts2;
+        opts2.fs = _fs;
+        opts2.stats = &stats2;
+        opts2.tablet_schema = tablet_schema;
+        opts2.chunk_size = 100;
+        opts2.enable_join_runtime_filter_pushdown = true;
+        PredicateAndNode pred_root2;
+        pred_root2.add_child(PredicateColumnNode{placeholder_c0});
+        opts2.pred_tree = PredicateTree::create(std::move(pred_root2));
+
+        ASSIGN_OR_ABORT(auto iter2,
+                        new_reusable_segment_iterator(segment, full_schema, full_schema, opts2, &reusable_slot));
+        read_chunk->reset();
+        ASSERT_OK(iter2->get_next(read_chunk.get()));
+        EXPECT_EQ(read_chunk->num_rows(), 100);
+        iter2->close();
+        reusable_slot->close();
+    }
+}
+
+TEST_F(SegmentIteratorTest, NonTopNScanThroughputBenchmark) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+
+    constexpr size_t kNumRows = 50000;
+    constexpr size_t kChunkSize = 4096;
+    constexpr int kIterations = 7;
+
+    std::string file_name = kSegmentDir + "/non_topn_scan_throughput_bench";
+    DeferOp defer([&] { (void)_fs->delete_file(file_name); });
+
+    TabletSchemaBuilder schema_builder;
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/false, TYPE_VARCHAR)
+                                                          .set_length(32)
+                                                          .create(2, /*nullable=*/false, TYPE_INT)
+                                                          .create(3, /*nullable=*/false, TYPE_BIGINT)
+                                                          .build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto write_chunk = ChunkFactory::new_chunk(full_schema, kNumRows);
+    static constexpr const char* kDictVals[4] = {"alpha", "bravo", "charlie", "delta"};
+    for (size_t i = 0; i < kNumRows; ++i) {
+        write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(Slice(kDictVals[i & 3])));
+        write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        write_chunk->get_column_by_index(2)->as_mutable_ptr()->append_datum(Datum(static_cast<int64_t>(i * 10)));
+    }
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *write_chunk, kNumRows);
+
+    auto run_scan_once = [&](bool enable_rf_pushdown, uint64_t* elapsed_ns_out) -> size_t {
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = kChunkSize;
+        seg_opts.enable_join_runtime_filter_pushdown = enable_rf_pushdown;
+        seg_opts.enable_predicate_col_late_materialize = true;
+
+        auto* ne_pred = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, "none"));
+        auto* ge_pred = pool.add(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "0"));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{ne_pred});
+        pred_root.add_child(PredicateColumnNode{ge_pred});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        MonotonicStopWatch sw;
+        sw.start();
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, kChunkSize);
+        size_t rows = 0;
+        while (true) {
+            read_chunk->reset();
+            Status st = iter->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK(st.ok()) << st;
+            rows += read_chunk->num_rows();
+        }
+        iter->close();
+        *elapsed_ns_out = sw.elapsed_time();
+        EXPECT_EQ(stats.runtime_stats_filtered, 0);
+        return rows;
+    };
+
+    // Warm up page cache and instruction cache for both paths.
+    uint64_t warmup_ns = 0;
+    EXPECT_EQ(run_scan_once(false, &warmup_ns), kNumRows);
+    EXPECT_EQ(run_scan_once(true, &warmup_ns), kNumRows);
+
+    std::vector<uint64_t> disabled_samples_ns;
+    std::vector<uint64_t> enabled_samples_ns;
+    disabled_samples_ns.reserve(kIterations);
+    enabled_samples_ns.reserve(kIterations);
+
+    for (int i = 0; i < kIterations; ++i) {
+        uint64_t ns_disabled = 0;
+        uint64_t ns_enabled = 0;
+        EXPECT_EQ(run_scan_once(false, &ns_disabled), kNumRows);
+        EXPECT_EQ(run_scan_once(true, &ns_enabled), kNumRows);
+        disabled_samples_ns.push_back(ns_disabled);
+        enabled_samples_ns.push_back(ns_enabled);
+    }
+
+    std::sort(disabled_samples_ns.begin(), disabled_samples_ns.end());
+    std::sort(enabled_samples_ns.begin(), enabled_samples_ns.end());
+    const uint64_t median_disabled_ns = disabled_samples_ns[kIterations / 2];
+    const uint64_t median_enabled_ns = enabled_samples_ns[kIterations / 2];
+    const double disabled_mrows_per_sec =
+            median_disabled_ns > 0 ? (static_cast<double>(kNumRows) * 1e3 / median_disabled_ns) : 0.0;
+    const double enabled_mrows_per_sec =
+            median_enabled_ns > 0 ? (static_cast<double>(kNumRows) * 1e3 / median_enabled_ns) : 0.0;
+
+    LOG(INFO) << "NonTopNScanThroughputBenchmark (rows=" << kNumRows << "): "
+              << "rf_pushdown=false median=" << median_disabled_ns << " ns (" << disabled_mrows_per_sec << " Mrows/s), "
+              << "rf_pushdown=true median=" << median_enabled_ns << " ns (" << enabled_mrows_per_sec << " Mrows/s)";
+
+    EXPECT_GT(median_disabled_ns, 0u);
+    EXPECT_GT(median_enabled_ns, 0u);
+}
+
+TEST_F(SegmentIteratorTest, DictRuntimeFilterRefreshTimingAttributionTest) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+
+    std::string file_name = kSegmentDir + "/dict_rf_refresh_timing_attribution";
+    DeferOp defer([&] { (void)_fs->delete_file(file_name); });
+
+    TabletSchemaBuilder schema_builder;
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/false, TYPE_VARCHAR)
+                                                          .set_length(32)
+                                                          .create(2, /*nullable=*/false, TYPE_INT)
+                                                          .build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto write_chunk = ChunkFactory::new_chunk(full_schema, 100);
+    for (int i = 0; i < 100; ++i) {
+        write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(
+                Datum(Slice(i % 2 == 0 ? "m_word" : "z_word")));
+        write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *write_chunk, 100);
+
+    // 1. Eager segment-level pruning via _prune_by_dict_runtime_filter_bounds() must attribute
+    // dictionary evaluation (_recompute_selection) to stats.rf_cond_evaluate_ns even though
+    // row-level evaluate() is never entered.
+    {
+        auto* str_rf =
+                MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("a_cutoff"), true, false);
+        RuntimeFilterProbeDescriptor rf_desc;
+        rf_desc.set_runtime_filter(str_rf);
+        auto* placeholder_c0 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_VARCHAR), 0));
+
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 50;
+        seg_opts.enable_join_runtime_filter_pushdown = true;
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{placeholder_c0});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+        seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&rf_desc, 0)));
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 50);
+        Status st = iter->get_next(read_chunk.get());
+        EXPECT_TRUE(st.is_end_of_file()) << st;
+        EXPECT_EQ(stats.runtime_stats_filtered, 100);
+        EXPECT_GT(stats.rf_cond_evaluate_ns, 0);
+        iter->close();
+    }
+
+    // 2. Mid-scan Top-N update before the second do_get_next() that prunes the remaining rows
+    // must also increase stats.rf_cond_evaluate_ns on the second get_next() call.
+    {
+        auto* str_rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("z_word"), true, false);
+        RuntimeFilterProbeDescriptor rf_desc;
+        rf_desc.set_runtime_filter(str_rf);
+        auto* placeholder_c0 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_VARCHAR), 0));
+
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 50;
+        seg_opts.enable_join_runtime_filter_pushdown = true;
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{placeholder_c0});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+        seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&rf_desc, 0)));
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 50);
+        ASSERT_OK(iter->get_next(read_chunk.get()));
+        EXPECT_EQ(read_chunk->num_rows(), 50);
+        const int64_t rf_ns_after_first_chunk = stats.rf_cond_evaluate_ns;
+        EXPECT_GT(rf_ns_after_first_chunk, 0);
+
+        // Tighten Top-N bound so all dictionary words become false before the second chunk is read.
+        str_rf->update_min_max<false>(Slice("a_cutoff"));
+        read_chunk->reset();
+        Status st = iter->get_next(read_chunk.get());
+        EXPECT_TRUE(st.is_end_of_file()) << st;
+        EXPECT_EQ(stats.runtime_stats_filtered, 50);
+        EXPECT_GT(stats.rf_cond_evaluate_ns, rf_ns_after_first_chunk);
+        iter->close();
+    }
+}
+
+TEST_F(SegmentIteratorTest, DescendingTopNSliceMaxValueSentinelUnboundedTest) {
+    ObjectPool pool;
+
+    // 65,536 0xff bytes is 1 byte longer than Slice::max_value() (65,535 0xff bytes),
+    // so Slice(large_ff) > Slice::max_value().
+    const std::string large_ff(65536, '\xff');
+    ASSERT_GT(Slice(large_ff), Slice::max_value());
+
+    // A descending Top-N filter (ORDER BY s DESC LIMIT k) sets the lower bound (_min = "a")
+    // while leaving _max at Slice::max_value() with _right_close_interval = true.
+    auto* desc_topn_rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<true>(&pool, Slice("a"), true, false);
+    RuntimeFilterProbeDescriptor rf_desc;
+    rf_desc.set_runtime_filter(desc_topn_rf);
+
+    auto col = BinaryColumn::create();
+    col->append(Slice("0_below"));
+    col->append(Slice("b_mid"));
+    col->append(Slice(large_ff));
+
+    Chunk chunk;
+    chunk.append_column(col, 0, true);
+
+    // 1. Selection vector evaluation (apply_slice_minmax_selection)
+    {
+        RuntimeFilterPredicate pred(&rf_desc, 0);
+        ASSERT_TRUE(pred.init(-1));
+        std::vector<uint8_t> selection = {1, 1, 1};
+        ASSERT_OK(pred.evaluate(&chunk, selection.data(), 0, 3));
+        EXPECT_EQ(selection[0], 0);
+        EXPECT_EQ(selection[1], 1);
+        EXPECT_EQ(selection[2], 1);
+    }
+
+    // 2. Branchless index evaluation (apply_slice_minmax_branchless)
+    {
+        RuntimeFilterPredicate pred(&rf_desc, 0);
+        ASSERT_TRUE(pred.init(-1));
+        uint16_t sel[3] = {0, 1, 2};
+        uint16_t target_sel[3] = {0, 0, 0};
+        ASSIGN_OR_ABORT(uint16_t new_size, pred.evaluate(&chunk, sel, 3, target_sel));
+        ASSERT_EQ(new_size, 2);
+        EXPECT_EQ(target_sel[0], 1);
+        EXPECT_EQ(target_sel[1], 2);
+    }
+
+    // 3. Dictionary mask recomputation (DictColumnRuntimeFilterPredicate::_recompute_selection)
+    {
+        DictColumnRuntimeFilterPredicate dict_pred(0, col, desc_topn_rf, false);
+        ASSERT_OK(dict_pred.init());
+        EXPECT_FALSE(dict_pred.is_always_false());
+        ASSERT_EQ(dict_pred._dict_codes_selection.size(), 3u);
+        EXPECT_EQ(dict_pred._dict_codes_selection[0], 0);
+        EXPECT_EQ(dict_pred._dict_codes_selection[1], 1);
+        EXPECT_EQ(dict_pred._dict_codes_selection[2], 1);
+    }
 }
 
 } // namespace starrocks

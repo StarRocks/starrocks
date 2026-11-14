@@ -369,7 +369,7 @@ private:
     Status _init_internal();
     Status _init_reused_scan();
     Status _init_scan_range_and_context();
-    Status _try_to_update_ranges_by_runtime_filter();
+    Status _try_to_update_ranges_by_runtime_filter(bool force = false);
     Status _do_get_next(Chunk* result, vector<rowid_t>* rowid);
 
     template <bool check_global_dict>
@@ -424,6 +424,7 @@ private:
                                           uint16_t to);
 
     void _init_column_predicates();
+    inline ALWAYS_INLINE bool _prune_by_dict_runtime_filter_bounds();
 
     StatusOr<size_t> trigger_sample_if_necessary(vector<rowid_t>* rowid);
 
@@ -608,6 +609,7 @@ private:
 
     bool _inited = false;
     bool _one_time_setup_done = false;
+    bool _has_dict_runtime_filters = false;
 
     std::unordered_map<ColumnId, ColumnAccessPath*> _column_access_paths;
     std::unordered_map<ColumnId, ColumnAccessPath*> _predicate_column_access_paths;
@@ -1079,6 +1081,7 @@ Status SegmentIterator::_init_scan_range_and_context() {
         // Support prefilter for now.
         RETURN_IF_ERROR(_apply_bitmap_index());
         RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
+        RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter(true));
         RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
         RETURN_IF_ERROR(_apply_inverted_index());
         if (apply_del_vec_after_all_index_filter) {
@@ -1110,6 +1113,7 @@ Status SegmentIterator::_init_scan_range_and_context() {
         RETURN_IF_ERROR(_apply_data_sampling());
     }
     _init_column_predicates();
+    (void)_prune_by_dict_runtime_filter_bounds();
     RETURN_IF_ERROR(_init_context());
 
     // Finalize: turn the filtered range into the form the read loop consumes. Not a function of its
@@ -1136,6 +1140,7 @@ Status SegmentIterator::_init_reused_scan() {
     _non_expr_pred_tree = PredicateTree{};
     _expr_pred_tree = PredicateTree{};
     _runtime_filter_preds = RuntimeFilterPredicates{};
+    _has_dict_runtime_filters = false;
     _column_to_runtime_filters_map.clear();
     _context_list[0].reset();
     _context_list[1].reset();
@@ -1524,7 +1529,8 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
 struct IndexOnlyPredicateChecker {
     bool operator()(const PredicateColumnNode& node) const {
         const auto* col_pred = node.col_pred();
-        return col_pred != nullptr && col_pred->is_index_filter_only();
+        return col_pred != nullptr &&
+               (col_pred->is_index_filter_only() || col_pred->type() == PredicateType::kPlaceHolder);
     }
 
     template <CompoundNodeType Type>
@@ -1840,7 +1846,13 @@ Status SegmentIterator::_get_row_ranges_by_row_ids(std::vector<int64_t>* result_
     return Status::OK();
 }
 
-Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
+inline Status SegmentIterator::_try_to_update_ranges_by_runtime_filter(bool force) {
+    if (_prune_by_dict_runtime_filter_bounds()) {
+        return Status::OK();
+    }
+    if (LIKELY(!_opts.runtime_range_pruner.has_runtime_filters())) {
+        return Status::OK();
+    }
     return _opts.runtime_range_pruner.update_range_if_arrived(
             _opts.global_dictmaps,
             [this](auto cid, const PredicateList& predicates) {
@@ -1849,18 +1861,30 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
                 del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
                 SparseRange<> r;
 
-                RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r,
-                                                                                   CompoundNodeType::AND));
-                size_t prev_size = _range_iter.remaining_rows();
-                SparseRange<> res;
-                res.set_sorted(_scan_range.is_sorted());
-                _range_iter = _range_iter.intersection(r, &res);
-                std::swap(res, _scan_range);
-                _range_iter.set_range(&_scan_range);
-                _opts.stats->runtime_stats_filtered += (prev_size - _range_iter.remaining_rows());
+                Range<> src_range;
+                const Range<>* src_range_ptr = nullptr;
+                if (_inited && _scan_range.is_sorted() && !_scan_range.empty() && _cur_rowid < _scan_range.end()) {
+                    src_range = Range<>(_cur_rowid, _scan_range.end());
+                    src_range_ptr = &src_range;
+                }
+                RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(
+                        predicates, del_pred, &r, CompoundNodeType::AND, src_range_ptr));
+                if (!_inited) {
+                    size_t prev_size = _scan_range.span_size();
+                    _scan_range = _scan_range.intersection(r);
+                    _opts.stats->runtime_stats_filtered += (prev_size - _scan_range.span_size());
+                } else {
+                    size_t prev_size = _range_iter.remaining_rows();
+                    SparseRange<> res;
+                    res.set_sorted(_scan_range.is_sorted());
+                    _range_iter = _range_iter.intersection(r, &res);
+                    std::swap(res, _scan_range);
+                    _range_iter.set_range(&_scan_range);
+                    _opts.stats->runtime_stats_filtered += (prev_size - _range_iter.remaining_rows());
+                }
                 return Status::OK();
             },
-            false, _opts.stats->raw_rows_read);
+            force, _opts.stats->raw_rows_read);
 }
 
 StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t ucid) {
@@ -2164,6 +2188,29 @@ void SegmentIterator::_init_column_predicates() {
     _expr_pred_tree = PredicateTree::create(std::move(expr_pred_root));
     _non_expr_pred_tree = PredicateTree::create(std::move(non_expr_pred_root));
     _runtime_filter_preds = _opts.runtime_filter_preds;
+    _has_dict_runtime_filters = _opts.enable_join_runtime_filter_pushdown && _runtime_filter_preds.has_dict_filters();
+}
+
+inline ALWAYS_INLINE bool SegmentIterator::_prune_by_dict_runtime_filter_bounds() {
+    if (LIKELY(!_has_dict_runtime_filters)) {
+        return false;
+    }
+    int64_t* rf_eval_timer_ns = _opts.stats != nullptr ? &_opts.stats->rf_cond_evaluate_ns : nullptr;
+    Status st = _runtime_filter_preds.refresh_dict_filters(rf_eval_timer_ns);
+    if (!st.ok()) {
+        return false;
+    }
+    if (_runtime_filter_preds.has_always_false_dict_filter()) {
+        size_t remaining =
+                _range_iter.has_more() ? _range_iter.remaining_rows() : (!_inited ? _scan_range.span_size() : 0);
+        if (_opts.stats != nullptr) {
+            _opts.stats->runtime_stats_filtered += remaining;
+        }
+        _scan_range.clear();
+        _range_iter.set_range(&_scan_range);
+        return true;
+    }
+    return false;
 }
 
 StatusOr<size_t> SegmentIterator::trigger_sample_if_necessary(vector<rowid_t>* rowid) {
@@ -2288,8 +2335,8 @@ StatusOr<size_t> SegmentIterator::_sample_predicate_columns(vector<rowid_t>* row
     // Filter the entire chunk (including all columns and rowid) based on merged selection
     // _selection already contains the merged result, use it directly
     // This removes rows that don't pass all predicates
-    size_t filtered_chunk_size = 0;
-    {
+    size_t filtered_chunk_size = chunk_size;
+    if (!use_merged_selection) {
         SCOPED_RAW_TIMER(&_opts.stats->vec_cond_chunk_copy_ns);
         filtered_chunk_size = _filter_chunk_by_selection(chunk, rowid, 0, chunk_size);
     }
@@ -2879,12 +2926,11 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk) {
+    bool need_update_rf = _inited;
     if (!_inited) {
         RETURN_IF_ERROR(_init());
         _inited = true;
     }
-
-    RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
 
     DCHECK_EQ(0, chunk->num_rows());
 
@@ -2901,35 +2947,41 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
         p_rowids = &local_rowids;
     }
     do {
+        if (need_update_rf) {
+            RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
+        }
+        need_update_rf = true;
         st = _do_get_next(chunk, p_rowids);
     } while (st.ok() && chunk->num_rows() == 0);
     return st;
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
+    bool need_update_rf = _inited;
     if (!_inited) {
         RETURN_IF_ERROR(_init());
         _inited = true;
     }
 
-    RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
-
     DCHECK_EQ(0, chunk->num_rows());
 
     Status st;
     do {
+        if (need_update_rf) {
+            RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
+        }
+        need_update_rf = true;
         st = _do_get_next(chunk, rowid);
     } while (st.ok() && chunk->num_rows() == 0);
     return st;
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids) {
+    bool need_update_rf = _inited;
     if (!_inited) {
         RETURN_IF_ERROR(_init());
         _inited = true;
     }
-
-    RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
 
     DCHECK_EQ(0, chunk->num_rows());
 
@@ -2943,6 +2995,10 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids
         p_rowids = &_inverted_index_ctx->rowid_buffer;
     }
     do {
+        if (need_update_rf) {
+            RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
+        }
+        need_update_rf = true;
         st = _do_get_next(chunk, p_rowids);
     } while (st.ok() && chunk->num_rows() == 0);
     if (st.ok()) {
@@ -3243,6 +3299,10 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize_read_firs
 
     const ColumnPredicateMap& non_expr_column_predicate_map = _non_expr_pred_tree.get_immediate_column_predicate_map();
     const ColumnPredicateMap& expr_column_predicate_map = _expr_pred_tree.get_immediate_column_predicate_map();
+    const bool has_first_col_non_expr_predicate =
+            has_non_expr_predicate && non_expr_column_predicate_map.contains(first_column_id);
+    const bool has_first_col_runtime_filter =
+            _opts.enable_join_runtime_filter_pushdown && _column_to_runtime_filters_map.contains(first_column_id);
 
     current_columns.emplace_back(first_col);
     if (_context->_enable_predicate_col_late_materialize) {
@@ -3253,10 +3313,25 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize_read_firs
     uint16_t chunk_start = first_col->size();
 
     size_t original_chunk_size = chunk_start;
+    bool first_batch = true;
     while ((chunk_start < return_chunk_threshold) && _range_iter.has_more()) {
+        if (!first_batch) {
+            if (chunk_start == 0) {
+                RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter(false));
+                if (!_range_iter.has_more()) {
+                    break;
+                }
+            } else if (_prune_by_dict_runtime_filter_bounds()) {
+                break;
+            }
+        }
+        first_batch = false;
         RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start, true));
         // chunk->check_or_die();
         size_t next_start = first_col->size();
+        if (next_start == chunk_start) {
+            break;
+        }
 
         // Count how many rowids were read by this _read() call
         if (!_context->_is_filtered) {
@@ -3264,14 +3339,17 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize_read_firs
             _context->_first_column_total_rows_read += rows_read_this_iter;
         }
 
-        if (has_non_expr_predicate && !_context->_is_filtered &&
-            non_expr_column_predicate_map.contains(first_column_id)) {
-            // use first column's non-expr predicate to filter data
+        if (!_context->_is_filtered && (has_first_col_non_expr_predicate || has_first_col_runtime_filter)) {
+            // use first column's non-expr predicate and/or runtime filters to filter data
             // This will filter rowid_column, removing rows that don't match the predicate
             // column-expr-predicate doesn't support [begin, end] interface
-            ASSIGN_OR_RETURN(next_start, _filter_by_compound_and_predicates(
-                                                 chunk, rowid, chunk_start, next_start, first_column_id,
-                                                 non_expr_column_predicate_map.at(first_column_id), current_columns));
+            static const std::vector<const ColumnPredicate*> kEmptyPredicates;
+            const auto& first_col_preds = has_first_col_non_expr_predicate
+                                                  ? non_expr_column_predicate_map.at(first_column_id)
+                                                  : kEmptyPredicates;
+            ASSIGN_OR_RETURN(next_start,
+                             _filter_by_compound_and_predicates(chunk, rowid, chunk_start, next_start, first_column_id,
+                                                                first_col_preds, current_columns));
         }
 
         chunk_start = next_start;
@@ -3369,15 +3447,31 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
 StatusOr<size_t> SegmentIterator::_predicate_evaluate_without_late_materialize(vector<rowid_t>* rowid) {
     const uint32_t chunk_capacity = _reserve_chunk_size;
     const uint32_t return_chunk_threshold = std::max<uint32_t>(chunk_capacity - chunk_capacity / 4, 1);
-    const bool has_non_expr_predicate = !_non_expr_pred_tree.empty();
+    const bool has_non_expr_predicate = !_non_expr_pred_tree.empty() ||
+                                        (_opts.enable_join_runtime_filter_pushdown && !_runtime_filter_preds.empty());
     const bool scan_range_normalized = _scan_range.is_sorted();
 
     Chunk* chunk = _context->_read_chunk.get();
     uint16_t chunk_start = chunk->num_rows();
+    bool first_batch = true;
     while ((chunk_start < return_chunk_threshold) & _range_iter.has_more()) {
+        if (!first_batch) {
+            if (chunk_start == 0) {
+                RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter(false));
+                if (!_range_iter.has_more()) {
+                    break;
+                }
+            } else if (_prune_by_dict_runtime_filter_bounds()) {
+                break;
+            }
+        }
+        first_batch = false;
         RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start, false));
         chunk->check_or_die();
         size_t next_start = chunk->num_rows();
+        if (next_start == chunk_start) {
+            break;
+        }
 
         if (has_non_expr_predicate) {
             ASSIGN_OR_RETURN(next_start, _filter_by_non_expr_predicates(chunk, rowid, chunk_start, next_start));
@@ -3785,14 +3879,17 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_compound_and_predicates(
 
 StatusOr<uint16_t> SegmentIterator::_filter_by_non_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from,
                                                                    uint16_t to) {
-    // There must be one predicate, either vectorized or branchless.
-    DCHECK(!_non_expr_pred_tree.empty() || _del_vec);
+    // There must be one predicate, either vectorized, branchless, or runtime filter.
+    DCHECK(!_non_expr_pred_tree.empty() ||
+           (_opts.enable_join_runtime_filter_pushdown && !_runtime_filter_preds.empty()) || _del_vec);
 
     SCOPED_RAW_TIMER(&_opts.stats->vec_cond_ns);
 
-    {
+    if (!_non_expr_pred_tree.empty()) {
         SCOPED_RAW_TIMER(&_opts.stats->vec_cond_evaluate_ns);
         RETURN_IF_ERROR(_non_expr_pred_tree.evaluate(chunk, _selection.data(), from, to));
+    } else {
+        std::fill(&_selection[from], &_selection[to], 1);
     }
 
     auto hit_count = SIMD::count_nonzero(&_selection[from], to - from);
@@ -4156,7 +4253,26 @@ void SegmentIterator::_build_context_for_predicate(ScanContext* ctx) {
 
     for (const auto& pair : column_predicate_map) {
         ctx->_predicate_order.emplace_back(pair.first);
-        ctx->_column_predicate_map.emplace(pair.first, pair.second);
+        size_t valid_count = 0;
+        for (const auto* pred : pair.second) {
+            if (pred != nullptr && !pred->is_index_filter_only() && pred->type() != PredicateType::kPlaceHolder) {
+                ++valid_count;
+            }
+        }
+        if (LIKELY(valid_count == pair.second.size())) {
+            ctx->_column_predicate_map.emplace(pair.first, pair.second);
+        } else if (valid_count == 0) {
+            ctx->_column_predicate_map.emplace(pair.first, ColumnPredicates{});
+        } else {
+            ColumnPredicates preds;
+            preds.reserve(valid_count);
+            for (const auto* pred : pair.second) {
+                if (pred != nullptr && !pred->is_index_filter_only() && pred->type() != PredicateType::kPlaceHolder) {
+                    preds.emplace_back(pred);
+                }
+            }
+            ctx->_column_predicate_map.emplace(pair.first, std::move(preds));
+        }
     }
 
     // if column predicate is always true for string column or already used by bitmap index
@@ -4266,8 +4382,11 @@ Status SegmentIterator::_rewrite_predicates() {
     {
         // in normal case it can always rewrite the predicate,
         // but for JSON extended column, it might be a JsonExtractColumnIterator, so we need to fallback to the orignal predicate
-        ColumnPredicateRewriter rewriter(_column_iterators, _schema, _predicate_need_rewrite, _predicate_columns,
-                                         _scan_range);
+        ColumnPredicateRewriter rewriter(
+                _column_iterators, _schema, _predicate_need_rewrite, _predicate_columns, _scan_range,
+                (_opts.enable_join_runtime_filter_pushdown && !_opts.runtime_filter_preds.empty())
+                        ? &_opts.runtime_filter_preds
+                        : nullptr);
         auto st = (rewriter.rewrite_predicate(&_obj_pool, _opts.pred_tree));
         if (st.is_not_supported()) {
             VLOG(2) << "not supported predicate rewrite: " << _opts.pred_tree.root().debug_string() << " " << st;
@@ -4277,7 +4396,7 @@ Status SegmentIterator::_rewrite_predicates() {
             VLOG(2) << "rewrite_predicates: " << _opts.pred_tree.root().debug_string();
         }
     }
-    if (_opts.enable_join_runtime_filter_pushdown) {
+    if (_opts.enable_join_runtime_filter_pushdown && !_opts.runtime_filter_preds.empty()) {
         RETURN_IF_ERROR(RuntimeFilterPredicatesRewriter::rewrite(&_obj_pool, _opts.runtime_filter_preds,
                                                                  _column_iterators, _schema));
     }
@@ -4302,6 +4421,10 @@ Status SegmentIterator::_rewrite_predicates() {
 }
 
 Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
+    if (UNLIKELY(_has_dict_runtime_filters)) {
+        int64_t* rf_eval_timer_ns = _opts.stats != nullptr ? &_opts.stats->rf_cond_evaluate_ns : nullptr;
+        RETURN_IF_ERROR(_runtime_filter_preds.refresh_dict_filters(rf_eval_timer_ns));
+    }
     SCOPED_RAW_TIMER(&_opts.stats->decode_dict_ns);
     DCHECK_NE(ctx->_read_chunk, ctx->_dict_chunk);
     if (ctx->_read_chunk->num_rows() == 0) {
@@ -5023,6 +5146,7 @@ void SegmentIterator::close() {
     }
     _one_time_setup_done = false;
     _inited = false;
+    _has_dict_runtime_filters = false;
 }
 
 // put the field that has predicated on it ahead of those without one, for handle late

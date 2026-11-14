@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/utility/defer_op.h"
+#include "common/config_scan_io_fwd.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/query/scan_conjuncts_manager.h"
@@ -50,6 +52,8 @@ public:
 protected:
     template <LogicalType Type>
     StatusOr<RuntimeFilterProbeDescriptor*> _gen_runtime_filter_desc(SlotId slot_id);
+    StatusOr<RuntimeFilterProbeDescriptor*> _gen_typed_runtime_filter_desc(SlotId slot_id,
+                                                                           TRuntimeFilterBuildType::type filter_type);
     StatusOr<RuntimeFilterProbeCollector*> _gen_runtime_filter_collector(SlotId slot_id, bool has_null);
     StatusOr<RuntimeFilterProbeCollector*> _gen_varchar_runtime_filter_collector(SlotId slot_id, bool has_null);
     template <bool IsMin>
@@ -172,6 +176,24 @@ StatusOr<RuntimeFilterProbeCollector*> ChunkPredicateBuilderTest::_gen_range_run
     rf_collector->add_descriptor(rf_desc);
 
     return rf_collector;
+}
+
+StatusOr<RuntimeFilterProbeDescriptor*> ChunkPredicateBuilderTest::_gen_typed_runtime_filter_desc(
+        SlotId slot_id, TRuntimeFilterBuildType::type filter_type) {
+    TRuntimeFilterDescription desc;
+    desc.__set_filter_id(1);
+    desc.__set_has_remote_targets(false);
+    desc.__set_build_plan_node_id(1);
+    desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
+    desc.__set_filter_type(filter_type);
+
+    TExpr col_ref = ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(slot_id, true);
+    desc.__isset.plan_node_id_to_target_expr = true;
+    desc.__set_plan_node_id_to_target_expr({{1, col_ref}});
+
+    auto* rf_desc = _pool.add(new RuntimeFilterProbeDescriptor());
+    RETURN_IF_ERROR(rf_desc->init(&_pool, desc, 1, &_runtime_state));
+    return rf_desc;
 }
 
 TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null) {
@@ -650,5 +672,268 @@ TEST_F(ChunkPredicateBuilderTest, in_runtime_filter_has_no_null) {
     auto ret2 = pred_builder.get_predicate_tree_root(_int_pred_parser, _predicate_free_pool);
     ASSERT_TRUE(ret2.ok());
     ASSERT_EQ(ret2.value().debug_string(), "{\"and\":[{\"pred\":\"((columnId=1)IN(9,5,1,7,3))\"}]}");
+}
+
+TEST_F(ChunkPredicateBuilderTest, topn_runtime_filter_pushdown_and_placeholder) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+    const_cast<TQueryOptions&>(_runtime_state.query_options()).__set_enable_join_runtime_filter_pushdown(true);
+
+    // Subcase 1: TOPN_FILTER unarrived at parse_conjuncts() time, then published before get_runtime_filter_predicates().
+    {
+        ASSIGN_OR_ASSERT_FAIL(auto* rf_desc,
+                              _gen_typed_runtime_filter_desc(slot_id, TRuntimeFilterBuildType::TOPN_FILTER));
+        ASSERT_TRUE(rf_desc->is_stream_build_filter());
+        ASSERT_TRUE(rf_desc->is_topn_filter());
+
+        auto* rf_collector = _pool.add(new RuntimeFilterProbeCollector());
+        rf_collector->add_descriptor(rf_desc);
+        _opts.runtime_filters = rf_collector;
+
+        ScanConjunctsManager mgr(_opts);
+        ASSERT_OK(mgr.parse_conjuncts());
+        ASSERT_EQ(mgr.unarrived_runtime_filters().unarrived_runtime_filters.size(), 1);
+
+        auto* rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&_pool, 10, false);
+        rf_desc->set_runtime_filter(rf);
+
+        ASSIGN_OR_ASSERT_FAIL(auto pred_tree, mgr.get_predicate_tree(_int_pred_parser, _predicate_free_pool));
+        ASSERT_EQ(pred_tree.root().debug_string(), "{\"and\":[{\"pred\":\"placeholder (column_id=1)\"}]}");
+        ASSERT_TRUE(pred_tree.contains_column(1));
+
+        ASSIGN_OR_ASSERT_FAIL(auto rf_preds, mgr.get_runtime_filter_predicates(&_pool, _int_pred_parser));
+        ASSERT_FALSE(rf_preds.empty());
+        ASSERT_EQ(rf_preds.rf_predicates().size(), 1);
+        ASSERT_EQ(rf_preds.rf_predicates()[0]->get_column_id(), 1);
+        ASSERT_EQ(rf_preds.rf_predicates()[0]->get_rf_desc(), rf_desc);
+        ASSERT_TRUE(rf_desc->has_push_down_to_storage());
+    }
+
+    // Subcase 2: TOPN_FILTER already arrived at parse_conjuncts() time normalizes its bound, registers in
+    // unarrived_runtime_filters for subsequent rf_version updates, AND emits placeholder.
+    {
+        ASSIGN_OR_ASSERT_FAIL(auto* rf_desc,
+                              _gen_typed_runtime_filter_desc(slot_id, TRuntimeFilterBuildType::TOPN_FILTER));
+        auto* rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&_pool, 10, false);
+        rf_desc->set_runtime_filter(rf);
+
+        auto* rf_collector = _pool.add(new RuntimeFilterProbeCollector());
+        rf_collector->add_descriptor(rf_desc);
+        _opts.runtime_filters = rf_collector;
+
+        ScanConjunctsManager mgr(_opts);
+        ASSERT_OK(mgr.parse_conjuncts());
+        ASSERT_EQ(mgr.unarrived_runtime_filters().unarrived_runtime_filters.size(), 1);
+        ASSERT_EQ(mgr.unarrived_runtime_filters().unarrived_runtime_filters[0], rf_desc);
+
+        ColumnPredicatePtrs pred_pool;
+        ASSIGN_OR_ASSERT_FAIL(auto pred_tree, mgr.get_predicate_tree(_int_pred_parser, pred_pool));
+        ASSERT_EQ(pred_tree.root().debug_string(),
+                  "{\"and\":[{\"pred\":\"(columnId(1)<10)\"},{\"pred\":\"placeholder (column_id=1)\"}]}");
+    }
+}
+
+TEST_F(ChunkPredicateBuilderTest, topn_runtime_filter_kill_switches_and_agg_filter_exclusion) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    // Case A: config::enable_topn_runtime_filter_storage_pushdown = false disables storage pushdown while preserving
+    // unarrived_runtime_filters registration for RuntimeScanRangePruner.
+    {
+        const bool old_val = config::enable_topn_runtime_filter_storage_pushdown;
+        config::enable_topn_runtime_filter_storage_pushdown = false;
+        DeferOp restore([&]() { config::enable_topn_runtime_filter_storage_pushdown = old_val; });
+        const_cast<TQueryOptions&>(_runtime_state.query_options()).__set_enable_join_runtime_filter_pushdown(true);
+
+        ASSIGN_OR_ASSERT_FAIL(auto* rf_desc,
+                              _gen_typed_runtime_filter_desc(slot_id, TRuntimeFilterBuildType::TOPN_FILTER));
+        auto* rf_collector = _pool.add(new RuntimeFilterProbeCollector());
+        rf_collector->add_descriptor(rf_desc);
+        _opts.runtime_filters = rf_collector;
+
+        ScanConjunctsManager mgr(_opts);
+        ASSERT_OK(mgr.parse_conjuncts());
+        ASSERT_EQ(mgr.unarrived_runtime_filters().unarrived_runtime_filters.size(), 1);
+
+        auto* rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&_pool, 10, false);
+        rf_desc->set_runtime_filter(rf);
+
+        ColumnPredicatePtrs pred_pool;
+        ASSIGN_OR_ASSERT_FAIL(auto pred_tree, mgr.get_predicate_tree(_int_pred_parser, pred_pool));
+        ASSERT_EQ(pred_tree.root().debug_string(), "{\"and\":[]}");
+
+        ASSIGN_OR_ASSERT_FAIL(auto rf_preds, mgr.get_runtime_filter_predicates(&_pool, _int_pred_parser));
+        ASSERT_TRUE(rf_preds.empty());
+        ASSERT_FALSE(rf_desc->has_push_down_to_storage());
+    }
+
+    // Case B: session variable enable_join_runtime_filter_pushdown = false disables pushdown.
+    {
+        const_cast<TQueryOptions&>(_runtime_state.query_options()).__set_enable_join_runtime_filter_pushdown(false);
+
+        ASSIGN_OR_ASSERT_FAIL(auto* rf_desc,
+                              _gen_typed_runtime_filter_desc(slot_id, TRuntimeFilterBuildType::TOPN_FILTER));
+        auto* rf_collector = _pool.add(new RuntimeFilterProbeCollector());
+        rf_collector->add_descriptor(rf_desc);
+        _opts.runtime_filters = rf_collector;
+
+        ScanConjunctsManager mgr(_opts);
+        ASSERT_OK(mgr.parse_conjuncts());
+
+        auto* rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&_pool, 10, false);
+        rf_desc->set_runtime_filter(rf);
+
+        ColumnPredicatePtrs pred_pool;
+        ASSIGN_OR_ASSERT_FAIL(auto pred_tree, mgr.get_predicate_tree(_int_pred_parser, pred_pool));
+        ASSERT_EQ(pred_tree.root().debug_string(), "{\"and\":[]}");
+
+        ASSIGN_OR_ASSERT_FAIL(auto rf_preds, mgr.get_runtime_filter_predicates(&_pool, _int_pred_parser));
+        ASSERT_TRUE(rf_preds.empty());
+        ASSERT_FALSE(rf_desc->has_push_down_to_storage());
+    }
+
+    // Case C: AGG_FILTER remains excluded from both get_predicate_tree() and get_runtime_filter_predicates().
+    {
+        const_cast<TQueryOptions&>(_runtime_state.query_options()).__set_enable_join_runtime_filter_pushdown(true);
+
+        ASSIGN_OR_ASSERT_FAIL(auto* rf_desc,
+                              _gen_typed_runtime_filter_desc(slot_id, TRuntimeFilterBuildType::AGG_FILTER));
+        ASSERT_TRUE(rf_desc->is_stream_build_filter());
+        ASSERT_FALSE(rf_desc->is_topn_filter());
+
+        auto* rf_collector = _pool.add(new RuntimeFilterProbeCollector());
+        rf_collector->add_descriptor(rf_desc);
+        _opts.runtime_filters = rf_collector;
+
+        ScanConjunctsManager mgr(_opts);
+        ASSERT_OK(mgr.parse_conjuncts());
+
+        ColumnPredicatePtrs pred_pool;
+        ASSIGN_OR_ASSERT_FAIL(auto pred_tree, mgr.get_predicate_tree(_int_pred_parser, pred_pool));
+        ASSERT_EQ(pred_tree.root().debug_string(), "{\"and\":[]}");
+
+        ASSIGN_OR_ASSERT_FAIL(auto rf_preds, mgr.get_runtime_filter_predicates(&_pool, _int_pred_parser));
+        ASSERT_TRUE(rf_preds.empty());
+        ASSERT_FALSE(rf_desc->has_push_down_to_storage());
+    }
+
+    // Case D: toggling config::enable_topn_runtime_filter_storage_pushdown mid-preparation (between
+    // get_predicate_tree() and get_runtime_filter_predicates()) keeps one consistent pushdown decision
+    // per ScanConjunctsManager instance.
+    {
+        const bool old_val = config::enable_topn_runtime_filter_storage_pushdown;
+        DeferOp restore([&]() { config::enable_topn_runtime_filter_storage_pushdown = old_val; });
+        const_cast<TQueryOptions&>(_runtime_state.query_options()).__set_enable_join_runtime_filter_pushdown(true);
+
+        // D1: false -> true mid-preparation must NOT push a RuntimeFilterPredicate without a kPlaceHolder.
+        config::enable_topn_runtime_filter_storage_pushdown = false;
+        ASSIGN_OR_ASSERT_FAIL(auto* rf_desc_d1,
+                              _gen_typed_runtime_filter_desc(slot_id, TRuntimeFilterBuildType::TOPN_FILTER));
+        auto* rf_collector_d1 = _pool.add(new RuntimeFilterProbeCollector());
+        rf_collector_d1->add_descriptor(rf_desc_d1);
+        _opts.runtime_filters = rf_collector_d1;
+
+        ScanConjunctsManager mgr_d1(_opts);
+        ASSERT_OK(mgr_d1.parse_conjuncts());
+
+        ColumnPredicatePtrs pred_pool_d1;
+        ASSIGN_OR_ASSERT_FAIL(auto pred_tree_d1, mgr_d1.get_predicate_tree(_int_pred_parser, pred_pool_d1));
+        ASSERT_EQ(pred_tree_d1.root().debug_string(), "{\"and\":[]}");
+
+        // Concurrent config toggle before get_runtime_filter_predicates().
+        config::enable_topn_runtime_filter_storage_pushdown = true;
+        ASSIGN_OR_ASSERT_FAIL(auto rf_preds_d1, mgr_d1.get_runtime_filter_predicates(&_pool, _int_pred_parser));
+        ASSERT_TRUE(rf_preds_d1.empty());
+        ASSERT_FALSE(rf_desc_d1->has_push_down_to_storage());
+
+        // D2: true -> false mid-preparation must keep the RuntimeFilterPredicate matching the emitted kPlaceHolder.
+        config::enable_topn_runtime_filter_storage_pushdown = true;
+        ASSIGN_OR_ASSERT_FAIL(auto* rf_desc_d2,
+                              _gen_typed_runtime_filter_desc(slot_id, TRuntimeFilterBuildType::TOPN_FILTER));
+        auto* rf_collector_d2 = _pool.add(new RuntimeFilterProbeCollector());
+        rf_collector_d2->add_descriptor(rf_desc_d2);
+        _opts.runtime_filters = rf_collector_d2;
+
+        ScanConjunctsManager mgr_d2(_opts);
+        ASSERT_OK(mgr_d2.parse_conjuncts());
+
+        ColumnPredicatePtrs pred_pool_d2;
+        ASSIGN_OR_ASSERT_FAIL(auto pred_tree_d2, mgr_d2.get_predicate_tree(_int_pred_parser, pred_pool_d2));
+        ASSERT_EQ(pred_tree_d2.root().debug_string(), "{\"and\":[{\"pred\":\"placeholder (column_id=1)\"}]}");
+
+        // Concurrent config toggle before get_runtime_filter_predicates().
+        config::enable_topn_runtime_filter_storage_pushdown = false;
+        ASSIGN_OR_ASSERT_FAIL(auto rf_preds_d2, mgr_d2.get_runtime_filter_predicates(&_pool, _int_pred_parser));
+        ASSERT_FALSE(rf_preds_d2.empty());
+        ASSERT_TRUE(rf_desc_d2->has_push_down_to_storage());
+    }
+    ASSERT_TRUE(config::enable_topn_runtime_filter_storage_pushdown);
+
+    // Case E: TOPN_FILTER on a synthetic slot not present in TabletSchema (e.g. __vector_approx_l2_distance,
+    // where parser->can_pushdown(slot_desc) is false and parser->column_id(*slot_desc) is UINT32_MAX) or with
+    // num_partition_by_exprs() > 1 must be skipped by get_predicate_tree() as well as get_runtime_filter_predicates().
+    {
+        SlotId synthetic_slot_id = 3;
+        parquet::Utils::SlotDesc ext_slot_descs[] = {{"c1", TYPE_INT_DESC, 1},
+                                                     {"c2", TYPE_INT_DESC, 2},
+                                                     {"__vector_approx_l2_distance", TYPE_INT_DESC, 3},
+                                                     {""}};
+        _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, ext_slot_descs);
+        const_cast<TQueryOptions&>(_runtime_state.query_options()).__set_enable_join_runtime_filter_pushdown(true);
+
+        const auto* synthetic_slot = _opts.tuple_desc->get_slot_by_id(synthetic_slot_id);
+        ASSERT_NE(synthetic_slot, nullptr);
+        ASSERT_FALSE(_int_pred_parser->can_pushdown(synthetic_slot));
+
+        ASSIGN_OR_ASSERT_FAIL(auto* rf_desc_synth,
+                              _gen_typed_runtime_filter_desc(synthetic_slot_id, TRuntimeFilterBuildType::TOPN_FILTER));
+        auto* rf_collector_synth = _pool.add(new RuntimeFilterProbeCollector());
+        rf_collector_synth->add_descriptor(rf_desc_synth);
+        _opts.runtime_filters = rf_collector_synth;
+
+        ScanConjunctsManager mgr_synth(_opts);
+        ASSERT_OK(mgr_synth.parse_conjuncts());
+
+        ColumnPredicatePtrs pred_pool_synth;
+        ASSIGN_OR_ASSERT_FAIL(auto pred_tree_synth, mgr_synth.get_predicate_tree(_int_pred_parser, pred_pool_synth));
+        ASSERT_EQ(pred_tree_synth.root().debug_string(), "{\"and\":[]}");
+
+        ASSIGN_OR_ASSERT_FAIL(auto rf_preds_synth, mgr_synth.get_runtime_filter_predicates(&_pool, _int_pred_parser));
+        ASSERT_TRUE(rf_preds_synth.empty());
+        ASSERT_FALSE(rf_desc_synth->has_push_down_to_storage());
+
+        // Multi-partition-by runtime filter (num_partition_by_exprs() > 1) on a valid schema column (slot_id = 1).
+        TRuntimeFilterDescription multi_part_desc;
+        multi_part_desc.__set_filter_id(2);
+        multi_part_desc.__set_has_remote_targets(false);
+        multi_part_desc.__set_build_plan_node_id(1);
+        multi_part_desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::PARTITIONED);
+        multi_part_desc.__set_filter_type(TRuntimeFilterBuildType::TOPN_FILTER);
+        TExpr col_ref1 = ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(1, true);
+        TExpr col_ref2 = ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(2, true);
+        multi_part_desc.__set_plan_node_id_to_target_expr({{1, col_ref1}});
+        multi_part_desc.__set_plan_node_id_to_partition_by_exprs({{1, {col_ref1, col_ref2}}});
+
+        auto* rf_desc_mp = _pool.add(new RuntimeFilterProbeDescriptor());
+        ASSERT_OK(rf_desc_mp->init(&_pool, multi_part_desc, 1, &_runtime_state));
+        ASSERT_EQ(rf_desc_mp->num_partition_by_exprs(), 2);
+
+        auto* rf_collector_mp = _pool.add(new RuntimeFilterProbeCollector());
+        rf_collector_mp->add_descriptor(rf_desc_mp);
+        _opts.runtime_filters = rf_collector_mp;
+
+        ScanConjunctsManager mgr_mp(_opts);
+        ASSERT_OK(mgr_mp.parse_conjuncts());
+
+        ColumnPredicatePtrs pred_pool_mp;
+        ASSIGN_OR_ASSERT_FAIL(auto pred_tree_mp, mgr_mp.get_predicate_tree(_int_pred_parser, pred_pool_mp));
+        ASSERT_EQ(pred_tree_mp.root().debug_string(), "{\"and\":[]}");
+
+        ASSIGN_OR_ASSERT_FAIL(auto rf_preds_mp, mgr_mp.get_runtime_filter_predicates(&_pool, _int_pred_parser));
+        ASSERT_TRUE(rf_preds_mp.empty());
+        ASSERT_FALSE(rf_desc_mp->has_push_down_to_storage());
+    }
 }
 } // namespace starrocks

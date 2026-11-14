@@ -285,7 +285,13 @@ StatusOr<ExprContext*> BoxedExprContext::expr_context(ObjectPool* obj_pool, Runt
 template <BoxedExprType E, CompoundNodeType Type>
 ChunkPredicateBuilder<E, Type>::ChunkPredicateBuilder(const ScanConjunctsManagerOptions& opts, std::vector<E> exprs,
                                                       bool is_root_builder)
-        : _opts(opts), _exprs(std::move(exprs)), _is_root_builder(is_root_builder), _normalized_exprs(_exprs.size()) {}
+        : _opts(opts),
+          _exprs(std::move(exprs)),
+          _is_root_builder(is_root_builder),
+          _enable_topn_filter_pushdown(
+                  config::enable_topn_runtime_filter_storage_pushdown &&
+                  (_opts.runtime_state == nullptr || _opts.runtime_state->enable_join_runtime_filter_pushdown())),
+          _normalized_exprs(_exprs.size()) {}
 
 template <BoxedExprType E, CompoundNodeType Type>
 StatusOr<bool> ChunkPredicateBuilder<E, Type>::parse_conjuncts() {
@@ -919,6 +925,11 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
                 rt_ranger_params.add_unarrived_rf(desc, &slot, _opts.driver_sequence);
                 continue;
             }
+            if (desc->is_topn_filter()) {
+                // Top-N filters are mutable (rf_version increases as the heap tightens), so register
+                // arrived Top-N filters with RuntimeScanRangePruner as well.
+                rt_ranger_params.add_unarrived_rf(desc, &slot, _opts.driver_sequence);
+            }
             // an arrived join filter that passes every row filters nothing. always_true() alone does not tell it: a
             // top-n filter is always true but has bounds.
             if (rf->always_true() && rf->is_pass_all()) {
@@ -1329,7 +1340,14 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
             if (slot_desc == nullptr) {
                 continue;
             }
-            if (desc->is_stream_build_filter()) {
+            if (desc->is_stream_build_filter() && (!desc->is_topn_filter() || !_enable_topn_filter_pushdown)) {
+                continue;
+            }
+            // If the runtime filter's partition-by-exprs's size is greater than 1, skip to push it down to storage engine.
+            if (desc->num_partition_by_exprs() > 1) {
+                continue;
+            }
+            if (!parser->can_pushdown(slot_desc)) {
                 continue;
             }
 
@@ -1541,7 +1559,8 @@ StatusOr<RuntimeFilterPredicates> ScanConjunctsManager::get_runtime_filter_predi
         if (slot_desc == nullptr) {
             continue;
         }
-        if (desc->is_stream_build_filter()) {
+        if (desc->is_stream_build_filter() &&
+            (!desc->is_topn_filter() || !_root_builder.enable_topn_filter_pushdown())) {
             continue;
         }
         // If the runtime filter's partition-by-exprs's size is greater than 1, skip to push it down to storage engine.
