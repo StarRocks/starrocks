@@ -226,6 +226,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -1300,40 +1301,104 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         }
     }
 
-    // Whether a date_format (MySQL-style) or format_datetime (Joda) format may not print what Trino prints. date_format
-    // needs a MySQL-style format without the zone: StarRocks reads one starting with yyyy as a Java-style mask, which
-    // Trino prints as written. format_datetime needs the Joda fields that the BE formats as Joda does, outside quotes:
-    // y, M, d, H, h, m, s, a, E and up to six S; the BE drops an escaped quote (''). Both BE formatters return NULL for
-    // output longer than 127 characters, so a field counts as its longest output, a month or day name
+    // Whether a date_format (MySQL-style) or format_datetime (Joda) format may not print what Trino prints. Only the
+    // directives and Joda fields that Trino and the BE format alike are supported, and the BE formatters return NULL
+    // for output longer than 127 bytes, so a format must fit at its longest
     private static boolean isFormatUnlikeTrino(String function, String format) {
-        int maxLength = 0;
-        if (function.equals("date_format")) {
-            if (format.contains("%z") || format.contains("%Z") || !format.contains("%") || format.startsWith("yyyy")) {
-                return true;
-            }
-            for (int i = 0; i < format.length(); i++) {
-                maxLength += format.charAt(i) == '%' && i + 1 < format.length() ? 9 : 1;
-                i += format.charAt(i) == '%' ? 1 : 0;
-            }
-            return maxLength > 127;
-        }
-        if (format.contains("''")) {
-            return true;
-        }
-        boolean quoted = false;
-        int run = 0;
+        OptionalInt length = function.equals("date_format") ? mysqlFormatMaxBytes(format) : jodaFormatMaxBytes(format);
+        return length.isEmpty() || length.getAsInt() > 127;
+    }
+
+    // The longest output of each MySQL-style directive that Trino's date_format and the BE format alike
+    private static final Map<Character, Integer> MYSQL_DIRECTIVE_BYTES = ImmutableMap.<Character, Integer>builder()
+            .put('Y', 4).put('y', 2).put('m', 2).put('c', 2).put('M', 9).put('b', 3).put('d', 2).put('e', 2)
+            .put('j', 3).put('W', 9).put('a', 3).put('H', 2).put('k', 2).put('h', 2).put('I', 2).put('l', 2)
+            .put('i', 2).put('s', 2).put('S', 2).put('f', 6).put('p', 2).put('r', 11).put('T', 8).put('%', 1)
+            .build();
+
+    // Without a supported directive, StarRocks may read the format as a Java-style mask (e.g. yyyy-MM-dd), which
+    // Trino prints as written; an unpaired trailing % is dropped by Trino and printed by the BE
+    private static OptionalInt mysqlFormatMaxBytes(String format) {
+        int bytes = 0;
+        boolean directive = false;
         for (int i = 0; i < format.length(); i++) {
             char c = format.charAt(i);
-            boolean field = !quoted && Character.isLetter(c);
-            run = field && i > 0 && format.charAt(i - 1) == c ? run + 1 : (field ? 1 : 0);
+            if (c != '%') {
+                bytes += utf8Bytes(c);
+                continue;
+            }
+            Integer width = i + 1 < format.length() ? MYSQL_DIRECTIVE_BYTES.get(format.charAt(i + 1)) : null;
+            if (width == null) {
+                return OptionalInt.empty();
+            }
+            bytes += width;
+            directive = true;
+            i++;
+        }
+        return directive && !format.startsWith("yyyy") ? OptionalInt.of(bytes) : OptionalInt.empty();
+    }
+
+    // UTF-8 bytes of a UTF-16 char; each half of a surrogate pair counts two of the pair's four bytes
+    private static int utf8Bytes(char c) {
+        return c < 0x80 ? 1 : (c < 0x800 || Character.isSurrogate(c) ? 2 : 3);
+    }
+
+    // Joda fields that the BE formats as Joda does, outside quotes: y, M, d, H, h, m, s, a, E and up to six S. The BE
+    // drops an escaped quote ('') that Joda prints
+    private static OptionalInt jodaFormatMaxBytes(String format) {
+        if (format.contains("''")) {
+            return OptionalInt.empty();
+        }
+        int bytes = 0;
+        boolean quoted = false;
+        for (int i = 0; i < format.length(); i++) {
+            char c = format.charAt(i);
             if (c == '\'') {
                 quoted = !quoted;
-            } else if ((field && "yMdHhmsaES".indexOf(c) < 0) || (c == 'S' && run > 6)) {
-                return true;
+                continue;
             }
-            maxLength += field && run == 1 ? 9 : (field ? 1 : (c == '\'' ? 0 : 1));
+            if (quoted || !Character.isLetter(c)) {
+                bytes += utf8Bytes(c);
+                continue;
+            }
+            int run = 1;
+            while (i + 1 < format.length() && format.charAt(i + 1) == c) {
+                run++;
+                i++;
+            }
+            int width;
+            switch (c) {
+                case 'y':
+                    width = run == 2 ? 2 : Math.max(run, 4);
+                    break;
+                case 'M':
+                    width = run >= 4 ? 9 : (run == 3 ? 3 : Math.max(run, 2));
+                    break;
+                case 'E':
+                    width = run >= 4 ? 9 : 3;
+                    break;
+                case 'a':
+                    width = 2;
+                    break;
+                case 'd':
+                case 'H':
+                case 'h':
+                case 'm':
+                case 's':
+                    width = Math.max(run, 2);
+                    break;
+                case 'S':
+                    if (run > 6) {
+                        return OptionalInt.empty();
+                    }
+                    width = run;
+                    break;
+                default:
+                    return OptionalInt.empty();
+            }
+            bytes += width;
         }
-        return maxLength > 127;
+        return OptionalInt.of(bytes);
     }
 
     // The zone whose wall-clock time a with_timezone value is: z2 of a conversion, or z1

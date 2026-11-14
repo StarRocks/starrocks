@@ -163,6 +163,9 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                 "select format_datetime(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), 'HH''''mm')",
                 // Output the BE formatters don't have room for
                 "select date_format(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), '" + "%Y".repeat(32) + "')",
+                "select date_format(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), '" + "%r".repeat(12) + "')",
+                // Trino drops an unpaired trailing %; the BE prints it
+                "select date_format(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), '%Y%')",
                 "select format_datetime(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), '" +
                         "EEEE ".repeat(16) + "')",
                 // Trino rejects with_timezone as a window function
