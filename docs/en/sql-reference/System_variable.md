@@ -1177,6 +1177,8 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Default**: false
 * **Introduced in**: v3.0
 
+When aggregation spilling is enabled, grouping keys that cannot be sorted, such as MAP or ARRAY/STRUCT containing MAP, automatically use hash-partitioned (partitionwise) spilling even if `spill_partitionwise_agg` is `false`. Sortable grouping keys continue to follow that setting.
+
 ### enable_spill_to_remote_storage
 
 * **Description**: Whether to enable intermediate result spilling to object storage. If it is set to `true`, StarRocks spills the intermediate results to the storage volume specified in `spill_storage_volume` after the capacity limit of the local disk is reached. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage).

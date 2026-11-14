@@ -1003,6 +1003,8 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: false
 * **導入バージョン**: v3.0
 
+集計のスピルが有効な場合、MAP や MAP を含む ARRAY/STRUCT など、ソートできないグループ化キーには、`spill_partitionwise_agg` が `false` でもハッシュ分割による partitionwise スピルが自動的に使用されます。ソート可能なグループ化キーは、引き続きこの設定に従います。
+
 ### enable_spill_to_remote_storage
 
 * **説明**: 中間結果をオブジェクトストレージにスピルするかどうか。`true` に設定されている場合、StarRocks はローカルディスクの容量制限に達した後、`spill_storage_volume` で指定されたストレージボリュームに中間結果をスピルします。詳細については、[Spill to object storage](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage) を参照してください。
