@@ -28,9 +28,11 @@
 #include "compute_env/compute_env.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_context_handle.h"
+#include "compute_env/load/stream_load_pipe_attachment.h"
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
@@ -69,6 +71,7 @@
 #include "gutil/map_util.h"
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
+#include "runtime/fragment_attachment.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
 
 namespace starrocks::orchestration {
@@ -611,6 +614,49 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
 Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     const TExecPlanFragmentParams& unique_request = request.unique();
+    if (request.common().query_options.query_type == TQueryType::LOAD) {
+        std::vector<std::unique_ptr<FragmentAttachment>> attachments;
+        auto bind_pipes = [&](const std::vector<TScanRangeParams>& scan_ranges) -> Status {
+            for (const auto& scan_range : scan_ranges) {
+                if (!scan_range.scan_range.__isset.broker_scan_range) {
+                    continue;
+                }
+                const auto& broker_range = scan_range.scan_range.broker_scan_range;
+                // skip merge commit or transaction streamload which has been handled by StreamLoadContextHandle
+                if (broker_range.__isset.channel_id) {
+                    continue;
+                }
+                for (const auto& range : broker_range.ranges) {
+                    if (range.file_type != TFileType::FILE_STREAM) {
+                        continue;
+                    }
+                    auto pipe = exec_env->load_stream_mgr()->get(range.load_id);
+                    if (pipe == nullptr) {
+                        return Status::InternalError("Invalid or outdated load id " + print_id(range.load_id));
+                    }
+                    attachments.emplace_back(std::make_unique<StreamLoadPipeAttachment>(std::move(pipe)));
+                }
+            }
+            return Status::OK();
+        };
+        for (const auto& [node_id, scan_ranges] : unique_request.params.per_node_scan_ranges) {
+            if (request.per_driver_seq_scan_ranges_of_node(node_id).empty()) {
+                RETURN_IF_ERROR(bind_pipes(scan_ranges));
+            }
+        }
+        if (unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
+            for (const auto& [node_id, per_driver_ranges] : unique_request.params.node_to_per_driver_seq_scan_ranges) {
+                for (const auto& [driver_seq, scan_ranges] : per_driver_ranges) {
+                    RETURN_IF_ERROR(bind_pipes(scan_ranges));
+                }
+            }
+        }
+        if (!attachments.empty()) {
+            _fragment_ctx->set_fragment_attachments(std::move(attachments));
+            return Status::OK();
+        }
+    }
+
     if (!unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
         return Status::OK();
     }
