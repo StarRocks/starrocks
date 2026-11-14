@@ -38,6 +38,10 @@ bool is_fallback_to_hadoop_fs(std::string_view uri);
 
 bool is_s3_uri(std::string_view uri);
 
+inline bool is_adls2_uri(std::string_view uri) {
+    return starts_with(uri, "abfs://") || starts_with(uri, "abfss://");
+}
+
 inline bool is_azblob_uri(std::string_view uri) {
     return starts_with(uri, "wasb://") || starts_with(uri, "wasbs://");
 }
