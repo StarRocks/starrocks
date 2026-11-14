@@ -16,7 +16,16 @@
 
 #include <algorithm>
 #include <cmath>
+<<<<<<< HEAD
+=======
+#include <cstring>
+#include <initializer_list>
+>>>>>>> 7bdd7f8cf0c... [BugFix][RB-591] Clear approx_top_k counters on reset so pass-through stays linear (#66241)
 #include <memory>
+#include <optional>
+#include <random>
+#include <string>
+#include <vector>
 
 #include "common/config_exec_fwd.h"
 #include "exprs/agg/base_aggregate_test.h"
@@ -3152,6 +3161,229 @@ TEST_F(AggregateTest, test_ds_theta_count_distinct) {
 
     func->finalize_to_column(local_ctx.get(), state3->state(), result_column.get());
     ASSERT_EQ(5, result_column->get_data()[0]);
+}
+
+namespace {
+
+// One serialized approx_top_k(BIGINT) state, as ApproxTopKAggregateFunction::serialize_state lays it out:
+// null count (int64), effective counter number (int32), then (value, count) for each non-empty counter.
+struct ApproxTopKBigintState {
+    int64_t null_count = 0;
+    std::vector<std::pair<int64_t, int64_t>> counters;
+};
+
+ApproxTopKBigintState decode_approx_top_k_bigint_state(const Slice& bytes) {
+    ApproxTopKBigintState state;
+    size_t pos = 0;
+    std::memcpy(&state.null_count, bytes.data + pos, sizeof(int64_t));
+    pos += sizeof(int64_t);
+    int32_t effective_counter_num = 0;
+    std::memcpy(&effective_counter_num, bytes.data + pos, sizeof(int32_t));
+    pos += sizeof(int32_t);
+    for (int32_t i = 0; i < effective_counter_num; ++i) {
+        int64_t value = 0;
+        int64_t count = 0;
+        std::memcpy(&value, bytes.data + pos, sizeof(int64_t));
+        pos += sizeof(int64_t);
+        std::memcpy(&count, bytes.data + pos, sizeof(int64_t));
+        pos += sizeof(int64_t);
+        state.counters.emplace_back(value, count);
+    }
+    EXPECT_EQ(bytes.size, pos);
+    return state;
+}
+
+// Reads the single row of an approx_top_k(BIGINT) result as "item:count" strings, "NULL" standing for a NULL item.
+std::vector<std::string> approx_top_k_bigint_result(const Column& result) {
+    const auto& array = down_cast<const ArrayColumn&>(result);
+    EXPECT_EQ(1, array.size());
+    const auto [offset, size] = array.get_element_offset_size(0);
+    const auto* fields = down_cast<const StructColumn*>(ColumnHelper::get_data_column(&array.elements()));
+    std::vector<std::string> items;
+    for (size_t i = offset; i < offset + size; ++i) {
+        const Datum item = fields->field_column_raw_ptr(0)->get(i);
+        const Datum count = fields->field_column_raw_ptr(1)->get(i);
+        items.emplace_back((item.is_null() ? std::string("NULL") : std::to_string(item.get_int64())) + ":" +
+                           std::to_string(count.get_int64()));
+    }
+    return items;
+}
+
+MutableColumnPtr create_approx_top_k_bigint_result_column() {
+    const auto result_type = TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
+            {"item", "count"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT)}));
+    return ColumnHelper::create_column(result_type, false);
+}
+
+// Value v (0..36) appears (v + 1) * 5 times, 3515 rows in all, shuffled. The 37 distinct values fit in the default
+// 100 counters, so the sketch is exact and the top 5 are 36..32 with distinct counts.
+std::vector<int64_t> gen_approx_top_k_input() {
+    std::vector<int64_t> values;
+    for (int64_t v = 0; v < 37; ++v) {
+        values.insert(values.end(), (v + 1) * 5, v);
+    }
+    std::mt19937 rng(20261020);
+    std::shuffle(values.begin(), values.end(), rng);
+    return values;
+}
+
+} // namespace
+
+// ApproxTopKState::reset() must leave exactly counter_num empty counters. It used to append counter_num more on every
+// call and keep the old ones with their values and counts.
+TEST_F(AggregateTest, test_approx_top_k_reset_drops_previous_counters) {
+    {
+        ApproxTopKState<TYPE_BIGINT> state;
+        for (int round = 0; round < 8; ++round) {
+            state.reset(5, 100);
+            ASSERT_EQ(100, state.counters.size());
+            ASSERT_EQ(0, state.unused_idx);
+            ASSERT_EQ(0, state.null_counter.count);
+            ASSERT_TRUE(state.table.empty());
+            for (size_t i = 0; i < state.counters.size(); ++i) {
+                ASSERT_EQ(i, state.counters[i]._index);
+                ASSERT_EQ(0, state.counters[i].count);
+            }
+            // Fill every counter (and evict some) so that the next reset has something to drop.
+            for (int64_t v = 0; v < 150; ++v) {
+                state.process<false>(nullptr, v, v + 1, false);
+            }
+            state.process_null(3);
+        }
+    }
+
+    // A state reset through the aggregate function must serialize as empty instead of carrying the counters it had
+    // before the reset.
+    const AggregateFunction* func = get_aggregate_function("approx_top_k", TYPE_BIGINT, TYPE_ARRAY, false);
+    ASSERT_NE(nullptr, func);
+    auto input = Int64Column::create();
+    for (int64_t v : gen_approx_top_k_input()) {
+        input->append(v);
+    }
+    auto state = ManagedAggrState::create(ctx, func);
+    const Column* row_column = input.get();
+    func->update_batch_single_state(ctx, input->size(), &row_column, state->state());
+    func->reset(ctx, Columns{}, state->state());
+
+    auto serialized = BinaryColumn::create();
+    func->serialize_to_column(ctx, state->state(), serialized.get());
+    const auto decoded = decode_approx_top_k_bigint_state(serialized->get_slice(0));
+    ASSERT_EQ(0, decoded.null_count);
+    ASSERT_TRUE(decoded.counters.empty());
+}
+
+// The streaming (pass-through) path turns every input row into its own one-row state. Each must hold exactly that row,
+// and merging them all must give what aggregating the rows directly gives.
+TEST_F(AggregateTest, test_approx_top_k_convert_to_serialize_format) {
+    const AggregateFunction* func = get_aggregate_function("approx_top_k", TYPE_BIGINT, TYPE_ARRAY, false);
+    ASSERT_NE(nullptr, func);
+
+    const std::vector<int64_t> values = gen_approx_top_k_input();
+    auto input = Int64Column::create();
+    for (int64_t v : values) {
+        input->append(v);
+    }
+
+    Columns src = {input};
+    MutableColumnPtr serialized = BinaryColumn::create();
+    func->convert_to_serialize_format(ctx, src, input->size(), serialized);
+    const auto* binary = down_cast<const BinaryColumn*>(serialized.get());
+    ASSERT_EQ(values.size(), binary->size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        const auto row = decode_approx_top_k_bigint_state(binary->get_slice(i));
+        ASSERT_EQ(0, row.null_count) << "row " << i;
+        ASSERT_EQ(1, row.counters.size()) << "row " << i;
+        ASSERT_EQ(values[i], row.counters[0].first) << "row " << i;
+        ASSERT_EQ(1, row.counters[0].second) << "row " << i;
+    }
+
+    auto merged = ManagedAggrState::create(ctx, func);
+    for (size_t i = 0; i < binary->size(); ++i) {
+        func->merge(ctx, binary, merged->state(), i);
+    }
+    auto updated = ManagedAggrState::create(ctx, func);
+    const Column* row_column = input.get();
+    func->update_batch_single_state(ctx, input->size(), &row_column, updated->state());
+
+    auto merged_result = create_approx_top_k_bigint_result_column();
+    func->finalize_to_column(ctx, merged->state(), merged_result.get());
+    auto updated_result = create_approx_top_k_bigint_result_column();
+    func->finalize_to_column(ctx, updated->state(), updated_result.get());
+
+    const std::vector<std::string> expected = {"36:185", "35:180", "34:175", "33:170", "32:165"};
+    ASSERT_EQ(expected, approx_top_k_bigint_result(*updated_result));
+    ASSERT_EQ(expected, approx_top_k_bigint_result(*merged_result));
+}
+
+// Same as above with NULLs in the input.
+TEST_F(AggregateTest, test_approx_top_k_convert_to_serialize_format_nullable) {
+    auto data_column = Int64Column::create();
+    auto null_column = NullColumn::create();
+    std::vector<std::optional<int64_t>> rows;
+    for (int64_t v : gen_approx_top_k_input()) {
+        if (rows.size() % 7 == 6) {
+            rows.emplace_back(std::nullopt);
+            data_column->append_default();
+            null_column->append(1);
+        }
+        rows.emplace_back(v);
+        data_column->append(v);
+        null_column->append(0);
+    }
+    auto input = NullableColumn::create(std::move(data_column), std::move(null_column));
+    ASSERT_EQ(585, input->null_count());
+    Columns src = {input};
+
+    // The nullable wrapper passes the nullable column on to the nested function and masks the NULL rows of the
+    // output with the null flags, but each row's state must still hold only that row. A NULL row's state used to
+    // also carry the previous row's value, left in counters[0] by reset().
+    {
+        const AggregateFunction* nested = get_aggregate_function("approx_top_k", TYPE_BIGINT, TYPE_ARRAY, false);
+        ASSERT_NE(nullptr, nested);
+        MutableColumnPtr serialized = BinaryColumn::create();
+        nested->convert_to_serialize_format(ctx, src, input->size(), serialized);
+        const auto* binary = down_cast<const BinaryColumn*>(serialized.get());
+        ASSERT_EQ(rows.size(), binary->size());
+        for (size_t i = 0; i < rows.size(); ++i) {
+            const auto row = decode_approx_top_k_bigint_state(binary->get_slice(i));
+            if (rows[i].has_value()) {
+                ASSERT_EQ(0, row.null_count) << "row " << i;
+                ASSERT_EQ(1, row.counters.size()) << "row " << i;
+                ASSERT_EQ(*rows[i], row.counters[0].first) << "row " << i;
+                ASSERT_EQ(1, row.counters[0].second) << "row " << i;
+            } else {
+                ASSERT_EQ(1, row.null_count) << "row " << i;
+                ASSERT_TRUE(row.counters.empty()) << "row " << i;
+            }
+        }
+    }
+
+    // Through the nullable wrapper: merging the per-row states must give what aggregating the rows directly gives.
+    const AggregateFunction* func = get_aggregate_function("approx_top_k", TYPE_BIGINT, TYPE_ARRAY, true);
+    ASSERT_NE(nullptr, func);
+    MutableColumnPtr serialized = ColumnHelper::create_column(TypeDescriptor(TYPE_VARBINARY), true);
+    func->convert_to_serialize_format(ctx, src, input->size(), serialized);
+    ASSERT_EQ(rows.size(), serialized->size());
+    for (size_t i = 0; i < rows.size(); ++i) {
+        ASSERT_EQ(!rows[i].has_value(), serialized->is_null(i)) << "row " << i;
+    }
+
+    auto merged = ManagedAggrState::create(ctx, func);
+    for (size_t i = 0; i < serialized->size(); ++i) {
+        func->merge(ctx, serialized.get(), merged->state(), i);
+    }
+    auto updated = ManagedAggrState::create(ctx, func);
+    const Column* row_column = input.get();
+    func->update_batch_single_state(ctx, input->size(), &row_column, updated->state());
+
+    auto merged_result = create_approx_top_k_bigint_result_column();
+    func->finalize_to_column(ctx, merged->state(), merged_result.get());
+    auto updated_result = create_approx_top_k_bigint_result_column();
+    func->finalize_to_column(ctx, updated->state(), updated_result.get());
+
+    const std::vector<std::string> expected = {"NULL:585", "36:185", "35:180", "34:175", "33:170"};
+    ASSERT_EQ(expected, approx_top_k_bigint_result(*updated_result));
+    ASSERT_EQ(expected, approx_top_k_bigint_result(*merged_result));
 }
 
 } // namespace starrocks
