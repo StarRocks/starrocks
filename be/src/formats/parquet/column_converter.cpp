@@ -411,6 +411,138 @@ private:
     int32_t _type_length = 0;
 };
 
+// This class is to convert *variable length* binary (parquet BYTE_ARRAY) to decimal.
+// Unlike FIXED_LEN_BYTE_ARRAY, each value may have its own length, so values are
+// located through the binary column's offsets instead of a fixed stride.
+template <LogicalType DestType>
+class VarBinaryToDecimalConverter final : public ColumnConverter {
+public:
+    using DecimalType = typename RunTimeTypeTraits<DestType>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<DestType>::ColumnType;
+    using DestPrimitiveType = typename RunTimeTypeTraits<TYPE_DECIMAL128>::CppType;
+    VarBinaryToDecimalConverter(int32_t src_scale, int32_t dst_scale) {
+        if (src_scale < dst_scale) {
+            _scale_type = DecimalScaleType::kScaleUp;
+            _scale_factor = get_scale_factor<DestPrimitiveType>(dst_scale - src_scale);
+        } else if (src_scale > dst_scale) {
+            _scale_type = DecimalScaleType::kScaleDown;
+            _scale_factor = get_scale_factor<DestPrimitiveType>(src_scale - dst_scale);
+        }
+    }
+
+    // Decodes a big-endian two's complement unscaled value of any length. An empty value is zero.
+    // Returns false if the value does not fit into 128 bits.
+    static bool decode_unscaled(const Slice& value, DestPrimitiveType* unscaled) {
+        const auto* data = reinterpret_cast<const uint8_t*>(value.data);
+        size_t len = value.size;
+        if (len == 0) {
+            *unscaled = 0;
+            return true;
+        }
+        const bool negative = (data[0] & 0x80) != 0;
+        // Leading bytes that only repeat the sign carry no value, so a value longer than 16 bytes
+        // still fits as long as every byte above the lowest 16 is sign extension.
+        if (len > sizeof(DestPrimitiveType)) {
+            const uint8_t sign_byte = negative ? 0xFF : 0x00;
+            const size_t extra = len - sizeof(DestPrimitiveType);
+            for (size_t i = 0; i < extra; i++) {
+                if (data[i] != sign_byte) {
+                    return false;
+                }
+            }
+            if (((data[extra] & 0x80) != 0) != negative) {
+                return false;
+            }
+            data += extra;
+            len = sizeof(DestPrimitiveType);
+        }
+        uint128_t bits = 0;
+        for (size_t i = 0; i < len; i++) {
+            bits = (bits << 8) | data[i];
+        }
+        if (negative && len < sizeof(DestPrimitiveType)) {
+            bits |= ~uint128_t(0) << (len * 8);
+        }
+        *unscaled = static_cast<DestPrimitiveType>(bits);
+        return true;
+    }
+
+    template <DecimalScaleType scale_type, bool has_null>
+    void t_convert(size_t size, uint8_t* dst_null_data, const uint8_t* src_null_data, DecimalType* dst_data,
+                   const BinaryColumn* src_column) {
+        for (size_t i = 0; i < size; i++) {
+            if constexpr (has_null) {
+                if (src_null_data[i]) {
+                    dst_null_data[i] = 1;
+                    continue;
+                }
+            }
+            DestPrimitiveType unscale = 0;
+            if (!decode_unscaled(src_column->get_slice(i), &unscale)) {
+                // Same as FIXED_LEN_BYTE_ARRAY wider than 16 bytes: a value that does not fit is null.
+                dst_null_data[i] = 1;
+                continue;
+            }
+            dst_null_data[i] = 0;
+            if constexpr (scale_type == DecimalScaleType::kScaleUp) {
+                unscale *= _scale_factor;
+            }
+            if constexpr (scale_type == DecimalScaleType::kScaleDown) {
+                unscale /= _scale_factor;
+            }
+            dst_data[i] = DecimalType(unscale);
+        }
+    }
+
+    template <DecimalScaleType scale_type>
+    void t_convert(size_t size, bool has_null, uint8_t* dst_null_data, const uint8_t* src_null_data,
+                   DecimalType* dst_data, const BinaryColumn* src_column) {
+        if (has_null) {
+            t_convert<scale_type, true>(size, dst_null_data, src_null_data, dst_data, src_column);
+        } else {
+            t_convert<scale_type, false>(size, dst_null_data, src_null_data, dst_data, src_column);
+        }
+    }
+
+    Status convert(const Column* src, Column* dst) override {
+        auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
+        // hive only support null column
+        // TODO: support not null
+        auto* dst_nullable_column = down_cast<NullableColumn*>(dst);
+        dst_nullable_column->resize_uninitialized(src_nullable_column->size());
+
+        auto* src_column = ColumnHelper::as_raw_column<BinaryColumn>(src_nullable_column->data_column());
+        auto* dst_column = ColumnHelper::as_raw_column<ColumnType>(dst_nullable_column->data_column_raw_ptr());
+
+        auto* dst_data = dst_column->get_data().data();
+        const auto* src_null_data = src_nullable_column->null_column()->get_data().data();
+        auto* dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data().data();
+
+        size_t size = src_column->size();
+        bool has_null = src_nullable_column->has_null();
+
+        switch (_scale_type) {
+        case DecimalScaleType::kScaleUp:
+            t_convert<DecimalScaleType::kScaleUp>(size, has_null, dst_null_data, src_null_data, dst_data, src_column);
+            break;
+        case DecimalScaleType::kScaleDown:
+            t_convert<DecimalScaleType::kScaleDown>(size, has_null, dst_null_data, src_null_data, dst_data, src_column);
+            break;
+        default:
+            t_convert<DecimalScaleType::kNoScale>(size, has_null, dst_null_data, src_null_data, dst_data, src_column);
+            break;
+        }
+
+        // A value that does not fit is converted to null, so has_null is recomputed.
+        dst_nullable_column->update_has_null();
+        return Status::OK();
+    }
+
+private:
+    DecimalScaleType _scale_type = DecimalScaleType::kNoScale;
+    DestPrimitiveType _scale_factor = 1;
+};
+
 // UUID is stored as 16 raw bytes; the canonical string form is 36 characters:
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 static constexpr int kUUIDByteLength = 16;
@@ -614,13 +746,32 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         break;
     }
     case tparquet::Type::type::BYTE_ARRAY: {
-        // TODO don't support converter byte_array to decimal
         if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR &&
             col_type != LogicalType::TYPE_VARBINARY) {
             need_convert = true;
         }
-        if (col_type == TYPE_GEOGRAPHY) {
+        switch (col_type) {
+        case LogicalType::TYPE_DECIMALV2:
+            // All DecimalV2 use scale 9 as scale
+            *converter = std::make_unique<VarBinaryToDecimalConverter<TYPE_DECIMALV2>>(field.scale, 9);
+            break;
+        case LogicalType::TYPE_DECIMAL32:
+            *converter =
+                    std::make_unique<VarBinaryToDecimalConverter<TYPE_DECIMAL32>>(field.scale, typeDescriptor.scale);
+            break;
+        case LogicalType::TYPE_DECIMAL64:
+            *converter =
+                    std::make_unique<VarBinaryToDecimalConverter<TYPE_DECIMAL64>>(field.scale, typeDescriptor.scale);
+            break;
+        case LogicalType::TYPE_DECIMAL128:
+            *converter =
+                    std::make_unique<VarBinaryToDecimalConverter<TYPE_DECIMAL128>>(field.scale, typeDescriptor.scale);
+            break;
+        case LogicalType::TYPE_GEOGRAPHY:
             *converter = std::make_unique<BinaryToGeographyConverter>();
+            break;
+        default:
+            break;
         }
         break;
     }

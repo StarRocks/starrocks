@@ -18,6 +18,7 @@
 
 #include <filesystem>
 #include <limits>
+#include <optional>
 #include <random>
 
 #include "base/testutil/assert.h"
@@ -182,26 +183,31 @@ TEST_F(ColumnConverterTest, TestByteArrayTest) {
     }
 
     {
+        // BYTE_ARRAY annotated as DECIMAL(5, 1)
         const std::string col_name = "decimal_binary";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL);
             check(file_path, col_type, col_name, "[6.7]", expected_rows, true);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32);
-            check(file_path, col_type, col_name, "[6.7]", expected_rows, true);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMALV2, 5, 1);
+            check(file_path, col_type, col_name, "[6.7]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64);
-            check(file_path, col_type, col_name, "[6.7]", expected_rows, true);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32, 5, 1);
+            check(file_path, col_type, col_name, "[6.7]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128);
-            check(file_path, col_type, col_name, "[6.7]", expected_rows, true);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, 18, 8);
+            check(file_path, col_type, col_name, "[6.70000000]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMALV2);
-            check(file_path, col_type, col_name, "[6.7]", expected_rows, true);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 5, 0);
+            check(file_path, col_type, col_name, "[6]", expected_rows);
+        }
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 38, 2);
+            check(file_path, col_type, col_name, "[6.70]", expected_rows);
         }
     }
 
@@ -728,6 +734,205 @@ TEST_F(ColumnConverterTest, UnsignedInt32ZeroExtend) {
         auto* dst_nullable = down_cast<NullableColumn*>(dst.get());
         auto* dst_data = down_cast<Decimal128Column*>(dst_nullable->data_column_raw_ptr());
         EXPECT_EQ(kExpectedUnsigned, static_cast<int64_t>(dst_data->get_data()[0]));
+    }
+}
+
+// BYTE_ARRAY decimals are variable length: every value is big-endian two's complement with
+// its own length, so values of different lengths must be decoded in the same column.
+TEST_F(ColumnConverterTest, ByteArrayDecimalVariableLength) {
+    // Minimal big-endian two's complement encoding of v, as written by Avro/Java BigInteger.
+    auto encode = [](int128_t v) {
+        std::string bytes;
+        for (int i = 15; i >= 0; i--) {
+            bytes.push_back(static_cast<char>(static_cast<uint8_t>(static_cast<uint128_t>(v) >> (i * 8))));
+        }
+        size_t start = 0;
+        while (start < bytes.size() - 1) {
+            auto cur = static_cast<uint8_t>(bytes[start]);
+            auto next = static_cast<uint8_t>(bytes[start + 1]);
+            if ((cur == 0x00 && (next & 0x80) == 0) || (cur == 0xFF && (next & 0x80) != 0)) {
+                start++;
+            } else {
+                break;
+            }
+        }
+        return bytes.substr(start);
+    };
+
+    auto make_field = [](int32_t precision, int32_t scale) {
+        ParquetField field;
+        field.physical_type = tparquet::Type::BYTE_ARRAY;
+        field.precision = precision;
+        field.scale = scale;
+        return field;
+    };
+
+    // nullopt is a null row.
+    auto make_src = [](const std::vector<std::optional<std::string>>& values) {
+        auto data = BinaryColumn::create();
+        auto nulls = NullColumn::create();
+        for (const auto& v : values) {
+            if (v.has_value()) {
+                data->append(Slice(*v));
+                nulls->get_data().push_back(0);
+            } else {
+                data->append_default();
+                nulls->get_data().push_back(1);
+            }
+        }
+        return NullableColumn::create(std::move(data), std::move(nulls));
+    };
+
+    auto convert = [&](const ParquetField& field, const TypeDescriptor& col_type,
+                       const std::vector<std::optional<std::string>>& values) {
+        std::unique_ptr<ColumnConverter> converter;
+        Status st = ColumnConverterFactory::create_converter(field, col_type, "UTC", &converter);
+        EXPECT_TRUE(st.ok()) << st.message();
+        EXPECT_TRUE(converter->need_convert);
+        auto src = make_src(values);
+        auto dst = ColumnHelper::create_column(col_type, true);
+        st = converter->convert(src.get(), dst.get());
+        EXPECT_TRUE(st.ok()) << st.message();
+        return dst;
+    };
+
+    // DECIMAL(18, 8) with 1..8 byte values, positive and negative, and nulls.
+    {
+        const std::vector<int64_t> unscaled = {0,
+                                               1,
+                                               -1,
+                                               127,
+                                               128,
+                                               -128,
+                                               -129,
+                                               32767,
+                                               -32768,
+                                               123456789,
+                                               -123456789,
+                                               670000000LL,
+                                               999999999999999999LL,
+                                               -999999999999999999LL};
+        std::vector<std::optional<std::string>> values;
+        for (auto v : unscaled) {
+            values.emplace_back(encode(v));
+        }
+        values.emplace_back(std::nullopt);
+        const ParquetField field = make_field(18, 8);
+
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, 18, 8);
+            auto dst = convert(field, col_type, values);
+            auto* nullable = down_cast<NullableColumn*>(dst.get());
+            auto& data = down_cast<Decimal64Column*>(nullable->data_column_raw_ptr())->get_data();
+            for (size_t i = 0; i < unscaled.size(); i++) {
+                EXPECT_FALSE(nullable->is_null(i)) << i;
+                EXPECT_EQ(unscaled[i], data[i]) << i;
+            }
+            EXPECT_TRUE(nullable->is_null(unscaled.size()));
+            EXPECT_TRUE(nullable->has_null());
+        }
+        {
+            // Scale up: DECIMAL(18, 8) -> DECIMAL(38, 10).
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 38, 10);
+            auto dst = convert(field, col_type, values);
+            auto* nullable = down_cast<NullableColumn*>(dst.get());
+            auto& data = down_cast<Decimal128Column*>(nullable->data_column_raw_ptr())->get_data();
+            for (size_t i = 0; i < unscaled.size(); i++) {
+                EXPECT_EQ(static_cast<int128_t>(unscaled[i]) * 100, data[i]) << i;
+            }
+            EXPECT_TRUE(nullable->is_null(unscaled.size()));
+        }
+        {
+            // Scale down: DECIMAL(18, 8) -> DECIMAL(18, 2) truncates like the other decimal converters.
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, 18, 2);
+            auto dst = convert(field, col_type, values);
+            auto* nullable = down_cast<NullableColumn*>(dst.get());
+            auto& data = down_cast<Decimal64Column*>(nullable->data_column_raw_ptr())->get_data();
+            for (size_t i = 0; i < unscaled.size(); i++) {
+                EXPECT_EQ(unscaled[i] / 1000000, data[i]) << i;
+            }
+        }
+        {
+            // DECIMALV2 always uses scale 9.
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMALV2, 27, 9);
+            auto dst = convert(field, col_type, values);
+            auto* nullable = down_cast<NullableColumn*>(dst.get());
+            auto& data = down_cast<DecimalColumn*>(nullable->data_column_raw_ptr())->get_data();
+            for (size_t i = 0; i < unscaled.size(); i++) {
+                EXPECT_EQ(static_cast<int128_t>(unscaled[i]) * 10, data[i].value()) << i;
+            }
+        }
+    }
+
+    // DECIMAL32 without nulls.
+    {
+        const std::vector<int32_t> unscaled = {0, 5, -5, 99999, -99999};
+        std::vector<std::optional<std::string>> values;
+        for (auto v : unscaled) {
+            values.emplace_back(encode(v));
+        }
+        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32, 9, 2);
+        auto dst = convert(make_field(9, 2), col_type, values);
+        auto* nullable = down_cast<NullableColumn*>(dst.get());
+        auto& data = down_cast<Decimal32Column*>(nullable->data_column_raw_ptr())->get_data();
+        for (size_t i = 0; i < unscaled.size(); i++) {
+            EXPECT_EQ(unscaled[i], data[i]) << i;
+        }
+        EXPECT_FALSE(nullable->has_null());
+    }
+
+    // DECIMAL(38, 0): 9..16 byte values, plus redundant sign bytes beyond 16 bytes, an empty
+    // value (zero) and values that do not fit into 128 bits (null).
+    {
+        const int128_t max38 = get_scale_factor<int128_t>(38) - 1;
+        const std::vector<int128_t> unscaled = {static_cast<int128_t>(std::numeric_limits<int64_t>::max()) + 1,
+                                                static_cast<int128_t>(std::numeric_limits<int64_t>::min()) - 1, max38,
+                                                -max38};
+        std::vector<std::optional<std::string>> values;
+        for (auto v : unscaled) {
+            values.emplace_back(encode(v));
+        }
+        // 1 and -1 padded with sign bytes to 20 bytes.
+        values.emplace_back(std::string(19, '\x00') + std::string(1, '\x01'));
+        values.emplace_back(std::string(20, '\xFF'));
+        // Empty value.
+        values.emplace_back(std::string());
+        // 2^128 does not fit.
+        values.emplace_back(std::string(1, '\x01') + std::string(16, '\x00'));
+        // 17 bytes whose sign byte disagrees with the remaining 16 bytes does not fit.
+        values.emplace_back(std::string(1, '\x00') + std::string(1, '\x80') + std::string(15, '\x00'));
+
+        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 38, 0);
+        auto dst = convert(make_field(38, 0), col_type, values);
+        auto* nullable = down_cast<NullableColumn*>(dst.get());
+        auto& data = down_cast<Decimal128Column*>(nullable->data_column_raw_ptr())->get_data();
+        for (size_t i = 0; i < unscaled.size(); i++) {
+            EXPECT_FALSE(nullable->is_null(i)) << i;
+            EXPECT_EQ(unscaled[i], data[i]) << i;
+        }
+        size_t i = unscaled.size();
+        EXPECT_EQ(1, data[i++]);
+        EXPECT_EQ(-1, data[i++]);
+        EXPECT_FALSE(nullable->is_null(i));
+        EXPECT_EQ(0, data[i++]);
+        EXPECT_TRUE(nullable->is_null(i++));
+        EXPECT_TRUE(nullable->is_null(i++));
+        EXPECT_TRUE(nullable->has_null());
+    }
+
+    // Footer min/max statistics share the converter.
+    {
+        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, 18, 8);
+        const ParquetField field = make_field(18, 8);
+        auto column = ColumnHelper::create_column(col_type, true);
+        std::vector<std::string> stats_values = {encode(-123456789), encode(670000000)};
+        std::vector<bool> null_pages = {false, false};
+        ASSERT_OK(
+                StatisticsHelper::decode_value_into_column(column, stats_values, null_pages, col_type, &field, "UTC"));
+        auto* nullable = down_cast<NullableColumn*>(column.get());
+        auto& data = down_cast<Decimal64Column*>(nullable->data_column_raw_ptr())->get_data();
+        EXPECT_EQ(-123456789, data[0]);
+        EXPECT_EQ(670000000, data[1]);
     }
 }
 
