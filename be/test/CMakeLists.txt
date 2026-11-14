@@ -304,6 +304,7 @@ SET(DW_TEST_FILES
     ./storage/lake/metacache_test.cpp
     ./storage/lake/metacache_adjuster_test.cpp
     ./storage/lake/meta_file_test.cpp
+    ./storage/lake/lake_metadata_corruption_test.cpp
     ./storage/lake/lake_proto_normalizer_test.cpp
     ./storage/lake/partial_update_test.cpp
     ./storage/lake/partial_update_vector_index_test.cpp
