@@ -543,7 +543,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
     - それ以外の場合、`targetRows > statistic_sample_collect_rows` (デフォルト: 200000) の場合、SAMPLE 統計収集が使用されます。
     - それ以外の場合、FULL 統計収集が使用されます。
   
-  - 最初のロードの場合: `deltaRatio = loadRows / (totalRows + 1)`
+  - INSERT による最初のロードの場合: `deltaRatio = loadRows / (totalRows + 1)`。`totalRows` は、最初のロードの候補となる論理パーティションの FE 行数の合計です。候補はコミットバージョンが 2 の物理パーティションから選択されます。
+    - `loadRows` を取得できない場合、または `loadRows <= 0` の場合、統計収集は実行されません。
+    - `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (デフォルト: 0.1) の場合、統計収集は実行されません。
+    - それ以外の場合、`loadRows > statistic_sample_collect_rows` (デフォルト: 200000) の場合は SAMPLE 統計収集を使用します。
+    - それ以外の場合は FULL 統計収集を使用します。
+
+  - `enable_statistic_collect_on_update` が有効な UPDATE の場合: `deltaRatio = loadRows / (totalRows + 1)`。`totalRows` はテーブル統計の正の行数を使用し、それ以外の場合は今回更新したパーティションの FE 行数の合計を使用します。
     - `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (デフォルト: 0.1) の場合、統計収集は実行されません。
     - それ以外の場合、`loadRows > statistic_sample_collect_rows` (デフォルト: 200000) の場合、SAMPLE 統計収集が使用されます。
     - それ以外の場合、FULL 統計収集が使用されます。
