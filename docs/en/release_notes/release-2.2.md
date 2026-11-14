@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 2.2 release notes: resource group management, Java UDF framework, partial updates for Primary Key tables, JSON data type and functions, and Hudi..."
+products: [oss]
 ---
 
 # StarRocks version 2.2

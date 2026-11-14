@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算地球两点之间的球面距离，单位为米。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Distance_Sphere

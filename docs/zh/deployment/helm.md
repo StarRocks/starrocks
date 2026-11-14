@@ -2,6 +2,7 @@
 sidebar_position: 50
 displayed_sidebar: docs
 description: "使用 Helm 包管理工具在 Kubernetes 集群上自动化部署 StarRocks。"
+products: [oss]
 ---
 
 # 使用 Helm 部署 StarRocks 集群

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された数のスペースを含む文字列を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # space

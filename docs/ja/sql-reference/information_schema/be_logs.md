@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "be_logsは各BEノードのログに関する情報を提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # be_logs

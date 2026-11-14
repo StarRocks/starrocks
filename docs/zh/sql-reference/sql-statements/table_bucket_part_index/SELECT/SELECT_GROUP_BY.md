@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "GROUP BY clause groups rows by specified columns for use with aggregate functions."
 sidebar_label: "GROUP BY"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # GROUP BY

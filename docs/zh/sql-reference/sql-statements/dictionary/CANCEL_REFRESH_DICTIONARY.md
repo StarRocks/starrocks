@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CANCEL REFRESH DICTIONARY cancels the refresh operation of a dictionary object."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CANCEL REFRESH DICTIONARY

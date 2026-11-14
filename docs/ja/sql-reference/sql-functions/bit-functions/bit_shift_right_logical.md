@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "数値式の2進数表現を指定されたビット数だけ右にシフトします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bit_shift_right_logical

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the value of x associated with the minimum value of y."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # min_by

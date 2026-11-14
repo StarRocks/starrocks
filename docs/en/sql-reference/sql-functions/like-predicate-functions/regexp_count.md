@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Counts the number of times a pattern occurs in a string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';

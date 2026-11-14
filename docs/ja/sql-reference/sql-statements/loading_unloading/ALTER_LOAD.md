@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "QUEUEING または LOADING 状態の Broker Load ジョブの優先度を変更します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER LOAD

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从指定日期或日期时间中减去指定的分钟数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # minutes_sub

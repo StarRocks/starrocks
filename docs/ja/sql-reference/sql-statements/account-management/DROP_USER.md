@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP USER removes a specified user identity from StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP USER

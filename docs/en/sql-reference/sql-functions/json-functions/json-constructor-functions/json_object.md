@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts one or more key-value pairs to a JSON object that consists of the key-value pairs."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # json_object

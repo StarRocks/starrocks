@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 100
 description: "如何使用 Apache Airflow 的 DAG、SQLExecuteQueryOperator 和 MySQLHook 编排和调度 StarRocks 数据工作流。"
+products: [oss, anywhere]
 ---
 
 # Apache Airflow

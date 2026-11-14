@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the day corresponding to a date."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # dayname

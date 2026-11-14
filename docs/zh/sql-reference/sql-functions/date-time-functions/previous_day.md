@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回指定日期之前的那个指定星期几所对应的日期。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # previous_day

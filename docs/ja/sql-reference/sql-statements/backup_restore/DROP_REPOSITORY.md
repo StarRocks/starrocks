@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "リポジトリを削除します。"
+products: [oss, enterprise, anywhere]
 ---
 
 # DROP REPOSITORY

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Force-abort a transaction stuck in the COMMITTED state on a shared-data table, discarding its data while advancing the partition version."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SKIP COMMITTED TRANSACTION

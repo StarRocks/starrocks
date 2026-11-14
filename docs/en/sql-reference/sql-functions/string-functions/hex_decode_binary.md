@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Decodes a hex encoded string to a binary."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hex_decode_binary

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "获取当前用户激活的角色。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # current_role

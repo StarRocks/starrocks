@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "リモートストレージシステムにリポジトリを作成して、データスナップショットをバックアップおよび復元するために使用します。"
+products: [oss, enterprise, anywhere]
 ---
 
 # CREATE REPOSITORY

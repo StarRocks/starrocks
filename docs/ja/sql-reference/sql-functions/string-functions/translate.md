@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列内の指定された文字を別の文字に置換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # translate

@@ -2,6 +2,7 @@
 sidebar_position: 20
 description: Azure Blob Storage および Azure Data Lake Storage で認証するように StarRocks を設定する方法について説明します。
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Microsoft Azure Storage への認証

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "be_metrics provides information about the metrics of each BE node."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # be_metrics

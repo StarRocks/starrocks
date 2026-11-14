@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns a serialized Theta sketch whose distinct count estimates |A∪B|, the union of two input sketches."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_union

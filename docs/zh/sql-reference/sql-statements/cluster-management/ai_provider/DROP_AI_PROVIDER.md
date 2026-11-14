@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从集群中删除一个 AI provider。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP AI PROVIDER

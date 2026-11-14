@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Lambda式を使用してマップ内の値を変換し、各エントリの新しい値を生成します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # transform_values

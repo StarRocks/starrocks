@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "REFRESH DICTIONARY manually refreshes a dictionary object with latest data."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # REFRESH DICTIONARY

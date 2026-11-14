@@ -3,6 +3,7 @@ displayed_sidebar: docs
 sidebar_position: 70
 description: "How to use StarRocks virtual columns such as _tablet_id_, _segment_id_, and _row_id_ to inspect where each row of a native table is physically stored."
 keywords: ['virtual column', 'tablet_id', 'row_id', 'segment_id', 'rowset_id']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Virtual columns

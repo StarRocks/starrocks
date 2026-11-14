@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DELETE 从表中删除数据行，主键表支持按主键和任意列删除。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DELETE

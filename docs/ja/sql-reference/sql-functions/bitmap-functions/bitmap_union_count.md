@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ビットマップ値の和集合を返し、その和集合の基数を計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_union_count

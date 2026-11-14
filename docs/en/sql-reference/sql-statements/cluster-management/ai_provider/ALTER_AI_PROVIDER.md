@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Update the properties of an existing AI provider."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER AI PROVIDER

@@ -2,6 +2,7 @@
 sidebar_position: 100
 displayed_sidebar: docs
 description: "セッション/グローバルレベルでタイムゾーンを設定してデータ保存とクエリ処理に影響させます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # タイムゾーンの設定

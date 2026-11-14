@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算输入数值的双曲正弦值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # sinh

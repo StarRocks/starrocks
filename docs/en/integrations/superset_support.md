@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "How to connect Apache Superset to StarRocks for data exploration and visualization."
+products: [oss, enterprise, anywhere]
 ---
 
 # Superset Support

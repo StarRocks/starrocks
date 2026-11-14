@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "在 Ubuntu 操作系统上编译 StarRocks 源代码。"
+products: [oss]
 ---
 
 # 基于 Ubuntu 编译 StarRocks

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "日付または日時式の日付部分を抽出します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # date_add, adddate

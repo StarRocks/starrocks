@@ -2,6 +2,7 @@
 sidebar_position: 110
 displayed_sidebar: docs
 description: "大規模クエリ（多数の行をスキャンまたはCPU/メモリを大量に占有するクエリ）をリソースグループとクエリキューで監視・管理します。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 大規模クエリの監視と管理

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "System limits and naming rules for StarRocks objects including databases, tables, partitions, columns, and identifiers."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # System limits

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ネイティブ GEOMETRY または GEOGRAPHY 値を WKB としてシリアライズします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_AsBinary, ST_AsWKB

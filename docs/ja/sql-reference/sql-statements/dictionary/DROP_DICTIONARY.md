@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP DICTIONARY は、辞書オブジェクトを削除するか、辞書オブジェクト内のキャッシュデータをクリアします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP DICTIONARY

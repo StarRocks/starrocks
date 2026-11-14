@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP TABLE is used to delete a table."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP TABLE

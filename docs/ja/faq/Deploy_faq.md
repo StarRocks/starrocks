@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "StarRocks デプロイメント関連のよくある質問への回答。"
+products: [oss, enterprise]
 ---
 
 # デプロイメント

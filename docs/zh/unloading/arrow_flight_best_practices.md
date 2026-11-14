@@ -3,6 +3,7 @@ sidebar_position: 50
 displayed_sidebar: docs
 description: "使用 Arrow Flight SQL 从 StarRocks 获取最快大结果集读取的最佳实践与客户端代码模式。"
 keywords: ['arrow flight sql', 'performance', 'best practices', 'optimization', 'parquet', 'jdbc']
+products: [oss, enterprise]
 ---
 
 # Arrow Flight SQL 最佳实践

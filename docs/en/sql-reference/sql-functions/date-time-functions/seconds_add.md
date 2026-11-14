@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DATETIME SECONDS_ADD(DATETIME expr1,INT expr2)"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # seconds_add

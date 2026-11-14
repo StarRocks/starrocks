@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Calculates the square of a value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # square

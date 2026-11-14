@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Set an AI provider as the default for its type."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SET DEFAULT AI PROVIDER

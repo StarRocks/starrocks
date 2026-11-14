@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "triggersはStarRocksで実装されていないプレースホルダービューです。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # triggers

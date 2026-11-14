@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "INSTALL PLUGIN は、プラグインをインストールするために使用されます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # INSTALL PLUGIN

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Release notes and changelog for the StarRocks Connector for Apache Kafka."
+products: [oss]
 ---
 
 # Releases of StarRocks Connector for Kafka

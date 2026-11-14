@@ -2,6 +2,7 @@
 sidebar_position: 50
 displayed_sidebar: docs
 description: "StarRocks コミュニティ提供のクロスクラスターデータ移行ツールを使用して異なるクラスター間のデータ移行を実施。"
+products: [oss, enterprise, anywhere]
 ---
 
 import Tabs from '@theme/Tabs';

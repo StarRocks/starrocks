@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "The External Table feature is no longer recommended except for certain corner usage cases, and might be deprecated in future releases."
+products: [oss, enterprise, anywhere]
 ---
 
 # External table

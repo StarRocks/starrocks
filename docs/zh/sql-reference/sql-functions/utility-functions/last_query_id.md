@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回最近一次执行的查询的 ID。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # last_query_id

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP USER drops a specified user identity."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP USER

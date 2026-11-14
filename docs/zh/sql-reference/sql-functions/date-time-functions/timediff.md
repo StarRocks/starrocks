@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回两个DATETIME类型值之间的差值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # timediff

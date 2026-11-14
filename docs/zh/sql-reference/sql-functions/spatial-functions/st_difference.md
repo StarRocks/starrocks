@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从一个原生平面多边形或多多边形中减去另一个。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Difference

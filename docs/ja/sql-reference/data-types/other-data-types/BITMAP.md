@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "COUNT DISTINCT を高速化するためによく使用される bitmap データ型。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # BITMAP

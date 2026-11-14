@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "be_bvars 提供 bRPC 的统计信息，包括 RPC 延迟、QPS 等。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # be_bvars

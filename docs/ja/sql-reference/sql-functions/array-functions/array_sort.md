@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ARRAY_SORT関数は配列の要素を昇順にソートし、v4.0以降はラムダコンパレータをサポートしています。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_sort

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Rounds the input down to the nearest equal or smaller value with the specified number of places after the decimal point."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # truncate

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Tests whether two native polygons or multipolygons intersect."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Intersects

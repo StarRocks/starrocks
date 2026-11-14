@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "URLのクエリ文字列から指定パラメータの値を抽出します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # url_extract_parameter

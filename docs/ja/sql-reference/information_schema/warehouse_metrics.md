@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "warehouse_metrics は各ウェアハウスのメトリックに関する情報を提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # warehouse_metrics

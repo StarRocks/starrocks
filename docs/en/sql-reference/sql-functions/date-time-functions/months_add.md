@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Adds a specified number of months to the date, accurate to the month."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # months_add

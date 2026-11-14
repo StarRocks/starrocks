@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "StarRocks uses role-based access control (RBAC) and identity-based access control (IBAC) to manage user privileges across different granularity levels."
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 管理用户权限

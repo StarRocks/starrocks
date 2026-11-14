@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW WARNINGS 和 SHOW ERRORS 返回当前会话中上一条语句的诊断信息，例如 INSERT 过滤掉或替换为 NULL 的行。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW WARNINGS

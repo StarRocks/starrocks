@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 10
 description: "Overview of StarRocks privilege system, covering role-based access control (RBAC) and identity-based access control (IBAC) models."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Overview of privileges

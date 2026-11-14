@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Troubleshooting guide for asynchronous materialized views: diagnose and fix refresh failures, query rewrite issues, and data consistency problems."
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 异步物化视图故障排除

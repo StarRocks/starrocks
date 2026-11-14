@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "task_runsは非同期タスクの実行に関する情報を提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # task_runs

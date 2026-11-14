@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回输入字符串的 64 位 XXH64 hash 值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # xx_hash64

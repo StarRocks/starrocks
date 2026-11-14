@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Transforms the input arg into a binary."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bin

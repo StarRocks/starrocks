@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Overview of memory classification and memory management strategies in StarRocks."
+products: [oss, enterprise, anywhere]
 ---
 
 # 管理内存

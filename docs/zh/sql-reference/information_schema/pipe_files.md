@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "pipe_files 提供指定 Pipe 下数据文件的导入状态。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # pipe_files

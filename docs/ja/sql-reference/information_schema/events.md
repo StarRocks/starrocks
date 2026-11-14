@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "eventsはStarRocksで実装されていないプレースホルダービューです。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # events

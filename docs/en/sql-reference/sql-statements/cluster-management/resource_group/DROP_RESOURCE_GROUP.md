@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP RESOURCE GROUP [IF EXISTS] drops the specified resource group."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP RESOURCE GROUP

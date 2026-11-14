@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN CHECK TABLET は、一連の tablet をチェックするために使用されます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN CHECK TABLET

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "TPC-H ベンチマーク 100GB データセットで StarRocks ネイティブストレージと Hive テーブルのパフォーマンス測定結果。"
+products: [oss, enterprise]
 ---
 
 # TPC-H ベンチマーク

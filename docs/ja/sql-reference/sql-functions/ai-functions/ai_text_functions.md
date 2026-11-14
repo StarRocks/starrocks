@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "AI 関数を使用して、テキストの生成、ベクトル化、分類、抽出、翻訳、要約、意味の評価を行います。"
 sidebar_position: 21
 toc_max_heading_level: 2
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # AI テキスト関数

@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "本番環境での StarRocks クラスタのノード数、CPU、メモリ、ストレージのリソース計画方法。"
+products: [oss, enterprise]
 ---
 
 # StarRocks クラスターの計画

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回 FE TaskManager 中所有任务的当前状态，以 JSON 格式呈现。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_task_runs

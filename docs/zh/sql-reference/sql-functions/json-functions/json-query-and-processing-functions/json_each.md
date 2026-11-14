@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将 JSON 对象的最外层元素展开为键值对并返回表。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # json_each

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW DYNAMIC PARTITION TABLES displays status of all partitioned tables with dynamic partitioning enabled."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW DYNAMIC PARTITION TABLES

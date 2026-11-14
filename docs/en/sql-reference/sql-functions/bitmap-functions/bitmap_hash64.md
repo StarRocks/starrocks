@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Calculates a 64-bit hash value for any type of input and returns a bitmap containing the hash value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_hash64

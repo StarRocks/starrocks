@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "A family of functions that extract typed values from VARIANT objects at specified paths."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # get_variant

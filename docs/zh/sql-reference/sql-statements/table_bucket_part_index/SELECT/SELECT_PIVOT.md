@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "PIVOT transforms rows into columns using aggregate functions, simplifying pivot table queries."
 sidebar_label: "PIVOT"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # PIVOT

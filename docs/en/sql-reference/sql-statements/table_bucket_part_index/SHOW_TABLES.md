@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW TABLES displays all tables in a StarRocks database or a database in an external data source, for example, Hive, Iceberg, Hudi, or Delta Lake."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW TABLES

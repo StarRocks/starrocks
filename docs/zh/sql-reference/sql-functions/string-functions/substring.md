@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从指定位置开始提取指定长度的子字符串。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # substring, substr

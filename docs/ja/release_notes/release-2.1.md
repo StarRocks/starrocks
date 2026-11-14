@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 2.1：Iceberg 外部テーブル（プレビュー）、パイプライン実行エンジン、CREATE TABLE AS SELECT、SQL 改善。"
+products: [oss]
 ---
 
 # StarRocks version 2.1

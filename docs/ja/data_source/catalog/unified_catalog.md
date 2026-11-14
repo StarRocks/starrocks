@@ -3,6 +3,7 @@ sidebar_position: 120
 displayed_sidebar: docs
 description: "Unified catalog は Hive、Iceberg、Hudi、Delta Lake、Paimon、Kudu のデータを統一的にクエリ。"
 toc_max_heading_level: 5
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'

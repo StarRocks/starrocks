@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "How to manually deploy a shared-data StarRocks cluster with decoupled storage and computing."
+products: [oss]
 ---
 
 import Tabs from '@theme/Tabs';

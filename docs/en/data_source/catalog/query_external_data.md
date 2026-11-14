@@ -2,6 +2,7 @@
 sidebar_position: 160
 displayed_sidebar: docs
 description: "How to query data from external sources in StarRocks using external catalogs."
+products: [oss, enterprise, anywhere]
 ---
 
 # Query external data

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "2つの文字列のngram類似度を計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ngram_search

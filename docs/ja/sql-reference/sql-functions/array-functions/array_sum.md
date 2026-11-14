@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "配列内のすべての要素を合計します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_sum

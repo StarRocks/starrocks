@@ -3,6 +3,7 @@ sidebar_position: 120
 displayed_sidebar: docs
 description: "Schema 管理与迁移"
 sidebar_label: "Schema 管理与迁移"
+products: [oss, enterprise, anywhere]
 ---
 
 # 使用 SQLAlchemy 和 Alembic 进行 Schema 管理和迁移

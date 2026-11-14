@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Lists the native GEOGRAPHY and GEOMETRY overloads, function IDs, supported inputs, and runtime behavior."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Native GEO function overload matrix

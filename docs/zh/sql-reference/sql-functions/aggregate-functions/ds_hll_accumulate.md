@@ -1,3 +1,7 @@
+---
+products: [oss, enterprise, cloud, anywhere]
+---
+
 # ds_hll_accumulate
 
 将值累积到 HyperLogLog 草图中，并返回序列化的草图作为 VARBINARY。此函数是 DataSketches HLL 近似去重计数函数族的一部分。

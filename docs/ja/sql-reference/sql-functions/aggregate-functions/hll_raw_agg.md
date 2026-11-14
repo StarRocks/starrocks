@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "HLL フィールドを集計し、HLL 値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hll_raw_agg

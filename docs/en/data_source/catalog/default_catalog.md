@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "StarRocks 2.3 and later provide an internal catalog to manage the internal data of StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Default catalog

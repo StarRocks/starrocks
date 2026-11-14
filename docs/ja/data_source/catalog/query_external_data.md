@@ -2,6 +2,7 @@
 sidebar_position: 160
 displayed_sidebar: docs
 description: "External catalog を使用して StarRocks から外部データソースのデータをクエリする方法。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 外部データのクエリ

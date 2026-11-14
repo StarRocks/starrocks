@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the sine of x, where x is in radians."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # sin
