@@ -324,7 +324,11 @@ public class IcebergMetadata implements ConnectorMetadata {
             throw new AlreadyExistsException("Database Already Exists");
         }
 
-        icebergCatalog.createDB(context, dbName, properties);
+        try {
+            icebergCatalog.createDB(context, dbName, properties);
+        } catch (org.apache.iceberg.exceptions.AlreadyExistsException e) {
+            throw new AlreadyExistsException("Database Already Exists: " + dbName);
+        }
     }
 
     @Override
