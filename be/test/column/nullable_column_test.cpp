@@ -360,6 +360,75 @@ PARALLEL_TEST(NullableColumnTest, test_compare_row) {
     }
 }
 
+PARALLEL_TEST(NullableColumnTest, test_compare_row_no_null) {
+    std::vector<int64_t> values = {-100, 0, 1, 2, 5, 8, 13, 21, 34, 55};
+    auto data_col = Int64Column::create();
+    for (int64_t v : values) {
+        data_col->append(v);
+    }
+    auto null_col = NullColumn::create(values.size(), 0);
+    auto c0 = NullableColumn::create(std::move(data_col), std::move(null_col));
+    ASSERT_FALSE(c0->has_null());
+
+    std::vector<Datum> rhs_values = {Datum(int64_t(-200)),
+                                     Datum(int64_t(-100)),
+                                     Datum(int64_t(0)),
+                                     Datum(int64_t(5)),
+                                     Datum(int64_t(55)),
+                                     Datum(int64_t(100)),
+                                     Datum()};
+
+    std::vector<CompareVector> init_cmp_vectors;
+    // all-zero initial state
+    init_cmp_vectors.push_back(CompareVector(c0->size(), 0));
+    // pre-populated ({-1, 0, 1}) initial state
+    CompareVector prepopulated = {-1, 0, 1, -1, 0, 1, -1, 0, 1, -1};
+    init_cmp_vectors.push_back(prepopulated);
+
+    auto oracle = [&](const CompareVector& init_cmp, const Datum& rhs_value, int sort_order, int null_first) {
+        CompareVector expected_vec = init_cmp;
+        auto rhs_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
+        rhs_column->append_datum(rhs_value);
+        auto desc = SortDesc(sort_order, null_first);
+
+        for (size_t i = 0; i < c0->size(); i++) {
+            if (expected_vec[i] == 0) {
+                int cmp_res = 0;
+                if (c0->is_null(i) || rhs_value.is_null()) {
+                    cmp_res = c0->compare_at(i, 0, *rhs_column, desc.nan_direction());
+                } else {
+                    cmp_res = c0->compare_at(i, 0, *rhs_column, desc.null_first) * sort_order;
+                }
+                expected_vec[i] = static_cast<int8_t>(cmp_res);
+            }
+        }
+        int expected_equal_count = 0;
+        for (size_t i = 0; i < expected_vec.size(); i++) {
+            if (expected_vec[i] == 0) {
+                expected_equal_count++;
+            }
+        }
+        return std::make_pair(expected_equal_count, expected_vec);
+    };
+
+    for (const auto& init_cmp : init_cmp_vectors) {
+        for (const auto& rhs_value : rhs_values) {
+            for (int sort_order : {1, -1}) {
+                for (int null_first : {1, -1}) {
+                    auto [expected_equal_count, expected_cmp_vec] = oracle(init_cmp, rhs_value, sort_order, null_first);
+
+                    CompareVector cmp_result = init_cmp;
+                    int actual_equal_count =
+                            compare_column(c0, cmp_result, rhs_value, SortDesc(sort_order, null_first));
+
+                    EXPECT_EQ(expected_equal_count, actual_equal_count);
+                    EXPECT_EQ(expected_cmp_vec, cmp_result);
+                }
+            }
+        }
+    }
+}
+
 PARALLEL_TEST(NullableColumnTest, test_replicate) {
     auto column = NullableColumn::create(Int32Column::create(), NullColumn::create());
     column->append_datum((int32_t)1);
