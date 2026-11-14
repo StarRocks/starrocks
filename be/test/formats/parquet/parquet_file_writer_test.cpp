@@ -14,9 +14,9 @@
 
 #include "formats/parquet/parquet_file_writer.h"
 
-#include <gtest/gtest.h>
 #include <arrow/buffer.h>
 #include <arrow/io/memory.h>
+#include <gtest/gtest.h>
 #include <parquet/file_reader.h>
 #include <parquet/metadata.h>
 
