@@ -35,6 +35,8 @@ public class Statistics {
     public enum StatsSource {
         NONE,
         TABLE_METADATA,
+        // Whole-snapshot estimates that have not applied the scan predicate.
+        SNAPSHOT_CACHE,
         ANALYZE
     }
 
