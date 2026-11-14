@@ -165,14 +165,66 @@ public class Memo {
     }
 
     private void mergeGroup(Group srcGroup, Group dstGroup) {
+        // A merge rewrites, removes and re-appends GroupExpressions across arbitrary groups -- not just
+        // srcGroup and dstGroup -- so it can rotate which expression is a group's FIRST logical one.
+        // Record every group that currently has a stats-derived first expression, so the rotation can be
+        // compensated for afterwards; see restoreStatsDerivedRepresentative.
+        Map<Group, GroupExpression> derivedFirstBefore = Maps.newIdentityHashMap();
+        for (Group group : groups) {
+            if (!group.getLogicalExpressions().isEmpty() && group.getFirstLogicalExpression().isStatsDerived()) {
+                derivedFirstBefore.put(group, group.getFirstLogicalExpression());
+            }
+        }
+
         mergeGroupImpl(srcGroup, dstGroup);
         removeSelfReferencing(dstGroup);
         // When some rule merge two groups to one group, or
         // the GroupExpressions of one group are all removed.
         // The group is empty, We should remove it.
-        Set<Group> groups = getAllEmptyGroups();
-        for (Group group : groups) {
+        Set<Group> emptyGroups = getAllEmptyGroups();
+        for (Group group : emptyGroups) {
             removeOneGroup(group);
+        }
+
+        // Must run last: removeOneGroup above also drops GroupExpressions from arbitrary groups and can
+        // rotate their first logical expression again.
+        restoreStatsDerivedRepresentative(derivedFirstBefore);
+    }
+
+    /**
+     * Statistics are a group-level property shared by every logically-equivalent expression in a group,
+     * but the derived marker lives on each GroupExpression and DeriveStatsTask only ever checks it on a
+     * child group's FIRST logical expression. When a merge rotates a group's first logical expression
+     * away from an already-derived one, that check would start failing for a group whose statistics are
+     * in fact already derived, so re-mark the new first expression as derived.
+     * <p>
+     * Gated on the group having had a derived first expression before the merge: a group that never
+     * derived its statistics is left untouched, so this never claims derivation that did not happen.
+     */
+    private void restoreStatsDerivedRepresentative(Map<Group, GroupExpression> derivedFirstBefore) {
+        for (Group group : groups) {
+            GroupExpression previousFirst = derivedFirstBefore.get(group);
+            if (previousFirst == null || group.getLogicalExpressions().isEmpty()) {
+                continue;
+            }
+            if (group.getFirstLogicalExpression() != previousFirst) {
+                markStatsDerivedRepresentative(group);
+            }
+        }
+    }
+
+    /**
+     * Mark the group's current first logical expression as stats-derived. Only ever called for a group
+     * whose statistics are already derived, so this records where the derivation lives rather than
+     * claiming a derivation that did not happen.
+     */
+    private void markStatsDerivedRepresentative(Group group) {
+        if (group.getLogicalExpressions().isEmpty()) {
+            return;
+        }
+        GroupExpression representative = group.getFirstLogicalExpression();
+        if (!representative.isStatsDerived()) {
+            representative.setStatsDerived();
         }
     }
 
@@ -189,6 +241,9 @@ public class Memo {
             }
         }
         for (GroupExpression ge : removeList) {
+            // Mark unused so any ApplyRuleTask already queued on the scheduler stack that still holds
+            // this GE is skipped by its isUnused() guard, instead of resurrecting the self-reference.
+            ge.setUnused(true);
             group.removeGroupExpression(ge);
             groupExpressions.remove(ge);
         }
@@ -196,6 +251,14 @@ public class Memo {
 
     // Merge srcGroup to dstGroup, srcGroup will be deleted
     private void mergeGroupImpl(Group srcGroup, Group dstGroup) {
+        // Every expression that referenced srcGroup is rewritten below to reference dstGroup, and
+        // Group.mergeGroup hands dstGroup srcGroup's statistics when it has none of its own. So a parent
+        // DeriveStatsTask already queued on the scheduler stack, which used to check srcGroup's
+        // representative, ends up checking dstGroup's -- the derived marker has to travel along with the
+        // statistics, or that check fails for a group whose statistics are in fact derived.
+        boolean srcRepresentativeDerived = !srcGroup.getLogicalExpressions().isEmpty()
+                && srcGroup.getFirstLogicalExpression().isStatsDerived();
+
         groups.remove(srcGroup);
         // Reset root group, rewrite rule maybe eliminate the root group
         if (srcGroup == rootGroup) {
@@ -268,7 +331,19 @@ public class Memo {
         }
         dstGroup.mergeGroup(srcGroup);
 
-        needMergeGroup.forEach(this::mergeGroupImpl);
+        // Cascade sub-merges call mergeGroupImpl directly, so they bypass the cleanup mergeGroup does for
+        // the top-level pair. A rewrite inside one of them can turn an expression in the cascade
+        // destination into a self reference, which would stay registered and be fed back into copyIn by an
+        // already-queued ApplyRuleTask, so clean each cascade destination as well.
+        needMergeGroup.forEach((cascadeSrc, cascadeDst) -> {
+            mergeGroupImpl(cascadeSrc, cascadeDst);
+            removeSelfReferencing(cascadeDst);
+        });
+
+        // Last, so that any first-expression rotation done by the cascade above is accounted for.
+        if (srcRepresentativeDerived) {
+            markStatsDerivedRepresentative(dstGroup);
+        }
     }
 
     private Set<Group> getAllEmptyGroups() {
