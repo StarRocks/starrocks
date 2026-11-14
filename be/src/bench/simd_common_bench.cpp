@@ -23,19 +23,22 @@
 //
 // Functions covered:
 //   * simd.h          : all_zeros / all_ones (8-bit) vs scalar early-exit
+//                       count_zero (8-bit and 32-bit) vs scalar loop
 //   * rle_simd.h      : simd_fill_int32 / simd_fill_int16 vs scalar fill
 //                       simd_dict_gather_int32 vs scalar dict[indices[i]]
 //                       simd_minmax_int32       vs scalar min/max loop
 //                       simd_widen_int8_to_int32 vs scalar cast loop
-//   * string_length_filter.h : length_eq_mask  vs scalar batched compute
+//   * string_length_filter.h : length_eq_mask  vs scalar batched compute (batches and tails)
 
 #include <benchmark/benchmark.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <random>
 #include <vector>
 
+#include "base/simd/filter.h"
 #include "base/simd/rle_simd.h"
 #include "base/simd/simd.h"
 #include "base/simd/string_length_filter.h"
@@ -262,12 +265,117 @@ BENCHMARK(BM_DictGather_AVX512)->Arg(256)->Arg(1024)->Arg(4096);
 #endif
 
 // =====================================================================
+// count_zero: 8-bit and 32-bit buffers across sizes and selectivities
+// =====================================================================
+//
+// Evaluates scalar loops against SIMD::count_zero multi-arch vectorisation
+// across 64B, 256B, 4KB, and 64KB buffers and varying zero selectivities:
+// 0%, 1%, 10%, 50%, 90%, 100%.
+
+static size_t scalar_count_zero_u8(const uint8_t* data, size_t n) {
+    size_t count = 0;
+    for (size_t i = 0; i < n; ++i) {
+        count += (data[i] == 0);
+    }
+    return count;
+}
+
+static size_t scalar_count_zero_u32(const uint32_t* data, size_t n) {
+    size_t count = 0;
+    for (size_t i = 0; i < n; ++i) {
+        count += (data[i] == 0);
+    }
+    return count;
+}
+
+static void GenerateCountZeroArgs(benchmark::Benchmark* b) {
+    for (int64_t bytes : {64, 256, 4096, 65536}) {
+        for (int64_t zero_pct : {0, 1, 10, 50, 90, 100}) {
+            b->Args({bytes, zero_pct});
+        }
+    }
+}
+
+static void BM_CountZero_8Bit_Scalar(benchmark::State& state) {
+    const size_t bytes = static_cast<size_t>(state.range(0));
+    const int zero_pct = static_cast<int>(state.range(1));
+    const size_t n = bytes / sizeof(uint8_t);
+    std::vector<uint8_t> data(n);
+    std::mt19937_64 rng(0xC0072E80);
+    std::uniform_int_distribution<int> d(0, 99);
+    for (size_t i = 0; i < n; ++i) {
+        data[i] = (d(rng) < zero_pct) ? 0 : static_cast<uint8_t>((i % 255) + 1);
+    }
+    for (auto _ : state) {
+        size_t count = scalar_count_zero_u8(data.data(), n);
+        benchmark::DoNotOptimize(count);
+    }
+    state.SetBytesProcessed(state.iterations() * bytes);
+}
+
+static void BM_CountZero_8Bit_SIMD(benchmark::State& state) {
+    const size_t bytes = static_cast<size_t>(state.range(0));
+    const int zero_pct = static_cast<int>(state.range(1));
+    const size_t n = bytes / sizeof(uint8_t);
+    std::vector<uint8_t> data(n);
+    std::mt19937_64 rng(0xC0072E80);
+    std::uniform_int_distribution<int> d(0, 99);
+    for (size_t i = 0; i < n; ++i) {
+        data[i] = (d(rng) < zero_pct) ? 0 : static_cast<uint8_t>((i % 255) + 1);
+    }
+    for (auto _ : state) {
+        size_t count = SIMD::count_zero(data.data(), n);
+        benchmark::DoNotOptimize(count);
+    }
+    state.SetBytesProcessed(state.iterations() * bytes);
+}
+
+static void BM_CountZero_32Bit_Scalar(benchmark::State& state) {
+    const size_t bytes = static_cast<size_t>(state.range(0));
+    const int zero_pct = static_cast<int>(state.range(1));
+    const size_t n = bytes / sizeof(uint32_t);
+    std::vector<uint32_t> data(n);
+    std::mt19937_64 rng(0xC0072E80);
+    std::uniform_int_distribution<int> d(0, 99);
+    for (size_t i = 0; i < n; ++i) {
+        data[i] = (d(rng) < zero_pct) ? 0 : static_cast<uint32_t>(i + 1);
+    }
+    for (auto _ : state) {
+        size_t count = scalar_count_zero_u32(data.data(), n);
+        benchmark::DoNotOptimize(count);
+    }
+    state.SetBytesProcessed(state.iterations() * bytes);
+}
+
+static void BM_CountZero_32Bit_SIMD(benchmark::State& state) {
+    const size_t bytes = static_cast<size_t>(state.range(0));
+    const int zero_pct = static_cast<int>(state.range(1));
+    const size_t n = bytes / sizeof(uint32_t);
+    std::vector<uint32_t> data(n);
+    std::mt19937_64 rng(0xC0072E80);
+    std::uniform_int_distribution<int> d(0, 99);
+    for (size_t i = 0; i < n; ++i) {
+        data[i] = (d(rng) < zero_pct) ? 0 : static_cast<uint32_t>(i + 1);
+    }
+    for (auto _ : state) {
+        size_t count = SIMD::count_zero(data.data(), n);
+        benchmark::DoNotOptimize(count);
+    }
+    state.SetBytesProcessed(state.iterations() * bytes);
+}
+
+BENCHMARK(BM_CountZero_8Bit_Scalar)->Apply(GenerateCountZeroArgs);
+BENCHMARK(BM_CountZero_8Bit_SIMD)->Apply(GenerateCountZeroArgs);
+BENCHMARK(BM_CountZero_32Bit_Scalar)->Apply(GenerateCountZeroArgs);
+BENCHMARK(BM_CountZero_32Bit_SIMD)->Apply(GenerateCountZeroArgs);
+
+// =====================================================================
 // length_eq_mask (parquet PLAIN binary length filter, 8 strings per call)
 // =====================================================================
 //
 // Pre-PR equivalent: scalar 8-element batched compute.
-// Post-PR: AVX2 (8 lanes) or NEON (4 lanes). The NEON bench loops twice
-// per AVX2 call so total work matches.
+// Post-PR: AVX2 (8 lanes) or NEON (4 lanes widened to 8 lanes).
+// Exercises both full 8-element batches and unaligned tails.
 
 static uint32_t scalar_length_eq_mask_avx_width(const uint32_t* offsets, size_t base, uint32_t target_len) {
     uint32_t mask = 0;
@@ -290,8 +398,14 @@ static void BM_LengthEqMask_Scalar(benchmark::State& state) {
     }
     for (auto _ : state) {
         uint32_t agg = 0;
-        for (size_t base = 0; base + 8 <= n_strings; base += 8) {
+        size_t base = 0;
+        for (; base + 8 <= n_strings; base += 8) {
             agg ^= scalar_length_eq_mask_avx_width(offsets.data(), base, 5);
+        }
+        for (; base < n_strings; ++base) {
+            if (offsets[base + 1] - offsets[base] == 5) {
+                agg ^= (1u << (base % 8));
+            }
         }
         benchmark::DoNotOptimize(agg);
     }
@@ -310,15 +424,297 @@ static void BM_LengthEqMask_SIMD(benchmark::State& state) {
     }
     for (auto _ : state) {
         uint32_t agg = 0;
-        for (size_t base = 0; base + SIMD::kStringLenSimdWidth <= n_strings; base += SIMD::kStringLenSimdWidth) {
+        size_t base = 0;
+        for (; base + SIMD::kStringLenSimdWidth <= n_strings; base += SIMD::kStringLenSimdWidth) {
             agg ^= SIMD::length_eq_mask(offsets.data(), base, 5);
+        }
+        for (; base < n_strings; ++base) {
+            if (offsets[base + 1] - offsets[base] == 5) {
+                agg ^= (1u << (base % SIMD::kStringLenSimdWidth));
+            }
         }
         benchmark::DoNotOptimize(agg);
     }
 }
 
-BENCHMARK(BM_LengthEqMask_Scalar)->Arg(256)->Arg(1024)->Arg(4096);
-BENCHMARK(BM_LengthEqMask_SIMD)->Arg(256)->Arg(1024)->Arg(4096);
+// Full batches (8, 256, 1024, 4096) as well as odd tail lengths (15, 63, 255)
+BENCHMARK(BM_LengthEqMask_Scalar)->Arg(8)->Arg(15)->Arg(63)->Arg(255)->Arg(1024)->Arg(4096);
+BENCHMARK(BM_LengthEqMask_SIMD)->Arg(8)->Arg(15)->Arg(63)->Arg(255)->Arg(1024)->Arg(4096);
+
+// Dedicated microbenchmarks for small sizes (1 through 15 elements)
+static void BM_LengthEqMask_SmallSizes_Scalar(benchmark::State& state) {
+    size_t size = static_cast<size_t>(state.range(0));
+    std::vector<uint32_t> offsets(size + 1);
+    for (size_t i = 0; i <= size; ++i) {
+        offsets[i] = static_cast<uint32_t>(i * 5);
+    }
+    for (auto _ : state) {
+        uint32_t mask = 0;
+        for (size_t i = 0; i < size; ++i) {
+            if (offsets[i + 1] - offsets[i] == 5) {
+                mask |= (1u << i);
+            }
+        }
+        benchmark::DoNotOptimize(mask);
+    }
+}
+
+static void BM_LengthEqMask_SmallSizes_SIMD(benchmark::State& state) {
+    size_t size = static_cast<size_t>(state.range(0));
+    std::vector<uint32_t> offsets(size + 1);
+    for (size_t i = 0; i <= size; ++i) {
+        offsets[i] = static_cast<uint32_t>(i * 5);
+    }
+    for (auto _ : state) {
+        uint32_t mask = 0;
+        size_t i = 0;
+        if (size >= SIMD::kStringLenSimdWidth) {
+            mask = SIMD::length_eq_mask(offsets.data(), 0, 5);
+            i += SIMD::kStringLenSimdWidth;
+        }
+        for (; i < size; ++i) {
+            if (offsets[i + 1] - offsets[i] == 5) {
+                mask |= (1u << i);
+            }
+        }
+        benchmark::DoNotOptimize(mask);
+    }
+}
+
+BENCHMARK(BM_LengthEqMask_SmallSizes_Scalar)->DenseRange(1, 15, 1);
+BENCHMARK(BM_LengthEqMask_SmallSizes_SIMD)->DenseRange(1, 15, 1);
+
+// =====================================================================
+// SIMD::Filter::filter_range across sizes and per-mille selectivities
+// =====================================================================
+
+static void GenerateFilterRangeMatrixArgs(benchmark::Benchmark* b) {
+    for (int64_t n : {16, 64, 512, 4096, 65536}) {
+        for (int64_t permille : {0, 1, 10, 50, 500, 950, 1000}) {
+            b->Args({n, permille});
+        }
+    }
+}
+
+template <typename T>
+static void BM_FilterRange_Width(benchmark::State& state) {
+    const size_t n = static_cast<size_t>(state.range(0));
+    const int permille = static_cast<int>(state.range(1));
+    std::vector<T> src(n);
+    std::vector<T> dst(n + 64 / sizeof(T));
+    std::vector<uint8_t> sel(n, 0);
+    std::mt19937_64 rng(0x514DF17E);
+    std::uniform_int_distribution<int> dist(0, 999);
+    for (size_t i = 0; i < n; ++i) {
+        src[i] = static_cast<T>(i + 1);
+        sel[i] = (dist(rng) < permille) ? 1 : 0;
+    }
+    for (auto _ : state) {
+        size_t out = SIMD::Filter::filter_range(dst.data(), src.data(), sel.data(), 0, n);
+        benchmark::DoNotOptimize(out);
+        benchmark::DoNotOptimize(dst.data());
+    }
+    state.SetItemsProcessed(state.iterations() * n);
+}
+
+BENCHMARK_TEMPLATE(BM_FilterRange_Width, uint32_t)->Name("BM_FilterRange_4B")->Apply(GenerateFilterRangeMatrixArgs);
+BENCHMARK_TEMPLATE(BM_FilterRange_Width, uint64_t)->Name("BM_FilterRange_8B")->Apply(GenerateFilterRangeMatrixArgs);
+
+// =====================================================================
+// 3-state Streaming Pre-Aggregation Selection Dispatch:
+//   PrePR     : SSE2/NEON count_zero (scanned twice in ADJUST middle range)
+//   CurrentPR : !SIMD::contain_zero + SIMD::all_zeros (scanned up to 3x in ADJUST)
+//   Future    : AVX2/NEON single-pass SIMD::count_zero + reuse hit_count in ADJUST
+// =====================================================================
+
+static inline size_t pre_pr_count_zero_u8(const uint8_t* data, size_t size) {
+    size_t count = 0;
+    const uint8_t* end = data + size;
+#if defined(__SSE2__) && defined(__POPCNT__)
+    const __m128i zero16 = _mm_setzero_si128();
+    const uint8_t* end64 = data + (size / 64 * 64);
+    for (; data < end64; data += 64) {
+        count += __builtin_popcountll(static_cast<uint64_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(
+                                              _mm_loadu_si128(reinterpret_cast<const __m128i*>(data)), zero16))) |
+                                      (static_cast<uint64_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(
+                                               _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 16)), zero16)))
+                                       << 16u) |
+                                      (static_cast<uint64_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(
+                                               _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 32)), zero16)))
+                                       << 32u) |
+                                      (static_cast<uint64_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(
+                                               _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 48)), zero16)))
+                                       << 48u));
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    const uint8_t* end16 = data + (size / 16 * 16);
+    for (; data < end16; data += 16) {
+        uint8x16_t vdata = vld1q_u8(data);
+        uint8x16_t result = vceqq_u8(vdata, vdupq_n_u8(0));
+        result = vandq_u8(result, vdupq_n_u8(1));
+        count += vaddvq_u8(result);
+    }
+#endif
+    for (; data < end; ++data) {
+        count += (*data == 0);
+    }
+    return count;
+}
+
+static void FillStreamingSelection(std::vector<uint8_t>& sel, size_t n, int hit_pct, int dist_mode) {
+    sel.resize(n);
+    if (hit_pct == 0) {
+        std::fill(sel.begin(), sel.end(), 1);
+        return;
+    }
+    if (hit_pct == 100) {
+        std::fill(sel.begin(), sel.end(), 0);
+        return;
+    }
+    if (dist_mode == 0) {
+        std::mt19937_64 rng(0x5E1EC700);
+        std::uniform_int_distribution<int> d(0, 99);
+        for (size_t i = 0; i < n; ++i) {
+            sel[i] = (d(rng) < hit_pct) ? 0 : 1;
+        }
+    } else if (dist_mode == 1) {
+        size_t k = (n * static_cast<size_t>(hit_pct)) / 100;
+        std::fill(sel.begin(), sel.begin() + k, 0);
+        std::fill(sel.begin() + k, sel.end(), 1);
+    } else {
+        size_t k = (n * static_cast<size_t>(hit_pct)) / 100;
+        std::fill(sel.begin(), sel.begin() + (n - k), 1);
+        std::fill(sel.begin() + (n - k), sel.end(), 0);
+    }
+}
+
+static void GenerateStreamingAggDispatchArgs(benchmark::Benchmark* b) {
+    for (int64_t dist_mode : {0, 1, 2}) {
+        for (int64_t hit_pct : {0, 1, 10, 25, 50, 75, 95, 100}) {
+            b->Args({dist_mode, hit_pct});
+        }
+    }
+}
+
+static void BM_StreamingAggSelectiveDispatch_PrePR(benchmark::State& state) {
+    const int dist_mode = static_cast<int>(state.range(0));
+    const int hit_pct = static_cast<int>(state.range(1));
+    const size_t n = kBatch;
+    std::vector<uint8_t> sel;
+    FillStreamingSelection(sel, n, hit_pct, dist_mode);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(sel.data());
+        size_t zero_count = pre_pr_count_zero_u8(sel.data(), n);
+        int branch = (zero_count == 0) ? 0 : (zero_count == n ? 1 : 2);
+        benchmark::DoNotOptimize(branch);
+    }
+    state.SetBytesProcessed(state.iterations() * n);
+}
+
+static void BM_StreamingAggSelectiveDispatch_CurrentPR(benchmark::State& state) {
+    const int dist_mode = static_cast<int>(state.range(0));
+    const int hit_pct = static_cast<int>(state.range(1));
+    const size_t n = kBatch;
+    std::vector<uint8_t> sel;
+    FillStreamingSelection(sel, n, hit_pct, dist_mode);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(sel.data());
+        int branch = !SIMD::contain_zero(sel.data(), n) ? 0 : (SIMD::all_zeros(sel.data(), n) ? 1 : 2);
+        benchmark::DoNotOptimize(branch);
+    }
+    state.SetBytesProcessed(state.iterations() * n);
+}
+
+static void BM_StreamingAggSelectiveDispatch_Future(benchmark::State& state) {
+    const int dist_mode = static_cast<int>(state.range(0));
+    const int hit_pct = static_cast<int>(state.range(1));
+    const size_t n = kBatch;
+    std::vector<uint8_t> sel;
+    FillStreamingSelection(sel, n, hit_pct, dist_mode);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(sel.data());
+        size_t zero_count = SIMD::count_zero(sel.data(), n);
+        int branch = (zero_count == 0) ? 0 : (zero_count == n ? 1 : 2);
+        benchmark::DoNotOptimize(branch);
+    }
+    state.SetBytesProcessed(state.iterations() * n);
+}
+
+static void BM_StreamingAggAutoAdjust_PrePR(benchmark::State& state) {
+    const int dist_mode = static_cast<int>(state.range(0));
+    const int hit_pct = static_cast<int>(state.range(1));
+    const size_t n = kBatch;
+    std::vector<uint8_t> sel;
+    FillStreamingSelection(sel, n, hit_pct, dist_mode);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(sel.data());
+        size_t hit_count = pre_pr_count_zero_u8(sel.data(), n);
+        int branch = 0;
+        if (hit_count * 5 <= n) {
+            branch = 10;
+        } else if (hit_count * 10 >= n * 9) {
+            branch = 11;
+        } else {
+            benchmark::ClobberMemory();
+            size_t zero_count = pre_pr_count_zero_u8(sel.data(), n);
+            branch = (zero_count == 0) ? 0 : (zero_count == n ? 1 : 2);
+        }
+        benchmark::DoNotOptimize(branch);
+    }
+    state.SetBytesProcessed(state.iterations() * n);
+}
+
+static void BM_StreamingAggAutoAdjust_CurrentPR(benchmark::State& state) {
+    const int dist_mode = static_cast<int>(state.range(0));
+    const int hit_pct = static_cast<int>(state.range(1));
+    const size_t n = kBatch;
+    std::vector<uint8_t> sel;
+    FillStreamingSelection(sel, n, hit_pct, dist_mode);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(sel.data());
+        size_t hit_count = SIMD::count_zero(sel.data(), n);
+        int branch = 0;
+        if (hit_count * 5 <= n) {
+            branch = 10;
+        } else if (hit_count * 10 >= n * 9) {
+            branch = 11;
+        } else {
+            benchmark::ClobberMemory();
+            branch = !SIMD::contain_zero(sel.data(), n) ? 0 : (SIMD::all_zeros(sel.data(), n) ? 1 : 2);
+        }
+        benchmark::DoNotOptimize(branch);
+    }
+    state.SetBytesProcessed(state.iterations() * n);
+}
+
+static void BM_StreamingAggAutoAdjust_Future(benchmark::State& state) {
+    const int dist_mode = static_cast<int>(state.range(0));
+    const int hit_pct = static_cast<int>(state.range(1));
+    const size_t n = kBatch;
+    std::vector<uint8_t> sel;
+    FillStreamingSelection(sel, n, hit_pct, dist_mode);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(sel.data());
+        size_t hit_count = SIMD::count_zero(sel.data(), n);
+        int branch = 0;
+        if (hit_count * 5 <= n) {
+            branch = 10;
+        } else if (hit_count * 10 >= n * 9) {
+            branch = 11;
+        } else {
+            branch = (hit_count == 0) ? 0 : (hit_count == n ? 1 : 2);
+        }
+        benchmark::DoNotOptimize(branch);
+    }
+    state.SetBytesProcessed(state.iterations() * n);
+}
+
+BENCHMARK(BM_StreamingAggSelectiveDispatch_PrePR)->Apply(GenerateStreamingAggDispatchArgs);
+BENCHMARK(BM_StreamingAggSelectiveDispatch_CurrentPR)->Apply(GenerateStreamingAggDispatchArgs);
+BENCHMARK(BM_StreamingAggSelectiveDispatch_Future)->Apply(GenerateStreamingAggDispatchArgs);
+BENCHMARK(BM_StreamingAggAutoAdjust_PrePR)->Apply(GenerateStreamingAggDispatchArgs);
+BENCHMARK(BM_StreamingAggAutoAdjust_CurrentPR)->Apply(GenerateStreamingAggDispatchArgs);
+BENCHMARK(BM_StreamingAggAutoAdjust_Future)->Apply(GenerateStreamingAggDispatchArgs);
 
 } // namespace starrocks
 

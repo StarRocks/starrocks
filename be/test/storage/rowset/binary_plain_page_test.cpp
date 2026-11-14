@@ -569,4 +569,101 @@ TEST_F(BinaryPlainPageTest, test_max_value_length_is_cached_and_correct) {
     }
 }
 
+// NOLINTNEXTLINE
+TEST_F(BinaryPlainPageTest, TestNextBatchWithFilterVectorisedOffsets) {
+    constexpr size_t kTotalRows = 1050;
+    std::vector<std::string> raw_strings(kTotalRows);
+    std::vector<Slice> slices(kTotalRows);
+
+    for (size_t i = 0; i < kTotalRows; ++i) {
+        if (i % 37 == 0) {
+            raw_strings[i] = ""; // empty string
+        } else if (i % 13 == 0) {
+            raw_strings[i] = std::string(128 + (i % 64), static_cast<char>('A' + (i % 26))); // long string
+        } else if (i % 3 == 0) {
+            raw_strings[i] = std::string(1 + (i % 5), static_cast<char>('a' + (i % 26))); // short string
+        } else {
+            raw_strings[i] = "str_" + std::to_string(i) + "_" + std::string(i % 17, 'x'); // medium string
+        }
+        slices[i] = Slice(raw_strings[i]);
+    }
+
+    auto run_tests = [&](bool delta) {
+        PageBuilderOptions options;
+        options.data_page_size = 2 * 1024 * 1024;
+        BinaryPlainPageBuilder builder(options, delta);
+        size_t added = builder.add(reinterpret_cast<const uint8_t*>(slices.data()), kTotalRows);
+        ASSERT_EQ(kTotalRows, added);
+
+        OwnedSlice owned = builder.finish()->build();
+        BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(owned.slice(), delta);
+        ASSERT_OK(decoder.init());
+        ASSERT_EQ(kTotalRows, decoder.count());
+
+        auto test_range = [&](uint32_t idx, uint32_t end) {
+            ASSERT_OK(decoder.seek_to_position_in_page(idx));
+            auto column = BinaryColumn::create();
+            SparseRange<> range(idx, end);
+            size_t count = range.span_size();
+            std::vector<uint8_t> selection(count, 1);
+            std::vector<uint16_t> selected_idx(count);
+
+            std::unique_ptr<ColumnPredicate> predicate(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+            std::vector<const ColumnPredicate*> predicates{predicate.get()};
+
+            Status st = decoder.next_batch_with_filter(column.get(), range, predicates, nullptr, selection.data(),
+                                                       selected_idx.data());
+            ASSERT_TRUE(st.ok()) << st.to_string();
+            ASSERT_EQ(count, column->size());
+
+            const auto& offsets = column->get_offset();
+            ASSERT_EQ(count + 1, offsets.size());
+            EXPECT_FALSE(offsets.is_large());
+            EXPECT_EQ(0, offsets[0]);
+
+            for (size_t i = 0; i < count; ++i) {
+                uint32_t expected_len = raw_strings[idx + i].size();
+                EXPECT_EQ(expected_len, offsets[i + 1] - offsets[i]);
+                EXPECT_GE(offsets[i + 1], offsets[i]);
+                if (expected_len > 0) {
+                    EXPECT_GT(offsets[i + 1], offsets[i]);
+                } else {
+                    EXPECT_EQ(offsets[i + 1], offsets[i]);
+                }
+                EXPECT_EQ(slices[idx + i], column->get_slice(i));
+            }
+        };
+
+        // Full scan
+        test_range(0, 1024);
+
+        // Sub-ranges
+        test_range(17, 533);
+        test_range(100, 101);
+        test_range(500, 516);
+
+        // Sub-range where all strings are non-empty: offsets must be strictly monotonic
+        {
+            ASSERT_OK(decoder.seek_to_position_in_page(500));
+            auto column = BinaryColumn::create();
+            SparseRange<> range(500, 516);
+            size_t count = range.span_size();
+            std::vector<uint8_t> selection(count, 1);
+            std::vector<uint16_t> selected_idx(count);
+            std::unique_ptr<ColumnPredicate> predicate(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+            std::vector<const ColumnPredicate*> predicates{predicate.get()};
+            ASSERT_OK(decoder.next_batch_with_filter(column.get(), range, predicates, nullptr, selection.data(),
+                                                     selected_idx.data()));
+            const auto& offsets = column->get_offset();
+            EXPECT_EQ(0, offsets[0]);
+            for (size_t i = 0; i < count; ++i) {
+                EXPECT_GT(offsets[i + 1], offsets[i]);
+            }
+        }
+    };
+
+    run_tests(false);
+    run_tests(true);
+}
+
 } // namespace starrocks

@@ -167,24 +167,28 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(Runti
     return Status::OK();
 }
 
-Status AggregateStreamingSinkOperator::_push_chunk_by_selective_preaggregation(const ChunkPtr& chunk,
-                                                                               const size_t chunk_size,
-                                                                               bool need_build) {
+Status AggregateStreamingSinkOperator::_push_chunk_by_selective_preaggregation(
+        const ChunkPtr& chunk, const size_t chunk_size, bool need_build, std::optional<size_t> precomputed_zero_count) {
     TRY_CATCH_ALLOC_SCOPE_START();
     if (need_build) {
         SCOPED_TIMER(_aggregator->agg_compute_timer());
         _aggregator->build_hash_map_with_selection(chunk_size);
     }
 
-    size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection());
-    // very poor aggregation
+    DCHECK(!need_build || !precomputed_zero_count.has_value());
+    DCHECK(!precomputed_zero_count.has_value() ||
+           *precomputed_zero_count == SIMD::count_zero(_aggregator->streaming_selection()));
+    const size_t zero_count = precomputed_zero_count.has_value() ? *precomputed_zero_count
+                                                                 : SIMD::count_zero(_aggregator->streaming_selection());
+
+    // very poor aggregation: when all selection bytes are non-zero (contains no zeros)
     if (zero_count == 0) {
         SCOPED_TIMER(_aggregator->streaming_timer());
         ChunkPtr res = std::make_shared<Chunk>();
         RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res));
         _aggregator->offer_chunk_to_buffer(res);
     }
-    // very high aggregation
+    // very high aggregation: when all selection bytes are zero
     else if (zero_count == _aggregator->streaming_selection().size()) {
         SCOPED_TIMER(_aggregator->agg_compute_timer());
         RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
@@ -292,7 +296,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(RuntimeState* state, 
                          << _auto_context.get_auto_state_string(_auto_state);
             }
         } else {
-            RETURN_IF_ERROR(_push_chunk_by_selective_preaggregation(chunk, chunk_size, false));
+            RETURN_IF_ERROR(_push_chunk_by_selective_preaggregation(chunk, chunk_size, false, hit_count));
             _auto_context.selective_preagg_count++;
             _auto_context.pass_through_count = 0;
             _auto_context.preagg_count = 0;

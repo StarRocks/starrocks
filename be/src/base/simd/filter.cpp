@@ -31,11 +31,10 @@
 namespace SIMD::Filter {
 namespace {
 
-// AVX-512 vpcompressq (8-byte lanes) is a fixed four-group cost per batch and,
-// on down-clocking Intel parts, loses to a plain scalar copy once only a few
-// lanes survive. Below this many set bits in a batch the 64-bit path falls back
-// to scalar. (The 32-bit path packs 16 lanes/group, so its fixed cost is lower
-// and it always takes the vectorised path.)
+// AVX-512 vpcompressd/vpcompressq (4-byte and 8-byte lanes) incur a fixed
+// multi-group cost per batch and, on down-clocking Intel parts, lose to a plain
+// scalar copy once only a few lanes survive. Below this many set bits in a
+// batch both the 32-bit and 64-bit paths fall back to scalar.
 #if defined(__x86_64__)
 constexpr int kCompressMinBits = 6;
 #endif
@@ -139,7 +138,7 @@ __attribute__((target("avx2"))) size_t scan_avx2(Elem* dst, const Elem* src, con
     return result;
 }
 
-// AVX-512 vpcompressd for 4-byte lanes (same scan, compress in the mixed branch).
+// AVX-512 vpcompressd for 4-byte lanes, with a popcount guard for sparse batches.
 __attribute__((target("avx512f,avx512vl,avx512bw"))) size_t compress_w4(uint32_t* dst, const uint32_t* src,
                                                                         const uint8_t* selector, size_t from,
                                                                         size_t to) {
@@ -157,14 +156,22 @@ __attribute__((target("avx512f,avx512vl,avx512bw"))) size_t compress_w4(uint32_t
         } else if (mask == 0xffffffff) {
             memmove(dst + result, src + start, kBatchNums * sizeof(uint32_t));
             result += kBatchNums;
+        } else if (__builtin_popcount(mask) < kCompressMinBits) {
+            for (uint32_t m = mask; m != 0; m &= m - 1) {
+                dst[result++] = src[start + __builtin_ctz(m)];
+            }
         } else {
             // 32 lanes = two groups of 16.
-            _mm512_storeu_si512(dst + result, _mm512_maskz_compress_epi32(static_cast<__mmask16>(mask),
-                                                                          _mm512_loadu_si512(src + start)));
-            result += __builtin_popcount(mask & 0xffffu);
-            _mm512_storeu_si512(dst + result, _mm512_maskz_compress_epi32(static_cast<__mmask16>(mask >> 16),
-                                                                          _mm512_loadu_si512(src + start + 16)));
-            result += __builtin_popcount(mask >> 16);
+            if (uint16_t low_mask = static_cast<uint16_t>(mask & 0xffffu); low_mask != 0) {
+                _mm512_storeu_si512(dst + result,
+                                    _mm512_maskz_compress_epi32(low_mask, _mm512_loadu_si512(src + start)));
+                result += __builtin_popcount(low_mask);
+            }
+            if (uint16_t high_mask = static_cast<uint16_t>(mask >> 16); high_mask != 0) {
+                _mm512_storeu_si512(dst + result,
+                                    _mm512_maskz_compress_epi32(high_mask, _mm512_loadu_si512(src + start + 16)));
+                result += __builtin_popcount(high_mask);
+            }
         }
         start += kBatchNums;
     }
@@ -232,7 +239,7 @@ size_t scan_neon(Elem* dst, const Elem* src, const uint8_t* selector, size_t fro
     size_t start = from;
     size_t result = from;
     const uint8_t* sel = selector + from;
-    while (start + kBatchNums < to) {
+    while (start + kBatchNums <= to) {
         const uint8x16_t vsel = vld1q_u8(sel);
         // nibble_mask[i] != 0 ? 0xF : 0x0
         uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(vsel, vsel));
