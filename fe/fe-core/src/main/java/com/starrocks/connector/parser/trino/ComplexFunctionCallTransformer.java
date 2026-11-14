@@ -26,16 +26,20 @@ import com.starrocks.sql.ast.expression.CollectionElementExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.type.AnyMapType;
 import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 
 import java.util.Collections;
+import java.util.Set;
 
 public class ComplexFunctionCallTransformer {
     public static Expr transform(String functionName, Expr... args) {
@@ -137,7 +141,42 @@ public class ComplexFunctionCallTransformer {
                 throw new SemanticException("date function must have 1 argument");
             }
             return new CastExpr(DateType.DATE, args[0]);
+        } else if (functionName.equalsIgnoreCase("sequence") && args.length == 3) {
+            return transformSequence(args);
         }
         return null;
+    }
+
+    private static final Set<String> SEQUENCE_INTERVAL_UNITS = Set.of("year", "month", "day", "hour", "minute", "second");
+
+    // sequence(start, stop, step) -> trino_sequence(start, stop, step), and with an interval step,
+    // sequence(start, stop, INTERVAL 'n' UNIT) -> trino_sequence(start, stop, n, 'unit'). The signed magnitude and unit
+    // stay apart, so the backend can step MONTH and YEAR by the calendar from start, and reject a DATE step that isn't
+    // whole days. Which overload applies is decided by the analyzed types of start and stop.
+    private static Expr transformSequence(Expr[] args) {
+        if (!(args[2] instanceof IntervalLiteral)) {
+            return new FunctionCallExpr("trino_sequence", ImmutableList.copyOf(args));
+        }
+        IntervalLiteral interval = (IntervalLiteral) args[2];
+        String unit = interval.getUnitIdentifier().getDescription().toLowerCase();
+        String value = interval.getValue() instanceof StringLiteral ?
+                ((StringLiteral) interval.getValue()).getStringValue().trim() : interval.getValue().toString();
+        Long magnitude = parseIntervalMagnitude(value);
+        // Fractional seconds and other units would lose meaning as a whole number of the unit.
+        if (magnitude == null || !SEQUENCE_INTERVAL_UNITS.contains(unit)) {
+            throw UnsupportedException.unsupportedException(String.format(
+                    "Trino parser on StarRocks does not support the sequence step INTERVAL '%s' %s now", value,
+                    interval.getUnitIdentifier().getDescription()));
+        }
+        return new FunctionCallExpr("trino_sequence", ImmutableList.of(args[0], args[1],
+                new IntLiteral(magnitude, IntegerType.BIGINT), new StringLiteral(unit)));
+    }
+
+    private static Long parseIntervalMagnitude(String value) {
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

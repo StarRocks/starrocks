@@ -155,6 +155,15 @@ public:
         return ArrayGenerate<type>::close(context, scope);
     }
 
+    // Trino's sequence(start, stop[, step]) over BIGINT, registered as trino_sequence. Unlike array_generate, a
+    // NULL argument gives NULL, the two-argument form counts down when start > stop, and a zero step, a step
+    // pointing away from stop, or a result over 10,000 elements is an error.
+    DEFINE_VECTORIZED_FN(trino_sequence_bigint);
+    // trino_sequence over DATE and DATETIME: two arguments step by one day, and (start, stop, n, unit) steps by the
+    // Trino interval n unit, by the calendar for MONTH and YEAR and in whole days for DATE.
+    DEFINE_VECTORIZED_FN(trino_sequence_date);
+    DEFINE_VECTORIZED_FN(trino_sequence_datetime);
+
     DEFINE_VECTORIZED_FN(concat);
 
     DEFINE_VECTORIZED_FN(arrays_zip);
