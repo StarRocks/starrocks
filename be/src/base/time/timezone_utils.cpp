@@ -103,18 +103,26 @@ bool TimezoneUtils::_match_cctz_time_zone(std::string_view timezone, cctz::time_
     re2::StringPiece value;
 
     // RE2 obj is thread safe
-    // +8:00
-    static RE2 reg1(R"(^[+-]{1}\d{2}\:\d{2}$)", re2::RE2::Quiet);
-    // GMT+8:00
-    static RE2 reg2(R"(^GMT[+-]{1}\d{2}\:\d{2}$)", re2::RE2::Quiet);
+    // +8:00 or +08:00
+    static RE2 reg1(R"(^[+-]{1}\d{1,2}\:\d{2}$)", re2::RE2::Quiet);
+    // GMT+8:00 or UTC+8:00
+    static RE2 reg2(R"(^(?:GMT|UTC)[+-]{1}\d{1,2}\:\d{2}$)", re2::RE2::Quiet);
+    // GMT+8, GMT-12, UTC+8, UTC-12 (hour only, no minutes)
+    static RE2 reg3(R"(^(?:GMT|UTC)[+-]{1}\d{1,2}$)", re2::RE2::Quiet);
 
+    bool hour_only = false;
     if (reg1.Match(re2::StringPiece(timezone.data(), timezone.size()), 0, timezone.size(), RE2::UNANCHORED, &value,
                    1)) {
         // Do nothing.
     } else if (reg2.Match(re2::StringPiece(timezone.data(), timezone.size()), 0, timezone.size(), RE2::UNANCHORED,
                           &value, 1)) {
-        // remove GMT header.
+        // remove GMT/UTC header.
         value = value.substr(3);
+    } else if (reg3.Match(re2::StringPiece(timezone.data(), timezone.size()), 0, timezone.size(), RE2::UNANCHORED,
+                          &value, 1)) {
+        // remove GMT/UTC header, hour only with no minutes part.
+        value = value.substr(3);
+        hour_only = true;
     } else {
         // all regular expressions return empty.
         return false;
@@ -123,8 +131,15 @@ bool TimezoneUtils::_match_cctz_time_zone(std::string_view timezone, cctz::time_
     bool positive = (value[0] != '-');
 
     //Regular expression guarantees hour and minute mush be int
-    int hour = std::stoi(std::string(value.substr(1, 2)));
-    int minute = std::stoi(std::string(value.substr(4, 2)));
+    int hour = 0;
+    int minute = 0;
+    if (hour_only) {
+        hour = std::stoi(value.substr(1).as_string());
+    } else {
+        size_t colon_pos = value.find(':');
+        hour = std::stoi(value.substr(1, colon_pos - 1).as_string());
+        minute = std::stoi(value.substr(colon_pos + 1, 2).as_string());
+    }
 
     // timezone offsets around the world extended from -12:00 to +14:00
     if (!positive && hour > 12) {
