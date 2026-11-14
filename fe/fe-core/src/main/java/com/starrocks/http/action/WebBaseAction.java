@@ -192,7 +192,7 @@ public class WebBaseAction extends BaseAction {
 
                     Authorizer.checkSystemAction(context, PrivilegeType.NODE);
                 } catch (AccessDeniedException e) {
-                    checkUserOwnsAdminRole(currentUser);
+                    checkAdminRole(ctx);
                 }
             }
             request.setAuthorized(true);
@@ -229,7 +229,11 @@ public class WebBaseAction extends BaseAction {
                     context.setCurrentRoleIds(sessionValue.currentUser);
                     Authorizer.checkSystemAction(context, PrivilegeType.NODE);
                 } catch (AccessDeniedException e) {
-                    checkUserOwnsAdminRole(sessionValue.currentUser);
+                    // The session keeps only the user, not the groups it logged in with, so this
+                    // counts the roles granted to the user and the roles they inherit.
+                    ConnectContext adminCheckContext = new ConnectContext();
+                    adminCheckContext.setCurrentUserIdentity(sessionValue.currentUser);
+                    checkAdminRole(adminCheckContext);
                 }
                 authorized = true;
             } catch (AccessDeniedException e) {

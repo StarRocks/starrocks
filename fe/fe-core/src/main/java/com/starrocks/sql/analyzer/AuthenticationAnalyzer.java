@@ -169,11 +169,15 @@ public class AuthenticationAnalyzer {
             UserRef user = statement.getUser();
             if (user != null) {
                 analyzeUser(user);
-                checkUserExist(user, true);
-            } else if (!statement.isAll()) {
-                statement.setUser(new UserRef(context.getCurrentUserIdentity().getUser(),
-                        context.getCurrentUserIdentity().getHost(),
-                        context.getCurrentUserIdentity().isDomain()));
+                UserIdentity userIdent = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+                if (!GlobalStateMgr.getCurrentState().getAuthenticationMgr().doesUserExist(userIdent)) {
+                    // A user from a security integration is not stored, so FOR cannot name
+                    // it, but its own session can describe it.
+                    throw new SemanticException("cannot find user " + userIdent + "! A user that logs in "
+                            + "through a security integration is not stored and cannot be named in FOR; "
+                            + "it can view its own authentication information with SHOW AUTHENTICATION "
+                            + "without FOR");
+                }
             }
             return null;
         }
