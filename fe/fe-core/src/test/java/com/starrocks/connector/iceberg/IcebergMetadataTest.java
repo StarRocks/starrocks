@@ -363,15 +363,18 @@ public class IcebergMetadataTest extends TableTestBase {
 
         new Expectations() {
             {
-                icebergHiveCatalog.getTable(connectContext, "db", "tbl");
+                icebergHiveCatalog.getTable((ConnectContext) any, "db", "tbl");
                 result = new BaseTable(hiveTableOperations, "tbl");
-                minTimes = 0;
+                times = 1;
             }
         };
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), null);
-        Table actual = metadata.getTable(new ConnectContext(), "db", "tbl");
+        ConnectContext context = new ConnectContext();
+        Table actual = metadata.prefetchTableMetadataForAnalyze("db", "tbl", context);
+        Assertions.assertSame(((IcebergTable) actual).getNativeTable(),
+                ((IcebergTable) metadata.getTable(context, "db", "tbl")).getNativeTable());
         Assertions.assertEquals("tbl", actual.getName());
         Assertions.assertEquals(ICEBERG, actual.getType());
     }
