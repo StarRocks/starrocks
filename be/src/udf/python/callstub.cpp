@@ -58,6 +58,14 @@ public:
     using FlightStreamWriter = arrow::flight::FlightStreamWriter;
     using FlightStreamReader = arrow::flight::FlightStreamReader;
 
+    // Releases the worker it was given, also when init failed.
+    ~ArrowFlightWithRW() {
+        if (_process != nullptr) {
+            _process->remove_client();
+        }
+    }
+
+    // `process` comes counted as a client (PyWorker::add_client) and is released by the destructor.
     Status init(const std::string& uri_string, const PyFunctionDescriptor& func_desc,
                 std::shared_ptr<PyWorker> process);
     StatusOr<std::shared_ptr<arrow::RecordBatch>> rpc(arrow::RecordBatch& batch);
@@ -74,7 +82,8 @@ private:
 
 Status ArrowFlightWithRW::init(const std::string& uri_string, const PyFunctionDescriptor& func_desc,
                                std::shared_ptr<PyWorker> process) {
-    CancelableDefer defer = [worker = process.get()]() { worker->mark_dead(); };
+    _process = std::move(process);
+    CancelableDefer defer = [worker = _process.get()]() { worker->mark_dead(); };
     using namespace arrow::flight;
     ARROW_ASSIGN_OR_RETURN(auto location, Location::Parse(uri_string));
     ARROW_ASSIGN_OR_RETURN(_arrow_client, ArrowFlightClient::Connect(location));
@@ -83,7 +92,6 @@ Status ArrowFlightWithRW::init(const std::string& uri_string, const PyFunctionDe
     ARROW_ASSIGN_OR_RETURN(auto result, _arrow_client->DoExchange(descriptor));
     _reader = std::move(result.reader);
     _writer = std::move(result.writer);
-    _process = std::move(process);
     defer.cancel();
     return Status::OK();
 }
