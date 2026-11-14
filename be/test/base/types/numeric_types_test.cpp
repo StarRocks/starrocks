@@ -247,6 +247,14 @@ TEST(TestNumericTypes, test_check_signed_number_overflow_integral_narrow_convers
             (check_signed_number_overflow<double, float>(static_cast<double>(std::numeric_limits<float>::max()) * 2)));
     EXPECT_TRUE((check_signed_number_overflow<double, float>(static_cast<double>(std::numeric_limits<float>::lowest()) *
                                                              2)));
+
+    // "3.4028235E38" is the canonical shortest decimal representation of FLT_MAX. Its double
+    // value is slightly greater than (double)FLT_MAX, but it must round back to FLT_MAX.
+    EXPECT_FALSE((check_signed_number_overflow<double, float>(3.4028235e38)));
+    EXPECT_FALSE((check_signed_number_overflow<double, float>(-3.4028235e38)));
+    // A value beyond the rounding window of FLT_MAX must still overflow.
+    EXPECT_TRUE((check_signed_number_overflow<double, float>(3.4028236e38)));
+    EXPECT_TRUE((check_signed_number_overflow<double, float>(-3.4028236e38)));
 }
 
 // JSON will use check_signed_number_overflow to check whether an uint64_t converted to a signed number type will overflow.
