@@ -496,6 +496,8 @@ public class ComputeNodeTest {
         Assertions.assertTrue(node.handleHbResponse(hbResponse, false));
         Assertions.assertEquals(rebootTimeA * 1000, node.getLastStartTime());
         Assertions.assertTrue(node.isAlive());
+        // The first heartbeat only records the start time; it is not observed as a restart.
+        Assertions.assertEquals(0L, node.getLastRecoveryTime());
 
         // simulate that a few intermittent heartbeat probing failures due to high load or unstable network.
         // FE marks the BE as dead and then the node is back alive
@@ -508,6 +510,8 @@ public class ComputeNodeTest {
         Assertions.assertTrue(node.isAlive());
         // reboot time should not change
         Assertions.assertEquals(rebootTimeA * 1000, node.getLastStartTime());
+        // Coming back alive without a restart is not a recovery window.
+        Assertions.assertEquals(0L, node.getLastRecoveryTime());
 
         // response an OK status, but the rebootTime changed.
         // This simulates the case that the BE is restarted quickly in between the two heartbeat probes.
@@ -517,6 +521,8 @@ public class ComputeNodeTest {
         Assertions.assertTrue(node.isAlive());
         // reboot time changed
         Assertions.assertEquals(rebootTimeB * 1000, node.getLastStartTime());
+        // A restart opens the recovery window: failures of requests sent before it are ignored.
+        Assertions.assertTrue(node.getLastRecoveryTime() > 0);
 
         Config.heartbeat_retry_times = previousRetryTimes;
     }

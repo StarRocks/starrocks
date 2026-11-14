@@ -858,7 +858,7 @@ public class DefaultCoordinator extends Coordinator {
                 throw new StarRocksException("query timeout. backend id: " + execution.getWorker().getId());
             case THRIFT_RPC_ERROR:
                 cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
-                SimpleScheduler.addToBlocklist(execution.getWorker().getId());
+                SimpleScheduler.addToBlocklist(execution.getWorker().getId(), execution.getDeployStartTime());
                 throw new RpcException(
                         String.format("rpc failed with %s: %s", execution.getWorker().getHost(), status.getErrorMsg()),
                         failure);

@@ -99,6 +99,7 @@ public class FragmentInstanceExecState {
     private final long lastMissingHeartbeatTime;
     private final long lastStartTime;
 
+    private long deployStartTime;
     private FragmentInstance fragmentInstance;
 
     /**
@@ -184,8 +185,9 @@ public class FragmentInstanceExecState {
         transitionState(State.CREATED, State.EXECUTING);
     }
 
-    public void changeStateIntoDeploying() {
+    public void changeStateIntoDeploying(long deployStartTime) {
         transitionState(State.CREATED, State.DEPLOYING);
+        this.deployStartTime = deployStartTime;
     }
 
     public void setDeployFuture(Future<PExecPlanFragmentResult> deployFuture) {
@@ -200,6 +202,7 @@ public class FragmentInstanceExecState {
         transitionState(State.CREATED, State.DEPLOYING);
 
         TNetworkAddress brpcAddress = worker.getBrpcAddress();
+        deployStartTime = System.currentTimeMillis();
         try {
             // when `set enable_plan_serialize_concurrently = false` or encountered exception when serializing.
             if (serializedRequest != null && serializedRequest.length != 0) {
@@ -408,6 +411,7 @@ public class FragmentInstanceExecState {
         }
 
         TNetworkAddress brpcAddress = worker.getBrpcAddress();
+        long requestStartTime = System.currentTimeMillis();
         try {
             BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
                     jobSpec.getQueryId(), instanceId, cancelReason,
@@ -415,7 +419,7 @@ public class FragmentInstanceExecState {
         } catch (RpcException e) {
             LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
                     brpcAddress.getPort(), e);
-            SimpleScheduler.addToBlocklist(worker.getId());
+            SimpleScheduler.addToBlocklist(worker.getId(), requestStartTime);
             return false;
         }
 
@@ -444,6 +448,10 @@ public class FragmentInstanceExecState {
 
     public ComputeNode getWorker() {
         return worker;
+    }
+
+    public long getDeployStartTime() {
+        return deployStartTime;
     }
 
     public TNetworkAddress getAddress() {

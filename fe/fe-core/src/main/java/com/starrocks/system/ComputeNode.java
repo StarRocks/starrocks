@@ -81,6 +81,7 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
     private volatile long lastUpdateMs;
     @SerializedName("lastStartTime")
     private volatile long lastStartTime;
+    private transient volatile long lastRecoveryTime;
     @SerializedName("isAlive")
     private AtomicBoolean isAlive;
 
@@ -389,6 +390,10 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         this.lastUpdateMs = currentTime;
     }
 
+    public long getLastRecoveryTime() {
+        return lastRecoveryTime;
+    }
+
     public long getLastStartTime() {
         return this.lastStartTime;
     }
@@ -591,6 +596,9 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
             // NOTE: remove the compatibility where the reboot time is not set.
             // The RebootTime must be set in the heartbeat response if the backend version is >= 2.4.
             if (hbResponse.getRebootTime() > this.lastStartTime) {
+                if (this.lastStartTime > 0 && !GlobalStateMgr.isCheckpointThread()) {
+                    this.lastRecoveryTime = System.currentTimeMillis();
+                }
                 this.lastStartTime = hbResponse.getRebootTime();
                 isChanged = true;
                 // reboot time change means the BE has been restarted
