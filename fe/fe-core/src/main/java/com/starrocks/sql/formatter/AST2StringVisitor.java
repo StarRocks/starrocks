@@ -1047,6 +1047,12 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             sb.append("(").append(columns).append(") ");
         }
 
+        if (!options.isEnableDigest() && !insert.getProperties().isEmpty()) {
+            sb.append("PROPERTIES (");
+            sb.append(new PrintableMap<>(insert.getProperties(), "=", true, false, options.isHideCredential()));
+            sb.append(") ");
+        }
+
         // source
         if (insert.getQueryStatement() != null) {
             sb.append(visitInsertSource(insert.getQueryStatement(), context));
