@@ -61,6 +61,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
     @Override
     protected void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
+        ctx.setCurrentThreadAllocatedMemory(getThreadAllocatedBytes(Thread.currentThread().getId()));
         ctx.getAuditEventBuilder().reset();
         ctx.getAuditEventBuilder()
                 .setTimestamp(System.currentTimeMillis())
