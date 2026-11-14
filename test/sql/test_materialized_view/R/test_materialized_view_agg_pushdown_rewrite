@@ -1,4 +1,7 @@
 -- name: test_materialized_view_agg_pushdown_rewrite @slow
+-- Test Point: Aggregate pushdown preserves eligible rewrites and partition compensation.
+-- Method: Assert refresh success, plan eligibility and rewrite-disabled query results.
+[UC]db_name=SELECT DATABASE();
 CREATE TABLE IF NOT EXISTS `lineorder` (
     `lo_orderkey` int(11) NOT NULL COMMENT "",
     `lo_linenumber` int(11) NOT NULL COMMENT "",
@@ -146,8 +149,11 @@ select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_u
 from lineorder l group by LO_ORDERDATE;
 -- result:
 -- !result
-[UC]refresh materialized view mv0 with sync mode;
-function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
+function: refresh_mv_manual("${db_name}", "mv0")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0", expect_hit=False)
 -- result:
 False
 -- !result
@@ -177,6 +183,12 @@ select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join date
 1993-01-01	180	90
 1994-01-01	175	175
 -- !result
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+1993-01-01	180	90
+1994-01-01	175	175
+-- !result
 select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
 -- result:
 1993-01-01	180	90	180	90	180	90	1	1
@@ -200,8 +212,11 @@ select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1), min(LO_REVENUE + 
 from lineorder l group by LO_ORDERDATE;
 -- result:
 -- !result
-[UC]refresh materialized view mv1 with sync mode;
-function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv1")
+function: refresh_mv_manual("${db_name}", "mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv1", expect_hit=False)
 -- result:
 False
 -- !result
@@ -254,7 +269,10 @@ select LO_ORDERDATE, lo_custkey, lo_partkey, lo_suppkey, sum(LO_REVENUE), max(LO
 from lineorder l GROUP BY LO_ORDERDATE, lo_custkey, lo_partkey, lo_suppkey;
 -- result:
 -- !result
-[UC]refresh materialized view mv2 with sync mode;
+function: refresh_mv_manual("${db_name}", "mv2")
+-- result:
+True
+-- !result
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE) FROM lineorder AS l INNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY INNER JOIN dates AS d ON l.lo_orderdate = d.d_date group by LO_ORDERDATE;", "mv2")
 -- result:
 True
@@ -281,8 +299,11 @@ select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_u
 from lineorder l group by LO_ORDERDATE;
 -- result:
 -- !result
-[UC]refresh materialized view mv0 with sync mode;
-function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
+function: refresh_mv_manual("${db_name}", "mv0")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0", expect_hit=False)
 -- result:
 False
 -- !result
@@ -312,6 +333,12 @@ select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join date
 1993-01-01	180	90
 1994-01-01	175	175
 -- !result
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+1993-01-01	180	90
+1994-01-01	175	175
+-- !result
 select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
 -- result:
 1993-01-01	180	90	180	90	180	90	1	1
@@ -327,7 +354,7 @@ select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_u
 1993-01-01	180	90	90	1	1	90.0	90.0	90	1
 1994-01-01	175	175	175	1	1	175.0	175.0	175	1
 -- !result
-function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0")
+function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0", expect_hit=False)
 -- result:
 False
 -- !result
@@ -417,7 +444,7 @@ VALUES
 ;
 -- result:
 -- !result
-function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0", "UNION")
+function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0", "UNION", expect_hit=False)
 -- result:
 False
 -- !result
@@ -506,7 +533,10 @@ select LO_ORDERDATE, sum(LO_REVENUE), count(LO_REVENUE), sum(lo_suppkey), count(
 from lineorder l group by LO_ORDERDATE;
 -- result:
 -- !result
-[UC]refresh materialized view mv0 with sync mode;
+function: refresh_mv_manual("${db_name}", "mv0")
+-- result:
+True
+-- !result
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), avg(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
 -- result:
 True
@@ -592,9 +622,9 @@ FROM `test_pt8`
 GROUP BY  `id`,`pt`;
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW `test_mv1` WITH SYNC MODE;
+function: refresh_mv_manual("${db_name}", "test_mv1")
 -- result:
-019c2c41-ab07-7cf8-9736-fa3499cd1096
+True
 -- !result
 function: print_hit_materialized_view("SELECT SUM((gmv+gmv2)*0.01) FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1');", "test_mv1")
 -- result:
@@ -604,7 +634,15 @@ SELECT SUM((gmv+gmv2)*0.01) FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELE
 -- result:
 0.03
 -- !result
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ SUM((gmv+gmv2)*0.01) FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1');
+-- result:
+0.03
+-- !result
 -- name: test_materialized_view_agg_pushdown_rewrite_with_group_by_exprs @slow
+-- Test Point: Group-by expression rewrites respect fact and dimension updates.
+-- Method: Check refresh success and plan eligibility against rewrite-disabled results.
+[UC]db_name=SELECT DATABASE();
 CREATE TABLE fact_event_requests
 (
     event_date                DATE                        ,
@@ -679,9 +717,9 @@ WHERE event_type = 'TYPE_A'
 GROUP BY event_date, metric_time_1h, region_id, site_id, channel, last_geohash;
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW mv_hourly_events WITH SYNC MODE;
+function: refresh_mv_manual("${db_name}", "mv_hourly_events")
 -- result:
-019c2c40-ce80-732d-a41d-a6c92fffcf16
+True
 -- !result
 function: print_hit_materialized_view("SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;", "mv_hourly_events")
 -- result:
@@ -691,14 +729,25 @@ SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) 
 -- result:
 2025-10-01 00:00:00	9.0
 -- !result
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;
+-- result:
+2025-10-01 00:00:00	9.0
+-- !result
 INSERT INTO fact_event_requests values('20251001', '10', '20251001 10:00:00', 'SUCCESS', 1, 1, 'TYPE_A', ['1234567890'], 'mobile');
 -- result:
 -- !result
-function: print_hit_materialized_view("SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;", "mv_hourly_events")
+function: print_hit_materialized_view("SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;", "mv_hourly_events", expect_hit=False)
 -- result:
 False
 -- !result
 SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;
+-- result:
+None	1.0
+2025-10-01 00:00:00	9.0
+-- !result
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;
 -- result:
 None	1.0
 2025-10-01 00:00:00	9.0
@@ -706,7 +755,7 @@ None	1.0
 INSERT INTO dim_location_area values('1234567898', 'Zone-9');
 -- result:
 -- !result
-function: print_hit_materialized_view("SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;", "mv_hourly_events")
+function: print_hit_materialized_view("SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;", "mv_hourly_events", expect_hit=False)
 -- result:
 False
 -- !result
@@ -715,15 +764,27 @@ SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) 
 None	1.0
 2025-10-01 00:00:00	9.0
 -- !result
-[UC]REFRESH MATERIALIZED VIEW mv_hourly_events WITH SYNC MODE;
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;
 -- result:
-019c2c40-e7f7-7567-a66e-3fc9eadd3dd8
+None	1.0
+2025-10-01 00:00:00	9.0
+-- !result
+function: refresh_mv_manual("${db_name}", "mv_hourly_events")
+-- result:
+True
 -- !result
 function: print_hit_materialized_view("SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;", "mv_hourly_events")
 -- result:
 True
 -- !result
 SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;
+-- result:
+None	1.0
+2025-10-01 00:00:00	9.0
+-- !result
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;
 -- result:
 None	1.0
 2025-10-01 00:00:00	9.0
