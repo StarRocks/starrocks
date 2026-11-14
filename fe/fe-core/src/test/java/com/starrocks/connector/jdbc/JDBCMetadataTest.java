@@ -727,6 +727,12 @@ public class JDBCMetadataTest {
             JDBCMetadata metadata5 = new JDBCMetadata(testProperties, "catalog", dataSource);
             Assertions.assertTrue(metadata5.schemaResolver instanceof ClickhouseSchemaResolver,
                     "clickhouse should create ClickhouseSchemaResolver");
+
+            // Test dameng
+            testProperties.put(JDBCResource.SCHEMA_RESOLVER, "dameng");
+            JDBCMetadata metadata6 = new JDBCMetadata(testProperties, "catalog", dataSource);
+            Assertions.assertTrue(metadata6.schemaResolver instanceof DamengSchemaResolver,
+                    "dameng should create DamengSchemaResolver");
         } catch (Exception e) {
             Assertions.fail("Test should not throw exception: " + e.getMessage());
         }
