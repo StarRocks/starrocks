@@ -315,6 +315,8 @@ struct TIcebergTableSink {
     12: optional TIcebergTableSinkExt ext
     // Parquet encryption info for encrypted Iceberg tables
     13: optional PlanNodes.TParquetEncryptionInfo parquet_encryption_info
+    // 14-16 are reserved by Iceberg Parquet size and compression-level changes.
+    17: optional string parquet_data_page_version
 }
 
 struct THiveTableSink {

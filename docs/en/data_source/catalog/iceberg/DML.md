@@ -131,6 +131,10 @@ You cannot specify the `column_name` property if you have specified the PARTITIO
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
+### Parquet data-page version
+
+For Parquet data files, the Iceberg table property `write.parquet.page-version` accepts `v1` or `v2` (case-insensitive). If absent, StarRocks writes DataPage V1. An invalid value rejects the write. DataPage V2 writes are rejected when the data-file schema contains a BOOLEAN column, including one nested in an array, map, or struct, because the StarRocks reader cannot currently decode its RLE-encoded values. This property does not configure position-delete files. Parquet data-page version is separate from Iceberg table format version.
+
 ## DELETE
 
 You can use the DELETE statement to delete data from Iceberg tables based on specified conditions. This feature is supported from v4.1 and later. The `WITH` clause, the `USING` clause, and `FOR VERSION AS OF` are supported from v4.2 and later. The WHERE clause is required, and the PARTITION clause is not supported.
