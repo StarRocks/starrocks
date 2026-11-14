@@ -4029,6 +4029,80 @@ TEST_F(ArrayFunctionsTest, array_generate_rejects_too_many_elements) {
     ASSERT_TRUE(st.status().is_invalid_argument()) << st.status();
 }
 
+TEST_F(ArrayFunctionsTest, trino_sequence_bigint) {
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+    auto append = [&](Datum start, Datum stop, Datum step) {
+        start_column->append_datum(start);
+        stop_column->append_datum(stop);
+        step_column->append_datum(step);
+    };
+    append(Datum((int64_t)1), Datum((int64_t)10), Datum((int64_t)3));
+    append(Datum((int64_t)3), Datum((int64_t)1), Datum((int64_t)-1));
+    append(Datum((int64_t)3), Datum((int64_t)3), Datum((int64_t)-1));
+    // A NULL argument gives NULL before the zero-step check.
+    append(Datum(), Datum((int64_t)3), Datum((int64_t)0));
+    append(Datum((int64_t)1), Datum((int64_t)3), Datum());
+    // The distance between the extreme BIGINTs doesn't overflow.
+    append(Datum(std::numeric_limits<int64_t>::min()), Datum(std::numeric_limits<int64_t>::max()),
+           Datum(std::numeric_limits<int64_t>::max()));
+
+    auto result = ArrayFunctions::trino_sequence_bigint(nullptr, {start_column, stop_column, step_column}).value();
+    ASSERT_EQ(result->size(), 6);
+    _check_array<int64_t>({1, 4, 7, 10}, result->get(0).get_array());
+    _check_array<int64_t>({3, 2, 1}, result->get(1).get_array());
+    _check_array<int64_t>({3}, result->get(2).get_array());
+    ASSERT_TRUE(result->is_null(3));
+    ASSERT_TRUE(result->is_null(4));
+    _check_array<int64_t>({std::numeric_limits<int64_t>::min(), -1, std::numeric_limits<int64_t>::max() - 1},
+                          result->get(5).get_array());
+}
+
+TEST_F(ArrayFunctionsTest, trino_sequence_bigint_default_step) {
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
+    start_column->append_datum(Datum((int64_t)1));
+    stop_column->append_datum(Datum((int64_t)3));
+    start_column->append_datum(Datum((int64_t)5));
+    stop_column->append_datum(Datum((int64_t)1));
+
+    // Without a step, each row's evaluated bounds choose the direction.
+    auto result = ArrayFunctions::trino_sequence_bigint(nullptr, {start_column, stop_column}).value();
+    ASSERT_FALSE(result->is_nullable());
+    _check_array<int64_t>({1, 2, 3}, result->get(0).get_array());
+    _check_array<int64_t>({5, 4, 3, 2, 1}, result->get(1).get_array());
+
+    // Constant bounds give a constant result.
+    result = ArrayFunctions::trino_sequence_bigint(nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(2, 4),
+                                                             ColumnHelper::create_const_column<TYPE_BIGINT>(0, 4)})
+                     .value();
+    ASSERT_TRUE(result->is_constant());
+    ASSERT_EQ(result->size(), 4);
+    _check_array<int64_t>({2, 1, 0}, result->get(3).get_array());
+}
+
+TEST_F(ArrayFunctionsTest, trino_sequence_bigint_errors) {
+    auto run = [](int64_t start, int64_t stop, int64_t step) {
+        return ArrayFunctions::trino_sequence_bigint(nullptr,
+                                                     {ColumnHelper::create_const_column<TYPE_BIGINT>(start, 1),
+                                                      ColumnHelper::create_const_column<TYPE_BIGINT>(stop, 1),
+                                                      ColumnHelper::create_const_column<TYPE_BIGINT>(step, 1)});
+    };
+    ASSERT_EQ(run(1, 1, 0).status().message(), "step must not be zero");
+    ASSERT_TRUE(run(1, 3, -1).status().message().starts_with(
+            "sequence stop value should be greater than or equal to start value"));
+    ASSERT_TRUE(run(3, 1, 1).status().message().starts_with(
+            "sequence stop value should be greater than or equal to start value"));
+
+    // Trino's limit is 10,000 elements, counted across zero too.
+    ASSERT_EQ(run(1, 10000, 1).value()->get(0).get_array().size(), 10000);
+    ASSERT_EQ(run(1, 10001, 1).status().message(), "result of sequence function must not have more than 10000 entries");
+    ASSERT_FALSE(run(0, 10000, 1).ok());
+    ASSERT_FALSE(run(-20000, 5, 1).ok());
+    ASSERT_FALSE(run(5000, -5000, -1).ok());
+}
+
 TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
     // test only null
     {
