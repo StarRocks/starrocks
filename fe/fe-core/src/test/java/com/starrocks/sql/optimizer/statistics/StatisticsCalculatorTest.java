@@ -1397,6 +1397,67 @@ public class StatisticsCalculatorTest {
         Assertions.assertTrue(innerValStatAfterJoin.getNullsFraction() < outerNullFraction);
     }
 
+    @ParameterizedTest
+    @EnumSource(value = OuterJoin.class)
+    public void testOuterJoinKeepsPreservedSideStats(OuterJoin outerJoin) {
+        // GIVEN
+        JoinOperator joinType = JoinOperator.RIGHT_OUTER_JOIN;
+        if (outerJoin == OuterJoin.LEFT_OUTER_JOIN) {
+            joinType = JoinOperator.LEFT_OUTER_JOIN;
+        }
+
+        // The big side is preserved, the small side only matches a part of it
+        final var bigKey = columnRefFactory.create("big_key", IntegerType.INT, true);
+        final var bigVal = columnRefFactory.create("big_val", IntegerType.INT, true);
+        final var smallKey = columnRefFactory.create("small_key", IntegerType.INT, true);
+        columnRefFactory.updateColumnToRelationIds(bigKey.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(bigVal.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(smallKey.getId(), 1);
+
+        final var bigHistogram = new Histogram(
+                Lists.newArrayList(new Bucket(1, 200000, 200000L, 1L)), Maps.newHashMap());
+        final var bigGroup = new Group(0);
+        bigGroup.setStatistics(Statistics.builder().setOutputRowCount(200000)
+                .addColumnStatistic(bigKey, new ColumnStatistic(1, 200000, 0, 8, 200000, bigHistogram,
+                        ColumnStatistic.StatisticType.ESTIMATE))
+                .addColumnStatistic(bigVal, new ColumnStatistic(1, 200000, 0, 8, 100000))
+                .build());
+        bigGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(bigKey, bigVal))));
+
+        final var smallGroup = new Group(1);
+        smallGroup.setStatistics(Statistics.builder().setOutputRowCount(100)
+                .addColumnStatistic(smallKey, new ColumnStatistic(1, 100, 0, 8, 100))
+                .build());
+        smallGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(smallKey))));
+
+        final var IsRight = joinType == JoinOperator.RIGHT_OUTER_JOIN;
+        final var joinPred = IsRight
+                ? new BinaryPredicateOperator(BinaryType.EQ, smallKey, bigKey)
+                : new BinaryPredicateOperator(BinaryType.EQ, bigKey, smallKey);
+        final var children = IsRight
+                ? Lists.newArrayList(smallGroup, bigGroup)
+                : Lists.newArrayList(bigGroup, smallGroup);
+        final var groupExpr = new GroupExpression(new LogicalJoinOperator(joinType, joinPred), children);
+        groupExpr.setGroup(new Group(2));
+        final var exprCtx = new ExpressionContext(groupExpr);
+        final var calc = new StatisticsCalculator(exprCtx, columnRefFactory, optimizerContext);
+
+        // WHEN
+        calc.estimatorStats();
+        final var joinStats = exprCtx.getStatistics();
+
+        // THEN
+        Assertions.assertEquals(200000, joinStats.getOutputRowCount(), 0.0001);
+        final var bigKeyStat = joinStats.getColumnStatistic(bigKey);
+        Assertions.assertEquals(200000, bigKeyStat.getDistinctValuesCount(), 0.0001);
+        Assertions.assertEquals(1, bigKeyStat.getMinValue(), 0.0001);
+        Assertions.assertEquals(200000, bigKeyStat.getMaxValue(), 0.0001);
+        Assertions.assertSame(bigHistogram, bigKeyStat.getHistogram());
+        Assertions.assertEquals(100000, joinStats.getColumnStatistic(bigVal).getDistinctValuesCount(), 0.0001);
+        Assertions.assertTrue(joinStats.getColumnStatistic(smallKey).getDistinctValuesCount() <= 100);
+    }
+
+
     @Test
     public void testLeftJoinInnerSideNullFractionReflectsResultNulls() {
         // GIVEN
