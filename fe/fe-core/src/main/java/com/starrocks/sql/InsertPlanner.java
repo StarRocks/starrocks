@@ -1138,10 +1138,21 @@ public class InsertPlanner {
      */
     private void materializeShadowColumnDefault(ColumnRefFactory columnRefFactory, List<ColumnRefOperator> outputColumns,
                                                 Map<ColumnRefOperator, ScalarOperator> columnRefMap, Column targetColumn) {
-        ScalarOperator scalarOperator;
+        ScalarOperator scalarOperator = schemaChangeColumnDefault(targetColumn);
+        ColumnRefOperator col = columnRefFactory
+                .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+        outputColumns.add(col);
+        columnRefMap.put(col, scalarOperator);
+    }
+
+    /**
+     * The value a write gives a column that exists only in a schema change's shadow index: its CONST or NULL
+     * default. Shared with {@link UpdatePlanner}, which has to fill the same columns.
+     */
+    static ScalarOperator schemaChangeColumnDefault(Column targetColumn) {
         Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
         if (defaultValueType == Column.DefaultValueType.NULL) {
-            scalarOperator = ConstantOperator.createNull(targetColumn.getType());
+            return ConstantOperator.createNull(targetColumn.getType());
         } else if (defaultValueType == Column.DefaultValueType.CONST) {
             // calculatedDefaultValue() evaluates a time-function default (e.g. CURRENT_TIMESTAMP) to the
             // transaction time and returns a scalar literal's string, but it returns null for a complex
@@ -1152,16 +1163,12 @@ public class InsertPlanner {
             if (defaultValueStr == null) {
                 defaultValueStr = targetColumn.getDefaultValue();
             }
-            scalarOperator = ConstantOperator.createVarchar(defaultValueStr);
+            return ConstantOperator.createVarchar(defaultValueStr);
         } else {
             // VARY (variable expr, e.g. uuid()) -- not materializable as a constant for the shadow rewrite.
             throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
                     + targetColumn.getDefaultExpr().getExpr());
         }
-        ColumnRefOperator col = columnRefFactory
-                .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
-        outputColumns.add(col);
-        columnRefMap.put(col, scalarOperator);
     }
 
     private OptExprBuilder castOutputColumnsTypeToTargetColumns(ColumnRefFactory columnRefFactory,
