@@ -1118,4 +1118,31 @@ TEST_F(LocalTabletsChannelTest, add_segment_r_timeout_reports_once_and_recovers)
     EXPECT_TRUE(lock.owns_lock());
 }
 
+TEST_F(LocalTabletsChannelTest, test_open_with_global_dict_words) {
+    _create_tablets(1);
+
+    ReplicaInfo replica_info{_tablets[0]->tablet_id(), _nodes};
+    PTabletWriterOpenRequest request;
+    _create_open_request(_nodes[0].node_id(), {replica_info}, &request);
+    request.set_is_replicated_storage(false);
+
+    auto* slot = request.mutable_schema()->mutable_slot_descs(1);
+    slot->add_global_dict_words("dict_word_alpha");
+    slot->add_global_dict_words("dict_word_beta_16");
+    slot->set_global_dict_version(5);
+    slot->set_global_dict_content_identity(99);
+
+    auto schema_param = std::make_shared<OlapTableSchemaParam>();
+    ASSERT_OK(schema_param->init(request.schema()));
+    PTabletWriterOpenResult response;
+    ASSERT_OK(_tablets_channel->open(request, &response, schema_param, false));
+
+    auto it = _tablets_channel->_global_dicts.find("c1");
+    ASSERT_NE(it, _tablets_channel->_global_dicts.end());
+    EXPECT_EQ(2, it->second.dict.size());
+    EXPECT_EQ(5, it->second.version);
+    ASSERT_TRUE(it->second.content_identity.has_value());
+    EXPECT_EQ(99, it->second.content_identity.value());
+}
+
 } // namespace starrocks

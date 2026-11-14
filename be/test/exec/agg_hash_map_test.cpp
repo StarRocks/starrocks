@@ -965,6 +965,51 @@ TEST(PartitionHashMapSerializedKeyTest, SumsOrdinaryColumnSerializeSizes) {
     EXPECT_LE(slice_sizes[0], max_one_row_size) << "serialize_batch() overran the bound it was given";
 }
 
+TEST(PartitionHashMapSerializedKeyTest, AppendsStringAndSerializedKeys) {
+    MemPool mem_pool;
+    ObjectPool obj_pool;
+
+    auto string_column = BinaryColumn::create();
+    string_column->append("abc");
+    string_column->append("def");
+    string_column->append("abc");
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(string_column, 1);
+
+    PartitionHashMapWithOneStringKey<SlicePartitionHashMap<PhmapSeed1>> one_string_map(4);
+    auto res1 = one_string_map.append_chunk<false>(chunk, {string_column}, &mem_pool, &obj_pool, nullptr, nullptr);
+    ASSERT_TRUE(res1.ok());
+    EXPECT_EQ(2U, one_string_map.hash_map.size());
+
+    auto nullable_string = NullableColumn::create(string_column, NullColumn::create(3, 0));
+    auto nullable_chunk = std::make_shared<Chunk>();
+    nullable_chunk->append_column(nullable_string, 1);
+
+    PartitionHashMapWithOneNullableStringKey<SlicePartitionHashMap<PhmapSeed1>> nullable_string_map(4);
+    auto res2 = nullable_string_map.append_chunk<false>(nullable_chunk, {nullable_string}, &mem_pool, &obj_pool,
+                                                        nullptr, nullptr);
+    ASSERT_TRUE(res2.ok());
+    EXPECT_EQ(2U, nullable_string_map.hash_map.size());
+
+    PartitionHashMapWithSerializedKey<SlicePartitionHashMap<PhmapSeed1>> serialized_map(4);
+    ASSERT_NE(nullptr, serialized_map.buffer);
+    EXPECT_EQ(serialized_map.max_one_row_size * 4 + SLICE_MEMEQUAL_OVERFLOW_PADDING,
+              serialized_map.inner_mem_pool->total_allocated_bytes());
+
+    uint8_t* last_row = serialized_map.buffer + 3 * serialized_map.max_one_row_size;
+    std::memset(last_row, 'p', serialized_map.max_one_row_size);
+    std::memset(last_row + serialized_map.max_one_row_size, 0x22, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+    std::vector<uint8_t> other_row(serialized_map.max_one_row_size + SLICE_MEMEQUAL_OVERFLOW_PADDING, 0xDD);
+    std::memset(other_row.data(), 'p', serialized_map.max_one_row_size);
+    EXPECT_TRUE(SliceEqual()(Slice(last_row, serialized_map.max_one_row_size),
+                             Slice(other_row.data(), serialized_map.max_one_row_size)));
+
+    auto res3 = serialized_map.append_chunk<false>(chunk, {string_column}, &mem_pool, &obj_pool, nullptr, nullptr);
+    ASSERT_TRUE(res3.ok());
+    EXPECT_EQ(2U, serialized_map.hash_map.size());
+}
+
 TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_FixedSize16SliceAggHashMap) {
     using TestAggHashMap = FixedSize16SliceAggHashMap<PhmapSeed1>;
     using TestAggHashMapKey = AggHashMapWithSerializedKeyFixedSize<TestAggHashMap>;

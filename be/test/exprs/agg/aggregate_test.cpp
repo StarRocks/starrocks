@@ -18,6 +18,8 @@
 #include <cmath>
 #include <memory>
 
+#include "column/map_column.h"
+#include "column/struct_column.h"
 #include "common/config_exec_fwd.h"
 #include "exprs/agg/base_aggregate_test.h"
 #include "testutil/column_test_helper.h"
@@ -3152,6 +3154,125 @@ TEST_F(AggregateTest, test_ds_theta_count_distinct) {
 
     func->finalize_to_column(local_ctx.get(), state3->state(), result_column.get());
     ASSERT_EQ(5, result_column->get_data()[0]);
+}
+
+TEST_F(AggregateTest, test_approx_top_k_varchar) {
+    const AggregateFunction* func = get_aggregate_function("approx_top_k", TYPE_VARCHAR, TYPE_ARRAY, false);
+    ASSERT_NE(func, nullptr);
+
+    auto state1 = ManagedAggrState::create(ctx, func);
+    auto col1 = BinaryColumn::create();
+    col1->append("alpha");
+    col1->append("alpha");
+    col1->append("alpha");
+    col1->append("beta_short");
+    col1->append("beta_short");
+    col1->append("gamma_sixteen_16");
+    const Column* raw_col1 = col1.get();
+    func->update_batch_single_state(ctx, col1->size(), &raw_col1, state1->state());
+
+    auto state2 = ManagedAggrState::create(ctx, func);
+    auto col2 = BinaryColumn::create();
+    col2->append("alpha");
+    col2->append("alpha");
+    col2->append("beta_short");
+    col2->append("beta_short");
+    col2->append("beta_short");
+    col2->append("beta_short");
+    col2->append("delta");
+    const Column* raw_col2 = col2.get();
+    func->update_batch_single_state(ctx, col2->size(), &raw_col2, state2->state());
+
+    MutableColumnPtr serde1 = BinaryColumn::create();
+    func->serialize_to_column(ctx, state1->state(), serde1.get());
+    MutableColumnPtr serde2 = BinaryColumn::create();
+    func->serialize_to_column(ctx, state2->state(), serde2.get());
+
+    auto merged_state = ManagedAggrState::create(ctx, func);
+    size_t mem_before = ctx->mem_pool()->total_allocated_bytes();
+    func->merge(ctx, serde1.get(), merged_state->state(), 0);
+    func->merge(ctx, serde2.get(), merged_state->state(), 0);
+    EXPECT_GT(ctx->mem_pool()->total_allocated_bytes(), mem_before);
+
+    MutableColumns struct_fields;
+    struct_fields.emplace_back(NullableColumn::create(BinaryColumn::create(), NullColumn::create()));
+    struct_fields.emplace_back(NullableColumn::create(Int64Column::create(), NullColumn::create()));
+    auto struct_col = StructColumn::create(std::move(struct_fields), std::vector<std::string>{"item", "count"});
+    auto* raw_struct_col = struct_col.get();
+    auto nullable_struct_col = NullableColumn::create(std::move(struct_col), NullColumn::create());
+    auto result_col = ArrayColumn::create(std::move(nullable_struct_col), UInt32Column::create());
+
+    func->finalize_to_column(ctx, merged_state->state(), result_col.get());
+    ASSERT_EQ(1, result_col->size());
+    ASSERT_EQ(4, raw_struct_col->size());
+    EXPECT_EQ(Slice("beta_short"), raw_struct_col->field_column_raw_ptr(0)->get(0).get_slice());
+    EXPECT_EQ(6, raw_struct_col->field_column_raw_ptr(1)->get(0).get_int64());
+    EXPECT_EQ(Slice("alpha"), raw_struct_col->field_column_raw_ptr(0)->get(1).get_slice());
+    EXPECT_EQ(5, raw_struct_col->field_column_raw_ptr(1)->get(1).get_int64());
+    EXPECT_EQ(1, raw_struct_col->field_column_raw_ptr(1)->get(2).get_int64());
+    EXPECT_EQ(1, raw_struct_col->field_column_raw_ptr(1)->get(3).get_int64());
+}
+
+TEST_F(AggregateTest, test_sum_map_varchar_key) {
+    const AggregateFunction* func = get_aggregate_function("sum_map", TYPE_VARCHAR, TYPE_INT, false);
+    ASSERT_NE(func, nullptr);
+
+    auto state = ManagedAggrState::create(ctx, func);
+
+    auto keys_data = BinaryColumn::create();
+    auto keys_null = NullColumn::create();
+    auto vals_data = Int32Column::create();
+    auto vals_null = NullColumn::create();
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+
+    // Row 0: {"k1": 10, "sixteen_byte_key": 20}
+    keys_data->append("k1");
+    keys_null->append(0);
+    vals_data->append(10);
+    vals_null->append(0);
+    keys_data->append("sixteen_byte_key");
+    keys_null->append(0);
+    vals_data->append(20);
+    vals_null->append(0);
+    offsets->append(2);
+
+    // Row 1: {"k1": 5, "sixteen_byte_key": 15}
+    keys_data->append("k1");
+    keys_null->append(0);
+    vals_data->append(5);
+    vals_null->append(0);
+    keys_data->append("sixteen_byte_key");
+    keys_null->append(0);
+    vals_data->append(15);
+    vals_null->append(0);
+    offsets->append(4);
+
+    auto map_col =
+            MapColumn::create(NullableColumn::create(std::move(keys_data), std::move(keys_null)),
+                              NullableColumn::create(std::move(vals_data), std::move(vals_null)), std::move(offsets));
+    const Column* raw_col = map_col.get();
+
+    size_t mem_before = ctx->mem_pool()->total_allocated_bytes();
+    func->update_batch_single_state(ctx, map_col->size(), &raw_col, state->state());
+    // The reserve only guarantees spare chunk capacity; it is not counted as allocated payload.
+    EXPECT_GE(ctx->mem_pool()->total_allocated_bytes() - mem_before, 2 + 16);
+    EXPECT_GE(ctx->mem_pool()->total_reserved_bytes() - ctx->mem_pool()->total_allocated_bytes(),
+              SLICE_MEMEQUAL_OVERFLOW_PADDING);
+
+    auto out_keys = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto out_vals = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    auto out_map = MapColumn::create(std::move(out_keys), std::move(out_vals), UInt32Column::create());
+
+    func->finalize_to_column(ctx, state->state(), out_map.get());
+    ASSERT_EQ(1, out_map->size());
+    ASSERT_EQ(2, out_map->get_map_size(0));
+    std::map<std::string, int64_t> actual;
+    for (size_t i = 0; i < 2; ++i) {
+        actual[out_map->keys_column()->get(i).get_slice().to_string()] = out_map->values_column()->get(i).get_int64();
+    }
+    EXPECT_EQ(15, actual["k1"]);
+    EXPECT_EQ(35, actual["sixteen_byte_key"]);
 }
 
 } // namespace starrocks

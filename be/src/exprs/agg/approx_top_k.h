@@ -229,7 +229,7 @@ private:
     template <bool IsDeepCopy>
     CppType _copy(MemPool* mem_pool, const CppType& value) {
         if constexpr (IsDeepCopy && IsSlice<CppType>) {
-            uint8_t* pos = mem_pool->allocate(value.size);
+            uint8_t* pos = mem_pool->allocate_with_reserve(value.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
             std::memcpy(pos, value.data, value.size);
             return Slice{pos, value.size};
         } else {
@@ -310,7 +310,8 @@ public:
                 int64_t slice_size;
                 std::memcpy(&slice_size, bytes.data + start, sizeof(int64_t));
                 start += sizeof(int64_t);
-                uint8_t* slice_data = ctx->mem_pool()->allocate(slice_size);
+                uint8_t* slice_data =
+                        ctx->mem_pool()->allocate_with_reserve(slice_size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                 std::memcpy(slice_data, bytes.data + start, slice_size);
                 start += slice_size;
                 descrialize_counters[i].value = Slice{slice_data, static_cast<size_t>(slice_size)};
