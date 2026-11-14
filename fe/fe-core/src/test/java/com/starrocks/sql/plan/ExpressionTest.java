@@ -2204,4 +2204,20 @@ public class ExpressionTest extends PlanTestBase {
             starRocksAssert.dropTable("rc_t2");
         }
     }
+
+    @Test
+    public void testArrayGenerateDefaultStepOnColumns() throws Exception {
+        // the default step is 1 when start <= end and -1 otherwise, also when start and end aren't literals
+        String plan = getFragmentPlan("select array_generate(v1, v2) from t0");
+        assertContains(plan, "array_generate(1: v1, 2: v2, ", "if(1: v1 <= 2: v2, 1, -1)");
+
+        // a non-deterministic bound would be evaluated again in the comparison, so it gets an explicit step of 1
+        plan = getFragmentPlan("select array_generate(cast(rand() * 10 as bigint), v2) from t0");
+        assertContains(plan, ", 2: v2, 1)");
+        assertNotContains(plan, "if(");
+
+        // a NULL bound, in either position, gets an explicit step instead of failing on the column bound
+        getFragmentPlan("select array_generate(v1, NULL) from t0");
+        getFragmentPlan("select array_generate(NULL, v2) from t0");
+    }
 }

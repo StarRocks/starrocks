@@ -55,6 +55,7 @@ import com.starrocks.sql.ast.expression.ArraySliceExpr;
 import com.starrocks.sql.ast.expression.ArrowExpr;
 import com.starrocks.sql.ast.expression.BetweenPredicate;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CastExpr;
@@ -1139,6 +1140,7 @@ public class ExpressionAnalyzer {
  
             // Handle backward compatibility parameter conversion
             handleBackwardCompatibleParameterConversion(fnName, node);
+            addArrayGenerateDefaultStep(fnName, node, scope);
 
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             // check fn & throw exception direct if analyze failed
@@ -1287,6 +1289,47 @@ public class ExpressionAnalyzer {
                 node.addChild(new StringLiteral("AES_128_ECB"));
             }
             // 4 or 5 params: no conversion needed, validation will be done in checkFunction
+        }
+
+        // The default step of integer array_generate(start, end) is 1 when start <= end and -1 otherwise.
+        // FunctionAnalyzer can only pick it when both arguments are literals, so for other arguments add
+        // if(start <= end, 1, -1) as an explicit step. The step repeats start and end, so a non-deterministic
+        // bound such as rand() would be evaluated twice; those get an explicit step of 1, as before.
+        private void addArrayGenerateDefaultStep(String fnName, FunctionCallExpr node, Scope scope) {
+            if (!FunctionSet.ARRAY_GENERATE.equals(fnName) || node.getChildren().size() != 2 ||
+                    FunctionAnalyzer.isArrayGenerateDateSignature(node)) {
+                return;
+            }
+            Expr start = node.getChild(0);
+            Expr end = node.getChild(1);
+            if ((start instanceof LiteralExpr && end instanceof LiteralExpr) ||
+                    !isIntegerOrNull(start.getType()) || !isIntegerOrNull(end.getType()) ||
+                    ExprUtils.hasLambdaFunction(start) || ExprUtils.hasLambdaFunction(end)) {
+                return;
+            }
+            // A NULL bound makes the result NULL whatever the step, so it only needs one
+            if (start.getType().isNull() || end.getType().isNull() ||
+                    AnalyzerUtils.containsNonDeterministicFunction(start).first ||
+                    AnalyzerUtils.containsNonDeterministicFunction(end).first) {
+                node.addChild(new IntLiteral(1));
+                return;
+            }
+            Expr ascending = new BinaryPredicate(BinaryType.LE, start.clone(), end.clone());
+            Expr step = new FunctionCallExpr(FunctionSet.IF,
+                    Lists.newArrayList(ascending, new IntLiteral(1), new IntLiteral(-1)));
+            analyzeBottomUp(step, scope);
+            node.addChild(step);
+        }
+
+        private static boolean isIntegerOrNull(Type type) {
+            return type.isFixedPointType() || type.isNull();
+        }
+
+        private void analyzeBottomUp(Expr expr, Scope scope) {
+            for (Expr child : expr.getChildren()) {
+                analyzeBottomUp(child, scope);
+            }
+            visit(expr, scope);
         }
 
         private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {

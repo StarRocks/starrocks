@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QualifiedName;
@@ -418,7 +419,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 collect(Collectors.toList());
         boolean isDistinct = node.getSelect().isDistinct();
         SelectList selectList = new SelectList(selectListItems, isDistinct);
-        Relation from = (Relation) processOptional(node.getFrom(), context);
+        Relation from = wrapStandaloneTableFunction((Relation) processOptional(node.getFrom(), context));
 
         // from == null means a statement without from or from dual, add a single row of null values here
         if (from == null) {
@@ -540,6 +541,18 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         FunctionCallExpr functionCallExpr = new FunctionCallExpr("unnest", expressions);
         TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(functionCallExpr);
         return tableFunctionRelation;
+    }
+
+    // Trino allows UNNEST as a standalone relation, e.g. SELECT d FROM UNNEST(sequence(...)) AS t(d).
+    // StarRocks only accepts a bare table function on the right side of a lateral join, so wrap it the
+    // same way as TABLE(unnest(...)): a lateral join with a one-row relation that only exposes the
+    // table function's columns. UNNEST on the right side of a join stays lateral and can still
+    // reference columns from the left side.
+    private static Relation wrapStandaloneTableFunction(Relation relation) {
+        if (relation instanceof TableFunctionRelation) {
+            return new NormalizedTableFunctionRelation((TableFunctionRelation) relation);
+        }
+        return relation;
     }
 
     @Override
@@ -677,7 +690,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitJoin(Join node, ParseTreeContext context) {
-        Relation left = (Relation) visit(node.getLeft(), context);
+        Relation left = wrapStandaloneTableFunction((Relation) visit(node.getLeft(), context));
         Relation right = (Relation) visit(node.getRight(), context);
         JoinOperator joinType = JOIN_TYPE_MAP.get(node.getType());
         if (joinType == null) {
@@ -1079,8 +1092,13 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitIntervalLiteral(IntervalLiteral node, ParseTreeContext context) {
+        // Trino keeps the sign of INTERVAL -'1' DAY apart from its value; apply it, so -'1' is -1 and -'-1' is 1
+        String value = node.getValue().trim();
+        if (node.getSign() == IntervalLiteral.Sign.NEGATIVE) {
+            value = value.startsWith("-") ? value.substring(1) : "-" + value;
+        }
         return new com.starrocks.sql.ast.expression.IntervalLiteral(
-                new com.starrocks.sql.ast.expression.StringLiteral(node.getValue()),
+                new com.starrocks.sql.ast.expression.StringLiteral(value),
                 new UnitIdentifier(node.getStartField().toString()));
     }
 

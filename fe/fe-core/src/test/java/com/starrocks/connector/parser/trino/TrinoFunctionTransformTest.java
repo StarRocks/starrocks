@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.parser.trino;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -75,6 +76,54 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select slice(array[1,2,3,4], 2, 2)";
         assertPlanContains(sql, "array_slice([1,2,3,4], 2, 2)");
+
+        sql = "select sequence(1, 5)";
+        assertPlanContains(sql, "array_generate(1, 5, 1)");
+
+        // on columns, the step follows the direction of start and stop, as in Trino
+        sql = "select sequence(v1, v2) from t0";
+        assertPlanContains(sql, "if(1: v1 <= 2: v2, 1, -1)");
+
+        sql = "select sequence(1, 10, 3)";
+        assertPlanContains(sql, "array_generate(1, 10, 3)");
+
+        // array_generate picks the direction from start and stop, so a negative interval becomes a positive step
+        sql = "select sequence(date '2024-01-05', date '2024-01-01', interval '-1' day)";
+        assertPlanContains(sql, "array_generate('2024-01-05', '2024-01-01', 1, 'day')");
+
+        sql = "select sequence(TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 06:00:00', interval '2' hour)";
+        assertPlanContains(sql, "array_generate('2024-01-01 00:00:00', '2024-01-01 06:00:00', 2, 'hour')");
+
+        sql = "select sequence(date '2024-01-01', date '2024-01-03')";
+        assertPlanContains(sql, "array_generate('2024-01-01', '2024-01-03', 1, 'day')");
+
+        // Trino accepts whole-day intervals for dates
+        sql = "select sequence(date '2024-01-01', date '2024-01-03', interval '24' hour)";
+        assertPlanContains(sql, "array_generate('2024-01-01', '2024-01-03', 1, 'day')");
+
+        // Trino rejects a zero step, and a step whose sign disagrees with start and stop
+        // a zero step fails when the query runs, unless start or stop is NULL, which returns NULL as in Trino
+        sql = "select sequence(v1, v2, 0) from t0";
+        assertPlanContains(sql, "step must not be zero", "IS NULL");
+        sql = "select sequence(v1, v2, 2) from t0";
+        assertPlanContains(sql, "assert_true(", "array_generate(1: v1, 2: v2, 2)");
+
+        // a step expression, such as -1, is checked for zero and direction when the query runs; a NULL step passes
+        sql = "select sequence(v1, v2, -1) from t0";
+        assertPlanContains(sql, "step must not be zero", "IS NULL", "array_generate(1: v1, 2: v2, ");
+
+        // a NULL bound, in either position, gets an explicit step and returns NULL
+        getFragmentPlan("select sequence(v1, NULL) from t0");
+        getFragmentPlan("select sequence(NULL, v1) from t0");
+
+        // the sign of INTERVAL -'1' DAY is kept: a valid descending sequence
+        sql = "select sequence(date '2024-01-03', date '2024-01-01', interval -'1' day)";
+        assertPlanContains(sql, "array_generate('2024-01-03', '2024-01-01', 1, 'day')");
+
+        // no direction check for non-deterministic bounds, which the check would evaluate a second time
+        sql = "select sequence(v1, cast(rand() * 10 as bigint), 2) from t0";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertFalse(plan.contains("assert_true("), plan);
 
         sql = "select contains_sequence(array[1,2,3], array[1,2])";
         assertPlanContains(sql, "array_contains_seq([1,2,3], [1,2])");

@@ -62,3 +62,35 @@ None	None
 None	None
 None	None
 -- !result
+select sequence(a, b, c) from (select 1 as a, 3 as b, cast(null as bigint) as c) t;
+-- result:
+None
+-- !result
+select sequence(a, b, c) from (select 3 as a, 1 as b, -1 as c) t;
+-- result:
+[3,2,1]
+-- !result
+select sequence(1, 3, -1);
+-- result:
+[REGEX].*sequence stop value should be greater than or equal to start value.*
+-- !result
+select sequence(DATE '2024-01-03', DATE '2024-01-01', INTERVAL -'1' DAY);
+-- result:
+["2024-01-03","2024-01-02","2024-01-01"]
+-- !result
+select sequence(a, b, c) from (select cast(null as bigint) as a, 3 as b, 0 as c) t;
+-- result:
+None
+-- !result
+select sequence(1, 3, 0);
+-- result:
+[REGEX].*step must not be zero.*
+-- !result
+select sequence(a, NULL) from (select 1 as a) t;
+-- result:
+None
+-- !result
+select sequence(NULL, a) from (select 1 as a) t;
+-- result:
+None
+-- !result

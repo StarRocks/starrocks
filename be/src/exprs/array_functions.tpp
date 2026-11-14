@@ -1849,7 +1849,7 @@ static inline Status array_generate_too_many_elements() {
                                                                                                                    \
             using ValueType = std::conditional_t<LType == TYPE_DATE, DateValue, TimestampValue>;                   \
             ValueType current = start;                                                                             \
-            while (true) {                                                                                         \
+            for (int32_t i = 1;; i++) {                                                                            \
                 if (is_forward) {                                                                                  \
                     if (current > stop) break;                                                                     \
                 } else {                                                                                           \
@@ -1859,7 +1859,18 @@ static inline Status array_generate_too_many_elements() {
                 data_column->append_datum(current);                                                                \
                 total_elements_num++;                                                                              \
                                                                                                                    \
-                ValueType next = current.template add<TIME_UNIT>(actual_step);                                     \
+                /* Calendar units are added to start, not to the previous element, so a month-end start */         \
+                /* doesn't drift: Jan 31 + 1, 2 months is Feb 29, Mar 31, not Feb 29, Mar 29. Fixed-length */      \
+                /* units give the same result either way and stay incremental to avoid int overflow. */            \
+                ValueType next;                                                                                    \
+                if constexpr (TIME_UNIT == TimeUnit::MONTH || TIME_UNIT == TimeUnit::QUARTER ||                    \
+                              TIME_UNIT == TimeUnit::YEAR) {                                                       \
+                    int64_t offset = static_cast<int64_t>(actual_step) * i;                                        \
+                    if (offset > INT32_MAX || offset < INT32_MIN) break;                                           \
+                    next = start.template add<TIME_UNIT>(static_cast<int32_t>(offset));                            \
+                } else {                                                                                           \
+                    next = current.template add<TIME_UNIT>(actual_step);                                           \
+                }                                                                                                  \
                                                                                                                    \
                 if (!next.is_valid_non_strict()) break;                                                            \
                                                                                                                    \
