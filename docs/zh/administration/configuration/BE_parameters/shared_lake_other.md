@@ -433,6 +433,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述: 存算分离集群中主键索引缓存的占用上限，以缓存容量的百分比表示。每次 Publish 结束后（因超出内存限制而失败的除外）都会检查一次：占用超过该比例时，按最近最少使用的顺序淘汰未在使用的主键索引，直至占用回落到该比例以内。缓存增长快于后台线程将其回收到 `primary_key_index_memory_high_percent` 的速度时，由该配置项兜底，因此应设置为大于该配置项的值。
 - 引入版本: -
 
+### remote_read_skip_contended_cache_writes
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，缓存盘繁忙时远端 IO 调度器是否可以不把拉取到的数据块写入 Data Cache。缓存盘繁忙指连续两次 250 ms 采样中，磁盘利用率都不低于 90%，且读请求占服务时间的比例不低于 20%。只有大查询扫描后段拉取的数据块才可能跳过写入，且该数据块必须已按 `remote_read_retain_prefetched_bytes` 保留在内存中，由内存中的副本供读取方使用。跳过写入的数据块再次被读取时，会重新从对象存储拉取。如果缓存盘比网络慢，且后续扫描经常回读前面扫描刚写入缓存的数据，开启该参数可能有帮助。`remote_io_scheduler_enable` 为 `false` 或 `remote_read_retain_prefetched_bytes` 为 `0` 时不生效。修改后对之后拉取的数据块生效。
+- 引入版本：-
+
 ### s3_multipart_equal_part_size
 
 - 默认值：false

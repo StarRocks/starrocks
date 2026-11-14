@@ -51,6 +51,10 @@ void set_starlet_in_shutdown();
 // how those parts are cut. Called during worker init; exposed for tests.
 void apply_starlet_upload_threshold_configs();
 
+// Applies remote_read_skip_contended_cache_writes to the starlet gflag of the same name. Called during worker init and
+// on a dynamic config update.
+void apply_remote_read_skip_contended_cache_writes();
+
 #ifdef BE_TEST
 void set_staros_worker_for_test(std::shared_ptr<StarOSWorker> worker);
 std::shared_ptr<staros::starlet::Starlet> swap_starlet_for_test(std::shared_ptr<staros::starlet::Starlet> starlet);
