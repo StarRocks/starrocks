@@ -1,0 +1,16 @@
+-- name: test_encode_fingerprint_sha256_null @sequential
+-- Regression: encode_fingerprint_sha256 read the per-row null bitmap of each argument
+-- column. For an all-NULL (only_null) argument the const null column has a single
+-- element and the data column is absent, so iterating null_data[row] over a multi-row
+-- chunk read out of bounds and could dereference the missing data column, crashing the
+-- BE (SIGSEGV in SHA256_Update). The fix handles an only_null column as all-NULL.
+CREATE TABLE t_fp (k INT, v INT)
+  DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES("replication_num" = "1");
+INSERT INTO t_fp SELECT generate_series, generate_series FROM TABLE(generate_series(1, 5000));
+-- all-NULL argument over a multi-row chunk must not crash the BE
+[UC] SELECT count(encode_fingerprint_sha256(v, CAST(NULL AS INT))) FROM t_fp;
+-- a normal single-row call still produces a 32-byte digest
+SELECT length(encode_fingerprint_sha256(7, 11));
+-- BE must still be serving queries
+SELECT count(*) FROM t_fp;
