@@ -919,6 +919,23 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> ScalarColumnIterator::get_io_
         prev_page_index = iter_end.page_index();
     }
 
+    // |range| is not necessarily ascending: a descending scan splits the row ranges and reverses them (see
+    // SparseRange::split_and_reverse), and two neighbouring row ranges may share the same data page. Sort the page
+    // ranges and merge the overlapped ones, otherwise the same page is reported twice and
+    // SharedBufferedInputStream rejects the io ranges ("io ranges are overlapped").
+    std::sort(page_index.begin(), page_index.end());
+    size_t merged = 0;
+    for (size_t i = 1; i < page_index.size(); ++i) {
+        if (page_index[i].first <= page_index[merged].second) {
+            page_index[merged].second = std::max(page_index[merged].second, page_index[i].second);
+        } else {
+            page_index[++merged] = page_index[i];
+        }
+    }
+    if (!page_index.empty()) {
+        page_index.resize(merged + 1);
+    }
+
     for (auto pair : page_index) {
         OrdinalPageIndexIterator iter_start;
         OrdinalPageIndexIterator iter_end;
