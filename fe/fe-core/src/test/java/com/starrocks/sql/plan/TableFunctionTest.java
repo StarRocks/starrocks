@@ -15,11 +15,21 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionName;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.TableFunction;
 import com.starrocks.planner.TableFunctionNode;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.HdfsURI;
+import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -271,6 +281,49 @@ public class TableFunctionTest extends PlanTestBase {
         });
 
         Assertions.assertTrue(e.getMessage().contains("Not unique table/alias: 'table_function_unnest'"));
+    }
+
+    @Test
+    public void testUnnestNullArgument() throws Exception {
+        // A NULL array argument keeps the table function in the plan instead of folding it away.
+        String plan = getFragmentPlan("select v1, x from t0, unnest(cast(null as array<int>)) as t(x)");
+        assertContains(plan, "tableFunctionName: unnest", "<slot 5> : NULL");
+
+        plan = getFragmentPlan("select v1, x from t0 left join unnest(cast(null as array<int>)) as t(x) on true");
+        assertContains(plan, "tableFunctionName: unnest", "<slot 5> : NULL");
+
+        // The other arrays keep their elements.
+        plan = getFragmentPlan("select v1, x, y from t0, unnest([v2, v3], cast(null as array<int>)) as t(x, y)");
+        assertContains(plan, "tableFunctionName: unnest", "<slot 6> : [2: v2,3: v3]", "<slot 7> : NULL");
+
+        // Arguments are still coerced like the arguments of a scalar call, e.g. a numeric string with spaces.
+        plan = getFragmentPlan("select * from TABLE(generate_series(' 1 ', 3))");
+        assertContains(plan, "tableFunctionName: generate_series");
+
+        // Other table functions still reject a NULL argument when the whole call would fold to NULL.
+        Exception e = Assertions.assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan("select v1, x from t0, generate_series(1, null) as t(x)"));
+        Assertions.assertEquals("table function not support null parameter", e.getMessage());
+
+        // As before, a call with a non-constant argument isn't folded, so its NULL argument reaches the function.
+        plan = getFragmentPlan("select v1, x from t0, generate_series(v1, null) as t(x)");
+        assertContains(plan, "tableFunctionName: generate_series");
+    }
+
+    @Test
+    public void testUdtfNullArgument() throws Exception {
+        // A UDTF handles its own NULL input; NULL propagation never folded a UDF call.
+        FunctionName functionName = new FunctionName("nullable_udtf");
+        TableFunction udtf = new TableFunction(functionName, Lists.newArrayList("x"),
+                Lists.newArrayList(IntegerType.INT), Lists.newArrayList(IntegerType.INT));
+        udtf.setLocation(new HdfsURI("file://udtf.jar"));
+        udtf.setBinaryType(TFunctionBinaryType.SRJAR);
+        Field functionSetField = GlobalStateMgr.class.getDeclaredField("functionSet");
+        functionSetField.setAccessible(true);
+        ((FunctionSet) functionSetField.get(GlobalStateMgr.getCurrentState())).addBuiltin(udtf);
+
+        String plan = getFragmentPlan("select * from TABLE(nullable_udtf(cast(null as int)))");
+        assertContains(plan, "tableFunctionName: nullable_udtf");
     }
 
     @Test

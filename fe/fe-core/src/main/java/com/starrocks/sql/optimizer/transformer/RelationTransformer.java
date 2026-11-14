@@ -145,6 +145,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
@@ -1197,16 +1198,35 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             outputColumns.add(columnRefFactory.create(colName, tableFunction.getTableFnReturnTypes().get(i), true));
         }
 
-        FunctionCallExpr expr = new FunctionCallExpr(tableFunction.getFunctionName().getFunction(), node.getChildExpressions());
-        expr.setFn(tableFunction);
-        ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr, context, columnRefFactory);
+        // Translate the arguments one by one instead of as a scalar call: scalar NULL propagation would fold the
+        // whole call to NULL when any argument is NULL, but a table function is a relation, not a value. UNNEST of
+        // a NULL array produces no rows, or a NULL-padded row in a left join, and leaves the other arrays intact.
+        List<ScalarOperator> arguments = new ArrayList<>();
+        for (int i = 0; i < node.getChildExpressions().size(); ++i) {
+            ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(node.getChildExpressions().get(i),
+                    context, columnRefFactory);
+            // Coerce the argument the way ImplicitCastRule coerced it as a child of the call, so constants are
+            // still cast and folded by the scalar rules (e.g. a numeric string with spaces).
+            Type argumentType = tableFunction.getArgs()[i];
+            if (!argumentType.matchesType(scalarOperator.getType())) {
+                scalarOperator = new ScalarOperatorRewriter().rewrite(new CastOperator(argumentType, scalarOperator, true),
+                        ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            }
+            arguments.add(scalarOperator);
+        }
 
-        if (operator.isConstantRef() && ((ConstantOperator) operator).isNull()) {
-            throw new StarRocksPlannerException("table function not support null parameter", ErrorType.USER_ERROR);
+        // Other table functions keep the error they got when the whole call folded to NULL: the evaluator decides
+        // as before, so UDFs, functions that handle NULL input and calls with non-constant arguments still run.
+        if (!FunctionSet.UNNEST.equalsIgnoreCase(tableFunction.functionName())) {
+            CallOperator call = new CallOperator(tableFunction.functionName(), tableFunction.getReturnType(),
+                    arguments, tableFunction);
+            if (ScalarOperatorEvaluator.INSTANCE.evaluation(call, false).isConstantNull()) {
+                throw new StarRocksPlannerException("table function not support null parameter", ErrorType.USER_ERROR);
+            }
         }
 
         List<Pair<ColumnRefOperator, ScalarOperator>> projectMap = new ArrayList<>();
-        for (ScalarOperator scalarOperator : operator.getChildren()) {
+        for (ScalarOperator scalarOperator : arguments) {
             if (scalarOperator instanceof ColumnRefOperator) {
                 projectMap.add(Pair.create((ColumnRefOperator) scalarOperator, scalarOperator));
             } else {
