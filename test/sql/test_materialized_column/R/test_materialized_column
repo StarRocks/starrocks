@@ -49,7 +49,7 @@ SHOW CREATE TABLE t;
 t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
   `array_data` array<int(11)> NOT NULL COMMENT "",
-  `mc` double NULL AS array_avg(array_data) COMMENT ""
+  `mc` double NULL AS array_avg(`array_data`) COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
@@ -107,7 +107,7 @@ t	CREATE TABLE `t` (
   `name` bigint(20) NOT NULL COMMENT "",
   `job` int(11) NOT NULL COMMENT "",
   `newcol` int(11) NULL DEFAULT "0" COMMENT "",
-  `mc` int(11) NULL AS job COMMENT ""
+  `mc` int(11) NULL AS `job` COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
