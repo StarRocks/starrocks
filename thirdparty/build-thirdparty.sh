@@ -734,7 +734,7 @@ build_brpc() {
     cd $TP_SOURCE_DIR/$BRPC_SOURCE
     CMAKE_GENERATOR="Unix Makefiles"
     BUILD_SYSTEM='make'
-    PATH=$PATH:$TP_INSTALL_DIR/bin/ ./config_brpc.sh --headers="$TP_INSTALL_DIR/include" --libs="$TP_INSTALL_DIR/bin $TP_INSTALL_DIR/lib" --with-glog --with-thrift
+    PATH=$PATH:$TP_INSTALL_DIR/bin/ bash ./config_brpc.sh --headers="$TP_INSTALL_DIR/include" --libs="$TP_INSTALL_DIR/bin $TP_INSTALL_DIR/lib" --with-glog --with-thrift
     make -j$PARALLEL
     cp -rf output/* ${TP_INSTALL_DIR}/
     if [ -f $TP_INSTALL_DIR/lib/libbrpc.a ]; then
@@ -754,7 +754,7 @@ build_rocksdb() {
     EXTRA_CFLAGS="-I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy -I ${TP_INCLUDE_DIR}/lz4 -L${TP_LIB_DIR} ${FILE_PREFIX_MAP_OPTION}" \
     EXTRA_CXXFLAGS="-fPIC -Wno-redundant-move -Wno-deprecated-copy -Wno-stringop-truncation -Wno-pessimizing-move -I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy ${FILE_PREFIX_MAP_OPTION}" \
     EXTRA_LDFLAGS="-static-libstdc++ -static-libgcc" \
-    PORTABLE=1 make USE_RTTI=1 -j$PARALLEL static_lib
+    PORTABLE=1 DISABLE_WARNING_AS_ERROR=1 make USE_RTTI=1 -j$PARALLEL static_lib
 
     cp librocksdb.a $TP_LIB_DIR/librocksdb.a
     cp -r include/rocksdb $TP_INCLUDE_DIR
@@ -774,7 +774,7 @@ build_kerberos() {
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    CFLAGS="-fPIC" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit
+    CFLAGS="-std=gnu17 -fPIC" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit
     make -j$PARALLEL
     make install
 }
@@ -1384,6 +1384,7 @@ build_avro_cpp() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c++
     mkdir -p build
     cd build
+    LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=${TP_INSTALL_DIR} -DBoost_USE_STATIC_RUNTIME=ON  -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} -DSNAPPY_INCLUDE_DIR=${TP_INSTALL_DIR}/include -DSNAPPY_LIBRARIES=${TP_INSTALL_DIR}/lib
     LIBRARY_PATH=${TP_INSTALL_DIR}/lib64:$LIBRARY_PATH LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib64:$LD_LIBRARY_PATH ${BUILD_SYSTEM} -j$PARALLEL
 

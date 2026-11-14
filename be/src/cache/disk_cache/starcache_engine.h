@@ -16,8 +16,17 @@
 
 #include "cache/disk_cache/local_disk_cache_engine.h"
 #include "common/status.h"
+
+#ifdef WITH_STARCACHE
 #include "starcache/star_cache.h"
 #include "starcache/time_based_cache_adaptor.h"
+#else
+namespace starcache {
+class StarCache;
+class TimeBasedCacheAdaptor;
+struct CacheMetrics;
+} // namespace starcache
+#endif
 
 namespace starrocks {
 
@@ -45,7 +54,9 @@ public:
 
     Status update_inline_cache_count_limit(int32_t limit) override;
 
+#ifdef WITH_STARCACHE
     const StarCacheMetrics starcache_metrics(int level) const;
+#endif
 
     const DataCacheDiskMetrics cache_metrics() const override;
 
