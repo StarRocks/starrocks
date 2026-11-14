@@ -15,8 +15,11 @@
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.LanceTable;
+import com.starrocks.connector.CatalogConnector;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TConnectorScanNode;
@@ -34,6 +37,7 @@ import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -60,8 +64,14 @@ public class LanceScanNode extends ScanNode {
     }
 
     private void setupCloudCredential() {
-        // Lance tables will use properties/credentials defined in catalog
-        // For Phase 1 & 2 mock catalog, we can safely allow empty config or resolve standard connectors if registered
+        String catalog = lanceTable.getCatalogName();
+        if (catalog == null) {
+            return;
+        }
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+        Preconditions.checkState(connector != null, "Missing Lance catalog connector");
+        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        Preconditions.checkState(cloudConfiguration != null, "Missing Lance catalog cloud configuration");
     }
 
     @Override
@@ -100,7 +110,10 @@ public class LanceScanNode extends ScanNode {
         hdfsScanRange.setFull_path(lanceTable.getUri());
         // The reader takes its dataset URI from TLanceTable; full_path identifies the range to the scheduler.
         // A single range scans the entire dataset, including every fragment.
-        // Leave split_info unset until fragment enumeration and reader splitting are implemented.
+        // REST metadata carries identifiers and a token-file reference, never credential values.
+        if (lanceTable.getRestCatalogInfo() != null) {
+            hdfsScanRange.setLance_split_info(lanceTable.getRestCatalogInfo().getBytes(StandardCharsets.UTF_8));
+        }
         hdfsScanRange.setFile_length(0);
         hdfsScanRange.setLength(0);
         hdfsScanRange.setFile_format(THdfsFileFormat.LANCE);
