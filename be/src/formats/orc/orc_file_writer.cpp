@@ -263,7 +263,12 @@ Status ORCFileWriter::_write_string(orc::ColumnVectorBatch& orc_column, const Co
 
     for (size_t i = 0; i < column_size; ++i) {
         auto slice = data_col->get_slice(i);
-        string_orc_column.data[i] = const_cast<char*>(slice.get_data());
+        // Empty strings in a column whose _bytes buffer is completely empty carry a nullptr data pointer
+        // (BinaryColumn::get_slice on an unallocated buffer). The ORC library skips nullptr values when it updates
+        // the min/max statistics (StringColumnStatisticsImpl::update), which drops empty strings from the
+        // stripe/file statistics and makes min/max pruning skip the data for `col = ''`. Use a valid pointer.
+        string_orc_column.data[i] =
+                slice.get_size() == 0 ? const_cast<char*>("") : const_cast<char*>(slice.get_data());
         string_orc_column.length[i] = slice.get_size();
     }
 
