@@ -90,9 +90,12 @@ private:
     void _init_build_match() const;
     Status _permute_probe_row(const ChunkPtr& chunk);
     StatusOr<ChunkPtr> _permute_chunk_for_other_join(size_t chunk_size);
-    ChunkPtr _permute_chunk_for_inner_join(size_t chunk_size);
+    StatusOr<ChunkPtr> _permute_chunk_for_inner_join(size_t chunk_size);
     void _permute_chunk_base_left(ChunkPtr* chunk);
     void _permute_chunk_base_right(ChunkPtr* chunk);
+    // Estimate whether the next permute step would push an output binary column past its uint32 range.
+    bool _next_inner_join_permute_exceeds_binary_limit(const ChunkPtr& result_chunk) const;
+    bool _permute_probe_row_exceeds_binary_limit(const ChunkPtr& chunk) const;
     Status _permute_right_join(size_t chunk_size);
     void _permute_left_join(const ChunkPtr& chunk, size_t probe_row_index, size_t probe_rows);
     bool _is_curr_probe_chunk_finished() const;
