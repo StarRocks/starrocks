@@ -45,19 +45,28 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.summary.AuditLoaderPlugin;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.io.FileUtils;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -149,5 +158,49 @@ public class PluginMgrTest {
         pluginMgr.uninstallPluginFromStmt(stmt);
         assertFalse(pluginMgr.getAllDynamicPluginInfo()
                 .stream().anyMatch(p -> p.getName().equals(pluginName)));
+    }
+
+    @Test
+    public void testBuiltinAuditLoaderRegistered() throws Exception {
+        PluginMgr pluginMgr = new PluginMgr();
+        pluginMgr.init();
+        assertTrue(pluginMgr.getActivePlugin(PluginMgr.BUILTIN_PLUGIN_PREFIX + "AuditLoader",
+                PluginType.AUDIT) != null);
+        assertTrue(pluginMgr.getActivePluginList(PluginType.AUDIT).size() >= 2);
+        // A second init hits the already-registered branch of every builtin plugin.
+        pluginMgr.init();
+        assertTrue(pluginMgr.getActivePluginList(PluginType.AUDIT).size() >= 2);
+    }
+
+    @Test
+    public void testBuiltinAuditLoaderRegistrationConflictPreservesExistingPlugin() throws Exception {
+        PluginMgr pluginMgr = new PluginMgr();
+        AuditLoaderPlugin existing = new AuditLoaderPlugin();
+        assertTrue(pluginMgr.registerBuiltinPlugin(existing.getPluginInfo(), existing));
+        List<String> warnings = new ArrayList<>();
+        Logger logger = (Logger) LogManager.getLogger(PluginMgr.class);
+        Level previousLevel = logger.getLevel();
+        AbstractAppender appender = new AbstractAppender("audit-registration-conflict-test", null, null) {
+            @Override
+            public void append(LogEvent event) {
+                if (event.getLevel() == Level.WARN) {
+                    warnings.add(event.getMessage().getFormattedMessage());
+                }
+            }
+        };
+        appender.start();
+        logger.addAppender(appender);
+        logger.setLevel(Level.WARN);
+        try {
+            pluginMgr.init();
+            assertSame(existing, pluginMgr.getActivePlugin(existing.getPluginInfo().getName(), PluginType.AUDIT));
+            assertEquals(2, pluginMgr.getActivePluginList(PluginType.AUDIT).size());
+            assertTrue(pluginMgr.getAllDynamicPluginInfo().isEmpty());
+            assertEquals(List.of("failed to register builtin audit loader"), warnings);
+        } finally {
+            logger.removeAppender(appender);
+            appender.stop();
+            logger.setLevel(previousLevel);
+        }
     }
 }
