@@ -34,9 +34,9 @@
 
 #include "http/action/health_action.h"
 
-#include <sstream>
 #include <string>
 
+#include "common/process_exit.h"
 #include "common/tracer.h"
 #include "platform/http/http_channel.h"
 #include "platform/http/http_headers.h"
@@ -53,21 +53,22 @@ bool HealthAction::need_auth() const {
     return true;
 }
 
+std::pair<HttpStatus, std::string_view> HealthAction::health_response(bool crashing) {
+    if (crashing) {
+        return {HttpStatus::SERVICE_UNAVAILABLE,
+                R"({"status": "CRASHING","msg": "fatal signal handler is running; process is terminating"})"};
+    }
+    // Byte-identical to the historical hardcoded 200 reply: consumers must see no
+    // change while the process is healthy.
+    return {HttpStatus::OK, R"({"status": "OK","msg": "To Be Added"})"};
+}
+
 void HealthAction::handle(HttpRequest* req) {
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_health"));
-    std::stringstream ss;
-    ss << "{";
-    ss << R"("status": "OK",)";
-    ss << R"("msg": "To Be Added")";
-    ss << "}";
-    std::string result = ss.str();
+    auto [status, body] = health_response(is_process_crashing());
 
     req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_JSON.c_str());
-    HttpChannel::send_reply(req, HttpStatus::OK, result);
-#if 0
-    HttpResponse response(HttpStatus::OK, HEADER_JSON, &result);
-    channel->send_response(response);
-#endif
+    HttpChannel::send_reply(req, status, body);
 }
 
 } // end namespace starrocks

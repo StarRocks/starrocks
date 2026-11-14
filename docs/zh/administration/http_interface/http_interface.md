@@ -65,7 +65,7 @@ products: [oss, enterprise, anywhere]
 | HEAD/GET         | `/api/_download_load`                                             | |
 | HEAD/GET         | `/api/_tablet/_download`                                          | |
 | HEAD/GET         | `/api/_load_error_log`                                            | |
-| GET              | `/api/health`                                                     | |
+| GET              | `/api/health`                                                     | 返回 BE 进程的健康状态。进程正常时返回 HTTP 200；当致命信号处理函数将进程标记为 crashing 后返回 HTTP 503，以便编排系统的健康检查（例如 Kubernetes liveness probe）重启崩溃处理函数卡住的节点。 |
 | GET              | `/api/_stop_be`                                                   | |
 | GET              | `/pprof/heap`                                                     | |
 | GET              | `/pprof/growth`                                                   | |
@@ -96,7 +96,7 @@ products: [oss, enterprise, anywhere]
 
 | HTTP 请求方法       | HTTP 请求路径                                                   | 描述                                                                                                                |
 |------------------| --------------------------------------------------------------  |-------------------------------------------------------------------------------------------------------------------- |
-| GET              | `/api/health`                                                     | |
+| GET              | `/api/health`                                                     | 返回 CN 进程的健康状态。进程正常时返回 HTTP 200；当致命信号处理函数将进程标记为 crashing 后返回 HTTP 503，以便编排系统的健康检查（例如 Kubernetes liveness probe）重启崩溃处理函数卡住的节点。 |
 | GET              | `/pprof/heap`                                                     | |
 | GET              | `/pprof/growth`                                                   | |
 | GET              | `/pprof/profile`                                                  | |
