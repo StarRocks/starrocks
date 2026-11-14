@@ -334,6 +334,8 @@ public:
 
     void add_in_writing_data_size(int64_t txn_id, int64_t delta);
 
+    void set_in_writing_data_size(int64_t txn_id, int64_t bytes);
+
     void remove_in_writing_data_size(int64_t txn_id);
 
     // verify all rowsets of current(max) version in this tablet
@@ -480,6 +482,9 @@ private:
 
     std::unique_ptr<BinlogManager> _binlog_manager;
 
+    // Accounting may run under a TxnManager map lock. Keep it independent of _meta_lock,
+    // which can be held across publish metadata I/O, and never call back into TxnManager here.
+    std::mutex _in_writing_size_lock;
     std::unordered_map<int64_t, int64_t> _in_writing_txn_size;
 
     // this variable indicate tablet will be replaced in TabletManger by
