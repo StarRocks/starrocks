@@ -21,6 +21,6 @@ public class StarRocksPlugin
 {
     public StarRocksPlugin()
     {
-        super("starrocks", new StarRocksClientModule());
+        super("starrocks", StarRocksClientModule::new);
     }
 }
