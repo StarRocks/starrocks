@@ -123,40 +123,6 @@ public class ConvertTzStatisticUtilsTest {
                 min, max, ConstantOperator.createVarchar("Not/AZone"), ConstantOperator.createVarchar("UTC")));
     }
 
-    // ---------- buildSingleBucketHistogram ----------
-
-    @Test
-    public void testBuildSingleBucketHistogramComputesNonMcvRows() {
-        final Map<String, Long> mcv = Map.of("a", 100L, "b", 200L);
-        final Histogram hist = ConvertTzStatisticUtils.buildSingleBucketHistogram(100.0, 200.0, 1000, mcv);
-
-        Assertions.assertEquals(1, hist.getBuckets().size());
-        final Bucket bucket = hist.getBuckets().get(0);
-        Assertions.assertEquals(100.0, bucket.getLower(), 0.001);
-        Assertions.assertEquals(200.0, bucket.getUpper(), 0.001);
-        Assertions.assertEquals(700L, bucket.getCount()); // 1000 - (100 + 200)
-        Assertions.assertEquals(0L, bucket.getUpperRepeats());
-        Assertions.assertEquals(2, hist.getMCV().size());
-    }
-
-    @Test
-    public void testBuildSingleBucketHistogramWithInfiniteBoundsHasNoBucket() {
-        final Map<String, Long> mcv = Map.of("a", 100L);
-        final Histogram hist = ConvertTzStatisticUtils.buildSingleBucketHistogram(
-                Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 1000, mcv);
-
-        Assertions.assertTrue(hist.getBuckets().isEmpty());
-        Assertions.assertEquals(1, hist.getMCV().size());
-    }
-
-    @Test
-    public void testBuildSingleBucketHistogramClampsNonMcvRowsAtZero() {
-        final Map<String, Long> mcv = Map.of("a", 800L, "b", 400L); // sum 1200 > total 1000
-        final Histogram hist = ConvertTzStatisticUtils.buildSingleBucketHistogram(1.0, 2.0, 1000, mcv);
-
-        Assertions.assertEquals(0L, hist.getBuckets().get(0).getCount());
-    }
-
     // ---------- transformHistogram ----------
 
     @Test
@@ -173,7 +139,7 @@ public class ConvertTzStatisticUtilsTest {
                 ConstantOperator.createVarchar(fromTz), ConstantOperator.createVarchar(toTz));
 
         final Optional<Histogram> result = ConvertTzStatisticUtils.transformHistogram(
-                call, childStats, 1.0, 2.0, 1000,
+                call, childStats, 1.0, 2.0, 1000, 2,
                 Optional.of(ConstantOperator.createVarchar(fromTz)),
                 Optional.of(ConstantOperator.createVarchar(toTz)));
 
@@ -196,7 +162,7 @@ public class ConvertTzStatisticUtilsTest {
                 ConstantOperator.createVarchar("UTC"), ConstantOperator.createVarchar("Asia/Shanghai"));
 
         Assertions.assertTrue(ConvertTzStatisticUtils.transformHistogram(
-                call, childStats, 1.0, 2.0, 1000,
+                call, childStats, 1.0, 2.0, 1000, 2,
                 Optional.of(ConstantOperator.createVarchar("UTC")),
                 Optional.of(ConstantOperator.createVarchar("Asia/Shanghai"))).isEmpty());
     }
@@ -212,7 +178,7 @@ public class ConvertTzStatisticUtilsTest {
         final CallOperator call = convertTzCall(fromTzCol, toTzCol);
 
         Assertions.assertTrue(ConvertTzStatisticUtils.transformHistogram(
-                call, childStats, 1.0, 2.0, 1000, Optional.empty(), Optional.empty()).isEmpty());
+                call, childStats, 1.0, 2.0, 1000, 2, Optional.empty(), Optional.empty()).isEmpty());
     }
 
     @Test
@@ -225,7 +191,7 @@ public class ConvertTzStatisticUtilsTest {
                 ConstantOperator.createVarchar("UTC"), ConstantOperator.createVarchar("Asia/Shanghai"));
 
         Assertions.assertTrue(ConvertTzStatisticUtils.transformHistogram(
-                call, childStats, 1.0, 2.0, 1000,
+                call, childStats, 1.0, 2.0, 1000, 2,
                 Optional.of(ConstantOperator.createVarchar("UTC")),
                 Optional.of(ConstantOperator.createVarchar("Asia/Shanghai"))).isEmpty());
     }
@@ -240,7 +206,7 @@ public class ConvertTzStatisticUtilsTest {
                 ConstantOperator.createVarchar("Not/AZone"), ConstantOperator.createVarchar("UTC"));
 
         Assertions.assertTrue(ConvertTzStatisticUtils.transformHistogram(
-                call, childStats, 1.0, 2.0, 1000,
+                call, childStats, 1.0, 2.0, 1000, 2,
                 Optional.of(ConstantOperator.createVarchar("Not/AZone")),
                 Optional.of(ConstantOperator.createVarchar("UTC"))).isEmpty());
     }
