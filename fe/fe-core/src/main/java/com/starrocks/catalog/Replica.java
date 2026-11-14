@@ -160,6 +160,8 @@ public class Replica implements Writable {
      */
     private boolean needFurtherRepair = false;
     private long furtherRepairSetTime = -1;
+    // Raw readable watermarks must not be replaced by FE last-success promotion.
+    private volatile long furtherRepairVersion = -1L;
     private static final long FURTHER_REPAIR_TIMEOUT_MS = 20 * 60 * 1000L; // 20min
 
     // if this watermarkTxnId is set, which means before deleting a replica,
@@ -381,6 +383,21 @@ public class Replica implements Writable {
     public void setNeedFurtherRepair(boolean needFurtherRepair) {
         this.needFurtherRepair = needFurtherRepair;
         this.furtherRepairSetTime = System.currentTimeMillis();
+        if (!needFurtherRepair) {
+            furtherRepairVersion = -1L;
+        }
+    }
+
+    public synchronized void updateFurtherRepairVersion(long readableVersion) {
+        if (needFurtherRepair()) {
+            furtherRepairVersion = Math.max(furtherRepairVersion, readableVersion);
+        }
+    }
+
+    public boolean isVersionCompleteForFurtherRepair(long visibleVersion) {
+        return lastFailedVersion <= 0 && version >= visibleVersion
+                && (!needFurtherRepair() || furtherRepairVersion < 0
+                    || furtherRepairVersion >= visibleVersion);
     }
 
     public boolean getDeferReplicaDeleteToNextReport() {
@@ -406,12 +423,14 @@ public class Replica implements Writable {
                                             long newRowCount) {
         updateReplicaInfo(newVersion, this.lastFailedVersion,
                 this.lastSuccessVersion, minReadableVersion, newDataSize, newRowCount);
+        updateFurtherRepairVersion(newVersion);
     }
 
     public synchronized void updateRowCount(long newVersion, long newDataSize,
                                             long newRowCount) {
         updateReplicaInfo(newVersion, this.lastFailedVersion,
                 this.lastSuccessVersion, this.minReadableVersion, newDataSize, newRowCount);
+        updateFurtherRepairVersion(newVersion);
     }
 
     public synchronized void updateVersionInfo(long newVersion,
