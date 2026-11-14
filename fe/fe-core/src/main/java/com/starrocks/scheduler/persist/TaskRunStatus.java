@@ -35,6 +35,7 @@ import io.netty.buffer.Unpooled;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -538,6 +539,7 @@ public class TaskRunStatus implements Writable, GsonPostProcessable {
                 try {
                     ByteBuf copied = Unpooled.copiedBuffer(buffer);
                     jsonString = copied.toString(Charset.defaultCharset());
+                    jsonString = StringEscapeUtils.unescapeJava(jsonString);
                     res.addAll(ListUtils.emptyIfNull(TaskRunStatusJSONRecord.fromJson(jsonString).data));
                 } catch (Exception e) {
                     // If the task run history is corrupted, we can use `ignore_task_run_history_replay_error` config to ignore
