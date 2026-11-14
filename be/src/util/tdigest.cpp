@@ -150,6 +150,17 @@ Index TDigest::unprocessedSize(Index size, Value compression) noexcept {
 
 // merge in another t-digest
 void TDigest::merge(const TDigest* other) {
+    if (other->_processed.empty()) {
+        // Small percentile states often contain only unprocessed centroids. Append directly
+        // without temporary merge queues or rebuilding cumulative weights for unchanged centroids.
+        appendUnprocessed(*other);
+        processIfNecessary();
+        // _processed is unchanged, so _cumulative only needs building if it was never initialized.
+        if (_cumulative.size() != _processed.size() + 1) {
+            updateCumulative();
+        }
+        return;
+    }
     std::vector<const TDigest*> others{other};
     add(others.cbegin(), others.cend());
 }
@@ -493,16 +504,14 @@ Weight TDigest::weight(int i) const noexcept {
 void TDigest::mergeUnprocessed(const std::vector<const TDigest*>& tdigests) {
     if (tdigests.size() == 0) return;
 
-    size_t total = _unprocessed.size();
     for (auto& td : tdigests) {
-        total += td->_unprocessed.size();
+        appendUnprocessed(*td);
     }
+}
 
-    _unprocessed.reserve(total);
-    for (auto& td : tdigests) {
-        _unprocessed.insert(_unprocessed.end(), td->_unprocessed.cbegin(), td->_unprocessed.cend());
-        _unprocessed_weight += td->_unprocessed_weight;
-    }
+void TDigest::appendUnprocessed(const TDigest& other) {
+    _unprocessed.insert(_unprocessed.end(), other._unprocessed.cbegin(), other._unprocessed.cend());
+    _unprocessed_weight += other._unprocessed_weight;
 }
 
 void TDigest::mergeProcessed(const std::vector<const TDigest*>& tdigests) {
@@ -567,6 +576,8 @@ void TDigest::process() {
     CentroidComparator cc;
     pdqsort(_unprocessed.begin(), _unprocessed.end(), [&](auto& lhs, auto& rhs) { return lhs.mean() < rhs.mean(); });
     auto count = _unprocessed.size();
+    // Reserve exactly so the insert does not double the capacity, which clear() below would retain.
+    _unprocessed.reserve(count + _processed.size());
     _unprocessed.insert(_unprocessed.end(), _processed.cbegin(), _processed.cend());
     std::inplace_merge(_unprocessed.begin(), _unprocessed.begin() + count, _unprocessed.end(), cc);
 
