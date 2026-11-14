@@ -112,21 +112,11 @@ public class LocationRestrictedWorkerProvider implements WorkerProvider {
 
     @Override
     public List<Long> selectAllComputeNodes() {
-        // Do not call delegate.selectAllComputeNodes(): it records every compute-pool node as
-        // selected before filtering. RemoteFragmentAssignmentStrategy invokes this even when
-        // isPreferComputeNode() is false; a later death of an unused node outside L∪N would
-        // cancel the query via CoordinatorMonitor. Filter first, then record.
-        if (!delegate.isPreferComputeNode()) {
-            return List.of();
-        }
-        List<Long> selected = new ArrayList<>();
-        for (Long id : delegate.getAllAvailableNodes()) {
-            if (allowedWorkerIds.contains(id)) {
-                selectWorkerUnchecked(id);
-                selected.add(id);
-            }
-        }
-        return selected;
+        // This wrapper always reports isPreferComputeNode()=false, so RemoteFragmentAssignmentStrategy
+        // calls this unconditionally then discards the result. Do not register any workers as
+        // selected — unused replica BEs (N) would still be watched by CoordinatorMonitor and cancel
+        // the query if they die. Mirror DefaultWorkerProvider's empty path when CN scheduling is off.
+        return List.of();
     }
 
     @Override
@@ -181,9 +171,11 @@ public class LocationRestrictedWorkerProvider implements WorkerProvider {
 
     @Override
     public List<Long> getAllAvailableNodes() {
-        return delegate.getAllAvailableNodes().stream()
-                .filter(allowedWorkerIds::contains)
-                .toList();
+        // Do not filter delegate.getAllAvailableNodes(): with prefer_compute_node +
+        // COMPUTE_NODES_ONLY that list is CN-only, so labelled BEs in allowedWorkers vanish
+        // and adaptive remote-fragment expansion has no candidates. This wrapper overrides
+        // prefer to false and already resolved schedulable L∪N into allowedWorkers.
+        return allowedWorkers.stream().map(ComputeNode::getId).toList();
     }
 
     @Override

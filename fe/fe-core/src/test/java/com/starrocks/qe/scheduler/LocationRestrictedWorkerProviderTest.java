@@ -235,7 +235,8 @@ class LocationRestrictedWorkerProviderTest {
                 Set.of(7L));
         Assertions.assertEquals(1, restricted.getAllWorkers().size());
         Assertions.assertEquals(7L, restricted.getAllWorkers().iterator().next().getId());
-        Assertions.assertEquals(List.of(7L), restricted.selectAllComputeNodes());
+        // Wrapper never prefers CNs, so selectAllComputeNodes must not register anyone.
+        Assertions.assertTrue(restricted.selectAllComputeNodes().isEmpty());
         Assertions.assertEquals(7L, restricted.selectBackupWorker(7L));
         Assertions.assertEquals(-1, restricted.selectBackupWorker(8L));
         Assertions.assertEquals(7L, restricted.selectBackupWorker(7L, 1L));
@@ -243,24 +244,40 @@ class LocationRestrictedWorkerProviderTest {
     }
 
     @Test
-    void testSelectAllComputeNodesDoesNotSelectExcluded() {
+    void testSelectAllComputeNodesDoesNotRegisterWhenPreferDisabled() {
         ImmutableMap<Long, ComputeNode> map = nodes(3);
-        // prefer_compute_node=true + ALL_NODES-style pool: every node is in the compute map.
-        // Calling selectAllComputeNodes on the delegate would mark 2L selected before filtering.
+        // prefer_compute_node=true on the delegate + ALL_NODES-style pool. RemoteFragment still
+        // calls selectAllComputeNodes even though the wrapper reports prefer=false and discards
+        // the result — registering allowed replica BEs would still cancel on unused-BE death.
         DefaultWorkerProvider base = new DefaultWorkerProvider(
                 map, map, map, map, true, WarehouseManager.DEFAULT_RESOURCE);
         LocationRestrictedWorkerProvider restricted =
                 new LocationRestrictedWorkerProvider(base, Set.of(0L, 1L), Set.of(0L));
 
-        List<Long> selected = restricted.selectAllComputeNodes();
-        Assertions.assertEquals(Set.of(0L, 1L), Set.copyOf(selected));
-        Assertions.assertTrue(restricted.isWorkerSelected(0L));
-        Assertions.assertTrue(restricted.isWorkerSelected(1L));
-        Assertions.assertFalse(restricted.isWorkerSelected(2L),
-                "excluded workers outside L∪N must not be recorded as selected");
-        // Wrapper still reports prefer=false; RemoteFragment ignores the list but selection
-        // state must already be clean for CoordinatorMonitor.
+        Assertions.assertTrue(restricted.selectAllComputeNodes().isEmpty());
+        Assertions.assertFalse(restricted.isWorkerSelected(0L));
+        Assertions.assertFalse(restricted.isWorkerSelected(1L));
+        Assertions.assertFalse(restricted.isWorkerSelected(2L));
         Assertions.assertFalse(restricted.isPreferComputeNode());
         Assertions.assertTrue(base.isPreferComputeNode());
+    }
+
+    @Test
+    void testGetAllAvailableNodesUsesAllowedWorkersWhenPreferComputeNode() {
+        // BEs 0,1 and a separate CN 10. prefer_compute_node=true → delegate available list is
+        // CN-only; filtering that against labelled BEs would yield []. Adaptive scheduling needs
+        // the wrapper's allowedWorkers (L∪N) instead.
+        ImmutableMap<Long, ComputeNode> backends = nodes(2);
+        ComputeNode cn = new ComputeNode(10L, "127.0.0.1", 9060);
+        cn.setAlive(true);
+        ImmutableMap<Long, ComputeNode> computeNodes = ImmutableMap.of(10L, cn);
+        DefaultWorkerProvider base = new DefaultWorkerProvider(
+                backends, computeNodes, backends, computeNodes, true, WarehouseManager.DEFAULT_RESOURCE);
+        Assertions.assertEquals(List.of(10L), base.getAllAvailableNodes());
+
+        LocationRestrictedWorkerProvider restricted =
+                new LocationRestrictedWorkerProvider(base, Set.of(0L, 1L), Set.of(0L));
+        Assertions.assertEquals(Set.of(0L, 1L), Set.copyOf(restricted.getAllAvailableNodes()));
+        Assertions.assertFalse(restricted.isPreferComputeNode());
     }
 }
