@@ -125,6 +125,8 @@ Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
         if (_context->subtask_id >= 0) {
             return Status::OK();
         }
+        // The index sstables are read here and by the merge tasks this starts, on their own pool: as this compaction.
+        ScopedRemoteReadContext remote_read_scope(remote_read_context());
         RETURN_IF_ERROR(_tablet.tablet_manager()->primary_key_mgr()->execute_index_major_compaction(
                 _tablet.metadata(), txn_log, _context->is_unshare));
         if (txn_log->has_op_compaction() && !txn_log->op_compaction().input_sstables().empty()) {

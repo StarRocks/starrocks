@@ -94,6 +94,7 @@ void LakePersistentIndexParallelCompactTask::cancel() {
 }
 
 Status LakePersistentIndexParallelCompactTask::do_run() {
+    ScopedRemoteReadContext remote_read_scope(_remote_read);
     Trace* trace = _cb->trace();
     scoped_refptr<Trace> child_trace(new Trace);
     Trace* sub_trace = child_trace.get();

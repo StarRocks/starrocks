@@ -2251,7 +2251,10 @@ TEST_F(SegmentIteratorTest, FooterAndIndexReadsReportStreamStatsOnce) {
                     .io_count_local_disk = 2,
                     .io_count_remote = 3,
                     .io_ns_read_local_disk = 1000,
-                    .io_ns_read_remote = 2000};
+                    .io_ns_read_remote = 2000,
+                    .remote_queue_wait_ns = 400,
+                    .remote_fill_wait_ns = 500,
+                    .remote_fill_joins = 1};
         }
     };
     class ReadStatsFileSystem : public MemoryFileSystem {
@@ -2286,6 +2289,10 @@ TEST_F(SegmentIteratorTest, FooterAndIndexReadsReportStreamStatsOnce) {
         EXPECT_EQ(1000, stats.io_ns_read_local_disk);
         EXPECT_EQ(2000, stats.io_ns_remote);
         EXPECT_GT(stats.io_ns, 0);
+        // The remote read scheduler's waits of footer and index reads reach the scan statistics too.
+        EXPECT_EQ(400, stats.remote_io_queue_wait_ns);
+        EXPECT_EQ(500, stats.remote_io_fill_wait_ns);
+        EXPECT_EQ(1, stats.remote_io_fill_joins);
     };
     LakeIOOptions io_opts;
     io_opts.use_page_cache = false;
@@ -2308,6 +2315,7 @@ TEST_F(SegmentIteratorTest, FooterAndIndexReadsReportStreamStatsOnce) {
     EXPECT_EQ(0, repeated_stats.compressed_bytes_read);
     EXPECT_EQ(0, repeated_stats.io_ns);
     EXPECT_EQ(0, repeated_stats.io_count_request);
+    EXPECT_EQ(0, repeated_stats.remote_io_queue_wait_ns);
 
     // Corrupt real footer/index bytes after writing a valid segment. Reads before the parse error
     // still reach the caller; an unsuccessful footer open must not count as an opened segment.

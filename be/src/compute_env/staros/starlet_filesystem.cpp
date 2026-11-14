@@ -255,10 +255,10 @@ public:
         }
         const auto& s = (*stream_st)->get_io_stats();
         return {
-                s.bytes_read_local_disk,  s.bytes_read_remote,  s.bytes_write_local_disk, s.bytes_write_remote,
-                s.io_count_local_disk,    s.io_count_remote,    s.io_ns_read_local_disk,  s.io_ns_read_remote,
-                s.io_ns_write_local_disk, s.io_ns_write_remote, s.prefetch_hit_count,     s.prefetch_wait_finish_ns,
-                s.prefetch_pending_ns,
+                s.bytes_read_local_disk,  s.bytes_read_remote,    s.bytes_write_local_disk, s.bytes_write_remote,
+                s.io_count_local_disk,    s.io_count_remote,      s.io_ns_read_local_disk,  s.io_ns_read_remote,
+                s.io_ns_write_local_disk, s.io_ns_write_remote,   s.prefetch_hit_count,     s.prefetch_wait_finish_ns,
+                s.prefetch_pending_ns,    s.remote_queue_wait_ns, s.remote_fill_wait_ns,    s.remote_fill_joins,
         };
     }
 

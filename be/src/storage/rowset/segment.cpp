@@ -259,6 +259,9 @@ static void add_read_file_io_stats(const RandomAccessFile& file, OlapReaderStati
     stats->io_count += io.io_count_local_disk + io.io_count_remote;
     stats->io_ns_read_local_disk += io.io_ns_read_local_disk;
     stats->io_ns_remote += io.io_ns_read_remote;
+    stats->remote_io_queue_wait_ns += io.remote_queue_wait_ns;
+    stats->remote_io_fill_wait_ns += io.remote_fill_wait_ns;
+    stats->remote_io_fill_joins += io.remote_fill_joins;
 }
 
 Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
