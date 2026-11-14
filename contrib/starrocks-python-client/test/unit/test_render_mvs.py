@@ -15,6 +15,7 @@
 from unittest.mock import Mock
 
 from alembic.autogenerate.api import AutogenContext
+from sqlalchemy.testing import fixtures
 
 from starrocks.alembic.ops import (
     AlterMaterializedViewOp,
@@ -29,8 +30,8 @@ from starrocks.alembic.render import (
 from test.unit.test_render import _normalize_py_call
 
 
-class TestMaterializedViewRendering:
-    def setup_method(self, method):
+class MaterializedViewRenderingTest(fixtures.TestBase):
+    def setup_test(self):
         self.ctx = Mock(spec=AutogenContext)
 
     # ========================================================================
