@@ -4069,6 +4069,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         sql = "explain %s" % query
         res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], res["msg"])
         for expect in expects:
             tools.assert_true(
                 str(res["result"]).find(expect) > 0,
@@ -4099,6 +4100,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         sql = "explain %s" % query
         res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], res["msg"])
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) == -1, "assert expect %s is found in plan" % (expect))
 
@@ -4136,6 +4138,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         sql = "explain costs %s" % query
         res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], res["msg"])
         for expect in expects:
             plan_string = "\n".join(item[0] for item in res["result"])
             tools.assert_true(
@@ -4151,6 +4154,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         sql = "explain costs %s" % query
         res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], res["msg"])
         plan_string = "\n".join(item[0] for item in res["result"])
         for line in plan_string.split("\n"):
             stripped = line.strip()
@@ -4203,6 +4207,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         sql = "show stats meta %s" % predicate
         res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], res["msg"])
         for expect in expects:
             # Concatenate all tuples in res['result'] into a single string
             meta_string = "\n".join("\t".join(item) for item in res["result"])
@@ -4217,6 +4222,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         sql = "trace values %s" % query
         res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], res["msg"])
         for expect in expects:
             tools.assert_true(
                 str(res["result"]).find(expect) > 0,
@@ -4318,6 +4324,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         sql = "trace times %s" % query
         res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], res["msg"])
         for expect in expects:
             tools.assert_true(
                 str(res["result"]).find(expect) > 0,
