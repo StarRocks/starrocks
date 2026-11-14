@@ -42,7 +42,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.KillStmt;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -76,6 +78,14 @@ public class HttpConnectProcessor extends ConnectProcessor {
         StatementBase parsedStmt = ((HttpConnectContext) ctx).getStatement();
         SecurityPolicyRewriteRule.markRelationsForRewrite(parsedStmt);
         String sql = parsedStmt.getOrigStmt().originStmt;
+
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitRelation(Relation relation, Void context) {
+                relation.setNeedRewrittenByPolicy(true);
+                return null;
+            }
+        }.visit(parsedStmt);
 
         executor = new StmtExecutor(ctx, parsedStmt);
         ctx.setExecutor(executor);
