@@ -34,6 +34,7 @@ enum class AIFunctionRowAction : uint8_t {
     DISPATCH,
     SQL_NULL,
     TERMINAL_ROW_FAILURE,
+    LOCAL_RESULT,
 };
 
 struct AIFunctionRowInput {
@@ -41,6 +42,8 @@ struct AIFunctionRowInput {
     std::string model;
     std::string prompt;
     std::optional<AIMediaInput> media;
+    std::optional<AIRerankInput> rerank;
+    std::optional<AIProviderValue> local_result;
 };
 
 struct AIFunctionInputBatch {

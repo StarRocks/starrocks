@@ -71,6 +71,7 @@ AIProviderErrorCode classify_error(const rapidjson::Value& envelope) {
 } // namespace
 
 StatusOr<AIProviderHttpRequest> DashScopeMultimodalProvider::build_request(const AIChatRequest& request) const {
+    if (request.rerank != nullptr) return Status::InvalidArgument("AI rerank input is not supported by this protocol");
     if (request.capability != AICapability::EMBEDDING) {
         return Status::NotSupported("DashScope multimodal protocol supports embedding only");
     }
@@ -135,8 +136,8 @@ StatusOr<AIProviderHttpRequest> DashScopeMultimodalProvider::build_request(const
     return result;
 }
 
-AIProviderParseResult DashScopeMultimodalProvider::parse_response(std::string_view body,
-                                                                  AICapability capability) const {
+AIProviderParseResult DashScopeMultimodalProvider::parse_response(std::string_view body, AICapability capability,
+                                                                  const AIProviderResponseContext&) const {
     if (body.find('\0') != std::string_view::npos) return AIProviderMalformed{};
     rapidjson::Document document;
     document.Parse<rapidjson::kParseFullPrecisionFlag | rapidjson::kParseValidateEncodingFlag>(body.data(),

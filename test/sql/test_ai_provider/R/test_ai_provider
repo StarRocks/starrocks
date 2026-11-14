@@ -131,7 +131,7 @@ protocol	openai
 -- !result
 CREATE AI PROVIDER ai_provider_bad_test TYPE chat PROPERTIES ("protocol" = "gemini", "endpoint" = "https://x/v1", "model" = "m");
 -- result:
-E: (1064, "Getting analyzing error. Detail message: invalid AI provider protocol 'gemini'; expected one of openai, anthropic, cohere.")
+E: (1064, "Getting analyzing error. Detail message: invalid AI provider protocol 'gemini'; expected one of openai, anthropic, cohere, dashscope_rerank.")
 -- !result
 CREATE AI PROVIDER ai_provider_bad_test TYPE "text" PROPERTIES ("endpoint" = "https://x/v1", "model" = "m");
 -- result:

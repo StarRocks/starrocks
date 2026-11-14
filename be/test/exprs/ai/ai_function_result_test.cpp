@@ -18,6 +18,7 @@
 
 #include <limits>
 
+#include "base/testutil/sync_point.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -120,6 +121,54 @@ TEST(AIFunctionResultTest, EmbeddingAppendsNullableFloatElementsAndDoesNotPartia
         EXPECT_EQ(1, output->size());
         EXPECT_EQ(2, array->elements().size());
     }
+}
+
+TEST(AIFunctionResultTest, RerankPreservesTypedIndicesDoublePrecisionAndEmptyArray) {
+    auto type = TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
+            {"index", "relevance_score"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_DOUBLE)}));
+    auto output = ColumnHelper::create_column(type, true);
+    const double score = 0.123456789012345;
+    ASSERT_TRUE(
+            append_ai_function_result(AIFunctionResultKind::RERANK, AIRerankResult{{2, score}, {0, -0.5}}, output.get())
+                    .ok());
+    ASSERT_EQ(2, output->get(0).get_array().size());
+    EXPECT_EQ(2, output->get(0).get_array()[0].get_struct()[0].get_int32());
+    EXPECT_DOUBLE_EQ(score, output->get(0).get_array()[0].get_struct()[1].get_double());
+    ASSERT_TRUE(append_ai_function_result(AIFunctionResultKind::RERANK, AIRerankResult{}, output.get()).ok());
+    EXPECT_FALSE(output->is_null(1));
+    EXPECT_TRUE(output->get(1).get_array().empty());
+    for (AIProviderValue invalid :
+         {AIProviderValue(std::string("[]")),
+          AIProviderValue(AIRerankResult{{0, 0.5}, {1, std::numeric_limits<double>::infinity()}}),
+          AIProviderValue(AIRerankResult{{-1, 1}}), AIProviderValue(AIRerankResult{{0, 1}, {0, 0.5}}),
+          AIProviderValue(AIRerankResult{{0, 0.1}, {1, 0.5}})}) {
+        EXPECT_TRUE(
+                append_ai_function_result(AIFunctionResultKind::RERANK, invalid, output.get()).is_invalid_argument());
+        EXPECT_EQ(2, output->size());
+    }
+    auto wrong = ColumnHelper::create_column(TYPE_ARRAY_FLOAT_DESC, true);
+    EXPECT_TRUE(
+            append_ai_function_result(AIFunctionResultKind::RERANK, AIRerankResult{}, wrong.get()).is_internal_error());
+    EXPECT_EQ(0, wrong->size());
+}
+
+TEST(AIFunctionResultTest, RerankAllocationFailureRestoresAllNestedColumnSizes) {
+    auto type = TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
+            {"index", "relevance_score"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_DOUBLE)}));
+    auto output = ColumnHelper::create_column(type, true);
+    ASSERT_TRUE(append_ai_function_result(AIFunctionResultKind::RERANK, AIRerankResult{{0, 0.5}}, output.get()).ok());
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("append_ai_function_result:rerank_after_append", [](void*) { throw std::bad_alloc(); });
+    sync->EnableProcessing();
+    EXPECT_THROW(append_ai_function_result(AIFunctionResultKind::RERANK, AIRerankResult{{1, 0.25}}, output.get()),
+                 std::bad_alloc);
+    sync->DisableProcessing();
+    sync->ClearAllCallBacks();
+    ASSERT_EQ(1, output->size());
+    EXPECT_EQ(0, output->get(0).get_array()[0].get_struct()[0].get_int32());
+    ASSERT_TRUE(append_ai_function_result(AIFunctionResultKind::RERANK, AIRerankResult{}, output.get()).ok());
+    EXPECT_EQ(2, output->size());
+    EXPECT_TRUE(output->get(1).get_array().empty());
 }
 
 } // namespace starrocks
