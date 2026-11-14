@@ -18,10 +18,13 @@ package com.starrocks.authorization;
 import com.google.common.collect.Lists;
 import com.google.gson.stream.JsonReader;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -45,6 +48,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -52,15 +56,21 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UserRef;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -138,6 +148,20 @@ public class AuthorizationMgrTest {
     private void setCurrentUserAndRoles(ConnectContext ctx, UserIdentity userIdentity) {
         ctx.setCurrentUserIdentity(userIdentity);
         ctx.setCurrentRoleIds(userIdentity);
+    }
+
+    private static void assertShowGrantsCatalog(ConnectContext ctx, String user, String objectText,
+                                                String expectedCatalog) throws Exception {
+        ShowResultSet grants = ShowExecutor.execute(
+                (ShowGrantsStmt) UtFrameUtils.parseStmtWithNewParser("SHOW GRANTS FOR " + user, ctx), ctx);
+        boolean found = false;
+        for (List<String> row : grants.getResultRows()) {
+            if (row.size() > 2 && row.get(2).contains(objectText)) {
+                Assertions.assertEquals(expectedCatalog, row.get(1), row.toString());
+                found = true;
+            }
+        }
+        Assertions.assertTrue(found, grants.getResultRows().toString());
     }
 
     @Test
@@ -1836,6 +1860,216 @@ public class AuthorizationMgrTest {
                 new TableName("db3", "mv1"));
         new NativeAccessController().checkAnyActionOnAnyMaterializedView(ctx,
                 "db3");
+    }
+
+    @Test
+    public void testGrantViewExternalCatalog(@Mocked IcebergHiveCatalog hiveCatalog) throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create external catalog test_catalog properties (" +
+                        "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")", ctx), ctx);
+        ctx.setCurrentCatalog("test_catalog");
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user ext_view_user", ctx), ctx);
+        UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("ext_view_user", "%");
+        AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
+
+        // verify no access initially
+        setCurrentUserAndRoles(ctx, user);
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkViewAction(ctx,
+                        new TableName("test_catalog", DB_NAME, "some_view"), PrivilegeType.SELECT));
+
+        // grant SELECT on ALL VIEWS in db
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        String grantSql = "grant SELECT on all views in database " + DB_NAME + " to ext_view_user";
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        manager.grant(grantStmt);
+        assertShowGrantsCatalog(ctx, "ext_view_user", "ALL VIEWS", "test_catalog");
+
+        // verify access now works
+        setCurrentUserAndRoles(ctx, user);
+        Authorizer.checkViewAction(ctx,
+                new TableName("test_catalog", DB_NAME, "some_view"), PrivilegeType.SELECT);
+
+        // also verify checkAnyActionOnView and checkAnyActionOnOrInDb
+        Authorizer.checkAnyActionOnView(ctx,
+                new TableName("test_catalog", DB_NAME, "some_view"));
+        Authorizer.checkAnyActionOnOrInDb(ctx, "test_catalog", DB_NAME);
+
+        // revoke
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        String revokeSql = "revoke SELECT on all views in database " + DB_NAME + " from ext_view_user";
+        RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        manager.revoke(revokeStmt);
+
+        // verify no access after revoke
+        setCurrentUserAndRoles(ctx, user);
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkViewAction(ctx,
+                        new TableName("test_catalog", DB_NAME, "some_view"), PrivilegeType.SELECT));
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop catalog test_catalog", ctx), ctx);
+    }
+
+    @Test
+    public void testConnectorViewSelectHonorsViewGrant() throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user connector_view_user", ctx), ctx);
+        UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("connector_view_user", "%");
+        View view = (View) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(DB_NAME, "view1");
+        TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME, "view1");
+
+        // SELECT authorization reaches ColumnPrivilege.checkViewPrivilege, not Authorizer.checkViewAction.
+        // Treat the internal view as a connector view so that path is what we exercise.
+        new MockUp<View>() {
+            @Mock
+            public boolean isConnectorView() {
+                return true;
+            }
+        };
+
+        setCurrentUserAndRoles(ctx, user);
+        // A TABLE check on a view name finds no table object and is swallowed, so it does not
+        // report denial. The SELECT path is ColumnPrivilege.checkViewPrivilege.
+        Assertions.assertThrows(ErrorReportException.class, () ->
+                ColumnPrivilege.checkViewPrivilege(ctx, tableName, view));
+
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant select on view db.view1 to connector_view_user", ctx), ctx);
+
+        setCurrentUserAndRoles(ctx, user);
+        // VIEW grant is enough for the SELECT path.
+        ColumnPrivilege.checkViewPrivilege(ctx, tableName, view);
+
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "revoke select on view db.view1 from connector_view_user", ctx), ctx);
+
+        setCurrentUserAndRoles(ctx, user);
+        Assertions.assertThrows(ErrorReportException.class, () ->
+                ColumnPrivilege.checkViewPrivilege(ctx, tableName, view));
+    }
+
+    @Test
+    public void testGrantMaterializedViewExternalCatalog(@Mocked IcebergHiveCatalog hiveCatalog) throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create external catalog test_catalog properties (" +
+                        "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")", ctx), ctx);
+        ctx.setCurrentCatalog("test_catalog");
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user ext_mv_user", ctx), ctx);
+        UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("ext_mv_user", "%");
+        AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
+
+        // verify no access initially
+        setCurrentUserAndRoles(ctx, user);
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkMaterializedViewAction(ctx,
+                        new TableName("test_catalog", DB_NAME, "some_mv"), PrivilegeType.SELECT));
+
+        // grant SELECT on ALL MATERIALIZED VIEWS in db
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        String grantSql = "grant SELECT on all materialized views in database " + DB_NAME + " to ext_mv_user";
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        manager.grant(grantStmt);
+        assertShowGrantsCatalog(ctx, "ext_mv_user", "MATERIALIZED VIEWS", "test_catalog");
+
+        // verify access now works
+        setCurrentUserAndRoles(ctx, user);
+        Authorizer.checkMaterializedViewAction(ctx,
+                new TableName("test_catalog", DB_NAME, "some_mv"), PrivilegeType.SELECT);
+        Authorizer.checkAnyActionOnMaterializedView(ctx,
+                new TableName("test_catalog", DB_NAME, "some_mv"));
+
+        // revoke
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        String revokeSql = "revoke SELECT on all materialized views in database " + DB_NAME + " from ext_mv_user";
+        RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        manager.revoke(revokeStmt);
+
+        // verify no access after revoke
+        setCurrentUserAndRoles(ctx, user);
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkMaterializedViewAction(ctx,
+                        new TableName("test_catalog", DB_NAME, "some_mv"), PrivilegeType.SELECT));
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop catalog test_catalog", ctx), ctx);
+    }
+
+    @Test
+    public void testHiveMaterializedViewUsesMvGrant(@Mocked IcebergHiveCatalog hiveCatalog) throws Exception {
+        String catalog = "hive_mv_catalog";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create external catalog " + catalog + " properties (" +
+                        "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")", ctx), ctx);
+        ctx.setCurrentCatalog(catalog);
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user hive_mv_user", ctx), ctx);
+        UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("hive_mv_user", "%");
+
+        HiveTable hiveMv = hiveTable(catalog, "hive_mv", HiveTable.HiveTableType.MATERIALIZED_VIEW);
+        HiveTable hiveTbl = hiveTable(catalog, "hive_tbl", HiveTable.HiveTableType.MANAGED_TABLE);
+        // The suite installs RBACMockedMetadataMgr, which overrides getTable. Mocking MetadataMgr
+        // does not intercept that override, so the lookup misses hive_mv and the check returns.
+        new MockUp<RBACMockedMetadataMgr>() {
+            @Mock
+            public Optional<Table> getTable(Invocation inv, ConnectContext context, TableName tableName) {
+                if (tableName != null && "hive_mv".equals(tableName.getTbl())) {
+                    return Optional.of(hiveMv);
+                }
+                if (tableName != null && "hive_tbl".equals(tableName.getTbl())) {
+                    return Optional.of(hiveTbl);
+                }
+                return inv.proceed(context, tableName);
+            }
+        };
+
+        TableName mvName = new TableName(catalog, DB_NAME, "hive_mv");
+        TableName tblName = new TableName(catalog, DB_NAME, "hive_tbl");
+        QueryStatement mvQuery = queryOn(mvName, hiveMv);
+
+        setCurrentUserAndRoles(ctx, user);
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkActionOnTableLikeObject(ctx, mvName, PrivilegeType.SELECT));
+        Assertions.assertThrows(ErrorReportException.class, () ->
+                ColumnPrivilege.check(ctx, mvQuery, Lists.newArrayList()));
+
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant SELECT on all materialized views in database " + DB_NAME + " to hive_mv_user", ctx), ctx);
+
+        setCurrentUserAndRoles(ctx, user);
+        // MV grant authorizes the Hive MV. A regular Hive table still needs a TABLE grant.
+        Authorizer.checkActionOnTableLikeObject(ctx, mvName, PrivilegeType.SELECT);
+        ColumnPrivilege.check(ctx, mvQuery, Lists.newArrayList());
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkActionOnTableLikeObject(ctx, tblName, PrivilegeType.SELECT));
+
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop catalog " + catalog, ctx), ctx);
+        ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+    }
+
+    private static HiveTable hiveTable(String catalog, String name, HiveTable.HiveTableType hiveTableType) {
+        return HiveTable.builder()
+                .setId(1)
+                .setTableName(name)
+                .setCatalogName(catalog)
+                .setHiveDbName(DB_NAME)
+                .setHiveTableName(name)
+                .setFullSchema(Lists.newArrayList(new Column("c1", IntegerType.INT)))
+                .setHiveTableType(hiveTableType)
+                .build();
+    }
+
+    private static QueryStatement queryOn(TableName tableName, Table table) {
+        TableRelation relation = new TableRelation(tableName);
+        relation.setTable(table);
+        return new QueryStatement(new SelectRelation(new SelectList(), relation, null, null, null));
     }
 
     @Test

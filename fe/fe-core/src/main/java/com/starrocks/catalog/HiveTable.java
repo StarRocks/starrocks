@@ -242,6 +242,19 @@ public class HiveTable extends Table {
         return hiveTableType;
     }
 
+    /**
+     * Hive metastore {@code MATERIALIZED_VIEW} is stored as a {@link HiveTable} ({@code TableType.HIVE}),
+     * unlike a StarRocks materialized view. Authorization must use this instead of
+     * {@link Table#isMaterializedView()}, which stays limited to OLAP and cloud-native MVs.
+     */
+    public boolean isHiveMaterializedView() {
+        return hiveTableType == HiveTableType.MATERIALIZED_VIEW;
+    }
+
+    public static boolean isHiveMaterializedView(BasicTable table) {
+        return table instanceof HiveTable && ((HiveTable) table).isHiveMaterializedView();
+    }
+
     @Override
     public Map<String, String> getProperties() {
         // The user may alter the resource properties, so the metastore URIs are read fresh from the resource.
