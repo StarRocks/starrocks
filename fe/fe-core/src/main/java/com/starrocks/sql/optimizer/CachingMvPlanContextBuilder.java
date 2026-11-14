@@ -220,6 +220,21 @@ public class CachingMvPlanContextBuilder {
     }
 
     /**
+     * Peek at the plan cache without side effects: returns the cached plan contexts only if the mv's
+     * plan has already been loaded successfully. Unlike {@link #getPlanContextIfPresent}, this never
+     * triggers an async load and never blocks on an in-flight load, so it is cheap enough to be used
+     * as a fast-path filter before more expensive checks.
+     */
+    public List<MvPlanContext> getPlanContextIfLoaded(MaterializedView mv) {
+        CompletableFuture<List<MvPlanContext>> future = MV_PLAN_CONTEXT_CACHE.getIfPresent(mv);
+        if (future == null || !future.isDone() || future.isCompletedExceptionally()) {
+            return Lists.newArrayList();
+        }
+        List<MvPlanContext> result = future.getNow(null);
+        return result == null ? Lists.newArrayList() : result;
+    }
+
+    /**
      * Build the plan for MV, return an empty list if no plan is available
      */
     private static List<MvPlanContext> loadMvPlanContext(MaterializedView mv) {
