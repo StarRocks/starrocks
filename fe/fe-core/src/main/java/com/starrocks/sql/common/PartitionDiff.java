@@ -29,10 +29,16 @@ import java.util.Map;
 public class PartitionDiff {
     private final PCellSortedSet adds;
     private final PCellSortedSet deletes;
+    private final PCellSortedSet retentionPruned;
 
     public PartitionDiff(PCellSortedSet adds, PCellSortedSet deletes) {
+        this(adds, deletes, PCellSortedSet.of());
+    }
+
+    public PartitionDiff(PCellSortedSet adds, PCellSortedSet deletes, PCellSortedSet retentionPruned) {
         this.adds = adds;
         this.deletes = deletes;
+        this.retentionPruned = retentionPruned;
     }
 
     public PCellSortedSet getAdds() {
@@ -41,6 +47,11 @@ public class PartitionDiff {
 
     public PCellSortedSet getDeletes() {
         return deletes;
+    }
+
+    /** Cells partition_ttl / partition_ttl_number kept out of {@link #getAdds()}; empty for other producers. */
+    public PCellSortedSet getRetentionPruned() {
+        return retentionPruned;
     }
 
     /**
