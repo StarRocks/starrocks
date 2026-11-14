@@ -32,6 +32,7 @@ import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.ConnectorTableTriggerAnalyzeMgr;
 import com.starrocks.connector.statistics.StatisticsUtils;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.metric.CounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricRepo;
@@ -65,6 +66,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -352,6 +354,69 @@ public class CachedStatisticStorageTest {
             Assertions.assertTrue(stats.stream().allMatch(ConnectorTableColumnStats::isUnknown));
         } finally {
             // The inline load clears the thread's context when it finishes.
+            connectContext.setThreadLocalInfo();
+        }
+    }
+
+    /**
+     * A lookup with the query trigger disabled (the column pruning an authorization check runs on a statement
+     * not yet authorized) must not ask for a collection; an ordinary lookup still does.
+     */
+    @Test
+    public void testALookupWithTriggerDisabledQueuesNoCollection() {
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "hive0", "partitioned_db", "t1");
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public static boolean checkStatisticTableStateNormal() {
+                return true;
+            }
+        };
+        new MockUp<ConnectorColumnStatsCacheLoader>() {
+            @Mock
+            public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID,
+                                                            List<String> columns) {
+                return new ArrayList<>();
+            }
+        };
+        new MockUp<StatisticsUtils>() {
+            @Mock
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
+                return table;
+            }
+        };
+        AtomicInteger requests = new AtomicInteger();
+        new MockUp<ConnectorTableTriggerAnalyzeMgr>() {
+            @Mock
+            public void checkAndUpdateTableStats(
+                    Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> stats) {
+                requests.incrementAndGet();
+            }
+        };
+
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        // Both the load and the callback that asks for a collection run inline, so the count is settled on return.
+        Deencapsulation.setField(storage, "connectorTableCachedStatistics",
+                Caffeine.newBuilder().executor(Runnable::run).buildAsync(new ConnectorColumnStatsCacheLoader()));
+        Deencapsulation.setField(storage, "statsCacheRefresherExecutor", (Executor) Runnable::run);
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        FrontendNodeType restore = state.getFeType();
+        state.setFrontendNodeType(FrontendNodeType.LEADER);
+        try {
+            connectContext.setThreadLocalInfo();
+            storage.getConnectorTableStatistics(table, ImmutableList.of("c1", "c2"), false);
+            Assertions.assertEquals(0, requests.get(), "a lookup with the trigger disabled asked for a collection");
+
+            // The inline load clears the thread's context when it finishes.
+            connectContext.setThreadLocalInfo();
+            storage.getConnectorTableStatistics(table, ImmutableList.of("c1", "c2"), true);
+            Assertions.assertEquals(1, requests.get(), "an ordinary lookup did not ask for a collection");
+
+            connectContext.setThreadLocalInfo();
+            storage.getConnectorTableStatistics(table, ImmutableList.of("c1", "c2"));
+            Assertions.assertEquals(2, requests.get(), "the two-argument lookup is the ordinary one");
+        } finally {
+            state.setFrontendNodeType(restore);
             connectContext.setThreadLocalInfo();
         }
     }

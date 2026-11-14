@@ -716,7 +716,8 @@ public class MetadataMgr {
         return ImmutableList.copyOf(partitionNames.build());
     }
 
-    public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {
+    public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns,
+                                                               boolean queryTriggerAnalyzeEnabled) {
         Statistics.Builder statistics = Statistics.builder();
 
         List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>();
@@ -730,8 +731,8 @@ public class MetadataMgr {
 
         List<String> columnNames = requiredColumnRefs.stream().map(col -> columns.get(col).getName()).collect(
                 Collectors.toList());
-        List<ConnectorTableColumnStats> columnStatisticList =
-                GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatistics(table, columnNames);
+        List<ConnectorTableColumnStats> columnStatisticList = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .getConnectorTableStatistics(table, columnNames, queryTriggerAnalyzeEnabled);
 
         Map<String, Histogram> histogramStatistics =
                 GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatistics(table, columnNames);
@@ -773,8 +774,9 @@ public class MetadataMgr {
                 .filter(ref -> !FeNameFormat.FORBIDDEN_COLUMN_NAMES.contains(ref.getName()))
                 .collect(Collectors.toList());
         List<String> columnNames = refs.stream().map(ref -> columns.get(ref).getName()).collect(Collectors.toList());
-        List<ConnectorTableColumnStats> stats =
-                GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatistics(table, columnNames);
+        List<ConnectorTableColumnStats> stats = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .getConnectorTableStatistics(table, columnNames,
+                        session.getOptimizerOptions().isQueryTriggerAnalyzeEnabled());
         for (int i = 0; i < refs.size() && i < stats.size(); i++) {
             if (!stats.get(i).isUnknown()) {
                 session.getDumpInfo().addExternalColumnRowCount(table, refs.get(i).getName(),
@@ -865,7 +867,8 @@ public class MetadataMgr {
         // FIXME: In testing env, `_statistics_.external_column_statistics` is not created, ignore query columns stats from it.
         // Get basic/histogram stats from internal statistics.
         Statistics internalStatistics = FeConstants.runningUnitTest ? null :
-                getTableStatisticsFromInternalStatistics(table, columns);
+                getTableStatisticsFromInternalStatistics(table, columns,
+                        session.getOptimizerOptions().isQueryTriggerAnalyzeEnabled());
         if (internalStatistics == null ||
                 internalStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
             // Get basic stats from connector metadata.
