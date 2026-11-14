@@ -24,6 +24,7 @@ ADD_BE_LIB(IO
         input_stream.cpp
         io_profiler.cpp
         io_profiler_metrics.cpp
+        object_storage_metrics.cpp
         readable.cpp
         seekable_input_stream.cpp
         compressed_input_stream.cpp

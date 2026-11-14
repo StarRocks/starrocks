@@ -46,6 +46,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/util.h"
 #include "io/direct_s3_output_stream.h"
+#include "io/object_storage_metrics.h"
 #include "io/s3_input_stream.h"
 #include "io/s3_output_stream.h"
 
@@ -146,6 +147,50 @@ static const std::vector<Aws::String> retryable_errors = {
         "ExceedAccountQPSLimit", "ExceedAccountRateLimit", "ExceedBucketQPSLimit", "ExceedBucketRateLimit"};
 // clang-format: on
 
+// Reports every failed attempt to the request measured on this thread (io::ObjectStorageRequestScope),
+// so retries and timeouts the SDK absorbs still show up in object_storage_request_{retry,timeout}_total.
+// Everything else is the wrapped strategy's.
+class ObservedRetryStrategy final : public Aws::Client::RetryStrategy {
+public:
+    explicit ObservedRetryStrategy(std::shared_ptr<Aws::Client::RetryStrategy> inner) : _inner(std::move(inner)) {}
+
+    bool ShouldRetry(const Aws::Client::AWSError<Aws::Client::CoreErrors>& error,
+                     long attempted_retries) const override {
+        const bool retry = _inner->ShouldRetry(error, attempted_retries);
+        const bool timed_out = error.GetErrorType() == Aws::Client::CoreErrors::REQUEST_TIMEOUT ||
+                               io::ObjectStorageRequestScope::is_timeout_message(error.GetMessage());
+        io::ObjectStorageRequestScope::on_attempt_failed(timed_out, retry);
+        return retry;
+    }
+
+    long CalculateDelayBeforeNextRetry(const Aws::Client::AWSError<Aws::Client::CoreErrors>& error,
+                                       long attempted_retries) const override {
+        return _inner->CalculateDelayBeforeNextRetry(error, attempted_retries);
+    }
+
+    long GetMaxAttempts() const override { return _inner->GetMaxAttempts(); }
+    void GetSendToken() override { _inner->GetSendToken(); }
+    bool HasSendToken() override { return _inner->HasSendToken(); }
+    void RequestBookkeeping(const Aws::Client::HttpResponseOutcome& outcome) override {
+        _inner->RequestBookkeeping(outcome);
+    }
+    void RequestBookkeeping(const Aws::Client::HttpResponseOutcome& outcome,
+                            const Aws::Client::AWSError<Aws::Client::CoreErrors>& last_error) override {
+        _inner->RequestBookkeeping(outcome, last_error);
+    }
+    const char* GetStrategyName() const override { return _inner->GetStrategyName(); }
+
+private:
+    std::shared_ptr<Aws::Client::RetryStrategy> _inner;
+};
+
+std::shared_ptr<Aws::Client::RetryStrategy> observed_retry_strategy(std::shared_ptr<Aws::Client::RetryStrategy> inner) {
+    if (inner == nullptr) {
+        return inner;
+    }
+    return std::make_shared<ObservedRetryStrategy>(std::move(inner));
+}
+
 static void set_request_timeout(Aws::Client::ClientConfiguration& client_config,
                                 S3ClientFactory::OperationType operation_type) {
     if (operation_type == S3ClientFactory::OperationType::RENAME_FILE &&
@@ -203,8 +248,8 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
 
     auto credential_provider = _get_aws_credentials_provider(aws_cloud_credential);
 
-    config.retryStrategy = std::make_shared<Aws::Client::SpecifiedRetryableErrorsRetryStrategy>(
-            retryable_errors, config::object_storage_max_retries, config::object_storage_retry_scale_factor);
+    config.retryStrategy = observed_retry_strategy(std::make_shared<Aws::Client::SpecifiedRetryableErrorsRetryStrategy>(
+            retryable_errors, config::object_storage_max_retries, config::object_storage_retry_scale_factor));
     S3ClientPtr client = std::make_shared<Aws::S3::S3Client>(
             credential_provider, config, Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, !path_style_access);
 
@@ -225,6 +270,9 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
         if (_client_cache_keys[i] == client_cache_key) return _clients[i];
     }
 
+    // The cache key above keeps the caller's configuration; only the client sees the observed strategy.
+    ClientConfiguration client_config = config;
+    client_config.retryStrategy = observed_retry_strategy(config.retryStrategy);
     S3ClientPtr client;
     string access_key_id;
     string secret_access_key;
@@ -254,14 +302,14 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
 
     if (!access_key_id.empty() && !secret_access_key.empty()) {
         auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(access_key_id, secret_access_key);
-        client = std::make_shared<Aws::S3::S3Client>(credentials, config,
+        client = std::make_shared<Aws::S3::S3Client>(credentials, client_config,
                                                      /* signPayloads */
                                                      Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
                                                      /* useVirtualAddress */
                                                      !path_style_access);
     } else {
         // if not cred provided, we can use default cred in aws profile.
-        client = std::make_shared<Aws::S3::S3Client>(config,
+        client = std::make_shared<Aws::S3::S3Client>(client_config,
                                                      /* signPayloads */
                                                      Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
                                                      /* useVirtualAddress */
