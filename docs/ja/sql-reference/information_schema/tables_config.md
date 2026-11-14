@@ -20,7 +20,7 @@ products: [oss, enterprise, cloud, anywhere]
 | PARTITION_KEY    | テーブルのパーティション列。                                |
 | DISTRIBUTE_KEY   | テーブルのバケット列。                                       |
 | DISTRIBUTE_TYPE  | テーブルのデータ分散方法。                                   |
-| DISTRUBTE_BUCKET | テーブルのバケット数。                                       |
+| DISTRIBUTE_BUCKET | テーブルのバケット数。                                       |
 | SORT_KEY         | テーブルのソートキー。                                       |
 | PROPERTIES       | テーブルのプロパティ。                                       |
 | TABLE_ID         | テーブルのID。                                               |
