@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
@@ -40,6 +41,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.AuditInternalLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
@@ -354,45 +356,8 @@ public class StatisticExecutor {
         return executeDML(statsConnectCtx, sql);
     }
 
-<<<<<<< HEAD
     public boolean dropExternalHistogramRawColumn(ConnectContext statsConnectCtx, String rawTableUUID, String columnName) {
-        String sql = StatisticSQLBuilder.buildDropExternalHistogramSQLForRawUuid(rawTableUUID, Lists.newArrayList(columnName));
-=======
-    // Partitions of `tableUUID` whose external column statistics were all written more than `graceSeconds` ago.
-    // Reads the internal statistics table only; never touches the external catalog. Runs on the analyze job's
-    // own context, so KILL ANALYZE and the job's query timeout apply to it.
-    public List<String> queryExternalStatPartitionsNotUpdatedSince(ConnectContext statsConnectCtx, String tableUUID,
-                                                                  List<String> columnNames, long graceSeconds) {
-        String sql = StatisticSQLBuilder.buildQueryExternalStatPartitionsNotUpdatedSinceSQL(tableUUID, columnNames,
-                graceSeconds);
-        LOG.debug("Query external statistic partitions SQL: {}", sql);
-        List<String> partitionNames = Lists.newArrayList();
-        List<TResultBatch> batches = SimpleExecutor.getRepoExecutor().executeDQL(sql, statsConnectCtx);
-        for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
-            for (ByteBuffer buffer : batch.getRows()) {
-                String json = Unpooled.copiedBuffer(buffer).toString(StandardCharsets.UTF_8);
-                JsonArray data = JsonParser.parseString(json).getAsJsonObject().get("data").getAsJsonArray();
-                if (!data.get(0).isJsonNull()) {
-                    partitionNames.add(data.get(0).getAsString());
-                }
-            }
-        }
-        return partitionNames;
-    }
-
-    public boolean dropExternalStatDroppedPartitions(ConnectContext statsConnectCtx, String tableUUID,
-                                                     List<String> partitionNames, List<String> columnNames) {
-        String sql = StatisticSQLBuilder.buildDropExternalStatSQLForDroppedPartitions(tableUUID, partitionNames,
-                columnNames);
-        LOG.debug("Cleanup external statistic rows of dropped partitions SQL: {}", sql);
-        return executeDML(statsConnectCtx, sql);
-    }
-
-    public boolean dropExternalHistogramRawColumns(ConnectContext statsConnectCtx, String rawTableUUID,
-                                                   List<String> columnNames) {
-        if (CollectionUtils.isEmpty(columnNames)) {
-            return true;
-        }
+        List<String> columnNames = Lists.newArrayList(columnName);
         String existsSql = StatisticSQLBuilder.buildExistsExternalHistogramRawColumnsSQL(rawTableUUID, columnNames);
         Optional<Boolean> exists = rawKeyedRowExists(statsConnectCtx, existsSql);
         if (exists.isEmpty()) {
@@ -403,7 +368,6 @@ public class StatisticExecutor {
             return true;
         }
         String sql = StatisticSQLBuilder.buildDropExternalHistogramSQLForRawUuid(rawTableUUID, columnNames);
->>>>>>> 85ceece ([BugFix] Skip no-op raw-keyed external statistics cleanup DELETE (#83000))
         LOG.debug("Cleanup stale raw-keyed external histogram row SQL: {}", sql);
         return executeRawKeyedCleanupDML(statsConnectCtx, sql);
     }

@@ -609,6 +609,10 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         }
     }
 
+    private static boolean isAnalyzeCancelled(long jobId) {
+        return GlobalStateMgr.getCurrentState().getAnalyzeMgr().isAnalyzeCancelled(jobId);
+    }
+
     protected List<CollectTask> buildCollectSQLList(int parallelism) {
         // Collect a partition in a single scan by wrapping the read in a CTE (base_cte_table) shared by every
         // column's aggregate branch. Columns are split into groups so a wide table does not build one CTE
