@@ -958,7 +958,9 @@ public class IcebergApiConverter {
         List<Column> columns = toFullSchemas(icebergView.schema());
         ViewVersion currentVersion = icebergView.currentVersion();
         String defaultCatalogName = currentVersion.defaultCatalog();
-        String defaultDbName = currentVersion.defaultNamespace().level(0);
+        Namespace defaultNamespace = currentVersion.defaultNamespace();
+        String defaultDbName = defaultNamespace == null || defaultNamespace.isEmpty()
+                ? dbName : defaultNamespace.level(0);
         String viewName = icebergView.name();
         String location = icebergView.location();
         IcebergView view = new IcebergView(CONNECTOR_ID_GENERATOR.getNextId().asLong(), catalogName, dbName, viewName,
