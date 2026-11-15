@@ -15,9 +15,13 @@
 package com.starrocks.connector.paimon;
 
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.TableName;
 import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SimpleExecutor;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TRowFormat;
@@ -36,6 +40,7 @@ import java.util.function.Consumer;
 public final class PaimonGlobalIndexCollectJob extends MetadataCollectJob {
     // Reserve space for mutable bitmap containers, merge state and SDK split-range conversion.
     private static final int MEMORY_BYTES_PER_ROW = 512;
+    private final PaimonTable origin;
     private final PaimonGlobalIndexRequest request;
     private final long budget;
     private long receivedBytes;
@@ -45,6 +50,7 @@ public final class PaimonGlobalIndexCollectJob extends MetadataCollectJob {
 
     public PaimonGlobalIndexCollectJob(PaimonTable origin, PaimonGlobalIndexRequest request, long budget) {
         super(origin.getCatalogName(), origin.getCatalogDBName(), origin.getCatalogTableName(), TResultSinkType.CUSTOMIZED);
+        this.origin = origin;
         this.request = request;
         this.budget = budget;
     }
@@ -66,7 +72,28 @@ public final class PaimonGlobalIndexCollectJob extends MetadataCollectJob {
     }
 
     public GlobalIndexResult collect(ConnectContext caller) {
-        initWithCaller(caller);
+        int remaining = SimpleExecutor.outerRemainingQueryTimeoutS();
+        if (remaining <= 0 || caller.isStatementCancelled()) {
+            throw new IllegalStateException("Metadata collection cancelled or timed out");
+        }
+        // Check policies in the user's context before creating the trusted internal task.
+        TableName name = new TableName(getCatalogName(), getDbName(), getTableName());
+        var masks = Authorizer.getColumnMaskingPolicy(caller, name, origin.getFullSchema());
+        if (Authorizer.getRowAccessPolicy(caller, name) != null || masks != null && !masks.isEmpty()) {
+            throw new IllegalArgumentException("Paimon index evaluation is unavailable with row or masking policies");
+        }
+        // Reuse Iceberg's internal identity; the outer query authorizes the base table.
+        init(caller.getSessionVariable());
+        getContext().setParentConnectContext(caller);
+        getContext().setNeedQueued(false);
+        var variables = getContext().getSessionVariable();
+        variables.copyQueryResourcePolicyFrom(caller.getSessionVariable());
+        if (caller.getResourceGroup() != null) {
+            variables.setResourceGroup(caller.getResourceGroup().getName());
+        }
+        variables.setQueryTimeoutS(Math.min(remaining, caller.getSessionVariable().getMetadataCollectQueryTimeoutS()));
+        variables.setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        variables.setEnableShortCircuit(false);
         // Bound each RPC result batch as well as the aggregate; a large combined chunk
         // would already be allocated by the RPC client before the consumer can reject it.
         getContext().getSessionVariable().setChunkSize(1);

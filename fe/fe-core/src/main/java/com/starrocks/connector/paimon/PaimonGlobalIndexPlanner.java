@@ -14,16 +14,11 @@
 
 package com.starrocks.connector.paimon;
 
-import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.PaimonTable;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.RemoteMetaSplit;
 import com.starrocks.connector.SerializedMetaSpec;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -65,6 +60,10 @@ public final class PaimonGlobalIndexPlanner {
                 || !"main".equals(org.apache.paimon.CoreOptions.branch(table.options()))) {
             return null;
         }
+        Set<Integer> indexedFields = btreeFields(table, snapshotId);
+        if (indexedFields.isEmpty()) {
+            return null;
+        }
         List<ScalarOperator> supported = new ArrayList<>();
         Map<Integer, Integer> bindings = new HashMap<>();
         for (ScalarOperator conjunct : Utils.extractConjuncts(predicate)) {
@@ -73,7 +72,7 @@ public final class PaimonGlobalIndexPlanner {
             for (ColumnRefOperator column : conjunct.getColumnRefs()) {
                 var field = table.rowType().getFields().stream().filter(f -> f.name().equals(column.getName()))
                         .findFirst().orElse(null);
-                if (field == null || table.partitionKeys().contains(field.name())
+                if (field == null || !indexedFields.contains(field.id()) || table.partitionKeys().contains(field.name())
                         || !supportedKey(field.type())) {
                     compatible = false;
                     break;
@@ -81,6 +80,7 @@ public final class PaimonGlobalIndexPlanner {
                 fields.put(column.getId(), field.id());
             }
             if (!compatible) {
+                // A top-level AND conjunct may be omitted, but never prune only part of an OR.
                 continue;
             }
             try {
@@ -95,6 +95,26 @@ public final class PaimonGlobalIndexPlanner {
         }
         return supported.isEmpty() ? null : PaimonGlobalIndexRequest.create(table.location().toString(), "main", snapshotId,
                 table.schema().id(), table.schema().timeMillis(), Utils.compoundAnd(supported), bindings);
+    }
+
+    private static Set<Integer> btreeFields(FileStoreTable table, long snapshotId) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "PaimonGlobalIndex.DiscoverIndexes")) {
+            Snapshot snapshot = table.snapshotManager().snapshot(snapshotId);
+            Set<Integer> fields = new HashSet<>();
+            Set<Integer> unsupported = new HashSet<>();
+            for (IndexManifestEntry entry : table.store().newIndexFileHandler().scan(snapshot, unused -> true)) {
+                GlobalIndexMeta index = entry.indexFile().globalIndexMeta();
+                if (index != null) {
+                    if ("btree".equals(entry.indexFile().indexType())) {
+                        fields.add(index.indexFieldId());
+                    } else {
+                        unsupported.add(index.indexFieldId());
+                    }
+                }
+            }
+            fields.removeAll(unsupported);
+            return fields;
+        }
     }
 
     private static boolean eligible(TableSchema schema) {
@@ -117,7 +137,6 @@ public final class PaimonGlobalIndexPlanner {
             throw new IllegalArgumentException("Paimon Global Index table, branch or schema changed");
         }
         request.validatePredicate(table.schema());
-        authorize(origin, request, table.schema());
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "PaimonGlobalIndex.ValidateCoverage")) {
             Snapshot snapshot = table.snapshotManager().snapshot(request.getSnapshotId());
             TableSchema schema = table.schemaManager().schema(snapshot.schemaId());
@@ -180,26 +199,6 @@ public final class PaimonGlobalIndexPlanner {
                 splits.add(new Shard(id, range.from, range.to, Math.max(1, totalBytes / shards.size()), request));
             }
             return new Metadata(request, List.copyOf(splits));
-        }
-    }
-
-    private static void authorize(PaimonTable origin, PaimonGlobalIndexRequest request, TableSchema schema) {
-        ConnectContext caller = ConnectContext.get();
-        if (caller == null) {
-            throw new IllegalStateException("Paimon index evaluation requires a caller context");
-        }
-        TableName name = new TableName(origin.getCatalogName(), origin.getCatalogDBName(), origin.getCatalogTableName());
-        for (int id : request.getRequiredFieldIds()) {
-            try {
-                Authorizer.checkColumnAction(caller, name, schema.idToFieldMap().get(id).name(), PrivilegeType.SELECT);
-            } catch (AccessDeniedException e) {
-                throw new IllegalArgumentException("Paimon index field is not accessible to the caller", e);
-            }
-        }
-        // Raw index membership cannot apply row filters or masking expressions.
-        var masks = Authorizer.getColumnMaskingPolicy(caller, name, origin.getFullSchema());
-        if (Authorizer.getRowAccessPolicy(caller, name) != null || masks != null && !masks.isEmpty()) {
-            throw new IllegalArgumentException("Paimon index evaluation is unavailable with row or masking policies");
         }
     }
 

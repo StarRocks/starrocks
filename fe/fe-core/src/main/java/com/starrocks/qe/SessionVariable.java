@@ -4434,7 +4434,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return queryMemLimit;
     }
 
-    void copyQueryResourcePolicyFrom(SessionVariable caller) {
+    public void copyQueryResourcePolicyFrom(SessionVariable caller) {
         queryMemLimit = caller.queryMemLimit;
         maxExecMemByte = caller.maxExecMemByte;
         resourceGroup = caller.resourceGroup;
