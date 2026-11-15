@@ -19,6 +19,7 @@
 #include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
 #include "connector/hive/hive_chunk_sink.h"
+#include "connector/hive/paimon/paimon_global_index_scan_context.h"
 #include "connector/hive/scanner/hdfs_scanner.h"
 #include "connector_primitive/connector.h"
 #include "fs/credential/refreshable_cloud_configuration.h"
@@ -67,6 +68,7 @@ protected:
     const RefreshableCloudConfiguration _cloud_configuration;
     int64_t _max_file_length = 0;
     mutable std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
+    std::shared_ptr<PaimonGlobalIndexScanContext> _paimon_global_index_context;
 };
 
 class HiveDataSource final : public DataSource {

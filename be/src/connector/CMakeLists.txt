@@ -122,6 +122,9 @@ if ("${WITH_PAIMON_CPP}" STREQUAL "ON" AND NOT "${MAKE_TEST}" STREQUAL "ON" AND 
             hive/paimon/paimon_write_column_converter.cpp
             hive/paimon/paimon_predicate_converter.cpp
             hive/paimon/paimon_file_system.cpp
+            hive/paimon/paimon_global_index_evaluator.cpp
+            hive/paimon/paimon_global_index_schema_guard.cpp
+            hive/paimon/paimon_global_index_scanner.cpp
             hive/paimon/paimon_scanner.cpp
             hive/paimon/paimon_blob_converter.cpp
     )

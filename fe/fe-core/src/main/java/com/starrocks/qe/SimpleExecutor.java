@@ -192,7 +192,7 @@ public class SimpleExecutor {
         }
     }
 
-    private static ConnectContext createCallerQueryContext(ConnectContext caller, int timeout) {
+    public static ConnectContext createCallerQueryContext(ConnectContext caller, int timeout) {
         ConnectContext context = ConnectContext.build();
         // Setting the warehouse installs its session defaults before applying query policy.
         context.setCurrentWarehouse(caller.getCurrentWarehouseName());

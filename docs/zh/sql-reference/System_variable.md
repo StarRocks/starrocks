@@ -1405,6 +1405,15 @@ FROM test;
 * 描述：设置通过 Hive Catalog 读取 ORC 文件时，列的对应方式。默认值是 `false`，即按照 Hive 表中列的顺序对应。如果设置为 `true`，则按照列名称对应。
 * 引入版本：v3.1.10
 
+### enable_paimon_distributed_global_index
+
+* 描述：在生成扫描分片时，将符合条件的 Paimon 标量 BTree Global Index 谓词交给 BE/CN 求值。适用于 main 分支上 data evolution 表的快照查询，要求索引键的 schema 兼容且索引完整覆盖数据。内部 metadata 查询继承调用者身份、资源策略、Warehouse、取消状态与超时预算，不创建持久化表，也不缓存查询 bitmap。
+* 默认值：false（沿用现有的 Paimon SDK 规划行为）。
+* 类型：Boolean
+* 引入版本：v4.2
+* 限制：最多 4096 个索引分片，每个分片最多返回 1 MiB 序列化 bitmap。FE 收集预算最多为查询内存限制的八分之一，上限 64 MiB，并对序列化字节数和候选行数实施保守限制。分布式索引不可用、执行失败或超过限制时，保留原谓词，规划不使用 Global Index 裁剪的数据扫描。查询被取消或外层超时预算耗尽时停止规划。有行过滤或列脱敏策略时不使用此优化。
+* 诊断：External Trace 包括 `PaimonGlobalIndex.Evaluate`、`PaimonGlobalIndex.ValidateCoverage`、`PaimonGlobalIndex.Result` 和 `PaimonGlobalIndex.Fallback`。开启 metadata profile 后，可查看原生 scanner 的索引打开、求值、序列化耗时、序列化字节数以及文件系统 I/O 计数。
+
 ### paimon_reader_mode
 
 * 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。

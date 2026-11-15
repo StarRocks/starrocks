@@ -27,7 +27,7 @@ import org.apache.logging.log4j.Logger;
 
 public class MetadataExecutor {
     private static final Logger LOG = LogManager.getLogger(MetadataExecutor.class);
-    private StmtExecutor executor;
+    private volatile StmtExecutor executor;
 
     public void asyncExecuteSQL(MetadataCollectJob job) {
         ConnectContext context = job.getContext();
@@ -46,12 +46,22 @@ public class MetadataExecutor {
 
             this.executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
+            ConnectContext parent = context.getParent();
+            if (parent != null && parent.getExecutor() != null) {
+                parent.getExecutor().registerSubStmtExecutor(executor);
+            }
+            int remaining = parent == null ? Integer.MAX_VALUE : com.starrocks.qe.SimpleExecutor.outerRemainingQueryTimeoutS();
+            if (context.isStatementCancelled() || remaining <= 0) {
+                context.getState().setError("Metadata collection cancelled");
+                return;
+            }
+            context.getSessionVariable().setQueryTimeoutS(Math.min(context.getSessionVariable().getQueryTimeoutS(), remaining));
             context.setQueryId(UUIDUtil.genUUID());
             context.getSessionVariable().setEnableMaterializedViewRewrite(false);
 
             LOG.info("Start to execute metadata collect job on {}.{}.{}", job.getCatalogName(), job.getDbName(),
                     job.getTableName());
-            executor.executeStmtWithResultQueue(context, execPlan, job.getResultQueue());
+            executor.executeStmtWithResultConsumer(context, execPlan, job.getResultConsumer());
         }
     }
 

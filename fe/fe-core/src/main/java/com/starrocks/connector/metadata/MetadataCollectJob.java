@@ -99,6 +99,24 @@ public abstract class MetadataCollectJob {
         return resultQueue;
     }
 
+    public void initWithCaller(ConnectContext caller) {
+        this.sql = buildCollectMetadataSQL();
+        int remaining = com.starrocks.qe.SimpleExecutor.outerRemainingQueryTimeoutS();
+        if (remaining <= 0 || caller.isStatementCancelled()) {
+            throw new IllegalStateException("Metadata collection cancelled or timed out");
+        }
+        this.context = com.starrocks.qe.SimpleExecutor.createCallerQueryContext(caller,
+                Math.min(remaining, caller.getSessionVariable().getMetadataCollectQueryTimeoutS()));
+        this.context.setMetadataContext(true);
+        this.context.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        this.context.getSessionVariable().setEnablePipelineEngine(true);
+        this.context.getSessionVariable().setEnableProfile(caller.getSessionVariable().isEnableMetadataProfile());
+    }
+
+    public java.util.function.Consumer<TResultBatch> getResultConsumer() {
+        return resultQueue::add;
+    }
+
     public Coordinator getMetadataJobCoord() {
         return metadataExecutor.getCoordinator();
     }

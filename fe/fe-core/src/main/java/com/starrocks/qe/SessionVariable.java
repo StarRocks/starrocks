@@ -859,6 +859,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FILE_PAGECACHE = "enable_file_pagecache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String PAIMON_FORCE_JNI_READER = "paimon_force_jni_reader";
+    public static final String ENABLE_PAIMON_DISTRIBUTED_GLOBAL_INDEX = "enable_paimon_distributed_global_index";
     public static final String PAIMON_READER_MODE = "paimon_reader_mode";
     public static final String AVRO_USE_JNI_READER = "avro_use_jni_reader";
     public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
@@ -3109,6 +3110,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PAIMON_FORCE_JNI_READER)
     private boolean paimonForceJNIReader = false;
 
+    @VariableMgr.VarAttr(name = ENABLE_PAIMON_DISTRIBUTED_GLOBAL_INDEX)
+    private boolean enablePaimonDistributedGlobalIndex = false;
+
     @VariableMgr.VarAttr(name = PAIMON_READER_MODE)
     private String paimonReaderMode = PaimonReaderMode.AUTO.name();
 
@@ -4068,6 +4072,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return hudiMORForceJNIReader;
     }
 
+    public boolean isEnablePaimonDistributedGlobalIndex() {
+        return enablePaimonDistributedGlobalIndex;
+    }
+
     public boolean getPaimonForceJNIReader() {
         return paimonForceJNIReader;
     }
@@ -4688,6 +4696,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getExchangeInstanceParallel() {
         return exchangeInstanceParallel;
+    }
+
+    public void setChunkSize(int chunkSize) {
+        this.chunkSize = chunkSize;
     }
 
     public int getChunkSize() {

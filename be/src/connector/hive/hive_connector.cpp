@@ -119,6 +119,10 @@ HiveDataSourceProvider::HiveDataSourceProvider(const TPlanNode& plan_node)
           _hdfs_scan_node(plan_node.hdfs_scan_node),
           _cloud_configuration(cloud_configuration_of(_hdfs_scan_node),
                                config::scan_credential_refresh_rpc_timeout_ms > 0) {
+    if (_hdfs_scan_node.__isset.metadata_table_type &&
+        _hdfs_scan_node.metadata_table_type == "PAIMON_GLOBAL_INDEX") {
+        _paimon_global_index_context = std::make_shared<PaimonGlobalIndexScanContext>();
+    }
     if (_hdfs_scan_node.__isset.bucket_properties) {
         _bucket_properties = _hdfs_scan_node.bucket_properties;
     }
@@ -130,6 +134,10 @@ HiveDataSourceProvider::HiveDataSourceProvider(int32_t plan_node_id, const THdfs
         : _plan_node_id(plan_node_id),
           _hdfs_scan_node(hdfs_scan_node),
           _cloud_configuration(cloud_configuration_of(_hdfs_scan_node), false) {
+    if (_hdfs_scan_node.__isset.metadata_table_type &&
+        _hdfs_scan_node.metadata_table_type == "PAIMON_GLOBAL_INDEX") {
+        _paimon_global_index_context = std::make_shared<PaimonGlobalIndexScanContext>();
+    }
     if (_hdfs_scan_node.__isset.bucket_properties) {
         _bucket_properties = _hdfs_scan_node.bucket_properties;
     }
@@ -951,7 +959,13 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     _scanner_ctx.obj_pool = &_pool;
 
     _scanner_ctx.scan_range = &scan_range;
-    _scanner_ctx.fs = _pool.add(fs.release());
+    if (scan_range.__isset.paimon_global_index_scan_range) {
+        _scanner_ctx.paimon_global_index_file_system = std::move(fs);
+        _scanner_ctx.fs = _scanner_ctx.paimon_global_index_file_system.get();
+        _scanner_ctx.paimon_global_index_context = _provider->_paimon_global_index_context;
+    } else {
+        _scanner_ctx.fs = _pool.add(fs.release());
+    }
     _scanner_ctx.file_path = native_file_path;
     _scanner_ctx.file_size = _scan_range.file_length;
     _scanner_ctx.table_location = _scanner_ctx.hive_table->get_base_path();
@@ -1033,6 +1047,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = new CacheSelectScanner();
     } else if (_scanner_ctx.format_scan_context.options.use_partition_column_value_only) {
         scanner = new HdfsPartitionScanner();
+    } else if (scan_range.__isset.paimon_global_index_scan_range) {
+        // The virtual index table uses the Paimon descriptor for cloud credentials and
+        // table metadata, but has its own result-producing scanner.
+        ASSIGN_OR_RETURN(scanner, create_paimon_global_index_scanner());
     } else if (use_paimon_native_reader) {
         // Loads the paimon-cpp shim on first use; fails the query with an
         // actionable error (suggesting paimon_reader_mode='JNI') when the

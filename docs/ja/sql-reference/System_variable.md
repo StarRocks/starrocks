@@ -1361,6 +1361,15 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: false
 * **導入バージョン**: v3.1.10
 
+### enable_paimon_distributed_global_index
+
+* **説明**: スキャン分割の計画中に、対応する Paimon スカラー BTree Global Index の述語を BE/CN で評価します。main ブランチの data evolution テーブルのスナップショット読み取りが対象です。互換性のあるキー schema と完全なインデックスカバレッジが必要です。内部 metadata クエリは呼び出し元の ID、リソースポリシー、Warehouse、キャンセル状態、タイムアウトを引き継ぎます。永続テーブルの作成やクエリ bitmap のキャッシュは行いません。
+* **デフォルト**: false（既存の Paimon SDK による計画を使用）。
+* **データ型**: Boolean
+* **導入バージョン**: v4.2
+* **制限**: 最大 4096 シャード、シャードごとのシリアライズ済み bitmap は最大 1 MiB。FE の収集予算はクエリのメモリ制限の 8 分の 1、上限 64 MiB です。シリアライズ済みバイト数と候補行数を保守的に制限します。分散評価を使用できない場合、失敗した場合、制限を超えた場合は、元の述語を保持し Global Index による絞り込みを使わずにデータをスキャンします。クエリのキャンセルまたは外側のタイムアウトで計画を停止します。行フィルターや列マスキングがある場合はこの最適化を使用しません。
+* **診断**: External Trace に `PaimonGlobalIndex.Evaluate`、`PaimonGlobalIndex.ValidateCoverage`、`PaimonGlobalIndex.Result`、`PaimonGlobalIndex.Fallback` を記録します。metadata profile が有効な場合、ネイティブ scanner のインデックスオープン、評価、シリアライズ時間、バイト数、ファイルシステム I/O カウンターを確認できます。
+
 ### paimon_reader_mode
 
 * **説明**: Paimon テーブルで使用する Reader を制御します。有効な値は `AUTO`、`JNI`、`NATIVE` で、大文字と小文字は区別されません。

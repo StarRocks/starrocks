@@ -1637,6 +1637,15 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: false
 * **Introduced in**: v3.1.10
 
+### enable_paimon_distributed_global_index
+
+* **Description**: Evaluates eligible Paimon scalar BTree Global Index predicates on BE/CN during split planning. Applies to snapshot reads of data evolution tables on the main branch with compatible key schemas and complete index coverage. The internal metadata query inherits the caller's identity, resource policy, warehouse, cancellation and timeout budget. It does not create a persistent table or cache query bitmaps.
+* **Default**: false (uses the existing Paimon SDK planning behavior).
+* **Data type**: Boolean
+* **Introduced in**: v4.2
+* **Limits**: At most 4096 index shards and 1 MiB of serialized bitmap per shard. FE collection sets a budget of one eighth of the query memory limit, capped at 64 MiB, with conservative bounds on serialized bytes and candidate row count. When distributed index evaluation is unavailable, fails or exceeds these limits, planning scans data without Global Index pruning. Query cancellation and an exhausted outer timeout stop planning. Row filtering or column masking policies disable this optimization.
+* **Diagnostics**: External traces include `PaimonGlobalIndex.Evaluate`, `PaimonGlobalIndex.ValidateCoverage`, `PaimonGlobalIndex.Result` and `PaimonGlobalIndex.Fallback`. With metadata profiling enabled, native scanner profiles include index open, evaluation and serialization times, serialized bytes and filesystem I/O counters.
+
 ### paimon_reader_mode
 
 * **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive).

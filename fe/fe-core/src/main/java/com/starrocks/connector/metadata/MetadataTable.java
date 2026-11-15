@@ -66,6 +66,10 @@ public class MetadataTable extends Table {
         return PLACEHOLDER_COLUMNS;
     }
 
+    public boolean isInternalOnly() {
+        return false;
+    }
+
     public boolean supportBuildPlan() {
         return false;
     }
