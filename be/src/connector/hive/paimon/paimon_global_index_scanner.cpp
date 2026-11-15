@@ -305,8 +305,8 @@ Status PaimonGlobalIndexScanner::do_get_next(RuntimeState* runtime_state, ChunkP
     for (const SlotDescriptor* slot : _scanner_ctx->materialize_slots) {
         MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
         if (slot->col_name() == "shard_id") {
-            column->append_datum(Datum(static_cast<int64_t>(
-                    _scanner_ctx->scan_range->paimon_global_index_scan_range.shard_id)));
+            column->append_datum(
+                    Datum(static_cast<int64_t>(_scanner_ctx->scan_range->paimon_global_index_scan_range.shard_id)));
         } else if (slot->col_name() == kIndexResultColumn) {
             column->append_datum(Datum(Slice(bytes->data(), bytes->size())));
         } else {

@@ -119,8 +119,7 @@ HiveDataSourceProvider::HiveDataSourceProvider(const TPlanNode& plan_node)
           _hdfs_scan_node(plan_node.hdfs_scan_node),
           _cloud_configuration(cloud_configuration_of(_hdfs_scan_node),
                                config::scan_credential_refresh_rpc_timeout_ms > 0) {
-    if (_hdfs_scan_node.__isset.metadata_table_type &&
-        _hdfs_scan_node.metadata_table_type == "PAIMON_GLOBAL_INDEX") {
+    if (_hdfs_scan_node.__isset.metadata_table_type && _hdfs_scan_node.metadata_table_type == "PAIMON_GLOBAL_INDEX") {
         _paimon_global_index_context = std::make_shared<PaimonGlobalIndexScanContext>();
     }
     if (_hdfs_scan_node.__isset.bucket_properties) {
@@ -134,8 +133,7 @@ HiveDataSourceProvider::HiveDataSourceProvider(int32_t plan_node_id, const THdfs
         : _plan_node_id(plan_node_id),
           _hdfs_scan_node(hdfs_scan_node),
           _cloud_configuration(cloud_configuration_of(_hdfs_scan_node), false) {
-    if (_hdfs_scan_node.__isset.metadata_table_type &&
-        _hdfs_scan_node.metadata_table_type == "PAIMON_GLOBAL_INDEX") {
+    if (_hdfs_scan_node.__isset.metadata_table_type && _hdfs_scan_node.metadata_table_type == "PAIMON_GLOBAL_INDEX") {
         _paimon_global_index_context = std::make_shared<PaimonGlobalIndexScanContext>();
     }
     if (_hdfs_scan_node.__isset.bucket_properties) {
