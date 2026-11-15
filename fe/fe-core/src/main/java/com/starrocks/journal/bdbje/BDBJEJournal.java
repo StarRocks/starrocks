@@ -41,6 +41,7 @@ import com.sleepycat.je.DatabaseEntry;
 import com.sleepycat.je.DatabaseException;
 import com.sleepycat.je.OperationStatus;
 import com.sleepycat.je.Transaction;
+import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.journal.Journal;
@@ -299,6 +300,18 @@ public class BDBJEJournal implements Journal {
         }
 
         return bdbEnvironment.getDatabaseNamesWithPrefix(prefix);
+    }
+
+    @Override
+    public void checkEnvironment() throws JournalException {
+        ReplicatedEnvironment environment = bdbEnvironment.getReplicatedEnvironment();
+        // A normal close also makes isValid() false. Do not confuse it with a fatal BDB failure.
+        if (!environment.isValid() && !environment.isClosed()) {
+            JournalException exception = new JournalException(
+                    "BDB environment is invalid while waiting for FE to become ready; restart is required");
+            exception.initCause(environment.getInvalidatingException());
+            throw exception;
+        }
     }
 
     public BDBEnvironment getBdbEnvironment() {
