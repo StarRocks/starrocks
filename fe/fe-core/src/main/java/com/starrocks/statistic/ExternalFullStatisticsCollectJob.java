@@ -598,12 +598,19 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     // the next collection retries it. Best-effort: must never fail a job whose actual stats write
     // already succeeded.
     protected void cleanupStaleRawKeyedRows(ConnectContext context, long jobId) {
+        if (isAnalyzeCancelled(jobId)) {
+            return;
+        }
         String rawTableUuid = table.getUUID();
         boolean ok = new StatisticExecutor().dropExternalStatRawPartitions(context, rawTableUuid, partitionNames, columnNames);
         if (!ok) {
             LOG.warn("[ExternalStats] failed to clean up stale raw-keyed rows | jobId={} catalog={} db={} table={}",
                     jobId, catalogName, db.getOriginName(), table.getName());
         }
+    }
+
+    private static boolean isAnalyzeCancelled(long jobId) {
+        return GlobalStateMgr.getCurrentState().getAnalyzeMgr().isAnalyzeCancelled(jobId);
     }
 
     protected List<CollectTask> buildCollectSQLList(int parallelism) {
