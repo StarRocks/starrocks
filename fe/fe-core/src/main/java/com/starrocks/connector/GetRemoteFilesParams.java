@@ -49,18 +49,10 @@ public class GetRemoteFilesParams {
     private long scanFilesCap = -1;
     private long scanRowsCap = -1;
 
-<<<<<<< HEAD
-=======
-    /**
-     * Per query credentials the scan node captured while planning, for connectors that issue them per query: the
-     * listing runs after planning, with no way to look them up.
-     */
-    private QueryScopedCredentials queryScopedCredentials;
     // The scan node asking, -1 if none (statistics, metadata preparation). Only names the request in the profile;
     // it is not part of a planning's identity, so scans with the same request still share one planning.
     private int scanNodeId = -1;
 
->>>>>>> 165b15a9d83... [Enhancement][RB-1509] Report Iceberg planning storage I/O and show scan metrics as a tree in the query profile (#69818)
     protected GetRemoteFilesParams(Builder builder) {
         this.partitionKeys = builder.partitionKeys;
         this.partitionNames = builder.partitionNames;
@@ -79,15 +71,11 @@ public class GetRemoteFilesParams {
         this.scanBytesCap = builder.scanBytesCap;
         this.scanFilesCap = builder.scanFilesCap;
         this.scanRowsCap = builder.scanRowsCap;
-<<<<<<< HEAD
-=======
-        this.queryScopedCredentials = builder.queryScopedCredentials;
         this.scanNodeId = builder.scanNodeId;
     }
 
     public int getScanNodeId() {
         return scanNodeId;
->>>>>>> 165b15a9d83... [Enhancement][RB-1509] Report Iceberg planning storage I/O and show scan metrics as a tree in the query profile (#69818)
     }
 
     public int getPartitionSize() {
@@ -117,13 +105,8 @@ public class GetRemoteFilesParams {
                 .setUsedForDelete(usedForDelete)
                 .setScanBytesCap(scanBytesCap)
                 .setScanFilesCap(scanFilesCap)
-<<<<<<< HEAD
-                .setScanRowsCap(scanRowsCap);
-=======
                 .setScanRowsCap(scanRowsCap)
-                .setQueryScopedCredentials(queryScopedCredentials)
                 .setScanNodeId(scanNodeId);
->>>>>>> 165b15a9d83... [Enhancement][RB-1509] Report Iceberg planning storage I/O and show scan metrics as a tree in the query profile (#69818)
         if (isRecursive.isPresent()) {
             paramsBuilder.setIsRecursive(isRecursive.get());
         }
@@ -254,11 +237,7 @@ public class GetRemoteFilesParams {
         private long scanBytesCap = -1;
         private long scanFilesCap = -1;
         private long scanRowsCap = -1;
-<<<<<<< HEAD
-=======
-        private QueryScopedCredentials queryScopedCredentials;
         private int scanNodeId = -1;
->>>>>>> 165b15a9d83... [Enhancement][RB-1509] Report Iceberg planning storage I/O and show scan metrics as a tree in the query profile (#69818)
 
         public Builder setPartitionKeys(List<PartitionKey> partitionKeys) {
             this.partitionKeys = partitionKeys;
@@ -345,19 +324,11 @@ public class GetRemoteFilesParams {
             return this;
         }
 
-<<<<<<< HEAD
-=======
-        public Builder setQueryScopedCredentials(QueryScopedCredentials queryScopedCredentials) {
-            this.queryScopedCredentials = queryScopedCredentials;
-            return this;
-        }
-
         public Builder setScanNodeId(int scanNodeId) {
             this.scanNodeId = scanNodeId;
             return this;
         }
 
->>>>>>> 165b15a9d83... [Enhancement][RB-1509] Report Iceberg planning storage I/O and show scan metrics as a tree in the query profile (#69818)
         public GetRemoteFilesParams build() {
             return new GetRemoteFilesParams(this);
         }

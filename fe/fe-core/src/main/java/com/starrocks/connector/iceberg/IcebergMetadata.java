@@ -167,14 +167,11 @@ import org.apache.iceberg.expressions.StrictMetricsEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.FileIO;
-<<<<<<< HEAD
-=======
 import org.apache.iceberg.metrics.CounterResult;
 import org.apache.iceberg.metrics.MetricsContext;
 import org.apache.iceberg.metrics.ScanMetricsResult;
 import org.apache.iceberg.metrics.ScanReport;
 import org.apache.iceberg.metrics.TimerResult;
->>>>>>> 165b15a9d83... [Enhancement][RB-1509] Report Iceberg planning storage I/O and show scan metrics as a tree in the query profile (#69818)
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
@@ -2238,25 +2235,10 @@ public class IcebergMetadata implements ConnectorMetadata {
             return;
         }
 
-<<<<<<< HEAD
-        String name = "ICEBERG.ScanMetrics." + ((StarRocksIcebergTableScan) tableScan).getIcebergTableName();
-        String value = metricsReporter.getScanReport().toString();
-        Tracers.record(EXTERNAL, name, value);
-=======
         // One group per scan, a field per line, under the same group name as PlanningIO.
         String prefix = "ICEBERG.ScanMetrics." + scanProfileGroup(catalogName, dbName, tableName, scanNodeId) + ".";
         scanMetricsFields(metricsReporter.getScanReport())
                 .forEach((field, value) -> Tracers.record(EXTERNAL, prefix + field, value));
-
-        // Feed Iceberg's own split-planning duration (manifest planning only; excludes the
-        // StarRocks-side per-file stats loop) into the per-catalog planning-latency histogram,
-        // isolating the part that rewrite_manifests actually speeds up.
-        TimerResult planningDuration = metricsReporter.getScanReport().scanMetrics().totalPlanningDuration();
-        if (planningDuration != null && planningDuration.totalDuration() != null) {
-            IcebergMaintenanceMetricsMgr.recordPlanningLatencyMs(catalogName,
-                    planningDuration.totalDuration().toMillis());
-        }
->>>>>>> 165b15a9d83... [Enhancement][RB-1509] Report Iceberg planning storage I/O and show scan metrics as a tree in the query profile (#69818)
     }
 
     // The profile group of one scan: the table name, and the scan node when there is one. The profile nests on '.', so
