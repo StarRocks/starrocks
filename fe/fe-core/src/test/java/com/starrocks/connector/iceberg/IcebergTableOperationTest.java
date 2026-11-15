@@ -17,11 +17,15 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.connector.iceberg.procedure.IcebergTableProcedure;
 import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
+import com.starrocks.connector.iceberg.procedure.RollbackToTimestampProcedure;
+import com.starrocks.connector.iceberg.procedure.SetCurrentSnapshotProcedure;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -51,11 +55,14 @@ import mockit.Mocked;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -138,6 +145,56 @@ public class IcebergTableOperationTest extends TableTestBase {
                 connectContext,
                 HDFS_ENVIRONMENT);
         executor.execute();
+    }
+
+    private void executeProcedure(org.apache.iceberg.Table table, IcebergTableProcedure procedure,
+                                  String argName, ConstantOperator arg) throws Exception {
+        AlterTableOperationClause clause = new AlterTableOperationClause(
+                NodePosition.ZERO, procedure.getProcedureName(), List.of(), null);
+        clause.setTableProcedure(procedure);
+        clause.setAnalyzedArgs(Map.of(argName, arg));
+        new IcebergAlterTableExecutor(new AlterTableStmt(
+                new TableRef(QualifiedName.of(List.of(CATALOG_NAME, "db", table.name())), null, NodePosition.ZERO),
+                List.of(clause)), table, null, connectContext, HDFS_ENVIRONMENT).execute();
+        table.refresh();
+    }
+
+    @Test
+    public void testRollbackToTimestampAndSetCurrentSnapshot() throws Exception {
+        org.apache.iceberg.Table table = mockedNativeTableA;
+        table.newAppend().appendFile(FILE_A).commit();
+        Snapshot s1 = table.currentSnapshot();
+        Thread.sleep(5);
+        table.newAppend().appendFile(FILE_A_2).commit();
+        Snapshot s2 = table.currentSnapshot();
+        Assertions.assertTrue(s2.timestampMillis() > s1.timestampMillis());
+
+        // rollback_to_timestamp picks the latest snapshot committed strictly before the timestamp
+        LocalDateTime atS2 = LocalDateTime.ofInstant(Instant.ofEpochMilli(s2.timestampMillis()),
+                TimeUtils.getTimeZone().toZoneId());
+        executeProcedure(table, RollbackToTimestampProcedure.getInstance(),
+                RollbackToTimestampProcedure.TIMESTAMP, ConstantOperator.createDatetime(atS2));
+        Assertions.assertEquals(s1.snapshotId(), table.currentSnapshot().snapshotId());
+
+        // s2 is not an ancestor of the current snapshot: rollback_to_snapshot refuses it, set_current_snapshot does not
+        Assertions.assertThrows(ValidationException.class, () -> executeProcedure(table,
+                RollbackToSnapshotProcedure.getInstance(), RollbackToSnapshotProcedure.SNAPSHOT_ID,
+                ConstantOperator.createBigint(s2.snapshotId())));
+        executeProcedure(table, SetCurrentSnapshotProcedure.getInstance(), SetCurrentSnapshotProcedure.SNAPSHOT_ID,
+                ConstantOperator.createBigint(s2.snapshotId()));
+        Assertions.assertEquals(s2.snapshotId(), table.currentSnapshot().snapshotId());
+
+        // no snapshot before the timestamp
+        LocalDateTime beforeS1 = LocalDateTime.ofInstant(Instant.ofEpochMilli(s1.timestampMillis() - 1000),
+                TimeUtils.getTimeZone().toZoneId());
+        Assertions.assertThrows(IllegalArgumentException.class, () -> executeProcedure(table,
+                RollbackToTimestampProcedure.getInstance(), RollbackToTimestampProcedure.TIMESTAMP,
+                ConstantOperator.createDatetime(beforeS1)));
+        // unknown snapshot id
+        Assertions.assertThrows(ValidationException.class, () -> executeProcedure(table,
+                SetCurrentSnapshotProcedure.getInstance(), SetCurrentSnapshotProcedure.SNAPSHOT_ID,
+                ConstantOperator.createBigint(-1L)));
+        Assertions.assertEquals(s2.snapshotId(), table.currentSnapshot().snapshotId());
     }
 
     @Test

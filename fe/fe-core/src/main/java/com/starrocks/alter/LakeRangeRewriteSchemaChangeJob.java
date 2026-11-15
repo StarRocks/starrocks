@@ -18,19 +18,12 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.alter.reshard.ColocateChecker;
-import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.alter.reshard.presplit.BoundaryPlanner;
-import com.starrocks.alter.reshard.presplit.BoundaryPlannerResult;
-import com.starrocks.alter.reshard.presplit.DefaultPreSplitPipeline;
 import com.starrocks.alter.reshard.presplit.InternalPartitionScanContext;
 import com.starrocks.alter.reshard.presplit.ReservoirSampler;
 import com.starrocks.alter.reshard.presplit.SampleRequest;
 import com.starrocks.alter.reshard.presplit.SampleSet;
 import com.starrocks.alter.reshard.presplit.Sampler;
-import com.starrocks.catalog.ColocateRange;
-import com.starrocks.catalog.ColocateRangeUtils;
-import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -39,16 +32,11 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ParseUtil;
-import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.planner.RangeColocateScanDispatch;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageMedium;
@@ -57,7 +45,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -116,13 +103,6 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
     // Sampling seam. Production samples a partition's base by the new sort key via a SQL sub-query
     // (needs a backend); tests inject a stub returning a canned SampleSet. Not serialized.
     private transient Sampler sampler;
-
-    // The ColocateRanges and the colocate column count of the table's range colocate group, captured at the start
-    // of each PENDING run; the shadow tablets of every partition are planned and checked against them. Null ranges
-    // when the table is in no range colocate group, and once that check has passed. Not serialized: replay rebuilds
-    // the shadow from the boundaries.
-    private transient List<ColocateRange> colocateRanges;
-    private transient int colocateColumnCount;
 
     // for deserialization
     public LakeRangeRewriteSchemaChangeJob() {
@@ -235,143 +215,15 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
                 "new sort key columns are not set");
     }
 
-    /** Captures the ColocateRanges of the table's range colocate group, if it is in one. */
-    @Override
-    protected void capturePlanningInputs(@NotNull OlapTable table) throws AlterCancelException {
-        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-        ColocateTableIndex.GroupId groupId = colocateTableIndex.getRangeColocateGroupId(tableId);
-        if (groupId == null) {
-            colocateRanges = null;
-            return;
-        }
-        List<ColocateRange> ranges = colocateTableIndex.getColocateRanges(groupId.grpId);
-        if (ranges.isEmpty()) {
-            throw new AlterCancelException("colocate range metadata is missing for the colocate group of table "
-                    + table.getName());
-        }
-        colocateRanges = ranges;
-        colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
-    }
-
-    /**
-     * Applies the colocate prefix rule again under the table write lock, and checks that the shadow index of every
-     * partition is aligned with the ColocateRanges it was planned against. A misaligned shadow index is a planning
-     * defect; it must never be installed. The table stays in SCHEMA_CHANGE from here until the flip, so the rule
-     * holds for the rest of the job and no later stage checks it again.
-     */
-    @Override
-    protected void validateShadowBeforeCommit(@NotNull OlapTable table, List<PendingPartitionPlan> plans)
-            throws AlterCancelException {
-        checkColocatePrefix(table);
-        if (colocateRanges == null) {
-            return;
-        }
-        for (PendingPartitionPlan plan : plans) {
-            if (!RangeColocateScanDispatch.isTabletRangesAligned(plan.shadowIndex, newSortKeyColumns, colocateRanges,
-                    colocateColumnCount)) {
-                throw new AlterCancelException("the shadow index of partition " + plan.physicalPartitionId
-                        + " is not aligned with the colocate ranges of its group");
-            }
-        }
-        // The captured ranges are not needed past this check: a PENDING retry captures them again, and the PACK
-        // placement reads the current ones.
-        colocateRanges = null;
-    }
-
-    /**
-     * Places every shadow tablet of a table in a range colocate group into the PACK shard group of its ColocateRange,
-     * so that the new index keeps the host locality of colocate joins after the flip; the shards were created in the
-     * partition's shard group only. Checks against the current ColocateRanges: a tablet that a split of a peer table
-     * has since made cross a new bound is left to the colocate checker, which aligns the table after the flip.
-     * StarMgr journals the membership itself. A round that moves a tablet waits, and the next round confirms the
-     * placement.
-     */
-    @Override
-    protected String settleBeforeFinishingRewrite() throws AlterCancelException {
-        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-        ColocateTableIndex.GroupId groupId = colocateTableIndex.getRangeColocateGroupId(tableId);
-        if (groupId == null) {
-            return null;
-        }
-        Map<Long, Range<Tuple>> shadowTabletRanges = new HashMap<>();
-        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
-            getTableOrThrow();
-            for (PartitionRewriteState partitionState : partitionStates.values()) {
-                for (Tablet tablet : partitionState.shadowIndex.getTablets()) {
-                    shadowTabletRanges.put(tablet.getId(), tablet.getRange().getRange());
-                }
-            }
-        }
-        List<ColocateRange> currentRanges = colocateTableIndex.getColocateRanges(groupId.grpId);
-        int groupColocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
-        int shadowTabletCount = shadowTabletRanges.size();
-        shadowTabletRanges.values().removeIf(range -> !ColocateRangeUtils.isContainedInOwningColocateRange(
-                range, currentRanges, newSortKeyColumns, groupColocateColumnCount));
-        if (shadowTabletRanges.size() < shadowTabletCount) {
-            LOG.info("range-rewrite schema change job {}: {} of {} shadow tablets cross a colocate range bound added "
-                            + "after planning, the colocate checker aligns them after the flip", jobId,
-                    shadowTabletCount - shadowTabletRanges.size(), shadowTabletCount);
-        }
-        if (ColocateChecker.reconcileTabletPackPlacement(shadowTabletRanges, currentRanges,
-                groupColocateColumnCount, "range-rewrite schema change job " + jobId)) {
-            return null;
-        }
-        return "PACK placement of " + shadowTabletRanges.size() + " shadow tablets";
-    }
-
     /** Applies the colocate prefix rule to the new routing columns; a no-op outside a range colocate group. */
-    private void checkColocatePrefix(OlapTable table) throws AlterCancelException {
+    @Override
+    protected void checkShadowColocatePrefix(OlapTable table) throws AlterCancelException {
         try {
             SchemaChangeHandler.checkRangeColocatePrefix(table,
                     SchemaChangeHandler.newRangeRoutingColumns(newSchema, newKeysType, newSortKeyIdxes));
         } catch (DdlException e) {
             throw new AlterCancelException(e.getMessage());
         }
-    }
-
-    /**
-     * Plan one partition's K-tablet shadow layout lock-free using the shared tablet-count policy: a zero
-     * target preserves the latest base-index {@code K}, while a nonzero target derives {@code K}
-     * adaptively from the base data size and active compute-node count. When {@code K > 1}, sample by the
-     * new sort key and plan the boundaries; {@code K == 1} skips sampling. A table in a range colocate group
-     * gets at least one tablet per ColocateRange instead (see {@link #planColocateBoundaries}). Build the shadow
-     * {@link MaterializedIndex} via the StarOS createShards RPC. NO db lock is held here.
-     */
-    @Override
-    protected void planPartitionShadow(PendingPartitionPlan plan, OlapTable table, String dbName)
-            throws AlterCancelException {
-        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
-        int requestedTabletCount = selectRequestedTabletCount(plan, activeComputeNodeCount);
-        List<Tuple> boundaries;
-        if (colocateRanges == null) {
-            boundaries = requestedTabletCount == 1
-                    ? List.of()
-                    : planBoundaries(table, dbName, plan.tableName, plan.partitionName,
-                            plan.physicalPartitionId, plan.partitionDataSize, requestedTabletCount);
-        } else {
-            RangeColocateRewriteLayout layout =
-                    new RangeColocateRewriteLayout(colocateRanges, newSortKeyColumns, colocateColumnCount);
-            boundaries = planColocateBoundaries(layout, plan, table, dbName, requestedTabletCount);
-            LOG.info("range-rewrite schema change job {}: partition {} plans {} shadow tablets over {} colocate "
-                            + "ranges, tablets per colocate range: {}", jobId, plan.physicalPartitionId,
-                    boundaries.size() + 1, colocateRanges.size(), Arrays.toString(layout.tabletCountsOf(boundaries)));
-        }
-        // Outside a range colocate group, K may collapse to 1 (sampling failure / no-distinction): a single
-        // full-range tablet.
-        int shadowTabletCount = boundaries.size() + 1;
-        List<TabletRange> ranges = buildTabletRanges(boundaries);
-        MaterializedIndex shadowIndex;
-        try {
-            shadowIndex = LakeTableAlterJobV2Builder.buildRangeShadowIndex(
-                    dbId, table, plan.physicalPartition, shadowIndexMetaId, shadowTabletCount, ranges,
-                    plan.shardGroupId, computeResource);
-        } catch (DdlException e) {
-            throw new AlterCancelException("failed to build shadow index for partition "
-                    + plan.physicalPartitionId + ": " + e.getMessage());
-        }
-        plan.boundaries = boundaries;
-        plan.shadowTabletCount = shadowTabletCount;
-        plan.shadowIndex = shadowIndex;
     }
 
     @Override
@@ -404,6 +256,22 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         return "range-rewrite";
     }
 
+    @Override
+    protected String rangeJobLogPrefix() {
+        return "range-rewrite schema change job";
+    }
+
+    @Override
+    protected List<Column> getShadowRangeColumns() {
+        return newSortKeyColumns;
+    }
+
+    @Override
+    protected SampleSet sampleShadowSortKey(OlapTable table, String dbName, PendingPartitionPlan plan)
+            throws StarRocksException {
+        return sampleByNewSortKey(table, dbName, plan.tableName, plan.partitionName, plan.partitionDataSize);
+    }
+
     /**
      * Idempotently register the shadow index's {@link MaterializedIndexMeta} (schema, keysType,
      * sort-key indexes) on the table. Re-runnable on replay: {@code setIndexMeta} overwrites the
@@ -427,76 +295,13 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         table.rebuildFullSchema();
     }
 
-    /**
-     * Sample the partition by the new sort key and plan {@code K-1} boundaries. A sampling failure or
-     * a no-distinction sample (empty sample / all-equal keys → planner NO_SPLIT) degrades to an empty
-     * boundary list = a single full-range tablet (K=1 fallback). All inputs are captured snapshots so
-     * this runs lock-free (the sampler itself re-acquires a read lock for its SQL round-trip).
-     */
-    private List<Tuple> planBoundaries(OlapTable table, String dbName, String tableName, String partitionName,
-                                       long physicalPartitionId, long partitionDataSize,
-                                       int requestedTabletCount) {
-        try {
-            SampleSet sampleSet = sampleByNewSortKey(table, dbName, tableName, partitionName, partitionDataSize);
-            if (sampleSet.isEmpty()) {
-                return List.of();
-            }
-            BoundaryPlannerResult planResult =
-                    BoundaryPlanner.planRowQuantileBoundaries(sampleSet, requestedTabletCount, newSortKeyColumns);
-            if (planResult.isNoSplit()) {
-                return List.of();
-            }
-            return planResult.getBoundaries();
-        } catch (StarRocksException | RuntimeException e) {
-            // Sampling / planning failure must not fail the alter: fall back to a single full-range
-            // shadow tablet (the rewrite still re-sorts by the new key; it just isn't split).
-            LOG.warn("range-rewrite schema change job {}: sampling/planning failed for partition {}, "
-                    + "falling back to a single full-range shadow tablet", jobId, physicalPartitionId, e);
-            return List.of();
-        }
-    }
-
     @VisibleForTesting
     public List<Tuple> planBoundariesForTest(OlapTable table, String dbName, String tableName, String partitionName,
                                              long physicalPartitionId, long partitionDataSize,
                                              int requestedTabletCount) {
-        return planBoundaries(table, dbName, tableName, partitionName, physicalPartitionId, partitionDataSize,
-                requestedTabletCount);
-    }
-
-    /**
-     * Plan the boundaries of one partition of a table in a range colocate group: the ColocateRange bounds plus
-     * sampled cuts inside the ColocateRanges (see {@link RangeColocateRewriteLayout}). A zero
-     * {@code tablet_reshard_target_size} keeps the base tablet count of each ColocateRange; otherwise the requested
-     * count is shared among the ColocateRanges by their share of the sample. A sampling failure or an empty
-     * sample (an empty partition) gives one tablet per ColocateRange. So does a requested count of one, without
-     * sampling: no ColocateRange can get a second tablet.
-     */
-    private List<Tuple> planColocateBoundaries(RangeColocateRewriteLayout layout, PendingPartitionPlan plan,
-                                               OlapTable table, String dbName, int requestedTabletCount) {
-        if (requestedTabletCount <= 1 || !layout.usesSampledCuts()) {
-            return layout.colocateBoundaries();
-        }
-        try {
-            int[] baseTabletCounts = null;
-            if (Config.tablet_reshard_target_size == 0) {
-                baseTabletCounts = layout.tabletCountsOfBaseTablets(plan.baseIndex.getTablets());
-                if (Arrays.stream(baseTabletCounts).allMatch(count -> count == 1)) {
-                    return layout.colocateBoundaries();
-                }
-            }
-            SampleSet sampleSet = sampleByNewSortKey(table, dbName, plan.tableName, plan.partitionName,
-                    plan.partitionDataSize);
-            List<List<Tuple>> samplesByRange = layout.bucketByColocateRange(sampleSet.getTuples());
-            int[] tabletCounts = baseTabletCounts != null
-                    ? baseTabletCounts
-                    : layout.tabletCountsBySampleShare(samplesByRange, requestedTabletCount);
-            return layout.planBoundaries(samplesByRange, tabletCounts);
-        } catch (StarRocksException | RuntimeException e) {
-            LOG.warn("range-rewrite schema change job {}: sampling/planning failed for partition {}, "
-                    + "falling back to one shadow tablet per colocate range", jobId, plan.physicalPartitionId, e);
-            return layout.colocateBoundaries();
-        }
+        PendingPartitionPlan plan = new PendingPartitionPlan(physicalPartitionId, null, 0L, partitionName,
+                partitionDataSize, tableName, null);
+        return planBoundaries(table, dbName, plan, requestedTabletCount);
     }
 
     private SampleSet sampleByNewSortKey(OlapTable table, String dbName, String tableName, String partitionName,
@@ -571,21 +376,6 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
                 ? "NULL"
                 : "\"" + column.getDefaultValue().replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
         return "CAST(" + literal + " AS " + column.getType().toSql() + ") AS " + backquoted;
-    }
-
-    /**
-     * Tile {@code (-inf, +inf)} with one {@link TabletRange} per tablet given the {@code K-1}
-     * sorted boundaries: {@code (-inf, c1), [c1, c2), ..., [c_{K-1}, +inf)}. An empty boundary list
-     * yields a single full-range tablet (K=1 case).
-     */
-    @VisibleForTesting
-    static List<TabletRange> buildTabletRanges(List<Tuple> boundaries) {
-        if (boundaries.isEmpty()) {
-            List<TabletRange> singleRange = new ArrayList<>(1);
-            singleRange.add(new TabletRange(Range.all()));
-            return singleRange;
-        }
-        return DefaultPreSplitPipeline.buildTabletRanges(boundaries);
     }
 
     /**

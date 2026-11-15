@@ -496,10 +496,10 @@ BLAKE3_SOURCE="BLAKE3-1.8.5"
 BLAKE3_MD5SUM="3731247eb9086571ba7128a794c1d2d3"
 
 # xxhash
-XXHASH_DOWNLOAD="https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.3.tar.gz"
-XXHASH_NAME=xxHash-0.8.3.tar.gz
-XXHASH_SOURCE=xxHash-0.8.3
-XXHASH_MD5SUM="599804eb9555e51c05f1b821f9212a07"
+XXHASH_DOWNLOAD="https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.4.tar.gz"
+XXHASH_NAME=xxHash-0.8.4.tar.gz
+XXHASH_SOURCE=xxHash-0.8.4
+XXHASH_MD5SUM="918fa44277d81b1ac1d02ac075df4ec1"
 
 # benchgen
 BENCHGEN_DOWNLOAD="https://github.com/StarRocks/benchgen/archive/refs/tags/v26.03.11.tar.gz"

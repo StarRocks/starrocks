@@ -894,6 +894,10 @@ public class SplitTabletJob extends TabletReshardJob {
      *     range straddles an existing boundary without canonicalizing. Log a warning, mark
      *     unstable so the scan-time alignment guard fails closed.</li>
      * </ul>
+     *
+     * <p>Every split index is classified with its own sort key: the tablet ranges of an index, and the canonical
+     * {@code (k, NULL...)} shape of its bounds, are in that index's sort-key space, which starts with the colocate
+     * columns but can be shorter or longer than the base index's.
      */
     private void applyColocateRangeSplitResult() {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
@@ -913,15 +917,16 @@ public class SplitTabletJob extends TabletReshardJob {
         // from the PENDING phase) so it is replay-safe; used to arm the backstop for a boundary-less
         // pre-split below.
         boolean anySpreadPreSplit = false;
-        // New child ranges captured during the walk below, reused after the splice for the best-effort
-        // immediate PACK reassignment. sortKeyColumns is hoisted out of the lock so that same reassign
-        // can reuse it (it is immutable schema, always assigned inside the lock before the walk).
+        // New child ranges captured during the walk below, with the sort key of each child's index, reused after
+        // the splice for the best-effort immediate PACK reassignment. The sort keys are resolved inside the lock
+        // and kept for that reassign (they are immutable schema).
         Map<Long, Range<Tuple>> newChildRanges = new HashMap<>();
-        List<Column> sortKeyColumns = null;
+        Map<Long, List<Column>> newChildSortKeyColumns = new HashMap<>();
+        // One sort key per index meta, not per (partition, index): it depends on nothing else.
+        Map<Long, List<Column>> sortKeyColumnsByMetaId = new HashMap<>();
 
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
-            sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable);
 
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 PhysicalPartition physicalPartition = olapTable
@@ -934,6 +939,8 @@ public class SplitTabletJob extends TabletReshardJob {
                     MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
                     MaterializedIndex oldIndex = physicalPartition.getIndex(reshardingIndex.getMaterializedIndexId());
                     anySpreadPreSplit |= oldIndex != null && oldIndex.getRowCount() == 0;
+                    List<Column> sortKeyColumns = sortKeyColumnsByMetaId.computeIfAbsent(newIndex.getMetaId(),
+                            metaId -> MetaUtils.getRangeDistributionColumns(olapTable, metaId));
                     for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
                         SplittingTablet splittingTablet = reshardingTablet.getSplittingTablet();
                         // getSplittingTablet() returns null for a fallback-to-identical replacement (BE
@@ -962,6 +969,7 @@ public class SplitTabletJob extends TabletReshardJob {
                             }
                             Range<Tuple> newRange = newTablet.getRange().getRange();
                             newChildRanges.put(newTabletId, newRange);
+                            newChildSortKeyColumns.put(newTabletId, sortKeyColumns);
                             if (identical) {
                                 continue;
                             }
@@ -1026,8 +1034,8 @@ public class SplitTabletJob extends TabletReshardJob {
             // non-canonical crossing) has no single well-defined PACK group; leave it to the backstop.
             Map<Long, Range<Tuple>> containedChildRanges = new HashMap<>();
             for (Map.Entry<Long, Range<Tuple>> entry : newChildRanges.entrySet()) {
-                if (ColocateRangeUtils.isContainedInOwningColocateRange(
-                        entry.getValue(), updatedRanges, sortKeyColumns, colocateColumnCount)) {
+                if (ColocateRangeUtils.isContainedInOwningColocateRange(entry.getValue(), updatedRanges,
+                        newChildSortKeyColumns.get(entry.getKey()), colocateColumnCount)) {
                     containedChildRanges.put(entry.getKey(), entry.getValue());
                 }
             }

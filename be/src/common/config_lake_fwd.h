@@ -36,6 +36,9 @@ CONF_mInt32(lake_replication_max_parallel_files_per_tablet, "4");
 // Set to 0 to force disable parallel copy.
 CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
 
+// Allow compatible scalar add/drop histories in shared-data replication snapshots.
+CONF_mBool(lake_replication_enable_light_schema_change, "false");
+
 // Enable segment metadata filter for lake tables.
 // When enabled, segments whose sort key range does not intersect with query predicates will be skipped.
 CONF_mBool(enable_lake_segment_metadata_filter, "true");
@@ -74,11 +77,22 @@ CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
 // Capacity of the shared-data tablet metadata cache, as a percentage of the process memory limit, clamped to
 // [0, 100]. The cache holds tablet metadata and txn logs, apart from the segment metadata cache, so that segments
 // loaded by queries and compactions cannot evict them. Set to 0 to disable the cache.
-CONF_mInt32(lake_tablet_metadata_cache_limit_percent, "10");
+CONF_mInt32(lake_tablet_metadata_cache_limit_percent, "5");
 
 // Capacity of the shared-data segment metadata cache, as a percentage of the process memory limit, clamped to
 // [0, 100]. The cache holds opened segments, delete vectors and tablet schemas. Set to 0 to disable the cache.
-CONF_mInt32(lake_segment_metadata_cache_limit_percent, "20");
+CONF_mInt32(lake_segment_metadata_cache_limit_percent, "10");
+
+// The capacity, in bytes, that the shared-data tablet metadata cache never shrinks below. While the process memory
+// usage is above memory_high_level, the tablet and segment metadata caches give memory back, and they grow back to the
+// capacities set by lake_tablet_metadata_cache_limit_percent and lake_segment_metadata_cache_limit_percent once it
+// drops below. A value above the configured capacity keeps the cache at the configured capacity.
+CONF_mInt64(lake_tablet_metadata_cache_min_limit, /*1GB=*/"1073741824");
+
+// The capacity, in bytes, that the shared-data segment metadata cache never shrinks below. See
+// lake_tablet_metadata_cache_min_limit. A value above the configured capacity keeps the cache at the configured
+// capacity.
+CONF_mInt64(lake_segment_metadata_cache_min_limit, /*1GB=*/"1073741824");
 
 // Tracked memory budget for synchronously processing one dump_tablet_metadata request. It uses the standard
 // MemTracker accounting granularity. New requests fail closed when the value is non-positive.

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "How to view and interpret materialized view refresh task run details in StarRocks to understand refresh behavior, troubleshoot failures, and monitor refresh..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Understand Materialized View Task Runs
@@ -118,11 +119,12 @@ This section describes the fields provided in `MVTaskRunExtraMessage`.
 - **Default**: `Priority` = `LOWEST`, `isMergeRedundant` = `false`
 - **Fields**:
   - `priority`: Task execution priority (values from `Constants.TaskRunPriority`)
-    - `HIGHEST`: 0
-    - `HIGH`: 32
-    - `NORMAL`: 64
-    - `LOW`: 96
-    - `LOWEST`: 127
+    - `LOWEST`: 0
+    - `LOW`: 20
+    - `NORMAL`: 50
+    - `HIGH`: 80
+    - `HIGHER`: 90
+    - `HIGHEST`: 100
   - `isMergeRedundant`: Whether to merge redundant refresh operations.
   - `properties`: Additional execution properties in the format `Map<String, String>`.
 

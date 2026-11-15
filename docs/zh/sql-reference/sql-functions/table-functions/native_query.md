@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "native_query 是一个 JDBC catalog 表函数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # native_query

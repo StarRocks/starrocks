@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回 GEOGRAPHY 或 GEOMETRY 点的 Y 坐标。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Y

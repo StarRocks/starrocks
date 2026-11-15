@@ -86,6 +86,13 @@ public class SPMFunctions {
             throw new SemanticException("spm function placeholder id must be integer");
         }
 
+        if (CONST_RANGE_FUNC.equalsIgnoreCase(fnName) || CONST_ENUM_FUNC.equalsIgnoreCase(fnName)) {
+            for (Type argType : argsTypes.subList(1, argsTypes.size())) {
+                if (argType.isGeoType() || argType.hasNestedGeoType()) {
+                    throw new SemanticException("spm function %s does not support type %s", fnName, argType.toSql());
+                }
+            }
+        }
         if (CONST_VAR_FUNC.equalsIgnoreCase(fnName)) {
             if (argsTypes.size() > 2) {
                 throw new SemanticException("spm function _spm_const_var must have at most two parameters");

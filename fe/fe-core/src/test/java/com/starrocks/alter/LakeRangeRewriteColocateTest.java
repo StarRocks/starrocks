@@ -461,7 +461,8 @@ public class LakeRangeRewriteColocateTest {
     private static void mockRequestedTabletCount(int tabletCount) {
         new MockUp<LakeOnlineRewriteJobBase>() {
             @Mock
-            int selectRequestedTabletCount(LakeOnlineRewriteJobBase.PendingPartitionPlan plan, int activeComputeNodeCount) {
+            int selectRequestedTabletCount(LakeOnlineRewriteJobBase.PendingPartitionPlan plan, int activeComputeNodeCount,
+                                           long targetSize) {
                 return tabletCount;
             }
         };

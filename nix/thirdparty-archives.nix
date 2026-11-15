@@ -369,10 +369,10 @@ let
       md5 = "75c0d34cf7011924ba19978076c76dc1";
       sha256 = "1khd94aipz09blfxvnp53g9r4frsbx68v4yn146c2ma9jlv05php";
     };
-    "xxHash-0.8.3.tar.gz" = {
-      url = "https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.3.tar.gz";
-      md5 = "599804eb9555e51c05f1b821f9212a07";
-      sha256 = "104syb3m147ksf1lad4jqci0gww2xwc7g989v42zsg91x3ghirma";
+    "xxHash-0.8.4.tar.gz" = {
+      url = "https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.4.tar.gz";
+      md5 = "918fa44277d81b1ac1d02ac075df4ec1";
+      sha256 = "0cnd998anlmd8gg6fpx2jmwcwri5d74zgbdkg65d7hz76l4jff2p";
     };
     "zlib-ng-2.3.3.tar.gz" = {
       url = "https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.3.3.tar.gz";
@@ -542,7 +542,7 @@ let
       "azure-storage-files-shares_12.12.0.tar.gz"
       "libdivide-v5.2.0.tar.gz"
       "FlameGraph-20251015.tar.gz"
-      "xxHash-0.8.3.tar.gz"
+      "xxHash-0.8.4.tar.gz"
       "BLAKE3-1.8.5.tar.gz"
       "benchgen-26.03.11.tar.gz"
       "libnl-3.12.0.tar.gz"
@@ -616,7 +616,7 @@ let
       "azure-storage-files-shares_12.12.0.tar.gz"
       "libdivide-v5.2.0.tar.gz"
       "FlameGraph-20251015.tar.gz"
-      "xxHash-0.8.3.tar.gz"
+      "xxHash-0.8.4.tar.gz"
       "BLAKE3-1.8.5.tar.gz"
       "benchgen-26.03.11.tar.gz"
       "libnl-3.12.0.tar.gz"
@@ -690,7 +690,7 @@ let
       "azure-storage-files-shares_12.12.0.tar.gz"
       "libdivide-v5.2.0.tar.gz"
       "FlameGraph-20251015.tar.gz"
-      "xxHash-0.8.3.tar.gz"
+      "xxHash-0.8.4.tar.gz"
       "BLAKE3-1.8.5.tar.gz"
       "benchgen-26.03.11.tar.gz"
     ];

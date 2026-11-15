@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "SQL operators are functions used for comparison widely employed in WHERE clauses."
 sidebar_label: "WHERE and Operators"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Where と Operator

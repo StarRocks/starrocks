@@ -441,6 +441,35 @@ public class StatisticSQLBuilder {
                 " AND COLUMN_NAME IN (" + columnsIn + ")";
     }
 
+    // Partitions that have external column statistics but none written within the last `graceSeconds`.
+    // update_time is written with now() (see ExternalFullStatisticsCollectJob), so comparing against now()
+    // here uses the same clock. Matches both the hashed and the raw table_uuid.
+    public static String buildQueryExternalStatPartitionsNotUpdatedSinceSQL(String tableUUID, List<String> columnNames,
+                                                                            long graceSeconds) {
+        return "SELECT partition_name FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME +
+                " WHERE " + buildTableUUIDInPredicateQuoted(tableUUID) +
+                " AND COLUMN_NAME IN (" + quotedInList(columnNames) + ")" +
+                " GROUP BY partition_name" +
+                " HAVING max(update_time) < date_sub(now(), INTERVAL " + graceSeconds + " SECOND)";
+    }
+
+    // Deletes the given columns' statistics of the given partitions, under both the hashed and the raw table_uuid.
+    // Used to drop the statistics of partitions that no longer exist in the table. Filters on key columns only:
+    // in shared-data mode the statistics table is UNIQUE_KEYS, whose DELETE accepts nothing else.
+    public static String buildDropExternalStatSQLForDroppedPartitions(String tableUUID, List<String> partitionNames,
+                                                                      List<String> columnNames) {
+        Preconditions.checkState(partitionNames != null && !partitionNames.isEmpty());
+        Preconditions.checkState(columnNames != null && !columnNames.isEmpty());
+        return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME +
+                " WHERE " + buildTableUUIDInPredicateQuoted(tableUUID) +
+                " AND PARTITION_NAME IN (" + quotedInList(partitionNames) + ")" +
+                " AND COLUMN_NAME IN (" + quotedInList(columnNames) + ")";
+    }
+
+    private static String quotedInList(List<String> values) {
+        return values.stream().map(v -> "'" + SqlUtils.escapeSqlString(v) + "'").collect(Collectors.joining(", "));
+    }
+
     // Same cleanup purpose as buildDropExternalStatSQLForPartitions, for external_histogram_statistics
     // (PK is table_uuid + column_name, no partition dimension).
     public static String buildDropExternalHistogramSQLForRawUuid(String rawTableUUID, List<String> columnNames) {
@@ -448,6 +477,33 @@ public class StatisticSQLBuilder {
                 .map(c -> "'" + SqlUtils.escapeSqlString(c) + "'").collect(Collectors.joining(", "));
         return "delete from " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME +
                 " where table_uuid = '" + SqlUtils.escapeSqlString(rawTableUUID) + "' and column_name in (" + columnsIn + ")";
+    }
+
+    // Existence checks run before the raw-keyed cleanups above, over exactly the same rows. In shared-data mode the
+    // external statistics tables are UNIQUE KEY, where every DELETE adds a delete-predicate rowset to every tablet
+    // whether or not it matches anything, and those rowsets can only be cleared by compacting the tablet from its
+    // base rowset. Issuing the cleanup DELETE after every collection therefore keeps forcing rewrites of the whole
+    // statistics table even once no raw-keyed rows are left, so the DELETE is issued only when one exists.
+    // The filter is on key columns only, led by table_uuid, so the lookup reads very little.
+    public static String buildExistsExternalStatRawPartitionsSQL(String rawTableUUID, List<String> partitionNames,
+                                                                 List<String> columnNames) {
+        String partitionsIn = partitionNames.stream()
+                .map(p -> "'" + SqlUtils.escapeSqlString(p) + "'").collect(Collectors.joining(", "));
+        String columnsIn = columnNames.stream()
+                .map(c -> "'" + SqlUtils.escapeSqlString(c) + "'").collect(Collectors.joining(", "));
+        return "SELECT 1 FROM " + StatsConstants.STATISTICS_DB_NAME + "." + EXTERNAL_FULL_STATISTICS_TABLE_NAME +
+                " WHERE TABLE_UUID = '" + SqlUtils.escapeSqlString(rawTableUUID) + "'" +
+                " AND PARTITION_NAME IN (" + partitionsIn + ")" +
+                " AND COLUMN_NAME IN (" + columnsIn + ") LIMIT 1";
+    }
+
+    public static String buildExistsExternalHistogramRawColumnsSQL(String rawTableUUID, List<String> columnNames) {
+        String columnsIn = columnNames.stream()
+                .map(c -> "'" + SqlUtils.escapeSqlString(c) + "'").collect(Collectors.joining(", "));
+        return "SELECT 1 FROM " + StatsConstants.STATISTICS_DB_NAME + "." +
+                StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME +
+                " WHERE TABLE_UUID = '" + SqlUtils.escapeSqlString(rawTableUUID) + "'" +
+                " AND COLUMN_NAME IN (" + columnsIn + ") LIMIT 1";
     }
 
     public static String buildDropExternalStatSQL(String catalogName, String dbName, String tableName) {

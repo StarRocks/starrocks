@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将 chat、embedding 或 rerank 类型的外部 AI 服务注册为集群中的 AI Provider。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE AI PROVIDER

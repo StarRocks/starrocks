@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "現在のデータベース内のすべてのパイプのメタデータを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_all_pipes

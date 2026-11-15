@@ -156,6 +156,46 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
     }
 }
 
+TEST_F(IcebergChunkSinkTest, test_callback_returns_the_file_key) {
+    // An encrypted file's DEK and AAD prefix go back to FE on the commit info: FE records them as the file's
+    // Iceberg key_metadata, and without them the file can never be decrypted.
+    std::vector<std::string> partition_column_names = {"k1"};
+    std::vector<std::string> transform = {"identity"};
+    std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators =
+            ColumnSlotIdEvaluator::from_types({TYPE_VARCHAR_DESC});
+    auto mock_writer_factory = std::make_shared<MockFileWriterFactory>();
+    auto location_provider = std::make_shared<LocationProvider>("base_path", "ffffff", 0, 0, "parquet");
+    EXPECT_CALL(*mock_writer_factory, init()).WillOnce(Return(Status::OK()));
+    auto partition_chunk_writer_ctx = std::make_shared<BufferPartitionChunkWriterContext>(
+            BufferPartitionChunkWriterContext{mock_writer_factory, location_provider, 100, false});
+    auto sink = std::make_unique<connector::IcebergChunkSink>(
+            partition_column_names, transform, std::move(partition_column_evaluators),
+            std::make_unique<BufferPartitionChunkWriterFactory>(partition_chunk_writer_ctx), _runtime_state.get());
+    auto poller = MockPoller();
+    SinkMemoryManager mgr(nullptr, nullptr);
+    EXPECT_OK(sink->init(&poller, nullptr, &mgr));
+
+    const std::string dek(16, 'k');
+    const std::string aad_prefix(16, 'a');
+    sink->callback_on_commit(CommitResult{
+            .file_result =
+                    {
+                            .io_status = Status::OK(),
+                            .format = formats::PARQUET,
+                            .file_statistics = {.record_count = 1},
+                            .location = "path/to/directory/data.parquet",
+                            .encryption_dek = dek,
+                            .encryption_aad_prefix = aad_prefix,
+                    },
+    }
+                                     .set_partition_null_fingerprint("0"));
+
+    ASSERT_EQ(1, _runtime_state->sink_commit_infos().size());
+    const auto& data_file = _runtime_state->sink_commit_infos().back().iceberg_data_file;
+    EXPECT_EQ(dek, data_file.file_dek);
+    EXPECT_EQ(aad_prefix, data_file.aad_prefix);
+}
+
 TEST_F(IcebergChunkSinkTest, test_factory) {
     SCOPED_UPDATE(bool, config::enable_connector_sink_spill, false);
 
@@ -199,6 +239,34 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         EXPECT_EQ(sink->op_mem_mgr(), nullptr);
         EXPECT_ERROR(sink->init(&poller, nullptr, &mgr)); // format is not supported
     }
+}
+
+TEST_F(IcebergChunkSinkTest, test_factory_with_encryption) {
+    SCOPED_UPDATE(bool, config::enable_connector_sink_spill, false);
+
+    // The FE's encryption signal reaches the Parquet writer as factory options; a sink built from an
+    // encrypted context must come up like any other.
+    auto sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
+    sink_ctx->path = "/path/to/directory/";
+    sink_ctx->column_names = {"k1", "k2"};
+    sink_ctx->executor = nullptr;
+    sink_ctx->format = formats::PARQUET;
+    sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
+    sink_ctx->options = {};
+    sink_ctx->parquet_field_ids = {};
+    sink_ctx->max_file_size = 1 << 30;
+    sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types({TYPE_VARCHAR_DESC, TYPE_INT_DESC});
+    sink_ctx->runtime_state = _runtime_state.get();
+    sink_ctx->encryption_enabled = true;
+    sink_ctx->encryption_algorithm = "AES_GCM_V1";
+    sink_ctx->encryption_dek_length = 16;
+    IcebergChunkSinkProvider provider(sink_ctx);
+    formats::AsyncFlushStreamPoller poller;
+    SinkMemoryManager mgr(nullptr, nullptr);
+    ASSIGN_OR_ABORT(auto sink, provider.create_sink(0));
+    EXPECT_OK(sink->init(&poller, nullptr, &mgr));
+    // The options are copied for the writer, not written back into the shared context.
+    EXPECT_TRUE(sink_ctx->options.empty());
 }
 
 TEST_F(IcebergChunkSinkTest, test_factory_requires_runtime_state) {

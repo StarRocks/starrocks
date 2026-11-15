@@ -2,6 +2,7 @@
 sidebar_position: 50
 displayed_sidebar: docs
 description: "数据湖分析常见问题解答涵盖 catalog 配置、查询性能优化等问题。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 数据湖相关 FAQ

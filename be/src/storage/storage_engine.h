@@ -315,8 +315,6 @@ public:
 
     bool is_as_cn() { return !_options.need_write_cluster_id; }
 
-    bool enable_light_pk_compaction_publish();
-
 protected:
     static StorageEngine* _s_instance;
 
@@ -360,6 +358,7 @@ private:
     void* _update_cache_expire_thread_callback(void* arg);
     // update cache evict thread
     void* _update_cache_evict_thread_callback(void* arg);
+    void* _lake_metacache_adjust_thread_callback(void* arg);
 
     // unused rowset monitor thread
     void* _unused_rowset_monitor_thread_callback(void* arg);
@@ -432,6 +431,8 @@ private:
     // thread to expire update cache;
     std::thread _update_cache_expire_thread;
     std::thread _update_cache_evict_thread;
+    // thread to shrink and regrow the lake metadata caches with the process memory usage
+    std::thread _lake_metacache_adjust_thread;
     std::thread _unused_rowset_monitor_thread;
     // thread to monitor snapshot expiry
     std::thread _garbage_sweeper_thread;

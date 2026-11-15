@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "chat、embedding、rerank タイプの外部 AI サービスを、クラスターの AI Provider として登録します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE AI PROVIDER

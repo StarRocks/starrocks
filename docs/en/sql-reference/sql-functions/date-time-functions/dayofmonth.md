@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Obtains the day part in a date and returns a value that ranges from 1 to 31."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # dayofmonth

@@ -1090,6 +1090,7 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_TIME, DateToTime);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_TIME, DatetimeToTime);
 
 SELF_CAST(TYPE_JSON);
+SELF_CAST(TYPE_VARBINARY);
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {

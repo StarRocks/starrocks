@@ -56,6 +56,18 @@ public:
     virtual void terminate_and_wait() {}
     virtual void touch() {}
     virtual bool expired() { return false; }
+
+    // A worker is in use while a call stub is connected to it, and an idle worker that is in use
+    // must not be expired. The idle time counts from when the last stub disconnects.
+    void add_client() { _num_clients.fetch_add(1); }
+    void remove_client() {
+        touch();
+        _num_clients.fetch_sub(1);
+    }
+    int num_clients() const { return _num_clients.load(); }
+
+private:
+    std::atomic<int> _num_clients{0};
 };
 
 // A local Python worker process: PyWorkerManager spawns it, owns its Unix socket, pools it, and
@@ -87,6 +99,7 @@ public:
     void set_url(std::string url) { _url = std::move(url); }
 
     void touch() override { _last_touch_time = MonotonicSeconds(); }
+    // Unused and idle for longer than python_worker_expire_time_sec.
     bool expired() override;
 
     void mark_dead() override { _is_dead = true; }
@@ -99,7 +112,7 @@ private:
     std::string _sock_path;
     pid_t _pid = -1;
     bool _own_pgroup = false;
-    int64_t _last_touch_time = 0;
+    std::atomic<int64_t> _last_touch_time{0};
 };
 
 // A connection to an external, user-run Arrow Flight worker service (the CREATE FUNCTION

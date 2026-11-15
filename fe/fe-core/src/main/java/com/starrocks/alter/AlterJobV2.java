@@ -71,6 +71,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
@@ -146,6 +147,13 @@ public abstract class AlterJobV2 implements Writable {
 
     // Whether pruneMeta() has run on this in-memory job since it reached its final state. Not persisted.
     private transient volatile boolean metaPruned;
+
+    // Physical partitions this job has sent a lake publish request for, see PublishVersionRequest.is_retry_publish.
+    // Not persisted: a leader that has just taken over sends its first request as a first attempt.
+    private transient Set<Long> lakePublishSentPartitions;
+    // Set once a FORCE cancel has sent a no-op publish. That publish writes each partition's commit version with the
+    // job's gtid but without the alter's changes, so a later normal publish must not take a stored version as its own.
+    private transient volatile boolean lakeNoOpPublishSent;
 
     public AlterJobV2(long jobId, JobType jobType, long dbId, long tableId, String tableName, long timeoutMs) {
         this.jobId = jobId;
@@ -665,7 +673,30 @@ public abstract class AlterJobV2 implements Writable {
         return true;
     }
 
+    // Marks the publish request of |physicalPartitionId| as sent and returns whether an earlier request was already
+    // sent, i.e. whether this one is a retry that may find some tablets already at the new version. Call it right
+    // before sending, after every check that can still skip the send.
+    protected synchronized boolean getAndMarkLakePublishSent(long physicalPartitionId) {
+        if (lakePublishSentPartitions == null) {
+            lakePublishSentPartitions = Sets.newHashSet();
+        }
+        return !lakePublishSentPartitions.add(physicalPartitionId) && !lakeNoOpPublishSent;
+    }
+
+    // Call before sending a FORCE cancel's no-op publish. A no-op publish that fails part way leaves the job in
+    // FINISHED_REWRITING, and from then on publishVersion() refuses to finish it: only another FORCE cancel can.
+    protected void markLakeNoOpPublishSent() {
+        lakeNoOpPublishSent = true;
+    }
+
     protected boolean publishVersion() {
+        // The no-op publish may have written some partition's commit version with the job's gtid but without the
+        // alter's changes. A normal publish that reaches such a partition while BE still caches that version takes
+        // it as its own and succeeds, and the job would finish without the alter applied there. This also drops the
+        // result of a normal publish that was still running when the no-op publish was sent.
+        if (lakeNoOpPublishSent) {
+            return false;
+        }
         if (publishVersionFuture == null) {
             ThreadPoolExecutor executor = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor();
             try {

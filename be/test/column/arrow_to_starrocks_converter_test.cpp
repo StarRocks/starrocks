@@ -35,6 +35,7 @@
 #include "base/time/timezone_utils.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
+#include "column/struct_column.h"
 #include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
 #include "testutil/type_test_helper.h"
@@ -448,6 +449,120 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanVariantAndConvert) {
     ASSERT_TRUE(variant_column->try_get_row_ref(2, &row));
     ASSERT_EQ(kMetadata, row.get_metadata().raw());
     ASSERT_EQ(kValue2, row.get_value().raw());
+}
+
+TEST_F(ArrowConverterTest, NullStructDoesNotFilterHiddenDecimalOverflow) {
+    auto amounts = arrow::ArrayFromJSON(arrow::decimal128(38, 0),
+                                        R"(["42", "99999999999999999999999999999999999999", "7", null,
+                                           "99999999999999999999999999999999999999"])");
+    auto validity = arrow::ArrayFromJSON(arrow::boolean(), "[true, null, true, true, true]");
+    auto array_result = arrow::StructArray::Make({amounts}, {arrow::field("amount", amounts->type())},
+                                                 validity->null_bitmap(), validity->null_count());
+    ASSERT_OK(array_result.status());
+    auto array = array_result.ValueOrDie();
+    ASSERT_OK(array->ValidateFull());
+    TypeDescriptor type(TYPE_STRUCT);
+    type.field_names = {"amount"};
+    type.children = {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 0)};
+
+    for (bool strict : {false, true}) {
+        SCOPED_TRACE(strict);
+        TypeDescriptor raw_type;
+        ConvertFuncTree plan;
+        bool need_cast = false;
+        ASSERT_STATUS_OK(
+                build_arrow_column_convert_plan(array->type().get(), &type, true, &raw_type, &plan, need_cast, strict));
+        ASSERT_FALSE(need_cast);
+        auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
+        Filter filter(5, 1);
+        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, nullptr));
+        auto sliced = array->Slice(1);
+        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 2, sliced.get(), column.get(), 0, 1, &filter, nullptr));
+        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 2, sliced.get(), column.get(), 2, 3, &filter, nullptr));
+        column->check_or_die();
+        EXPECT_EQ(5, column->size());
+        EXPECT_EQ("{amount:42}", column->debug_item(0));
+        EXPECT_TRUE(column->is_null(1));
+        EXPECT_EQ("{amount:7}", column->debug_item(2));
+        EXPECT_EQ("{amount:NULL}", column->debug_item(3));
+        // Hidden overflow must not discard the row; visible overflow still follows strict mode.
+        EXPECT_EQ(Filter({1, 1, 1, 1, static_cast<uint8_t>(strict ? 0 : 1)}), filter);
+    }
+}
+
+TEST_F(ArrowConverterTest, NestedStructNullMasksVariantPayloadAcrossSlices) {
+    constexpr std::string_view kMetadata("\x01\x00\x00", 3);
+    constexpr std::string_view kValue("\x09ok", 3);
+    constexpr std::string_view kVariantNull("\x00", 1);
+    auto values = std::make_shared<arrow::BinaryBuilder>();
+    auto metadata = std::make_shared<arrow::BinaryBuilder>();
+    auto variant_type = arrow::struct_(
+            {arrow::field("value", arrow::binary(), false), arrow::field("metadata", arrow::binary(), false)});
+    arrow::StructBuilder variants(variant_type, arrow::default_memory_pool(), {values, metadata});
+    for (int i = 0; i < 6; ++i) {
+        ASSERT_OK(variants.Append(i != 3));
+        // Required physical children may hold empty placeholders under a NULL ancestor.
+        ASSERT_OK(values->Append(i >= 1 && i <= 3 ? std::string_view{} : (i == 4 ? kVariantNull : kValue)));
+        ASSERT_OK(metadata->Append(i >= 1 && i <= 3 ? std::string_view{} : kMetadata));
+    }
+    std::shared_ptr<arrow::Array> payload;
+    ASSERT_OK(variants.Finish(&payload));
+    auto inner_validity = arrow::ArrayFromJSON(arrow::boolean(), "[true, true, null, true, true, true]");
+    auto inner_result = arrow::StructArray::Make({payload}, {arrow::field("payload", variant_type)},
+                                                 inner_validity->null_bitmap(), inner_validity->null_count());
+    ASSERT_OK(inner_result.status());
+    auto inner = inner_result.ValueOrDie();
+    auto outer_validity = arrow::ArrayFromJSON(arrow::boolean(), "[true, null, true, true, true, true]");
+    auto array_result = arrow::StructArray::Make({inner}, {arrow::field("inner", inner->type())},
+                                                 outer_validity->null_bitmap(), outer_validity->null_count());
+    ASSERT_OK(array_result.status());
+    auto array = array_result.ValueOrDie();
+    ASSERT_OK(array->ValidateFull());
+
+    TypeDescriptor inner_type(TYPE_STRUCT);
+    inner_type.field_names = {"payload"};
+    inner_type.children = {TypeDescriptor(TYPE_VARIANT)};
+    TypeDescriptor type(TYPE_STRUCT);
+    type.field_names = {"inner"};
+    type.children = {inner_type};
+    TypeDescriptor raw_type;
+    ConvertFuncTree plan;
+    bool need_cast = false;
+    ASSERT_STATUS_OK(
+            build_arrow_column_convert_plan(array->type().get(), &type, true, &raw_type, &plan, need_cast, true));
+    ASSERT_FALSE(need_cast);
+    auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
+    Filter filter(6, 1);
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, nullptr));
+    auto sliced = array->Slice(1);
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 2, sliced.get(), column.get(), 0, 1, &filter, nullptr));
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 3, sliced.get(), column.get(), 2, 3, &filter, nullptr));
+    column->check_or_die();
+    ASSERT_EQ(6, column->size());
+    EXPECT_EQ(Filter(6, 1), filter);
+    EXPECT_TRUE(column->is_null(1));
+    auto* outer_column = down_cast<StructColumn*>(down_cast<NullableColumn*>(column.get())->data_column_raw_ptr());
+    auto inner_column_result = outer_column->field_column_raw_ptr("inner");
+    ASSERT_TRUE(inner_column_result.ok());
+    auto* inner_column = down_cast<NullableColumn*>(inner_column_result.value());
+    EXPECT_TRUE(inner_column->is_null(1));
+    EXPECT_TRUE(inner_column->is_null(2));
+    auto payload_result =
+            down_cast<StructColumn*>(inner_column->data_column_raw_ptr())->field_column_raw_ptr("payload");
+    ASSERT_TRUE(payload_result.ok());
+    auto* payload_column = down_cast<NullableColumn*>(payload_result.value());
+    for (int i = 1; i <= 3; ++i) {
+        ASSERT_TRUE(payload_column->is_null(i)) << "row " << i;
+    }
+    auto* variant_column = down_cast<VariantColumn*>(payload_column->data_column_raw_ptr());
+    for (int i : {0, 4, 5}) {
+        ASSERT_FALSE(payload_column->is_null(i));
+        VariantRowRef row;
+        ASSERT_TRUE(variant_column->try_get_row_ref(i, &row));
+        EXPECT_EQ(kMetadata, row.get_metadata().raw());
+        EXPECT_EQ(i == 4 ? kVariantNull : kValue, row.get_value().raw());
+        EXPECT_EQ(i == 4, row.is_null());
+    }
 }
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanRejectsInvalidVariantLayout) {

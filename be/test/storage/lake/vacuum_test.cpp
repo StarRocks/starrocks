@@ -44,7 +44,13 @@
 #include "test_util.h"
 
 #if defined(ADDRESS_SANITIZER)
+// clang's compiler-rt ships this header; gcc's libsanitizer exports the symbol but not the
+// header, so declare it ourselves there.
+#if __has_include(<sanitizer/allocator_interface.h>)
 #include <sanitizer/allocator_interface.h>
+#else
+extern "C" size_t __sanitizer_get_current_allocated_bytes(void);
+#endif
 #elif STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
 #include "jemalloc/jemalloc.h"
 #endif

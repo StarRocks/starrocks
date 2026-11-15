@@ -339,7 +339,7 @@ bool ScanOperator::is_finished() const {
         return false;
     }
 
-    // Any shared chunk source from other ScanOperator
+    // Any chunk source that may still produce output or work for this operator.
     if (has_shared_chunk_source()) {
         return false;
     }

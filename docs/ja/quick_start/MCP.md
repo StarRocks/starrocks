@@ -2,7 +2,10 @@
 displayed_sidebar: docs
 sidebar_position: 10
 description: "共有データクラスター上でClaudeとStarRocks MCPサーバーを使用して複雑なデータを分析します。"
+products: [oss]
 ---
+
+import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 
 # Claude + StarRocks MCP
 
@@ -52,6 +55,10 @@ SQLファイルを実行するためのMySQLクライアント（例：`mysql`�
 :::note
 Apple Silicon：StarRocksはAVX2（x86）に依存しています。ARMビルドを使用するか、エミュレーションが遅くなることを想定してください。
 :::
+
+### MinIO AIStor ライセンス
+
+Free Tier ライセンスを取得する手順は、デモリポジトリをクローンした後に説明します。
 
 ***
 
@@ -127,6 +134,12 @@ git clone git@github.com:StarRocks/demo.git
 
 ***
 
+## MinIO AIStor ライセンスの取得
+
+<AIStorLicense />
+
+このチュートリアルでは、ローカルにクローンした `StarRocks/demo` リポジトリの `demo/documentation-samples/MCP` ディレクトリです。
+
 ## StarRocksとMinIOの起動
 
 ```bash
@@ -150,7 +163,7 @@ CNが正常と報告されない場合は、数秒待ってから再度確認し
 
 ## MinIOにバケットを作成する
 
-MinIOコンソールを [http://localhost:9001](http://localhost:9001) で開き（ログイン `miniouser` / `M!n10R0cks`）、**バケットの作成** をクリックして、バケット `my-starrocks-bucket` を作成します。
+MinIOコンソールを [http://localhost:9001](http://localhost:9001) で開き（ログイン `miniouser` / `M!n10R0cks`）、**バケットの追加** をクリックして、バケット `my-starrocks-bucket` を作成します。
 
 ***
 

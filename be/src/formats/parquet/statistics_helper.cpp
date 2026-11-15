@@ -60,7 +60,9 @@ Status StatisticsHelper::decode_min_max_into_columns(const MutableColumnPtr& min
                 src_column->append_nulls(1);
             } else {
                 RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(values[i], &decode_value));
-                src_column->append_numbers(&decode_value, sizeof(int64_t));
+                if (src_column->append_numbers(&decode_value, sizeof(int64_t)) == 0) {
+                    return Status::InternalError("Decode min-max column failed");
+                }
             }
         }
         return Status::OK();

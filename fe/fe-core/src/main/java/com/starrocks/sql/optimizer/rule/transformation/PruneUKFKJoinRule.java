@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -88,9 +89,13 @@ public class PruneUKFKJoinRule extends TransformationRule {
             //   1. uk is the only column from uk table that is used by join output.
             //   2. no column from uk table can be used by join.
             //   3. no column from uk table can be used by its children.
+            // For all joins, no scan on the uk side has table hints (PARTITION, TABLET or REPLICA): such a scan reads
+            // only part of the uk table and can miss the row a foreign key refers to. The join then filters out the
+            // foreign key row, or pads it with NULLs, while pruning would keep it as a match.
             if (!isNonUKTableColumnUsedByJoinOutput(property, joinOpt, ukChildOpt) &&
                     !isNonUKTableColumnUsedByJoinItself(property, joinOpt, ukChildOpt, notOuterJoin) &&
-                    !isNonUKTableColumnUsedByUKSideChildren(property, ukChildOpt, notOuterJoin)) {
+                    !isNonUKTableColumnUsedByUKSideChildren(property, ukChildOpt, notOuterJoin) &&
+                    !hasTableHints(ukChildOpt)) {
 
                 OptExpression filterOpt = buildFilterOpt(property, ukChildOpt, fkChildOpt, notOuterJoin);
                 OptExpression newProjectOpt = buildProjectOpt(property, projectOp, filterOpt);
@@ -137,7 +142,9 @@ public class PruneUKFKJoinRule extends TransformationRule {
     private boolean isNonUKTableColumnUsedByUKSideChildren(UKFKConstraints.JoinProperty property,
                                                            OptExpression ukChildOpt,
                                                            boolean exceptUK) {
-        ColumnRefSet ukTableColumnRefs = property.ukConstraint.nonUKColumnRefs;
+        // Copy the set before adding the uk: it belongs to the unique constraint that the collector keeps on the plan
+        // for later rules, and the join may be kept.
+        ColumnRefSet ukTableColumnRefs = property.ukConstraint.nonUKColumnRefs.clone();
         if (!exceptUK) {
             ukTableColumnRefs.union(Collections.singletonList(property.ukColumnRef));
         }
@@ -145,6 +152,12 @@ public class PruneUKFKJoinRule extends TransformationRule {
         ColumnRefSet childrenUsedColumns = UsedColumnRefCollector.collect(ukChildOpt);
 
         return childrenUsedColumns.containsAny(ukTableColumnRefs);
+    }
+
+    private static boolean hasTableHints(OptExpression ukChildOpt) {
+        List<LogicalOlapScanOperator> scans = Lists.newArrayList();
+        Utils.extractOperator(ukChildOpt, scans, op -> op instanceof LogicalOlapScanOperator);
+        return scans.stream().anyMatch(LogicalOlapScanOperator::hasTableHints);
     }
 
     private ScalarOperator collectUKPredicate(OptExpression ukChildOpt) {

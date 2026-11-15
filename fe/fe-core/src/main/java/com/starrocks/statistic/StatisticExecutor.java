@@ -22,6 +22,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonParser;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -43,6 +45,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.AuditInternalLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
@@ -64,6 +67,7 @@ import com.starrocks.thrift.TStatisticData;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.type.JsonType;
 import com.starrocks.type.Type;
+import io.netty.buffer.Unpooled;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
@@ -74,6 +78,7 @@ import org.apache.thrift.protocol.TCompactProtocol;
 import org.jetbrains.annotations.NotNull;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Collections;
@@ -371,18 +376,113 @@ public class StatisticExecutor {
     // Best-effort cleanup of the stale raw-keyed rows superseded by a fresh hashed-key write.
     // Failure just means the raw row lingers a bit longer (until this partition/column is
     // collected again); it must never fail the collection job that just succeeded.
+    // The DELETE is issued only when a raw-keyed row exists in that scope (see
+    // StatisticSQLBuilder#buildExistsExternalStatRawPartitionsSQL): in shared-data mode every DELETE on these
+    // UNIQUE KEY tables later forces a compaction of the whole table, even when it matches nothing. If the
+    // existence check fails, the DELETE is skipped rather than issued blindly; the rows are retried next time.
     public boolean dropExternalStatRawPartitions(ConnectContext statsConnectCtx, String rawTableUUID,
                                                  List<String> partitionNames, List<String> columnNames) {
+        if (CollectionUtils.isEmpty(partitionNames) || CollectionUtils.isEmpty(columnNames)) {
+            return true;
+        }
+        String existsSql = StatisticSQLBuilder.buildExistsExternalStatRawPartitionsSQL(rawTableUUID, partitionNames,
+                columnNames);
+        Optional<Boolean> exists = rawKeyedRowExists(statsConnectCtx, existsSql);
+        if (exists.isEmpty()) {
+            return false;
+        }
+        if (!exists.get()) {
+            LOG.debug("No stale raw-keyed external statistic rows, skip cleanup: {}", existsSql);
+            return true;
+        }
         String sql = StatisticSQLBuilder.buildDropExternalStatSQLForPartitions(rawTableUUID, partitionNames, columnNames);
         LOG.debug("Cleanup stale raw-keyed external statistic rows SQL: {}", sql);
+        return executeRawKeyedCleanupDML(statsConnectCtx, sql);
+    }
+
+    /**
+     * Runs an existence check built by StatisticSQLBuilder#buildExistsExternalStatRawPartitionsSQL or
+     * #buildExistsExternalHistogramRawColumnsSQL. Returns true if it returned a row, false if it returned none, and
+     * empty if the check failed (the caller then skips the cleanup).
+     * <p>
+     * Like the DELETE that may follow, the check runs on the analyze job's own context, so KILL ANALYZE and the
+     * job's query timeout apply to it. The statement clock is restarted first because the query deadline is the
+     * context's start time plus its query timeout.
+     */
+    @VisibleForTesting
+    protected Optional<Boolean> rawKeyedRowExists(ConnectContext statsConnectCtx, String existsSql) {
+        int pipelineDop = statsConnectCtx.getSessionVariable().getPipelineDop();
+        try (var guard = statsConnectCtx.bindScope()) {
+            statsConnectCtx.setStartTime();
+            List<TResultBatch> batches = SimpleExecutor.getRepoExecutor().executeDQL(existsSql, statsConnectCtx);
+            for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
+                if (batch.getRows() != null && !batch.getRows().isEmpty()) {
+                    return Optional.of(true);
+                }
+            }
+            return Optional.of(false);
+        } catch (Exception e) {
+            LOG.warn("Failed to check for stale raw-keyed external statistic rows, skip cleanup | SQL {}", existsSql, e);
+            return Optional.empty();
+        } finally {
+            // SimpleExecutor#executeDQL(String, ConnectContext) overwrites the context's pipeline dop.
+            statsConnectCtx.getSessionVariable().setPipelineDop(pipelineDop);
+        }
+    }
+
+    @VisibleForTesting
+    protected boolean executeRawKeyedCleanupDML(ConnectContext statsConnectCtx, String sql) {
+        statsConnectCtx.setStartTime();
+        return executeDML(statsConnectCtx, sql);
+    }
+
+    // Partitions of `tableUUID` whose external column statistics were all written more than `graceSeconds` ago.
+    // Reads the internal statistics table only; never touches the external catalog. Runs on the analyze job's
+    // own context, so KILL ANALYZE and the job's query timeout apply to it.
+    public List<String> queryExternalStatPartitionsNotUpdatedSince(ConnectContext statsConnectCtx, String tableUUID,
+                                                                  List<String> columnNames, long graceSeconds) {
+        String sql = StatisticSQLBuilder.buildQueryExternalStatPartitionsNotUpdatedSinceSQL(tableUUID, columnNames,
+                graceSeconds);
+        LOG.debug("Query external statistic partitions SQL: {}", sql);
+        List<String> partitionNames = Lists.newArrayList();
+        List<TResultBatch> batches = SimpleExecutor.getRepoExecutor().executeDQL(sql, statsConnectCtx);
+        for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
+            for (ByteBuffer buffer : batch.getRows()) {
+                String json = Unpooled.copiedBuffer(buffer).toString(StandardCharsets.UTF_8);
+                JsonArray data = JsonParser.parseString(json).getAsJsonObject().get("data").getAsJsonArray();
+                if (!data.get(0).isJsonNull()) {
+                    partitionNames.add(data.get(0).getAsString());
+                }
+            }
+        }
+        return partitionNames;
+    }
+
+    public boolean dropExternalStatDroppedPartitions(ConnectContext statsConnectCtx, String tableUUID,
+                                                     List<String> partitionNames, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropExternalStatSQLForDroppedPartitions(tableUUID, partitionNames,
+                columnNames);
+        LOG.debug("Cleanup external statistic rows of dropped partitions SQL: {}", sql);
         return executeDML(statsConnectCtx, sql);
     }
 
     public boolean dropExternalHistogramRawColumns(ConnectContext statsConnectCtx, String rawTableUUID,
                                                    List<String> columnNames) {
+        if (CollectionUtils.isEmpty(columnNames)) {
+            return true;
+        }
+        String existsSql = StatisticSQLBuilder.buildExistsExternalHistogramRawColumnsSQL(rawTableUUID, columnNames);
+        Optional<Boolean> exists = rawKeyedRowExists(statsConnectCtx, existsSql);
+        if (exists.isEmpty()) {
+            return false;
+        }
+        if (!exists.get()) {
+            LOG.debug("No stale raw-keyed external histogram rows, skip cleanup: {}", existsSql);
+            return true;
+        }
         String sql = StatisticSQLBuilder.buildDropExternalHistogramSQLForRawUuid(rawTableUUID, columnNames);
         LOG.debug("Cleanup stale raw-keyed external histogram row SQL: {}", sql);
-        return executeDML(statsConnectCtx, sql);
+        return executeRawKeyedCleanupDML(statsConnectCtx, sql);
     }
 
     public boolean dropPartitionStatistics(ConnectContext statsConnectCtx, List<Long> pids) {
@@ -837,7 +937,10 @@ public class StatisticExecutor {
                         // covered for them and a partial partition set would become a denominator far smaller
                         // than the rows it is dividing.
                         commitAnalyzeType = StatsConstants.AnalyzeType.SAMPLE;
-                        allPartitionSize = externalJob.getRequestedPartitionCount();
+                        // The table's partition count when the caller knew it: an incremental job requests
+                        // only the updated partitions, which is not how many the table has.
+                        allPartitionSize = externalJob.getTablePartitionCount() > 0
+                                ? externalJob.getTablePartitionCount() : externalJob.getRequestedPartitionCount();
                     }
 
                     LOG.warn("Committing partial external statistics for table {}.{}.{}: analyzeType={} " +
@@ -850,6 +953,27 @@ public class StatisticExecutor {
                     return;
                 }
 
+                // FULL metadata tells the read path "these rows are the whole table" and is used unscaled. A FULL
+                // job that refreshed only some partitions (the ones updated since the last run) cannot say that:
+                // the rest of the table is covered only by whatever earlier runs left, which may miss partitions.
+                // Record it as SAMPLE over the table's partition count instead, so the read path extrapolates by
+                // how many partitions the rows actually come from - when they cover the table that is 1x.
+                // No partition set is recorded, and the column's old one is dropped: the read path takes the
+                // covered count from the rows, and a set would only be used as the denominator when a backend
+                // cannot report that count, where a few partitions' hashes would scale every accumulated row.
+                // An empty set makes that case unknown instead.
+                boolean partialFullCommit = false;
+                if (commitAnalyzeType == StatsConstants.AnalyzeType.FULL
+                        && statsJob instanceof ExternalFullStatisticsCollectJob externalJob
+                        && !externalJob.scansWholeTable() && externalJob.getTablePartitionCount() > 0) {
+                    commitAnalyzeType = StatsConstants.AnalyzeType.SAMPLE;
+                    allPartitionSize = externalJob.getTablePartitionCount();
+                    partialFullCommit = true;
+                    LOG.info("[ExternalStats] commit partial full as sample | catalog={} db={} table={} " +
+                                    "scanned={} table_partitions={}", statsJob.getCatalogName(), db.getFullName(),
+                            table.getName(), externalJob.getRequestedPartitionCount(), allPartitionSize);
+                }
+
                 if (columnsToCommit.isEmpty()) {
                     return;
                 }
@@ -857,7 +981,8 @@ public class StatisticExecutor {
                 commitExternalColumnStatsMeta(db, table, statsJob.getCatalogName(), statsJob.getColumnNames(),
                         columnsToCommit, commitAnalyzeType, updateTimeOf(analyzeStatus),
                         statsJob.getProperties(), sampledPartitions, fullCoveragePartitions, allPartitionSize,
-                        collectedPartitionsByColumn, requestedPartitionCountByColumn, refreshAsync);
+                        collectedPartitionsByColumn, requestedPartitionCountByColumn, partialFullCommit,
+                        refreshAsync);
             }
         }
     }
@@ -909,6 +1034,20 @@ public class StatisticExecutor {
                                        int allPartitionSize, Map<String, Set<Long>> collectedPartitionsByColumn,
                                        Map<String, Integer> requestedPartitionCountByColumn,
                                        boolean refreshAsync) {
+        commitExternalColumnStatsMeta(db, table, catalogName, allJobColumnNames, columnNamesToCommit, jobAnalyzeType,
+                updateTime, properties, sampledPartitions, fullCoveragePartitions, allPartitionSize,
+                collectedPartitionsByColumn, requestedPartitionCountByColumn, false, refreshAsync);
+    }
+
+    // `dropRecordedPartitions`: replace the columns' recorded partition sets with `sampledPartitions` instead of
+    // merging into them (see the partial FULL commit in commitExternalStatistics).
+    void commitExternalColumnStatsMeta(Database db, Table table, String catalogName, List<String> allJobColumnNames,
+                                       List<String> columnNamesToCommit, StatsConstants.AnalyzeType jobAnalyzeType,
+                                       LocalDateTime updateTime, Map<String, String> properties,
+                                       Set<Long> sampledPartitions, Set<Long> fullCoveragePartitions,
+                                       int allPartitionSize, Map<String, Set<Long>> collectedPartitionsByColumn,
+                                       Map<String, Integer> requestedPartitionCountByColumn,
+                                       boolean dropRecordedPartitions, boolean refreshAsync) {
         AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
         // Read-modify-write, serialized against any other job committing metadata for this table: this
         // clones what is there, merges this job's columns into it and writes the result back, and an
@@ -917,7 +1056,7 @@ public class StatisticExecutor {
                 current -> buildExternalBasicStatsMeta(current, db, table, catalogName, allJobColumnNames,
                         columnNamesToCommit, jobAnalyzeType, updateTime, properties, sampledPartitions,
                         fullCoveragePartitions, allPartitionSize, collectedPartitionsByColumn,
-                        requestedPartitionCountByColumn));
+                        requestedPartitionCountByColumn, dropRecordedPartitions));
         analyzeMgr.refreshConnectorTableBasicStatisticsCache(catalogName, db.getFullName(), table.getName(),
                 columnNamesToCommit, refreshAsync);
     }
@@ -931,7 +1070,7 @@ public class StatisticExecutor {
             StatsConstants.AnalyzeType jobAnalyzeType, LocalDateTime updateTime, Map<String, String> properties,
             Set<Long> sampledPartitions, Set<Long> fullCoveragePartitions, int allPartitionSize,
             Map<String, Set<Long>> collectedPartitionsByColumn,
-            Map<String, Integer> requestedPartitionCountByColumn) {
+            Map<String, Integer> requestedPartitionCountByColumn, boolean dropRecordedPartitions) {
         ExternalBasicStatsMeta externalBasicStatsMeta = currentMeta;
         if (externalBasicStatsMeta == null) {
             externalBasicStatsMeta = new ExternalBasicStatsMeta(catalogName, db.getFullName(),
@@ -947,8 +1086,11 @@ public class StatisticExecutor {
 
         for (String column : ListUtils.emptyIfNull(columnNamesToCommit)) {
             ColumnStatsMeta existing = externalBasicStatsMeta.getColumnStatsMetaMap().get(column);
+            // isFullCoverageByRows: also the SAMPLE entry an incremental FULL run leaves, whose rows likewise
+            // still cover what this run missed - and whose update time must not move past the partitions
+            // this run failed to refresh, or the next run would not select them again.
             if (collectedPartitionsByColumn.containsKey(column) && existing != null
-                    && existing.getType() == StatsConstants.AnalyzeType.FULL) {
+                    && existing.isFullCoverageByRows()) {
                 // This run covered only part of the table for this column, but the column is already recorded
                 // as fully collected - and it still is: the rows an earlier complete run wrote for the
                 // partitions this run missed are still there, so the whole table is covered, just at mixed
@@ -968,8 +1110,13 @@ public class StatisticExecutor {
             // scan does. An entry in collectedPartitionsByColumn says this run did not manage that, and then
             // the measured coverage wins: claiming full coverage for a column that lost partitions would tell
             // the read path to use its row count and NDV as complete, with nothing to correct them.
+            // Only when this job did scan every partition for it: a SAMPLE job routes direct-value columns to all
+            // partitions (and hands their hashes over as `fullCoveragePartitions`), a FULL commit scanned the
+            // whole table; a FULL job that refreshed only some partitions is committed as SAMPLE with no full
+            // coverage and must not be promoted back to FULL here.
             boolean isDirectValue = StatisticUtils.isDirectValuePartitionColumn(table, column)
-                    && !collectedPartitionsByColumn.containsKey(column);
+                    && !collectedPartitionsByColumn.containsKey(column)
+                    && (jobAnalyzeType == StatsConstants.AnalyzeType.FULL || !fullCoveragePartitions.isEmpty());
             Set<Long> columnSampledPartitions;
             if (isDirectValue) {
                 // Full coverage should always just be full coverage - no merging with whatever
@@ -978,7 +1125,7 @@ public class StatisticExecutor {
             } else {
                 columnSampledPartitions = new HashSet<>(
                         collectedPartitionsByColumn.getOrDefault(column, sampledPartitions));
-                if (externalBasicStatsMeta.getColumnStatsMetaMap().containsKey(column)) {
+                if (!dropRecordedPartitions && externalBasicStatsMeta.getColumnStatsMetaMap().containsKey(column)) {
                     columnSampledPartitions.addAll(externalBasicStatsMeta.getColumnStatsMeta(column).
                             getSampledPartitionsHashValue());
                 }

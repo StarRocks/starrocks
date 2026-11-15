@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN SKIP COMMITTED TRANSACTION force-aborts a transaction stuck in COMMITTED state on shared-data tables."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SKIP COMMITTED TRANSACTION

@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
@@ -33,6 +34,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Predicate;
 
 public class ShowAnalyzeStatusStmt extends ShowStmt {
     private static final Logger LOG = LogManager.getLogger(ShowAnalyzeStatusStmt.class);
@@ -45,14 +48,44 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         this.orderByElements = orderByElements;
     }
 
+    // Columns of SHOW ANALYZE STATUS that are filled before the table is loaded (which may call the remote catalog
+    // of an external table), lower case. Only "Columns" needs the table.
+    public static final Set<String> EARLY_FILTER_COLUMNS = ImmutableSet.of(
+            "id", "database", "table", "type", "schedule", "status", "starttime", "endtime", "properties", "reason");
+
     public static List<String> showAnalyzeStatus(ConnectContext context,
                                                  AnalyzeStatus analyzeStatus) throws MetaNotFoundException {
+        return showAnalyzeStatus(context, analyzeStatus, null);
+    }
+
+    /**
+     * @param earlyFilter if not null, evaluated on a row in which only the columns in {@link #EARLY_FILTER_COLUMNS}
+     *                    are filled; returns null when it rejects the row, so the table is only loaded for rows that
+     *                    can be returned.
+     */
+    public static List<String> showAnalyzeStatus(ConnectContext context, AnalyzeStatus analyzeStatus,
+                                                 Predicate<List<String>> earlyFilter) throws MetaNotFoundException {
         List<String> row = Lists.newArrayList("", "", "", "ALL", "", "", "", "", "", "", "");
         List<String> columns = analyzeStatus.getColumns();
 
         row.set(0, String.valueOf(analyzeStatus.getId()));
         row.set(1, analyzeStatus.getCatalogName() + "." + analyzeStatus.getDbName());
         row.set(2, analyzeStatus.getTableName());
+
+        if (earlyFilter != null) {
+            // Filter on a copy so that the row below is built in the same order, with the same failures, as before.
+            List<String> earlyRow = Lists.newArrayList(row);
+            boolean filled;
+            try {
+                fillColumnsWithoutTable(earlyRow, analyzeStatus);
+                filled = true;
+            } catch (RuntimeException e) {
+                filled = false;
+            }
+            if (filled && !earlyFilter.test(earlyRow)) {
+                return null;
+            }
+        }
 
         Table table;
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
@@ -74,6 +107,12 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
             row.set(3, str);
         }
 
+        fillColumnsWithoutTable(row, analyzeStatus);
+        return row;
+    }
+
+    // Fills the columns after "Columns", none of which needs the table.
+    private static void fillColumnsWithoutTable(List<String> row, AnalyzeStatus analyzeStatus) {
         row.set(4, analyzeStatus.getType().name());
         row.set(5, analyzeStatus.getScheduleType().name());
         if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FINISH)) {
@@ -96,8 +135,6 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         if (analyzeStatus.getReason() != null) {
             row.set(10, analyzeStatus.getReason());
         }
-
-        return row;
     }
 
     @Override

@@ -3,6 +3,7 @@ sidebar_position: 20
 displayed_sidebar: docs
 sidebar_label: "Authentication, Query, and Loading"
 description: "FE configuration parameters for authentication, query execution, and data loading."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE Configuration - Authentication, Query, and Loading
@@ -96,7 +97,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit:
 - Is mutable: Yes
-- Description: The maximum number of roles a user can have.
+- Description: The maximum number of roles a user can have, including the roles inherited through the roles granted to the user. This limit is checked when a role is granted to a user.
 - Introduced in: v3.0.0
 
 ### `ranger_hive_catalog_prefix_enabled`
@@ -180,6 +181,24 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The least fraction of the partitions an external-table statistics collection asked for that must actually be collected before a column's statistics are recorded. A collection that is cut short - some queries tolerated away, or the job failing partway - still writes rows for the partitions it read and records how many that was, so the read path scales them correctly. Below some coverage that stops being worthwhile: row counts extrapolate from the partitions collected, but NDV does not, and NDV is what join cardinality estimates are most sensitive to. A column collected from a twentieth of its partitions would hand the optimizer an NDV roughly twenty times too small, presented as fact. A column below this ratio is left without metadata instead, so the optimizer falls back to the connector's own table metadata: an accurate row count and no NDV, which gives a default selectivity rather than a confidently wrong one. Measured against what the collection asked for, not against the table, so a sample is not treated as sparse merely for being a sample. A value of `0` or less records whatever was collected.
 - Introduced in: v4.1
+
+### `connector_table_analyze_dropped_partition_stats_cleanup_interval_second`
+
+- Default: 3600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Interval at which the Leader FE periodically deletes the column statistics of dropped partitions of external tables, independent of statistics collections. The cleanup at the end of a collection misses partitions dropped after the table's last collection, or still within `connector_table_analyze_dropped_partition_stats_grace_second` at that time; the periodic cleanup applies the same rule to a bounded number of tables per round. It only cleans columns whose statistics were last collected by a FULL collection; sampled columns are cleaned by their own next collection. Tables with a pending or running collection are skipped. A value of `0` or less disables the periodic cleanup. The periodic cleanup is also disabled when `connector_table_analyze_dropped_partition_stats_grace_second` is `0` or less.
+- Introduced in: v4.2
+
+### `connector_table_analyze_dropped_partition_stats_grace_second`
+
+- Default: 86400
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How long the column statistics of an external-table partition that no longer exists are kept. At the end of each successful statistics collection, the statistics of partitions missing from the table's current partition list are deleted once none of their rows has been written for longer than this value. Without the cleanup, the statistics of dropped partitions (for example, partitions expired or deleted in Iceberg) keep contributing to the table's row count, NDV, and min/max values. The grace period protects partitions that a concurrent collection has just written but that the current collection's partition list does not include yet. A value of `0` or less disables the cleanup.
+- Introduced in: v4.2
 
 ### `connector_table_analyze_memory_backoff_budget_second`
 
@@ -281,6 +300,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
 - Introduced in: v3.2.3
 
+### `default_mv_refresh_mode`
+
+- Default: pct
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Deprecated and has no effect. A materialized view created without the `refresh_mode` property uses `PCT` and reports `PCT`, whatever this value is. To create an incremental materialized view, specify `refresh_mode` in its properties. Valid values are still `pct` and `incremental` (case-insensitive), so an existing setting is still accepted.
+- Introduced in: v4.1
+
 ### `dynamic_partition_check_interval_seconds`
 
 - Default: 600
@@ -332,7 +360,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable the BACKUP and RESTORE of asynchronous materialized views when backing up or restoring a specific database. If this item is set to `false`, StarRocks will skip backing up asynchronous materialized views.
+- Description: Whether BACKUP includes asynchronous materialized views when you do not specify them by name, that is, when you back up a whole database or use `ON (ALL MATERIALIZED VIEWS)`. If this item is set to `false`, StarRocks skips them, and `ON (ALL MATERIALIZED VIEWS)` backs up nothing. Asynchronous materialized views specified by name are backed up regardless of this item. This item does not affect RESTORE.
 - Introduced in: v3.2.0
 
 ### `enable_collect_full_statistic`
@@ -1232,7 +1260,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The timeout duration for the INSERT INTO statement that is used to load data.
+- Description: Deprecated. This item does not control the timeout of INSERT statements. Use the session variable `insert_timeout` instead.
 - Introduced in: -
 
 ### `label_clean_interval_second`

@@ -1,0 +1,42 @@
+-- name: test_iceberg_function_predicate_row_group_pruning
+-- One Parquet file holds 2400 consecutive days in row groups of 100 rows: file statistics span all the years, so
+-- year(dt) = 2024 cannot prune the file, only its row groups.
+create external catalog iceberg_rg_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+create database iceberg_rg_${uuid0}.rg_db_${uuid0};
+create table iceberg_rg_${uuid0}.rg_db_${uuid0}.t1 (k int, dt date);
+
+create database rg_src_${uuid0};
+use rg_src_${uuid0};
+create table src (k int, dt date) duplicate key(k) distributed by hash(k) buckets 1 properties("replication_num" = "1");
+insert into src select generate_series, date_add('2020-01-01', generate_series) from TABLE(generate_series(0, 2399));
+select /*+ SET_VAR(chunk_size = 100, pipeline_dop = 1) */ k, dt from src order by dt
+    into outfile "oss://${oss_bucket}/test_iceberg_function_predicate_row_group_pruning/${uuid0}/data/"
+    format as parquet properties (
+        "fs.oss.endpoint" = "${oss_endpoint}",
+        "fs.oss.accessKeyId" = "${oss_ak}",
+        "fs.oss.accessKeySecret" = "${oss_sk}",
+        "max_row_group_bytes" = "1"
+    );
+alter table iceberg_rg_${uuid0}.rg_db_${uuid0}.t1 execute add_files(location = "oss://${oss_bucket}/test_iceberg_function_predicate_row_group_pruning/${uuid0}/data/", file_format = "parquet");
+select count(*) from iceberg_rg_${uuid0}.rg_db_${uuid0}.t1$files;
+
+set enable_profile = true;
+set enable_async_profile = false;
+set pipeline_dop = 1;
+
+-- the row groups outside 2024 are skipped on the derived range of dt
+select count(*), min(dt), max(dt) from iceberg_rg_${uuid0}.rg_db_${uuid0}.t1 where year(dt) = 2024;
+select CAST(regexp_extract(get_query_profile(last_query_id()), 'StatisticsSuccessCounter: ([0-9]+)', 1) AS BIGINT) >= 15;
+select count(*), min(dt), max(dt) from iceberg_rg_${uuid0}.rg_db_${uuid0}.t1 where date_trunc('month', dt) = '2024-03-01';
+select CAST(regexp_extract(get_query_profile(last_query_id()), 'StatisticsSuccessCounter: ([0-9]+)', 1) AS BIGINT) >= 20;
+
+-- control: without function predicate pruning no row group is skipped, and the result is the same
+set enable_iceberg_function_predicate_pruning = false;
+select count(*), min(dt), max(dt) from iceberg_rg_${uuid0}.rg_db_${uuid0}.t1 where year(dt) = 2024;
+select coalesce(CAST(regexp_extract(get_query_profile(last_query_id()), 'StatisticsSuccessCounter: ([0-9]+)', 1) AS BIGINT), 0);
+set enable_iceberg_function_predicate_pruning = true;
+
+drop table iceberg_rg_${uuid0}.rg_db_${uuid0}.t1 force;
+drop database iceberg_rg_${uuid0}.rg_db_${uuid0};
+drop catalog iceberg_rg_${uuid0};
+drop database rg_src_${uuid0};

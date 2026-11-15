@@ -78,8 +78,11 @@ import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
+import com.starrocks.thrift.TResultBatch;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.transaction.ExplicitTxnStatementValidator;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
@@ -690,6 +693,51 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertEquals(2, auditedSqls.size());
         Assertions.assertFalse(auditedSqls.get(0).contains(";"));
         Assertions.assertFalse(auditedSqls.get(1).contains(";"));
+    }
+
+    @Test
+    public void testCallerBoundQueryUsesCurrentStatementResourceGroup() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1; select /*+ SET_VAR(resource_group = 'group_b') */ "
+                + "lookup_string('default_catalog.db.dict', 'key', 'value');");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        List<String> childResourceGroups = new ArrayList<>();
+        SimpleExecutor lookupExecutor = new SimpleExecutor("testLookup", TResultSinkType.MYSQL_PROTOCAL) {
+            @Override
+            public List<TResultBatch> executeDQL(String sql, ConnectContext childContext) {
+                childResourceGroups.add(childContext.getSessionVariable().getResourceGroup());
+                return List.of();
+            }
+        };
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute(Invocation invocation) throws Exception {
+                StmtExecutor stmtExecutor = invocation.getInvokedInstance();
+                if (stmtExecutor.getParsedStmt().getOrigStmt().idx == 0) {
+                    // Simulate the resource group resolved by the first statement's coordinator.
+                    ctx.setResourceGroup(new TWorkGroup().setName("group_a"));
+                    return;
+                }
+
+                SessionVariable originalVariables = ctx.getSessionVariable();
+                try {
+                    stmtExecutor.processQueryScopeHint();
+                    // Capture the internal query context without running the lookup on a BE.
+                    lookupExecutor.executeDQLAsCaller("select 1", 30, ctx);
+                } finally {
+                    ctx.setSessionVariable(originalVariables);
+                }
+            }
+
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+
+        new ConnectProcessor(ctx).processOnce();
+
+        Assertions.assertFalse(ctx.getState().isError(), ctx.getState().getErrorMessage());
+        Assertions.assertEquals(List.of("group_b"), childResourceGroups);
     }
 
     // Verify multi-statement query stops on the first failed stmt and only audits executed stmts.

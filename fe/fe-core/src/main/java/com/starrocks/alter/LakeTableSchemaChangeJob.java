@@ -1025,14 +1025,17 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
                 long commitVersion = commitVersionMap.get(physicalPartitionId);
+                // A retry lets the tablets an earlier attempt already published answer from storage.
+                boolean isRetryPublish = getAndMarkLakePublishSent(physicalPartitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                     if (!isFileBundling) {
                         Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, computeResource,
-                                isFileBundling);
+                                isFileBundling, isRetryPublish);
                     } else {
                         Utils.createSubRequestForAggregatePublish(shadowIndex.getTablets(),
-                                Lists.newArrayList(txnInfo), 1, commitVersion, null, computeResource, request);
+                                Lists.newArrayList(txnInfo), 1, commitVersion, null, computeResource, request,
+                                false, isRetryPublish);
                     }
                 }
 
@@ -1051,10 +1054,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
                 if (!isFileBundling) {
                     Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1, commitVersion, 
-                            computeResource, isFileBundling);
+                            computeResource, isFileBundling, isRetryPublish);
                 } else {
                     Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo),
-                            commitVersion - 1, commitVersion, null, computeResource, request);
+                            commitVersion - 1, commitVersion, null, computeResource, request, false, isRetryPublish);
                 }
 
                 if (isFileBundling) {
@@ -1419,6 +1422,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         // See LakeTableAlterMetaJobBase.cancelImpl for the same pattern.
         boolean advanceVersionForForce = force && jobState == JobState.FINISHED_REWRITING && tableExists();
         if (advanceVersionForForce) {
+            markLakeNoOpPublishSent();
             if (!lakePublishVersionWithSkip(errMsg)) {
                 return false;
             }

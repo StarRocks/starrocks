@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Reference for common StarRocks error codes returned for query requests."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Error Codes

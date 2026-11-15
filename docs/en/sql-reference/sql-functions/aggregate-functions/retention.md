@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Calculates the user retention rate within a specified period of time."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # retention

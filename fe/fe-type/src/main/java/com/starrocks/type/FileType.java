@@ -20,6 +20,13 @@ package com.starrocks.type;
  * materialized only inside the BE; the FE treats it as an opaque scalar.
  */
 public class FileType extends ScalarType {
+    public static final String URI = "uri";
+    public static final String OFFSET = "offset";
+    public static final String SIZE = "size";
+    public static final String CONTENT_TYPE = "content_type";
+    public static final String CHECKSUM = "checksum";
+    public static final String INLINE = "inline";
+
     public static final FileType FILE = new FileType();
 
     public FileType() {

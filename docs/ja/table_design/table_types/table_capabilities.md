@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "StarRocks テーブルタイプの機能比較: 重複キー、集計、ユニークキー、主キーテーブル、およびサポート機能。"
 sidebar_position: 10
+products: [oss, enterprise, anywhere]
 ---
 
 # 各テーブルタイプの機能

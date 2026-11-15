@@ -29,6 +29,7 @@ import copy
 import datetime
 import json
 import logging
+import socket
 import sys
 import threading
 import traceback
@@ -1017,7 +1018,13 @@ class StarrocksSQLApiLib(object):
                 if sql.endswith(";"):
                     sql = sql[:-1]
                 cursor.execute(sql)
-                result = cursor.fetchall()
+                try:
+                    result = cursor.fetchall()
+                except pyhive.exc.ProgrammingError as e:
+                    # Hive DDL succeeds without a result set; preserve other driver errors.
+                    if str(e) != "No result set" or cursor.description is not None:
+                        raise
+                    result = []
 
                 for i in range(len(result)):
                     row = [str(item) for item in result[i]]
@@ -3963,15 +3970,29 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             res1 == res2, "assert two plans are different, plan1: {}, plan2: {}".format(res1["result"], res2["result"])
         )
 
+    @staticmethod
+    def _query_result_text(result):
+        """
+        Text of a query result to search expectations in: the cells as they are, joined by tab within a row and by
+        newline between rows, i.e. what a MySQL client shows. str() of the result tuple is not used, because it
+        escapes quotes (a cell holding both ' and " is printed as '...\\'...'), so an expectation with a single
+        quote would never match it.
+        """
+        if not isinstance(result, (list, tuple)):
+            return str(result)
+        rows = [row if isinstance(row, (list, tuple)) else (row,) for row in result]
+        return "\n".join("\t".join(str(cell) for cell in row) for row in rows)
+
     def assert_query_contains(self, query, *expects):
         """
         assert explain result contains expect string
         """
         res = self.execute_sql(query, True)
+        haystack = self._query_result_text(res["result"])
         for expect in expects:
             tools.assert_true(
-                str(res["result"]).find(expect) > 0,
-                "assert expect {} is not found in plan {}".format(expect, res["result"]),
+                expect in haystack,
+                "assert expect {} is not found in result:\n{}".format(expect, haystack),
             )
 
     def assert_query_not_contains(self, query, *expects):
@@ -3979,10 +4000,11 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         assert query result does not contain expect string
         """
         res = self.execute_sql(query, True)
+        haystack = self._query_result_text(res["result"])
         for expect in expects:
             tools.assert_true(
-                str(res["result"]).find(expect) < 0,
-                "assert expect {} is unexpectedly found in result {}".format(expect, res["result"]),
+                expect not in haystack,
+                "assert expect {} is unexpectedly found in result:\n{}".format(expect, haystack),
             )
 
     def print_query_columns(self, query, *columns):
@@ -4020,7 +4042,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         runs only once.
         """
         res = self.execute_sql(query, True)
-        haystack = str(res["result"])
+        haystack = self._query_result_text(res["result"])
         actual_times = haystack.count(str(expect))
         tools.assert_true(
             actual_times == int(expected_times),
@@ -4524,6 +4546,49 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         # print(f"Last query id: {query_id}")
         return query_id
 
+    def assert_pipelined_request_waits_for_stream(self, query):
+        """
+        Sends `query` to the HTTP SQL API and, while its response is still being streamed, pipelines GET /api/health
+        on the same connection: the SQL response has to end with its last chunk before the health response starts.
+        """
+        auth = base64.b64encode(f"{self.mysql_user}:{self.mysql_password}".encode()).decode()
+        body = json.dumps({"query": query}).encode()
+        sql = (f"POST /api/v1/catalogs/default_catalog/sql HTTP/1.1\r\nHost: {self.mysql_host}\r\n"
+               f"Authorization: Basic {auth}\r\nContent-Type: application/json\r\n"
+               f"Content-Length: {len(body)}\r\n\r\n").encode() + body
+        health = f"GET /api/health HTTP/1.1\r\nHost: {self.mysql_host}\r\n\r\n".encode()
+        last_chunk = b"\r\n0\r\n\r\n"
+
+        def health_after(data, start):
+            # The start of a whole response with a Content-Length at or after `start`, or -1.
+            at = data.find(b"HTTP/1.1", start)
+            head_end = data.find(b"\r\n\r\n", at) if at >= 0 else -1
+            if head_end < 0:
+                return -1
+            length = re.search(rb"(?i)content-length:\s*(\d+)", data[at:head_end])
+            return at if length and len(data) >= head_end + 4 + int(length.group(1)) else -1
+
+        received = bytearray()
+        with socket.create_connection((self.mysql_host, int(self.http_port)), timeout=60) as conn:
+            conn.sendall(sql)
+            # Well into the stream before the next request goes out.
+            while len(received) < 1024 * 1024:
+                data = conn.recv(65536)
+                tools.assert_true(data, f"the SQL response ended early: {bytes(received[:300])!r}")
+                received += data
+            conn.sendall(health)
+            while True:
+                end = received.find(last_chunk)
+                if end >= 0 and health_after(received, end + len(last_chunk)) >= 0:
+                    break
+                data = conn.recv(1 << 20)
+                tools.assert_true(data, "the connection closed before both responses were whole")
+                received += data
+        tools.assert_true(received.startswith(b"HTTP/1.1 200"), bytes(received[:300]))
+        tools.assert_equal(-1, received.find(b"HTTP/1.1", 1, end), "a response started inside the SQL response")
+        health_at = health_after(received, end + len(last_chunk))
+        tools.assert_true(received.startswith(b"HTTP/1.1 200", health_at), bytes(received[health_at:health_at + 300]))
+
     def get_query_details(self):
         url = f"http://{self.mysql_host}:{self.http_port}/api/query_detail?event_time=0"
         result = self.get_http_request(url)
@@ -4739,6 +4804,18 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             log.info(f"Set tablet_id = {self.tablet_id}")
         else:
             raise Exception(f"Failed to get tablet ID for table {table_name}")
+
+    def set_max_tablet_id(self, table_name, partition_name=None):
+        """Bind ${tablet_id} to the newest installed generation, using numeric tablet IDs."""
+        if partition_name:
+            sql = f"SHOW TABLETS FROM {table_name} PARTITION ({partition_name})"
+        else:
+            sql = f"SHOW TABLETS FROM {table_name}"
+        result = self.execute_sql(sql, True)
+        if not (result and result.get("result")):
+            raise Exception(f"Failed to get tablet IDs for table {table_name}")
+        self.tablet_id = str(max(int(row[0]) for row in result["result"]))
+        log.info(f"Set tablet_id = {self.tablet_id}")
 
     def wait_reshard_job_finish(self, table_name, job_type, expect_count, timeout_sec=60):
         """

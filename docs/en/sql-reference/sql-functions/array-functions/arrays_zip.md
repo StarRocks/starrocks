@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Merges the given arrays by index into an array of structs in which the n-th struct contains n-th values of all input arrays."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # arrays_zip

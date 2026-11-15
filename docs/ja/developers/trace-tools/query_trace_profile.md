@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "クエリトレースプロファイルを取得・分析してクエリ実行をデバッグする方法。"
+products: [oss]
 ---
 
 # Query Trace Profile
@@ -23,7 +24,7 @@ TRACE { TIMES | VALUES | LOGS | ALL } [ <module> ] <query_statement>
   - `BASE`: ベースモジュール。
   - `MV`: マテリアライズドビュー モジュール。
   - `OPTIMIZER`: オプティマイザーモジュール。
-  - `SCHEDULE`: スケジュールモジュール。
+  - `SCHEDULER`: スケジュールモジュール。
   - `EXTERNAL`: 外部テーブル関連のモジュール。
 
   モジュールが指定されていない場合、`BASE` が使用されます。

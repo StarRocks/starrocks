@@ -22,6 +22,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
@@ -258,6 +259,11 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
                                          TvrVersionRange version) {
         ConnectorMetadata metadata = metadataOfTable(table);
         return metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit, version);
+    }
+
+    @Override
+    public Map<String, Pair<Double, Double>> getPartitionSourceColumnRanges(Table table, TvrVersionRange version) {
+        return metadataOfTable(table).getPartitionSourceColumnRanges(table, version);
     }
 
     @Override
