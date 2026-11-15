@@ -65,6 +65,7 @@ Status JsonDocumentStreamParser::parse(char* data, size_t len, size_t allocated)
                 data, len, config::enable_dynamic_batch_size_for_json_parse_many ? std::min(_batch_size, _len) : _len);
 
         _doc_stream_itr = _doc_stream.begin();
+        _has_doc_iter_snapshot = false;
 
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = strings::Substitute("Failed to parse json as document stream. error: $0",
@@ -84,6 +85,7 @@ bool JsonDocumentStreamParser::_check_and_new_doc_stream_iterator() {
 
     // The following code should be no-exception by designed.
     _curr_ready = false;
+    _has_doc_iter_snapshot = false;
     do {
         _batch_size = std::min(_batch_size * 8, cur_left_len);
         _doc_stream = _parser->iterate_many(_data + _last_begin_offset, cur_left_len, _batch_size);
@@ -121,6 +123,7 @@ Status JsonDocumentStreamParser::_get_current_impl(simdjson::ondemand::object* r
                 }
 
                 _doc_iter_snapshot = RewindableDocument::iter_of(doc);
+                _has_doc_iter_snapshot = true;
                 _curr = doc.get_object();
                 *row = _curr;
                 _curr_ready = true;
@@ -180,7 +183,8 @@ Status JsonDocumentStreamParser::advance() noexcept {
     static_assert(simdjson::SIMDJSON_VERSION_MAJOR == 5,
                   "Re-validate JsonDocumentStreamParser::advance() mid-document error latching on simdjson upgrade");
     _curr_ready = false;
-    if (_first_object_parsed && _doc_stream_itr != _doc_stream.end() && _doc_stream_itr.error() == simdjson::SUCCESS) {
+    if (_has_doc_iter_snapshot && _doc_stream_itr != _doc_stream.end() &&
+        _doc_stream_itr.error() == simdjson::SUCCESS) {
         simdjson::ondemand::document_reference doc = *_doc_stream_itr;
         if (!RewindableDocument::is_finished_cleanly(doc)) {
             // In simdjson 5.x, if the caller stopped early or hit a mid-document error (which may abandon doc.iter,
@@ -190,6 +194,7 @@ Status JsonDocumentStreamParser::advance() noexcept {
             RewindableDocument::iter_of(doc) = _doc_iter_snapshot;
         }
     }
+    _has_doc_iter_snapshot = false;
     ++_doc_stream_itr;
     if (_first_object_parsed && _doc_stream_itr != _doc_stream.end() && _doc_stream_itr.error() != simdjson::SUCCESS &&
         _doc_stream_offset + _doc_stream_itr.current_index() == _last_begin_offset) {
