@@ -70,7 +70,10 @@ public class HiveView extends ConnectorView {
                 continue;
             }
 
-            tableRelation.getName().setCatalog(catalogName);
+            // keep an explicit catalog from the view definition, only fill in a missing one
+            if (Strings.isNullOrEmpty(name.getCatalog())) {
+                name.setCatalog(catalogName);
+            }
             if (Strings.isNullOrEmpty(tableRelation.getName().getDb())) {
                 tableRelation.getName().setDb(dbName);
             }

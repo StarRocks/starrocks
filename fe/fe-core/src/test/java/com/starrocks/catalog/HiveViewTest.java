@@ -40,4 +40,21 @@ public class HiveViewTest {
         assertEquals("hive_catalog", tableRelation.getName().getCatalog());
         assertEquals("sample_db", tableRelation.getName().getDb());
     }
+
+    @Test
+    public void testKeepsExplicitCatalogAndDb() {
+        // A table that the view definition already qualifies must not be moved to the view's catalog
+        HiveView view = new HiveView(1L, "hive_catalog", "sample_db", "test_view",
+                Collections.emptyList(), "SELECT * FROM iceberg_catalog.other_db.t", HiveView.Type.Trino);
+        TableRelation qualified = new TableRelation(new TableName("iceberg_catalog", "other_db", "t"));
+        TableRelation unqualified = new TableRelation(new TableName(null, null, "u"));
+        List<TableRelation> relations = Lists.newArrayList(qualified, unqualified);
+
+        view.formatRelations(relations, Collections.emptyList());
+
+        assertEquals("iceberg_catalog", qualified.getName().getCatalog());
+        assertEquals("other_db", qualified.getName().getDb());
+        assertEquals("hive_catalog", unqualified.getName().getCatalog());
+        assertEquals("sample_db", unqualified.getName().getDb());
+    }
 }
