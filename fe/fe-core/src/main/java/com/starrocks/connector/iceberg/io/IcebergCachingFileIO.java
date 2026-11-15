@@ -794,7 +794,16 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             // planning goes through -- manifest lists, manifests, metadata.json -- and it is reached
             // through the FileIO the catalogs install, not through MetadataMgr.
             BlockingCallValidator.validateNotUnderLock("remote-storage");
-            len = wrappedInputFile.getLength();
+            IcebergPlanningIoStats stats = IcebergPlanningIoStats.current();
+            long start = System.nanoTime();
+            try {
+                len = wrappedInputFile.getLength();
+            } finally {
+                // A HEAD that fails (a timeout after retries, a denial) is the one a slow planning must show.
+                if (stats != null) {
+                    stats.recordHead(System.nanoTime() - start, location());
+                }
+            }
             knownLength = len;
             return len;
         }
@@ -817,7 +826,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
                 // fallback to non-caching input stream.
                 BlockingCallValidator.validateNotUnderLock("remote-storage");
-                return wrappedInputFile.newStream();
+                return openRemoteStream();
             } catch (FileNotFoundException e) {
                 throw new NotFoundException(e, "Failed to open input stream for file: %s", wrappedInputFile.location());
             } catch (IOException e) {
@@ -837,7 +846,15 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 return true;
             }
             BlockingCallValidator.validateNotUnderLock("remote-storage");
-            return wrappedInputFile.exists();
+            IcebergPlanningIoStats stats = IcebergPlanningIoStats.current();
+            long start = System.nanoTime();
+            try {
+                return wrappedInputFile.exists();
+            } finally {
+                if (stats != null) {
+                    stats.recordHead(System.nanoTime() - start, location());
+                }
+            }
         }
 
         private CacheEntry newCacheEntry() {
@@ -851,14 +868,14 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                     if (stream == null) {
                         LOG.debug(location() + " load from remote");
                         BlockingCallValidator.validateNotUnderLock("remote-storage");
-                        stream = wrappedInputFile.newStream();
+                        stream = openRemoteStream();
                     }
                 } else {
                     LOG.debug(location() + " load from remote");
                     // The content cache's loader, so a hit never reaches here; the disk-cache branch above
                     // is local until its stream comes back null.
                     BlockingCallValidator.validateNotUnderLock("remote-storage");
-                    stream = wrappedInputFile.newStream();
+                    stream = openRemoteStream();
                 }
                 List<ByteBuffer> buffers = Lists.newArrayList();
 
@@ -886,6 +903,13 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                     IOUtil.closeInputStreamIgnoreException(stream);
                 }
                 throw new UncheckedIOException(ex);
+            } catch (RuntimeException ex) {
+                // Storage clients fail unchecked too (the AWS SDK does): close the stream all the same, so it does
+                // not leak and the planning I/O of the failed read is counted.
+                if (stream != null) {
+                    IOUtil.closeInputStreamIgnoreException(stream);
+                }
+                throw ex;
             }
         }
 
@@ -904,6 +928,24 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 LockInvariantViolationException.rethrowIfRefusal(ex);
                 throw new IOException("Caught an error while reading through cache", ex);
             }
+        }
+
+        // A stream from storage. When a planning is being measured, the stream is timed for that planning: one
+        // GET, whose time is spent inside the stream's calls.
+        private SeekableInputStream openRemoteStream() {
+            IcebergPlanningIoStats stats = IcebergPlanningIoStats.current();
+            if (stats == null) {
+                return wrappedInputFile.newStream();
+            }
+            long start = System.nanoTime();
+            SeekableInputStream stream;
+            try {
+                stream = wrappedInputFile.newStream();
+            } catch (RuntimeException e) {
+                stats.recordGet(System.nanoTime() - start, location());
+                throw e;
+            }
+            return PlanningIoTimedInputStream.wrap(stream, stats, location(), System.nanoTime() - start);
         }
 
         @Override
