@@ -14,13 +14,10 @@
 
 #include "exprs/paimon_functions.h"
 
-#include <cstdlib>
-#include <mutex>
-
 #include "base/testutil/sync_point.h"
-#include "base/utility/dynamic_util.h"
 #include "column/column_helper.h"
 #include "runtime/current_thread.h"
+#include "runtime/paimon_cpp_library.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -39,22 +36,14 @@ StatusOr<CreatePaimonBucketCalculator> load_calculator() {
     CreatePaimonBucketCalculator linked_factory = nullptr;
     TEST_SYNC_POINT_CALLBACK("PaimonFunctions::load_calculator", &linked_factory);
     if (linked_factory != nullptr) return linked_factory;
-    static std::mutex mutex;
-    static void* handle = nullptr;
-    static CreatePaimonBucketCalculator create = nullptr;
-    std::lock_guard<std::mutex> lock(mutex);
-    if (create != nullptr) return create;
-    if (handle == nullptr) {
-        const char* home = std::getenv("STARROCKS_HOME");
-        std::string path =
-                home ? std::string(home) + "/lib/paimon-cpp-lib/libstarrocks_paimon.so" : "libstarrocks_paimon.so";
-        RETURN_IF_ERROR(dynamic_open(path.c_str(), &handle));
+    auto result = PaimonCppLibrary::instance().get_symbol(PaimonCppLibrary::Capability::BUCKET_CALCULATOR);
+    if (!result.ok()) {
+        if (result.status().is_not_supported()) {
+            return Status::NotSupported("Install the matching Paimon bucket function shim");
+        }
+        return result.status();
     }
-    void* symbol = nullptr;
-    auto status = dynamic_lookup(handle, STARROCKS_PAIMON_BUCKET_CALCULATOR_SYMBOL, &symbol);
-    if (!status.ok()) return Status::NotSupported("Install the matching Paimon bucket function shim");
-    create = reinterpret_cast<CreatePaimonBucketCalculator>(symbol);
-    return create; // Never dlclose: calculators retain the shim's vtable until query destruction.
+    return reinterpret_cast<CreatePaimonBucketCalculator>(result.value());
 }
 } // namespace
 

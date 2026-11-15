@@ -16,6 +16,8 @@ package com.starrocks.connector.paimon;
 
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
@@ -122,13 +124,88 @@ public class PaimonWriteMetadataTest {
     }
 
     @Test
+    public void testMetadataLoadsAndCachesNativeIdentity() throws Exception {
+        createTarget();
+        FileStoreTable nativeTarget = spy(nativeTable());
+        Catalog observedCatalog = spy(catalog);
+        doReturn(nativeTarget).when(observedCatalog).getTable(TARGET);
+        PaimonMetadata checked = newMetadata(observedCatalog);
+
+        PaimonTable table = (PaimonTable) checked.getTable(null, DB, TABLE);
+        assertNotNull(table.getNativeWriteIdentity());
+        verify(nativeTarget).uuid();
+        clearInvocations(nativeTarget);
+        assertSame(table, checked.getTable(null, DB, TABLE));
+        assertNotNull(table.getNativeWriteIdentity());
+        verify(nativeTarget, never()).uuid();
+    }
+
+    @Test
+    public void testPublicationTraceRetainsOwningQueryAcrossThreads() throws Exception {
+        createTarget();
+        try {
+            Tracers.register();
+            Tracers.init(Tracers.Mode.VARS, Tracers.Module.EXTERNAL, true, false);
+            PaimonSinkExtra operation = operation("APPEND", Map.of(), "traced_commit");
+            assertPublicationTrace(operation, WRITING);
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                Tracers.register();
+                Tracers.init(Tracers.Mode.VARS, Tracers.Module.EXTERNAL, true, false);
+                try {
+                    operation.transition(WRITING, PREPARED);
+                    operation.transition(PREPARED, PUBLISHING);
+                    operation.transition(PUBLISHING, COMMITTED);
+                    assertTrue(Tracers.getAllVars().isEmpty());
+                } finally {
+                    Tracers.close();
+                }
+            }).get();
+            assertPublicationTrace(operation, COMMITTED);
+        } finally {
+            Tracers.close();
+        }
+    }
+
+    @Test
+    public void testPublicationTraceCoversEmptyAbortAndUnknownOutcomes() throws Exception {
+        createTarget();
+        for (PaimonSinkExtra.PublicationState outcome : List.of(COMMITTED, ABORTED, UNKNOWN)) {
+            try {
+                Tracers.register();
+                Tracers.init(Tracers.Mode.VARS, Tracers.Module.EXTERNAL, true, false);
+                PaimonSinkExtra operation = operation("APPEND", Map.of(), "traced_" + outcome);
+                assertPublicationTrace(operation, WRITING);
+                if (outcome == COMMITTED) {
+                    metadata.finishSink(DB, TABLE, List.of(report(operation, "empty", List.of())),
+                            null, operation, null);
+                } else if (outcome == ABORTED) {
+                    metadata.abortSink(DB, TABLE, List.of(), operation, null);
+                } else {
+                    operation.transition(WRITING, PREPARED);
+                    operation.transition(PREPARED, PUBLISHING);
+                    operation.transition(PUBLISHING, UNKNOWN);
+                }
+                assertPublicationTrace(operation, outcome);
+            } finally {
+                Tracers.close();
+            }
+        }
+    }
+
+    private static void assertPublicationTrace(PaimonSinkExtra operation, PaimonSinkExtra.PublicationState state) {
+        RuntimeProfile profile = new RuntimeProfile("Planner");
+        Tracers.toRuntimeProfile(profile);
+        assertEquals(operation.getOperationId(), profile.getInfoString("PaimonOperationId"));
+        assertEquals(state.name(), profile.getInfoString("PaimonPublicationState"));
+    }
+
+    @Test
     public void testSameTableOperationsFreezeIndependentContractsAndPublicationStates() throws Exception {
         createTarget();
         FileStoreTable nativeTarget = spy(nativeTable());
         Map<String, String> sourceOptions = new HashMap<>(nativeTarget.options());
         doReturn(sourceOptions).when(nativeTarget).options();
         PaimonTable target = new PaimonTable(CATALOG, DB, TABLE, List.of(), nativeTarget);
-        target.resolveNativeWriteIdentity();
         Map<String, String> partition = new HashMap<>(Map.of("p", "one"));
         PaimonSinkExtra first = PaimonSinkExtra.from(target, "APPEND", partition, "first_operation", "Asia/Shanghai");
         PaimonSinkExtra second = PaimonSinkExtra.from(target, "APPEND", Map.of(), "second_operation", "UTC");
@@ -504,7 +581,6 @@ public class PaimonWriteMetadataTest {
         catalog.invalidateTable(TARGET);
         FileStoreTable changed = nativeTable();
         PaimonTable target = new PaimonTable(CATALOG, DB, TABLE, List.of(), changed);
-        target.resolveNativeWriteIdentity();
         PaimonSinkExtra operation = PaimonSinkExtra.from(target, "APPEND", Map.of(), "wrong_file_schema", "UTC");
         assertTrue(operation.getSchemaId() > ((CommitMessageImpl) oldSchemaFiles.get(0))
                 .newFilesIncrement().newFiles().get(0).schemaId());
@@ -553,7 +629,6 @@ public class PaimonWriteMetadataTest {
 
     private PaimonSinkExtra operation(String mode, Map<String, String> partition, String operationId) {
         PaimonTable table = table();
-        table.resolveNativeWriteIdentity();
         return PaimonSinkExtra.from(table, mode, partition, operationId, "UTC");
     }
 

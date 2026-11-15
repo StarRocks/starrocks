@@ -17,9 +17,11 @@ package com.starrocks.qe;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
@@ -175,7 +177,7 @@ public class PaimonOperationPublicationTest {
     }
 
     @Test
-    public void testUnknownCommitIsTypedAndNeverAborted() throws Exception {
+    public void testUnknownCommitPreservesCauseAndIsNeverAborted() throws Exception {
         try (Fixture fixture = new Fixture("APPEND", 0, 0)) {
             PaimonCommitUnknownException unknown = new PaimonCommitUnknownException(
                     fixture.operation.getOperationId(), new IllegalStateException("snapshot response was lost"));
@@ -189,8 +191,12 @@ public class PaimonOperationPublicationTest {
                 throw unknown;
             }).when(fixture.metadata).finishSink(anyString(), anyString(), anyString(), anyList(), any(), any(), any());
 
-            assertSame(unknown, assertThrows(PaimonCommitUnknownException.class,
-                    () -> fixture.executor.handleDMLStmt(fixture.plan, fixture.statement)));
+            StarRocksException failure = assertThrows(StarRocksException.class,
+                    () -> fixture.executor.handleDMLStmt(fixture.plan, fixture.statement));
+            assertSame(unknown, failure.getCause());
+            String message = LogUtil.getUnwoundExceptionMessage(failure);
+            assertTrue(message.contains(fixture.operation.getOperationId()));
+            assertTrue(message.contains("snapshot response was lost"));
 
             assertFalse(fixture.operation.canAbort());
             assertEquals(QueryState.MysqlStateType.ERR, fixture.queryState.getStateType());
@@ -202,7 +208,7 @@ public class PaimonOperationPublicationTest {
     @Test
     public void testUnconfirmedFinishDoesNotAcknowledgeVisible() throws Exception {
         try (Fixture fixture = new Fixture("APPEND", 0, 0)) {
-            assertThrows(StarRocksConnectorException.class,
+            assertThrows(StarRocksException.class,
                     () -> fixture.executor.handleDMLStmt(fixture.plan, fixture.statement));
             assertEquals(QueryState.MysqlStateType.ERR, fixture.queryState.getStateType());
             verify(fixture.metadata).abortSink("p", "db", "t", fixture.profile.getSinkCommitInfos(),

@@ -55,7 +55,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -253,7 +252,7 @@ public class PaimonInsertPlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testIdentityPrepassDoesNotDependOnGenericRefreshFlags() throws Exception {
+    public void testMetadataIdentityDoesNotDependOnGenericRefreshFlags() throws Exception {
         boolean preparse = Config.enable_experimental_external_table_preparse;
         PaimonTable original = TARGETS.get("target");
         FileStoreTable nativeTable = (FileStoreTable) original.getNativeTable();
@@ -264,7 +263,7 @@ public class PaimonInsertPlanTest extends PlanTestBase {
         try {
             Planned planned = plan("insert into " + target("target") + " values ('2026-10-29', 1, 'a')");
             Assertions.assertEquals("native-target", planned.sink().getPaimonSinkExtra().getTableIdentity());
-            verify(nativeTable, atLeastOnce()).uuid();
+            verify(nativeTable, never()).uuid();
         } finally {
             Config.enable_experimental_external_table_preparse = preparse;
             TARGETS.put("target", original);
@@ -276,7 +275,6 @@ public class PaimonInsertPlanTest extends PlanTestBase {
         PaimonTable original = TARGETS.get("target");
         FileStoreTable first = (FileStoreTable) original.getNativeTable();
         PaimonTable table = new PaimonTable(CATALOG, "db", "target", original.getFullSchema(), first);
-        table.resolveNativeWriteIdentity();
         FileStoreTable refreshed = mock(FileStoreTable.class);
         when(refreshed.uuid()).thenReturn("refreshed-identity");
         table.setPaimonNativeTable(refreshed);
@@ -304,7 +302,6 @@ public class PaimonInsertPlanTest extends PlanTestBase {
         when(nativeTable.location()).thenReturn(new Path("file:///paimon-planning/" + name));
         PaimonTable table = new PaimonTable(CATALOG, "db", name,
                 ColumnTypeConverter.fromPaimonSchemas(schema.fields()), nativeTable);
-        table.resolveNativeWriteIdentity();
         TARGETS.put(name, table);
     }
 

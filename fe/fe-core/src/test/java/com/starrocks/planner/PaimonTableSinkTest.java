@@ -51,7 +51,6 @@ public class PaimonTableSinkTest {
     public void testFrozenWriterContractAndRedactedExplain() {
         FileStoreTable nativeTable = nativeTable(-1);
         PaimonTable table = table(nativeTable);
-        table.resolveNativeWriteIdentity();
         PaimonSinkExtra extra = PaimonSinkExtra.from(table, "APPEND", Map.of("p", "2026-10-29"),
                 "operation_1", "Asia/Shanghai");
         clearInvocations(nativeTable);
@@ -118,7 +117,6 @@ public class PaimonTableSinkTest {
     public void testFixedBucketsRequireInstalledRouting() {
         FileStoreTable nativeTable = nativeTable(4);
         PaimonTable table = table(nativeTable);
-        table.resolveNativeWriteIdentity();
         PaimonSinkExtra extra = PaimonSinkExtra.from(table, "APPEND", Map.of(), "operation_2", "UTC");
         GlobalStateMgr state = mock(GlobalStateMgr.class, RETURNS_DEEP_STUBS);
         when(state.getConnectorMgr().getConnector("paimon_write").getMetadata().getCloudConfiguration())
@@ -137,27 +135,26 @@ public class PaimonTableSinkTest {
     }
 
     @Test
-    public void testIdentityMustBeResolvedAndIsUpdatedOnRefresh() {
+    public void testIdentityIsLoadedWithMetadataAndUpdatedOnRefresh() {
         FileStoreTable nativeTable = nativeTable(-1);
         PaimonTable table = table(nativeTable);
+        verify(nativeTable).uuid();
         clearInvocations(nativeTable);
         Assertions.assertTrue(table.supportInsert());
         Assertions.assertFalse(table.supportsUpdate());
+        Assertions.assertEquals("native-identity", table.getNativeWriteIdentity());
+        Assertions.assertTrue(table.getUUID().contains("native-identity"));
         verify(nativeTable, never()).uuid();
-        Assertions.assertThrows(StarRocksConnectorException.class, table::getNativeWriteIdentity);
-        table.resolveNativeWriteIdentity();
-        table.resolveNativeWriteIdentity();
-        verify(nativeTable).uuid();
-        Assertions.assertEquals("native-identity", table.getNativeWriteIdentity());
+        when(nativeTable.uuid()).thenReturn("refreshed-identity");
         table.setPaimonNativeTable(nativeTable);
-        Assertions.assertEquals("native-identity", table.getNativeWriteIdentity());
+        Assertions.assertEquals("refreshed-identity", table.getNativeWriteIdentity());
+        Assertions.assertTrue(table.getUUID().contains("refreshed-identity"));
     }
 
     @Test
     public void testChangedSchemaCannotUseFrozenContract() {
         FileStoreTable nativeTable = nativeTable(-1);
         PaimonTable table = table(nativeTable);
-        table.resolveNativeWriteIdentity();
         PaimonSinkExtra extra = PaimonSinkExtra.from(table, "APPEND", Map.of(), "operation_3", "UTC");
         TableSchema changed = TableSchema.create(18, Schema.newBuilder().column("other", DataTypes.INT()).build());
         when(nativeTable.schema()).thenReturn(changed);

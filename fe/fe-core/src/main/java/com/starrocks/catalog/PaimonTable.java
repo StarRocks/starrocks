@@ -64,6 +64,7 @@ public class PaimonTable extends Table {
         this.databaseName = dbName;
         this.tableName = tblName;
         this.paimonNativeTable = paimonNativeTable;
+        this.nativeWriteIdentity = paimonNativeTable.uuid();
         this.partColumnNames = paimonNativeTable.partitionKeys();
         this.paimonFieldNames = paimonNativeTable.rowType().getFields().stream()
                 .map(DataField::name)
@@ -91,25 +92,16 @@ public class PaimonTable extends Table {
 
     // For refresh table only
     public synchronized void setPaimonNativeTable(org.apache.paimon.table.Table paimonNativeTable) {
-        // An INSERT can read and write the same cached table. Source refresh replaces
-        // its native table after the write-target identity was resolved; refresh the
-        // identity as well so it always describes the new native table.
-        String refreshedIdentity = nativeWriteIdentity == null ? null : paimonNativeTable.uuid();
+        String refreshedIdentity = paimonNativeTable.uuid();
         this.paimonNativeTable = paimonNativeTable;
         this.nativeWriteIdentity = refreshedIdentity;
-    }
-
-    // Resolve outside FE metadata locks: the native uuid may read the original schema from storage.
-    public synchronized void resolveNativeWriteIdentity() {
-        if (nativeWriteIdentity == null) {
-            nativeWriteIdentity = paimonNativeTable.uuid();
-        }
+        this.uuid = null;
     }
 
     public String getNativeWriteIdentity() {
         String identity = nativeWriteIdentity;
         if (identity == null) {
-            throw new StarRocksConnectorException("Paimon write identity was not resolved before planning");
+            throw new StarRocksConnectorException("Paimon table metadata has no native identity");
         }
         return identity;
     }
@@ -123,7 +115,7 @@ public class PaimonTable extends Table {
     @Override
     public String getUUID() {
         if (Strings.isNullOrEmpty(this.uuid)) {
-            this.uuid = String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid().replace(".", "_"));
+            this.uuid = String.join(".", catalogName, databaseName, tableName, getNativeWriteIdentity().replace(".", "_"));
         }
         return this.uuid;
     }

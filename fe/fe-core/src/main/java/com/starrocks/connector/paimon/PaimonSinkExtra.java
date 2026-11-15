@@ -15,6 +15,7 @@
 package com.starrocks.connector.paimon;
 
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.table.FileStoreTable;
@@ -34,6 +35,7 @@ public final class PaimonSinkExtra {
         WRITING, PREPARED, PUBLISHING, COMMITTED, ABORTED, UNKNOWN
     }
 
+    private final Tracers tracers;
     private final String location;
     private final String tableIdentity;
     private final long schemaId;
@@ -54,10 +56,10 @@ public final class PaimonSinkExtra {
 
     private PaimonSinkExtra(FileStoreTable table, String tableIdentity, String mode,
                            Map<String, String> staticPartition, String operationId, String timeZone) {
+        this.tracers = Tracers.get();
         TableSchema schema = table.schema();
         this.location = table.location().toString();
-        // The native UUID was resolved with the external target before metadata locks.
-        // Sink planning only copies that identity and the already-loaded schema.
+        // Table metadata already contains the native identity; planning only copies it.
         this.tableIdentity = tableIdentity;
         this.schemaId = schema.id();
         this.schemaJson = canonicalSchemaJson(table);
@@ -73,6 +75,7 @@ public final class PaimonSinkExtra {
         this.timeZone = Objects.requireNonNull(timeZone, "timeZone");
         this.commitUser = "starrocks-" + operationId;
         this.commitIdentifier = BatchWriteBuilder.COMMIT_IDENTIFIER;
+        recordPublicationState();
     }
 
     public static PaimonSinkExtra from(PaimonTable table, String mode, Map<String, String> staticPartition,
@@ -125,6 +128,12 @@ public final class PaimonSinkExtra {
             throw new StarRocksConnectorException("Invalid Paimon publication state transition");
         }
         publicationState = next;
+        recordPublicationState();
+    }
+
+    private void recordPublicationState() {
+        Tracers.record(tracers, Tracers.Module.EXTERNAL, "PaimonOperationId", operationId);
+        Tracers.record(tracers, Tracers.Module.EXTERNAL, "PaimonPublicationState", publicationState.name());
     }
 
     public synchronized boolean canAbort() {

@@ -14,62 +14,29 @@
 
 #include "connector/hive/paimon/paimon_cpp_loader.h"
 
-#include <atomic>
-#include <cstdlib>
-#include <mutex>
-#include <string>
-
-#include "base/utility/dynamic_util.h"
 #include "connector/hive/paimon/paimon_chunk_sink.h"
 #include "connector/hive/paimon/paimon_cpp_shim_api.h"
 #include "fmt/format.h"
+#include "runtime/paimon_cpp_library.h"
 
 namespace starrocks {
 namespace {
 
-constexpr const char* kShimLibraryName = "libstarrocks_paimon.so";
-
-std::string shim_library_path() {
-    const char* home = std::getenv("STARROCKS_HOME");
-    if (home == nullptr) {
-        return kShimLibraryName;
-    }
-    return std::string(home) + "/lib/paimon-cpp-lib/" + kShimLibraryName;
-}
-
-// Never dlclose a usable shim: BE objects keep its vtables for their entire lifetime.
-std::mutex load_mutex;
-void* shim_handle = nullptr; // Protected by load_mutex.
-std::atomic<StarRocksPaimonCreateScannerFn> create_scanner_fn{nullptr};
-std::atomic<StarRocksPaimonCreateSinkFn> create_sink_fn{nullptr};
-
 template <typename Fn>
-StatusOr<Fn> load_capability(std::atomic<Fn>& cached, const char* symbol, bool reader) {
-    auto fn = cached.load(std::memory_order_acquire);
-    if (fn != nullptr) return fn;
-    std::lock_guard<std::mutex> guard(load_mutex);
-    fn = cached.load(std::memory_order_acquire);
-    if (fn != nullptr) return fn;
-    if (shim_handle == nullptr) {
-        const auto path = shim_library_path();
-        if (Status st = dynamic_open(path.c_str(), &shim_handle); !st.ok()) {
-            shim_handle = nullptr;
-            return Status::InternalError(fmt::format(
-                    "Paimon native {} is unavailable: {}. Install the matching BE's paimon-cpp-lib package.{}",
-                    reader ? "reader" : "writer", st.message(),
-                    reader ? " Set paimon_reader_mode=JNI to use the JNI reader instead." : ""));
+StatusOr<Fn> load_capability(PaimonCppLibrary::Capability capability, const char* symbol, bool reader) {
+    auto result = PaimonCppLibrary::instance().get_symbol(capability);
+    if (!result.ok()) {
+        if (result.status().is_not_supported()) {
+            return Status::NotSupported(fmt::format(
+                    "Paimon shim lacks {} capability ({}). Install the matching BE's paimon-cpp-lib package: {}",
+                    reader ? "reader" : "native writer v1", symbol, result.status().message()));
         }
+        return Status::InternalError(
+                fmt::format("Paimon native {} is unavailable: {}. Install the matching BE's paimon-cpp-lib package.{}",
+                            reader ? "reader" : "writer", result.status().message(),
+                            reader ? " Set paimon_reader_mode=JNI to use the JNI reader instead." : ""));
     }
-    void* address = nullptr;
-    if (Status st = dynamic_lookup(shim_handle, symbol, &address); !st.ok()) {
-        // Do not tear down the independently available scanner when an older shim lacks writes.
-        return Status::NotSupported(fmt::format(
-                "Paimon shim lacks {} capability ({}). Install the matching BE's paimon-cpp-lib package: {}",
-                reader ? "reader" : "native writer v1", symbol, st.message()));
-    }
-    fn = reinterpret_cast<Fn>(address);
-    cached.store(fn, std::memory_order_release);
-    return fn;
+    return reinterpret_cast<Fn>(result.value());
 }
 
 class DeferredPaimonSink final : public connector::ConnectorSink {
@@ -79,7 +46,8 @@ public:
 
     Status init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
                 connector::SinkMemoryManager* memory) override {
-        auto result = load_capability(create_sink_fn, STARROCKS_PAIMON_CREATE_SINK_SYMBOL, false);
+        auto result = load_capability<StarRocksPaimonCreateSinkFn>(PaimonCppLibrary::Capability::SINK,
+                                                                   STARROCKS_PAIMON_CREATE_SINK_SYMBOL, false);
         if (!result.ok()) return _status = result.status();
         _delegate.reset(result.value()(_context, _driver_id));
         if (_delegate == nullptr) return _status = Status::InternalError("Paimon shim returned a null writer");
@@ -109,7 +77,9 @@ private:
 } // namespace
 
 StatusOr<HdfsScanner*> create_paimon_cpp_scanner() {
-    ASSIGN_OR_RETURN(auto fn, load_capability(create_scanner_fn, STARROCKS_PAIMON_CREATE_SCANNER_SYMBOL, true));
+    ASSIGN_OR_RETURN(auto fn,
+                     load_capability<StarRocksPaimonCreateScannerFn>(PaimonCppLibrary::Capability::SCANNER,
+                                                                     STARROCKS_PAIMON_CREATE_SCANNER_SYMBOL, true));
     return fn();
 }
 

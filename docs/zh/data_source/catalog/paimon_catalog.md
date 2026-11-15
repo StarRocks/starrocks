@@ -850,7 +850,7 @@ SELECT 2, 'two';
 
 支持显式列列表和 `BY NAME`。指定静态分区时，输入中不包含分区列，分区列在原生 schema 中的位置不受限制。省略的可空列填充 NULL，必填列必须提供值。对于配置了 Paimon 原生默认值的列，需要显式提供值，暂不支持省略该列或使用 `DEFAULT`。
 
-写入要求启用 Pipeline 引擎、使用 Parquet 数据文件，并且 FE/BE 版本一致、BE 安装原生 Paimon writer。写入使用 catalog 的存储凭据。`paimon_reader_mode` 只选择读取方式，不改变写入实现。暂不支持显式事务、部分列更新、主键表动态分桶、跨分区主键更新、data evolution、row tracking、全局索引和外部数据路径。
+写入要求使用 Parquet 数据文件，并且 FE/BE 版本一致、BE 安装原生 Paimon writer。写入使用 catalog 的存储凭据。`paimon_reader_mode` 只选择读取方式，不改变写入实现。暂不支持显式事务、部分列更新、主键表动态分桶、跨分区主键更新、data evolution、row tracking、全局索引和外部数据路径。
 
 分区列支持布尔、整数、字符串和日期类型。空字符串、纯空白字符串以及保留的默认分区名称会被拒绝，因为原生 SDK 无法将这些值与 NULL 分区区分保存。每个 Sink Driver 默认最多管理 64 个活跃的分区/分桶 Writer，原生和 Arrow 分配的内存预算为 256 MiB；超过限制会在发布前使语句失败。可通过表属性 `starrocks.paimon.max-active-writers`（1–4096）和 `starrocks.paimon.max-writer-memory-bytes`（2 MiB–4 GiB，以字节指定）调整限制，同时仍受查询内存限制约束。
 

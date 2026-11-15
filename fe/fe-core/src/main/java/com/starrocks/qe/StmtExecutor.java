@@ -97,7 +97,6 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergMetadata;
-import com.starrocks.connector.paimon.PaimonCommitUnknownException;
 import com.starrocks.connector.paimon.PaimonSinkExtra;
 import com.starrocks.failpoint.FailPointExecutor;
 import com.starrocks.http.HttpConnectContext;
@@ -459,10 +458,6 @@ public class StmtExecutor {
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Query");
         summaryProfile.addInfoString(ProfileManager.QUERY_STATE, context.getState().toProfileString());
-        if (paimonOperation != null) {
-            summaryProfile.addInfoString("PaimonOperationId", paimonOperation.getOperationId());
-            summaryProfile.addInfoString("PaimonPublicationState", paimonOperation.getPublicationState().name());
-        }
         summaryProfile.addInfoString(ProfileKeyDictionary.STARROCKS_VERSION,
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
@@ -1411,8 +1406,7 @@ public class StmtExecutor {
             String sql = originStmt != null ? originStmt.originStmt : "";
             LOG.warn("execute Exception, sql: {}", LogUtil.redactSqlForLog(sql, parsedStmt),
                     LogUtil.desensitize(e));
-            context.getState().setError(e instanceof PaimonCommitUnknownException
-                    ? e.getMessage() : LogUtil.getUnwoundExceptionMessage(e));
+            context.getState().setError(LogUtil.getUnwoundExceptionMessage(e));
             context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
@@ -3690,9 +3684,6 @@ public class StmtExecutor {
                     "explain analyze only supports insert into olap native table");
         }
         if (targetTable.isPaimonTable()) {
-            if (!(stmt instanceof InsertStmt) || context.getTxnId() != 0) {
-                throw new SemanticException("Paimon writes require an autocommit INSERT statement");
-            }
             if (execPlan.getFragments().isEmpty()
                     || !(execPlan.getFragments().get(0).getSink() instanceof PaimonTableSink sink)) {
                 throw new StarRocksConnectorException("Paimon write is missing its native sink context");
@@ -4172,7 +4163,6 @@ public class StmtExecutor {
                 LOG.warn("errors when abort txn", abortTxnException);
             }
 
-
             // if not using old load usage pattern, error will be returned directly to user
             StringBuilder sb = new StringBuilder(errMsg);
             if (coord != null && !Strings.isNullOrEmpty(coord.getTrackingUrl())) {
@@ -4191,9 +4181,6 @@ public class StmtExecutor {
                 }
             } catch (Exception abortTxnException) {
                 LOG.warn("errors when cancel insert load job {}", jobId);
-            }
-            if (targetTable.isPaimonTable() && t instanceof StarRocksConnectorException connectorException) {
-                throw connectorException;
             }
             throw new StarRocksException(t.getMessage(), t);
         } finally {
