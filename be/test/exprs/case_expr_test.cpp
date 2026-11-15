@@ -1514,13 +1514,15 @@ static void run_date_or_datetime_case_when_test() {
             ASSERT_EQ(kNumRows, res->size());
 
             if (mode == 4) {
-                // When SIMD_muti_selector is enabled and arity <= max_simd_case_when_size (8),
-                // evaluate_no_case unpacks ConstColumn WHEN inputs to kNumRows; the >8 scalar fallback does not.
-                if (arity <= 8) {
-                    ASSERT_EQ(kNumRows, const_when_data->size());
-                } else {
-                    ASSERT_EQ(1u, const_when_data->size());
-                }
+                // evaluate_no_case only enables SIMD_muti_selector for DATE/DATETIME under __AVX2__.
+                // When active with arity <= max_simd_case_when_size (8), ConstColumn WHEN inputs are
+                // unpacked in place to kNumRows; non-AVX2 builds and arity > 8 keep size 1.
+#if defined(__AVX2__)
+                const size_t expected_const_when_size = (arity <= 8) ? kNumRows : size_t{1};
+#else
+                const size_t expected_const_when_size = size_t{1};
+#endif
+                ASSERT_EQ(expected_const_when_size, const_when_data->size());
             }
 
             ColumnViewer<LT> viewer(res);
