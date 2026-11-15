@@ -53,7 +53,7 @@ The version of StarRocks is represented by three numbers in the form **Major.Min
 > 1. Run [ALTER SYSTEM CREATE IMAGE](../../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) to create a new image.
 > 2. Wait for the new image to be synchronized to all Follower FEs.
 >
-> You can check whether the image file has been synchronized by viewing the log file **fe.log** of the Leader FE. A record of log like "push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" suggests that the image file has been successfully synchronized.
+> You can check whether the image file has been synchronized by viewing the log file **fe.log** of the Leader FE. A record of log like "push image.* from subdir [] to other nodes. totally xx nodes, push succeeded xx nodes" suggests that the image file has been successfully synchronized.
 
 ### Upgrade procedure
 

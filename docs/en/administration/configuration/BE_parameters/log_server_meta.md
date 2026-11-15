@@ -111,7 +111,7 @@ This topic introduces the following types of BE configurations:
 - Type: String
 - Unit: -
 - Is mutable: Yes (from v3.3.0, v3.2.7, and v3.1.12)
-- Description: The severity levels into which system log entries are classified. Valid values: INFO, WARNING, ERROR, and FATAL. At startup, if the value in the configuration file is none of these, it is reported in the log and INFO is used, so an invalid value cannot leave the BE without working logging. At runtime, an invalid value is instead rejected with an error and the level in effect is left unchanged. This item was changed to a dynamic configuration from v3.3.0, v3.2.7, and v3.1.12 onwards.
+- Description: The severity levels into which system log entries are classified. Valid values: INFO, WARNING, ERROR, and FATAL. At startup, if the value in the configuration file is none of these, it is reported in the log and INFO is used, so an invalid value cannot leave the BE without working logging. At runtime, an invalid value is instead rejected with an error and the level in effect is left unchanged. This item was changed to a dynamic configuration from v3.3.0, v3.2.7, and v3.1.12 onwards. However, a runtime modification changes the log level in effect only in v3.1.12 to v3.1.13, v3.2.7 to v3.2.8, v3.3.0, and from v4.0.16 and v4.1.6 onwards. In other versions, the item can be modified at runtime, but the log level in effect does not change.
 - Introduced in: -
 
 ### sys_log_roll_mode
@@ -435,9 +435,9 @@ This topic introduces the following types of BE configurations:
 - Default: `percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false`
 - Type: string
 - Unit: -
-- Is mutable: Yes (only some options)
+- Is mutable: Yes (only some options; from v4.0.16 and v4.1.6 onwards. Not mutable in v4.1.3 and v4.1.4)
 - Description: The jemalloc runtime options that `bin/start_backend.sh` exports as the `JEMALLOC_CONF` environment variable when the BE is started in the normal mode. This item is ignored if `JEMALLOC_CONF` is already set in the environment, and if the BE is started with `--jemalloc_debug` or `--check_mem_leak`, because those modes force their own option string. jemalloc reads `JEMALLOC_CONF` before the BE parses its configuration, so modifying this item at runtime only re-applies the options that jemalloc itself allows to be changed after initialization: `dirty_decay_ms`, `muzzy_decay_ms`, and `prof_active`. Adding, removing, or changing any other option is rejected with an error and the configuration value is rolled back, which means those options require restarting the BE. `prof_active` can only be changed if the BE was started with `prof:true`. Setting `dirty_decay_ms` or `muzzy_decay_ms` to `0` purges all unused pages synchronously and can therefore make the modification take a while, and setting it to `-1` disables purging.
-- Introduced in: v4.0.15, v4.1.3
+- Introduced in: v4.0.16, v4.1.3
 
 ### large_memory_alloc_report_threshold
 
@@ -472,7 +472,7 @@ This topic introduces the following types of BE configurations:
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100G"). The default hard limit is 90% of the server's memory size, and the soft limit is 80%. You need to configure this parameter if you want to deploy StarRocks with other memory-intensive services on a same server.
+- Description: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100G"). The default value is 90% of the server's memory size. The BE uses 90% of `mem_limit` as the memory limit of the process memory tracker, which is 81% of the server's memory size by default. You need to configure this parameter if you want to deploy StarRocks with other memory-intensive services on a same server.
 - Introduced in: -
 
 ### memory_max_alignment
@@ -508,7 +508,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Cores
 - Is mutable: No
-- Description: Controls the number of CPU cores the system will use for CPU-aware decisions (for example, thread-pool sizing and runtime scheduling). A value of 0 enables auto-detection: the system reads `/proc/cpuinfo` and uses all available cores. If set to a positive integer, that value overrides the detected core count and becomes the effective core count. When running inside containers, cgroup cpuset or cpu quota settings can further restrict usable cores; `CpuInfo` also respects those cgroup limits.
+- Description: Controls the number of CPU cores the system will use for CPU-aware decisions (for example, thread-pool sizing and runtime scheduling). A value of 0 enables auto-detection: the system reads `/proc/cpuinfo` and uses all available cores. If set to a positive integer, that value overrides the detected core count and becomes the effective core count. When running inside a Docker container (that is, when the file `/.dockerenv` exists), the auto-detected core count is further restricted by the cgroup cpuset or cpu quota settings. Outside of such containers, cgroup limits are not read.
 - Introduced in: v3.2.0
 
 ### plugin_path

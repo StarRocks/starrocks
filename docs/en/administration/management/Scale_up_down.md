@@ -13,7 +13,7 @@ This topic describes how to scale in and out the node of StarRocks.
 
 StarRocks has two types of FE nodes: Follower and Observer. Followers are involved in election voting and writing. Observers are only used to synchronize logs and extend read performance.
 
-> * The number of follower FEs (including leader) must be odd, and it is recommended to deploy 3 of them to form a High Availability (HA) mode.
+> * We recommend that the number of follower FEs (including leader) be odd, and that 3 of them be deployed to form a High Availability (HA) mode.
 > * When the FE is in high availability deployment (1 leader, 2 followers), it is recommended to add Observer FEs for better read performance. 
 
 ### Scale FE out

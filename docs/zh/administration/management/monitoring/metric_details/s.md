@@ -846,7 +846,7 @@ products: [oss, enterprise, cloud, anywhere]
 
 - 单位：计数
 - 类型：瞬时
-- 描述：表示每个 BE 节点上的最高 Compaction Score。
+- 描述：表示每个 BE 节点上的最高 Compaction Score，即 `tablet_base_max_compaction_score` 和 `tablet_cumulative_max_compaction_score` 中的较大值。不包含主键表的 Compaction Score（`tablet_update_max_compaction_score`）。
 
 ## `starrocks_fe_tablet_num`
 

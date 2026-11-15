@@ -111,11 +111,12 @@ In 3.3.6+, the database will periodically print the memory profile and output it
 Control configuration:
 
 ```properties
-proc_profile_collect_interval_s = 600
-proc_profile_collect_time_s = 300
+proc_profile_collect_time_s = 120
 proc_profile_cpu_enable = true
 proc_profile_mem_enable = true
 ```
+
+From v3.4.5 and v3.5.0 onwards, the CPU profile and the memory profile are collected in turn without interval, each for `proc_profile_collect_time_s` seconds. In earlier versions, the default value of `proc_profile_collect_time_s` is `300`, and `proc_profile_collect_interval_s` (default: `600`) controls the interval between collections.
 
 For versions prior to 3.3.6, you can periodically print the profile via a script. Create a new script file named `mem_profiler.sh` under the installation directory of each FE and copy the following content into the file.
 
@@ -298,24 +299,24 @@ If the `O` (Old Generation) percentage has been relatively high, it indicates a 
 
 **5. Observe whether there is a leak through the FE's memory tracker (3.3.7+)**
 
-You can locate which module has a memory leak by checking the logs of `MemoryUsageTracker`, which prints the memory consumption of each module once every hour:
+You can locate which module has a memory leak by checking the logs of `MemoryUsageTracker`, which prints the object count of each module every `memory_tracker_interval_seconds` (default: 60) seconds. From v4.0.7 and v4.1.0 onwards, these periodic logs no longer include the estimated memory size of each module. You can query `sys.fe_memory_usage` (v4.0.17, v4.1.7, and later) to get the estimated sizes. In earlier versions, each log line also includes the estimated memory size of the module, for example, `LocalMetastore estimated 3.8MB of memory`.
 
-```
-2025-06-06 16:37:50.633+08:00 INFO (MemoryUsageTracker|74)
-[MemoryUsageTracker.trackMemory():161] (6ms) Module Dict -
-CacheDictManager estimated 0B of memory. Contains ColumnDict with 0 object(s).
+```plaintext
+2025-06-06 16:37:50.633+08:00 INFO (memory-usage-tracker|74)
+[MemoryUsageTracker.trackCount():236] Module Dict -
+CacheDictManager. Contains ColumnDict with 0 object(s).
 
-2025-06-06 16:37:50.657+08:00 INFO (MemoryUsageTracker|74)
-[MemoryUsageTracker.trackMemory():161] (21ms) Module LocalMetastore -
-LocalMetastore estimated 3.8MB of memory. Contains Partition with 17473 object(s).
+2025-06-06 16:37:50.657+08:00 INFO (memory-usage-tracker|74)
+[MemoryUsageTracker.trackCount():236] Module LocalMetastore -
+LocalMetastore. Contains Partition with 17473 object(s).
 
-2025-06-06 16:37:50.667+08:00 INFO (MemoryUsageTracker|74)
-[MemoryUsageTracker.trackMemory():161] (0ms) Module TabletInvertedIndex -
-TabletInvertedIndex estimated 37.7MB of memory. Contains TabletMeta with 353459 object(s).
+2025-06-06 16:37:50.667+08:00 INFO (memory-usage-tracker|74)
+[MemoryUsageTracker.trackCount():236] Module TabletInvertedIndex -
+TabletInvertedIndex. Contains TabletMeta with 353459 object(s).
 
-2025-06-06 16:37:50.741+08:00 INFO (MemoryUsageTracker|74)
-[MemoryUsageTracker.trackMemory():108] total tracked memory: 46.8MB,
-jvm: Process used: 18.6GB, heap used: 4.4GB, non heap used: 289.1MB, direct buffer used: 395.5MB
+2025-06-06 16:37:50.741+08:00 INFO (memory-usage-tracker|74)
+[MemoryUsageTracker.trackMemory():125] jvm: heap committed: 8.0GB,
+heap used: 4.4GB, non heap used: 289.1MB, direct buffer used: 395.5MB
 ```
 
 Compare the memory growth of each module across recent log entries to identify which module is growing.
@@ -402,21 +403,7 @@ This file may be very large (several GB) and needs to be opened and analyzed usi
 Add the following to the JVM configuration in `fe.conf` to automatically generate a dump file when FE runs out of memory:
 
 ```bash
-JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true \
-  -Xmx8192m \
-  -XX:+UseG1GC \
-  -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time \
-  -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log \
-  -XX:+HeapDumpOnOutOfMemoryError \
-  -XX:HeapDumpPath=${LOG_DIR}/heap_dump_oom.hprof \
-  -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy \
-  -Djava.security.krb5.conf=/etc/krb5.conf \
-  -Dsun.security.krb5.debug=true \
-  -Dsun.security.spnego.debug=true \
-  -Dcom.sun.management.jmxremote \
-  -Dcom.sun.management.jmxremote.authenticate=false \
-  -Dcom.sun.management.jmxremote.ssl=false \
-  -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:8113"
+JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=${LOG_DIR}"
 ```
 
 Note: `HeapDumpPath` specifies a directory path, not a file name.
@@ -427,18 +414,18 @@ Starting from version 3.3.6, memory profiles are output to the `log/proc_profile
 
 Find the file corresponding to the time of memory increase, decompress it, and open it in a browser to see the flame graph of memory allocation. The wider part of the stack represents more memory allocation.
 
-If no memory profile is printed during the period of memory increase, you can turn off the CPU profile and adjust the printing interval to 5 minutes:
+If no memory profile is printed during the period of memory increase, you can turn off the CPU profile so that only the memory profile is collected:
 
 ```properties
 proc_profile_cpu_enable = false
-proc_profile_collect_interval_s = 300
 ```
 
-These are dynamic parameters that can be modified directly without restart:
+In versions earlier than v3.4.5, you can also set `proc_profile_collect_interval_s` to `300` to adjust the printing interval to 5 minutes.
+
+This is a dynamic parameter that can be modified directly without restart:
 
 ```sql
 ADMIN SET FRONTEND CONFIG ("proc_profile_cpu_enable" = "false");
-ADMIN SET FRONTEND CONFIG ("proc_profile_collect_interval_s" = "300");
 ```
 
 ## Emergency Recovery
@@ -450,15 +437,7 @@ ADMIN SET FRONTEND CONFIG ("proc_profile_collect_interval_s" = "300");
 Modify the `-Xmx` value in `fe.conf`:
 
 ```bash
-JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC \
-  -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time \
-  -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log \
-  -XX:+HeapDumpOnOutOfMemoryError \
-  -XX:HeapDumpPath=${LOG_DIR}/heap_dump_oom.hprof \
-  -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy \
-  -Dcom.sun.management.jmxremote.authenticate=false \
-  -Dcom.sun.management.jmxremote.ssl=false \
-  -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:8113"
+JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=${LOG_DIR}"
 ```
 
 **3. If the machine itself has limited memory**, restarting may still result in OOM issues. Consider expanding the machine's memory, then increasing the JVM configuration before restarting.

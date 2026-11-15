@@ -63,7 +63,7 @@ SHOW ROLES;
 
 ### 创建角色
 
-您可以使用 [CREATE ROLE](../../../sql-reference/sql-statements/account-management/CREATE_ROLE.md) 创建角色。默认情况下，用户最多可以拥有 64 个角色。您可以使用 FE 动态参数 `privilege_max_total_roles_per_user` 调整此设置。角色最多可以有 16 个继承级别。您可以使用 FE 动态参数 `privilege_max_role_depth` 调整此设置。
+您可以使用 [CREATE ROLE](../../../sql-reference/sql-statements/account-management/CREATE_ROLE.md) 创建角色。默认情况下，用户最多可以拥有 64 个角色（包括通过已授予角色继承的角色），该限制在将角色授予用户时进行检查。您可以使用 FE 动态参数 `privilege_max_total_roles_per_user` 调整此设置。角色最多可以有 16 个继承级别。您可以使用 FE 动态参数 `privilege_max_role_depth` 调整此设置。
 
 以下示例创建了角色 `example_role`：
 

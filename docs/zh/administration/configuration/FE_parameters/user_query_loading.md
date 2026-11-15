@@ -97,7 +97,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位:
 - 是否可变: Yes
-- 描述: 用户可以拥有的最大角色数量。
+- 描述: 用户可以拥有的最大角色数量，包括通过已授予角色继承的角色。该限制在将角色授予用户时进行检查。
 - 引入版本: v3.0.0
 
 ### `ranger_hive_catalog_prefix_enabled`

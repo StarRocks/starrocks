@@ -21,8 +21,8 @@ products: [oss, enterprise, cloud, anywhere]
 ## 構文
 
 ```SQL
-CREATE RESOURCE GROUP resource_group_name 
-TO CLASSIFIER1, CLASSIFIER2, ...
+CREATE RESOURCE GROUP [IF NOT EXISTS] [OR REPLACE] resource_group_name 
+[TO CLASSIFIER1, CLASSIFIER2, ...]
 WITH resource_limit
 ```
 
@@ -30,7 +30,11 @@ WITH resource_limit
 
 - `resource_group_name`: 作成するリソースグループの名前。
 
-- `CLASSIFIER`: リソース制限が課されるクエリをフィルタリングするために使用されるクラシファイア（分類器）。クラシファイアは`"key"="value"`ペアで指定する必要があります。リソースグループに対して複数のクラシファイアを設定できます。
+- `IF NOT EXISTS`: 同じ名前のリソースグループがすでに存在する場合、このステートメントは何も実行せず、エラーも返しません。
+
+- `OR REPLACE`: 同じ名前のリソースグループがすでに存在する場合、そのリソースグループは新しいリソースグループに置き換えられます。
+
+- `CLASSIFIER`: リソース制限が課されるクエリをフィルタリングするために使用されるクラシファイア（分類器）。クラシファイアは`"key"="value"`ペアで指定する必要があります。リソースグループに対して複数のクラシファイアを設定できます。`TO` とクラシファイアは必須です。ただし、`type` が `mv` のリソースグループ（v3.1.0 以降でサポート）はクラシファイアをサポートしないため除きます。
 
   クラシファイアのパラメータは以下の通りです：
 

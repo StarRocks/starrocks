@@ -99,7 +99,7 @@ The following limits apply when you use a StarRocks external table:
 
 * You can only run the INSERT INTO and SHOW CREATE TABLE commands on a StarRocks external table. Other data writing methods are not supported. In addition, you cannot query data from a StarRocks external table or perform DDL operations on the external table.
 * The syntax of creating an external table is the same as creating a normal table, but the column names and other information in the external table must be the same as the destination table.
-* The external table synchronizes table metadata from the destination table every 10 seconds. If a DDL operation is performed on the destination table, there may be a delay for data synchronization between the two tables.
+* From v2.5.8, v3.0.3, v3.1.4, and v3.2.0 onwards, the external table synchronizes table metadata from the destination table each time an INSERT INTO statement is run on it. In earlier versions, the external table synchronizes table metadata from the destination table every 10 seconds, and if a DDL operation is performed on the destination table, there may be a delay for data synchronization between the two tables.
 
 ## (Deprecated) External table for a JDBC-compatible database
 

@@ -70,7 +70,7 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 | **变量**                            | **默认值** | **描述**                                                     |
 | ----------------------------------- | ---------- | ------------------------------------------------------------ |
-| query_queue_concurrency_limit       | 0          | 单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。      |
+| query_queue_concurrency_limit       | 0          | 并发查询上限。自 v3.1.4 起，正在运行的查询数量由 Leader FE 统计。在更早的版本中，该上限作用于各个 BE 上报的正在运行的查询数量。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。      |
 | query_queue_mem_used_pct_limit      | 0          | 单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。取值范围：[0, 1] |
 | query_queue_cpu_used_permille_limit | 0          | 单个 BE 节点中 CPU 使用千分比上限（即 CPU 使用率 * 1000）。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。取值范围：[0, 1000] |
 
@@ -87,7 +87,7 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 | **属性**           | **默认值** | **描述**                                                                            |
 |--------------------|------------|--------------------------------------------------------------------------------------|
-| concurrency_limit  | 0          | 该资源组在单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。                     |
+| concurrency_limit  | 0          | 该资源组的并发查询上限。对于资源组粒度的查询队列，该资源组正在运行的查询数量由 Leader FE 统计。仅在设置为大于 `0` 后生效。                     |
 | max_cpu_cores      | 0          | 该资源组在单个 BE 节点中使用的 CPU 核数上限。仅在设置为大于 `0` 后生效。取值范围：[0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。 |
 | mem_used_pct_limit | 0          | 该资源组在单个 BE 节点中的内存使用率上限。仅在设置为大于 `0` 后生效。取值范围：[0, 1] |
 
@@ -145,7 +145,7 @@ Query Queue v2 通过 FE 配置项启用和调整。其中，修改 `enable_quer
 | `query_queue_v2_mem_bytes_per_slot` | `0` | 基于内存成本估算策略（MBE）使用的每 Slot 内存目标值。当 `query_queue_slots_estimator_strategy` 设置为 `MBE` 时，总 Slot 数由 Warehouse 的内存预算计算得到，而单个查询所需的 Slot 数由其总内存成本除以该值计算，并限制在 `number_of_workers * max(1, pipeline_dop / 2)` 以内。如果该值小于等于 0，则 Query Queue V2 会使用每个 Worker 每个 CPU Core 的平均可用内存作为默认值。 |
 | `query_queue_v2_cpu_costs_per_slot` | `1000000000` | 基于 CPU 成本估算策略（CBE）使用的每 Slot CPU 成本阈值，用于根据查询执行计划的 CPU 成本估算所需的 Slot 数。调度器按照 `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)` 计算 Slot 数，并将结果限制在 `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]` 范围内。如果该值小于等于 0，则会自动规范化为 `1`。增大该值会减少每个查询分配的 Slot 数，从而提高整体并发能力；减小该值则会增加每个查询分配的 Slot 数，从而降低并发能力。 |
 | `query_queue_mem_used_pct_limit` | `0` | 全局会话变量。节点的内存使用率阈值，以节点内存上限的比例表示。当任一存活节点的进程内存使用率达到该值时，新查询在队列中等待。取值范围：[0, 1]。`0` 表示不做内存准入。详细信息，参见 [内存准入](#内存准入)。 |
-| `query_queue_concurrency_limit` | `0` | 单个 BE 上允许同时运行的查询数上限。仅当该值大于 `0` 时才生效。设置为 `0` 表示不限制并发查询数量。 |
+| `query_queue_concurrency_limit` | `0` | 允许同时运行的查询数上限。正在运行的查询数量由 Leader FE 统计。仅当该值大于 `0` 时才生效。设置为 `0` 表示不限制并发查询数量。 |
 
 :::note
 
@@ -162,7 +162,7 @@ Query Queue v2 将 BE 资源表示为逻辑 Slot：
 
 ### 排队逻辑
 
-当一个 Query 需要的 Slot 数量超过当前剩余的 Slot 数量时，该 Query 会进入队列等待。Query Queue v2 会优先满足 Slot 需求量较小的 Query，使小查询可以先获得资源，避免大查询长期占用队首导致后续小查询被阻塞，即队头阻塞（Head-of-line blocking）问题。
+当一个 Query 需要的 Slot 数量超过当前剩余的 Slot 数量时，该 Query 会进入队列等待。默认情况下（`query_queue_v2_schedule_strategy` 为 `SWRR`），Query Queue v2 会根据 Query 需要的 Slot 数量将排队的 Query 分为多个类别，并使用平滑加权轮询（Smooth Weighted Round Robin）算法从各个类别中选择 Query。Slot 需求量较小的类别权重更高，使小查询可以先获得资源，避免大查询长期占用队首导致后续小查询被阻塞，即队头阻塞（Head-of-line blocking）问题，同时 Slot 需求量较大的 Query 也不会被饿死。在 v4.1.4 之前的版本中，只需要一个 Slot 的 Query 还可以从额外的小 Slot 池中获得准入。如果将 `query_queue_v2_schedule_strategy` 设置为 `SJF`（自 v3.5.0 起支持），Query Queue v2 会优先调度短作业，并通过老化（Aging）机制避免饿死。
 
 整个排队逻辑都在 FE 上完成，包括设置集群总 Slot 数量、估算 Query 需要的 Slot 数量，以及决定优先满足哪个 Query 的 Slot 需求。Slot 调度不依赖 BE 的实际资源使用情况。唯一取自实际用量的输入是可选的内存使用率阈值 `query_queue_mem_used_pct_limit`：当有节点的内存使用过高时，新查询会等待。详细信息，参见 [内存准入](#内存准入)。
 
@@ -389,6 +389,14 @@ MySQL [(none)]> SHOW PROCESSLIST;
 | starrocks_fe_resource_group_query_queue_total   | 个   | 瞬时值 | 该资源组历史排队的查询数量（包括正在运行的查询）。Label `name` 表示该资源组的名称。从 v3.1.4 版本起，StarRocks 支持该指标。 |
 | starrocks_fe_resource_group_query_queue_pending | 个   | 瞬时值 | 该资源组正在排队的查询数量。Label `name` 表示该资源组的名称。从 v3.1.4 版本起，StarRocks 支持该指标。 |
 | starrocks_fe_resource_group_query_queue_timeout | 个   | 瞬时值 | 该资源组排队超时的查询数量。Label `name` 表示该资源组的名称。从 v3.1.4 版本起，StarRocks 支持该指标。 |
+| starrocks_fe_query_queue_slot_pending           | 个   | 瞬时值 | 队列中的查询需要的 Slot 数量。该指标仅由 Leader FE 上报。从 v3.4.0 版本起，StarRocks 支持该指标。 |
+| starrocks_fe_query_queue_slot_running           | 个   | 瞬时值 | 已分配给正在运行的查询的 Slot 数量。该指标仅由 Leader FE 上报。从 v3.4.0 版本起，StarRocks 支持该指标。 |
+| starrocks_fe_query_queue_v2_category_pending_slots | 个   | 瞬时值 | Query Queue v2：各类别中排队的查询需要的 Slot 数量。Label `category` 表示类别的序号。该指标仅由 Leader FE 上报。从 v3.4.0 版本起，StarRocks 支持该指标。 |
+| starrocks_fe_query_queue_v2_category_running_slots | 个   | 瞬时值 | Query Queue v2：各类别中已分配给正在运行的查询的 Slot 数量。Label `category` 表示类别的序号。该指标仅由 Leader FE 上报。从 v3.4.0 版本起，StarRocks 支持该指标。 |
+| starrocks_fe_query_queue_v2_category_total_allocated_slots | 个   | 瞬时值 | Query Queue v2：各类别历史累计分配的 Slot 数量。Label `category` 表示类别的序号。该指标仅由 Leader FE 上报。从 v3.4.0 版本起，StarRocks 支持该指标。 |
+| starrocks_fe_query_queue_v2_category_weight     | -    | 瞬时值 | Query Queue v2：各类别在平滑加权轮询算法中的权重。Label `category` 表示类别的序号。该指标仅由 Leader FE 上报。从 v3.4.0 版本起，StarRocks 支持该指标。 |
+| starrocks_fe_query_queue_v2_category_min_slots  | 个   | 瞬时值 | Query Queue v2：各类别中的查询需要的最小 Slot 数量。Label `category` 表示类别的序号。该指标仅由 Leader FE 上报。从 v3.4.0 版本起，StarRocks 支持该指标。 |
+| starrocks_fe_query_queue_v2_category_state      | -    | 瞬时值 | Query Queue v2：各类别在平滑加权轮询算法中的当前状态值。Label `category` 表示类别的序号。该指标仅由 Leader FE 上报。从 v3.4.0 版本起，StarRocks 支持该指标。 |
 
 ### SHOW RUNNING QUERIES
 

@@ -27,12 +27,13 @@ import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
 - 排序运算符
 - 哈希连接（LEFT JOIN, RIGHT JOIN, FULL JOIN, OUTER JOIN, SEMI JOIN 和 INNER JOIN）运算符
 - CTE 运算符（从 v3.3.4 开始支持）
+- Nested Loop Join（CROSS JOIN）运算符（从 v3.1.0 开始支持，且仅在 `spill_mode` 设置为 `force` 时落盘）
 
 ## 启用中间结果落盘
 
 按照以下步骤启用中间结果落盘：
 
-1. 在 BE 配置文件 **be.conf** 或 CN 配置文件 **cn.conf** 中指定本地落盘目录 `spill_local_storage_dir`，用于存储本地磁盘上的中间结果，并重启集群以使修改生效。
+1. （可选）在 BE 配置文件 **be.conf** 或 CN 配置文件 **cn.conf** 中指定本地落盘目录 `spill_local_storage_dir`，用于存储本地磁盘上的中间结果，并重启集群以使修改生效。如不指定，则使用默认目录 `${STARROCKS_HOME}/spill`。
 
    ```Properties
    spill_local_storage_dir=/<dir_1>[;/<dir_2>]
@@ -62,7 +63,7 @@ import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
    | **变量** | **默认值** | **描述** |
    | ------------ | ----------- | ------------------------------------------------------------ |
    | enable_spill | false       | 是否启用中间结果落盘。如果设置为 `true`，StarRocks 会将中间结果落盘，以减少处理查询中的聚合、排序或连接运算符时的内存使用。 |
-   | spill_mode   | auto        | 中间结果落盘的执行模式。有效值：<ul><li>`auto`: 当达到内存使用阈值时自动触发落盘。</li><li>`force`: 无论内存使用情况如何，StarRocks 强制对所有相关运算符执行落盘。</li></ul>此变量仅在 `enable_spill` 变量设置为 `true` 时生效。 |
+   | spill_mode   | auto        | 中间结果落盘的执行模式。有效值：<ul><li>`auto`: 当达到内存使用阈值时自动触发落盘。</li><li>`force`: 无论内存使用情况如何，StarRocks 强制对所有相关运算符执行落盘。</li></ul>系统也接受 `none` 和 `random` 两个值，但它们仅用于内部测试。此变量仅在 `enable_spill` 变量设置为 `true` 时生效。 |
 
 ## [预览] 中间结果落盘到对象存储
 

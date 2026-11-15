@@ -31,9 +31,9 @@ SHOW PROPERTY FOR 'root';
 
 セッション変数は 'key' = 'value' で設定でき、現在のセッションでの並行性、メモリ、その他のクエリパラメータを制限できます。例えば：
 
-- parallel_fragment_exec_instance_num
+- pipeline_dop
 
-  クエリの並行性で、デフォルト値は1です。各 BE 上のフラグメントインスタンスの数を示します。クエリパフォーマンスを向上させるために、BE の CPU コア数の半分に設定できます。
+  パイプラインインスタンスの並行性で、クエリの並行性を調整するために使用されます。デフォルト値 `0` は、システムが並行性を自動的に調整することを示します。0 より大きい値に設定することもでき、一般的には BE の物理 CPU コア数の半分に設定します。なお、`parallel_fragment_exec_instance_num` はパイプラインエンジンが無効な場合にのみ有効です。
 
 - query_mem_limit
 
@@ -46,7 +46,7 @@ SHOW PROPERTY FOR 'root';
 例 2:
 
 ```sql
-set parallel_fragment_exec_instance_num  = 8; 
+set pipeline_dop  = 8; 
 set query_mem_limit  = 137438953472;
 ```
 

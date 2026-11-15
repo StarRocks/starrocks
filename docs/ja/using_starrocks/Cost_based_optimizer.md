@@ -106,7 +106,7 @@ column_names: id,name
 
 テーブル内のデータサイズとデータ分布は常に変化します。統計情報はデータの変化を表すために定期的に更新する必要があります。統計収集タスクを作成する前に、ビジネス要件に最も適した収集タイプと方法を選択する必要があります。
 
-StarRocks は完全収集とサンプル収集をサポートしており、どちらも自動および手動で実行できます。デフォルトでは、StarRocks はテーブルの完全統計を自動的に収集します。データ更新を 5 分ごとにチェックします。データの変化が検出されると、データ収集が自動的にトリガーされます。自動完全収集を使用したくない場合は、収集タスクをカスタマイズできます。
+StarRocks は完全収集とサンプル収集をサポートしており、どちらも自動および手動で実行できます。デフォルトでは、StarRocks はテーブルの完全統計を自動的に収集します。データ更新を 10 分ごとにチェックします（v3.5.0 より前のバージョンでは 5 分ごと）。データの変化が検出されると、データ収集が自動的にトリガーされます。自動完全収集を使用したくない場合は、収集タスクをカスタマイズできます。
 
 | **収集タイプ** | **収集方法** | **説明**                                              | **利点と欠点**                               |
 | ------------------- | --------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
@@ -199,8 +199,9 @@ v3.5.0 以降、StarRocks は自動収集中に、テーブルのデータが前
 | **FE** **設定項目**         | **タイプ** | **デフォルト値** | **説明**                                              |
 | ------------------------------------- | -------- | ----------------- | ------------------------------------------------------------ |
 | enable_statistic_collect              | BOOLEAN  | TRUE              | 統計を収集するかどうか。このスイッチはデフォルトでオンになっています。 |
-| enable_collect_full_statistic         | BOOLEAN  | TRUE              | 自動完全収集を有効にするかどうか。このスイッチはデフォルトでオンになっています。 |
-| statistic_collect_interval_sec        | LONG     | 300               | 自動収集中のデータ更新をチェックする間隔。単位：秒。 |
+| enable_auto_collect_statistics        | BOOLEAN  | TRUE              | デフォルトの自動収集タスクを有効にするかどうか。このスイッチはデフォルトでオンになっています。v3.5.0 以降でサポートされています。 |
+| enable_collect_full_statistic         | BOOLEAN  | TRUE              | デフォルトの自動収集タスクで完全収集を使用するかどうか。`false` に設定すると、代わりにサンプル収集が使用されます。このスイッチはデフォルトでオンになっています。v3.3.11 および v3.4.1 より前のバージョンでは、`false` に設定するとデフォルトの自動収集タスクが無効になります。 |
+| statistic_collect_interval_sec        | LONG     | 600               | 自動収集中のデータ更新をチェックする間隔。単位：秒。 |
 | statistic_auto_analyze_start_time | STRING      | 00:00:00   | 自動収集の開始時間。値の範囲：`00:00:00` - `23:59:59`。 |
 | statistic_auto_analyze_end_time | STRING      | 23:59:59  | 自動収集の終了時間。値の範囲：`00:00:00` - `23:59:59`。 |
 | statistic_auto_collect_small_table_size     | LONG    | 5368709120   | 自動完全収集のためにテーブルが小さいか大きいかを判断するしきい値。この値を超えるサイズのテーブルは大きいテーブルと見なされ、この値以下のサイズのテーブルは小さいテーブルと見なされます。単位：バイト。デフォルト値：5368709120 (5 GB)。                         |
@@ -393,7 +394,7 @@ CREATE ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
 - 収集タイプ
   - FULL: 完全収集を示します。
   - SAMPLE: サンプル収集を示します。
-  - 収集タイプが指定されていない場合、デフォルトでサンプル収集が使用されます。
+  - 収集タイプが指定されていない場合、`CREATE ANALYZE TABLE` では完全収集、`CREATE ANALYZE ALL` および `CREATE ANALYZE DATABASE` ではサンプル収集が使用されます。
 
 - `col_name`: 統計を収集する列。複数の列をカンマ（`,`）で区切ります。このパラメータが指定されていない場合、テーブル全体が収集されます。
 
@@ -412,10 +413,7 @@ CREATE ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
 
 ```SQL
 -- すべてのデータベースの完全統計を自動的に収集します。
-CREATE ANALYZE ALL;
-
--- データベースの完全統計を自動的に収集します。
-CREATE ANALYZE DATABASE db_name;
+CREATE ANALYZE FULL ALL;
 
 -- データベース内のすべてのテーブルの完全統計を自動的に収集します。
 CREATE ANALYZE FULL DATABASE db_name;
@@ -456,7 +454,7 @@ CREATE ANALYZE SAMPLE TABLE tbl_name(c1, c2, c3) PROPERTIES (
 ```sql
 ADMIN SET FRONTEND CONFIG("enable_auto_collect_statistics"="false");
 DROP ALL ANALYZE JOB;
-CREATE ANALYZE FULL ALL db_name PROPERTIES (
+CREATE ANALYZE FULL ALL PROPERTIES (
    "statistic_exclude_pattern" = "db_name.tbl_name"
 );
 ```
@@ -756,13 +754,13 @@ v3.4.0 以降、システムはクエリトリガーによる ANALYZE タスク�
 - 説明: FE 上で Pending 状態のクエリトリガー ANALYZE タスクの最大数。
 - 導入バージョン: v3.4.0
 
-##### connector_table_query_trigger_analyze_schedule_interval
+##### connector_table_query_trigger_task_schedule_interval
 
 - デフォルト: 30
 - タイプ: Int
 - 単位: 秒
 - 変更可能: はい
-- 説明: スケジューラースレッドがクエリトリガー ANALYZE タスクをスケジュールする間隔。
+- 説明: スケジューラースレッドがクエリトリガー ANALYZE タスクをスケジュールする間隔。v3.4.0 および v3.4.1 では、この項目の名前は `connector_table_query_trigger_analyze_schedule_interval` です。
 - 導入バージョン: v3.4.0
 
 ##### connector_table_query_trigger_analyze_max_running_task_num
@@ -860,13 +858,13 @@ KILL ANALYZE <ID>
 
 ### 自動収集
 
-外部データソース内のテーブルの統計を自動的に収集するために、Analyze ジョブを作成できます。StarRocks はデフォルトのチェック間隔である 5 分ごとにタスクを実行するかどうかを自動的に確認します。Hive および Iceberg テーブルの場合、StarRocks はテーブル内のデータが更新された場合にのみ収集タスクを実行します。
+外部データソース内のテーブルの統計を自動的に収集するために、Analyze ジョブを作成できます。StarRocks はデフォルトのチェック間隔である 10 分（v3.5.0 より前のバージョンでは 5 分）ごとにタスクを実行するかどうかを自動的に確認します。Hive および Iceberg テーブルの場合、StarRocks はテーブル内のデータが更新された場合にのみ収集タスクを実行します。
 
 ただし、Hudi テーブルのデータ変更は認識できず、StarRocks は指定したチェック間隔と収集間隔に基づいて定期的に統計を収集します。収集動作を制御するために次の FE 設定項目を指定できます：
 
 - statistic_collect_interval_sec
 
-  自動収集中のデータ更新をチェックする間隔。単位：秒。デフォルト：5 分。
+  自動収集中のデータ更新をチェックする間隔。単位：秒。デフォルト：10 分（v3.5.0 より前のバージョンでは 5 分）。
 
 - statistic_auto_collect_small_table_rows (v3.2 以降)
 
