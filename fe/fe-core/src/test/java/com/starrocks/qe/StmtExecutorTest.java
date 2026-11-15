@@ -22,6 +22,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InternalErrorCode;
@@ -29,7 +30,10 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
@@ -62,6 +66,7 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -99,10 +104,18 @@ import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -427,6 +440,274 @@ public class StmtExecutorTest {
         String selectFilesRedacted = selectFilesExecutor.getRedactedOriginStmtInString();
         Assertions.assertFalse(selectFilesRedacted.contains("RETRY_SECRET"));
         Assertions.assertTrue(selectFilesRedacted.contains("***"));
+    }
+
+    private static final String SQL_CANARY = "synthetic_sql_desensitization";
+    private static final String CREDENTIAL_CANARY = "synthetic_credential_desensitization";
+    private static final String ERROR_CANARY = "synthetic_error_desensitization";
+    private static final String CAUSE_CANARY = "synthetic_cause_desensitization";
+    private static final String TRACE_CANARY = "synthetic_trace_desensitization";
+    private static Exception planningFailure;
+
+    private static class FailureLogAppender extends AbstractAppender implements AutoCloseable {
+        private final List<LogEvent> events = new ArrayList<>();
+        private final Logger logger = (Logger) LogManager.getLogger(StmtExecutor.class);
+        private final Level oldLevel = logger.getLevel();
+        private final boolean oldAdditive = logger.isAdditive();
+
+        FailureLogAppender() {
+            super("stmt-executor-failure-logs", null, null);
+            start();
+            logger.addAppender(this);
+            logger.setLevel(Level.INFO);
+            logger.setAdditive(false);
+        }
+
+        @Override
+        public void append(LogEvent event) {
+            events.add(event.toImmutable());
+        }
+
+        @Override
+        public void close() {
+            logger.removeAppender(this);
+            logger.setLevel(oldLevel);
+            logger.setAdditive(oldAdditive);
+            stop();
+        }
+    }
+
+    private static void assertSafeFailureLogs(List<LogEvent> events, String queryId) {
+        Assertions.assertFalse(events.isEmpty());
+        for (LogEvent event : events) {
+            String message = event.getMessage().getFormattedMessage();
+            for (String canary : List.of(SQL_CANARY, CREDENTIAL_CANARY, ERROR_CANARY, CAUSE_CANARY, TRACE_CANARY)) {
+                Assertions.assertFalse(message.contains(canary), message);
+            }
+            // Stronger than checking the cause chain: no Throwable may be attached at all.
+            Assertions.assertNull(event.getThrown());
+            Assertions.assertNull(event.getThrownProxy());
+            Assertions.assertTrue(message.contains("query_id=" + queryId), message);
+            Assertions.assertTrue(message.contains("error_type="), message);
+        }
+    }
+
+    @Test
+    public void testPlannerFailureLogDesensitization() throws Exception {
+        boolean oldDesensitize = Config.enable_sql_desensitize_in_log;
+        boolean oldTrace = Config.enable_dump_optimizer_trace_on_error;
+        ConnectContext oldContext = ConnectContext.get();
+        Tracers oldTracers = Tracers.get();
+        try (FailureLogAppender appender = new FailureLogAppender()) {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ctx.setQueryId(UUIDUtil.genUUID());
+            StatementBase stmt = SqlParser.parseSingleStatement("SELECT '" + SQL_CANARY + "'",
+                    SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+            Method logFailure = StmtExecutor.class.getDeclaredMethod(
+                    "logOptimizerTraceOnGenerateExecPlanFailure", Throwable.class);
+            logFailure.setAccessible(true);
+            Exception error = new IllegalStateException(ERROR_CANARY, new RuntimeException(CAUSE_CANARY));
+            String queryId = DebugUtil.printId(ctx.getQueryId());
+            ctx.getSessionVariable().setTraceLogMode("command");
+            for (boolean desensitize : new boolean[] {true, false}) {
+                Config.enable_sql_desensitize_in_log = desensitize;
+                for (boolean trace : new boolean[] {true, false}) {
+                    Config.enable_dump_optimizer_trace_on_error = trace;
+                    Tracers.close();
+                    Tracers.register(ctx);
+                    Tracers.init(Tracers.Mode.TIMING, Tracers.Module.ALL, true, false);
+                    Tracers.record("failureValue", TRACE_CANARY);
+                    Tracers.reasoning(Tracers.Module.OPTIMIZER, TRACE_CANARY);
+                    try (Timer ignored = Tracers.watchScope(TRACE_CANARY)) {
+                        // Include a synthetic timer name as well as profile values/reasons.
+                    }
+                    appender.events.clear();
+                    logFailure.invoke(executor, error);
+                    Assertions.assertEquals(1, appender.events.size());
+                    LogEvent event = appender.events.get(0);
+                    Assertions.assertEquals(Level.WARN, event.getLevel());
+                    String message = event.getMessage().getFormattedMessage();
+                    if (desensitize) {
+                        assertSafeFailureLogs(appender.events, queryId);
+                        Assertions.assertEquals("Generate exec plan failed. query_id=" + queryId +
+                                ", error_type=IllegalStateException", message);
+                    } else {
+                        Assertions.assertTrue(message.contains(SQL_CANARY));
+                        Assertions.assertTrue(message.contains(ERROR_CANARY));
+                        Assertions.assertTrue(message.contains(TRACE_CANARY));
+                        Assertions.assertTrue(message.contains(trace ? "dump optimizer trace" : "Planner profile"));
+                    }
+
+                    // Both modes must tolerate absent SQL and an absent error.
+                    Deencapsulation.setField(executor, "originStmt", null);
+                    appender.events.clear();
+                    logFailure.invoke(executor, new Object[] {null});
+                    Assertions.assertEquals(1, appender.events.size());
+                    if (desensitize) {
+                        assertSafeFailureLogs(appender.events, queryId);
+                        Assertions.assertEquals("Generate exec plan failed. query_id=" + queryId + ", error_type=",
+                                appender.events.get(0).getMessage().getFormattedMessage());
+                    } else {
+                        Assertions.assertTrue(appender.events.get(0).getMessage().getFormattedMessage()
+                                .contains("sql=, err="));
+                    }
+                    Deencapsulation.setField(executor, "originStmt", stmt.getOrigStmt());
+                }
+            }
+        } finally {
+            Config.enable_sql_desensitize_in_log = oldDesensitize;
+            Config.enable_dump_optimizer_trace_on_error = oldTrace;
+            ConnectContext.threadLocalInfo.set(oldContext);
+            Tracers.set(oldTracers);
+        }
+    }
+
+    @Test
+    public void testExecutePlannerFailureLogsAndErrorBehavior() throws Exception {
+        boolean oldDesensitize = Config.enable_sql_desensitize_in_log;
+        boolean oldTrace = Config.enable_dump_optimizer_trace_on_error;
+        ConnectContext oldContext = ConnectContext.get();
+        Tracers oldTracers = Tracers.get();
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public static ExecPlan plan(StatementBase stmt, ConnectContext ctx) throws Exception {
+                throw planningFailure;
+            }
+        };
+        try (FailureLogAppender appender = new FailureLogAppender()) {
+            List<Exception> failures = List.of(
+                    new SemanticException(ERROR_CANARY),
+                    new StarRocksPlannerException(ERROR_CANARY, ErrorType.INTERNAL_ERROR),
+                    new StarRocksPlannerException(ERROR_CANARY, ErrorType.USER_ERROR),
+                    new IOException(ERROR_CANARY),
+                    new LargeInPredicateException(ERROR_CANARY),
+                    new StarRocksException(ERROR_CANARY),
+                    new IllegalStateException(ERROR_CANARY));
+            for (Exception failure : failures) {
+                failure.initCause(new RuntimeException(CAUSE_CANARY));
+            }
+            for (boolean desensitize : new boolean[] {true, false}) {
+                Config.enable_sql_desensitize_in_log = desensitize;
+                for (boolean trace : new boolean[] {true, false}) {
+                    Config.enable_dump_optimizer_trace_on_error = trace;
+                    for (Exception failure : failures) {
+                        planningFailure = failure;
+                        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+                        ctx.setQueryId(UUIDUtil.genUUID());
+                        SessionVariable sessionVariable = ctx.getSessionVariable();
+                        Tracers.close();
+                        Tracers.register();
+                        StatementBase stmt = SqlParser.parseSingleStatement("SELECT '" + SQL_CANARY +
+                                "' FROM FILES(\"path\"=\"s3://bucket/data.parquet\", \"aws.s3.secret_key\"=\"" +
+                                CREDENTIAL_CANARY + "\")", SqlModeHelper.MODE_DEFAULT);
+                        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+                        appender.events.clear();
+                        boolean retry = failure instanceof LargeInPredicateException;
+                        if (retry) {
+                            Assertions.assertSame(failure,
+                                    Assertions.assertThrows(LargeInPredicateException.class, executor::execute));
+                            Assertions.assertFalse(ctx.getState().isError());
+                        } else {
+                            executor.execute();
+                            Assertions.assertTrue(ctx.getState().isError());
+                            Assertions.assertEquals(failure instanceof IOException ? failure.getMessage() :
+                                    LogUtil.getUnwoundExceptionMessage(failure), ctx.getState().getErrorMessage());
+                            QueryState.ErrType expected = failure instanceof IOException ? QueryState.ErrType.IO_ERR :
+                                    failure instanceof SemanticException || failure instanceof StarRocksException ?
+                                            QueryState.ErrType.ANALYSIS_ERR : QueryState.ErrType.INTERNAL_ERR;
+                            Assertions.assertEquals(expected, ctx.getState().getErrType());
+                        }
+                        for (LogEvent event : appender.events) {
+                            Assertions.assertFalse(event.getMessage().getFormattedMessage().contains(CREDENTIAL_CANARY));
+                        }
+                        Assertions.assertSame(sessionVariable, ctx.getSessionVariable());
+                        Assertions.assertEquals(Collections.singleton("default"), executor.getCatalogTypesInvolved());
+                        Class<?> outerType = failure instanceof SemanticException ? AnalysisException.class : failure.getClass();
+                        Level outerLevel = retry ? Level.ERROR :
+                                failure instanceof SemanticException || failure instanceof StarRocksException ?
+                                        Level.INFO : Level.WARN;
+                        LogEvent outer = appender.events.get(appender.events.size() - 1);
+                        Assertions.assertEquals(outerLevel, outer.getLevel());
+                        if (desensitize) {
+                            Assertions.assertEquals(2, appender.events.size());
+                            assertSafeFailureLogs(appender.events, DebugUtil.printId(ctx.getQueryId()));
+                            Assertions.assertTrue(appender.events.get(0).getMessage().getFormattedMessage()
+                                    .contains("error_type=" + failure.getClass().getSimpleName()));
+                            Assertions.assertTrue(outer.getMessage().getFormattedMessage()
+                                    .contains("error_type=" + outerType.getSimpleName()));
+                        } else {
+                            boolean duplicatePlannerLog = failure instanceof StarRocksPlannerException &&
+                                    ((StarRocksPlannerException) failure).getType() != ErrorType.USER_ERROR;
+                            Assertions.assertEquals(duplicatePlannerLog ? 3 : 2, appender.events.size());
+                            if (outerLevel == Level.WARN) {
+                                Assertions.assertSame(failure, outer.getThrown());
+                            } else {
+                                Assertions.assertTrue(outer.getMessage().getFormattedMessage().contains(ERROR_CANARY));
+                            }
+                            if (!(failure instanceof IOException)) {
+                                Assertions.assertTrue(outer.getMessage().getFormattedMessage().contains(SQL_CANARY));
+                                Assertions.assertTrue(outer.getMessage().getFormattedMessage().contains("***"));
+                            }
+                        }
+                    }
+                }
+            }
+        } finally {
+            planningFailure = null;
+            Config.enable_sql_desensitize_in_log = oldDesensitize;
+            Config.enable_dump_optimizer_trace_on_error = oldTrace;
+            ConnectContext.threadLocalInfo.set(oldContext);
+            Tracers.set(oldTracers);
+        }
+    }
+
+    @Test
+    public void testExplainTracePlannerFailureLogs() throws Exception {
+        boolean oldDesensitize = Config.enable_sql_desensitize_in_log;
+        ConnectContext oldContext = ConnectContext.get();
+        Tracers oldTracers = Tracers.get();
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public static ExecPlan plan(StatementBase stmt, ConnectContext ctx) {
+                throw new IllegalStateException(ERROR_CANARY, new RuntimeException(CAUSE_CANARY));
+            }
+        };
+        try (FailureLogAppender appender = new FailureLogAppender()) {
+            for (boolean desensitize : new boolean[] {true, false}) {
+                Config.enable_sql_desensitize_in_log = desensitize;
+                ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+                ctx.setQueryId(UUIDUtil.genUUID());
+                Tracers.close();
+                Tracers.register();
+                StatementBase stmt = SqlParser.parseSingleStatement("TRACE TIMES SELECT '" + SQL_CANARY + "'",
+                        SqlModeHelper.MODE_DEFAULT);
+                StmtExecutor executor = new StmtExecutor(ctx, stmt);
+                // Return the explain result through the proxy, without a client socket.
+                executor.setProxy();
+                appender.events.clear();
+                executor.execute();
+                Assertions.assertEquals(MysqlStateType.EOF, ctx.getState().getStateType());
+                Assertions.assertEquals(2, appender.events.size());
+                LogEvent explain = appender.events.get(1);
+                Assertions.assertEquals(Level.WARN, explain.getLevel());
+                Assertions.assertTrue(explain.getMessage().getFormattedMessage()
+                        .startsWith("Generate exec plan failed for explain stmt"));
+                if (desensitize) {
+                    assertSafeFailureLogs(appender.events, DebugUtil.printId(ctx.getQueryId()));
+                    Assertions.assertTrue(explain.getMessage().getFormattedMessage()
+                            .contains("error_type=IllegalStateException"));
+                } else {
+                    Assertions.assertTrue(explain.getMessage().getFormattedMessage().contains(SQL_CANARY));
+                    Assertions.assertEquals(ERROR_CANARY, explain.getThrown().getMessage());
+                    Assertions.assertEquals(CAUSE_CANARY, explain.getThrown().getCause().getMessage());
+                }
+            }
+        } finally {
+            Config.enable_sql_desensitize_in_log = oldDesensitize;
+            ConnectContext.threadLocalInfo.set(oldContext);
+            Tracers.set(oldTracers);
+        }
     }
 
     @Test

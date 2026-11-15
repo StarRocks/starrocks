@@ -921,12 +921,10 @@ public class StmtExecutor {
             logOptimizerTraceOnGenerateExecPlanFailure(e);
             dumpException(e);
             catalogTypesInvolved = catalogTypeFromSession();
-            if (e.getType().equals(ErrorType.USER_ERROR)) {
-                throw e;
-            } else {
+            if (!e.getType().equals(ErrorType.USER_ERROR) && !Config.enable_sql_desensitize_in_log) {
                 LOG.warn("Planner error: {}", getRedactedOriginStmtInString(), e);
-                throw e;
             }
+            throw e;
         } catch (Exception e) {
             logOptimizerTraceOnGenerateExecPlanFailure(e);
             catalogTypesInvolved = catalogTypeFromSession();
@@ -939,6 +937,12 @@ public class StmtExecutor {
 
     private void logOptimizerTraceOnGenerateExecPlanFailure(Throwable e) {
         String qid = DebugUtil.printId(context.getQueryId());
+        if (Config.enable_sql_desensitize_in_log) {
+            // SQL literals can also appear in exception messages, causes and tracer/profile values.
+            LOG.warn("Generate exec plan failed. query_id={}, error_type={}",
+                    qid, e == null ? "" : e.getClass().getSimpleName());
+            return;
+        }
         String sql = originStmt == null ? "" : SqlCredentialRedactor.redact(originStmt.originStmt);
         String err = e == null ? "" : (e.getClass().getSimpleName() + ": " + StringUtils.defaultString(e.getMessage()));
 
@@ -1071,8 +1075,13 @@ public class StmtExecutor {
                 try {
                     execPlan = generateExecPlan();
                 } catch (Exception e) {
-                    LOG.warn("Generate exec plan failed for explain stmt: {}",
-                            getRedactedOriginStmtInString(), e);
+                    if (Config.enable_sql_desensitize_in_log) {
+                        LOG.warn("Generate exec plan failed for explain stmt. query_id={}, error_type={}",
+                                DebugUtil.printId(context.getQueryId()), e.getClass().getSimpleName());
+                    } else {
+                        LOG.warn("Generate exec plan failed for explain stmt: {}",
+                                getRedactedOriginStmtInString(), e);
+                    }
                 }
                 handleExplainExecPlan(execPlan);
                 return;
@@ -1347,7 +1356,12 @@ public class StmtExecutor {
                 context.getState().setError("Do not support this query.");
             }
         } catch (IOException e) {
-            LOG.warn("execute IOException ", e);
+            if (Config.enable_sql_desensitize_in_log) {
+                LOG.warn("execute IOException. query_id={}, error_type={}",
+                        DebugUtil.printId(context.getQueryId()), e.getClass().getSimpleName());
+            } else {
+                LOG.warn("execute IOException ", e);
+            }
             // the exception happens when interact with client
             // this exception shows the connection is gone
             context.getState().setError(e.getMessage());
@@ -1356,15 +1370,26 @@ public class StmtExecutor {
             // Re-throw LargeInPredicateException to trigger a full retry from parser stage
             // The query will be re-parsed and re-executed with enable_large_in_predicate=false
             // to use the traditional expression-based approach instead of raw constant optimization
-            String sql = originStmt != null ? originStmt.originStmt : "";
-            String truncatedSql = sql.length() > 200 ? sql.substring(0, 200) + "..." : sql;
-            LOG.error("LargeInPredicate optimization failed, sql: {}, error: {}. Will retry with" +
-                    " enable_large_in_predicate=false.", SqlCredentialRedactor.redact(truncatedSql), e.getMessage());
+            if (Config.enable_sql_desensitize_in_log) {
+                LOG.error("LargeInPredicate optimization failed. Will retry with enable_large_in_predicate=false." +
+                                " query_id={}, error_type={}",
+                        DebugUtil.printId(context.getQueryId()), e.getClass().getSimpleName());
+            } else {
+                String sql = originStmt != null ? originStmt.originStmt : "";
+                String truncatedSql = sql.length() > 200 ? sql.substring(0, 200) + "..." : sql;
+                LOG.error("LargeInPredicate optimization failed, sql: {}, error: {}. Will retry with" +
+                        " enable_large_in_predicate=false.", SqlCredentialRedactor.redact(truncatedSql), e.getMessage());
+            }
             throw e;
         } catch (StarRocksException e) {
-            String sql = originStmt != null ? originStmt.originStmt : "";
-            // analysis exception only print message, not print the stack
-            LOG.info("execute Exception, sql: {}, error: {}", SqlCredentialRedactor.redact(sql), e.getMessage());
+            if (Config.enable_sql_desensitize_in_log) {
+                LOG.info("execute Exception. query_id={}, error_type={}",
+                        DebugUtil.printId(context.getQueryId()), e.getClass().getSimpleName());
+            } else {
+                String sql = originStmt != null ? originStmt.originStmt : "";
+                // analysis exception only print message, not print the stack
+                LOG.info("execute Exception, sql: {}, error: {}", SqlCredentialRedactor.redact(sql), e.getMessage());
+            }
             context.getState().setError(LogUtil.getUnwoundExceptionMessage(e));
             if (parsedStmt instanceof KillStmt) {
                 // ignore kill stmt execute err(not monitor it)
@@ -1386,8 +1411,13 @@ public class StmtExecutor {
                 }
             }
         } catch (Throwable e) {
-            String sql = originStmt != null ? originStmt.originStmt : "";
-            LOG.warn("execute Exception, sql: {}", SqlCredentialRedactor.redact(sql), e);
+            if (Config.enable_sql_desensitize_in_log) {
+                LOG.warn("execute Exception. query_id={}, error_type={}",
+                        DebugUtil.printId(context.getQueryId()), e.getClass().getSimpleName());
+            } else {
+                String sql = originStmt != null ? originStmt.originStmt : "";
+                LOG.warn("execute Exception, sql: {}", SqlCredentialRedactor.redact(sql), e);
+            }
             context.getState().setError(LogUtil.getUnwoundExceptionMessage(e));
             context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
