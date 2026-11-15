@@ -1251,6 +1251,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: StarRocksにストリーミングできるJSONファイルの最大サイズ。
 - 導入バージョン: -
 
+組み込み監査ローダーでは、この BE 設定を FE パラメータ [`audit_loader_batch_max_bytes`](../FE_parameters/log_server_meta.md#audit_loader_batch_max_bytes) と手動で連携させてください。FE はこの制限を自動的に読み取って追従しません。監査ロードを受信し得るすべてのノードで、配列の角括弧とカンマを含む JSON 本文全体を受け付けられる必要があります。この BE 制限を上げても、FE のバッファ予算やフラッシュ水位は自動的には増えません。
+
 ### streaming_load_max_mb
 
 - デフォルト: 102400

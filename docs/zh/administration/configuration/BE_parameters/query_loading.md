@@ -1342,6 +1342,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：流式导入单个 JSON 文件大小的上限。
 - 引入版本：-
 
+使用内置审计导入时，需要人工将本 BE 参数与 FE 参数 [`audit_loader_batch_max_bytes`](../FE_parameters/log_server_meta.md#audit_loader_batch_max_bytes) 联动配置。FE 不会自动读取或跟随本限制。所有可能接收审计导入的节点都应允许包含方括号和逗号在内的完整 JSON 请求体。提高本 BE 限制不会自动增加 FE 缓冲预算或触发水位。
+
 ### streaming_load_max_mb
 
 - 默认值：102400

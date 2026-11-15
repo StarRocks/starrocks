@@ -211,6 +211,24 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean audit_log_enable_compress = false;
 
+    @ConfField(mutable = true, comment = "Whether to enable the builtin audit loader, which persists audit " +
+            "events into the table starrocks_audit_db__.starrocks_audit_tbl__. Disabled by default. It stays " +
+            "inert while an external dynamic AUDIT plugin is installed, to avoid importing audit data twice.")
+    public static boolean enable_audit_loader = false;
+    @ConfField(mutable = true, comment = "Time-based flush interval in seconds for the builtin audit loader. " +
+            "The half-cap watermark can trigger earlier loads. Below the watermark, 0 keeps a 5-second polling " +
+            "cadence; negative values are treated as 0, and values above one day are clamped down to one day. " +
+            "A fixed batch gets at most three attempts in total (the initial attempt and two retries), " +
+            "with a 5-second backoff after each failure. All attempts reuse the same rows and label.")
+    public static long audit_loader_load_interval_seconds = 60;
+    @ConfField(mutable = true, comment = "Per-FE byte cap of buffered audit row JSON and each complete " +
+            "UTF-8 JSON load request, including array brackets and commas. Events beyond the cap are " +
+            "dropped and counted. Batch assembly and HTTP encoding require additional FE heap memory. " +
+            "Values outside 1183738 to 536870912 bytes are clamped into that range. Coordinate this " +
+            "budget manually with the JSON size limit on every receiving BE/CN. Selected batches retain " +
+            "their capacity snapshot across retries; capacity changes apply to subsequent batch selections.")
+    public static long audit_loader_batch_max_bytes = 52428800L; // 50MB
+
     @ConfField(mutable = true)
     public static long slow_lock_threshold_ms = 3000L;
 

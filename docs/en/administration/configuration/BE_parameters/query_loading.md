@@ -1339,6 +1339,8 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The maximum size of a JSON file that can be streamed into StarRocks.
 - Introduced in: -
 
+For the builtin audit loader, coordinate this BE setting manually with the FE parameter [`audit_loader_batch_max_bytes`](../FE_parameters/log_server_meta.md#audit_loader_batch_max_bytes). The FE does not automatically read or follow this limit. All nodes that can receive audit loads must allow the complete JSON request body, including array brackets and commas. Raising this BE limit does not automatically increase the FE buffer budget or flush watermark.
+
 ### streaming_load_max_mb
 
 - Default: 102400

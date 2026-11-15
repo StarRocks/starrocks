@@ -57,6 +57,49 @@ This topic introduces the following types of FE configurations:
 
 ## Logging
 
+### `audit_loader_batch_max_bytes`
+
+- Default: 52428800
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The per-FE byte budget for buffered audit row JSON and the complete UTF-8 JSON request body of each load, including array brackets and commas. The flush watermark is half this value: with the default 50 MiB budget, it is 25 MiB. The watermark triggers a load; it is not a fixed batch size. The time interval can also trigger a smaller load. This budget is not a cap on total FE heap usage: row objects, batch construction, and HTTP encoding require additional memory. If the downstream cannot keep up and the buffer stays full, excess events are dropped and counted, with a rate-limited warning in the FE log. This feature does not guarantee lossless delivery under overload or sustained load failures, and buffered events are lost when the FE stops. Retries reuse the same batch and label to deduplicate a lost commit response within the FE transaction label retention window. SQL statement text is truncated to at most 1 MiB of UTF-8 data before loading. The loader clamps values below 1183738 bytes or above 536870912 bytes (512 MiB) to these bounds, with a rate-limited warning. This clamp does not rewrite the configured value. Effective only when `enable_audit_loader` is enabled.
+- Introduced in: v4.2
+
+The FE setting and the BE JSON limit [`streaming_load_max_batch_size_mb`](../BE_parameters/query_loading.md#streaming_load_max_batch_size_mb) are configured independently. The audit loader does not read or automatically follow the BE setting, and the FE does not validate this parameter against the actual BE limit. A BE value of `100` permits a JSON request body of up to 100 MiB (`104857600` bytes).
+
+Administrators must coordinate the settings on every BE/CN that can receive audit loads. The complete JSON request body, including array brackets and commas, must fit the receiving node's limit. Set the effective FE budget at or below the smallest JSON limit among these nodes. The loader includes brackets and commas in its batch budget, so no additional JSON envelope allowance is needed. You can lower the FE budget or raise the BE limit according to the available memory. Acceptance of an FE configuration value alone does not mean that the BE will accept the load.
+
+The queue counts serialized row bytes; request syntax is counted only when selecting a batch. A row whose single-row request exceeds the effective budget is dropped and counted, with a rate-limited warning. Each selected batch keeps its budget snapshot across all attempts. Admission of new events uses the latest budget, but a capacity update does not resize a selected, in-flight, or retrying batch. After that batch ends, subsequent selections use the new budget and load rows that fit in smaller batches. Before lowering the BE JSON limit, wait for any batch using the previous budget to finish. If the queue head no longer fits alone, one such row is dropped per cycle without making a request or consuming an attempt. The next head gets a fresh attempt budget, while any backoff from an earlier failed request remains in effect.
+
+Inspect the reported BE values with:
+
+```sql
+SELECT BE_ID, NAME, VALUE
+FROM information_schema.be_configs
+WHERE NAME = 'streaming_load_max_batch_size_mb';
+```
+
+| FE value in bytes | FE flush watermark | BE JSON limit | Configuration relationship |
+| --- | --- | --- | --- |
+| `52428800` (50 MiB) | 25 MiB | `100` (100 MiB) | The default request budget is below the BE JSON limit. |
+| `209715200` (200 MiB) | 100 MiB | `1024` (1024 MiB) | Example of manually coordinated larger limits; FE memory must also be sized accordingly. |
+
+Raising the BE limit to 1024 MiB does not change the FE budget, watermark, or its 512 MiB maximum. Lowering the BE limit requires reviewing the FE setting and buffered data as well. A larger BE limit does not change the audit loader's request timeout or retry policy.
+
+### `audit_loader_load_interval_seconds`
+
+- Default: 60
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time-based interval for submitting buffered audit events to the audit table. Reaching half of `audit_loader_batch_max_bytes` can trigger an earlier load. After a successful load, another batch can run without an additional fixed 5-second wait if the buffer still reaches that watermark. For smaller buffers, 0 retains a 5-second polling cadence; negative values are treated as 0, and values above one day are clamped down to one day, with a rate-limited warning in the FE log. A lower value can reduce visibility latency at the cost of more load transactions. A fixed batch gets at most three attempts in total: the initial attempt and two retries, with a 5-second backoff before another submission following a failure. If all three attempts fail, the batch is immediately discarded, logged, and counted. Measured from the start of the first attempt, three immediate failures take about 10 seconds; if all three requests reach the 10-second HTTP timeout, they take about 40 seconds. These estimates exclude the wait before the first attempt, serialization, scheduling, and other processing overhead. When the audit table is not ready, loads are skipped without consuming the attempt budget. Effective only when `enable_audit_loader` is enabled.
+- Introduced in: v4.2
+
+A Stream Load `Publish Timeout` response means that the batch is committed but visibility has not been confirmed. The audit loader removes that batch from its buffer without retrying it or counting the batch as discarded, and reports the outcome in the FE log. Missing, malformed, or contradictory row statistics do not cause a committed batch to be retried. For a committed batch, only trustworthy reported filtered-row counts contribute to the filtered/discarded counters; other statistics are reported as unknown.
+
+All attempts for a batch use identical rows and the same unique label; events arriving meanwhile wait for the next batch. A `Label Already Exists` response confirms the previous commit only when the returned label matches and `ExistingJobStatus` is `FINISHED`. `RUNNING`, missing status, or a mismatched label do not confirm success. Counters in a duplicate response describe the rejected request, so the original batch statistics remain unknown. If all attempts end without confirmation, the original batch alone is removed and counted as discarded from the local buffer; `commit_result_unknown=true` in the discard log means the BE may still have committed it. This is not a guarantee that the rows were absent from the table.
+
 ### `audit_log_delete_age`
 
 - Default: 30d
@@ -303,6 +346,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Threshold (in ms) used by JournalWriter to detect and log slow edit-log batch writes. After a batch commit, if the batch duration exceeds this value, JournalWriter emits a WARN with batch size, duration and current journal queue size (rate-limited to once every ~2s). This setting only controls logging/alerts for potential IO or replication latency on the FE leader; it does not change commit or roll behavior (see `edit_log_roll_num` and commit-related settings). Metric updates still occur regardless of this threshold.
 - Introduced in: v3.2.3
+
+### `enable_audit_loader`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the builtin audit loader. When enabled, the FE persists audit events (queries and connections) into the table `starrocks_audit_db__.starrocks_audit_tbl__` so audit data can be analyzed directly with SQL. The audit database and table are created automatically by the Leader FE after the feature is enabled, partitioned by day and keeping the 30 most recent daily partitions; adjust that with `ALTER TABLE ... SET ("partition_live_number"="N")`, which the system will not override. A table dropped by mistake is recreated automatically as an empty one. When an external dynamic AUDIT plugin (for example, the auditloader plugin) is installed in the cluster, this feature stays inert to avoid importing audit data twice, and recovers automatically after that plugin is uninstalled. Do not add a NOT NULL column to the audit table: a column the FE never writes is set to NULL by the load rather than to its DEFAULT, so every batch is rejected and discarded after a few retries; dropping the column restores loading without an FE restart. This feature is independent of and can coexist with `fe.audit.log`.
+- Introduced in: v4.2
 
 ### `enable_audit_sql`
 
