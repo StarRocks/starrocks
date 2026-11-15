@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "RETRY FILE retries to load all data files or a specific data file in a pipe."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # RETRY FILE

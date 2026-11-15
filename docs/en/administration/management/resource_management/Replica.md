@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 70
 description: "Manage data replicas in your StarRocks cluster."
+products: [oss, enterprise, anywhere]
 ---
 
 # Manage replica
@@ -89,14 +90,14 @@ Follow these steps to check the replica status of tablets to identify the unheal
 
    ```Plain
    mysql> SHOW PROC '/statistic';
-   +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
-   | DbId     | DbName                      | TableNum | PartitionNum | IndexNum | TabletNum | ReplicaNum | UnhealthyTabletNum | InconsistentTabletNum |
-   +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
-   | 35153636 | default_cluster:DF_Newrisk  | 3        | 3            | 3        | 96        | 288        | 0                  | 0                     |
-   | 48297972 | default_cluster:PaperData   | 0        | 0            | 0        | 0         | 0          | 0                  | 0                     |
-   | 5909381  | default_cluster:UM_TEST     | 7        | 7            | 10       | 320       | 960        | 1                  | 0                     |
-   | Total    | 240                         | 10       | 10           | 13       | 416       | 1248       | 1                  | 0                     |
-   +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
+   +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+------------------+---------------------+
+   | DbId     | DbName                      | TableNum | PartitionNum | IndexNum | TabletNum | ReplicaNum | UnhealthyTabletNum | InconsistentTabletNum | CloningTabletNum | ErrorStateTabletNum |
+   +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+------------------+---------------------+
+   | 35153636 | default_cluster:DF_Newrisk  | 3        | 3            | 3        | 96        | 288        | 0                  | 0                     | 0                | 0                   |
+   | 48297972 | default_cluster:PaperData   | 0        | 0            | 0        | 0         | 0          | 0                  | 0                     | 0                | 0                   |
+   | 5909381  | default_cluster:UM_TEST     | 7        | 7            | 10       | 320       | 960        | 1                  | 0                     | 0                | 0                   |
+   | Total    | 240                         | 10       | 10           | 13       | 416       | 1248       | 1                  | 0                     | 0                | 0                   |
+   +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+------------------+---------------------+
    ```
 
    - `UnhealthyTabletNum`: indicates the number of unhealthy tablets in the corresponding database.
@@ -112,11 +113,11 @@ Follow these steps to check the replica status of tablets to identify the unheal
 
    ```Plain
    mysql> SHOW PROC '/statistic/5909381';
-   +------------------+---------------------+
-   | UnhealthyTablets | InconsistentTablets |
-   +------------------+---------------------+
-   | [40467980]       | []                  |
-   +------------------+---------------------+
+   +------------------+---------------------+----------------+-------------------+
+   | UnhealthyTablets | InconsistentTablets | CloningTablets | ErrorStateTablets |
+   +------------------+---------------------+----------------+-------------------+
+   | [40467980]       | []                  | []             | []                |
+   +------------------+---------------------+----------------+-------------------+
    ```
 
    The ID of the unhealthy tablet is returned in the field `UnhealthyTablets`.
@@ -271,7 +272,7 @@ To move a tablet from a high-load node to a low-load node, StarRocks first creat
 
 #### BE load
 
-StarRocks shows the load statistics of each BE node in the cluster using `ClusterLoadStatistics` (CLS). Tablet Scheduler triggers the replica balancing based on `ClusterLoadStatistics`. StarRocks evaluates the **disk utilization** and the **replica count** of each BE node and calculates a `loadScore` accordingly. The higher the `loadScore` of a BE node, the higher the load the node has. Tablet Scheduler updates `ClusterLoadStatistics` every one minute.
+StarRocks shows the load statistics of each BE node in the cluster using `ClusterLoadStatistics` (CLS). StarRocks evaluates the **disk utilization** and the **replica count** of each BE node and calculates a `loadScore` accordingly. The higher the `loadScore` of a BE node, the higher the load the node has. Tablet Scheduler updates `ClusterLoadStatistics` every one minute.
 
 `capacityCoefficient` and `replicaNumCoefficient`are the weighting factors for the disk utilization and the replica count respectively. The sum of `capacityCoefficient` and `replicaNumCoefficient` is one. `capacityCoefficient` is dynamically adjusted according to the actual disk usage. When the overall disk utilization of a BE node is below 50%, the `capacityCoefficient` value is 0.5. When the disk utilization is above 75%, the value is 1. You can configure this limit via the FE configuration item `capacity_used_percent_high_water`. If the utilization is between 50% and 75%, `capacityCoefficient` increases smoothly based on this formula:
 
@@ -282,6 +283,8 @@ capacityCoefficient= 2 * Disk utilization - 0.5
 `capacityCoefficient` ensures that when the disk usage is exceedingly high, the `loadScore` of this BE node gets higher, forcing the system to reduce the load on this BE node at the earliest opportunity.
 
 #### Balancing policy
+
+StarRocks first balances replicas across BE nodes, and then balances replicas across the disks within each BE node. The replica balancing does not depend on `loadScore`. If the disk utilization of all BE nodes is lower than the value of the FE configuration item `tablet_sched_balance_load_disk_safe_threshold` (Default: 50%), or the difference between the highest and lowest disk utilization is less than the value of `tablet_sched_balance_load_score_threshold` (Default: 10%), StarRocks balances the number of tablets of each partition across BE nodes. Otherwise, StarRocks moves replicas from the BE nodes with high disk utilization to the BE nodes with low disk utilization.
 
 Each time Tablet Scheduler schedules tablets, it selects a certain number of healthy tablets as the candidate tablets to be balanced through Load Balancer. Next time when scheduling tablets, Tablet Scheduler balances these healthy tablets.
 
@@ -409,15 +412,16 @@ You can check tablet scheduling tasks that are pending, running, and finished.
   Example:
 
    ```Plain
-   +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
-   | TabletId | Type   | Status          | State   | OrigPrio | DynmPrio | SrcBe | SrcPath | DestBe | DestPath | Timeout | Create              | LstSched            | LstVisit            | Finished | Rate | FailedSched | FailedRunning | LstAdjPrio          | VisibleVer | VisibleVerHash      | CmtVer | CmtVerHash          | ErrMsg                        |
-   +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
-   | 4203036  | REPAIR | REPLICA_MISSING | PENDING | HIGH     | LOW      | -1    | -1      | -1     | -1       | 0       | 2019-02-21 15:00:20 | 2019-02-24 11:18:41 | 2019-02-24 11:18:41 | N/A      | N/A  | 2           | 0             | 2019-02-21 15:00:43 | 1          | 0                   | 2      | 0                   | unable to find source replica |
-   +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
+   +----------+--------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
+   | TabletId | Type   | Medium | Status          | State   | OrigPrio | DynmPrio | SrcBe | SrcPath | DestBe | DestPath | Timeout | Create              | LstSched            | LstVisit            | Finished | Rate | FailedSched | FailedRunning | LstAdjPrio          | VisibleVer | VisibleVerHash      | CmtVer | CmtVerHash          | ErrMsg                        |
+   +----------+--------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
+   | 4203036  | REPAIR | HDD    | REPLICA_MISSING | PENDING | HIGH     | LOW      | -1    | -1      | -1     | -1       | 0       | 2019-02-21 15:00:20 | 2019-02-24 11:18:41 | 2019-02-24 11:18:41 | N/A      | N/A  | 2           | 0             | 2019-02-21 15:00:43 | 1          | 0                   | 2      | 0                   | unable to find source replica |
+   +----------+--------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
    ```
 
   - `TabletId`: the ID of the tablet pending to be scheduled. A scheduled task is only for one tablet.
   - `Type`: the task type. Valid values: REPAIR and BALANCE.
+  - `Medium`: the storage medium of the tablet.
   - `Status`: the current status of the tablet, such as REPLICA_MISSING.
   - `State`: the state of the scheduling task. Valid values: PENDING, RUNNING, FINISHED, CANCELLED, TIMEOUT, and UNEXPECTED.
   - `OrigPrio`: the original priority of the task.

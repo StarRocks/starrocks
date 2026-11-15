@@ -28,6 +28,16 @@ class DriverQueue;
 using DriverQueuePtr = std::unique_ptr<DriverQueue>;
 class DriverQueueMetrics;
 
+// Scheduling statistics of one level of a multi-level driver queue.
+struct DriverQueueLevelStats {
+    // Execution time charged to the level divided by the level's factor. The queue takes the next driver
+    // from the non-empty level with the smallest value.
+    int64_t accu_time_ns = 0;
+    // Total time that the drivers taken from the level waited in it, and the number of these drivers.
+    int64_t wait_time_ns = 0;
+    int64_t schedule_count = 0;
+};
+
 class DriverQueue {
 public:
     DriverQueue(DriverQueueMetrics* metrics) : _metrics(metrics) {}
@@ -50,6 +60,9 @@ public:
     bool empty() const { return size() == 0; }
 
     virtual bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const = 0;
+
+    // Statistics of each level, empty for a queue without levels.
+    virtual std::vector<DriverQueueLevelStats> level_stats() const { return {}; }
 
     DriverQueueMetrics* _metrics;
 };

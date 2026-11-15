@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.starrocks.qe.ConnectContext;
@@ -33,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
 
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.NaN;
@@ -229,7 +229,7 @@ public class BinaryPredicateStatisticCalculator {
             ColumnStatistic estimatedColumnStatistic = ColumnStatistic.buildFrom(columnStatistic).setNullsFraction(0).build();
             double rowCount = Math.max(0.0, statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction())
                     - estimateColumnEqualToConstant(columnRefOperator, columnStatistic, constant, statistics)
-                            .getOutputRowCount());
+                    .getOutputRowCount());
 
             return columnRefOperator.map(operator -> Statistics.buildFrom(statistics)
                             .setOutputRowCount(rowCount).addColumnStatistic(operator, estimatedColumnStatistic).build())
@@ -311,7 +311,7 @@ public class BinaryPredicateStatisticCalculator {
             ColumnStatistic finalNewEstimateColumnStatistics = adjustColumnStatisticsMinMax(
                     newEstimateColumnStatistics, constant, statistics, columnRefOperator, false);
             return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount)
-                                    .addColumnStatistic(operator, finalNewEstimateColumnStatistics).build())
+                            .addColumnStatistic(operator, finalNewEstimateColumnStatistics).build())
                     .orElseGet(() -> statistics.withOutputRowCount(rowCount));
         }
     }
@@ -400,16 +400,17 @@ public class BinaryPredicateStatisticCalculator {
         Optional<Histogram> hist = enableJoinHistogram ?
                 updateHistWithJoin(leftColumnStatistic, leftColumn.getType(), rightColumnStatistic, rightColumn.getType()) :
                 Optional.empty();
+        double nonNullFactor = isEqualForNull ? 1 :
+                (1 - leftColumnStatistic.getNullsFraction()) * (1 - rightColumnStatistic.getNullsFraction());
         if (hist.isEmpty()) {
             double selectivity = 1.0 /
                     max(1, max(leftColumnStatistic.getDistinctValuesCount(), rightColumnStatistic.getDistinctValuesCount()));
-            rowCount = statistics.getOutputRowCount() * selectivity *
-                    (isEqualForNull ? 1 :
-                            (1 - leftColumnStatistic.getNullsFraction()) * (1 - rightColumnStatistic.getNullsFraction()));
+            rowCount = statistics.getOutputRowCount() * selectivity * nonNullFactor;
         } else {
             double selectivity = hist.get().getTotalRows() / (double)
                     (leftColumnStatistic.getHistogram().getTotalRows() * rightColumnStatistic.getHistogram().getTotalRows());
-            rowCount = statistics.getOutputRowCount() * selectivity;
+            // Histograms exclude nulls, so their selectivity is conditional on both operands being non-null.
+            rowCount = statistics.getOutputRowCount() * selectivity * nonNullFactor;
         }
 
         ColumnStatistic.Builder newLeftStatisticBuilder = ColumnStatistic.buildFrom(newEstimateColumnStatistics.build());
@@ -487,10 +488,6 @@ public class BinaryPredicateStatisticCalculator {
 
     private static void estimateMcvToBucket(Map<String, Long> leftMcv, Map<String, Long> estimatedMcv,
                                             Histogram rightHistogram, double distinctValuesCount, Type dataType) {
-        if (rightHistogram.getBuckets() == null) {
-            return;
-        }
-
         for (Map.Entry<String, Long> entry : leftMcv.entrySet()) {
             if (estimatedMcv.containsKey(entry.getKey())) {
                 continue;
@@ -508,11 +505,12 @@ public class BinaryPredicateStatisticCalculator {
         }
     }
 
+    @Nonnull
     private static List<Bucket> estimateBucketToBucket(Histogram leftHistogram, double leftColumnDistinctValue, Type dataTypeLeft,
                                                        Histogram rightHistogram, double rightColumnDistinctValue,
                                                        Type dataTypeRight) {
         if (leftHistogram == null || rightHistogram == null) {
-            return null;
+            return List.of();
         }
 
         // Intersecting two such placeholders bucket degenerate zero-count bucket that collapses the estimate to ~1/(L*R),
@@ -521,7 +519,7 @@ public class BinaryPredicateStatisticCalculator {
         List<Bucket> leftBuckets = withFiniteBounds(leftHistogram.getBuckets());
         List<Bucket> rightBuckets = withFiniteBounds(rightHistogram.getBuckets());
         if (leftBuckets.isEmpty() || rightBuckets.isEmpty()) {
-            return null;
+            return List.of();
         }
 
         // Assume the distinct values are uniformly distributed.
@@ -598,10 +596,7 @@ public class BinaryPredicateStatisticCalculator {
         return mergedBuckets;
     }
 
-    private static List<Bucket> withFiniteBounds(List<Bucket> buckets) {
-        if (buckets == null) {
-            return List.of();
-        }
+    private static List<Bucket> withFiniteBounds(@Nonnull List<Bucket> buckets) {
         return buckets.stream()
                 .filter(b -> Double.isFinite(b.getLower()) && Double.isFinite(b.getUpper()))
                 .collect(Collectors.toList());
@@ -612,7 +607,7 @@ public class BinaryPredicateStatisticCalculator {
     // histogram fully described by MCVs is legitimately complete, not a placeholder.
     private static boolean hasOnlyNonFiniteBuckets(Histogram histogram) {
         List<Bucket> buckets = histogram.getBuckets();
-        return buckets != null && !buckets.isEmpty() && withFiniteBounds(buckets).isEmpty();
+        return !buckets.isEmpty() && withFiniteBounds(buckets).isEmpty();
     }
 
     private static Optional<StatisticRangeValues> computeBucketIntersection(Bucket leftBucket, Bucket rightBucket) {
@@ -664,6 +659,14 @@ public class BinaryPredicateStatisticCalculator {
         // so the predicate factor :
         //          pf = 1.0 / distinct_val.
         double predicateFactor = columnRange.overlapPercentWith(intersectRange);
+        // `col = c` on a column already narrowed to exactly c (e.g. by an earlier `col = c`, whose NDV is kept)
+        // keeps every row; 1 / NDV would apply the earlier filter again. Only a point predicate qualifies: `<` / `>`
+        // are encoded with c included and must still drop the row, and a string constant has no finite bounds while
+        // string columns carry a placeholder min = max.
+        if (!intersectRange.isEmpty() && columnRange.getLow() == columnRange.getHigh()
+                && predicateRange.getLow() == predicateRange.getHigh() && !predicateRange.isBothInfinite()) {
+            predicateFactor = 1.0;
+        }
         double rowCount = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;
 
         ColumnStatistic newEstimateColumnStatistics = ColumnStatistic.builder().
@@ -680,8 +683,8 @@ public class BinaryPredicateStatisticCalculator {
     }
 
     public static Optional<Histogram> updateHistWithLessThan(ColumnStatistic columnStatistic,
-                                                   Optional<ConstantOperator> constant,
-                                                   boolean containUpper) {
+                                                             Optional<ConstantOperator> constant,
+                                                             boolean containUpper) {
         if (columnStatistic.getHistogram() == null || !constant.isPresent()) {
             return Optional.empty();
         }

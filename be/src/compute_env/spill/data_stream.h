@@ -15,6 +15,7 @@
 #pragma once
 
 #include "base/string/slice.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "compute_env/spill/spill_fwd.h"
 #include "runtime/runtime_state_fwd.h"
@@ -44,8 +45,12 @@ using InputStreamPtr = std::shared_ptr<SpillInputStream>;
 // This class will execution io tasks. make sure call it in io threads
 class DataTranster {
 public:
+    // merge_timer, when non-null, is charged with the time spent pulling chunks out of input_stream
+    // (for a compaction that is the multi-way merge). Callers whose work is not a compaction pass
+    // nullptr rather than mislabeling it; ScopedTimer no-ops on a null counter.
     static Status transfer(workgroup::YieldContext& yield_ctx, RuntimeState* state, Serde* serde,
-                           const SpillOutputDataStreamPtr& output, const InputStreamPtr& input_stream);
+                           const SpillOutputDataStreamPtr& output, const InputStreamPtr& input_stream,
+                           RuntimeProfile::Counter* merge_timer = nullptr);
 };
 
 } // namespace starrocks::spill

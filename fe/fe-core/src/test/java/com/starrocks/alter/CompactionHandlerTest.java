@@ -16,8 +16,15 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.compaction.PartitionIdentifier;
+import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -45,6 +52,7 @@ public class CompactionHandlerTest {
     protected static StarRocksAssert starRocksAssert;
 
     private CompactionHandler compactionHandler = new CompactionHandler();
+    private final boolean savedEnableRangeDistribution = Config.enable_range_distribution;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -77,6 +85,7 @@ public class CompactionHandlerTest {
 
     @AfterEach
     public void tearDown() {
+        Config.enable_range_distribution = savedEnableRangeDistribution;
         GlobalStateMgr.getCurrentState().getCompactionMgr().clearPartitions();
         db.dropTable(olapTable.getName());
     }
@@ -120,5 +129,79 @@ public class CompactionHandlerTest {
                 Assertions.fail("process should not throw user exceptions here");
             }
         });
+    }
+
+    /** Marks every tablet clean except the first one, which gets {@code firstShared}. */
+    private void markTablets(OlapTable table, boolean firstShared) {
+        boolean first = true;
+        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
+            for (MaterializedIndex index : partition.getLatestMaterializedIndices(
+                    MaterializedIndex.IndexExtState.VISIBLE)) {
+                for (Tablet tablet : index.getTablets()) {
+                    ((LakeTablet) tablet).setHasSharedFiles(first && firstShared);
+                    first = false;
+                }
+            }
+        }
+    }
+
+    /**
+     * Creates the table {@code name (k1 int, v1 int)} with the given key and distribution clauses, runs
+     * ALTER TABLE COMPACT on it, and returns the compaction priority this leaves on its first partition.
+     */
+    private PartitionStatistics.CompactionPriority compactTable(String name, String clauses, boolean firstShared)
+            throws Exception {
+        Config.enable_range_distribution = true;
+        starRocksAssert.withTable("CREATE TABLE " + name + " (k1 int, v1 int) " + clauses
+                + " PROPERTIES('replication_num' = '1')");
+        OlapTable table =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), name);
+        try {
+            markTablets(table, firstShared);
+            PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+            compactionHandler.process(
+                    Collections.singletonList(new CompactionClause(Collections.emptyList(), true, null)), db, table);
+            return GlobalStateMgr.getCurrentState().getCompactionMgr()
+                    .getStatistics(new PartitionIdentifier(db.getId(), table.getId(), partition.getId())).getPriority();
+        } finally {
+            db.dropTable(name);
+        }
+    }
+
+    private static final String RANGE_PK_CLAUSES = "PRIMARY KEY(k1) ORDER BY(k1)";
+
+    @Test
+    public void testRangePrimaryKeyTableWithSharedTabletRoutesToUnshare() throws Exception {
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.UNSHARE,
+                compactTable("range_pk", RANGE_PK_CLAUSES, true));
+    }
+
+    /**
+     * The FE's view of shared files can be stale, as after a restart, and does not cover an index file that reaches
+     * outside its tablet, so COMPACT does not consult it: every tablet decides for itself whether it unshares or
+     * runs the manual compaction.
+     */
+    @Test
+    public void testRangePrimaryKeyTableWithoutSharedTabletRoutesToUnshare() throws Exception {
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.UNSHARE,
+                compactTable("range_pk", RANGE_PK_CLAUSES, false));
+    }
+
+    @Test
+    public void testRangePrimaryKeyTableWithSeparateSortKeyKeepsManualCompact() throws Exception {
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT,
+                compactTable("range_pk_sk", "PRIMARY KEY(k1) ORDER BY(v1)", true));
+    }
+
+    @Test
+    public void testHashPrimaryKeyTableWithSharedTabletKeepsManualCompact() throws Exception {
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT,
+                compactTable("hash_pk", "PRIMARY KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 3", true));
+    }
+
+    @Test
+    public void testRangeDuplicateKeyTableWithSharedTabletKeepsManualCompact() throws Exception {
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT,
+                compactTable("range_dup", "ORDER BY(k1)", true));
     }
 }

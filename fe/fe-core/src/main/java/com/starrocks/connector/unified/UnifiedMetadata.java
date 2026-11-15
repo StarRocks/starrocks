@@ -22,6 +22,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
@@ -36,12 +38,16 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.SerializedMetaSpec;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -119,8 +125,7 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     }
 
     private ConnectorMetadata metadataOfTable(String dbName, String tblName) {
-        Table.TableType type = getTableType(dbName, tblName);
-        return metadataMap.get(type);
+        return metadataOfType(getTableType(dbName, tblName));
     }
 
     private ConnectorMetadata metadataOfTable(Table table) {
@@ -128,7 +133,20 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
         if (table.isHiveView()) {
             type = HIVE;
         }
-        return metadataMap.get(type);
+        return metadataOfType(type);
+    }
+
+    // Not every table type has an entry in metadataMap: PAIMON is only registered when the catalog was
+    // created with "paimon.catalog.warehouse", while the table type is inferred from the metastore
+    // properties alone. Every caller dereferences the result right away, so report the missing
+    // connector here instead of letting it surface as a NullPointerException.
+    private ConnectorMetadata metadataOfType(Table.TableType type) {
+        ConnectorMetadata metadata = metadataMap.get(type);
+        if (metadata == null) {
+            throw new StarRocksConnectorException("Table type %s is not available in this unified catalog, " +
+                    "the corresponding connector is not configured", type);
+        }
+        return metadata;
     }
 
     @Override
@@ -244,6 +262,11 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     }
 
     @Override
+    public Map<String, Pair<Double, Double>> getPartitionSourceColumnRanges(Table table, TvrVersionRange version) {
+        return metadataOfTable(table).getPartitionSourceColumnRanges(table, version);
+    }
+
+    @Override
     public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
         ConnectorMetadata metadata = metadataOfTable(item.getTable());
         return metadata.prepareMetadata(item, tracers, connectContext);
@@ -258,6 +281,11 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
         ConnectorMetadata metadata = metadataOfTable(table);
         metadata.refreshTable(srDbName, table, partitionNames, onlyCachedPartitions);
+    }
+
+    @Override
+    public void invalidateTableForRead(String srDbName, Table table) {
+        metadataOfTable(table).invalidateTableForRead(srDbName, table);
     }
 
     @Override
@@ -292,6 +320,18 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     public void dropTable(ConnectContext context, DropTableStmt stmt) throws DdlException {
         ConnectorMetadata metadata = metadataOfTable(stmt.getDbName(), stmt.getTableName());
         metadata.dropTable(context, stmt);
+    }
+
+    @Override
+    public ShowResultSet alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+        ConnectorMetadata metadata = metadataOfTable(stmt.getDbName(), stmt.getTableName());
+        return metadata.alterTable(context, stmt);
+    }
+
+    @Override
+    public void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) throws DdlException {
+        ConnectorMetadata metadata = metadataOfTable(truncateTableStmt.getDbName(), truncateTableStmt.getTblName());
+        metadata.truncateTable(truncateTableStmt, context);
     }
 
     @Override

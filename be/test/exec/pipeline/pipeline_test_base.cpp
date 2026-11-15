@@ -197,12 +197,12 @@ ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<SlotDescript
                 data_column->append_datum(ud(e));
                 break;
             case TYPE_DATE: {
-                DateValue value;
+                DateValue value{};
                 data_column->append_datum(value);
                 break;
             }
             case TYPE_DATETIME: {
-                TimestampValue value;
+                TimestampValue value{};
                 data_column->append_datum(value);
                 break;
             }
@@ -230,21 +230,10 @@ ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<SlotDescript
 }
 
 ChunkPtr PipelineTestBase::_create_and_fill_chunk(size_t row_num) {
-    // the following content is TDescriptorTable serialized in json format
-    // CREATE TABLE IF NOT EXISTS `test_aggregate` (
-    //   `id_int` INT(11) NOT NULL,
-    //   `id_tinyint` TINYINT NOT NULL,
-    //   `id_smallint` SMALLINT NOT NULL,
-    //   `id_bigint` BIGINT NOT NULL,
-    //   `id_largeint` LARGEINT NOT NULL,
-    //   `id_float` FLOAT NOT NULL,
-    //   `id_double` DOUBLE NOT NULL,
-    //   `id_char` CHAR(10) NOT NULL,
-    //   `id_varchar` VARCHAR(100) NOT NULL,
-    //   `id_date` DATE NOT NULL,
-    //   `id_datetime` DATETIME NOT NULL,
-    //   `id_decimal` DECIMAL(9,0) NOT NULL
-    // );
+    // The following content is a TDescriptorTable serialized as thrift JSON. It describes `table_statistic_v1`:
+    // BIGINT columns (table_id, db_id, row_count, data_size, distinct_count, null_count), VARCHAR columns
+    // (column_name, max, min) and a DATETIME column (update_time). A second tuple repeats these slot ids and adds
+    // one INT slot (id 13); slots are deduplicated by id below.
     std::string content =
             "{\"1\":{\"lst\":[\"rec\",21,{\"1\":{\"i32\":1},\"2\":{\"i32\":0},\"3\":{\"rec\":{\"1\":{\"lst\":["
             "\"rec\",1,{\"1\":{\"i32\":0},\"2\":{\"rec\":{\"1\":{\"i32\":6}}}}]}}},\"4\":{\"i32\":-1},\"5\":{"

@@ -1,0 +1,248 @@
+-- name: test_grouping_sets_cascade
+-- PushDownAggregateGroupingSetsRule applies repeatedly, so a ROLLUP is computed as a cascade: each
+-- coarser level re-aggregates from the level above it instead of being expanded out of the finest
+-- aggregate. cbo_push_down_groupingset_cascade_level bounds how many levels are built (1 == the
+-- historical single split).
+--
+-- test_grouping_sets_pushdown covers the single-split rewrite, but it rolls up only 3 keys - and the
+-- rule refuses to fire once the repeat is down to 3 grouping sets, so a 4-set rollup gets exactly one
+-- application no matter what the cascade level is. That case therefore never reaches the second
+-- cascade level at all. This one rolls up 5 keys (6 grouping sets) so the cascade really engages, and
+-- is a differential oracle on rows: rule off vs cascade level 1 vs a deep cascade must all return
+-- identical result sets.
+--
+-- Level 2 is where the interesting failures live, because that is the first level whose *input* is
+-- another level's rewritten output rather than the original aggregation:
+--   * count -> sum does not preserve nullability (count(*) is non-nullable, sum() is nullable), and
+--     avg's count part has the same property. Declaring those columns non-nullable is invisible at
+--     level 1, where the input really is the non-nullable count(*), and segfaults the BE from level 2.
+--   * the producer statistics of the level just built have to be registered before the next level is
+--     rewritten, or the NDV-based single-column shuffle silently degrades to all-key partitioning.
+-- Plan-shape assertions for both live in GroupingSetsTest.java and TPCDS1TTest.java.
+drop table if exists gs_cascade_src_${uuid0};
+CREATE TABLE `gs_cascade_src_${uuid0}` (
+    `k1` varchar(20),
+    `k2` varchar(20),
+    `k3` varchar(20),
+    `k4` int,
+    `k5` int,
+    `v_big` bigint,
+    `v_int` int,
+    `v_dec` decimal(27,9),
+    `v_dbl` double
+) DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+PROPERTIES ( "replication_num" = "1");
+
+-- Rows are shaped so that a wrong re-aggregation shows up as a wrong value, not just a wrong count:
+--  * the (a,x,p,*,*) groups have unequal sizes, so re-averaging per-group averages at a coarser level
+--    differs from averaging the underlying rows - and with a cascade that error compounds per level.
+--  * (b,y,q,2,2) has v_big entirely NULL, so its partial sum is NULL and its partial count is 0; every
+--    coarser level must keep folding that in as "contributes nothing".
+--  * genuine NULL group keys collide with the NULLs the rolled-up levels pad their dropped keys with.
+--  * k4/k5 are narrow, so the coarser levels collapse hard - which is the whole point of cascading.
+INSERT INTO gs_cascade_src_${uuid0} VALUES
+ ('a','x','p',1,1,  10,  1,  1.500000000,  1.5)
+,('a','x','p',1,1,  20,  2,  2.500000000,  2.5)
+,('a','x','p',1,2,  30,  3,  3.500000000,  3.5)
+,('a','x','q',2,1,   7,  7,  7.250000000,  7.25)
+,('a','y','p',1,1,  11, 11, 11.125000000, 11.125)
+,('b','x','p',1,1, 100, 10, 10.125000000, 10.125)
+,('b','y','q',2,2,NULL,NULL,NULL,NULL)
+,('b','y','q',2,2,NULL,  5,  5.000000000,  5.0)
+,('c',NULL,'p',1,1, 40,  4,  4.750000000,  4.75)
+,('c',NULL,NULL,NULL,1, 50,  5,  5.250000000,  5.25)
+,(NULL,'x','p',2,2, 60,  6,  6.125000000,  6.125)
+,(NULL,NULL,NULL,NULL,NULL,70, 7,  7.875000000,  7.875);
+
+-- ---------------------------------------------------------------------------
+-- 1. ROLLUP over 5 keys with the full aggregate whitelist.
+--    v_dbl is rounded because the rewrite changes the summation order of a double accumulator, and a
+--    cascade changes it once per level; a real logic error moves the value far more than 6 decimals.
+-- ---------------------------------------------------------------------------
+set cbo_push_down_groupingset = false;
+create table gs_casc_off_1_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5,
+       avg(v_big) a_big, count(v_big) c_big, count(*) c_star,
+       sum(v_big) s_big, max(v_int) mx, min(v_int) mn,
+       avg(v_dec) a_dec, sum(v_dec) s_dec, round(avg(v_dbl), 6) a_dbl,
+       grouping(k4) g4, grouping_id(k1, k2, k3, k4, k5) gid
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5);
+
+set cbo_push_down_groupingset = true;
+set cbo_push_down_groupingset_cascade_level = 1;
+create table gs_casc_lvl1_1_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5,
+       avg(v_big) a_big, count(v_big) c_big, count(*) c_star,
+       sum(v_big) s_big, max(v_int) mx, min(v_int) mn,
+       avg(v_dec) a_dec, sum(v_dec) s_dec, round(avg(v_dbl), 6) a_dbl,
+       grouping(k4) g4, grouping_id(k1, k2, k3, k4, k5) gid
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5);
+
+set cbo_push_down_groupingset_cascade_level = 64;
+create table gs_casc_deep_1_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5,
+       avg(v_big) a_big, count(v_big) c_big, count(*) c_star,
+       sum(v_big) s_big, max(v_int) mx, min(v_int) mn,
+       avg(v_dec) a_dec, sum(v_dec) s_dec, round(avg(v_dbl), 6) a_dbl,
+       grouping(k4) g4, grouping_id(k1, k2, k3, k4, k5) gid
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5);
+
+select (select count(*) from gs_casc_off_1_${uuid0}) - (select count(*) from gs_casc_lvl1_1_${uuid0}) cnt_diff_lvl1,
+       (select count(*) from gs_casc_off_1_${uuid0}) - (select count(*) from gs_casc_deep_1_${uuid0}) cnt_diff_deep,
+       (select count(*) from ((select * from gs_casc_off_1_${uuid0}) except (select * from gs_casc_lvl1_1_${uuid0})) d) only_off_lvl1,
+       (select count(*) from ((select * from gs_casc_lvl1_1_${uuid0}) except (select * from gs_casc_off_1_${uuid0})) d) only_lvl1,
+       (select count(*) from ((select * from gs_casc_off_1_${uuid0}) except (select * from gs_casc_deep_1_${uuid0})) d) only_off_deep,
+       (select count(*) from ((select * from gs_casc_deep_1_${uuid0}) except (select * from gs_casc_off_1_${uuid0})) d) only_deep;
+
+-- ---------------------------------------------------------------------------
+-- 2. COUNT only. This is the narrowest repro of the nullability bug: with nothing but counts in the
+--    plan, every cascade level above the first re-sums a nullable sum() into a column the rewrite used
+--    to declare non-nullable.
+-- ---------------------------------------------------------------------------
+set cbo_push_down_groupingset = false;
+create table gs_casc_off_2_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, count(*) c_star, count(v_big) c_big
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5);
+set cbo_push_down_groupingset = true;
+set cbo_push_down_groupingset_cascade_level = 64;
+create table gs_casc_deep_2_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, count(*) c_star, count(v_big) c_big
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5);
+select (select count(*) from gs_casc_off_2_${uuid0}) - (select count(*) from gs_casc_deep_2_${uuid0}) cnt_diff,
+       (select count(*) from ((select * from gs_casc_off_2_${uuid0}) except (select * from gs_casc_deep_2_${uuid0})) d) only_off,
+       (select count(*) from ((select * from gs_casc_deep_2_${uuid0}) except (select * from gs_casc_off_2_${uuid0})) d) only_deep;
+
+-- ---------------------------------------------------------------------------
+-- 3. CUBE over 4 keys. CUBE is not prefix-nested, so a cascade level would drop no key and buy nothing;
+--    the rule must stop after its first application. Whether or not it does, the rows must match.
+-- ---------------------------------------------------------------------------
+set cbo_push_down_groupingset = false;
+create table gs_casc_off_3_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, count(*) c_star, count(v_big) c_big, avg(v_big) a_big, sum(v_dec) s_dec
+from gs_cascade_src_${uuid0} group by cube(k1, k2, k3, k4);
+set cbo_push_down_groupingset = true;
+set cbo_push_down_groupingset_cascade_level = 64;
+create table gs_casc_deep_3_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, count(*) c_star, count(v_big) c_big, avg(v_big) a_big, sum(v_dec) s_dec
+from gs_cascade_src_${uuid0} group by cube(k1, k2, k3, k4);
+select (select count(*) from gs_casc_off_3_${uuid0}) - (select count(*) from gs_casc_deep_3_${uuid0}) cnt_diff,
+       (select count(*) from ((select * from gs_casc_off_3_${uuid0}) except (select * from gs_casc_deep_3_${uuid0})) d) only_off,
+       (select count(*) from ((select * from gs_casc_deep_3_${uuid0}) except (select * from gs_casc_off_3_${uuid0})) d) only_deep;
+
+-- ---------------------------------------------------------------------------
+-- 4. HAVING on an AVG output above a 5-key rollup. HAVING on AVG blocks the push down entirely (the
+--    pre-divide sum/count columns are not the real value yet), so this pins that the cascade does not
+--    find a way around that guard.
+-- ---------------------------------------------------------------------------
+set cbo_push_down_groupingset = false;
+create table gs_casc_off_4_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, avg(v_big) a_big, count(*) c_star
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5) having avg(v_big) > 20;
+set cbo_push_down_groupingset = true;
+set cbo_push_down_groupingset_cascade_level = 64;
+create table gs_casc_deep_4_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, avg(v_big) a_big, count(*) c_star
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5) having avg(v_big) > 20;
+select (select count(*) from gs_casc_off_4_${uuid0}) - (select count(*) from gs_casc_deep_4_${uuid0}) cnt_diff,
+       (select count(*) from ((select * from gs_casc_off_4_${uuid0}) except (select * from gs_casc_deep_4_${uuid0})) d) only_off,
+       (select count(*) from ((select * from gs_casc_deep_4_${uuid0}) except (select * from gs_casc_off_4_${uuid0})) d) only_deep;
+
+-- ---------------------------------------------------------------------------
+-- 5. HAVING on a COUNT output above a 5-key rollup - i.e. a predicate carried *through* a cascade.
+--    This is the shape with the worst history in this rule: predicate remapping was fixed twice
+--    (#49928 dropped the repeat predicate, #58831 copied the having predicate without remapping the
+--    column refs), both times producing wrong rows rather than a bad plan. Every pre-existing case
+--    covering those shapes rolls up at most 3 keys, which the `size() > 3` floor gives exactly one
+--    application - so before this case the remapping had never been exercised across more than one
+--    level. count() is also the function whose rollup changes nullability (count -> sum), so this is
+--    the predicate path and the nullability path at once.
+-- ---------------------------------------------------------------------------
+set cbo_push_down_groupingset = false;
+create table gs_casc_off_5_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, count(*) c_star, count(v_big) c_big, sum(v_big) s_big
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5) having count(*) > 1;
+set cbo_push_down_groupingset = true;
+set cbo_push_down_groupingset_cascade_level = 1;
+create table gs_casc_lvl1_5_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, count(*) c_star, count(v_big) c_big, sum(v_big) s_big
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5) having count(*) > 1;
+set cbo_push_down_groupingset_cascade_level = 64;
+create table gs_casc_deep_5_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, count(*) c_star, count(v_big) c_big, sum(v_big) s_big
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5) having count(*) > 1;
+select (select count(*) from gs_casc_off_5_${uuid0}) - (select count(*) from gs_casc_lvl1_5_${uuid0}) cnt_diff_lvl1,
+       (select count(*) from gs_casc_off_5_${uuid0}) - (select count(*) from gs_casc_deep_5_${uuid0}) cnt_diff_deep,
+       (select count(*) from ((select * from gs_casc_off_5_${uuid0}) except (select * from gs_casc_lvl1_5_${uuid0})) d) only_off_lvl1,
+       (select count(*) from ((select * from gs_casc_lvl1_5_${uuid0}) except (select * from gs_casc_off_5_${uuid0})) d) only_lvl1,
+       (select count(*) from ((select * from gs_casc_off_5_${uuid0}) except (select * from gs_casc_deep_5_${uuid0})) d) only_off_deep,
+       (select count(*) from ((select * from gs_casc_deep_5_${uuid0}) except (select * from gs_casc_off_5_${uuid0})) d) only_deep;
+
+-- ---------------------------------------------------------------------------
+-- 6. HAVING on a SUM output above a 5-key rollup, plus a predicate on a rolled-up key that only the
+--    coarser levels set to NULL. sum is self-recombining, so unlike avg the rule is not blocked and
+--    the predicate really does travel down every cascade level, getting remapped each time.
+-- ---------------------------------------------------------------------------
+set cbo_push_down_groupingset = false;
+create table gs_casc_off_6_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, sum(v_big) s_big, max(v_int) mx
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5)
+having sum(v_big) > 20 and (k4 is null or k5 is null);
+set cbo_push_down_groupingset = true;
+set cbo_push_down_groupingset_cascade_level = 1;
+create table gs_casc_lvl1_6_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, sum(v_big) s_big, max(v_int) mx
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5)
+having sum(v_big) > 20 and (k4 is null or k5 is null);
+set cbo_push_down_groupingset_cascade_level = 64;
+create table gs_casc_deep_6_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, sum(v_big) s_big, max(v_int) mx
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5)
+having sum(v_big) > 20 and (k4 is null or k5 is null);
+select (select count(*) from gs_casc_off_6_${uuid0}) - (select count(*) from gs_casc_lvl1_6_${uuid0}) cnt_diff_lvl1,
+       (select count(*) from gs_casc_off_6_${uuid0}) - (select count(*) from gs_casc_deep_6_${uuid0}) cnt_diff_deep,
+       (select count(*) from ((select * from gs_casc_off_6_${uuid0}) except (select * from gs_casc_lvl1_6_${uuid0})) d) only_off_lvl1,
+       (select count(*) from ((select * from gs_casc_lvl1_6_${uuid0}) except (select * from gs_casc_off_6_${uuid0})) d) only_lvl1,
+       (select count(*) from ((select * from gs_casc_off_6_${uuid0}) except (select * from gs_casc_deep_6_${uuid0})) d) only_off_deep,
+       (select count(*) from ((select * from gs_casc_deep_6_${uuid0}) except (select * from gs_casc_off_6_${uuid0})) d) only_deep;
+
+-- ---------------------------------------------------------------------------
+-- 7. A filter on grouping() applied above a 5-key rollup - the #49928 shape, at cascade depth.
+--    NOTE: as of this change `check()` refuses to push down at all for this shape (measured: zero
+--    UNION nodes in the plan at every cascade level), so today this is a canary rather than a live
+--    test of the cascade. It is here so that if that guard is ever relaxed, the differential oracle
+--    is already in place for the predicate shape that regressed twice.
+-- ---------------------------------------------------------------------------
+set cbo_push_down_groupingset = false;
+create table gs_casc_off_7_${uuid0} properties("replication_num"="1") as
+select * from (select grouping(k1, k2) as aa, k1, k2, k3, k4, k5, sum(v_dec) s_dec
+               from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5)) t where aa = 1;
+set cbo_push_down_groupingset = true;
+set cbo_push_down_groupingset_cascade_level = 64;
+create table gs_casc_deep_7_${uuid0} properties("replication_num"="1") as
+select * from (select grouping(k1, k2) as aa, k1, k2, k3, k4, k5, sum(v_dec) s_dec
+               from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5)) t where aa = 1;
+select (select count(*) from gs_casc_off_7_${uuid0}) - (select count(*) from gs_casc_deep_7_${uuid0}) cnt_diff,
+       (select count(*) from ((select * from gs_casc_off_7_${uuid0}) except (select * from gs_casc_deep_7_${uuid0})) d) only_off,
+       (select count(*) from ((select * from gs_casc_deep_7_${uuid0}) except (select * from gs_casc_off_7_${uuid0})) d) only_deep;
+
+set cbo_push_down_groupingset = true;
+set cbo_push_down_groupingset_cascade_level = 5;
+drop table gs_casc_off_5_${uuid0};
+drop table gs_casc_lvl1_5_${uuid0};
+drop table gs_casc_deep_5_${uuid0};
+drop table gs_casc_off_6_${uuid0};
+drop table gs_casc_lvl1_6_${uuid0};
+drop table gs_casc_deep_6_${uuid0};
+drop table gs_casc_off_7_${uuid0};
+drop table gs_casc_deep_7_${uuid0};
+drop table gs_casc_off_1_${uuid0};
+drop table gs_casc_lvl1_1_${uuid0};
+drop table gs_casc_deep_1_${uuid0};
+drop table gs_casc_off_2_${uuid0};
+drop table gs_casc_deep_2_${uuid0};
+drop table gs_casc_off_3_${uuid0};
+drop table gs_casc_deep_3_${uuid0};
+drop table gs_casc_off_4_${uuid0};
+drop table gs_casc_deep_4_${uuid0};
+drop table gs_cascade_src_${uuid0};

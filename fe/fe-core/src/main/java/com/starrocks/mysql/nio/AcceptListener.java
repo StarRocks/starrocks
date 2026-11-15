@@ -73,7 +73,14 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
             // if exception happens.
             ConnectContext context = new ConnectContext(connection);
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            context.setConnectionId(connectScheduler.getNextConnectionId());
+            try {
+                context.setConnectionId(connectScheduler.getNextConnectionId());
+            } catch (ConnectScheduler.ConnectionIdExhaustedException e) {
+                LOG.warn("Reject connection because no connection ID is available. remote={}",
+                        connection.getPeerAddress(), e);
+                context.cleanup();
+                return;
+            }
             context.resetConnectionStartTime();
             int connectionId = context.getConnectionId();
             SocketAddress remoteAddr = connection.getPeerAddress();
@@ -108,6 +115,8 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         }
 
                         MysqlProto.sendResponsePacket(context);
+                        // the auth OK goes out uncompressed, everything after it is compressed
+                        context.getMysqlChannel().startCompression();
 
                         context.setStartTime();
                         ConnectProcessor processor = new ConnectProcessor(context);

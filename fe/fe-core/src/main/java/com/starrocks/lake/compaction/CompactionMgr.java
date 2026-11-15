@@ -107,6 +107,10 @@ public class CompactionMgr implements MemoryTrackable {
         return compactionScheduler.getRunningCompactions().size();
     }
 
+    public boolean isPartitionCompacting(PartitionIdentifier partition) {
+        return compactionScheduler != null && compactionScheduler.getRunningCompactions().containsKey(partition);
+    }
+
     // Total running tablet-level compaction tasks across all running jobs (one task == one tablet
     // still being compacted), the same unit bounded by Config.lake_compaction_max_tasks. This is
     // finer-grained than getRunningCompactionCount(), which counts jobs (one per partition).
@@ -124,6 +128,8 @@ public class CompactionMgr implements MemoryTrackable {
                     Config.lake_compaction_disable_ids);
             GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
                 compactionScheduler.disableTableOrPartitionId(Config.lake_compaction_disable_ids);
+                compactionScheduler.updateCompactionAllowlist(
+                        Config.lake_compaction_admission_mode, Config.lake_compaction_allow_table_ids);
             });
             compactionScheduler.start();
         }
@@ -222,6 +228,18 @@ public class CompactionMgr implements MemoryTrackable {
                 .mapToDouble(stat -> stat.getCompactionScore().getMax()).max().orElse(0);
     }
 
+    /**
+     * Drop a partition's compaction priority back to DEFAULT. Needed when a priority-carrying request is
+     * abandoned before it starts: the scheduler's own reset only covers partitions that reached
+     * runningCompactions, and ScoreSelector admits a non-DEFAULT priority regardless of its score.
+     */
+    void resetPriority(PartitionIdentifier partition) {
+        partitionStatisticsHashMap.computeIfPresent(partition, (k, v) -> {
+            v.resetPriority();
+            return v;
+        });
+    }
+
     void enableCompactionAfter(PartitionIdentifier partition, long delayMs) {
         PartitionStatistics statistics = partitionStatisticsHashMap.computeIfPresent(partition, (k, v) -> {
             // FE's follower nodes may have a different timestamp with the leader node.
@@ -253,6 +271,11 @@ public class CompactionMgr implements MemoryTrackable {
 
     public void cancelCompaction(long txnId) {
         compactionScheduler.cancelCompaction(txnId);
+    }
+
+    public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                                               Set<Long> includePartitionIds) {
+        return compactionScheduler.cancelPreviousCompactions(endTransactionId, dbId, tableId, includePartitionIds);
     }
 
     public boolean existCompaction(long txnId) {
@@ -290,9 +313,34 @@ public class CompactionMgr implements MemoryTrackable {
                 v = new PartitionStatistics(partition);
             }
             v.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            // A new request runs on the next cycle even if the partition is cooling down.
+            v.setNextCompactionTime(0);
             return v;
         });
         LOG.info("Trigger manual compaction, {}", statistics);
+        return statistics;
+    }
+
+    public PartitionStatistics triggerUnshareCompaction(PartitionIdentifier partition) {
+        PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
+            if (v == null) {
+                v = new PartitionStatistics(partition);
+            }
+            if (v.getCompactionScore() == null) {
+                // Score-based selectors discard null scores even for an explicit priority. A
+                // synthetic zero score lets UNSHARE run for an empty/new partition as well.
+                v.setCompactionScore(new Quantiles(0, 0, 0));
+            }
+            if (v.getPriority() != PartitionStatistics.CompactionPriority.UNSHARE) {
+                // A new request runs on the next cycle even if the partition is cooling down. SplitTabletJob
+                // re-triggers a pending UNSHARE on every reshard tick, so keep the retry deadline of a request
+                // that is already pending, or one the scheduler deferred would be retried every cycle.
+                v.setNextCompactionTime(0);
+            }
+            v.setPriority(PartitionStatistics.CompactionPriority.UNSHARE);
+            return v;
+        });
+        LOG.info("Trigger UNSHARE compaction, {}", statistics);
         return statistics;
     }
 

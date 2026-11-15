@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "How to create and manage bitmap indexes in StarRocks to accelerate equality and range queries on low-cardinality columns."
 keywords: ['suoyin']
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Bitmap 索引
@@ -60,7 +61,7 @@ StarRocks 判断是否使用 Bitmap 索引的逻辑：因为一般情况下查�
 
 ### 支持优化的查询
 
-Bitmap 索引适用于优化等值 `=` 查询、`[NOT] IN` 范围查询、`>`，`>=`，`<`，`<=` 查询、 `IS NULL` 查询。不适用于优化 `!=`，`[NOT] LIKE` 查询。
+Bitmap 索引适用于优化等值 `=` 查询、`IN` 范围查询、`>`，`>=`，`<`，`<=` 查询、 `IS NULL` 查询。不适用于优化 `!=`，`NOT IN`，`[NOT] LIKE` 查询。
 
 ### 支持的列和列的数据类型
 
@@ -291,7 +292,7 @@ IOTaskExecTime: 2s77ms // Scan 数据总时间，相对于没创建 Bitmap 索�
     DictDecode: 329.696ms // 因为输出的行数是一样的，所以低基数优化字典解码的时间所花时间差不多
     BitmapIndexFilter: 419.308ms // Bitmap 索引过滤数据的时间。
     BitmapIndexFilterRows: 123.433M (123432975) // Bitmap 索引过滤掉的数据行数。
-    ZoneMapIndexFiter: 171.580ms // ZoneMap 索引过滤数据花了 0.17 秒。
+    ZoneMapIndexFilter: 171.580ms // ZoneMap 索引过滤数据花了 0.17 秒。
 ```
 
 ##### 由 StarRocks 默认配置决定是否使用 Bitmap 索引

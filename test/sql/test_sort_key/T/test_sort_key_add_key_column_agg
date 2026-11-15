@@ -17,7 +17,7 @@ insert into agg_t values (1, 3, 10, 20), (2, 1, 30, 40), (3, 2, 50, 60);
 select * from agg_t order by k1;
 
 -- Add key column at default position (last key)
-alter table agg_t add column k3 int default '0';
+alter table agg_t add column k3 int key default '0';
 function: wait_alter_table_finish()
 select * from agg_t order by k1;
 insert into agg_t values (4, 4, 70, 80, 1);
@@ -27,7 +27,7 @@ select * from agg_t order by k1;
 select k1, k2, v1, v2 from agg_t where k1 in (1, 2) order by k1;
 
 -- Add key column at middle position (AFTER k1)
-alter table agg_t add column k4 int default '0' after k1;
+alter table agg_t add column k4 int key default '0' after k1;
 function: wait_alter_table_finish()
 select * from agg_t order by k1;
 insert into agg_t values (5, 2, 90, 100, 1, 2);
@@ -37,7 +37,7 @@ select * from agg_t order by k1;
 select k1, k2, v1, v2 from agg_t where k1 in (1, 2) order by k1;
 
 -- Add key column without specifying position
-alter table agg_t add column k5 int default '0';
+alter table agg_t add column k5 int key default '0';
 function: wait_alter_table_finish()
 select * from agg_t order by k1;
 insert into agg_t values (6, 3, 110, 120, 1, 2, 3);
@@ -57,7 +57,7 @@ select * from agg_t order by k1;
 select k1, k2, v1, v2 from agg_t where k1 in (1, 2) order by k1;
 
 -- Add key column after reorder
-alter table agg_t add column k6 int default '0';
+alter table agg_t add column k6 int key default '0';
 function: wait_alter_table_finish()
 select * from agg_t order by k1;
 insert into agg_t values (8, 2, 4, 1, 2, 4, 150, 160);

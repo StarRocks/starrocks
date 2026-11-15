@@ -75,6 +75,27 @@ public class CloudConfigurationFactoryTest {
                         "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
                         "region='us-west-2', endpoint='endpoint'}, enablePathStyleAccess=false, enableSSL=true}",
                 cloudConfiguration.toConfString());
+
+        // Vended credentials without a session token (e.g. Cloudflare R2, MinIO vend static
+        // scoped keys) must still produce an AWS configuration carrying the endpoint.
+        map.remove(S3FileIOProperties.SESSION_TOKEN);
+        map.put(S3FileIOProperties.PATH_STYLE_ACCESS, "true");
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map, "");
+        Assertions.assertNotNull(cloudConfiguration);
+        Assertions.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
+        Assertions.assertEquals(
+                "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
+                        "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
+                        "useInstanceProfile=false, useWebIdentityProfile=false, accessKey='ak', secretKey='sk', " +
+                        "sessionToken='', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
+                        "region='us-west-2', endpoint='endpoint'}, enablePathStyleAccess=true, enableSSL=true}",
+                cloudConfiguration.toConfString());
+
+        // Without ak/sk there is nothing to vend: fall back to DEFAULT.
+        map.remove(S3FileIOProperties.ACCESS_KEY_ID);
+        map.remove(S3FileIOProperties.SECRET_ACCESS_KEY);
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map, "");
+        Assertions.assertEquals(CloudType.DEFAULT, cloudConfiguration.getCloudType());
     }
 
     @Test
@@ -255,6 +276,70 @@ public class CloudConfigurationFactoryTest {
     }
 
     @Test
+    public void testAzureBlobEndpointSchemeIsExcludedFromHadoopCredentialKeys() {
+        Map<String, String> sharedKeyProperties = new HashMap<>();
+        sharedKeyProperties.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT,
+                "https://account.blob.core.windows.net");
+        sharedKeyProperties.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, "shared-key");
+
+        CloudConfiguration sharedKeyConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(sharedKeyProperties);
+        Configuration sharedKeyHadoopConfiguration = new Configuration();
+        sharedKeyConfiguration.applyToConfiguration(sharedKeyHadoopConfiguration);
+        Assertions.assertEquals("shared-key", sharedKeyHadoopConfiguration.get(
+                "fs.azure.account.key.account.blob.core.windows.net"));
+        Assertions.assertNull(sharedKeyHadoopConfiguration.get(
+                "fs.azure.account.key.https://account.blob.core.windows.net"));
+
+        Map<String, String> sasProperties = new HashMap<>();
+        sasProperties.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT,
+                "http://account.blob.core.windows.net");
+        sasProperties.put(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, "container");
+        sasProperties.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, "sas-token");
+
+        CloudConfiguration sasConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(sasProperties);
+        Configuration sasHadoopConfiguration = new Configuration();
+        sasConfiguration.applyToConfiguration(sasHadoopConfiguration);
+        Assertions.assertEquals("sas-token", sasHadoopConfiguration.get(
+                "fs.azure.sas.container.account.blob.core.windows.net"));
+        Assertions.assertNull(sasHadoopConfiguration.get(
+                "fs.azure.sas.container.http://account.blob.core.windows.net"));
+    }
+
+    @Test
+    public void testAzureBlobEndpointAuthorityIsUsedInHadoopCredentialKeys() {
+        Map<String, String> sharedKeyProperties = new HashMap<>();
+        sharedKeyProperties.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT,
+                "https://account.blob.core.windows.net:8443/");
+        sharedKeyProperties.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, "shared-key");
+
+        CloudConfiguration sharedKeyConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(sharedKeyProperties);
+        Configuration sharedKeyHadoopConfiguration = new Configuration();
+        sharedKeyConfiguration.applyToConfiguration(sharedKeyHadoopConfiguration);
+        Assertions.assertEquals("shared-key", sharedKeyHadoopConfiguration.get(
+                "fs.azure.account.key.account.blob.core.windows.net:8443"));
+        Assertions.assertNull(sharedKeyHadoopConfiguration.get(
+                "fs.azure.account.key.account.blob.core.windows.net:8443/"));
+
+        Map<String, String> sasProperties = new HashMap<>();
+        sasProperties.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT,
+                "http://account.blob.core.windows.net:10000/");
+        sasProperties.put(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, "container");
+        sasProperties.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, "sas-token");
+
+        CloudConfiguration sasConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(sasProperties);
+        Configuration sasHadoopConfiguration = new Configuration();
+        sasConfiguration.applyToConfiguration(sasHadoopConfiguration);
+        Assertions.assertEquals("sas-token", sasHadoopConfiguration.get(
+                "fs.azure.sas.container.account.blob.core.windows.net:10000"));
+        Assertions.assertNull(sasHadoopConfiguration.get(
+                "fs.azure.sas.container.account.blob.core.windows.net:10000/"));
+    }
+
+    @Test
     public void testAzureASLS1eCloudConfiguration() {
         Map<String, String> map = new HashMap<String, String>() {
             {
@@ -303,6 +388,41 @@ public class CloudConfigurationFactoryTest {
                         "cred=AzureADLS2CloudCredential{oauth2ManagedIdentity=false, oauth2TenantId='XX', " +
                         "oauth2ClientId='XX', endpoint='', storageAccount='XX', sharedKey='XX', sasToken='', " +
                         "oauth2ClientSecret='XX', oauth2ClientEndpoint='XX', oauth2TokenFile='XX'}}");
+    }
+
+    @Test
+    public void testAzureADLS2EndpointSchemeIsExcludedFromHadoopCredentialKeys() {
+        Map<String, String> sharedKeyProperties = new HashMap<>();
+        sharedKeyProperties.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT,
+                "https://account.dfs.core.windows.net");
+        sharedKeyProperties.put(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, "shared-key");
+
+        CloudConfiguration sharedKeyConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(sharedKeyProperties);
+        Configuration sharedKeyHadoopConfiguration = new Configuration();
+        sharedKeyConfiguration.applyToConfiguration(sharedKeyHadoopConfiguration);
+        Assertions.assertEquals("SharedKey", sharedKeyHadoopConfiguration.get(
+                "fs.azure.account.auth.type.account.dfs.core.windows.net"));
+        Assertions.assertEquals("shared-key", sharedKeyHadoopConfiguration.get(
+                "fs.azure.account.key.account.dfs.core.windows.net"));
+        Assertions.assertNull(sharedKeyHadoopConfiguration.get(
+                "fs.azure.account.key.https://account.dfs.core.windows.net"));
+
+        Map<String, String> sasProperties = new HashMap<>();
+        sasProperties.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT,
+                "http://account.dfs.core.windows.net");
+        sasProperties.put(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, "sas-token");
+
+        CloudConfiguration sasConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(sasProperties);
+        Configuration sasHadoopConfiguration = new Configuration();
+        sasConfiguration.applyToConfiguration(sasHadoopConfiguration);
+        Assertions.assertEquals("SAS", sasHadoopConfiguration.get(
+                "fs.azure.account.auth.type.account.dfs.core.windows.net"));
+        Assertions.assertEquals("sas-token", sasHadoopConfiguration.get(
+                "fs.azure.sas.fixed.token.account.dfs.core.windows.net"));
+        Assertions.assertNull(sasHadoopConfiguration.get(
+                "fs.azure.sas.fixed.token.http://account.dfs.core.windows.net"));
     }
 
     @Test
@@ -393,7 +513,9 @@ public class CloudConfigurationFactoryTest {
                         "cred=GCPCloudCredential{endpoint='http://xx', useComputeEngineServiceAccount=false, " +
                         "serviceAccountEmail='XX', serviceAccountPrivateKeyId='XX', serviceAccountPrivateKey='XX', " +
                         "impersonationServiceAccount='XX', accessToken='', accessTokenExpiresAt=''}}");
-        Assertions.assertEquals("SERVICE_ACCOUNT_JSON_KEYFILE", conf.get("fs.gs.auth.type"));
+        Assertions.assertEquals("ACCESS_TOKEN_PROVIDER", conf.get("fs.gs.auth.type"));
+        Assertions.assertEquals("com.starrocks.connector.gcp.ServiceAccountGCPAccessTokenProvider",
+                conf.get("fs.gs.auth.access.token.provider"));
         Assertions.assertEquals("XX", conf.get("fs.gs.auth.service.account.email"));
         Assertions.assertEquals("XX", conf.get("fs.gs.auth.service.account.private.key.id"));
         Assertions.assertEquals("XX", conf.get("fs.gs.auth.service.account.private.key"));

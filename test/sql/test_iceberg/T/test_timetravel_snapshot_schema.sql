@@ -1,7 +1,7 @@
--- name: test_timetravel_snapshot_schema @sequential @no_arrow_flight_sql
+-- name: test_timetravel_snapshot_schema @sequential @no_arrow_flight_sql @slow
 -- Test Point:
---   1. VERSION AS OF a tag/branch created before a column rename resolves columns by the
---      snapshot schema: the old column name resolves, the renamed name does not exist yet.
+--   1. VERSION AS OF a tag created before a column rename uses the snapshot schema;
+--      a branch uses the current schema while reading its referenced snapshot.
 --   2. Predicates on the snapshot-schema column name are planned and evaluated correctly.
 --   3. The same holds for a partitioned table whose partition source column was renamed.
 --   4. An ordinary current read after a metadata-only ADD COLUMN (no new snapshot) resolves the
@@ -39,8 +39,8 @@ select id, c from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
 select id, c_renamed from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of "tag_before_rename" order by id;
 -- predicate on the snapshot-schema column name
 select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of "tag_before_rename" where c = 100;
--- branch reference behaves the same as the tag
-select id, c from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of "branch_before_rename" where c >= 100 order by id;
+-- branch reference reads its snapshot using the current schema, including the renamed column
+select id, c_renamed from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of "branch_before_rename" where c_renamed >= 100 order by id;
 
 -- 2) partitioned table: partition source column renamed between snapshots
 function: retry_execute_sql("create external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_part_tbl_${uuid0} (id int, c int) partition by c", False, 5, 1000)

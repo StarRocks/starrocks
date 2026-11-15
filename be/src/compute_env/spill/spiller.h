@@ -70,6 +70,22 @@ public:
     RuntimeProfile::Counter* spill_rows = nullptr;
     // time spent to flush data to disk
     RuntimeProfile::Counter* flush_timer = nullptr;
+    // flush_timer split by stage. Both are scoped only inside RawSpillerWriter::_spill_mem_table()
+    // and ::_compact_mem_table(); PartitionedSpillerWriter leaves them at zero because
+    // spill_partition() finalizes and flushes the mem table itself and enters neither.
+    // time spent writing a finalized mem table out as a new block group. Non-zero for any
+    // RawSpillerWriter, ordered or not: an unordered one (nested-loop join build/probe, which takes
+    // the default SpilledOptions) has no compaction stage but still flushes mem tables.
+    RuntimeProfile::Counter* flush_mem_table_timer = nullptr;
+    // time spent in the compaction stage, merging several sorted block groups into one. The stage is
+    // entered on every flush task but returns straight away unless the spiller is ordered and
+    // enable_block_compaction is set, since _need_compact_block() bails out on is_unordered. So
+    // expect a negligible non-zero value, not exactly zero, where compaction does not apply; only
+    // the blocking aggregate sink and the partition sort sink do real work here.
+    RuntimeProfile::Counter* compact_timer = nullptr;
+    // the merging part of compact_timer: comparing keys and assembling the merged chunk. The
+    // deserialize and read IO it feeds on are counted by deserialize_timer/read_io_timer instead.
+    RuntimeProfile::Counter* compact_merge_timer = nullptr;
     // disk io time during flush
     RuntimeProfile::Counter* write_io_timer = nullptr;
     RuntimeProfile::Counter* local_write_io_timer = nullptr;
@@ -127,6 +143,9 @@ public:
     // the number of compact table
     RuntimeProfile::Counter* compact_count = nullptr;
     RuntimeProfile::Counter* compact_block_count = nullptr;
+    // bytes read from and written back to disk by compaction, a subset of restore_bytes/flush_bytes
+    RuntimeProfile::Counter* compact_bytes_read = nullptr;
+    RuntimeProfile::Counter* compact_bytes_written = nullptr;
 
     // flush/restore task count
     RuntimeProfile::Counter* flush_io_task_count = nullptr;

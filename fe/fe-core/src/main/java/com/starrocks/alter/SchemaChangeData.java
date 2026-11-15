@@ -40,11 +40,17 @@ class SchemaChangeData {
     private final boolean bloomFilterColumnsChanged;
     private final Set<ColumnId> bloomFilterColumns;
     private final double bloomFilterFpp;
+    private final boolean zstdCompressionColumnsChanged;
+    private final Set<ColumnId> zstdCompressionColumns;
+    private final Map<ColumnId, Integer> zstdCompressionPageSizes;
     private final boolean hasIndexChanged;
     private final Map<Long, Short> newIndexMetaIdToShortKeyCount;
     private final boolean shortKeyChanged;
     private final List<Integer> sortKeyIdxes;
     private final List<Integer> sortKeyUniqueIds;
+    // index meta id -> sort key of a non-base index that keeps its own sort key
+    private final Map<Long, List<Integer>> indexSortKeyIdxes;
+    private final Map<Long, List<Integer>> indexSortKeyUniqueIds;
     private final long warehouseId;
     private final ComputeResource computeResource;
     private final boolean disableReplicatedStorageForGIN;
@@ -90,6 +96,19 @@ class SchemaChangeData {
         return bloomFilterFpp;
     }
 
+    boolean isZstdCompressionColumnsChanged() {
+        return zstdCompressionColumnsChanged;
+    }
+
+    @Nullable
+    Map<ColumnId, Integer> getZstdCompressionPageSizes() {
+        return zstdCompressionPageSizes;
+    }
+
+    Set<ColumnId> getZstdCompressionColumns() {
+        return zstdCompressionColumns;
+    }
+
     boolean isHasIndexChanged() {
         return hasIndexChanged;
     }
@@ -115,6 +134,16 @@ class SchemaChangeData {
     }
 
     @NotNull
+    Map<Long, List<Integer>> getIndexSortKeyIdxes() {
+        return Collections.unmodifiableMap(indexSortKeyIdxes);
+    }
+
+    @NotNull
+    Map<Long, List<Integer>> getIndexSortKeyUniqueIds() {
+        return Collections.unmodifiableMap(indexSortKeyUniqueIds);
+    }
+
+    @NotNull
     public ComputeResource getComputeResource() {
         return computeResource;
     }
@@ -132,12 +161,17 @@ class SchemaChangeData {
         this.bloomFilterColumnsChanged = builder.bloomFilterColumnsChanged;
         this.bloomFilterColumns = builder.bloomFilterColumns;
         this.bloomFilterFpp = builder.bloomFilterFpp;
+        this.zstdCompressionColumnsChanged = builder.zstdCompressionColumnsChanged;
+        this.zstdCompressionColumns = builder.zstdCompressionColumns;
+        this.zstdCompressionPageSizes = builder.zstdCompressionPageSizes;
         this.hasIndexChanged = builder.hasIndexChanged;
         this.newIndexMetaIdToShortKeyCount =
                 Objects.requireNonNull(builder.newIndexMetaIdToShortKeyCount, "newIndexShortKeyCount is null");
         this.shortKeyChanged = builder.shortKeyChanged;
         this.sortKeyIdxes = builder.sortKeyIdxes;
         this.sortKeyUniqueIds = builder.sortKeyUniqueIds;
+        this.indexSortKeyIdxes = builder.indexSortKeyIdxes;
+        this.indexSortKeyUniqueIds = builder.indexSortKeyUniqueIds;
         this.warehouseId = builder.warehouseId;
         this.computeResource = builder.computeResource;
         this.disableReplicatedStorageForGIN = builder.disableReplicatedStorageForGIN;
@@ -152,11 +186,16 @@ class SchemaChangeData {
         private boolean bloomFilterColumnsChanged = false;
         private Set<ColumnId> bloomFilterColumns;
         private double bloomFilterFpp;
+        private boolean zstdCompressionColumnsChanged = false;
+        private Set<ColumnId> zstdCompressionColumns;
+        Map<ColumnId, Integer> zstdCompressionPageSizes;
         private boolean hasIndexChanged = false;
         private Map<Long, Short> newIndexMetaIdToShortKeyCount = new HashMap<>();
         private boolean shortKeyChanged = false;
         private List<Integer> sortKeyIdxes;
         private List<Integer> sortKeyUniqueIds;
+        private final Map<Long, List<Integer>> indexSortKeyIdxes = new HashMap<>();
+        private final Map<Long, List<Integer>> indexSortKeyUniqueIds = new HashMap<>();
         private long warehouseId;
         private ComputeResource computeResource;
         private boolean disableReplicatedStorageForGIN = false;
@@ -190,6 +229,21 @@ class SchemaChangeData {
             return this;
         }
 
+        Builder withZstdCompressionColumnsChanged(boolean changed) {
+            this.zstdCompressionColumnsChanged = changed;
+            return this;
+        }
+
+        Builder withZstdCompressionPageSizes(@Nullable Map<ColumnId, Integer> zstdCompressionPageSizes) {
+            this.zstdCompressionPageSizes = zstdCompressionPageSizes;
+            return this;
+        }
+
+        Builder withZstdCompressionColumns(@Nullable Set<ColumnId> zstdCompressionColumns) {
+            this.zstdCompressionColumns = zstdCompressionColumns;
+            return this;
+        }
+
         Builder withAlterIndexInfo(boolean hasIndexChanged, @NotNull List<Index> indexes) {
             this.hasIndexChanged = hasIndexChanged;
             this.indexes = indexes;
@@ -214,6 +268,13 @@ class SchemaChangeData {
 
         Builder withSortKeyUniqueIds(@Nullable List<Integer> sortKeyUniqueIds) {
             this.sortKeyUniqueIds = sortKeyUniqueIds;
+            return this;
+        }
+
+        Builder withIndexSortKey(long indexMetaId, @NotNull List<Integer> sortKeyIdxes,
+                                 @NotNull List<Integer> sortKeyUniqueIds) {
+            this.indexSortKeyIdxes.put(indexMetaId, sortKeyIdxes);
+            this.indexSortKeyUniqueIds.put(indexMetaId, sortKeyUniqueIds);
             return this;
         }
 

@@ -27,6 +27,7 @@
 #include "common/config_exec_fwd.h"
 #include "common/status.h"
 #include "fs/fs_factory.h"
+#include "storage/extends_column_utils.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -217,7 +218,11 @@ StatusOr<std::shared_ptr<Segment>> SegmentMetaCollecter::_get_dcg_segment(uint32
         if (idx.first >= 0) {
             ASSIGN_OR_RETURN(auto column_file, dcg->column_file_by_idx(parent_name(_segment->file_name()), idx.first));
             if (_dcg_segments.count(column_file) == 0) {
-                ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg, idx.first, _params->tablet_schema));
+                // A `.cols` segment is opened again by every metadata scan, so its footer read has to fill the
+                // local data cache like the other reads of this scan do, and count towards its statistics.
+                ASSIGN_OR_RETURN(auto dcg_segment,
+                                 _segment->new_dcg_segment(*dcg, idx.first, _params->tablet_schema,
+                                                           LakeIOOptions{.fill_data_cache = true}, &_stats));
                 _dcg_segments[column_file] = dcg_segment;
             }
             return _dcg_segments[column_file];
@@ -231,13 +236,23 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentMetaCollecter::_new_dcg_column_
         const TabletColumn& column, std::string* filename, FileEncryptionInfo* encryption_info,
         ColumnAccessPath* path) {
     // build column iter from delta column group
-    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(column.unique_id()));
+    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(storage_column_uid(column)));
     if (dcg_segment != nullptr) {
         if (filename != nullptr) {
             *filename = dcg_segment->file_name();
         }
         if (encryption_info != nullptr && dcg_segment->encryption_info()) {
             *encryption_info = *dcg_segment->encryption_info();
+        }
+        if (column.is_extended()) {
+            // Same as SegmentIterator::_new_dcg_column_iterator: an extended column has no reader of
+            // its own in the .cols segment, it must be rebuilt from the root JSON column.
+            //
+            // This site must stay in step with the scan path. The global dictionary for a JSON string
+            // subfield is collected here, through a [_META_] scan; if the scan read the .cols overlay
+            // while dictionary collection still read the base segment, the value the scan returns
+            // would be absent from the dictionary and the query would fail to decode it.
+            return dcg_segment->new_column_iterator_or_default(column, path);
         }
         return dcg_segment->new_column_iterator(column, path);
     }
@@ -664,6 +679,11 @@ Status SegmentMetaCollecter::_collect_column_compressed_size(ColumnId cid, Colum
 }
 
 size_t SegmentMetaCollecter::_collect_column_size_recursive(ColumnReader* col_reader) {
+    // A Flat JSON root footprint already aggregates its sub-readers.
+    if (col_reader->is_flat_json()) {
+        return col_reader->total_mem_footprint();
+    }
+
     size_t total_mem_footprint = col_reader->total_mem_footprint();
 
     if (col_reader->sub_readers() != nullptr) {

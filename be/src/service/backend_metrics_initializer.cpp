@@ -48,6 +48,7 @@
 #include "io/io_profiler_metrics.h"
 #include "platform/http/http_metrics.h"
 #include "platform/key_cache.h"
+#include "platform/llm/ai_metrics.h"
 #include "platform/platform_metrics.h"
 #include "runtime/process_memory_metrics.h"
 #include "runtime/runtime_env.h"
@@ -244,6 +245,7 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     registry->set_collect_hook_enabled(options.collect_hook_enabled);
     compression::install_compression_context_pool_metrics(registry);
     HttpMetrics::instance()->install(registry);
+    AIMetrics::instance()->install(registry);
     ServiceMetrics::instance()->install(registry);
     StarOSWorkerMetrics::instance()->install(registry);
     auto* agent_metrics = AgentMetrics::instance();

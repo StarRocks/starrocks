@@ -1,0 +1,83 @@
+-- name: test_skew_join_v1_outer
+CREATE TABLE sj_probe (
+    c_key INT NOT NULL,
+    c_val INT
+)
+DUPLICATE KEY(c_key)
+DISTRIBUTED BY HASH(c_key) BUCKETS 1
+PROPERTIES (
+    "replication_num"="1"
+);
+-- result:
+-- !result
+CREATE TABLE sj_build (
+    c_key INT NOT NULL,
+    c_val INT
+)
+DUPLICATE KEY(c_key)
+DISTRIBUTED BY HASH(c_key) BUCKETS 1
+PROPERTIES (
+    "replication_num"="1"
+);
+-- result:
+-- !result
+insert into sj_probe values (1, 7), (2, 7), (3, 7), (4, 9), (5, null);
+-- result:
+-- !result
+insert into sj_build values (10, 7), (11, 9);
+-- result:
+-- !result
+set enable_optimize_skew_join_v1 = true;
+-- result:
+-- !result
+set enable_optimize_skew_join_v2 = false;
+-- result:
+-- !result
+select count(*) from sj_probe left join sj_build on sj_build.c_val = sj_probe.c_val;
+-- result:
+5
+-- !result
+select count(*) from sj_probe left join [skew|sj_build.c_val(7)] sj_build on sj_build.c_val = sj_probe.c_val;
+-- result:
+5
+-- !result
+select sj_probe.c_key, sj_build.c_key from sj_probe left join [skew|sj_build.c_val(7)] sj_build on sj_build.c_val = sj_probe.c_val order by 1, 2;
+-- result:
+1	10
+2	10
+3	10
+4	11
+5	None
+-- !result
+function: assert_explain_not_contains('select sj_probe.c_key, sj_build.c_key from sj_probe left join [skew|sj_build.c_val(7)] sj_build on sj_build.c_val = sj_probe.c_val', 'rand_col')
+-- result:
+None
+-- !result
+select count(*) from sj_probe join sj_build on sj_build.c_val = sj_probe.c_val;
+-- result:
+4
+-- !result
+select count(*) from sj_probe join [skew|sj_build.c_val(7)] sj_build on sj_build.c_val = sj_probe.c_val;
+-- result:
+4
+-- !result
+function: assert_explain_contains('select sj_probe.c_key, sj_build.c_key from sj_probe join [skew|sj_build.c_val(7)] sj_build on sj_build.c_val = sj_probe.c_val', 'rand_col')
+-- result:
+None
+-- !result
+select count(*) from sj_probe left join [skew|sj_probe.c_val(7)] sj_build on sj_build.c_val = sj_probe.c_val;
+-- result:
+5
+-- !result
+select sj_probe.c_key, sj_build.c_key from sj_probe left join [skew|sj_probe.c_val(7)] sj_build on sj_build.c_val = sj_probe.c_val order by 1, 2;
+-- result:
+1	10
+2	10
+3	10
+4	11
+5	None
+-- !result
+function: assert_explain_contains('select sj_probe.c_key, sj_build.c_key from sj_probe left join [skew|sj_probe.c_val(7)] sj_build on sj_build.c_val = sj_probe.c_val', 'rand_col')
+-- result:
+None
+-- !result

@@ -1,4 +1,4 @@
--- name: test_jvm_udf @no_arrow_flight_sql
+-- name: test_jvm_udf @no_arrow_flight_sql @slow
 
 set enable_group_execution = true;
 
@@ -85,7 +85,8 @@ select count(udtfbigint) from t0, udtfbigint(c1);
 select count(udtffloat) from t0, udtffloat(c1);
 select count(udtfdouble) from t0, udtfdouble(c1);
 -- test udtf with utf8 case
-select * from TABLE(udtfstring(""));
+-- udtfstring returns its argument twice; bracket the rows so the two empty strings show in the result.
+select concat('[', udtfstring, ']') from TABLE(udtfstring(""));
 select * from TABLE(udtfstring("▁▂▃▄▅▆▇█"));
 select * from TABLE(udtfstring("中文测试"));
 select * from TABLE(udtfstring("∀∂∈ℝ∧∪≡∞ ↑↗↨↻⇣ ┐┼╔╘░►☺♀ ﬁ�⑀₂ἠḂӥẄɐː⍎אԱა"));

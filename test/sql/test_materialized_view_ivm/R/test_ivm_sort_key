@@ -1,0 +1,95 @@
+-- name: test_ivm_sort_key
+create external catalog ivm_ice_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog ivm_ice_${uuid0};
+-- result:
+-- !result
+create database ivm_ice_db_${uuid0};
+-- result:
+-- !result
+use ivm_ice_db_${uuid0};
+-- result:
+-- !result
+create table base (region string, dt date, amount int);
+-- result:
+-- !result
+insert into base values ('CN', '2024-01-01', 10), ('US', '2024-01-02', 20);
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_sort_key
+DISTRIBUTED BY HASH(region) BUCKETS 1
+ORDER BY (region, dt)
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT region, dt, amount FROM ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base;
+-- result:
+-- !result
+SELECT PRIMARY_KEY = SORT_KEY AS pk_eq_sort,
+       instr(PRIMARY_KEY, '__ROW_ID__') > 0 AS pk_is_row_id,
+       instr(SORT_KEY, 'region') > 0 AS sort_has_region
+FROM information_schema.tables_config
+WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'mv_sort_key';
+-- result:
+0	1	1
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_sort_key WITH SYNC MODE;
+SELECT region, dt, amount FROM mv_sort_key ORDER BY region;
+-- result:
+CN	2024-01-01	10
+US	2024-01-02	20
+-- !result
+insert into ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base values ('JP', '2024-01-03', 30);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_sort_key WITH SYNC MODE;
+SELECT region, dt, amount FROM mv_sort_key ORDER BY region;
+-- result:
+CN	2024-01-01	10
+JP	2024-01-03	30
+US	2024-01-02	20
+-- !result
+set enable_range_distribution = true;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_sort_key_range
+ORDER BY (region)
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT region, dt, amount FROM ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base;
+-- result:
+[REGEX].*ORDER BY is not supported on a range-distributed incremental materialized view.*
+-- !result
+set enable_range_distribution = false;
+-- result:
+-- !result
+drop materialized view mv_sort_key;
+-- result:
+-- !result
+drop table ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base;
+-- result:
+-- !result
+drop database ivm_ice_${uuid0}.ivm_ice_db_${uuid0};
+-- result:
+-- !result
+drop catalog ivm_ice_${uuid0};
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

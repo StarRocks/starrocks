@@ -68,7 +68,7 @@ struct HashJoinerParam {
     HashJoinerParam(ObjectPool* pool, const THashJoinNode& hash_join_node, std::vector<bool> is_null_safes,
                     std::vector<ExprContext*> build_expr_ctxs, std::vector<ExprContext*> probe_expr_ctxs,
                     std::vector<ExprContext*> other_join_conjunct_ctxs, std::vector<ExprContext*> conjunct_ctxs,
-                    const RowDescriptor& build_row_descriptor, const RowDescriptor& probe_row_descriptor,
+                    const RecordDescriptor& build_record_desc, const RecordDescriptor& probe_record_desc,
                     TPlanNodeType::type build_node_type, TPlanNodeType::type probe_node_type,
                     bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
                     std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots, size_t max_dop,
@@ -83,8 +83,8 @@ struct HashJoinerParam {
               _probe_expr_ctxs(std::move(probe_expr_ctxs)),
               _other_join_conjunct_ctxs(std::move(other_join_conjunct_ctxs)),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
-              _build_row_descriptor(build_row_descriptor),
-              _probe_row_descriptor(probe_row_descriptor),
+              _build_record_descriptor(build_record_desc),
+              _probe_record_descriptor(probe_record_desc),
               _build_node_type(build_node_type),
               _probe_node_type(probe_node_type),
               _build_conjunct_ctxs_is_empty(build_conjunct_ctxs_is_empty),
@@ -112,8 +112,8 @@ struct HashJoinerParam {
     const std::vector<ExprContext*> _probe_expr_ctxs;
     const std::vector<ExprContext*> _other_join_conjunct_ctxs;
     const std::vector<ExprContext*> _conjunct_ctxs;
-    const RowDescriptor _build_row_descriptor;
-    const RowDescriptor _probe_row_descriptor;
+    const RecordDescriptor _build_record_descriptor;
+    const RecordDescriptor _probe_record_descriptor;
     TPlanNodeType::type _build_node_type;
     TPlanNodeType::type _probe_node_type;
     bool _build_conjunct_ctxs_is_empty;
@@ -453,8 +453,8 @@ private:
     // Conjuncts in Join followed by a filter predicate, usually in Where and Having.
     const std::vector<ExprContext*>& _conjunct_ctxs;
     const std::map<SlotId, ExprContext*>& _common_expr_ctxs;
-    const RowDescriptor& _build_row_descriptor;
-    const RowDescriptor& _probe_row_descriptor;
+    const RecordDescriptor& _build_record_descriptor;
+    const RecordDescriptor& _probe_record_descriptor;
     const TPlanNodeType::type _build_node_type;
     const TPlanNodeType::type _probe_node_type;
     const bool _build_conjunct_ctxs_is_empty;

@@ -45,6 +45,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.CredentialMask;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -74,7 +75,6 @@ import java.util.stream.Collectors;
  * Base class for all functions.
  */
 public class Function implements Writable {
-    private static final String MASKED_LOCATION = "***";
 
     // Enum for how to compare function signatures.
     // For decimal types, the type in the function can be a wildcard, i.e. decimal(*,*).
@@ -242,6 +242,7 @@ public class Function implements Writable {
         retType = other.retType;
         argTypes = Arrays.copyOf(other.argTypes, other.argTypes.length);
         argNames = other.argNames;
+        defaultArgExprs = other.defaultArgExprs;
         hasVarArgs = other.hasVarArgs;
         userVisible = other.userVisible;
         location = other.location;
@@ -321,6 +322,10 @@ public class Function implements Writable {
         binaryType = type;
     }
 
+    public boolean isAI() {
+        return binaryType == TFunctionBinaryType.AI;
+    }
+
     public void setArgNames(List<String> names) {
         if (names != null) {
             argNames = names.toArray(new String[0]);
@@ -330,6 +335,10 @@ public class Function implements Writable {
 
     public void setDefaultNamedArgs(Vector<Pair<String, Expr>> defaultArgExprs) {
         this.defaultArgExprs = defaultArgExprs;
+    }
+
+    public Vector<Pair<String, Expr>> getDefaultNamedArgs() {
+        return defaultArgExprs;
     }
 
     public List<Expr> getLastDefaultsFromN(int n) {
@@ -518,6 +527,12 @@ public class Function implements Writable {
                 if (this.getDefaultNamedExpr(this.argNames[i]) == null) {
                     return false;
                 }
+            }
+        }
+        // Every supplied name must belong to this overload, even when its other parameters have defaults.
+        for (int i = start; i < mask.length; i++) {
+            if (!mask[i]) {
+                return false;
             }
         }
         return true;
@@ -965,10 +980,10 @@ public class Function implements Writable {
         try {
             JsonObject propertyObject = JsonParser.parseString(properties).getAsJsonObject();
             if (propertyObject.has(CreateFunctionStmt.FILE_KEY)) {
-                propertyObject.addProperty(CreateFunctionStmt.FILE_KEY, MASKED_LOCATION);
+                propertyObject.addProperty(CreateFunctionStmt.FILE_KEY, CredentialMask.SHORT);
             }
             if (propertyObject.has("object_file")) {
-                propertyObject.addProperty("object_file", MASKED_LOCATION);
+                propertyObject.addProperty("object_file", CredentialMask.SHORT);
             }
             return new Gson().toJson(propertyObject);
         } catch (RuntimeException e) {

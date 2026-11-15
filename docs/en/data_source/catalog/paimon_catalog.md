@@ -1,7 +1,9 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
 toc_max_heading_level: 5
 description: "StarRocks supports Paimon catalogs from v3.1 onwards."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
@@ -23,7 +25,7 @@ To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluste
 
 ## Usage notes
 
-You can only use Paimon catalogs to query data. You cannot use Paimon catalogs to drop, delete, or insert data into your Paimon cluster.
+You can use Paimon catalogs to query data and create or drop Paimon databases and tables. Writing data with INSERT, UPDATE, or DELETE, and creating tables with CREATE TABLE LIKE or CREATE TABLE AS SELECT are not supported.
 
 ## Paimon to StarRocks data types
 
@@ -48,6 +50,11 @@ You can only use Paimon catalogs to query data. You cannot use Paimon catalogs t
 | `ARRAY`               | `ARRAY<element_type>`       |
 | `MAP`                 | `MAP<key_type, value_type>` |
 | `ROW/STRUCT`          | `STRUCT<field1:type1, ...>` |
+| `VARIANT`             | `VARIANT`                   |
+
+:::note
+`VARIANT` is supported from v4.2 onwards for splits read by the native reader (append-only tables and compacted primary-key data). Reading `VARIANT` from uncompacted primary-key data requires the JNI reader and is not yet supported; such queries are rejected with a plan-time error.
+:::
 
 ## Integration preparations
 
@@ -65,7 +72,7 @@ The following authentication methods are recommended:
 
 Of the above-mentioned three authentication methods, instance profile is the most widely used.
 
-For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication).
+For more information, see [Preparation for authentication in AWS IAM](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication).
 
 ### HDFS
 
@@ -181,7 +188,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 
-For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 ##### S3-compatible storage system
 
@@ -404,6 +411,15 @@ If you choose Google GCS as storage for your Paimon cluster, take one of the fol
     | gcp.gcs.service_account_private_key_id | ""            | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.service_account_private_key    | ""            | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.impersonation_service_account  | ""            | "hello"                                                      | The data service account that you want to impersonate.       |
+
+#### MetadataCacheParams (optional)
+
+StarRocks caches Paimon metadata and refreshes it in the background. These optional properties tune that cache.
+
+| Parameter                              | Default value | Description                                                  |
+| -------------------------------------- | ------------- | ------------------------------------------------------------ |
+| paimon_meta_cache_ttl_sec              | 86400         | How long a cached entry lives, in seconds. |
+| paimon_table_cache_refresh_interval_sec | 60            | The minimum interval, in seconds, between two refreshes of the same table triggered by a query that read a newer snapshot. The refresh runs in the background and the query does not wait for it. Set to `0` to only refresh in the periodic background round. Supported from v4.2.0 onwards. |
 
 ### Examples
 
@@ -683,6 +699,134 @@ The following example drops a Paimon catalog named `paimon_catalog_fs`:
 
 ```SQL
 DROP Catalog paimon_catalog_fs;
+```
+
+## Create and drop Paimon databases and tables
+
+These operations create or drop native Paimon objects. The examples use an existing `paimon_catalog_fs` catalog with its warehouse and storage credentials configured.
+
+### CREATE DATABASE
+
+#### Syntax
+
+```SQL
+CREATE DATABASE [IF NOT EXISTS] <catalog_name>.<database_name>;
+```
+
+#### Parameters
+
+- `catalog_name`: The name of an existing Paimon catalog.
+- `database_name`: The name of the database to create.
+- `IF NOT EXISTS`: Suppresses the error if the database already exists.
+
+Database `PROPERTIES` are not supported. The database uses the catalog's storage configuration.
+
+#### Example
+
+```SQL
+CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+```
+
+### CREATE TABLE
+
+#### Syntax
+
+```SQL
+CREATE TABLE [IF NOT EXISTS] <catalog_name>.<database_name>.<table_name> (
+    <column_name> <column_type> [NULL | NOT NULL] [DEFAULT NULL] [COMMENT '<column_comment>']
+    [, ...]
+)
+[ENGINE = paimon]
+[PRIMARY KEY (<column_name> [, ...])]
+[COMMENT '<table_comment>']
+[PARTITION BY (<column_name> [, ...])]
+[PROPERTIES ("<key>" = "<value>" [, ...])];
+```
+
+#### Parameters
+
+- **Table name and engine**: Specify the database and new table name in an existing Paimon catalog. You can omit `ENGINE = paimon` when the target is a Paimon catalog. `IF NOT EXISTS` suppresses the duplicate-table error, but the table definition and properties are still validated.
+- **Column definitions**: Supported types are BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, FLOAT, DOUBLE, DATE, DATETIME, CHAR, VARCHAR, VARBINARY, DECIMAL with precision up to 38, ARRAY, MAP, STRUCT, and VARIANT. DATETIME maps to Paimon TIMESTAMP(6). The existing read restrictions for VARIANT still apply. Only `DEFAULT NULL` is supported, and primary key columns cannot have defaults. Use `COMMENT` for column and table comments.
+- **Primary keys**: Define keys with `PRIMARY KEY (column, ...)` or the `primary-key` table property. Key columns need not be the first columns. If nullability is unspecified, they become non-nullable in the Paimon schema; explicitly declaring them as `NULL` is not allowed. If both key forms are specified, the resolved column names and their order must match.
+- **Partitions**: Use `PARTITION BY (column, ...)` for ordinary partition columns. Partition expressions and explicit partition definitions are not supported.
+- **Table properties**: Specify Paimon table options, such as `bucket` and `file.format`, in `PROPERTIES`. The table uses the catalog's warehouse and storage credentials. Properties that override the catalog, storage location, credentials, or schema are rejected. Unknown options are rejected. Some invalid write configurations may only be detected when writing data. Dynamic column options such as `fields.<column>.aggregate-function` are not currently supported.
+
+#### Examples
+
+Create an empty partitioned append-only table:
+
+```SQL
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.append_demo (
+    id BIGINT NOT NULL,
+    payload VARCHAR(100) COMMENT 'Payload',
+    dt DATE
+)
+ENGINE = paimon
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "-1",
+    "file.format" = "parquet"
+);
+```
+
+Create a partitioned primary-key table:
+
+```SQL
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.pk_demo (
+    payload VARCHAR(100),
+    id BIGINT,
+    dt DATE
+)
+PRIMARY KEY (id, dt)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "2",
+    "bucket-key" = "id",
+    "file.format" = "parquet"
+);
+```
+
+Alternatively, omit the `PRIMARY KEY (id, dt)` clause and add `"primary-key" = "id,dt"` to `PROPERTIES`.
+
+#### Limitations
+
+- `DISTRIBUTED BY`, `ORDER BY`, `ROLLUP`, generated columns, aggregate columns, and `AUTO_INCREMENT` are not supported.
+- Non-NULL column defaults are not supported.
+- `CREATE TABLE LIKE`, `CREATE TABLE AS SELECT`, and writing data with `INSERT`, `UPDATE`, or `DELETE` are not supported.
+
+### DROP TABLE
+
+#### Syntax
+
+```SQL
+DROP TABLE [IF EXISTS] <catalog_name>.<database_name>.<table_name>;
+```
+
+`IF EXISTS` suppresses the error if the table does not exist. This operation drops the native Paimon table, rather than only removing its reference in StarRocks.
+
+#### Example
+
+```SQL
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.append_demo;
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.pk_demo;
+```
+
+### DROP DATABASE
+
+#### Syntax
+
+```SQL
+DROP DATABASE [IF EXISTS] <catalog_name>.<database_name> [FORCE];
+```
+
+`IF EXISTS` suppresses the error if the database does not exist. A database must be empty before it can be dropped; `FORCE` does not enable cascading deletion.
+
+#### Example
+
+After dropping the tables in the database, drop the database:
+
+```SQL
+DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
 ```
 
 ## View the schema of a Paimon table

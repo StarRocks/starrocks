@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW COMPUTE NODES は、クラスタ内のすべての CN ノードの情報を表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW COMPUTE NODES

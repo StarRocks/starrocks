@@ -241,8 +241,17 @@ statement
     // Group Provider Statement
     | createGroupProviderStatement
     | dropGroupProviderStatement
+    | alterGroupProviderStatement
     | showGroupProvidersStatement
     | showCreateGroupProviderStatement
+
+    // AI Provider Statement
+    | createAIProviderStatement
+    | alterAIProviderStatement
+    | dropAIProviderStatement
+    | showAIProvidersStatement
+    | descAIProviderStatement
+    | setDefaultAIProviderStatement
 
     // Backup Restore Statement
     | backupStatement
@@ -252,6 +261,7 @@ statement
     | cancelRestoreStatement
     | showRestoreStatement
     | showSnapshotStatement
+    | dropSnapshotStatement
     | createRepositoryStatement
     | dropRepositoryStatement
 
@@ -934,7 +944,7 @@ setDefaultStorageVolumeStatement
 
 updateFailPointStatusStatement
     : ADMIN (DISABLE | ENABLE) FAILPOINT string
-      (WITH (times=INTEGER_VALUE TIMES | prob=DECIMAL_VALUE PROBABILITY))?
+      (WITH (times=INTEGER_VALUE TIMES | prob=DECIMAL_VALUE PROBABILITY | PAUSE))?
       (ON (BACKEND string | FRONTEND))?
     ;
 
@@ -981,6 +991,7 @@ alterClause
     : addFrontendClause
     | dropFrontendClause
     | modifyFrontendHostClause
+    | transferLeaderClause
     | addBackendClause
     | dropBackendClause
     | decommissionBackendClause
@@ -1005,6 +1016,7 @@ alterClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
+    | alterTableDictColumnsClause
     | addPartitionColumnClause
     | dropPartitionColumnClause
     | replacePartitionColumnClause
@@ -1051,6 +1063,10 @@ dropFrontendClause
 
 modifyFrontendHostClause
   : MODIFY FRONTEND HOST string TO string
+  ;
+
+transferLeaderClause
+  : TRANSFER LEADER TO string (FORCE)?
   ;
 
 addBackendClause
@@ -1165,6 +1181,10 @@ addColumnsClause
 
 dropColumnClause
     : DROP COLUMN identifier (FROM rollupName=identifier)? properties?
+    ;
+
+alterTableDictColumnsClause
+    : (ENABLE | DISABLE) DICTIONARY '(' identifier (',' identifier)* ')'
     ;
 
 dropPartitionColumnClause
@@ -1356,15 +1376,15 @@ columnAliasesOrByName
     ;
 
 updateStatement
-    : explainDesc? withClause? UPDATE qualifiedName SET assignmentList fromClause (WHERE where=expression)?
+    : explainDesc? withClause? UPDATE qualifiedName writeBranch? SET assignmentList fromClause (WHERE where=expression)?
     ;
 
 deleteStatement
-    : explainDesc? withClause? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
+    : explainDesc? withClause? DELETE FROM qualifiedName writeBranch? partitionNames? (USING using=relations)? (WHERE where=expression)?
     ;
 
 mergeIntoStatement
-    : explainDesc? MERGE INTO qualifiedName (AS? targetAlias=identifier)?
+    : explainDesc? MERGE INTO qualifiedName writeBranch? (AS? targetAlias=identifier)?
       USING relation (AS? sourceAlias=identifier)?
       ON mergeCondition=expression
       mergeWhenClause+
@@ -1990,12 +2010,12 @@ privilegeType
 
 privObjectType
     : CATALOG | DATABASE | MATERIALIZED VIEW | RESOURCE | RESOURCE GROUP | STORAGE VOLUME | SYSTEM | TABLE | VIEW | WAREHOUSE
-    | PIPE
+    | PIPE | AI FUNCTION | AI PROVIDER
     ;
 
 privObjectTypePlural
     : CATALOGS | DATABASES | FUNCTIONS | GLOBAL FUNCTIONS | MATERIALIZED VIEWS | POLICIES | RESOURCES | RESOURCE GROUPS
-    | STORAGE VOLUMES | TABLES | USERS | VIEWS | WAREHOUSES | PIPES
+    | STORAGE VOLUMES | TABLES | USERS | VIEWS | WAREHOUSES | PIPES | AI FUNCTIONS | AI PROVIDERS
     ;
 
 // ------------------------------------------- Security Integration Statement ----------------------------------------------------
@@ -2030,12 +2050,46 @@ dropGroupProviderStatement
     : DROP GROUP PROVIDER (IF EXISTS)? identifier
     ;
 
+alterGroupProviderStatement
+    // The property list is spelled out here instead of reusing propertyList, which requires at least one
+    // property: an empty SET () is a mistake worth a clear message ("no property is specified"), and the
+    // shared rule is used by 30+ statements, so it cannot be relaxed just for this one.
+    : ALTER GROUP PROVIDER identifier SET '(' (property (',' property)*)? ')'
+    ;
+
 showGroupProvidersStatement
     : SHOW GROUP PROVIDERS showPredicateClauses
     ;
 
 showCreateGroupProviderStatement
     : SHOW CREATE GROUP PROVIDER identifier showPredicateClauses
+    ;
+
+// ---------------------------------------- AI Provider Statement ------------------------------------------------------
+
+createAIProviderStatement
+    : CREATE AI PROVIDER (IF NOT EXISTS)? aiProviderName=identifierOrString
+          TYPE providerType=identifierOrString comment? properties
+    ;
+
+alterAIProviderStatement
+    : ALTER AI PROVIDER (IF EXISTS)? identifierOrString SET propertyList
+    ;
+
+dropAIProviderStatement
+    : DROP AI PROVIDER (IF EXISTS)? identifierOrString
+    ;
+
+showAIProvidersStatement
+    : SHOW AI PROVIDERS ((LIKE pattern=string) | (TYPE providerType=identifierOrString))?
+    ;
+
+descAIProviderStatement
+    : (DESC | DESCRIBE) AI PROVIDER identifierOrString
+    ;
+
+setDefaultAIProviderStatement
+    : SET identifierOrString AS DEFAULT AI PROVIDER
     ;
 
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
@@ -2085,6 +2139,10 @@ createRepositoryStatement
 
 dropRepositoryStatement
     : DROP REPOSITORY identifier
+    ;
+
+dropSnapshotStatement
+    : DROP SNAPSHOT snapshotName=identifier ON repoName=identifier FORCE?
     ;
 
 // ------------------------------------ Sql BlackList And WhiteList Statement ------------------------------------------
@@ -3346,7 +3404,7 @@ number
     ;
 
 nonReserved
-    : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
+    : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | AI | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
     | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS | BOTH
     | BUILTIN | BASE | BEFORE | BASELINE
@@ -3362,7 +3420,7 @@ nonReserved
     | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INCLUDE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
     | INTERVAL | ISOLATION
     | JOB
-    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS | LEADING
+    | LABEL | LAST | LEADER | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS | LEADING
     | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCHED | MATCH_ANY | MATCH_ALL | MAPPINGS | MATERIALIZED | MAX | META | METADATA | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
@@ -3375,7 +3433,7 @@ nonReserved
     | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQL | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_KW | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRING_AGG | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
-    | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE | TRANSLATE
+    | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRANSFER | TRACE | TRANSLATE
     | TRIM_SPACE | TRAILING | TRIM
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNSET | UNINSTALL | USAGE | USER | USERS | UNLOCK

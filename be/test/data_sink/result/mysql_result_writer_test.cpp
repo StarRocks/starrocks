@@ -18,6 +18,8 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/geo_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "common/object_pool.h"
@@ -27,6 +29,7 @@
 #include "exprs/expr_context.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -62,38 +65,30 @@ TEST_F(MysqlResultWriterTest, should_set_binary_null_bit_after_fallback_column) 
     constexpr int kNumRows = 2;
 
     // Typed BIGINT column.
-    auto bigint_col = Int64Column::create();
-    bigint_col->append(11);
-    bigint_col->append(22);
+    auto bigint_col = ColumnTestHelper::build_column<int64_t>({11, 22});
 
     // Fallback STRUCT column (non-nullable).
-    auto struct_field = BinaryColumn::create();
-    struct_field->append("first");
-    struct_field->append("second");
+    auto struct_field = ColumnTestHelper::build_column<Slice>({"first", "second"});
     Columns struct_fields{struct_field};
     std::vector<std::string> field_names{"f"};
     auto struct_col = StructColumn::create(struct_fields, field_names);
 
     // Nullable BIGINT column that is NULL for the first row.
-    auto nullable_data = Int64Column::create();
-    nullable_data->append(999);
-    nullable_data->append(888);
+    auto nullable_data = ColumnTestHelper::build_column<int64_t>({999, 888});
     auto null_flags = NullColumn::create();
     null_flags->append(1);
     null_flags->append(0);
     auto nullable_col = NullableColumn::create(nullable_data, null_flags);
 
     std::vector<std::pair<TypeDescriptor, ColumnPtr>> expr_columns;
-    expr_columns.emplace_back(TypeDescriptor::from_logical_type(TYPE_BIGINT), bigint_col);
-    expr_columns.emplace_back(
-            TypeDescriptor::create_struct_type(field_names, {TypeDescriptor::from_logical_type(TYPE_VARCHAR)}),
-            struct_col);
-    expr_columns.emplace_back(TypeDescriptor::from_logical_type(TYPE_BIGINT), nullable_col);
+    expr_columns.emplace_back(TYPE_BIGINT_DESC, bigint_col);
+    expr_columns.emplace_back(TypeDescriptor::create_struct_type(field_names, {TYPE_VARCHAR_DESC}), struct_col);
+    expr_columns.emplace_back(TYPE_BIGINT_DESC, nullable_col);
     auto expr_ctxs = make_expr_ctxs(expr_columns);
 
     // Dummy chunk that only carries row count information.
     Chunk chunk;
-    auto dummy_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), false);
+    auto dummy_col = ColumnHelper::create_column(TYPE_INT_DESC, false);
     dummy_col->append_default();
     dummy_col->append_default();
     chunk.append_column(dummy_col, 0);
@@ -145,6 +140,85 @@ TEST_F(MysqlResultWriterTest, should_set_binary_null_bit_after_fallback_column) 
 
     for (auto* ctx : expr_ctxs) {
         ctx->close(&dummy_state);
+    }
+}
+
+TEST_F(MysqlResultWriterTest, geography_matches_varbinary_output) {
+    // Embedded zero bytes and EMPTY must reach the client unchanged.
+    const std::vector<std::string> payloads = {std::string("\x01\x01\0\0\0\0\0\0\0\0\0\xf0\x3f\0\0\0\0\0\0\0\x40", 21),
+                                               std::string("\x01\x07\0\0\0\0\0\0\0", 9)};
+    GeoColumnDescriptor desc;
+    desc.type.logical_type = GEO_LOGICAL_TYPE_GEOGRAPHY;
+    desc.type.coordinate_system = GEO_COORDINATE_SYSTEM_SPHERICAL;
+    desc.type.edge_algorithm = GEO_EDGE_ALGORITHM_SPHERICAL;
+    desc.type.crs = "OGC:CRS84";
+    auto geo_type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, desc.type);
+
+    for (bool binary : {false, true}) {
+        // Varying, nullable, constant, and all-NULL physical shapes.
+        for (int shape = 0; shape < 5; ++shape) {
+            auto geo = GeoColumn::create(desc);
+            auto bytes = BinaryColumn::create();
+            for (const auto& payload : payloads) {
+                geo->append_wkb(Slice(payload));
+                bytes->append(Slice(payload));
+            }
+            ColumnPtr geo_col = geo;
+            ColumnPtr bytes_col = bytes;
+            if (shape == 1 || shape == 3) {
+                auto flags = NullColumn::create();
+                flags->append(1);
+                flags->append(shape == 3 ? 1 : 0);
+                geo_col = NullableColumn::create(geo, flags);
+                bytes_col = NullableColumn::create(bytes, flags->clone());
+            } else if (shape == 2) {
+                geo->resize(1);
+                bytes->resize(1);
+                geo_col = ConstColumn::create(geo, 2);
+                bytes_col = ConstColumn::create(bytes, 2);
+            } else if (shape == 4) {
+                geo_col = ColumnHelper::create_const_null_column(2);
+                bytes_col = ColumnHelper::create_const_null_column(2);
+            }
+            auto run = [&](const TypeDescriptor& type, const ColumnPtr& column) {
+                auto ctxs = make_expr_ctxs(
+                        {{type, column},
+                         {TYPE_BIGINT_DESC, NullableColumn::create(Int64Column::create(2), NullColumn::create(2, 1))}});
+                Chunk chunk;
+                chunk.append_column(Int32Column::create(2), 0);
+                RuntimeProfile profile("geography_output");
+                RuntimeState state;
+                TUniqueId query_id;
+                BufferControlBlock sinker(query_id, 1024);
+                EXPECT_TRUE(sinker.init().ok());
+                MysqlResultWriter writer(&sinker, ctxs, binary, &profile);
+                EXPECT_TRUE(writer.init(&state).ok());
+                for (auto* ctx : ctxs) {
+                    EXPECT_TRUE(ctx->prepare(&state).ok());
+                    EXPECT_TRUE(ctx->open(&state).ok());
+                }
+                auto result = writer.process_chunk(&chunk);
+                EXPECT_TRUE(result.ok()) << result.status();
+                std::vector<std::string> rows;
+                if (result.ok()) {
+                    for (const auto& batch : result.value()) {
+                        rows.insert(rows.end(), batch->result_batch.rows.begin(), batch->result_batch.rows.end());
+                    }
+                }
+                for (auto* ctx : ctxs) ctx->close(&state);
+                return rows;
+            };
+            const auto actual = run(geo_type, geo_col);
+            EXPECT_EQ(run(TYPE_VARBINARY_DESC, bytes_col), actual);
+            ASSERT_EQ(2, actual.size());
+            if (shape == 0 || shape == 2) {
+                for (size_t row = 0; row < actual.size(); ++row) {
+                    const auto& payload = payloads[shape == 2 ? 0 : row];
+                    EXPECT_NE(std::string::npos, actual[row].find(payload));
+                }
+            }
+            EXPECT_EQ(desc, geo->descriptor());
+        }
     }
 }
 

@@ -20,12 +20,12 @@
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
-#include "common/config_exec_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage/primary_index.h"
 #include "storage/rows_mapper.h"
 #include "storage/tablet_schema.h"
@@ -38,7 +38,7 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
     ASSIGN_OR_RETURN(auto encoding_type, primary_key_encoding_type());
 
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, encoding_type, true));
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, encoding_type));
 
     // init rows mapper iter
     ASSIGN_OR_RETURN(auto filename, filename());
@@ -51,7 +51,7 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                 const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>& handle_delvec_result_func) {
                 std::map<uint32_t, DelVectorPtr> rssid_to_delvec;
                 // Accumulate multiple chunks' PKs into a single replace() call to reduce per-chunk
-                // overhead: each `params.index->replace()` ends with a memtable flush check + lock
+                // overhead: each `params.replace_rows()` ends with a memtable flush check + lock
                 // round-trip in LakePersistentIndex::replace(). For a 1 M-row segment with the default
                 // 4 K chunk, that is ~250 such calls per segment. Batching N chunks amortises the
                 // per-call setup, vector allocations, and memtable bookkeeping by ~N×. Values <= 1
@@ -66,7 +66,7 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                     // only hold pkey, so can use larger chunk size
                     ChunkUniquePtr chunk_shared_ptr;
                     TRY_CATCH_BAD_ALLOC(chunk_shared_ptr =
-                                                ChunkFactory::new_chunk(pkey_schema, config::vector_chunk_size));
+                                                ChunkFactory::new_chunk(pkey_schema, get_pk_vector_chunk_size()));
                     auto chunk = chunk_shared_ptr.get();
                     auto batch_col = pk_column->clone();
                     vector<uint32_t> tmp_deletes;
@@ -81,8 +81,8 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                         }
                         if (!batch_replace_indexes.empty()) {
                             TRACE_COUNTER_SCOPE_LATENCY_US("compaction_replace_index_latency_us");
-                            RETURN_IF_ERROR(params.index->replace(params.rowset_id + segment_id, batch_start_rowid,
-                                                                  batch_replace_indexes, *batch_col));
+                            RETURN_IF_ERROR(params.replace_rows(params.rowset_id + segment_id, batch_start_rowid,
+                                                                batch_replace_indexes, *batch_col));
                         }
                         batch_start_rowid += batch_acc_rows;
                         batch_acc_rows = 0;
@@ -186,14 +186,14 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                         LOG(WARNING) << "ignore lost segment in compaction conflict resolution, tablet: "
                                      << params.tablet_id << ", rssid: " << (params.rowset_id + segment_id) << ", left "
                                      << lost_rows << " PK index entries stale (skipped)";
-                        // Advance the mapper in vector_chunk_size batches, reusing one buffer, to bound
+                        // Advance the mapper in pk_vector_chunk_size batches, reusing one buffer, to bound
                         // transient memory (the running CRC accumulates across next_values calls, so a
                         // chunked read is byte-identical to one big read).
                         uint32_t remaining = lost_rows;
                         std::vector<uint64_t> skipped;
                         while (remaining > 0) {
                             const uint32_t n =
-                                    std::min<uint32_t>(remaining, static_cast<uint32_t>(config::vector_chunk_size));
+                                    std::min<uint32_t>(remaining, static_cast<uint32_t>(get_pk_vector_chunk_size()));
                             skipped.clear();
                             RETURN_IF_ERROR(mapper_iter.next_values(n, &skipped));
                             remaining -= n;

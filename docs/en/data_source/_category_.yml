@@ -1,0 +1,7 @@
+position: 100
+label: 'Data Lakes'
+collapsible: true
+collapsed: true
+link:
+  id: data_source
+  type: doc

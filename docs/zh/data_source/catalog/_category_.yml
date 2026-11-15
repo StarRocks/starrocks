@@ -1,0 +1,8 @@
+position: 10
+label: 'Catalogs'
+key: 'datasource-catalog'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: catalog_overview

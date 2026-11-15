@@ -25,10 +25,12 @@ Status LRUCacheEngine::init(const MemCacheOptions& options) {
 
 Status LRUCacheEngine::insert(const std::string& key, void* value, size_t size, MemCacheDeleter deleter,
                               MemCacheHandlePtr* handle, const MemCacheWriteOptions& options) {
-    if (!_check_write(size, options)) {
+    auto priority = static_cast<CachePriority>(options.priority);
+    auto* lru_handle = _check_write(size, options) ? _cache->insert(key, value, size, deleter, priority)
+                                                   : _cache->insert_no_evict(key, value, size, deleter, priority);
+    if (lru_handle == nullptr) {
         return Status::InternalError("cache insertion is rejected");
     }
-    auto* lru_handle = _cache->insert(key, value, size, deleter, static_cast<CachePriority>(options.priority));
     if (handle) {
         *handle = reinterpret_cast<MemCacheHandlePtr>(lru_handle);
     }
@@ -130,14 +132,6 @@ bool LRUCacheEngine::_check_write(size_t charge, const MemCacheWriteOptions& opt
     if (options.evict_probability <= 0) {
         return false;
     }
-
-    /*
-    // TODO: The cost of this call may be relatively high, and it needs to be optimized later.
-    if (_cache->get_memory_usage() + charge <= _cache->get_capacity()) {
-        return true;
-    }
-    */
-
     if (butil::fast_rand_less_than(100) < options.evict_probability) {
         return true;
     }

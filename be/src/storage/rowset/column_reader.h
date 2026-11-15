@@ -60,6 +60,10 @@ namespace starrocks {
 class BlockCompressionCodec;
 class MemTracker;
 
+namespace compression {
+class ZstdDDict;
+} // namespace compression
+
 class ColumnPredicate;
 class Column;
 class ZoneMapDetail;
@@ -215,6 +219,8 @@ public:
 
     bool is_flat_json() const { return _is_flat_json; }
     bool has_remain_json() const { return _has_remain; }
+    // Value stats of a JSON-typed flat JSON sub-column, nullptr when the segment has none.
+    const JsonValueStatsPB* json_value_stats() const { return _json_value_stats.get(); }
 
     // Return the pointer to the remain filter if it exists, otherwise return nullptr.
     const BloomFilter* get_remain_filter() const { return _remain_filter ? _remain_filter.get() : nullptr; }
@@ -240,6 +246,13 @@ private:
     Status _load_zonemap_index(const IndexReadOptions& opts);
     Status _load_bitmap_index(const IndexReadOptions& opts);
     Status _load_bloom_filter_index(const IndexReadOptions& opts);
+
+    // true when this column carries a compression-dictionary page.
+    bool has_zstd_compression_dict() const { return _zstd_compression_dict_page_pointer.size > 0; }
+    // build the shared DDict once (per segment, per column) by bootstrap
+    // reading the compression-dict page directly through PageIO (NOT read_page, which
+    // would re-enter the OnceFlag on the same thread and deadlock).
+    Status _ensure_zstd_compression_ddict(const ColumnIteratorOptions& iter_opts);
 
     // Build a fresh BitmapIndexReader backed by a standalone .idx file
     // (Index Delta Group payload). Used when IndexReadOptions carries an
@@ -285,6 +298,13 @@ private:
     [[maybe_unused]] LogicalType _column_child_type = TYPE_UNKNOWN;
     int32_t _column_length = 0; // Original column length from segment footer
     PagePointer _dict_page_pointer;
+    // Read side of the per-column ZSTD compression dictionary. Copied from
+    // ColumnMetaPB.zstd_compression_dict_page in _init (size 0 when the column has none).
+    // The DDict is built once per (segment, column) and then referenced on every
+    // data-page decompression.
+    PagePointer _zstd_compression_dict_page_pointer;
+    std::shared_ptr<compression::ZstdDDict> _zstd_compression_ddict;
+    OnceFlag _zstd_compression_ddict_once;
     uint64_t _total_mem_footprint = 0;
     uint32 _column_unique_id = std::numeric_limits<uint32_t>::max();
 
@@ -345,6 +365,7 @@ private:
     bool _is_flat_json = false;
     bool _has_remain = false;
     std::unique_ptr<BloomFilter> _remain_filter;
+    std::unique_ptr<JsonValueStatsPB> _json_value_stats;
 
     // only used for inverted index load
     OnceFlag _inverted_index_load_once;

@@ -1,9 +1,9 @@
 ---
 displayed_sidebar: docs
 description: "SUBMIT TASK submits an ETL statement as an asynchronous task."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
-import PropertyWarehouse from '../../../../_assets/commonMarkdown/property_warehouse_tip_default.mdx'
 
 # SUBMIT TASK
 
@@ -18,7 +18,7 @@ Supported statements include:
 
 - [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (from v3.0 onwards)
 - [INSERT](../INSERT.md) (from v3.0 onwards)
-- [CACHE SELECT](../../../../data_source/block_cache_warmup.md) (from v3.3 onwards)
+- [CACHE SELECT](../../../../data_source/data_cache/block_cache_warmup.md) (from v3.3 onwards)
 
 You can view the list of tasks by querying `INFORMATION_SCHEMA.tasks`, or view the execution history of tasks by querying `INFORMATION_SCHEMA.task_runs`. For more information, see [Usage Notes](#usage-notes).
 
@@ -44,8 +44,6 @@ You can add the `session.` prefix before session variables to change the task ru
 | `session.enable_profile` | Boolean | Whether to enable query profiling for the task. Default: `false`. |
 | `session.new_planner_optimize_timeout` | Integer | The timeout duration of the query optimizer. Unit: Milliseconds. Default: `3000`. |
 
-<PropertyWarehouse />
-
 For example, the following statement submits a task named `test_task` with session properties which enables query profile and increase query timeout:
 
 ```SQL
@@ -64,7 +62,7 @@ AS insert into t2 select * from t1;
 | task_name          | Yes     | The name of the task.                                                                               |
 | schedule_start     | No      | The start time for the scheduled task.                                                                 |
 | schedule_interval  | No      | The interval at which the scheduled task is executed, with a minimum interval of 10 seconds.          |
-| etl_statement      | Yes     | The ETL statement that you want to submit as an asynchronous task. StarRocks currently supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) and [INSERT](../../loading_unloading/INSERT.md). |
+| etl_statement      | Yes     | The ETL statement that you want to submit as an asynchronous task. StarRocks currently supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) and [INSERT](../INSERT.md). |
 
 ## Return value
 
@@ -107,6 +105,7 @@ You can configure asynchronous ETL tasks using the following FE configuration it
 | task_check_interval_second   | 3600              | The time interval to delete invalid Tasks. Unit: seconds.    |
 | task_runs_ttl_second         | 86400             | The period during which a TaskRun is valid. Unit: seconds. TaskRuns that exceed the validity period are deleted automatically. Additionally, TaskRuns in the `FAILED` and `SUCCESS` states are also deleted automatically. A `TaskRun` is an individual run of a periodic task.  |
 | task_runs_concurrency        | 4                 | The maximum number of TaskRuns that can be run in parallel.  |
+| task_runs_dispatch_interval_ms | 1000          | Interval at which the Leader FE checks running TaskRuns and dispatches pending ones. Unit: milliseconds. Mutable without FE restart. The new interval takes effect after the current dispatch cycle finishes. |
 | task_runs_queue_length       | 500               | The maximum number of TaskRuns that are pending for running. If the number exceeds the default value, the incoming tasks will be suspended. |
 | task_runs_max_history_number | 10000             | The maximum number of TaskRun records to retain. |
 | task_min_schedule_interval_s | 10                | The minimum interval for Task execution. Unit: seconds. |

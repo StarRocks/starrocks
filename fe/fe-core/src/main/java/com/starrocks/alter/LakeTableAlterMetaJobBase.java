@@ -35,6 +35,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.mv.MVRepairHandler.PartitionRepairInfo;
@@ -68,18 +69,38 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     @SerializedName(value = "watershedTxnId")
     private long watershedTxnId = -1;
+    // Gtid of the versions the job publishes, journaled under its old name.
     @SerializedName(value = "watershedGtid")
-    private long watershedGtid = -1;
+    private long commitGtid = 0;
     // PhysicalPartitionId -> indexId -> MaterializedIndex
     @SerializedName(value = "partitionIndexMap")
     private Table<Long, Long, MaterializedIndex> physicalPartitionIndexMap = HashBasedTable.create();
     @SerializedName(value = "commitVersionMap")
     private Map<Long, Long> commitVersionMap = new HashMap<>();
-    private AgentBatchTask batchTask = null;
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    AgentBatchTask batchTask = null;
     private boolean isFileBundling = false;
 
     public LakeTableAlterMetaJobBase(JobType jobType) {
         super(jobType);
+    }
+
+    @Override
+    protected void resetTransientState() {
+        // WAITING_TXN is skipped on the live path; RUNNING is the only in-memory-only state
+        // and its durable predecessor is PENDING - the same-state re-log in runPendingJob
+        // already persisted the watershed, and the -1 guard prevents re-allocation on re-run.
+        // replay() throws on RUNNING, so it must never leak into any persisted copy.
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.PENDING;
+        }
+        // Recreated fresh per dispatch; a stale value only skews SHOW ALTER progress.
+        batchTask = null;
+        // Filled by updatePartitionTabletMeta AFTER the PENDING re-log, so the durable PENDING image has
+        // it empty; the re-run refills it from the partitions that exist THEN. Keeping stale rows would
+        // let a partition dropped across the demote/re-elect window resurface and fail the re-run with a
+        // non-cancellable exception (checkNotNull), sticking the job until its global timeout.
+        physicalPartitionIndexMap.clear();
     }
 
     public LakeTableAlterMetaJobBase(long jobId, JobType jobType, long dbId, long tableId,
@@ -90,7 +111,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     protected LakeTableAlterMetaJobBase(LakeTableAlterMetaJobBase job) {
         super(job);
         this.watershedTxnId = job.watershedTxnId;
-        this.watershedGtid = job.watershedGtid;
+        this.commitGtid = job.commitGtid;
         if (job.physicalPartitionIndexMap != null) {
             this.physicalPartitionIndexMap = HashBasedTable.create();
             this.physicalPartitionIndexMap.putAll(job.physicalPartitionIndexMap);
@@ -150,7 +171,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         if (this.watershedTxnId == -1) {
             this.watershedTxnId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator()
                     .getNextTransactionId();
-            this.watershedGtid = globalStateMgr.getGtidGenerator().nextGtid();
+            // Only for an older FE taking the job over after a downgrade; this FE redraws it when reserving versions.
+            this.commitGtid = globalStateMgr.getGtidGenerator().nextGtid();
             persistStateChange(this, this.jobState);
         }
 
@@ -218,6 +240,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
+            // Same lock as the version reservation, so the gtid falls between those of commits before and after.
+            commitGtid = GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
             commitVersionMap.clear();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
@@ -277,6 +301,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             validateBeforeFinishUnprotected(db, table);
             // Prepare data before persist, so that copyForPersist() can include this data
             prepareForPersist(db, table);
+            // Must run before updateVisibleVersion(), which stamps finishedTimeMs onto EVERY touched
+            // physical partition and therefore destroys the pre-alter version times.
+            capturePreAlterLatestPartitions(table);
             persistStateChange(this, JobState.FINISHED, () -> {
                 updateCatalog(db, table, false);
                 // set visible version
@@ -326,12 +353,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     protected boolean lakePublishVersion() {
         try {
-            TxnInfoPB txnInfo = new TxnInfoPB();
-            txnInfo.txnId = watershedTxnId;
-            txnInfo.combinedTxnLog = false;
-            txnInfo.commitTime = finishedTimeMs / 1000;
-            txnInfo.txnType = TxnTypePB.TXN_NORMAL;
-            txnInfo.gtid = watershedGtid;
+            TxnInfoPB txnInfo = TxnInfoHelper.forJobPublish(watershedTxnId, TxnTypePB.TXN_NORMAL, finishedTimeMs,
+                    commitGtid);
             // there are two scenario we should use aggregate_publish
             // 1. this task is change `file_bundling` to true
             // 2. the table is enable `file_bundling` and this task is not change `file_bundling`
@@ -339,12 +362,14 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             boolean useAggregatePublish = enableFileBundling() || (isFileBundling && !disableFileBundling());
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(physicalPartitionId);
+                // A retry lets the tablets an earlier attempt already published answer from storage.
+                boolean isRetryPublish = getAndMarkLakePublishSent(physicalPartitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
                 List<Tablet> tablets = new ArrayList<>();
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
                     if (!useAggregatePublish) {
                         Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
-                                computeResource, false);
+                                computeResource, false, isRetryPublish);
                     } else {
                         tablets.addAll(index.getTablets());
                     }
@@ -352,7 +377,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 if (useAggregatePublish) {
                     List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
                     Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion,
-                                null, null, computeResource, null, vectorIndexBuildInfos);
+                                null, null, null, computeResource, null, vectorIndexBuildInfos, false, isRetryPublish);
                     VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
                 }
             }
@@ -389,7 +414,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            indexList = new ArrayList<>(physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE));
+            indexList = new ArrayList<>(physicalPartition
+                    .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE));
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
@@ -484,6 +510,63 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
     }
 
+    /**
+     * The physical partition that decided staleness before this job ran, i.e. the one
+     * {@link Partition#getLatestPhysicalPartition()} resolved to, together with the version and version
+     * time it carried then.
+     */
+    private static class PreAlterLatestPartition {
+        private final long physicalPartitionId;
+        private final long visibleVersion;
+        private final long visibleVersionTime;
+
+        private PreAlterLatestPartition(long physicalPartitionId, long visibleVersion, long visibleVersionTime) {
+            this.physicalPartitionId = physicalPartitionId;
+            this.visibleVersion = visibleVersion;
+            this.visibleVersionTime = visibleVersionTime;
+        }
+    }
+
+    // Runtime-only snapshot for handleMVRepair, keyed by LOGICAL partition id; never persisted and never
+    // replayed. A resumed job therefore finds it empty and skips the repair, which leaves the MV to
+    // refresh rather than advancing a watermark whose staleness cannot be proven.
+    private transient Map<Long, PreAlterLatestPartition> preAlterLatestPartitions = Maps.newHashMap();
+
+    /**
+     * Records, per logical partition, which physical partition MV staleness detection was reading before
+     * this job ran, and the version/version time it had.
+     *
+     * Both halves are needed and neither survives updateVisibleVersion(), which stamps one finishedTimeMs
+     * onto every touched physical partition: that erases the pre-alter version times, and it collapses
+     * getLatestPhysicalPartition()'s max-by-version-time into a tie. The MV's recorded watermark was
+     * compared against THIS partition, so this is the partition the repair filter must validate against.
+     */
+    // Package-private for tests, like updateNextVersion/updateVisibleVersion in this class.
+    void capturePreAlterLatestPartitions(@NotNull OlapTable table) {
+        Map<Long, PreAlterLatestPartition> snapshot = Maps.newHashMap();
+        for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+            if (physicalPartition == null) {
+                continue;
+            }
+            long partitionId = physicalPartition.getParentId();
+            if (snapshot.containsKey(partitionId)) {
+                continue;
+            }
+            Partition partition = table.getPartition(partitionId);
+            if (partition == null || table.isTempPartition(partitionId)) {
+                continue;
+            }
+            PhysicalPartition preAlterLatest = partition.getLatestPhysicalPartition();
+            if (preAlterLatest == null) {
+                continue;
+            }
+            snapshot.put(partitionId, new PreAlterLatestPartition(preAlterLatest.getId(),
+                    preAlterLatest.getVisibleVersion(), preAlterLatest.getVisibleVersionTime()));
+        }
+        preAlterLatestPartitions = snapshot;
+    }
+
     void updateVisibleVersion(@NotNull OlapTable table) {
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
@@ -534,6 +617,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         // loads can race in; if the version chain isn't healthy yet, they will
         // get stuck the same way.
         if (force && jobState == JobState.FINISHED_REWRITING) {
+            markLakeNoOpPublishSent();
             if (!lakePublishVersionWithSkip(errMsg)) {
                 // Leave the job at FINISHED_REWRITING so the operator can retry
                 // CANCEL ALTER ... FORCE once whatever made the RPC fail is
@@ -625,7 +709,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             }
             tabletsByPartition.put(physicalPartitionId, tablets);
         }
-        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, watershedGtid, commitVersionMap,
+        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, commitGtid, commitVersionMap,
                 tabletsByPartition, computeResource, useAggregatePublish);
     }
 
@@ -688,7 +772,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
             this.physicalPartitionIndexMap = other.physicalPartitionIndexMap;
             this.watershedTxnId = other.watershedTxnId;
-            this.watershedGtid = other.watershedGtid;
+            this.commitGtid = other.commitGtid;
             this.commitVersionMap = other.commitVersionMap;
             // FORCE-cancel audit marker. Must be copied here so the
             // CANCELLED branch below (which reads `this.forceSkippedAtCommitted`)
@@ -742,6 +826,17 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
     }
 
+    /**
+     * Drops the per-tablet data of a done job, which stays in memory only for SHOW ALTER. getInfo reads none of it.
+     * The map is replaced, not cleared: replay shares it with the journal entry it came from. The task batch is
+     * read only while the tablet meta update runs, so it goes back to null as on a new job.
+     */
+    @Override
+    public void pruneMeta() {
+        physicalPartitionIndexMap = HashBasedTable.create();
+        batchTask = null;
+    }
+
     // for test
     public Table<Long, Long, MaterializedIndex> getPartitionIndexMap() {
         return physicalPartitionIndexMap;
@@ -757,27 +852,54 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
     }
 
-    private void handleMVRepair(Database db, OlapTable table) {
+    // Package-private for tests, like updateNextVersion/updateVisibleVersion in this class.
+    void handleMVRepair(Database db, OlapTable table) {
         if (table.getRelatedMaterializedViews().isEmpty()) {
             return;
         }
 
-        List<PartitionRepairInfo> partitionRepairInfos = Lists.newArrayListWithCapacity(commitVersionMap.size());
+        List<PartitionRepairInfo> partitionRepairInfos =
+                Lists.newArrayListWithCapacity(preAlterLatestPartitions.size());
 
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
-            for (Map.Entry<Long, Long> partitionVersion : commitVersionMap.entrySet()) {
-                long partitionId = partitionVersion.getKey();
+            // One entry per LOGICAL partition, because MaterializedView.BasePartitionInfo has one slot per
+            // logical partition. commitVersionMap cannot drive this loop directly: it is keyed by PHYSICAL
+            // partition id, and feeding such an id to getPartition() -- which only looks up idToPartition --
+            // returned null for every entry and left this repair unreachable.
+            for (Map.Entry<Long, PreAlterLatestPartition> entry : preAlterLatestPartitions.entrySet()) {
+                long partitionId = entry.getKey();
+                PreAlterLatestPartition preAlterLatest = entry.getValue();
                 Partition partition = table.getPartition(partitionId);
                 if (partition == null || table.isTempPartition(partitionId)) {
                     continue;
                 }
-                // TODO(fixme): last version/version time is not kept in transaction state, use version - 1 for last commit
-                //  version.
-                // TODO: we may add last version time to check mv's version map with base table's version time.
-                PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo(partition.getId(),  partition.getName(),
-                        partitionVersion.getValue() - 1, partitionVersion.getValue(), finishedTimeMs);
+                // Two different physical partitions are involved, and conflating them is what the review
+                // findings on this method were about:
+                //
+                //   * the NEW watermark must be the version the MV will read back, i.e. the version of the
+                //     partition getLatestPhysicalPartition() resolves to now -- after updateVisibleVersion()
+                //     turned that call into a version-time tie;
+                //   * the VALIDATION values must describe the partition that decided staleness BEFORE this
+                //     job ran, because that is the partition the MV's recorded watermark was compared
+                //     against. Validating against the post-alter winner instead accepts an MV that was
+                //     already stale on the pre-alter latest partition and silently erases that change.
+                //
+                // With a single physical partition the two coincide, which is why this only shows up on
+                // sub-partitioned tables.
+                PhysicalPartition postAlterLatest = partition.getLatestPhysicalPartition();
+                if (postAlterLatest == null) {
+                    continue;
+                }
+                Long newVersion = commitVersionMap.get(postAlterLatest.getId());
+                if (newVersion == null) {
+                    // This job did not touch the physical partition the MV reads back.
+                    continue;
+                }
+                PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo(partition.getId(),
+                        partition.getName(), preAlterLatest.visibleVersion, newVersion, finishedTimeMs,
+                        preAlterLatest.visibleVersionTime);
                 partitionRepairInfos.add(partitionRepairInfo);
             }
         } finally {

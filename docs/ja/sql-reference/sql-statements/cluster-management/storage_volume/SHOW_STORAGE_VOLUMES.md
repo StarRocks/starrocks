@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW STORAGE VOLUMES は、StarRocks クラスター内のストレージボリュームを表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW STORAGE VOLUMES

@@ -64,6 +64,17 @@ public final class DistributionSpecHelper {
         if (groupId == null || !colocateTableIndex.isRangeColocateGroup(groupId)) {
             return null;
         }
+        // An unstable group is mid-alignment: its tablet ranges do not yet tile the group's
+        // colocate ranges, so no colocate bucket assignment can be built for a scan of it.
+        // Mirrors the hash single-table guard in HashDistributionSpec#isSatisfy and the range
+        // join guard in RangeDistributionSpec#isSatisfy. Without it even a plain single-table
+        // scan advertises a colocate distribution, ExecutionFragment builds a colocated
+        // assignment, and RangeColocateScanDispatch#requireAligned then throws — turning an
+        // ordinary reshard into a user-visible query failure instead of the intended fall
+        // back to a non-colocate plan.
+        if (colocateTableIndex.isGroupUnstable(groupId)) {
+            return null;
+        }
         ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(groupId);
         if (groupSchema == null) {
             // Metadata inconsistency (e.g. partial replay); fall back to ANY.

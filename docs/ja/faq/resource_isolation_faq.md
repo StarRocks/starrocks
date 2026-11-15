@@ -1,6 +1,8 @@
 ---
+sidebar_position: 80
 displayed_sidebar: docs
 description: "StarRocks のリソース分離機能における CPU/メモリ制限設定とリソースグループの設定方法を説明します。"
+products: [oss, enterprise]
 ---
 
 # リソース分離のトラブルシューティング
@@ -114,7 +116,7 @@ SELECT /*+ SET_VAR(SET resource_group = '<resource_group_name>') */ * FROM tbl;
 
 ### メモリ制限はグローバルに、ユーザーごとに、またはBEごとに効果がありますか？
 
-`mem_limit` はBEごとのリソースグループに適用されます。インスタンスごとのメモリは `exec_mem_limit` によって制御されます。
+`mem_limit` はBEごとのリソースグループに適用されます。各 BE 上のクエリごとのメモリは `query_mem_limit` によって制御されます。
 
 ### 同時実行とメモリ制限はリソースグループが有効な場合にのみ効果がありますか？
 
@@ -192,7 +194,7 @@ A: インスタンスの数を確認することはできません。
 
 Q: クエリが合計で128 GBのメモリを消費し、60のインスタンスを生成し、`query_mem_limit=0` および `exec_mem_limit=2G` の場合、クエリは失敗しますか？
 
-A: いずれかのインスタンスが2 GB（`exec_mem_limit`）以上のメモリを消費すると、クエリは失敗します。
+A: `exec_mem_limit` が原因で失敗することはありません。パイプラインクエリは `exec_mem_limit` によって制限されません。各 BE 上のクエリごとのメモリ制限は `query_mem_limit` であり、`query_mem_limit=0` はクエリごとの制限がないことを意味します。この場合、クエリはリソースグループと BE のメモリ制限のみによって制限されます。
 
 ### 特定のリソースグループのみでグローバルクエリキューを無効にする方法は？
 
@@ -240,9 +242,9 @@ A: いずれかのインスタンスが2 GB（`exec_mem_limit`）以上のメモ
 
 クエリキューは、すべてのクエリに対してBEレベルの制限を使用します。
 
-`concurrency_limit` と `max_cpu_cores` は、リソースグループレベルのクエリキューが有効な場合に両方適用されます。
+`concurrency_limit`、`max_cpu_cores`、`mem_used_pct_limit` は、リソースグループレベルのクエリキューが有効な場合にすべて適用されます。`mem_used_pct_limit` はさらに `enable_query_queue_v2` が `false` である必要があります。
 
-### `pipeline_dop`、`exec_mem_limit`、リソースグループの同時実行制限の違いは何ですか？
+### `pipeline_dop`、`query_mem_limit`、リソースグループの同時実行制限の違いは何ですか？
 
 `pipeline_dop` はクエリ内の並行性を制御します。
 

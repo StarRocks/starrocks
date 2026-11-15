@@ -61,7 +61,7 @@ protected:
 
     ChunkPtr make_one_int_column_chunk(SlotId slot_id, bool nullable) {
         auto chunk = std::make_shared<Chunk>();
-        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), nullable);
+        auto col = ColumnHelper::create_column(TYPE_INT_DESC, nullable);
         col->append_default();
         chunk->append_column(std::move(col), slot_id);
         return chunk;
@@ -78,14 +78,14 @@ protected:
     // OperatorRuntimeAccess (DCHECK'd non-null). _init_output_chunk never touches it.
     std::unique_ptr<NLJoinProbeOperatorFactory> make_factory(const std::shared_ptr<NLJoinContext>& ctx,
                                                              TJoinOp::type join_op) {
-        return std::make_unique<NLJoinProbeOperatorFactory>(0, 1, _empty_row_desc, _empty_row_desc, _empty_row_desc, "",
+        return std::make_unique<NLJoinProbeOperatorFactory>(0, 1, _empty_record_desc, _empty_record_desc, "",
                                                             std::vector<ExprContext*>{}, std::vector<ExprContext*>{},
                                                             std::map<SlotId, ExprContext*>{},
                                                             std::shared_ptr<NLJoinContext>(ctx), join_op);
     }
 
     ObjectPool _pool;
-    RowDescriptor _empty_row_desc;
+    RecordDescriptor _empty_record_desc;
     std::vector<ExprContext*> _no_exprs;
     std::map<SlotId, ExprContext*> _no_common_exprs;
     std::string _no_sql;

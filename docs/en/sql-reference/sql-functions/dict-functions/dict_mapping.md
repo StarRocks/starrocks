@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the value mapped to the specified key in a dictionary table."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # dict_mapping
@@ -34,6 +35,12 @@ key_column_expr ::= <column_name> | <expr>
   - `<null_if_not_exist>` (Optional): Whether to return if the key does not exist in the dictionary table. Valid values:
     - `true`: Null is returned if the key does not exist.
     - `false` (Default): An exception is thrown if the key does not exist.
+
+## Usage Notes
+
+By default, the system will allow the optimizer to choose the `COUNT(DISTINCT)` implementation.
+
+When deduplicating low- and medium-cardinality columns, you can set `count_distinct_implementation` to `multi_count_distinct` for a query via query hint to verify the `multi_distinct_count` implementation for precise counting. However, do not use the `multi_distinct_count` implementation when deduplicating high-cardinality columns, because its HashSet status and final merging can cause excessive memory consumption and even OOM.
 
 ## Return Value
 

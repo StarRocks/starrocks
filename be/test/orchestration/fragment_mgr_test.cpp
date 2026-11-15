@@ -42,6 +42,7 @@
 
 #include "base/time/monotime.h"
 #include "common/config_runtime_fwd.h"
+#include "common/system/cpu_info.h"
 #include "exec/exec_env.h"
 #include "exec_primitive/data_sink.h"
 #include "gen_cpp/Types_types.h"
@@ -83,6 +84,7 @@ public:
     FragmentMgrTest() = default;
 
     static void SetUpTestSuite() {
+        CpuInfo::init();
         auto* runtime_env = RuntimeEnv::GetInstance();
         _previous_process_mem_tracker = runtime_env->_process_mem_tracker;
         _previous_query_pool_mem_tracker = runtime_env->_query_pool_mem_tracker;

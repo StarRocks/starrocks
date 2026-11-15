@@ -32,14 +32,12 @@ import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil.fin
 
 public class ArithmeticCommutativeRule extends BottomUpScalarOperatorRewriteRule {
     // Don't support DIVIDE, because DIVIDE will use double type, Double is not efficient and will lose precision
+    // Don't support years/months add/sub: they clamp to the month end, so they are not invertible, e.g.
+    // months_add(c, 1) = '2024-02-29' holds for c in 2024-01-29..31, not only for months_sub('2024-02-29', 1)
     private static final Map<String, String> LEFT_COMMUTATIVE_MAP = ImmutableMap.<String, String>builder()
             .put(FunctionSet.ADD, FunctionSet.SUBTRACT)
             .put(FunctionSet.SUBTRACT, FunctionSet.ADD)
             .put(FunctionSet.DIVIDE, FunctionSet.MULTIPLY)
-            .put(FunctionSet.YEARS_ADD, FunctionSet.YEARS_SUB)
-            .put(FunctionSet.YEARS_SUB, FunctionSet.YEARS_ADD)
-            .put(FunctionSet.MONTHS_ADD, FunctionSet.MONTHS_SUB)
-            .put(FunctionSet.MONTHS_SUB, FunctionSet.MONTHS_ADD)
             .put(FunctionSet.DAYS_ADD, FunctionSet.DAYS_SUB)
             .put(FunctionSet.DAYS_SUB, FunctionSet.DAYS_ADD)
             .put(FunctionSet.ADDDATE, FunctionSet.SUBDATE)

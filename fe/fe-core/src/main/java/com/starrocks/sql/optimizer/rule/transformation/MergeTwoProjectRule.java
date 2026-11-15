@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -27,6 +28,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -34,6 +38,9 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 public class MergeTwoProjectRule extends TransformationRule {
+    private static final List<ScalarOperatorRewriteRule> CONSTANT_REPLACEMENT_REWRITE_RULES = Lists.newArrayList(
+            new NormalizePredicateRule(),
+            new FoldConstantsRule());
     public MergeTwoProjectRule() {
         super(RuleType.TF_MERGE_TWO_PROJECT, Pattern.create(OperatorType.LOGICAL_PROJECT)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, OperatorType.PATTERN_LEAF)));
@@ -46,12 +53,24 @@ public class MergeTwoProjectRule extends TransformationRule {
 
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(secondProject.getColumnRefMap());
+        ColumnRefSet constantReplacementColumns = new ColumnRefSet();
+        secondProject.getColumnRefMap().forEach((column, expression) -> {
+            if (expression.isConstant()) {
+                constantReplacementColumns.union(column);
+            }
+        });
+
         Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : firstProject.getColumnRefMap().entrySet()) {
+
             ScalarOperator result = rewriter.rewrite(entry.getValue());
+            boolean mayIntroduceConstant = !result.isConstant() && !constantReplacementColumns.isEmpty() &&
+                    entry.getValue().getUsedColumns().containsAny(constantReplacementColumns);
             if (result.isConstant()) {
                 // better to rewrite all expression, but it's unnecessary
                 result = scalarRewriter.rewrite(result, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            } else if (mayIntroduceConstant) {
+                result = scalarRewriter.rewrite(result, CONSTANT_REPLACEMENT_REWRITE_RULES);
             }
             resultMap.put(entry.getKey(), result);
         }

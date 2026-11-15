@@ -21,6 +21,7 @@ set(SCHEMA_SCANNER_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     ${BE_TEST_JNI_ENV_STUB}
     schema_scanner_test_main.cpp
+    schema_be_cloud_native_compactions_scanner_test.cpp
     schema_be_tablet_write_log_scanner_test.cpp
     schema_columns_scanner_test.cpp
     schema_fe_metrics_scanner_test.cpp
@@ -29,6 +30,7 @@ set(SCHEMA_SCANNER_TEST_FILES
     schema_materialized_view_refresh_jobs_scanner_test.cpp
     schema_materialized_views_scanner_test.cpp
     schema_partitions_meta_scanner_test.cpp
+    schema_routine_load_jobs_scanner_test.cpp
     schema_scanner_core_test.cpp
     schema_scanner_test.cpp
     schema_scanners_test.cpp
@@ -54,7 +56,7 @@ set(SCHEMA_SCANNER_TEST_LINK_LIBS
     StarRocksGen
     ${STARROCKS_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS} ${WRAP_FORCE_UNDEFINED_FLAGS}
     ${WL_START_GROUP}
     gmock
     gtest

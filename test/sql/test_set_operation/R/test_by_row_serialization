@@ -1,0 +1,96 @@
+-- name: test_set_operation_by_row_serialization @system @sequential
+CREATE TABLE `s1` (
+  `c1` int NULL,
+  `c2` varchar(64) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE `s2` (
+  `c1` int NULL,
+  `c2` varchar(64) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into s1 values (1, 'a'), (2, ''), (3, null), (4, 'dd'), (null, 'e');
+-- result:
+-- !result
+insert into s2 values (1, 'a'), (3, null), (5, 'ff');
+-- result:
+-- !result
+select * from (select c1, c2 from s1 intersect select c1, c2 from s2) t order by c1, c2;
+-- result:
+1	a
+3	None
+-- !result
+select * from (select c1, c2 from s1 except select c1, c2 from s2) t order by c1, c2;
+-- result:
+None	e
+2	
+4	dd
+-- !result
+admin enable failpoint 'intersect_hash_set_force_by_rows';
+-- result:
+-- !result
+admin enable failpoint 'except_hash_set_force_by_rows';
+-- result:
+-- !result
+select * from (select c1, c2 from s1 intersect select c1, c2 from s2) t order by c1, c2;
+-- result:
+1	a
+3	None
+-- !result
+select * from (select c1, c2 from s1 except select c1, c2 from s2) t order by c1, c2;
+-- result:
+None	e
+2	
+4	dd
+-- !result
+select * from (select c1, c2 from s1 intersect select c1, c2 from s2 intersect select c1, c2 from s1) t order by c1, c2;
+-- result:
+1	a
+3	None
+-- !result
+insert into s1 select generate_series, concat('v', generate_series) from table(generate_series(10, 5000));
+-- result:
+-- !result
+insert into s2 select generate_series, concat('v', generate_series) from table(generate_series(10, 5000));
+-- result:
+-- !result
+select count(*) from (select c1, c2 from s1 intersect select c1, c2 from s2) t;
+-- result:
+4993
+-- !result
+select count(*) from (select c1, c2 from s1 except select c1, c2 from s2) t;
+-- result:
+3
+-- !result
+admin disable failpoint 'intersect_hash_set_force_by_rows';
+-- result:
+-- !result
+admin disable failpoint 'except_hash_set_force_by_rows';
+-- result:
+-- !result
+select count(*) from (select c1, c2 from s1 intersect select c1, c2 from s2) t;
+-- result:
+4993
+-- !result
+select count(*) from (select c1, c2 from s1 except select c1, c2 from s2) t;
+-- result:
+3
+-- !result
+drop table s1;
+-- result:
+-- !result
+drop table s2;
+-- result:
+-- !result
+CLEANUP {
+  admin disable failpoint 'intersect_hash_set_force_by_rows';
+  admin disable failpoint 'except_hash_set_force_by_rows';
+} END CLEANUP

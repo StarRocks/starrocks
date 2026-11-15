@@ -14,9 +14,21 @@
 
 #include "storage/lake/segment_metadata_filter.h"
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "base/testutil/assert.h"
+#include "storage/datum_variant.h"
+#include "storage/lake/sort_key_bounds_test_util.h"
+#include "storage/sort_key_bounds.h"
 #include "storage/tablet_schema.h"
+#include "storage/variant_tuple.h"
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/predicate_tree/predicate_tree.hpp"
 #include "types/type_descriptor.h"
@@ -67,8 +79,7 @@ protected:
     // Helper function to create a VariantPB for an INT value.
     static VariantPB make_int_variant(int32_t value) {
         VariantPB var;
-        TypeDescriptor td(TYPE_INT);
-        *var.mutable_type() = td.to_protobuf();
+        *var.mutable_type() = TYPE_INT_DESC.to_protobuf();
         var.set_value(std::to_string(value));
         return var;
     }
@@ -76,8 +87,7 @@ protected:
     // Helper function to create a VariantPB for a null INT value.
     static VariantPB make_null_int_variant() {
         VariantPB var;
-        TypeDescriptor td(TYPE_INT);
-        *var.mutable_type() = td.to_protobuf();
+        *var.mutable_type() = TYPE_INT_DESC.to_protobuf();
         // No value set means null
         return var;
     }
@@ -86,11 +96,11 @@ protected:
     static SegmentMetadataPB create_segment_meta(const std::vector<int32_t>& min_values,
                                                  const std::vector<int32_t>& max_values) {
         SegmentMetadataPB meta;
-        auto* min_tuple = meta.mutable_sort_key_min();
+        auto* min_tuple = meta.mutable_deprecated_sort_key_min();
         for (int32_t v : min_values) {
             *min_tuple->add_values() = make_int_variant(v);
         }
-        auto* max_tuple = meta.mutable_sort_key_max();
+        auto* max_tuple = meta.mutable_deprecated_sort_key_max();
         for (int32_t v : max_values) {
             *max_tuple->add_values() = make_int_variant(v);
         }
@@ -122,8 +132,8 @@ TEST_F(SegmentMetadataFilterTest, test_no_metadata) {
 // Test: Empty min_tuple values, should return true.
 TEST_F(SegmentMetadataFilterTest, test_empty_tuple_values) {
     SegmentMetadataPB meta;
-    meta.mutable_sort_key_min(); // Empty tuple
-    auto* max_tuple = meta.mutable_sort_key_max();
+    meta.mutable_deprecated_sort_key_min(); // Empty tuple
+    auto* max_tuple = meta.mutable_deprecated_sort_key_max();
     *max_tuple->add_values() = make_int_variant(100);
 
     std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "50"));
@@ -579,11 +589,11 @@ TEST_F(SegmentMetadataFilterTest, test_non_leading_sort_key_custom_order_by) {
     // Actual c0 values in segment could range from e.g. 10 to 900.
     // The composite tuple gives c0 "min"=500, c0 "max"=50 — which is WRONG as per-column min/max.
     SegmentMetadataPB meta;
-    auto* min_tuple = meta.mutable_sort_key_min();
+    auto* min_tuple = meta.mutable_deprecated_sort_key_min();
     *min_tuple->add_values() = make_int_variant(1);   // c2 min (leading, correct)
     *min_tuple->add_values() = make_int_variant(500); // c0 from first row (NOT per-column min)
     *min_tuple->add_values() = make_int_variant(10);  // c1 from first row (NOT per-column min)
-    auto* max_tuple = meta.mutable_sort_key_max();
+    auto* max_tuple = meta.mutable_deprecated_sort_key_max();
     *max_tuple->add_values() = make_int_variant(99); // c2 max (leading, correct)
     *max_tuple->add_values() = make_int_variant(50); // c0 from last row (NOT per-column max)
     *max_tuple->add_values() = make_int_variant(90); // c1 from last row (NOT per-column max)
@@ -685,17 +695,16 @@ TEST_F(SegmentMetadataFilterTest, test_varchar_sort_key_no_use_after_free) {
 
     auto make_varchar_variant = [](const std::string& value) {
         VariantPB var;
-        TypeDescriptor td = TypeDescriptor::create_varchar_type(128);
-        *var.mutable_type() = td.to_protobuf();
+        *var.mutable_type() = TYPE_VARCHAR_DESC.to_protobuf();
         var.set_variant_type(VariantTypePB::NORMAL_VALUE);
         var.set_value(value);
         return var;
     };
 
     SegmentMetadataPB meta;
-    auto* min_tuple = meta.mutable_sort_key_min();
+    auto* min_tuple = meta.mutable_deprecated_sort_key_min();
     *min_tuple->add_values() = make_varchar_variant("apple");
-    auto* max_tuple = meta.mutable_sort_key_max();
+    auto* max_tuple = meta.mutable_deprecated_sort_key_max();
     *max_tuple->add_values() = make_varchar_variant("mango");
     meta.set_num_rows(100);
 
@@ -718,6 +727,156 @@ TEST_F(SegmentMetadataFilterTest, test_varchar_sort_key_no_use_after_free) {
         std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 0, "zzz"));
         PredicateTree pred_tree = create_pred_tree_with_column_pred(pred.get());
         ASSERT_FALSE(SegmentMetadataFilter::may_contain(meta, pred_tree, *varchar_schema));
+    }
+}
+
+namespace {
+
+// The same segment with its bounds moved into the encoded pair.
+SegmentMetadataPB with_encoded_bounds(const SegmentMetadataPB& legacy) {
+    RowsetMetadataPB rowset;
+    *rowset.add_segment_metas() = legacy;
+    convert_sort_key_bounds(&rowset, SortKeyBoundsRepr::kEncoded);
+    return rowset.segment_metas(0);
+}
+
+// A two-column INT tuple whose first value may be NULL, in the form the segment writer stores in the deprecated pair.
+TuplePB make_int_pair_tuple(std::optional<int32_t> first, int32_t second) {
+    VariantTuple tuple;
+    tuple.append(DatumVariant(get_type_info(TYPE_INT), first.has_value() ? Datum(*first) : Datum()));
+    tuple.append(DatumVariant(get_type_info(TYPE_INT), Datum(second)));
+    TuplePB tuple_pb;
+    tuple.to_proto(&tuple_pb);
+    return tuple_pb;
+}
+
+// Predicates on the leading sort key column c0, each with a name for failure messages.
+std::vector<std::pair<std::string, std::unique_ptr<ColumnPredicate>>> leading_column_predicates() {
+    std::vector<std::pair<std::string, std::unique_ptr<ColumnPredicate>>> predicates;
+    const auto type = get_type_info(TYPE_INT);
+    for (const char* value : {"-1", "5", "10", "50", "100", "200"}) {
+        predicates.emplace_back(fmt::format("c0 = {}", value), new_column_eq_predicate(type, 0, value));
+        predicates.emplace_back(fmt::format("c0 < {}", value), new_column_lt_predicate(type, 0, value));
+        predicates.emplace_back(fmt::format("c0 > {}", value), new_column_gt_predicate(type, 0, value));
+    }
+    for (const std::vector<std::string>& values :
+         std::vector<std::vector<std::string>>{{"1", "2", "3"}, {"5", "50", "200"}, {"100"}, {"150", "300"}}) {
+        const std::string list = fmt::format("({})", fmt::join(values, ", "));
+        predicates.emplace_back("c0 IN " + list, new_column_in_predicate(type, 0, values));
+        predicates.emplace_back("c0 NOT IN " + list, new_column_not_in_predicate(type, 0, values));
+    }
+    return predicates;
+}
+
+} // namespace
+
+// The encoded pair prunes exactly like the deprecated one for every comparison, IN and NOT IN predicate on the
+// leading sort key column.
+TEST_F(SegmentMetadataFilterTest, EncodedBoundsPruneLikeLegacy) {
+    const std::vector<SegmentMetadataPB> legacy_segments = {create_segment_meta({10, 0}, {100, 100}),
+                                                            create_segment_meta({50, 0}, {50, 7})};
+    int pruned = 0;
+    for (const auto& legacy : legacy_segments) {
+        const auto encoded = with_encoded_bounds(legacy);
+        ASSERT_FALSE(encoded.has_deprecated_sort_key_min());
+        for (const auto& [name, pred] : leading_column_predicates()) {
+            PredicateTree pred_tree = create_pred_tree_with_column_pred(pred.get());
+            const bool legacy_may_contain = SegmentMetadataFilter::may_contain(legacy, pred_tree, *_tablet_schema);
+            EXPECT_EQ(legacy_may_contain, SegmentMetadataFilter::may_contain(encoded, pred_tree, *_tablet_schema))
+                    << name << " on " << legacy.ShortDebugString();
+            pruned += legacy_may_contain ? 0 : 1;
+        }
+    }
+    EXPECT_GT(pruned, 0) << "no predicate pruned, so the comparison above proves nothing";
+}
+
+// A nullable leading sort key column whose minimum is NULL: the encoded pair prunes exactly like the deprecated one,
+// including a segment whose maximum is NULL as well.
+TEST_F(SegmentMetadataFilterTest, EncodedNullLeadingMinMatchesLegacy) {
+    TabletSchemaPB schema_pb;
+    _tablet_schema->to_schema_pb(&schema_pb);
+    schema_pb.mutable_column(0)->set_is_nullable(true);
+    auto nullable_schema = TabletSchema::create(schema_pb);
+
+    int pruned = 0;
+    for (const std::optional<int32_t> max_leading : {std::optional<int32_t>(100), std::optional<int32_t>()}) {
+        SegmentMetadataPB legacy;
+        *legacy.mutable_deprecated_sort_key_min() = make_int_pair_tuple(std::nullopt, 0);
+        *legacy.mutable_deprecated_sort_key_max() = make_int_pair_tuple(max_leading, 100);
+        legacy.set_num_rows(100);
+        const auto encoded = with_encoded_bounds(legacy);
+        DatumVariant min;
+        DatumVariant max;
+        ASSERT_OK(decode_segment_leading_sort_key_bounds(encoded, &min, &max));
+        ASSERT_TRUE(min.value().is_null());
+
+        auto predicates = leading_column_predicates();
+        predicates.emplace_back("c0 IS NULL", new_column_null_predicate(get_type_info(TYPE_INT), 0, true));
+        predicates.emplace_back("c0 IS NOT NULL", new_column_null_predicate(get_type_info(TYPE_INT), 0, false));
+        for (const auto& [name, pred] : predicates) {
+            PredicateTree pred_tree = create_pred_tree_with_column_pred(pred.get());
+            const bool legacy_may_contain = SegmentMetadataFilter::may_contain(legacy, pred_tree, *nullable_schema);
+            EXPECT_EQ(legacy_may_contain, SegmentMetadataFilter::may_contain(encoded, pred_tree, *nullable_schema))
+                    << name << " on " << legacy.ShortDebugString();
+            pruned += legacy_may_contain ? 0 : 1;
+        }
+    }
+    EXPECT_GT(pruned, 0) << "no predicate pruned, so the comparison above proves nothing";
+}
+
+// Encoded bounds whose header or leading value does not decode never prune: the segment may contain anything. The
+// same bounds intact do prune. Like the deprecated pair, only the leading column is read, so these damage the bytes
+// up to the end of the leading value.
+TEST_F(SegmentMetadataFilterTest, CorruptEncodedBoundsMayContain) {
+    const auto encoded = with_encoded_bounds(create_segment_meta({10, 0}, {100, 100}));
+    std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "5"));
+    PredicateTree pred_tree = create_pred_tree_with_column_pred(pred.get());
+    ASSERT_FALSE(SegmentMetadataFilter::may_contain(encoded, pred_tree, *_tablet_schema));
+
+    // Two INT columns: version (byte 0), column count (bytes 1-2), column types (bytes 3-4), then the leading
+    // value's marker (byte 5) and payload (bytes 6-9).
+    const std::string& valid = encoded.sort_key_min_encoded();
+    ASSERT_EQ(15u, valid.size());
+    auto with_byte = [&](size_t pos, char value) {
+        std::string damaged = valid;
+        damaged[pos] = value;
+        return damaged;
+    };
+    auto damage_one_side = [&](const std::string& corrupt, bool corrupt_min) {
+        SegmentMetadataPB meta(encoded);
+        if (corrupt_min) {
+            meta.set_sort_key_min_encoded(corrupt);
+        } else {
+            meta.set_sort_key_max_encoded(corrupt);
+        }
+        return meta;
+    };
+
+    // A format version this binary does not know means the segment has no bounds at all.
+    for (const std::string& corrupt : {std::string("garbage"), std::string(), with_byte(0, '\x02')}) {
+        for (const bool corrupt_min : {true, false}) {
+            const SegmentMetadataPB meta = damage_one_side(corrupt, corrupt_min);
+            EXPECT_FALSE(has_segment_sort_key_bounds(meta))
+                    << (corrupt_min ? "min " : "max ") << meta.ShortDebugString();
+            EXPECT_TRUE(SegmentMetadataFilter::may_contain(meta, pred_tree, *_tablet_schema))
+                    << (corrupt_min ? "min " : "max ") << meta.ShortDebugString();
+        }
+    }
+
+    // A damaged header in format version 1, or a damaged leading value, leaves the bounds present but unreadable.
+    for (const std::string& corrupt :
+         {valid.substr(0, 4), with_byte(3, '\x7f'), with_byte(5, '\x02'), valid.substr(0, 8)}) {
+        for (const bool corrupt_min : {true, false}) {
+            const SegmentMetadataPB meta = damage_one_side(corrupt, corrupt_min);
+            EXPECT_TRUE(has_segment_sort_key_bounds(meta))
+                    << (corrupt_min ? "min " : "max ") << meta.ShortDebugString();
+            DatumVariant min;
+            DatumVariant max;
+            EXPECT_TRUE(decode_segment_leading_sort_key_bounds(meta, &min, &max).is_corruption())
+                    << (corrupt_min ? "min " : "max ") << meta.ShortDebugString();
+            EXPECT_TRUE(SegmentMetadataFilter::may_contain(meta, pred_tree, *_tablet_schema))
+                    << (corrupt_min ? "min " : "max ") << meta.ShortDebugString();
+        }
     }
 }
 

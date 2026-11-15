@@ -1,6 +1,8 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "如何手动部署存算分离 StarRocks 集群，数据存储在远程存储中，本地盘作为缓存。"
+products: [oss]
 ---
 
 import Tabs from '@theme/Tabs';
@@ -11,7 +13,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
 <ManualPrep />
 
-本文介绍如何手动部署 StarRocks 存算分离集群。其他安装方式请参考[部署概览](../deployment/deployment_overview.md)。
+本文介绍如何手动部署 StarRocks 存算分离集群。其他安装方式请参考[部署概览](./deployment.md)。
 
 如果要部署存算一体集群（BE 同时做数据存储和计算），参见 [手动部署存算一体 StarRocks](./deploy_manually.md)。
 
@@ -43,7 +45,7 @@ StarRocks 存算分离集群由 FE 和 CN 组成。CN 取代了存算一体集�
    mkdir -p <meta_dir>
    ```
 
-2. 进入先前准备好的 [StarRocks FE 部署文件](../deployment/prepare_deployment_files.md)所在路径，修改 FE 配置文件 **fe/conf/fe.conf**。
+2. 进入先前准备好的 [StarRocks FE 部署文件](./preparation/prepare_deployment_files.md)所在路径，修改 FE 配置文件 **fe/conf/fe.conf**。
 
 
    a. 设定存算分离运行模式。
@@ -59,7 +61,7 @@ StarRocks 存算分离集群由 FE 和 CN 组成。CN 取代了存算一体集�
       meta_dir = <meta_dir>
       ```
 
-   c. 如果任何在 [环境配置清单](../deployment/environment_configurations.md) 中提到的 FE 端口被占用，您必须在 FE 配置文件中为其分配其他可用端口。
+   c. 如果任何在 [环境配置清单](./preparation/environment_configurations.md) 中提到的 FE 端口被占用，您必须在 FE 配置文件中为其分配其他可用端口。
 
       ```YAML
       http_port = aaaa               # 默认值：8030
@@ -91,7 +93,7 @@ StarRocks 存算分离集群由 FE 和 CN 组成。CN 取代了存算一体集�
       JAVA_HOME = <path_to_JDK>
       ```
 
-   更多高级配置项请参考 [参数配置 - FE 配置项](../administration/management/FE_configuration.md)。
+   更多高级配置项请参考 [参数配置 - FE 配置项](../administration/configuration/FE_parameters/FE_parameters.md)。
 
 3. 启动 FE 节点。
 
@@ -111,7 +113,7 @@ StarRocks 存算分离集群由 FE 和 CN 组成。CN 取代了存算一体集�
 
      > **注意**
      >
-     > 如需启用 FQDN 访问，在启动 FE 节点之前，请确保您已经在 **/etc/hosts** 中为所有实例分配了主机名。有关详细信息，请参考 [环境配置清单 - 主机名](../deployment/environment_configurations.md#主机名)。
+     > 如需启用 FQDN 访问，在启动 FE 节点之前，请确保您已经在 **/etc/hosts** 中为所有实例分配了主机名。有关详细信息，请参考 [环境配置清单 - 主机名](./preparation/environment_configurations.md#主机名)。
 
 4. 查看 FE 日志，检查 FE 节点是否启动成功。
 
@@ -140,7 +142,7 @@ StarRocks 存算分离集群由 FE 和 CN 组成。CN 取代了存算一体集�
    mkdir -p <storage_root_path>
    ```
 
-2. 进入先前准备好的 [StarRocks BE 部署文件](../deployment/prepare_deployment_files.md)所在路径，修改 CN 配置文件 **be/conf/cn.conf**。
+2. 进入先前准备好的 [StarRocks BE 部署文件](./preparation/prepare_deployment_files.md)所在路径，修改 CN 配置文件 **be/conf/cn.conf**。
 
    a.  在配置项 `storage_root_path` 中指定数据路径。多块盘配置使用分号（;）隔开。例如：`/data1;/data2`。
 
@@ -162,9 +164,9 @@ StarRocks 存算分离集群由 FE 和 CN 组成。CN 取代了存算一体集�
 
       > **说明**
       >
-      > 本地缓存数据将存储在 **`<storage_root_path>/starlet_cache`** 路径下。
+      > 自 v3.4.0 起，本地缓存数据将存储在 **`<storage_root_path>/datacache`** 路径下。CN 启动时，会自动将 `<storage_root_path>/starlet_cache` 中已有的缓存数据移动至该路径下。在更早的版本中，本地缓存数据将存储在 **`<storage_root_path>/starlet_cache`** 路径下。
 
-   b. 如果任何在 [环境配置清单](../deployment/environment_configurations.md) 中提到的 BE 端口被占用，您必须在 BE 配置文件中为其分配其他可用端口。
+   b. 如果任何在 [环境配置清单](./preparation/environment_configurations.md) 中提到的 BE 端口被占用，您必须在 BE 配置文件中为其分配其他可用端口。
 
       ```YAML
       be_port = vvvv                   # 默认值：9060
@@ -192,7 +194,7 @@ StarRocks 存算分离集群由 FE 和 CN 组成。CN 取代了存算一体集�
       JAVA_HOME = <path_to_JDK>
       ```
 
-   由于大部分 CN 参数都继承自 BE 节点，您可以参考 [参数配置 - BE 配置项](../administration/management/BE_configuration.md) 了解更多 CN 高级配置项。
+   由于大部分 CN 参数都继承自 BE 节点，您可以参考 [参数配置 - BE 配置项](../administration/configuration/BE_parameters/BE_parameters.md) 了解更多 CN 高级配置项。
 
 3. 启动 CN 节点。
 
@@ -202,7 +204,7 @@ StarRocks 存算分离集群由 FE 和 CN 组成。CN 取代了存算一体集�
 
    > **注意**
    >
-   > - 如需启用 FQDN 访问，在启动 CN 节点之前，请确保您已经在 **/etc/hosts** 中为所有实例分配了主机名。有关详细信息，请参考 [环境配置清单 - 主机名](../deployment/environment_configurations.md#主机名)。
+   > - 如需启用 FQDN 访问，在启动 CN 节点之前，请确保您已经在 **/etc/hosts** 中为所有实例分配了主机名。有关详细信息，请参考 [环境配置清单 - 主机名](./preparation/environment_configurations.md#主机名)。
    > - 启动 CN 节点时无需指定参数 `--host_type`。
 
 4. 查看 CN 日志，检查 CN 节点是否启动成功。
@@ -624,7 +626,7 @@ PROPERTIES (
 
 #### `datacache.partition_duration`
 
-热数据的有效期。当启用本地磁盘缓存时，所有数据都会导入至本地磁盘缓存中。当缓存满时，StarRocks 会从缓存中删除最近较少使用（Less recently used）的数据。当有查询需要扫描已删除的数据时，StarRocks 会从当前时间开始，检查该数据是否在有效期内。如果数据在有效期内，StarRocks 会再次将数据导入至缓存中。如果数据不在有效期内，StarRocks 不会将其导入至缓存中。该属性为字符串，您可以使用以下单位指定：`YEAR`、`MONTH`、`DAY` 和 `HOUR`，例如，`7 DAY` 和 `12 HOUR`。如果不指定，StarRocks 将所有数据都作为热数据进行缓存。
+热分区的时间范围，从当前时间向前计算。对于按 DATE 或 DATETIME 列分区的表，查询扫描某个分区时，仅当该分区的范围与此时间范围有交集（对于 List 分区，即分区值落在此时间范围内）时，StarRocks 才会将扫描的数据填充到缓存中。查询其他分区时仍可读取已缓存的数据，但不会填充缓存，也不会使用内存中的 Page Cache。该属性在查询时根据分区边界进行判断，而非根据数据导入时间，并且不会淘汰已缓存的数据。对于既不是按单个 DATE 或 DATETIME 列进行 Range 分区、也不是按 DATE 或 DATETIME 列进行 List 分区的表，该属性不生效。该属性为字符串，格式为 `<数值> <单位>`，单位可以是 `YEAR`、`MONTH`、`WEEK`、`DAY`、`HOUR`、`MINUTE` 或 `SECOND`（不区分大小写，单复数均可），例如，`7 DAY` 和 `12 HOUR`。可以组合多个数值和单位，例如 `1 DAY 12 HOUR`，但 `YEAR`、`MONTH`、`WEEK` 不能与 `HOUR`、`MINUTE`、`SECOND` 组合使用。如果不指定，查询所有分区时均会填充缓存。
 
 > **说明**
 >
@@ -649,7 +651,7 @@ StarRocks 存算分离集群中表的 `Type` 为 `CLOUD_NATIVE`。`StoragePath` 
 
 ### 向 StarRocks 存算分离集群导入数据
 
-StarRocks 存算分离集群支持 StarRocks 提供的所有导入方式。详细信息，请参阅 [导入方案](../loading/Loading_intro.md)。
+StarRocks 存算分离集群支持 StarRocks 提供的所有导入方式。详细信息，请参阅 [导入方案](../loading/loading_introduction/loading_introduction.mdx)。
 
 ### 在 StarRocks 存算分离集群查询
 
@@ -697,4 +699,4 @@ StarRocks 存算分离集群支持 StarRocks 提供的所有查询方式。详�
 
 ## 下一步
 
-成功部署 StarRocks 集群后，您可以参考 [部署后设置](../deployment/post_deployment_setup.md) 以获取有关初始管理措施的说明。
+成功部署 StarRocks 集群后，您可以参考 [部署后设置](./manage_deployment/post_deployment_setup.md) 以获取有关初始管理措施的说明。

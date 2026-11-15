@@ -107,8 +107,11 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
     // Key: tableId, Value: Set of partitionIds that belong to this table
     private final Map<Long, Set<Long>> lakeTableToPartitions;
 
-    private static final ExecutorService ASYNC_REMOVE_PARTITION_EXECUTOR = ThreadPoolManager.newDaemonFixedThreadPool(
-                Config.lake_remove_partition_thread_num, Integer.MAX_VALUE, "lake-remove-partition-pool", true);
+    // Not final and instance-owned (was a static pool nothing ever stopped): leader demotion drains
+    // it to termination in onStopped() and nulls it, and the getter lazily rebuilds it on the next
+    // leader session - the same lifecycle as the other LeaderDaemon-owned pools, so the re-activation
+    // cleanliness gate's "isRunning == false => owned pools terminated" invariant covers it.
+    private volatile ExecutorService asyncRemovePartitionExecutor;
 
     protected Map<Long, Long> idToRecycleTime;
 
@@ -912,7 +915,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
             CompletableFuture<Boolean> future = asyncDeleteForPartitions.get(partitionInfo);
             if (future == null) {
                 asyncDeleteForPartitions.put(partitionInfo,
-                        CompletableFuture.supplyAsync(partitionInfo::delete, ASYNC_REMOVE_PARTITION_EXECUTOR));
+                        CompletableFuture.supplyAsync(partitionInfo::delete, getAsyncRemovePartitionExecutor()));
             } else if (future.isDone()) {
                 try {
                     finished = future.get();
@@ -1022,10 +1025,16 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
+        Database db = dbInfo.getDb();
+        for (RecycleTableInfo tableInfo : idToTableInfo.row(db.getId()).values()) {
+            if (tableInfo.getDbId() == db.getId() && dbInfo.getTableNames().contains(tableInfo.getTable().getName())
+                    && tableInfo.isRecoverable()) {
+                warnIfRecoveringNonNormalTable(db, tableInfo.getTable());
+            }
+        }
         // 1. recover all tables in this db
         recoverAllTables(dbInfo);
 
-        Database db = dbInfo.getDb();
         // 2. remove db from idToDatabase and idToRecycleTime
         idToDatabase.remove(db.getId());
         removeRecycleMarkers(db.getId());
@@ -1086,6 +1095,18 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         }
     }
 
+    private static void warnIfRecoveringNonNormalTable(Database db, Table table) {
+        if (table.isNativeTableOrMaterializedView()) {
+            OlapTable.OlapTableState state = ((OlapTable) table).getState();
+            if (state != OlapTable.OlapTableState.NORMAL) {
+                LOG.warn("Attempting to recover native table {}.{} (dbId={}, tableId={}) in state {}; "
+                                + "unfinished alter/reshard metadata is not repaired and may leave version publication "
+                                + "or subsequent DDL blocked.",
+                        db.getFullName(), table.getName(), db.getId(), table.getId(), state);
+            }
+        }
+    }
+
     public synchronized boolean recoverTable(Database db, String tableName) {
         // make sure to get db lock
         long dbId = db.getId();
@@ -1096,6 +1117,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         }
 
         Table table = recycleTableInfo.getTable();
+        warnIfRecoveringNonNormalTable(db, table);
 
         // log
         RecoverInfo recoverInfo = new RecoverInfo(dbId, table.getId(), -1L);
@@ -1315,6 +1337,38 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         GlobalStateMgr.getCurrentState().getAuthorizationMgr().removeInvalidObject();
     }
 
+    private ExecutorService getAsyncRemovePartitionExecutor() {
+        ExecutorService executor = asyncRemovePartitionExecutor;
+        if (executor == null || executor.isShutdown()) {
+            synchronized (this) {
+                executor = asyncRemovePartitionExecutor;
+                if (executor == null || executor.isShutdown()) {
+                    executor = ThreadPoolManager.newDaemonFixedThreadPool(
+                            Config.lake_remove_partition_thread_num, Integer.MAX_VALUE,
+                            "lake-remove-partition-pool", true);
+                    asyncRemovePartitionExecutor = executor;
+                }
+            }
+        }
+        return executor;
+    }
+
+    @Override
+    protected void onStopped() {
+        // Drain the async partition-delete pool to termination so isRunning (the gate's single
+        // quiescence signal) is not cleared while a delete - a destructive external operation - is
+        // still running; then null it for the lazy rebuild above. Drop the in-flight futures too:
+        // the next leader re-drives erasure from its own durable recycle-bin state.
+        ExecutorService executor = asyncRemovePartitionExecutor;
+        if (executor != null) {
+            shutdownNowAndAwaitTermination("CatalogRecycleBin.asyncRemovePartitionExecutor", executor);
+            asyncRemovePartitionExecutor = null;
+        }
+        synchronized (this) {
+            asyncDeleteForPartitions.clear();
+        }
+    }
+
     @Override
     protected void runAfterLeaseValid() {
         long currentTimeMs = System.currentTimeMillis();
@@ -1431,7 +1485,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
     }
 
     @VisibleForTesting
-    synchronized RecyclePartitionInfo getRecyclePartitionInfo(long id) {
+    public synchronized RecyclePartitionInfo getRecyclePartitionInfo(long id) {
         return idToPartition.get(id);
     }
 

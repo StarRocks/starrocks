@@ -191,6 +191,9 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
     case TYPE_BINARY:
     case TYPE_VARBINARY:
     case TYPE_MAX_VALUE:
+    case TYPE_GEOGRAPHY:
+    case TYPE_GEOMETRY:
+    case TYPE_FILE:
         return nullptr;
         // No default to ensure newly added enumerator will be handled.
     }

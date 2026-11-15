@@ -14,6 +14,7 @@
 
 #include "storage/storage_env.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <memory>
 #include <vector>
@@ -34,9 +35,9 @@
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/lake/update_manager.h"
 
 #ifdef USE_STAROS
 #include "common/config_starlet_fwd.h"
@@ -44,6 +45,12 @@
 #endif
 
 namespace starrocks {
+
+namespace {
+
+constexpr int kVectorIndexCacheAsyncLoadMaxQueueSize = 4096;
+
+} // namespace
 
 StorageEnv* StorageEnv::GetInstance() {
     static StorageEnv s_storage_env;
@@ -101,20 +108,20 @@ Status StorageEnv::init(const StorageEnvOptions& options) {
         return Status::OK();
     }
 
-    auto lake_update_manager =
-            std::make_unique<lake::UpdateManager>(lake_location_provider, options.update_mem_tracker);
-    auto lake_tablet_manager =
-            std::make_unique<lake::TabletManager>(lake_location_provider, lake_update_manager.get(),
-                                                  options.lake_metadata_cache_limit, options.store_path_registry);
+    auto lake_primary_key_manager =
+            std::make_unique<lake::PrimaryKeyManager>(lake_location_provider, options.update_mem_tracker);
+    auto lake_tablet_manager = std::make_unique<lake::TabletManager>(
+            lake_location_provider, lake_primary_key_manager.get(), options.lake_tablet_metadata_cache_limit,
+            options.lake_segment_metadata_cache_limit, options.store_path_registry);
     auto lake_replication_txn_manager = std::make_unique<lake::ReplicationTxnManager>(lake_tablet_manager.get());
 
     auto parallel_compact_mgr =
             std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(lake_tablet_manager.get());
     RETURN_IF_ERROR(parallel_compact_mgr->init());
-    lake_update_manager->set_parallel_compact_mgr(parallel_compact_mgr.get());
+    lake_primary_key_manager->set_parallel_compact_mgr(parallel_compact_mgr.get());
 
     _lake_location_provider = std::move(lake_location_provider);
-    _lake_update_manager = std::move(lake_update_manager);
+    _lake_primary_key_manager = std::move(lake_primary_key_manager);
     _lake_tablet_manager = std::move(lake_tablet_manager);
     _lake_replication_txn_manager = std::move(lake_replication_txn_manager);
     _parallel_compact_mgr = std::move(parallel_compact_mgr);
@@ -135,11 +142,21 @@ Status StorageEnv::init_vector_index_cache(int64_t process_mem_limit, MemTracker
     if (vi_capacity <= 0) {
         LOG(WARNING) << "vector_query_cache_capacity resolved to " << vi_capacity
                      << " bytes (raw=" << config::vector_query_cache_capacity
-                     << ", process_mem_limit=" << process_mem_limit << "); vector index cache disabled";
+                     << ", process_mem_limit=" << process_mem_limit
+                     << "); async vector index loading is disabled, but queries still load indexes synchronously. "
+                        "The cache capacity is a soft limit";
         vi_capacity = 0;
     }
-    _vector_index_cache =
+    auto vector_index_cache =
             std::make_unique<VectorIndexCache>(static_cast<size_t>(vi_capacity), vector_index_mem_tracker);
+    const int async_load_threads = std::max(1, config::vector_index_cache_async_load_threads);
+    if (async_load_threads != config::vector_index_cache_async_load_threads) {
+        LOG(WARNING) << "vector_index_cache_async_load_threads must be positive; use 1 instead of "
+                     << config::vector_index_cache_async_load_threads;
+    }
+    RETURN_IF_ERROR(
+            vector_index_cache->init_async_load_pool(async_load_threads, kVectorIndexCacheAsyncLoadMaxQueueSize));
+    _vector_index_cache = std::move(vector_index_cache);
     tenann::SetGlobalIndexCache(_vector_index_cache.get());
 #endif
     return Status::OK();
@@ -162,6 +179,9 @@ void StorageEnv::destroy_vector_index_cache() {
     if (_vector_index_cache != nullptr && tenann::GetGlobalIndexCache() == _vector_index_cache.get()) {
         tenann::SetGlobalIndexCache(nullptr);
     }
+    if (_vector_index_cache != nullptr) {
+        _vector_index_cache->shutdown_async_load_pool();
+    }
 #endif
     _vector_index_cache.reset();
 }
@@ -174,7 +194,7 @@ void StorageEnv::destroy() {
     _parallel_compact_mgr.reset();
     _lake_replication_txn_manager.reset();
     _lake_tablet_manager.reset();
-    _lake_update_manager.reset();
+    _lake_primary_key_manager.reset();
     _lake_location_provider.reset();
 }
 

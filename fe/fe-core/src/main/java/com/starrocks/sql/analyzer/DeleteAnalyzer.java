@@ -17,7 +17,6 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -28,7 +27,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.KeysType;
@@ -240,12 +238,6 @@ public class DeleteAnalyzer {
             throw new SemanticException("Delete for Iceberg table do not support specifying partitions",
                     deleteStatement.getPartitionNames().getPos());
         }
-        if (deleteStatement.getUsingRelations() != null) {
-            throw new SemanticException("Delete for Iceberg table do not support `using` clause");
-        }
-        if (deleteStatement.getCommonTableExpressions() != null) {
-            throw new SemanticException("Delete for Iceberg table do not support `with` clause");
-        }
 
         TableName tableName = TableName.fromTableRef(deleteStatement.getTableRef());
         // Create select list: SELECT _file, _pos, partition_col1, partition_col2, ...
@@ -267,13 +259,25 @@ public class DeleteAnalyzer {
 
         // Create table relation with WHERE predicate
         TableRelation tableRelation = new TableRelation(tableName);
+        AnalyzerUtils.setIcebergWriteBranch(tableRelation, table, deleteStatement.getTargetBranch());
+        Relation relation = tableRelation;
+        if (deleteStatement.getUsingRelations() != null) {
+            for (Relation r : deleteStatement.getUsingRelations()) {
+                relation = new JoinRelation(null, relation, r, null, false);
+            }
+            // a row joined to several USING rows must be deleted once, or the delete file counts it twice
+            selectList.setIsDistinct(true);
+        }
         SelectRelation selectRelation = new SelectRelation(
                 selectList,
-                tableRelation,
+                relation,
                 deleteStatement.getWherePredicate(),
                 null,
                 null
         );
+        if (deleteStatement.getCommonTableExpressions() != null) {
+            deleteStatement.getCommonTableExpressions().forEach(selectRelation::addCTERelation);
+        }
 
         // Create query statement
         QueryStatement queryStatement = new QueryStatement(selectRelation);
@@ -290,18 +294,17 @@ public class DeleteAnalyzer {
 
         TableRef tableRef = deleteStatement.getTableRef();
         TableName tableName = TableName.fromTableRef(tableRef);
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getDb(session, tableName.getCatalog(), tableName.getDb());
-        if (db == null) {
-            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
-        }
-        Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
+        Table table = AnalyzerUtils.resolveWriteTarget(session, tableName);
         MetaUtils.checkNotSupportCatalog(table, TableOperation.DELETE);
 
         // Handle Iceberg table delete
         if (table instanceof IcebergTable) {
             analyzeIcebergTable(deleteStatement, table, session);
             return;
+        }
+
+        if (deleteStatement.getTargetBranch() != null) {
+            throw new SemanticException("Only an Iceberg table can be written on a branch");
         }
 
         if (table instanceof MaterializedView) {

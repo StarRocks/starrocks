@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "入力されたDATE/DATETIME式の指定された日付部分に基づく最後の日を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # last_day

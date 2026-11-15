@@ -1,6 +1,8 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "External Catalog を使用した外部データソースの管理をお勧めします。外部テーブルは廃止される可能性があります。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 外部テーブル
@@ -9,11 +11,11 @@ description: "External Catalog を使用した外部データソースの管理�
 
 外部テーブル機能は、特定の特殊な使用ケースを除き推奨されなくなり、将来のリリースで廃止される可能性があります。一般的なシナリオで外部データソースからのデータを管理およびクエリするには、[External Catalog](./catalog/catalog_overview.md) の使用が推奨されます。
 
-- v3.0以降、Hive、Iceberg、Hudiからデータをクエリするには、catalogを使用することを推奨します。詳細は [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](./catalog/iceberg/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md) を参照してください。
+- v3.0以降、Hive、Iceberg、Hudiからデータをクエリするには、catalogを使用することを推奨します。詳細は [Hive catalog](./catalog/hive_catalog.md)、[Iceberg catalog](./catalog/iceberg/iceberg.md)、[Hudi catalog](./catalog/hudi_catalog.md) を参照してください。
 
-- v3.1以降、MySQLとPostgreSQLからデータをクエリするには [JDBC catalog](../data_source/catalog/jdbc_catalog.md) を、Elasticsearchからデータをクエリするには [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) を使用することを推奨します。
+- v3.1以降、MySQLとPostgreSQLからデータをクエリするには [JDBC catalog](./catalog/jdbc_catalog.md) を、Elasticsearchからデータをクエリするには [Elasticsearch catalog](./catalog/elasticsearch_catalog.md) を使用することを推奨します。
 
-- v3.2.9 および v3.3.1 以降では、Oracle および SQL Server からデータをクエリするには [JDBC カタログ](../data_source/catalog/jdbc_catalog.md) の使用を推奨します。
+- v3.2.9 および v3.3.1 以降では、Oracle および SQL Server からデータをクエリするには [JDBC カタログ](./catalog/jdbc_catalog.md) の使用を推奨します。
 
 - 外部テーブル機能は、StarRocksにデータをロードするために設計されており、外部システムに対して通常の操作として効率的なクエリを実行するためのものではありません。より効率的な解決策は、データをStarRocksにロードすることです。
 
@@ -21,7 +23,7 @@ description: "External Catalog を使用した外部データソースの管理�
 
 StarRocksは、外部テーブルを使用して他のデータソースにアクセスすることをサポートしています。外部テーブルは、他のデータソースに保存されているデータテーブルに基づいて作成されます。StarRocksはデータテーブルのメタデータのみを保存します。外部テーブルを使用して、他のデータソースのデータを直接クエリすることができます。現在、 StarRocks 外部テーブル以外の外部テーブルはすべて非推奨です。**別の StarRocks クラスタから現在の StarRocks クラスタにデータを書き込むことしかできません。そこからのデータの読み出しはできません。StarRocks 以外のデータソースについては、これらのデータソースからのデータの読み取りのみが可能です。**
 
-v2.5以降、StarRocksは外部データソースのホットデータクエリを高速化するData Cache機能を提供しています。詳細は [Data Cache](data_cache.md) を参照してください。
+v2.5以降、StarRocksは外部データソースのホットデータクエリを高速化するData Cache機能を提供しています。詳細は [Data Cache](./data_cache/data_cache.md) を参照してください。
 
 ## StarRocks外部テーブル
 
@@ -97,7 +99,7 @@ StarRocks外部テーブルを使用する際の制限は以下の通りです�
 
 * StarRocks外部テーブルでは、INSERT INTOおよびSHOW CREATE TABLEコマンドのみを実行できます。他のデータ書き込み方法はサポートされていません。また、StarRocks外部テーブルからデータをクエリしたり、外部テーブルでDDL操作を行うことはできません。
 * 外部テーブルの作成構文は通常のテーブルと同じですが、外部テーブルの列名やその他の情報は宛先テーブルと同じでなければなりません。
-* 外部テーブルは、宛先テーブルから10秒ごとにテーブルメタデータを同期します。宛先テーブルでDDL操作が行われた場合、2つのテーブル間のデータ同期に遅延が生じる可能性があります。
+* v2.5.8、v3.0.3、v3.1.4、および v3.2.0 以降、外部テーブルは、INSERT INTO ステートメントが実行されるたびに宛先テーブルからテーブルメタデータを同期します。それ以前のバージョンでは、外部テーブルは宛先テーブルから10秒ごとにテーブルメタデータを同期し、宛先テーブルでDDL操作が行われた場合、2つのテーブル間のデータ同期に遅延が生じる可能性があります。
 
 ## (非推奨) JDBC互換データベース用外部テーブル
 
@@ -205,7 +207,7 @@ properties (
 
 * `table`: データベース内のターゲットテーブル名。
 
-StarRocksとターゲットデータベース間のサポートされているデータ型とデータ型のマッピングについては、[Data type mapping](External_table.md#Data type mapping) を参照してください。
+StarRocksとターゲットデータベース間のサポートされているデータ型とデータ型のマッピングについては、[Data type mapping](#data-type-mapping) を参照してください。
 
 > 注：
 >

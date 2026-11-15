@@ -34,12 +34,14 @@
 
 #pragma once
 
+#include <memory>
 #include <shared_mutex>
 
 #include "base/concurrency/spinlock.h"
 #include "base/phmap/phmap.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/data.pb.h"
+#include "platform/llm/ai_execution_statistics.h"
 
 namespace starrocks {
 
@@ -66,6 +68,7 @@ public:
         read_remote_cnt += remote_cnt;
     }
     void add_transmitted_bytes(int64_t bytes) { transmitted_bytes += bytes; }
+    void add_ai_statistics(const AIExecutionStatistics& statistics);
 
     void to_pb(PQueryStatistics* statistics);
     void to_params(TAuditStatistics* params);
@@ -123,6 +126,8 @@ private:
                   rf_filter_rows(rf_filter) {}
     };
     SpinLock _lock;
+    // Protected by _lock; no payload is allocated for queries without AI tasks.
+    std::unique_ptr<AIExecutionStatistics> _ai_statistics;
     std::unordered_map<int64_t, std::shared_ptr<ScanStats>> _stats_items;
     std::unordered_map<uint32_t, std::shared_ptr<NodeExecStats>> _exec_stats_items;
 };

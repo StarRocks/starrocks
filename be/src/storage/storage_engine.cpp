@@ -75,7 +75,6 @@
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
-#include "storage/lake/local_pk_index_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/rowset/metadata_cache.h"
@@ -146,9 +145,6 @@ StorageEngine::StorageEngine(const EngineOptions& options)
         return _unused_rowsets.size();
     });
     _delta_column_group_cache_mem_tracker = std::make_unique<MemTracker>(-1, "delta_column_group_non_pk_cache");
-#ifdef USE_STAROS
-    _local_pk_index_manager = std::make_unique<lake::LocalPkIndexManager>();
-#endif
 #ifndef BE_TEST
     const int64_t process_limit = RuntimeEnv::GetInstance()->process_mem_tracker()->limit();
     const int64_t lru_cache_limit = process_limit * (int64_t)config::metadata_cache_memory_limit_percent / (int64_t)100;
@@ -295,10 +291,6 @@ Status StorageEngine::_open(const EngineOptions& options) {
                                          _segment_replicate_executor->get_thread_pool());
 
     RETURN_IF_ERROR_WITH_WARN(_replication_txn_manager->init(dirs), "init ReplicationTxnManager failed");
-
-#ifdef USE_STAROS
-    RETURN_IF_ERROR_WITH_WARN(_local_pk_index_manager->init(), "init LocalPkIndexManager failed");
-#endif
 
     return Status::OK();
 }
@@ -583,18 +575,6 @@ DataDir* StorageEngine::get_store(int64_t path_hash) {
     return nullptr;
 }
 
-bool StorageEngine::enable_light_pk_compaction_publish() {
-    if (!config::enable_light_pk_compaction_publish) {
-        return false;
-    }
-    // Skip light pk compaction if there is no local disk to store temp rows mapper files.
-    auto stores = get_stores<false>();
-    if (stores.empty()) {
-        return false;
-    }
-    return true;
-}
-
 // maybe nullptr if as cn
 DataDir* StorageEngine::get_persistent_index_store(int64_t tablet_id) {
     auto stores = get_stores<false>();
@@ -666,6 +646,7 @@ void StorageEngine::stop() {
 
     JOIN_THREAD(_update_cache_expire_thread)
     JOIN_THREAD(_update_cache_evict_thread)
+    JOIN_THREAD(_lake_metacache_adjust_thread)
     JOIN_THREAD(_unused_rowset_monitor_thread)
     JOIN_THREAD(_garbage_sweeper_thread)
     JOIN_THREAD(_disk_stat_monitor_thread)
@@ -721,12 +702,6 @@ void StorageEngine::stop() {
     if (_compaction_manager) {
         _compaction_manager->stop();
     }
-
-#ifdef USE_STAROS
-    if (_local_pk_index_manager) {
-        _local_pk_index_manager->stop();
-    }
-#endif
 
     // Drain cleanup after all storage-side producers are quiesced.
     if (_storage_cleanup_executor) {

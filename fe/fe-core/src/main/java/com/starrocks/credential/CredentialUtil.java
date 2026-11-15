@@ -15,6 +15,7 @@
 package com.starrocks.credential;
 
 import com.starrocks.catalog.JDBCResource;
+import com.starrocks.common.util.CredentialMask;
 import com.starrocks.connector.iceberg.IcebergCatalogProperties;
 import com.starrocks.connector.iceberg.rest.OAuth2SecurityConfig;
 import com.starrocks.connector.odps.OdpsProperties;
@@ -31,7 +32,6 @@ import java.util.Map;
 public class CredentialUtil {
     public static final Logger LOG = LogManager.getLogger(CredentialUtil.class);
 
-    private static final String MASK_CLOUD_CREDENTIAL_WORDS = "******";
 
     public static void maskCredential(Map<String, String> properties) {
         // Mask for aws's credential
@@ -45,6 +45,7 @@ public class CredentialUtil {
         doMask(properties, CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN);
         doMask(properties, CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL);
         doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY);
+        doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN);
         doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET);
 
         // Mask for gcs's credential
@@ -93,10 +94,10 @@ public class CredentialUtil {
         // do mask
         properties.computeIfPresent(configKey, (key, value) -> {
             if (value.length() <= 4) {
-                return MASK_CLOUD_CREDENTIAL_WORDS;
+                return CredentialMask.LONG;
             } else {
                 return new StringBuilder(value).
-                        replace(2, value.length() - 2, MASK_CLOUD_CREDENTIAL_WORDS).
+                        replace(2, value.length() - 2, CredentialMask.LONG).
                         toString();
             }
         });

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "可変長文字列型で長さを指定可能な文字列データ型。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # VARCHAR

@@ -21,6 +21,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import javax.annotation.Nonnull;
 
 public class Histogram {
 
@@ -28,26 +29,25 @@ public class Histogram {
     private final Map<String, Long> mcv;
 
     public Histogram(List<Bucket> buckets, Map<String, Long> mcv) {
-        this.buckets = buckets;
-        this.mcv = mcv;
-
+        this.buckets = buckets == null ? List.of() : buckets;
+        this.mcv = mcv == null ? Map.of() : mcv;
     }
 
     public long getTotalRows() {
         long totalRows = 0;
-        if (buckets != null && !buckets.isEmpty()) {
+        if (!buckets.isEmpty()) {
             totalRows += buckets.get(buckets.size() - 1).getCount();
         }
-        if (mcv != null) {
-            totalRows += mcv.values().stream().reduce(Long::sum).orElse(0L);
-        }
+        totalRows += mcv.values().stream().reduce(Long::sum).orElse(0L);
         return Math.max(1, totalRows);
     }
 
+    @Nonnull
     public List<Bucket> getBuckets() {
         return buckets;
     }
 
+    @Nonnull
     public Map<String, Long> getMCV() {
         return mcv;
     }

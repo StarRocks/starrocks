@@ -1,7 +1,4 @@
 -- name: test_vector_index_insert @sequential @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
--- result:
--- !result
 CREATE TABLE t1 (
     id bigint(20) NOT NULL,
     v1 ARRAY<FLOAT> NOT NULL,
@@ -164,7 +161,4 @@ select * from t2 order by id, v1, v2;
 3	[0.33686078,0.42107597,0.50529116,null,0.67372155]	[0.33686078,0.42107597,0.50529116,null,0.67372155]
 4	[0.33686078,0.42107597,0.50529116,null,0.67372155]	None
 4	[0.33686078,0.42107597,0.50529116,null,0.67372155]	None
--- !result
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
--- result:
 -- !result

@@ -126,6 +126,19 @@ public class Replica implements Writable {
 
     private volatile long versionCount = -1;
 
+    // The tablet version the BE computed this replica's rowCount from, or 0 when that is unknown.
+    // Deliberately NOT persisted and NOT journal-replicated: it describes what THIS FE managed to
+    // collect, and every FE collects independently. Unknown means either nothing has been collected
+    // yet, or the BE is too old to report it, or rowCount was last overwritten by a path that
+    // carries no version with it -- in all three cases a caller needing an exact row count must not
+    // trust rowCount. A version rather than a timestamp so it stays comparable across machines; see
+    // Tablet#getRowCountAtVersion.
+    //
+    // Only ever read through getRowCountAtVersion(), which hands out the count and the version it
+    // was proven at together, so a count can never be read next to a version that does not describe
+    // it.
+    private volatile long statsVersion = 0;
+
     private long pathHash = -1;
 
     // If bad and setBadForce are both true, it means this Replica is unrecoverable and we will delete it
@@ -379,10 +392,14 @@ public class Replica implements Writable {
     }
 
     // only update data size and row num
-    public synchronized void updateStat(long dataSize, long rowNum, long versionCount) {
+    // statsVersion is the tablet version the BE computed rowNum from (0 = unknown); it is written
+    // here, together with the count it describes, and read back the same way -- see
+    // getRowCountAtVersion.
+    public synchronized void updateStat(long dataSize, long rowNum, long versionCount, long statsVersion) {
         this.dataSize = dataSize;
         this.rowCount = rowNum;
         this.versionCount = versionCount;
+        this.statsVersion = statsVersion;
     }
 
     public synchronized void updateRowCount(long newVersion, long minReadableVersion, long newDataSize,
@@ -416,6 +433,9 @@ public class Replica implements Writable {
         this.lastSuccessVersion = newVersion;
         this.dataSize = newDataSize;
         this.rowCount = newRowCount;
+        // This count did not come from a stat collection, so nothing vouches for which version it
+        // covers. See getRowCountAtVersion.
+        this.statsVersion = 0;
         this.minReadableVersion = newVersion;
     }
 
@@ -470,6 +490,12 @@ public class Replica implements Writable {
 
         this.version = newVersion;
         this.dataSize = newDataSize;
+        if (this.rowCount != newRowCount) {
+            // Overwritten by a path that carries no proof of which version it covers (publish, a
+            // tablet report, ...), so drop the stat collection's proof rather than let it vouch for
+            // a number it never saw. See getRowCountAtVersion.
+            this.statsVersion = 0;
+        }
         this.rowCount = newRowCount;
 
         // just check it
@@ -560,6 +586,19 @@ public class Replica implements Writable {
 
     public long getVersionCount() {
         return versionCount;
+    }
+
+    /**
+     * The row count this replica reports, but only if a stat collection proved it was computed from
+     * exactly {@code version}; -1 otherwise ("this replica cannot vouch for that version").
+     * <p>
+     * Synchronized against {@link #updateStat}, so the count and the version proving it are always
+     * read as one pair. Exact equality, not {@code >=}: a count computed from a version the FE has
+     * not made visible yet includes rows the query must not see, so it is no more usable than a
+     * stale one.
+     */
+    public synchronized long getRowCountAtVersion(long version) {
+        return statsVersion > 0 && statsVersion == version ? rowCount : -1L;
     }
 
     public void setVersionCount(long versionCount) {

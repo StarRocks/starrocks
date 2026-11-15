@@ -173,6 +173,8 @@ StatusOr<ColumnPtr> build_variant_projection_column(const VariantColumn* variant
     reader.prepare(variant_column, &path);
 
     const bool src_is_const = variant_src->is_constant();
+    TzOffsetCache offset_cache;
+    offset_cache.bind(zone);
     for (size_t row = 0; row < num_rows; ++row) {
         if (variant_src->is_null(row)) {
             builder.append_null();
@@ -184,7 +186,8 @@ StatusOr<ColumnPtr> build_variant_projection_column(const VariantColumn* variant
             builder.append_null();
             continue;
         }
-        auto cast_status = VariantRowConverter::cast_to<ResultType, false>(read.value.as_ref(), zone, builder);
+        auto cast_status =
+                VariantRowConverter::cast_to<ResultType, false>(read.value.as_ref(), zone, builder, &offset_cache);
         RETURN_IF_ERROR(cast_status);
     }
 
@@ -328,7 +331,7 @@ bool collect_variant_leaf_paths(const ColumnAccessPath* node, std::vector<Varian
 }
 
 VariantShreddedReadHints build_variant_shredded_hints(const std::vector<ColumnAccessPathPtr>* column_access_paths,
-                                                      std::string_view column_name) {
+                                                      std::string_view column_name, bool include_extended) {
     VariantShreddedReadHints hints;
     if (column_access_paths == nullptr || column_access_paths->empty()) {
         return hints;
@@ -337,6 +340,9 @@ VariantShreddedReadHints build_variant_shredded_hints(const std::vector<ColumnAc
     std::unordered_set<std::string> unique_paths;
     for (const auto& access_path : *column_access_paths) {
         if (access_path == nullptr || access_path->path() != column_name) {
+            continue;
+        }
+        if (access_path->is_extended() && !include_extended) {
             continue;
         }
         if (access_path->children().empty()) {
@@ -399,7 +405,8 @@ VariantProjectionHandler::~VariantProjectionHandler() = default;
 // ── _build_shredded_hints ────────────────────────────────────────────────────
 
 VariantShreddedReadHints VariantProjectionHandler::_build_shredded_hints(std::string_view column_name) const {
-    return build_variant_shredded_hints(&_param.scan_ctx->column_access_paths, column_name);
+    // A hidden source only feeds the virtual subfield columns, so the extended access paths are its read set.
+    return build_variant_shredded_hints(&_param.scan_ctx->column_access_paths, column_name, true);
 }
 
 // ── setup_readers ────────────────────────────────────────────────────────────
@@ -437,7 +444,7 @@ Status VariantProjectionHandler::setup_readers() {
                         fmt::format("invalid source parquet field idx for variant virtual column, idx={}, slot={}",
                                     column.idx_in_parquet, column.slot_id()));
             }
-            if (source_schema_node->type != ColumnType::STRUCT) {
+            if (source_schema_node->type != ColumnType::VARIANT) {
                 return Status::InternalError(
                         fmt::format("invalid source parquet field type for variant virtual column, idx={}, type={}",
                                     column.idx_in_parquet, static_cast<int>(source_schema_node->type)));

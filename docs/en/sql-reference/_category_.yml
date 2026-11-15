@@ -1,0 +1,7 @@
+position: 140
+label: 'Reference'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: sql-reference

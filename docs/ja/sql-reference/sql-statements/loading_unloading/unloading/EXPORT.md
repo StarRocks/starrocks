@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "テーブルのデータを指定された場所にエクスポートします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # EXPORT

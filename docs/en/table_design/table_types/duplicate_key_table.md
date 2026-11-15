@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 30
 description: "How to create and use Duplicate Key tables (the default StarRocks table type) for storing raw event logs and time-series data with a configurable sort key."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Duplicate Key table
@@ -54,7 +55,7 @@ ORDER BY (event_time, event_type);
 
 ## What to do next
 
-After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Loading options](../../loading/Loading_intro.md).
+After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Loading options](../../loading/loading_introduction/loading_introduction.mdx).
 
 :::note
 

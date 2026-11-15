@@ -110,6 +110,9 @@ TEST(StorageMetricsTest, InstallRegistersLoadMetrics) {
 
     metrics.lake_idg_files_written_total.increment(47);
     assert_metric_value(&registry, "lake_idg_files_written_total", "47");
+
+    metrics.lake_tablet_metadata_get_not_found_total.increment(48);
+    assert_metric_value(&registry, "lake_tablet_metadata_get_not_found_total", "48");
 }
 
 TEST(StorageMetricsTest, InstallRegistersCompactionMetrics) {

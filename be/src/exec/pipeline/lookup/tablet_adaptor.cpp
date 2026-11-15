@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <unordered_set>
 
 #include "base/status.h"
 #include "base/status_fmt.hpp"
@@ -80,6 +81,15 @@ Status init_global_dicts_for_scan_node(RuntimeState* state, ObjectPool* pool, co
         if (iter != global_dict_map.end()) {
             auto& dict_map = iter->second.first;
             dicts->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
+        } else if (slot->type().type == TYPE_INT && is_string_type(tablet_schema->column(index).type())) {
+            // The plan typed this slot as the dictionary code while storage holds the string, so the
+            // caller is asking to read it dictionary-encoded. Skipping quietly leaves the reader to
+            // return the raw string into an int column, which surfaces far away as a decode failure
+            // against a "key" that is really string bytes, or as an out-of-bounds access.
+            return Status::InternalError(
+                    fmt::format("no global dict for slot {} ({}), which the plan reads as a dictionary code; "
+                                "query_global_dicts carries {} entries",
+                                slot->id(), slot->col_name(), global_dict_map.size()));
         }
     }
     *global_dicts = dicts;
@@ -99,6 +109,19 @@ Status init_read_schema(const TabletSchemaCSPtr& tablet_schema, const std::vecto
     std::sort(scanner_columns.begin(), scanner_columns.end());
     *read_schema = ChunkHelper::convert_schema(tablet_schema, scanner_columns);
     return Status::OK();
+}
+
+// Set up the encoded and output schema of a lookup iterator the way TabletReader does for a scan.
+// Without it, output_schema() still types a global-dict column as the string. The plain dict path
+// gets away with that because it swaps its own code column into the chunk, but the force-encode
+// path builds its global-id column from output_schema() and then writes codes into it as a
+// LowCardDictColumn. A string column there gets its offsets overwritten, and the corruption only
+// surfaces later, e.g. as std::length_error when the fetched chunk is appended.
+Status init_iterator_schema(ChunkIterator* iter, ColumnIdToGlobalDictMap* global_dicts) {
+    static const std::unordered_set<uint32_t> kNoUnusedOutputColumns;
+    DCHECK(global_dicts != nullptr);
+    RETURN_IF_ERROR(iter->init_encoded_schema(*global_dicts));
+    return iter->init_output_schema(kNoUnusedOutputColumns);
 }
 
 } // namespace detail
@@ -170,6 +193,7 @@ private:
     LakeScanLazyMaterializationContext* _glm_ctx = nullptr;
     std::vector<lake::RowsetPtr> _rowsets;
     bool _use_page_cache = false;
+    LakeIOOptions _lake_io_opts;
 };
 
 Status OlapScanTabletAdaptor::init(int64_t tablet_id) {
@@ -262,6 +286,7 @@ auto OlapScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     if (iters.size() != 1) {
         return Status::InternalError("unexpected iterators from rowset");
     }
+    RETURN_IF_ERROR(detail::init_iterator_schema(iters[0].get(), _global_dicts));
 
     return iters[0];
 }
@@ -272,7 +297,11 @@ Status LakeScanTabletAdaptor::init(int64_t tablet_id) {
 }
 
 Status LakeScanTabletAdaptor::init_schema(RuntimeState* state) {
-    _use_page_cache = state->use_page_cache();
+    const auto cache_options = _glm_ctx->get_cache_options(_tablet_id);
+    _use_page_cache = state->use_page_cache() && cache_options.use_page_cache;
+    _lake_io_opts.fill_data_cache = cache_options.fill_data_cache;
+    _lake_io_opts.fill_metadata_cache = cache_options.fill_metadata_cache;
+    _lake_io_opts.skip_disk_cache = cache_options.skip_disk_cache;
     auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     const auto& lake_scan_node = _glm_ctx->scan_node();
 
@@ -343,7 +372,7 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
         return Status::InternalError(fmt::format("not found lake rssid:{} in tablet_id:{}", rssid, _tablet_id));
     }
 
-    ASSIGN_OR_RETURN(auto segments, target->segments(true));
+    ASSIGN_OR_RETURN(auto segments, target->segments(_lake_io_opts));
     if (target_segment_idx < 0 || target_segment_idx >= segments.size()) {
         return Status::InternalError(
                 fmt::format("invalid segment index:{} for lake rssid:{}", target_segment_idx, rssid));
@@ -355,12 +384,9 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     RowsetReadOptions rs_opts;
     rs_opts.rowid_range_option = std::make_shared<RowidRangeOption>();
     rs_opts.profile = nullptr;
-    // Honor the same page-cache policy as the normal scan (RuntimeState::use_page_cache(),
-    // which already respects the disable_storage_page_cache config and the session var).
-    // Otherwise the lookup bypasses StoragePageCache and re-decompresses every fetched
-    // column page per row locator. See lake_connector.cpp. Data-cache (fill_data_cache)
-    // is left at its default so the lookup does not override the scan's per-range policy.
+    // Honor both the query-level page-cache setting and this tablet's scan-range cache policy.
     rs_opts.use_page_cache = _use_page_cache;
+    rs_opts.lake_io_opts = _lake_io_opts;
     rs_opts.stats = &_stats;
     rs_opts.global_dictmaps = _global_dicts;
     rs_opts.column_access_paths = &_column_access_paths;
@@ -391,6 +417,7 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     if (iters.size() != 1) {
         return Status::InternalError("unexpected iterators from lake rowset");
     }
+    RETURN_IF_ERROR(detail::init_iterator_schema(iters[0].get(), _global_dicts));
 
     return iters[0];
 }

@@ -20,6 +20,7 @@
 #include "exprs/function_call_expr.h"
 #include "exprs/like_predicate.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -527,17 +528,8 @@ TEST_F(LikeTest, constValueLike) {
     const int num_rows = 10;
 
     auto value_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("abcd", num_rows);
-    auto pattern_col = BinaryColumn::create();
-    pattern_col->append("abc");
-    pattern_col->append("ab%");
-    pattern_col->append("abc_");
-    pattern_col->append("%cd");
-    pattern_col->append("_bcd");
-    pattern_col->append("a%d");
-    pattern_col->append("ab_d");
-    pattern_col->append("abcd");
-    pattern_col->append("abcm");
-    pattern_col->append("abcd_");
+    auto pattern_col = ColumnTestHelper::build_column<Slice>(
+            {"abc", "ab%", "abc_", "%cd", "_bcd", "a%d", "ab_d", "abcd", "abcm", "abcd_"});
 
     bool expected[num_rows] = {false, true, true, true, true, true, true, true, false, false};
 
@@ -568,11 +560,7 @@ TEST_F(LikeTest, constValueRegexp) {
     const int num_rows = 4;
 
     auto value_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("abcd", num_rows);
-    auto pattern_col = BinaryColumn::create();
-    pattern_col->append("abc");
-    pattern_col->append("ab.*");
-    pattern_col->append("abcd");
-    pattern_col->append("abcm");
+    auto pattern_col = ColumnTestHelper::build_column<Slice>({"abc", "ab.*", "abcd", "abcm"});
 
     bool expected[num_rows] = {true, true, true, false};
 
@@ -917,5 +905,100 @@ TEST_F(LikeTest, splitLikePatternIntoNgramSet) {
     ngram_set.clear();
     VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
     ASSERT_EQ(0, ngram_set.size());
+}
+
+TEST_F(LikeTest, issue76417LikeMultiline) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+
+    std::string test_str =
+            "-- --------------------------------------------------------------------------------\n"
+            "-- @Time     : 2026-05-07 17:02\n"
+            "    ,track_path                 ARRAY<STRING> COMMENT";
+
+    // Test with BinaryColumn
+    {
+        auto str = BinaryColumn::create();
+        str->append(test_str);
+        str->append("another row without matching keyword");
+
+        auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%track_path%", 2);
+        Columns columns;
+        columns.emplace_back(std::move(str));
+        columns.emplace_back(std::move(pattern));
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto result = LikePredicate::like(context, columns).value();
+        ASSERT_TRUE(result->is_numeric());
+        auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+        ASSERT_TRUE(v->immutable_data()[0]);
+        ASSERT_FALSE(v->immutable_data()[1]);
+
+        ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    }
+
+    // Test with ConstColumn
+    {
+        auto haystack = ColumnHelper::create_const_column<TYPE_VARCHAR>(test_str, 1);
+        auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%track_path%", 1);
+        Columns columns;
+        columns.emplace_back(std::move(haystack));
+        columns.emplace_back(std::move(pattern));
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto result = LikePredicate::like(context, columns).value();
+        ASSERT_TRUE(result->is_constant());
+        ASSERT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
+
+        ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    }
+}
+
+TEST_F(LikeTest, issue76417RegexpAlternation) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+
+    std::string test_str = "gk|abc_0.054523_psc2.8.225|cba_0.060057";
+
+    // Test with BinaryColumn
+    {
+        auto str = BinaryColumn::create();
+        str->append(test_str);
+        str->append("gk|xyz_dummy|cba_dummy");
+
+        auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("abc_[0-9]+[.][0-9]+", 2);
+        Columns columns;
+        columns.emplace_back(std::move(str));
+        columns.emplace_back(std::move(pattern));
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto result = LikePredicate::regex(context, columns).value();
+        ASSERT_TRUE(result->is_numeric());
+        auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+        ASSERT_TRUE(v->immutable_data()[0]);
+        ASSERT_FALSE(v->immutable_data()[1]);
+
+        ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    }
+
+    // Test with ConstColumn
+    {
+        auto haystack = ColumnHelper::create_const_column<TYPE_VARCHAR>(test_str, 1);
+        auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("abc_[0-9]+[.][0-9]+", 1);
+        Columns columns;
+        columns.emplace_back(std::move(haystack));
+        columns.emplace_back(std::move(pattern));
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto result = LikePredicate::regex(context, columns).value();
+        ASSERT_TRUE(result->is_constant());
+        ASSERT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
+
+        ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    }
 }
 } // namespace starrocks

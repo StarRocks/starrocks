@@ -2,13 +2,14 @@
 displayed_sidebar: docs
 sidebar_position: 30
 description: "How to use asynchronous materialized views in StarRocks to accelerate queries against data lake tables (Iceberg, Hive, Hudi, Delta Lake) through transparent..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Data lake query acceleration with materialized views
 
 This topic describes how to optimize query performance in your data lake using StarRocks' asynchronous materialized views.
 
-StarRocks offers out-of-the-box data lake query capabilities, which are highly effective for exploratory queries and analysis of data in the lake. In most scenarios, [Data Cache](../../../data_source/data_cache.md) can provide block-level file caching, avoiding performance degradation caused by remote storage jitter and a large number of I/O operations.
+StarRocks offers out-of-the-box data lake query capabilities, which are highly effective for exploratory queries and analysis of data in the lake. In most scenarios, [Data Cache](../../../data_source/data_cache/data_cache.md) can provide block-level file caching, avoiding performance degradation caused by remote storage jitter and a large number of I/O operations.
 
 However, when it comes to building complex and efficient reports using data from the lake or further accelerating these queries, you may still encounter performance challenges. With asynchronous materialized views, you can achieve higher concurrency and better query performance for reports and data applications on the lake.
 
@@ -161,7 +162,7 @@ To enable the Hive metadata cache refresh feature, you can set the following FE 
 **Default**: 86400 (24 hours)<br/>
 **Description**: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second.
 
-From v3.1.4, StarRocks supports detecting data changes for Iceberg Catalog at the partition level. Currently, only Iceberg V1 tables are supported.
+From v3.1.4, StarRocks supports detecting data changes for Iceberg Catalog at the partition level.
 
 ### Enable query rewrite for external catalog-based materialized views
 

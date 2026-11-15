@@ -35,17 +35,23 @@
 package com.starrocks.http.action;
 
 import com.google.common.base.Strings;
+import com.google.common.base.Suppliers;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.owasp.encoder.Encode;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 public class QueryAction extends WebBaseAction {
     private static final Logger LOG = LogManager.getLogger(QueryAction.class);
@@ -75,7 +81,14 @@ public class QueryAction extends WebBaseAction {
         buffer.append("<button style=\"float:right\" onclick=\"download_query()\">Download CSV</button>");
         buffer.append("<p>This table lists the latest 100 queries</p>");
 
-        List<List<String>> finishedQueries = ProfileManager.getInstance().getAllQueries();
+        // Same rule as SHOW PROFILELIST. The web gate admits NODE holders, who are not thereby OPERATE holders,
+        // so the owner-or-OPERATE filter has to run here too; the knob is read once for the whole listing.
+        ConnectContext ctx = ConnectContext.get();
+        boolean checkAccess = Config.authorization_enable_query_profile_access_check;
+        Supplier<Boolean> hasOperate =
+                Suppliers.memoize(() -> Authorizer.hasSystemAction(ctx, PrivilegeType.OPERATE));
+        List<List<String>> finishedQueries = ProfileManager.getInstance().getAllQueries(
+                element -> !checkAccess || Authorizer.canReadQueryProfile(ctx, element, hasOperate));
         List<String> columnHeaders = ProfileManager.PROFILE_HEADERS;
         int queryIdIndex = 0; // the first column is 'Query ID' by default
         for (int i = 0; i < columnHeaders.size(); ++i) {
@@ -98,13 +111,14 @@ public class QueryAction extends WebBaseAction {
             if (i == queryIdIndex) {
                 continue;
             }
-            buffer.append("<th>" + columnHeaders.get(i) + "</th>");
+            buffer.append("<th>").append(Encode.forHtml(columnHeaders.get(i))).append("</th>");
         }
 
         buffer.append("<th>Profile</th>");
         buffer.append("</tr>");
     }
 
+    // Cells are HTML-encoded because they carry user-controlled text, such as SQL statements and custom query ids.
     private void appendFinishedQueryTableBody(
             StringBuilder buffer,
             List<List<String>> bodies,
@@ -127,15 +141,15 @@ public class QueryAction extends WebBaseAction {
                                 + " ...";
                         // Add title attribute for hover tooltip to show full statement
                         buffer.append("<span title=\"")
-                                .append(statement.replace("\"", "&quot;"))
+                                .append(Encode.forHtmlAttribute(statement))
                                 .append("\">")
-                                .append(truncatedStatement)
+                                .append(Encode.forHtml(truncatedStatement))
                                 .append("</span>");
                     } else {
-                        buffer.append(statement);
+                        buffer.append(Encode.forHtml(statement));
                     }
                 } else {
-                    buffer.append(row.get(i));
+                    buffer.append(Encode.forHtml(row.get(i)));
                 }
                 buffer.append("</td>");
             }
@@ -147,9 +161,11 @@ public class QueryAction extends WebBaseAction {
                 buffer.append("<td>Empty Query ID</td>");
             } else {
                 buffer.append("<td>");
-                buffer.append("<a href=\"/query_profile?query_id="
-                        + queryId
-                        + "\">" + queryId + "</a>");
+                buffer.append("<a href=\"/query_profile?query_id=")
+                        .append(Encode.forUriComponent(queryId))
+                        .append("\">")
+                        .append(Encode.forHtml(queryId))
+                        .append("</a>");
                 buffer.append("</td>");
             }
 

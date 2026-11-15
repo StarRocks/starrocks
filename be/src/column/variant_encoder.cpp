@@ -102,7 +102,7 @@ void VariantEncoder::append_object_container(std::string* out, const std::vector
     out->append(payload.data(), payload.size());
 }
 
-static std::string key_datum_to_string(TypeInfo* type_info, const Datum& datum) {
+std::string VariantEncoder::map_key_to_string(TypeInfo* type_info, const Datum& datum) {
     if (datum.is_null()) {
         return "null";
     }
@@ -546,7 +546,7 @@ Status collect_object_keys_from_datum(const Datum& datum, const TypeDescriptor& 
             if (key_datum.is_null()) {
                 return Status::NotSupported("Map key is null");
             }
-            keys->insert(key_datum_to_string(key_type_info.get(), key_datum));
+            keys->insert(VariantEncoder::map_key_to_string(key_type_info.get(), key_datum));
             RETURN_IF_ERROR(collect_object_keys_from_datum(value, value_type, keys));
         }
         return Status::OK();
@@ -662,6 +662,14 @@ Status encode_datum_to_variant_value(const Datum& datum, const TypeDescriptor& t
     case TYPE_VARCHAR:
         append_string_value(out, datum.get_slice());
         return Status::OK();
+    case TYPE_VARBINARY: {
+        // A shredded binary typed_value is read as VARBINARY, and so is a UUID one: both are written as a variant
+        // BINARY, which keeps the bytes. The UUID type identity is not kept. Without this case the rebuild of the row
+        // failed with "Unsupported type" and the whole row was lost.
+        const Slice bytes = datum.get_slice();
+        append_string_or_binary_value(out, VariantType::BINARY, std::string_view(bytes.data, bytes.size));
+        return Status::OK();
+    }
     case TYPE_JSON: {
         const JsonValue* json = datum.get_json();
         if (json == nullptr || json->is_null_or_none()) {
@@ -716,7 +724,7 @@ Status encode_datum_to_variant_value(const Datum& datum, const TypeDescriptor& t
             if (key_datum.is_null()) {
                 return Status::NotSupported("Map key is null");
             }
-            std::string key_str = key_datum_to_string(key_type_info.get(), key_datum);
+            std::string key_str = VariantEncoder::map_key_to_string(key_type_info.get(), key_datum);
             auto it = key_to_id.find(key_str);
             if (it == key_to_id.end()) {
                 return Status::VariantError("Variant metadata missing field: " + key_str);
@@ -814,8 +822,17 @@ StatusOr<VariantRowValue> VariantEncoder::encode_json_text_to_variant(std::strin
     if (json_text.empty()) {
         return encode_json_to_variant(JsonValue::from_string(Slice("", 0)));
     }
+    // Plain scalar text (for example "abc") is accepted as a string value. Detect it through the parser's
+    // error-code API: a throw per non-JSON row would be far too expensive. The catch only remains as a safety
+    // net for exceptions that are not caused by the input, so it costs nothing on the hot path.
     try {
-        auto builder = vpack::Parser::fromJson(json_text.data(), json_text.size());
+        // Honor the shared JSON nesting-depth cap here too; over-deep input then fails to parse and
+        // falls back to string storage below, like any other non-JSON text.
+        auto options = JsonValue::parse_options_from_config();
+        auto builder = vpack::Parser::tryFromJson(json_text.data(), json_text.size(), nullptr, &options);
+        if (builder == nullptr) {
+            return encode_json_to_variant(JsonValue::from_string(Slice(json_text.data(), json_text.size())));
+        }
         JsonValue parsed;
         parsed.assign(*builder);
         return encode_json_to_variant(parsed);

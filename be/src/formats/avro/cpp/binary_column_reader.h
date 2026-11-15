@@ -16,6 +16,7 @@
 
 #include <cctz/time_zone.h>
 
+#include "base/time/tz_offset_cache.h"
 #include "column/vectorized_fwd.h"
 #include "formats/avro/cpp/column_reader.h"
 
@@ -25,7 +26,9 @@ class BinaryColumnReader final : public ColumnReader {
 public:
     explicit BinaryColumnReader(std::string_view col_name, const TypeDescriptor& type_desc,
                                 const cctz::time_zone& timezone)
-            : ColumnReader(col_name, type_desc), _timezone(timezone) {}
+            : ColumnReader(col_name, type_desc), _timezone(timezone) {
+        _offset_cache.bind(_timezone);
+    }
     ~BinaryColumnReader() override = default;
 
     Status read_datum(const avro::GenericDatum& datum, Column* column) override;
@@ -37,6 +40,7 @@ private:
     Status read_complex_value(const avro::GenericDatum& datum, BinaryColumn* column);
 
     const cctz::time_zone& _timezone;
+    TzOffsetCache _offset_cache;
 };
 
 } // namespace starrocks::avrocpp

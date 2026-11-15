@@ -42,7 +42,11 @@ import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunExecutor;
+import com.starrocks.scheduler.TaskRunManager;
+import com.starrocks.scheduler.TaskRunScheduler;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
@@ -70,6 +74,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
@@ -93,6 +98,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -297,6 +303,8 @@ public class PipeManagerTest {
 
                 ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
                 executorService.schedule(() -> {
+                    // Like the real executor: the task run scheduler archives a done run only in a finish state.
+                    taskRun.getStatus().setState(result);
                     taskRun.getFuture().complete(result);
                 }, runningSecs, TimeUnit.SECONDS);
                 return true;
@@ -312,10 +320,13 @@ public class PipeManagerTest {
              */
             @Mock
             public boolean executeTaskRun(TaskRun taskRun) {
+                // Like the real executor: the task run scheduler archives a done run only in a finish state.
                 try {
                     Constants.TaskRunState result = runnable.get();
+                    taskRun.getStatus().setState(result);
                     taskRun.getFuture().complete(result);
                 } catch (Exception e) {
+                    taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
                     taskRun.getFuture().completeExceptionally(e);
                 }
                 return true;
@@ -332,6 +343,45 @@ public class PipeManagerTest {
                 return new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED, future);
             }
         };
+    }
+
+    /**
+     * Stubs {@link TaskManager#executeTaskAsync} for the duration of the current test.
+     *
+     * <p>Deliberately a {@link MockUp} rather than {@code new Expectations(taskManager)}: the dynamic
+     * partial-mocking form records every call made on the live TaskManager singleton while its recording
+     * block is open, and that singleton's own dispatch scheduler calls
+     * {@code TaskManager#rescheduleDispatchIfIntervalChanged()} from a background thread once per
+     * {@code task_runs_dispatch_interval_ms}. A tick that lands inside the recording window is recorded as
+     * an expectation nothing ever replays, and the test then fails at teardown with "Missing 1 invocation
+     * to ... rescheduleDispatchIfIntervalChanged()". A MockUp redefines only the one method, so unrelated
+     * background traffic on the singleton stays invisible to it.</p>
+     */
+    private void mockTaskSubmission(Supplier<SubmitResult> submission) {
+        new MockUp<TaskManager>() {
+            @Mock
+            public SubmitResult executeTaskAsync(Task task, ExecuteOption option) {
+                return submission.get();
+            }
+        };
+    }
+
+    /** An accepted submission whose task run has already finished as FAILED. */
+    private static SubmitResult submittedWithFailedRun() {
+        SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
+        FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.FAILED);
+        submit.setFuture(future);
+        future.run();
+        return submit;
+    }
+
+    /** An accepted submission whose task run has been cancelled. */
+    private static SubmitResult submittedWithCancelledRun() {
+        SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
+        FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.FAILED);
+        submit.setFuture(future);
+        future.cancel(true);
+        return submit;
     }
 
     private void mockPollError(int errorCount) {
@@ -481,15 +531,8 @@ public class PipeManagerTest {
         Assertions.assertEquals(Pipe.State.RUNNING, p3.getState());
         Assertions.assertEquals(1, p3.getRunningTasks().size());
 
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        new mockit.Expectations(taskManager) {
-            {
-                // submit error
-                taskManager.executeTaskAsync((Task) any, (ExecuteOption) any);
-                result = new SubmitResult("queryid", SubmitResult.SubmitStatus.FAILED);
-
-            }
-        };
+        // submit error
+        mockTaskSubmission(() -> new SubmitResult("queryid", SubmitResult.SubmitStatus.FAILED));
 
         Thread.sleep(1000);
         Assertions.assertEquals(1, p3.getRunningTasks().size());
@@ -586,46 +629,207 @@ public class PipeManagerTest {
 
     @Test
     public void testExecuteFailed() throws Exception {
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         mockRepoExecutor();
+
+        // One stub for the whole test; the flag below picks the outcome of the next submission.
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        mockTaskSubmission(() -> cancelled.get() ? submittedWithCancelledRun() : submittedWithFailedRun());
 
         // mock execution failed
         for (boolean retryAll : Lists.newArrayList(true, false)) {
             final String pipeName = "p3";
             Pipe p3 = preparePipe(pipeName);
-            new mockit.Expectations(taskManager) {
-                {
-                    taskManager.executeTaskAsync((Task) any, (ExecuteOption) any);
-                    SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
-                    FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.FAILED);
-                    submit.setFuture(future);
-                    future.run();
-                    result = submit;
-                }
-            };
             Assertions.assertEquals(0, p3.getRunningTasks().size());
             pipeRetryFailedTask(p3, retryAll);
             dropPipe(pipeName);
         }
 
         // mock execution cancelled
+        cancelled.set(true);
         for (boolean retryAll : Lists.newArrayList(true, false)) {
             final String pipeName = "p4";
             Pipe p4 = preparePipe(pipeName);
-            new mockit.Expectations(taskManager) {
-                {
-                    taskManager.executeTaskAsync((Task) any, (ExecuteOption) any);
-                    SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
-                    FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.FAILED);
-                    submit.setFuture(future);
-                    future.cancel(true);
-                    result = submit;
-                }
-            };
             Assertions.assertEquals(0, p4.getRunningTasks().size());
             pipeRetryFailedTask(p4, retryAll);
             dropPipe(pipeName);
         }
+    }
+
+    // Whether TaskManager still has a task of the pipe, named as PipeTaskDesc.genUniqueTaskName() names them.
+    private static boolean hasPipeTasks(String pipeName) {
+        return GlobalStateMgr.getCurrentState().getTaskManager().filterTasks(null).stream()
+                .anyMatch(task -> task.getName().startsWith("pipe-" + pipeName + "-task-"));
+    }
+
+    /**
+     * Pipe tasks carry no expire time, so the pipe drops the task of a batch once the batch is done. Otherwise every
+     * batch would stay in TaskManager, and in information_schema.tasks, for good.
+     */
+    @Test
+    public void testFinishedTaskIsDropped() throws Exception {
+        mockRepoExecutor();
+        mockTaskExecution(Constants.TaskRunState.SUCCESS);
+        final String pipeName = "p_drop_finished";
+        Pipe pipe = preparePipe(pipeName);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        pipe.schedule(); // build the task and submit it
+        Assertions.assertEquals(1, pipe.getRunningTasks().size());
+        String taskName = pipe.getRunningTasks().get(0).getUniqueTaskName();
+        Assertions.assertTrue(taskManager.containTask(taskName));
+
+        pipe.schedule(); // the run succeeded: finalize the batch
+        Assertions.assertTrue(pipe.getRunningTasks().isEmpty());
+        Assertions.assertEquals(1,
+                pipe.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.FINISHED, 0).size());
+        Assertions.assertFalse(taskManager.containTask(taskName));
+        Assertions.assertFalse(hasPipeTasks(pipeName));
+
+        dropPipe(pipeName);
+    }
+
+    /**
+     * Each retry of a failed batch runs as a new task, so the task of every failed attempt is dropped as well, not only
+     * the last one.
+     */
+    @Test
+    public void testFailedAttemptTasksAreDropped() throws Exception {
+        mockRepoExecutor();
+        final String pipeName = "p_drop_failed";
+        Pipe pipe = preparePipe(pipeName);
+        mockTaskSubmission(PipeManagerTest::submittedWithFailedRun);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        List<String> attemptTaskNames = new ArrayList<>();
+        for (int i = 0; i <= Pipe.FAILED_TASK_THRESHOLD; i++) {
+            pipe.schedule(); // submit -> RUNNING
+            String taskName = pipe.getRunningTasks().get(0).getUniqueTaskName();
+            Assertions.assertTrue(taskManager.containTask(taskName), "attempt " + i);
+            attemptTaskNames.add(taskName);
+
+            pipe.schedule(); // execution failed -> ERROR, which ends the attempt
+            Assertions.assertFalse(taskManager.containTask(taskName), "attempt " + i);
+
+            if (i < Pipe.FAILED_TASK_THRESHOLD) {
+                pipe.schedule(); // retry as a new task -> RUNNABLE
+            }
+        }
+        Assertions.assertEquals(Pipe.State.ERROR, pipe.getState());
+        Assertions.assertTrue(pipe.getRunningTasks().isEmpty());
+        Assertions.assertEquals(Pipe.FAILED_TASK_THRESHOLD + 1, attemptTaskNames.stream().distinct().count());
+        Assertions.assertFalse(hasPipeTasks(pipeName));
+
+        dropPipe(pipeName);
+    }
+
+    /**
+     * A done future does not end an attempt yet: the task run scheduler archives the run on its next dispatch round.
+     * Until then the attempt stays running and keeps its task, so that the drop is journaled after the run's archive
+     * record.
+     */
+    @Test
+    public void testAttemptEndsAfterTaskRunIsArchived() throws Exception {
+        mockRepoExecutor();
+        final String pipeName = "p_wait_archive";
+        Pipe pipe = preparePipe(pipeName);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        TaskRunScheduler taskRunScheduler = taskManager.getTaskRunScheduler();
+
+        // Hand the pipe a done future, but leave the task's run registered as running, as the scheduler does until its
+        // next dispatch round. The run's own future stays open, so the scheduler of this FE does not archive it.
+        List<TaskRun> registeredRuns = new ArrayList<>();
+        new MockUp<TaskManager>() {
+            @Mock
+            public SubmitResult executeTaskAsync(Task task, ExecuteOption option) {
+                TaskRun run = TaskRunBuilder.newBuilder(task).build();
+                run.initStatus("queryid", System.currentTimeMillis());
+                taskRunScheduler.addRunningTaskRun(run);
+                registeredRuns.add(run);
+                CompletableFuture<Constants.TaskRunState> future = new CompletableFuture<>();
+                future.complete(Constants.TaskRunState.SUCCESS);
+                return new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED, future);
+            }
+        };
+
+        try {
+            pipe.schedule(); // build the task and submit it
+            Assertions.assertEquals(1, registeredRuns.size());
+            String taskName = pipe.getRunningTasks().get(0).getUniqueTaskName();
+
+            pipe.schedule();
+            pipe.schedule();
+            Assertions.assertEquals(1, pipe.getRunningTasks().size());
+            Assertions.assertTrue(pipe.getRunningTasks().get(0).isRunning());
+            Assertions.assertTrue(taskManager.containTask(taskName));
+
+            // the scheduler archives the run
+            taskRunScheduler.removeRunningTask(registeredRuns.get(0).getTaskId());
+            pipe.schedule();
+            Assertions.assertTrue(pipe.getRunningTasks().isEmpty());
+            Assertions.assertFalse(taskManager.containTask(taskName));
+        } finally {
+            registeredRuns.forEach(run -> taskRunScheduler.removeRunningTask(run.getTaskId()));
+        }
+
+        dropPipe(pipeName);
+    }
+
+    /**
+     * The scheduler archives a run under the task run lock, and removes it from the running map before it adds it to
+     * the history. A pipe that looks in between must not end the attempt yet: the failed run is not in the history, so
+     * its LabelAlreadyUsed error, which means an earlier attempt already loaded the batch, would read as an unknown
+     * failure.
+     */
+    @Test
+    public void testFailedAttemptWaitsForArchiveUnderTaskRunLock() throws Exception {
+        mockRepoExecutor();
+        final String pipeName = "p_archive_lock";
+        Pipe pipe = preparePipe(pipeName);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        TaskRunManager taskRunManager = taskManager.getTaskRunManager();
+
+        // The run fails and is never left in the running map: the archive has already removed it from there.
+        List<TaskRun> submittedRuns = new ArrayList<>();
+        new MockUp<TaskManager>() {
+            @Mock
+            public SubmitResult executeTaskAsync(Task task, ExecuteOption option) {
+                TaskRun run = TaskRunBuilder.newBuilder(task).build();
+                run.initStatus("queryid-" + task.getId(), System.currentTimeMillis());
+                submittedRuns.add(run);
+                CompletableFuture<Constants.TaskRunState> future = new CompletableFuture<>();
+                future.complete(Constants.TaskRunState.FAILED);
+                return new SubmitResult(run.getStatus().getQueryId(), SubmitResult.SubmitStatus.SUBMITTED, future);
+            }
+        };
+        // ...but has not added it to the history yet, and holds the task run lock until it has.
+        AtomicBoolean archiving = new AtomicBoolean(true);
+        new MockUp<TaskRunManager>() {
+            @Mock
+            public boolean tryTaskRunLock(Invocation invocation) {
+                return !archiving.get() && invocation.<Boolean>proceed();
+            }
+        };
+
+        pipe.schedule(); // build the task and submit it
+        pipe.schedule();
+        Assertions.assertEquals(1, pipe.getRunningTasks().size());
+        Assertions.assertTrue(pipe.getRunningTasks().get(0).isRunning(), pipe.getRunningTasks().toString());
+
+        // The archive completes.
+        TaskRunStatus status = submittedRuns.get(0).getStatus();
+        status.setState(Constants.TaskRunState.FAILED);
+        status.setErrorMessage(new LabelAlreadyUsedException(pipe.getRunningTasks().get(0).getUniqueTaskName()).getMessage());
+        taskRunManager.getTaskRunHistory().addHistory(status);
+        archiving.set(false);
+
+        pipe.schedule();
+        Assertions.assertTrue(pipe.getRunningTasks().isEmpty());
+        Assertions.assertEquals(1,
+                pipe.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.FINISHED, 0).size());
+        Assertions.assertEquals(0,
+                pipe.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.ERROR, 0).size());
+
+        dropPipe(pipeName);
     }
 
     @Test

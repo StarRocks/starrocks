@@ -33,6 +33,7 @@
 // under the License.
 package com.starrocks.http;
 
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.metric.MetricRepo;
@@ -47,6 +48,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.Optional;
 
 // inherit ConnectProcessor  to record the audit log and Query Detail
 public class HttpConnectProcessor extends ConnectProcessor {
@@ -72,6 +74,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
         Tracers.init(ctx, "TIMER", null);
 
         StatementBase parsedStmt = ((HttpConnectContext) ctx).getStatement();
+        SecurityPolicyRewriteRule.markRelationsForRewrite(parsedStmt);
         String sql = parsedStmt.getOrigStmt().originStmt;
 
         executor = new StmtExecutor(ctx, parsedStmt);
@@ -138,6 +141,8 @@ public class HttpConnectProcessor extends ConnectProcessor {
         // only handle query，so no need to dispatch
         ctx.setCommand(MysqlCommand.COM_QUERY);
         ctx.setStartTime();
+        // Set by an INSERT that reads Hive for itself only, see InsertAnalyzer; this context outlives the statement.
+        ctx.setUseConnectorMetadataCache(Optional.empty());
         ctx.setResourceGroup(null);
         ctx.resetErrorCode();
         this.handleQuery();

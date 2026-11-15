@@ -1,6 +1,8 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "Recover mistakenly deleted databases/tables/partitions."
+products: [oss, enterprise, anywhere]
 ---
 
 # Data Recovery

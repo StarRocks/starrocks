@@ -22,9 +22,13 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <map>
+#include <mutex>
 #include <set>
 #include <string>
+#include <string_view>
 
+#include "base/auth/credential_mask.h"
 #include "common/configbase_impl.h"
 #include "common/status.h"
 #include "fmt/format.h"
@@ -158,7 +162,7 @@ inline bool parse_key_value_pairs(std::istream& input) {
                                      field->name());
         }
         assigned_fields.insert(field);
-        if (bool r = field->set_value(kv.second); !r) {
+        if (bool r = field->set_value(kv.second, /*allow_fallback=*/true); !r) {
             std::cerr << fmt::format("Invalid value of config '{}': '{}'\n", kv.first, kv.second);
             return false;
         }
@@ -175,21 +179,55 @@ std::optional<Field*> Field::get(const std::string& name_or_alias) {
     return ret;
 }
 
-bool Field::set_value(std::string value) {
+// Fallbacks are keyed by config name: a config file may assign the same config more than once, and
+// the last assignment is the one that takes effect, so only the last one may be reported.
+namespace {
+std::mutex g_fallback_mutex;
+std::map<std::string, ConfigFallback> g_fallbacks;
+
+void erase_config_fallback(const std::string& name) {
+    std::lock_guard guard(g_fallback_mutex);
+    g_fallbacks.erase(name);
+}
+} // namespace
+
+void record_config_fallback(ConfigFallback fallback) {
+    std::lock_guard guard(g_fallback_mutex);
+    std::string name = fallback.name;
+    g_fallbacks.insert_or_assign(std::move(name), std::move(fallback));
+}
+
+std::vector<ConfigFallback> take_config_fallbacks() {
+    std::lock_guard guard(g_fallback_mutex);
+    std::vector<ConfigFallback> taken;
+    taken.reserve(g_fallbacks.size());
+    for (auto& entry : g_fallbacks) {
+        taken.emplace_back(std::move(entry.second));
+    }
+    g_fallbacks.clear();
+    return taken;
+}
+
+bool Field::set_value(std::string value, bool allow_fallback) {
     if (auto st = replaceenv(value); !st.ok()) {
         return false;
     }
     StripWhiteSpace(&value);
-    bool success = parse_value(value);
+    // This assignment supersedes any earlier one for the same config, including a fallback that an
+    // earlier duplicate assignment recorded.
+    erase_config_fallback(_name);
+    bool success = parse_value(value, allow_fallback);
     if (success) {
         _last_set_val.swap(_current_set_val);
-        _current_set_val = value;
+        // Read the value back instead of remembering what was passed in: a field may normalize what
+        // it stores, and a fallback stores something else entirely.
+        _current_set_val = this->value();
     }
     return success;
 }
 
 bool Field::rollback() {
-    bool success = parse_value(_last_set_val);
+    bool success = parse_value(_last_set_val, /*allow_fallback=*/false);
     if (success) {
         _current_set_val.swap(_last_set_val);
         _last_set_val.clear();
@@ -212,7 +250,8 @@ bool init(const char* filename) {
 
 inline bool init_from_default_values() {
     for (const auto& [name, field] : Field::fields()) {
-        if (!field->set_value(field->defval())) {
+        // A declared default that the field cannot accept is a programming error, never a fallback.
+        if (!field->set_value(field->defval(), /*allow_fallback=*/false)) {
             std::cerr << fmt::format("Invalid default value of config '{}': '{}'\n", name, field->defval());
             return false;
         }
@@ -236,7 +275,7 @@ Status set_config(const std::string& field, const std::string& value) {
     if (!it->second->valmutable()) {
         return Status::NotSupported(fmt::format("'{}' is immutable", field));
     }
-    if (!it->second->set_value(value)) {
+    if (!it->second->set_value(value, /*allow_fallback=*/false)) {
         return Status::InvalidArgument(fmt::format("Invalid value of config '{}': '{}'", field, value));
     }
     return Status::OK();
@@ -254,14 +293,34 @@ Status rollback_config(const std::string& field) {
     return Status::OK();
 }
 
+// Configs whose value is a credential. The access key id is listed along with the secret because together
+// they are a usable credential, matching how the FE masks AK/SK in SHOW CREATE CATALOG and SHOW STORAGE VOLUMES.
+static constexpr std::string_view kSensitiveConfigs[] = {
+        "object_storage_access_key_id",
+        "object_storage_secret_access_key",
+};
+
+bool is_sensitive_config(std::string_view name) {
+    return std::find(std::begin(kSensitiveConfigs), std::end(kSensitiveConfigs), name) != std::end(kSensitiveConfigs);
+}
+
+// An empty value stays empty, so the output still tells an unset credential from a set one.
+static std::string mask_if_sensitive(std::string_view name, std::string value) {
+    if (is_sensitive_config(name) && !value.empty()) {
+        return std::string(kCredentialMask);
+    }
+    return value;
+}
+
 std::vector<ConfigInfo> list_configs() {
     std::vector<ConfigInfo> infos;
     for (const auto& [name, field] : Field::fields()) {
         auto& info = infos.emplace_back();
         info.name = name;
-        info.value = field->value();
+        // Match on the field's own name rather than the map key, so an alias of a credential is masked too.
+        info.value = mask_if_sensitive(field->name(), field->value());
         info.type = field->type();
-        info.defval = field->defval();
+        info.defval = mask_if_sensitive(field->name(), field->defval());
         info.valmutable = field->valmutable();
     }
     return infos;
@@ -269,6 +328,21 @@ std::vector<ConfigInfo> list_configs() {
 
 void TEST_clear_configs() {
     Field::clear_fields();
+    (void)take_config_fallbacks();
+}
+
+bool fall_back_to_default(const std::string& field, std::string rejected_value, const std::string& allowed_values) {
+    auto it = Field::fields().find(field);
+    if (it == Field::fields().end()) {
+        return false;
+    }
+    // rejected_value is already a copy, so set_value overwriting the config variable cannot change
+    // what gets recorded below.
+    if (!it->second->set_value(it->second->defval(), /*allow_fallback=*/false)) {
+        return false;
+    }
+    record_config_fallback({field, std::move(rejected_value), it->second->value(), allowed_values});
+    return true;
 }
 
 } // namespace starrocks::config

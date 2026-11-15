@@ -48,6 +48,9 @@ struct TCounterStrategy {
     2: required TCounterMergeType merge_type
     3: required i64 display_threshold = 0
     4: optional TCounterMinMaxType min_max_type = TCounterMinMaxType.MIN_MAX_ALL
+    // Saturate each addition at the signed i64 bounds in SUM phases only.
+    // AVG phases and counter updates are unchanged. Older readers ignore this policy.
+    5: optional bool saturating_sum = false
 }
 
 // Counter data

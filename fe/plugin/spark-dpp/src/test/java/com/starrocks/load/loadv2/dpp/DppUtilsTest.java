@@ -139,7 +139,7 @@ public class DppUtilsTest {
             decimalResult = dppUtils.getClassFromColumn(column);
             Assertions.assertEquals(BigDecimal.valueOf(34, 4).getClass(), decimalResult);
         } catch (Exception e) {
-            Assertions.assertFalse(false);
+            Assertions.fail(e);
         }
 
     }

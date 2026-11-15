@@ -22,6 +22,8 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeTableAlterMetaJob;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -34,6 +36,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedView.MvRefreshScheme;
 import com.starrocks.catalog.MaterializedViewRefreshType;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -60,6 +63,7 @@ import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.MVTestUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -258,33 +262,57 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
 
     @Test
     public void testRangeDistributionMvDefault() throws Exception {
-        // The shipped default is on in shared-data mode; assert that is what we are exercising.
+        // The shipped defaults in shared-data mode are on for tables and off for materialized
+        // views; assert that is what we are exercising.
         Assertions.assertTrue(Config.enable_range_distribution);
+        Assertions.assertFalse(Config.enable_mv_range_distribution);
         boolean savedConfig = Config.enable_range_distribution;
+        boolean savedMvConfig = Config.enable_mv_range_distribution;
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         try {
-            // Default on: an async MV without a DISTRIBUTED BY clause defaults to RANGE.
+            // Shipped defaults: a table without a DISTRIBUTED BY clause is range-distributed, while
+            // an async MV without one keeps the previous default (RANDOM).
+            starRocksAssert.withTable("create table rd_table_default (k1 date, k2 int)\n" +
+                    "duplicate key(k1)");
+            OlapTable rangeTable = (OlapTable) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable(db.getFullName(), "rd_table_default");
+            Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANGE,
+                    rangeTable.getDefaultDistributionInfo().getType());
+
             starRocksAssert.withMaterializedView("create materialized view rd_mv_default\n" +
                     "refresh async\n" +
                     "as select k2, sum(k3) as total from base_table group by k2;");
-            MaterializedView rangeMv = (MaterializedView) GlobalStateMgr.getCurrentState()
+            MaterializedView randomMv = (MaterializedView) GlobalStateMgr.getCurrentState()
                     .getLocalMetastore().getTable(db.getFullName(), "rd_mv_default");
+            Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANDOM,
+                    randomMv.getDefaultDistributionInfo().getType());
+            starRocksAssert.dropMaterializedView("rd_mv_default");
+            starRocksAssert.dropTable("rd_table_default");
+
+            // Both configs on: the MV joins the table default and selects RANGE.
+            Config.enable_mv_range_distribution = true;
+            starRocksAssert.withMaterializedView("create materialized view rd_mv_range\n" +
+                    "refresh async\n" +
+                    "as select k2, sum(k3) as total from base_table group by k2;");
+            MaterializedView rangeMv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable(db.getFullName(), "rd_mv_range");
             Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANGE,
                     rangeMv.getDefaultDistributionInfo().getType());
-            starRocksAssert.dropMaterializedView("rd_mv_default");
+            starRocksAssert.dropMaterializedView("rd_mv_range");
 
-            // Kill switch: with the config disabled, it falls back to the previous default (RANDOM).
+            // Kill switch: the MV config alone selects nothing once the table config is disabled.
             Config.enable_range_distribution = false;
             starRocksAssert.withMaterializedView("create materialized view rd_mv_killswitch\n" +
                     "refresh async\n" +
                     "as select k2, sum(k3) as total from base_table group by k2;");
-            MaterializedView randomMv = (MaterializedView) GlobalStateMgr.getCurrentState()
+            MaterializedView killSwitchMv = (MaterializedView) GlobalStateMgr.getCurrentState()
                     .getLocalMetastore().getTable(db.getFullName(), "rd_mv_killswitch");
             Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANDOM,
-                    randomMv.getDefaultDistributionInfo().getType());
+                    killSwitchMv.getDefaultDistributionInfo().getType());
             starRocksAssert.dropMaterializedView("rd_mv_killswitch");
         } finally {
             Config.enable_range_distribution = savedConfig;
+            Config.enable_mv_range_distribution = savedMvConfig;
         }
     }
 
@@ -555,5 +583,72 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
 
         starRocksAssert.dropMaterializedView("mv6");
         Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv6"));
+    }
+
+    @Test
+    public void testCreateFileBundling() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        boolean savedConfig = Config.enable_file_bundling;
+        try {
+            starRocksAssert.withMaterializedView("create materialized view fb_mv_default\n" +
+                    "refresh async\n" +
+                    "as select k2, sum(k3) as total from base_table group by k2;");
+            MaterializedView defaultMv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable(db.getFullName(), "fb_mv_default");
+            Assertions.assertTrue(defaultMv.isFileBundling());
+            Assertions.assertTrue(defaultMv.getMaterializedViewDdlStmt(true).contains("\"file_bundling\" = \"true\""));
+            starRocksAssert.dropMaterializedView("fb_mv_default");
+
+            starRocksAssert.withMaterializedView("create materialized view fb_mv_off\n" +
+                    "PROPERTIES('file_bundling' = 'false')\n" +
+                    "refresh async\n" +
+                    "as select k2, sum(k3) as total from base_table group by k2;");
+            MaterializedView offMv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable(db.getFullName(), "fb_mv_off");
+            Assertions.assertFalse(offMv.isFileBundling());
+            starRocksAssert.dropMaterializedView("fb_mv_off");
+
+            Config.enable_file_bundling = false;
+            starRocksAssert.withMaterializedView("create materialized view fb_mv_config_off\n" +
+                    "refresh async\n" +
+                    "as select k2, sum(k3) as total from base_table group by k2;");
+            MaterializedView configOffMv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable(db.getFullName(), "fb_mv_config_off");
+            Assertions.assertFalse(configOffMv.isFileBundling());
+            starRocksAssert.dropMaterializedView("fb_mv_config_off");
+        } finally {
+            Config.enable_file_bundling = savedConfig;
+        }
+    }
+
+    @Test
+    public void testAlterFileBundling() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view fb_mv_alter\n" +
+                "PROPERTIES('file_bundling' = 'false')\n" +
+                "refresh async\n" +
+                "as select k2, sum(k3) as total from base_table group by k2;");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable(db.getFullName(), "fb_mv_alter");
+        Assertions.assertFalse(mv.isFileBundling());
+
+        Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.ddl(
+                "alter materialized view fb_mv_alter set ('file_bundling' = 'true', 'session.query_timeout' = '10')"));
+        Assertions.assertTrue(e.getMessage().contains("Can only set one table property at a time"), e.getMessage());
+        e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.ddl(
+                "alter materialized view fb_mv_alter set ('file_bundling' = 'yes')"));
+        Assertions.assertTrue(e.getMessage().contains("must be bool type"), e.getMessage());
+        e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.ddl(
+                "alter materialized view fb_mv_alter set ('file_bundling' = 'false')"));
+        Assertions.assertTrue(e.getMessage().contains("nothing need to do"), e.getMessage());
+
+        starRocksAssert.ddl("alter materialized view fb_mv_alter set ('file_bundling' = 'true')");
+        AlterJobV2 job = MVTestUtils.findAlterJobV2(db.getId(), mv.getId()).orElseThrow();
+        Assertions.assertInstanceOf(LakeTableAlterMetaJob.class, job);
+        Assertions.assertTrue(waitForSchemaChangeAlterJobFinish(job));
+        Assertions.assertTrue(mv.isFileBundling());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, mv.getState());
+
+        starRocksAssert.dropMaterializedView("fb_mv_alter");
     }
 }

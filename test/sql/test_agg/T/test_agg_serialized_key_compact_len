@@ -1,0 +1,84 @@
+-- name: test_agg_serialized_key_compact_len
+
+-- A serialized hash-table key encodes every variable-length column with a compact length prefix:
+-- one byte when len <= 254, 0xFF followed by a uint32 above that. Keys are compared byte for byte,
+-- so one logical key must always produce exactly one byte string. Two ways that can break:
+--   1. a non-canonical encoder (emitting the escape form for a short length), and
+--   2. the row-wise and column-wise key builders disagreeing.
+-- Either one splits a group in two, which shows up here as a larger group count.
+--
+-- These cases walk the 254/255 boundary through every operator that builds a serialized key:
+-- group by, distinct, except, intersect, and partition.
+
+create table t_len (
+    id int,
+    s1 varchar(65533),
+    s2 varchar(65533),
+    n int
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES('replication_num' = '1');
+
+-- s1 lengths 250..258 straddle the one-byte/escape boundary, s2 lengths 1..3 stay well inside it.
+-- 9 x 3 = 27 distinct (s1, s2) pairs, each with many rows, spread over many chunks so that
+-- different chunks see different maximum lengths.
+-- s2 must vary independently of s1: x % 3 would be fully determined by x % 9 and collapse the
+-- 27 combinations into 9.
+insert into t_len
+select x, repeat('a', 250 + (x % 9)), repeat('b', 1 + (floor(x / 9) % 3)), x % 5
+from TABLE(generate_series(1, 2000)) as g(x);
+
+set pipeline_dop=2;
+
+-- 27 groups, every one of them non-empty. A split group would add rows here.
+select length(s1), length(s2), count(*) from t_len group by s1, s2 order by 1, 2;
+
+-- The same assertion as a single number.
+select count(*) as num_groups from (select s1, s2 from t_len group by s1, s2) t;
+
+-- Distinct values must stay distinct across the escape boundary: 250..258 is nine values,
+-- not eight and not ten.
+select count(distinct s1) as d1, count(distinct s2) as d2 from t_len;
+
+-- Nulls interleaved with the boundary lengths.
+insert into t_len values (90001, null, repeat('b', 2), 1);
+insert into t_len values (90002, repeat('a', 254), null, 2);
+insert into t_len values (90003, repeat('a', 255), null, 2);
+insert into t_len values (90004, null, null, 3);
+select count(*) as num_groups_with_nulls from (select s1, s2 from t_len group by s1, s2) t;
+select length(s1), length(s2), count(*) from t_len where s1 is null or s2 is null group by s1, s2 order by 1, 2;
+
+-- DISTINCT goes through the hash set rather than the hash map.
+select count(*) from (select distinct s1, s2 from t_len) t;
+
+-- EXCEPT / INTERSECT each build their own serialized key.
+select count(*) from ((select s1, s2 from t_len) except (select s1, s2 from t_len where length(s1) = 254)) t;
+select count(*) from ((select s1, s2 from t_len) intersect (select s1, s2 from t_len where length(s1) >= 255)) t;
+
+-- The partition hash map, via a window partitioned on the same wide keys.
+select length(s1), length(s2), cnt from (
+    select s1, s2,
+           count(*) over (partition by s1, s2) as cnt,
+           row_number() over (partition by s1, s2 order by id) as rn
+    from t_len
+) t where rn = 1 order by 1, 2;
+
+-- Three group-by keys, mixing variable-length and fixed-length columns in one serialized key.
+select length(s1), length(s2), n, count(*) from t_len group by s1, s2, n order by 1, 2, 3;
+
+-- A key wide enough to push the aggregator onto its row-wise serialization fallback
+-- (AggHashMapWithSerializedKey::compute_agg_states_by_rows), which uses a different encoder
+-- entry point than the column-wise path and therefore has to agree with it byte for byte.
+create table t_huge (
+    id int,
+    s1 varchar(1048576),
+    s2 varchar(100)
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num' = '1');
+
+insert into t_huge select x, repeat('z', 600000), concat('k', x % 3) from TABLE(generate_series(1, 6)) as g(x);
+insert into t_huge values (100, 'short', 'k0');
+insert into t_huge values (101, 'short', 'k0');
+insert into t_huge values (102, repeat('z', 600000), 'k0');
+
+-- 3 long-string groups (k0, k1, k2) plus 1 short-string group = 4.
+select count(*) as num_groups from (select s1, s2 from t_huge group by s1, s2) t;
+select length(s1), s2, count(*) from t_huge group by s1, s2 order by 1, 2;
+select count(distinct s1) from t_huge;

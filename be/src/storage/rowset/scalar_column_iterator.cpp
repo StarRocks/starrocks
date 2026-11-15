@@ -413,6 +413,15 @@ Status ScalarColumnIterator::next_batch_with_filter(const SparseRange<>& range, 
 }
 
 Status ScalarColumnIterator::_load_next_page(bool* eos) {
+    // The page iterator is already past the last data page: a previous call
+    // consumed the final page and reported eos. Re-entering here is legal --
+    // a caller that got a short read may issue one more next_batch() -- so
+    // report eos again instead of stepping the ordinal page index out of
+    // bounds (DCHECK_LT in OrdinalPageIndexIterator::next()).
+    if (!_page_iter.valid()) {
+        *eos = true;
+        return Status::OK();
+    }
     _page_iter.next();
     if (!_page_iter.valid()) {
         *eos = true;

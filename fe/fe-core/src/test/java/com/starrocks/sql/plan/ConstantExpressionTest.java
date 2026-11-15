@@ -191,6 +191,32 @@ public class ConstantExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testCastBinaryToString() throws Exception {
+        // Folding used to produce the java default byte[] toString(), i.e. "[B@<identityHashCode>", which is
+        // both wrong and different on every run, while the non-folded BE path returns the bytes.
+        testFragmentPlanContainsConstExpr(
+                "select cast(cast('zz' as varbinary) as varchar);",
+                "'zz'");
+
+        testFragmentPlanContainsConstExpr(
+                "select cast(cast('zz' as varbinary) as char(10));",
+                "'zz'");
+
+        // The bogus value poisoned every function reading it, which is how the bug surfaced:
+        // "ERROR 1064: [B@3461c8cb not supported in next_day dow_string".
+        testFragmentPlanContainsConstExpr(
+                "select next_day(cast('2023-04-05' as datetime), cast(cast('Sunday' as varbinary) as varchar));",
+                "'2023-04-09'");
+
+        // A sized binary target does not change the value either. ReduceCastRule drops the intermediate cast
+        // here because matchesType() ignores the length of a varbinary, so this only guards that it stays a
+        // no-op; the binary -> binary folding itself is covered by ConstantOperatorTest.
+        testFragmentPlanContainsConstExpr(
+                "select cast(cast(cast('zz' as varbinary) as varbinary(10)) as varchar);",
+                "'zz'");
+    }
+
+    @Test
     public void testCastToDecimalLiteral() throws Exception {
         testFragmentPlanContainsConstExpr(
                 "select cast(151971657 as decimal32);",

@@ -1,0 +1,7 @@
+position: 60
+label: 'BI Tools'
+collapsible: true
+collapsed: true
+link:
+  id: BI_integrations
+  type: doc

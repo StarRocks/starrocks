@@ -16,6 +16,7 @@
 
 #include <butil/file_util.h>
 #include <butil/files/file_path.h>
+#include <curl/curl.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -58,6 +59,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/rowset/rowset_factory.h"
@@ -318,8 +320,7 @@ public:
         DescriptorTbl* tbl = nullptr;
         DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
-        auto* tuple_desc = row_desc->tuple_descriptors()[0];
+        auto* tuple_desc = tbl->get_tuple_descriptor(row_tuples[0]);
 
         return tuple_desc;
     }
@@ -350,8 +351,7 @@ public:
         DescriptorTbl* tbl = nullptr;
         DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
-        auto* tuple_desc = row_desc->tuple_descriptors()[0];
+        auto* tuple_desc = tbl->get_tuple_descriptor(row_tuples[0]);
 
         return tuple_desc;
     }
@@ -760,6 +760,12 @@ int main(int argc, char** argv) {
         fprintf(stderr, "error read config file. \n");
         return -1;
     }
+    const CURLcode curl_status = curl_global_init(CURL_GLOBAL_ALL);
+    if (curl_status != CURLE_OK) {
+        fprintf(stderr, "failed to initialize libcurl, curl_status=%d\n", static_cast<int>(curl_status));
+        return -1;
+    }
+    starrocks::DeferOp curl_cleanup([] { curl_global_cleanup(); });
 
     starrocks::config::sys_log_level = "INFO";
     butil::FilePath storage_root;
@@ -849,7 +855,10 @@ int main(int argc, char** argv) {
     storage_env_options.update_mem_tracker = runtime_env->update_mem_tracker();
     storage_env_options.process_mem_limit = runtime_env->process_mem_limit();
     storage_env_options.vector_index_mem_tracker = runtime_env->vector_index_mem_tracker();
-    storage_env_options.lake_metadata_cache_limit = starrocks::config::lake_metadata_cache_limit;
+    storage_env_options.lake_tablet_metadata_cache_limit = starrocks::lake::metacache_capacity(
+            runtime_env->process_mem_limit(), starrocks::config::lake_tablet_metadata_cache_limit_percent);
+    storage_env_options.lake_segment_metadata_cache_limit = starrocks::lake::metacache_capacity(
+            runtime_env->process_mem_limit(), starrocks::config::lake_segment_metadata_cache_limit_percent);
 #if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
     storage_env_options.lake_location_provider_mode = starrocks::LakeLocationProviderMode::kStarlet;
 #elif defined(BE_TEST)

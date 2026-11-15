@@ -47,6 +47,50 @@ uint32_t decode_size_header(const uint8_t* bytes) {
 
 } // namespace
 
+TEST(VariantValueTest, ObjectFieldAtIndexPreservesExactExtentWithNonmonotonicOffsets) {
+    const char metadata_bytes[] = {0x11, 2, 0, 1, 2, 'a', 'b'};
+    // Field order is [a, b]; payload order is [b (null), a ("xyz")].
+    const char value_bytes[] = {2, 2, 0, 1, 1, 0, 5, 0, 13, 'x', 'y', 'z'};
+    VariantRowValue row(std::string_view(metadata_bytes, sizeof(metadata_bytes)),
+                        std::string_view(value_bytes, sizeof(value_bytes)));
+    const auto& value = row.get_value();
+    auto a = value.get_object_field_at_index(0);
+    auto b = value.get_object_field_at_index(1);
+    ASSERT_TRUE(a.ok()) << a.status();
+    ASSERT_TRUE(b.ok()) << b.status();
+    EXPECT_EQ(std::string_view(value_bytes + 8, 4), a->raw());
+    EXPECT_EQ(VariantValue::kEmptyValue, b->raw());
+
+    auto a_by_key = value.get_object_by_key(row.get_metadata(), "a");
+    auto b_by_key = value.get_object_by_key(row.get_metadata(), "b");
+    ASSERT_TRUE(a_by_key.ok()) << a_by_key.status();
+    ASSERT_TRUE(b_by_key.ok()) << b_by_key.status();
+    EXPECT_EQ(a_by_key->raw(), a->raw());
+    EXPECT_EQ(b_by_key->raw(), b->raw());
+    EXPECT_FALSE(value.get_object_field_at_index(2).ok());
+    EXPECT_FALSE(value.get_object_field_at_index(UINT32_MAX).ok());
+}
+
+TEST(VariantValueTest, ObjectFieldAtIndexRejectsInvalidInput) {
+    struct TestCase {
+        const char* description;
+        std::string value;
+    };
+    const std::vector<TestCase> cases = {
+            {"not an object", {0}},
+            {"truncated object header", {2}},
+            {"empty object", {2, 0, 0}},
+            {"offset equals payload size", {2, 1, 0, 1, 1, 0}},
+            {"offset exceeds payload size", {2, 1, 0, 2, 1, 0}},
+            {"payload size exceeds buffer", {2, 1, 0, 0, 2, 0}},
+            {"truncated short string", {2, 1, 0, 0, 1, 13}},
+    };
+    for (const auto& test : cases) {
+        SCOPED_TRACE(test.description);
+        EXPECT_FALSE(VariantValue(test.value).get_object_field_at_index(0).ok());
+    }
+}
+
 TEST(VariantRowValueTest, CreateFromNullMetadataReturnsNullVariant) {
     auto row = VariantRowValue::create("", "");
     ASSERT_TRUE(row.ok());

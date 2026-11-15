@@ -1,7 +1,9 @@
 ---
+sidebar_position: 120
 displayed_sidebar: docs
 keywords: ['compaction']
 description: "How to manage and monitor compaction for shared-data clusters in StarRocks."
+products: [oss, enterprise, anywhere]
 ---
 
 # Compaction for Shared-data Clusters
@@ -134,12 +136,17 @@ The following fields are returned:
 
 #### View execution details of compaction tasks
 
-Each compaction task is divided into multiple sub-tasks, each of which corresponds to a tablet. You can view the execution details of each sub-task by querying the system-defined view `information_schema.be_cloud_native_compactions`.
+Each row in `information_schema.be_cloud_native_compactions` represents one tablet compaction execution unit. When
+tablet parallel compaction is enabled, every parallel subtask is returned as a separate row with the same transaction
+and tablet IDs but a distinct `SUBTASK_ID`. Parallel merged contexts are aggregation artifacts rather than execution
+units and are not returned.
 
 Example:
 
 ```Plain
-mysql> SELECT * FROM information_schema.be_cloud_native_compactions;
+mysql> SELECT BE_ID, TXN_ID, TABLET_ID, VERSION, SKIPPED, RUNS, START_TIME, FINISH_TIME,
+              PROGRESS, STATUS, PROFILE
+       FROM information_schema.be_cloud_native_compactions;
 +-------+--------+-----------+---------+---------+------+---------------------+-------------+----------+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | BE_ID | TXN_ID | TABLET_ID | VERSION | SKIPPED | RUNS | START_TIME          | FINISH_TIME | PROGRESS | STATUS | PROFILE                                                                                                                                                                                         |
 +-------+--------+-----------+---------+---------+------+---------------------+-------------+----------+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -171,6 +178,41 @@ The following fields are returned:
   - `read_local_count`: The number of times the sub-task reads data from the local cache.
   - `read_remote_count`: The number of times the sub-task reads data from the remote storage.
   - `in_queue_sec`: The time of the sub-task staying in queue. Unit: Seconds.
+- `SUBTASK_ID`: The zero-based parallel subtask ID. It is `NULL` for a regular non-parallel tablet task. Rows with the
+  same `BE_ID`, `TXN_ID`, and `TABLET_ID`, but different `SUBTASK_ID` values, are parallel execution units of the same
+  tablet compaction.
+
+The full-chain fields in `PROFILE` use nanoseconds for precise accounting:
+
+- Profile state:
+  - `profile_final`: `false` while the task is running and `true` after it finishes. A live profile adds the elapsed
+    time of the current attempt to `task_total_ns` and, after entering the executor, to `task_execute_ns`. Other phase
+    timers are updated when their current scope exits, so `task_unaccounted_ns` can temporarily be larger in a live
+    profile.
+- Task envelope:
+  - `queue_wait_ns`: Time from entering the CN compaction queue until a worker starts the task. It is outside
+    `task_total_ns`.
+  - `task_prepare_ns`: Time used to select input rowsets, load tablet metadata and construct the compaction task.
+  - `task_execute_ns`: Wall time inside the horizontal, vertical, or index compaction executor, including elapsed
+    time in the current executor for a live profile.
+  - `task_total_ns`: Wall time from the CN worker starting task preparation until the profile snapshot or task return.
+  - `task_accounted_ns`: Sum of all non-overlapping top-level phases.
+  - `task_unaccounted_ns`: `task_total_ns - task_accounted_ns`. A large value indicates a missing phase or
+    scheduler/runtime overhead.
+- Non-overlapping execution phases: `input_prepare_ns`, `reader_prepare_ns`, `reader_open_ns`,
+  `reader_get_next_ns`, `reader_close_ns`, `chunk_transform_ns`, `writer_create_ns`, `writer_open_ns`,
+  `writer_write_ns`, `writer_flush_ns`, `writer_finish_ns`, `writer_close_ns`, `mask_io_ns`, `txn_log_build_ns`,
+  `pk_sst_merge_ns`, `txn_log_write_ns`, `preload_compaction_state_ns`, and `tablet_write_log_ns`.
+- Nested reader details: `read_remote_ns`, `read_local_ns`, `create_segment_iter_ns`, `segment_init_ns`,
+  `column_iterator_init_ns`, `block_load_ns`, `block_fetch_ns`, `block_seek_ns`, `decompress_ns`, `decode_dict_ns`,
+  and delete-vector/filter timers. These fields explain time inside reader phases and must not be added to
+  `task_accounted_ns` again.
+- Vertical compaction details: `column_group_count`, `vertical_key_group_ns`, and `vertical_value_group_ns`. The group
+  times overlap with reader and writer phases and are diagnostic rather than additive.
+
+When a task finishes, the same individual profile is written to the CN INFO log with tablet ID, transaction ID,
+status, table ID, and partition ID. This preserves the per-tablet profile after the row disappears from
+`be_cloud_native_compactions`.
 
 ### Configure compaction tasks
 
@@ -194,16 +236,16 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
 - Introduced in: v3.1.0
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_tables" = "11111;22222");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "11111;22222");
 ```
 
-##### lake_compaction_disable_tables
+##### lake_compaction_disable_ids
 
 - Default：""
 - Type：String
 - Unit：-
 - Is mutable：Yes
-- Description：Disable compaction for certain tables. This will not affect compaction that has started. The value of this item is table ID. Multiple values are separated by ';'.
+- Description：Disable compaction for certain tables or partitions. This will not affect compaction that has started. The value of this item is table ID or partition ID. Multiple values are separated by ';'. In versions earlier than v3.4.5 and v3.5.0, this item is named `lake_compaction_disable_tables` and supports only table IDs. The old name is still accepted as an alias.
 - Introduced in：v3.2.7
 
 #### CN parameters
@@ -254,6 +296,15 @@ WHERE name = "compact_threads";
 >
 > In production, it is recommended to set `max_cumulative_compaction_num_singleton_deltas` to `100` to accelerate the Compaction tasks and reduce their resource consumption.
 
+##### lake_pk_compaction_max_rowsets_per_level
+
+- Default: 20
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of rowsets that still need compaction at which a size level of a Primary Key table in a shared-data cluster is merged even if it does not have the highest score. The Size-tiered Compaction policy merges only the level with the highest score in each round. While loads keep arriving, the level of the newest and smallest rowsets has the highest score in every round, so a level of larger rowsets (outputs of earlier compactions and medium-sized loads) keeps growing. This increases the number of segments that queries read, and shows up as a spike in the compaction score right after a compaction finishes. When a level that is not picked holds this many rowsets that still need compaction, and these rowsets fit in the same compaction task as the picked ones, the level is merged in that compaction task. Set it to `0` to disable this behavior.
+- Introduced in: -
+
 ### Manually trigger compaction tasks
 
 ```SQL
@@ -293,7 +344,9 @@ Since Compaction is crucial for query performance, it is recommended to regularl
 
 ### Slow queries
 
-To identify slow queries caused by untimely Compaction, you can check, in the SQL Profile, the value of `SegmentsReadCount` divided by `TabletCount` within a single Fragment. If it is an large value, such as tens or more, untimely Compaction may be the cause of the slow query.
+To identify slow queries caused by untimely Compaction in shared-data clusters, check the value of `PhySegmentsCount` divided by `TabletCount` within a single Fragment in the SQL Profile. If it is a large value, such as tens or more, untimely Compaction may be the cause of the slow query.
+
+`PhySegmentsCount` is available only for shared-data scans. For shared-nothing clusters, or profiles from older versions that do not include `PhySegmentsCount`, use `SegmentsReadCount` divided by `TabletCount` within a single Fragment instead. In both shared-data and shared-nothing scans, intra-tablet parallelism can cause `SegmentsReadCount` to count the same segment in multiple split readers. Prefer `PhySegmentsCount` when available; when using the fallback for parallel scans in either architecture, a high ratio alone does not establish a compaction problem.
 
 ### High Max Compaction Score in the cluster
 

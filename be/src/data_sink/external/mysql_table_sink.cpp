@@ -52,7 +52,7 @@ namespace starrocks {
 const int MYSQL_SINK_BATCH_SIZE = 1024;
 #endif
 
-MysqlTableSink::MysqlTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs)
+MysqlTableSink::MysqlTableSink(ObjectPool* pool, const std::vector<TExpr>& t_exprs)
         : _pool(pool), _t_output_expr(t_exprs) {}
 
 MysqlTableSink::~MysqlTableSink() = default;

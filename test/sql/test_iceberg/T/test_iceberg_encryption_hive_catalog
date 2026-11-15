@@ -1,0 +1,54 @@
+-- name: test_iceberg_encryption_hive_catalog
+-- Writes and reads an encrypted Iceberg table end to end. A Hive catalog builds Iceberg's encryption manager,
+-- here backed by StaticKeyManagementClient, a test-only KMS whose master key is in the catalog properties.
+create external catalog iceberg_enc_hive_${uuid0}
+PROPERTIES ( "type"  =  "iceberg",
+    "iceberg.catalog.type"  =  "hive",
+    "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false",
+    "encryption.kms-impl"="com.starrocks.connector.iceberg.StaticKeyManagementClient",
+    "encryption.static-kms.keys"="sql-tester-key:c3RhcnJvY2tzLXNxbC10ZXN0ZXItbWFzdGVyLWtleSE=");
+create database iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_encryption_hive_catalog/${uuid0}/iceberg_enc_db_${uuid0}"
+);
+create table iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t (
+    id INT,
+    name STRING,
+    region STRING
+)
+PARTITION BY (region)
+properties(
+  'format-version' = '3',
+  'encryption.key-id' = 'sql-tester-key',
+  'location' = 'oss://${oss_bucket}/test_iceberg_encryption_hive_catalog/${uuid0}/enc_t'
+);
+insert into iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t values (1, 'alpha', 'a'), (2, 'beta', 'a'), (3, 'gamma', 'b');
+insert into iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t values (4, 'delta', 'b');
+
+-- Read back what StarRocks wrote, including a filtered read.
+select * from iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t order by id;
+select region, count(*) from iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t group by region order by region;
+select name from iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t where id = 2;
+
+-- The data files on storage are encrypted: read directly, with no key, they are refused.
+select * from files(
+    "path" = "oss://${oss_bucket}/test_iceberg_encryption_hive_catalog/${uuid0}/enc_t/data/*/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    "format" = "parquet");
+
+-- Deleting a whole partition writes no delete file, so it works on an encrypted (format version 3) table.
+delete from iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t where region = 'b';
+select * from iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t order by id;
+-- Deleting individual rows needs a deletion vector, so it is refused.
+delete from iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t where id = 1;
+
+drop table iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t force;
+drop database iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0};
+drop catalog iceberg_enc_hive_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_encryption_hive_catalog/${uuid0}/ > /dev/null

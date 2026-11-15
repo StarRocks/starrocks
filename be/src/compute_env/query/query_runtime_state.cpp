@@ -110,4 +110,25 @@ void QueryRuntimeState::add_total_scan_stats(QueryStatistics* query_statistic) {
     }
 }
 
+void QueryRuntimeState::add_ai_statistics(const AIExecutionStatistics& statistics) noexcept {
+    if (statistics.empty()) {
+        return;
+    }
+    std::lock_guard l(_ai_statistics_lock);
+    _total_ai_statistics.add(statistics);
+    _delta_ai_statistics.add(statistics);
+}
+
+AIExecutionStatistics QueryRuntimeState::ai_statistics() const {
+    std::lock_guard l(_ai_statistics_lock);
+    return _total_ai_statistics;
+}
+
+AIExecutionStatistics QueryRuntimeState::consume_delta_ai_statistics() {
+    std::lock_guard l(_ai_statistics_lock);
+    auto delta = _delta_ai_statistics;
+    _delta_ai_statistics = {};
+    return delta;
+}
+
 } // namespace starrocks::pipeline

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Troubleshooting guide for asynchronous materialized views: diagnose and fix refresh failures, query rewrite issues, and data consistency problems."
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 异步物化视图故障排除
@@ -396,7 +397,7 @@ ALTER MATERIALIZED VIEW mv1 ACTIVE;
   StarRocks 会检查物化视图与基表数据的一致性。默认情况下，只有当物化视图中的数据为最新时，才能重写查询。要解决这个问题，您可以：
 
   - 为物化视图添加 `PROPERTIES('query_rewrite_consistency'='LOOSE')` 禁用一致性检查。
-  - 为物化视图添加 `PROPERTIES('mv_rewrite_staleness_second'='5')` 来容忍一定程度的数据不一致。只要上次刷新在该时间间隔之内，无论基表中的数据是否发生变化，查询都可以被重写。
+  - 为物化视图添加 `PROPERTIES('mv_rewrite_staleness_second'='5')` 来容忍一定程度的数据不一致。只要物化视图最近一次被确认的完整刷新在该时间间隔之内，无论基表中的数据是否发生变化，查询都可以被重写。仅覆盖部分分区的刷新操作不会更新该基线。
 
 - **检查物化视图的查询语句是否缺少输出列。**
 
@@ -451,16 +452,12 @@ SELECT dt, c_city, sum(tax) FROM tbl GROUP BY dt, c_city;
 #### 哪个资源组控制异步物化视图的资源？如何调整其配置？
 
 如果在创建异步物化视图时未指定 `resource_group` 属性，系统会将其分配给默认资源组 `default_mv_wg`。其默认配置为：
-- `cpu_core_limit`: 1
+- `cpu_weight_percent`: 1
 - `mem_limit`: 80%
 - `concurrency_limit`: 0
 - `spill_mem_limit_threshold`: 80%
 
-您可以通过以下 BE 配置项调整其 CPU 限制、内存限制、并发限制和溢出阈值：
-- `default_mv_resource_group_cpu_limit`
-- `default_mv_resource_group_memory_limit`
-- `default_mv_resource_group_concurrency_limit`
-- `default_mv_resource_group_spill_mem_limit_threshold`
+`default_mv_wg` 由 FE 存储并持久化。您可以通过 [ALTER RESOURCE GROUP](../../sql-reference/sql-statements/cluster-management/resource_group/ALTER_RESOURCE_GROUP.md) 调整其 CPU 限制、内存限制、并发限制和溢出阈值，例如 `ALTER RESOURCE GROUP default_mv_wg WITH ('mem_limit' = '60%')`。BE 配置项 `default_mv_resource_group_cpu_limit`、`default_mv_resource_group_memory_limit`、`default_mv_resource_group_concurrency_limit` 和 `default_mv_resource_group_spill_mem_limit_threshold` 已废弃，不再对 `default_mv_wg` 生效。
 
 您还可以通过指定 `resource_group` 属性为物化视图分配专用资源组。
 

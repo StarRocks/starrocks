@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.DateLiteral;
@@ -41,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
+import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
@@ -106,6 +108,60 @@ public class ListPartitionPrunerTest {
 
         conjuncts = Lists.newArrayList();
         pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null, null);
+    }
+
+    private ListPartitionPruner charPruner(ScalarOperator predicate) {
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> values = new ConcurrentSkipListMap<>();
+        values.put(new StringLiteral("hello world"), Sets.newHashSet(1L));
+        values.put(new StringLiteral("hi"), Sets.newHashSet(2L));
+        return new ListPartitionPruner(Map.of(stringColumn, values), Map.of(stringColumn, Set.of(3L)),
+                List.of(predicate), null);
+    }
+
+    @Test
+    public void testTruncatingCharPredicatesRemainForExecution() throws AnalysisException {
+        stringColumn = new ColumnRefOperator(3, VarcharType.VARCHAR, "s", true);
+        CastOperator cast = new CastOperator(new CharType(5), stringColumn);
+        List<ScalarOperator> predicates = Lists.newArrayList();
+        for (BinaryType type : List.of(BinaryType.EQ, BinaryType.EQ_FOR_NULL, BinaryType.NE,
+                BinaryType.LT, BinaryType.LE, BinaryType.GT, BinaryType.GE)) {
+            predicates.add(new BinaryPredicateOperator(type, cast, ConstantOperator.createVarchar("hello")));
+        }
+        predicates.add(new InPredicateOperator(cast, ConstantOperator.createVarchar("hello")));
+        predicates.add(new InPredicateOperator(true, cast, ConstantOperator.createVarchar("hello")));
+        predicates.add(new IsNullPredicateOperator(cast));
+        predicates.add(new BinaryPredicateOperator(BinaryType.EQ, stringColumn,
+                new CastOperator(new CharType(5), ConstantOperator.createVarchar("hello world"))));
+        for (ScalarOperator predicate : predicates) {
+            ListPartitionPruner charPruner = charPruner(predicate);
+            Assertions.assertNull(charPruner.prune(), predicate.toString());
+            Assertions.assertEquals(List.of(predicate), charPruner.getNoEvalConjuncts());
+            Assertions.assertFalse(ListPartitionPruner.canPruneWithConjunct(predicate));
+        }
+    }
+
+    @Test
+    public void testCharCastFallbackComposesWithAndOr() throws AnalysisException {
+        stringColumn = new ColumnRefOperator(3, VarcharType.VARCHAR, "s", true);
+        ScalarOperator truncating = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(new CharType(5), stringColumn), ConstantOperator.createVarchar("hello"));
+        ScalarOperator plain = new BinaryPredicateOperator(BinaryType.EQ, stringColumn,
+                ConstantOperator.createVarchar("hello world"));
+        ScalarOperator and = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, truncating, plain);
+        ListPartitionPruner andPruner = charPruner(and);
+        Assertions.assertEquals(List.of(1L), andPruner.prune());
+        Assertions.assertEquals(List.of(and), andPruner.getNoEvalConjuncts());
+        ScalarOperator or = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, truncating, plain);
+        ListPartitionPruner orPruner = charPruner(or);
+        Assertions.assertNull(orPruner.prune());
+        Assertions.assertEquals(List.of(or), orPruner.getNoEvalConjuncts());
+
+        ScalarOperator implicit = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(new CharType(5), stringColumn, true), ConstantOperator.createVarchar("hello world"));
+        Assertions.assertEquals(List.of(1L), charPruner(implicit).prune());
+        ScalarOperator wildcard = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(CharType.CHAR, stringColumn), ConstantOperator.createVarchar("hello world"));
+        Assertions.assertEquals(List.of(1L), charPruner(wildcard).prune());
     }
 
     @Test
@@ -618,6 +674,53 @@ public class ListPartitionPrunerTest {
         conjuncts.add(new InPredicateOperator(true,
                 Lists.newArrayList(intColumn, ConstantOperator.createInt(1), ConstantOperator.createInt(2))));
         Assertions.assertEquals(Lists.newArrayList(0L, 3L, 6L), pruner.prune());
+    }
+
+    @Test
+    public void testNullRejectingPredicatesKeepMixedNullPartition() throws AnalysisException {
+        // city=beijing,null   0   (multi-value partition that merely contains NULL)
+        // city=shanghai       1
+        // city=null           2   (NULL-only partition)
+        ColumnRefOperator city = new ColumnRefOperator(1, VarcharType.VARCHAR, "city", true);
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> cityValues = new ConcurrentSkipListMap<>();
+        cityValues.put(new StringLiteral("beijing"), Sets.newHashSet(0L));
+        cityValues.put(new StringLiteral("shanghai"), Sets.newHashSet(1L));
+        Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> valuesMap = Maps.newHashMap();
+        valuesMap.put(city, cityValues);
+        Map<ColumnRefOperator, Set<Long>> nullPartitions = Maps.newHashMap();
+        nullPartitions.put(city, Sets.newHashSet(0L, 2L));
+        ListPartitionInfo listPartitionInfo = new ListPartitionInfo();
+        listPartitionInfo.setValues(0L, Lists.newArrayList("beijing", "NULL"));
+        listPartitionInfo.setValues(1L, Lists.newArrayList("shanghai"));
+        listPartitionInfo.setValues(2L, Lists.newArrayList("NULL"));
+        List<ScalarOperator> predicates = Lists.newArrayList();
+        ListPartitionPruner mixedPruner =
+                new ListPartitionPruner(valuesMap, nullPartitions, predicates, null, listPartitionInfo);
+
+        // city is not null: only the NULL-only partition can go, the mixed one still holds beijing rows.
+        predicates.add(new IsNullPredicateOperator(true, city));
+        Assertions.assertEquals(Lists.newArrayList(0L, 1L), sorted(mixedPruner.prune()));
+
+        // city is null: both partitions holding NULL stay.
+        predicates.clear();
+        predicates.add(new IsNullPredicateOperator(false, city));
+        Assertions.assertEquals(Lists.newArrayList(0L, 2L), sorted(mixedPruner.prune()));
+
+        // city != 'shanghai': drops the single-value shanghai partition and the NULL-only one.
+        predicates.clear();
+        predicates.add(new BinaryPredicateOperator(BinaryType.NE, city, ConstantOperator.createVarchar("shanghai")));
+        Assertions.assertEquals(Lists.newArrayList(0L), sorted(mixedPruner.prune()));
+
+        // city not in ('shanghai'): same shape as !=.
+        predicates.clear();
+        predicates.add(new InPredicateOperator(true, city, ConstantOperator.createVarchar("shanghai")));
+        Assertions.assertEquals(Lists.newArrayList(0L), sorted(mixedPruner.prune()));
+    }
+
+    private static List<Long> sorted(List<Long> partitions) {
+        List<Long> copy = Lists.newArrayList(partitions);
+        copy.sort(null);
+        return copy;
     }
 
     @Test

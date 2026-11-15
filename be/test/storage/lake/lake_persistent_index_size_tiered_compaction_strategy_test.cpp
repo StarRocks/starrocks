@@ -17,11 +17,14 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/sst_seek_range.h"
 #include "storage/lake/tablet_metadata.h"
 
 namespace starrocks::lake {
@@ -495,6 +498,237 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_level_multiple_
 
     // Should separate into different levels based on size
     EXPECT_EQ(result.candidate_filesets.size(), 2);
+}
+
+// Test 21: The highest-scoring level holds a single fileset, a lower-scoring level holds two.
+//
+// Regression test for the index compactor declining to compact anything at all in this layout.
+// The level bonus rewards small levels by up to pk_index_size_tiered_max_level, so a single small
+// fileset can outscore an older level of two large filesets and, because only the top level was
+// considered, that round produced no index compaction at all while the flush side kept adding
+// sstables.
+//
+// NOTE: the scores below are computed with THIS FIXTURE's config (SetUp overrides
+// pk_index_size_tiered_level_multiplier to 5 and pk_index_size_tiered_max_level to 7), not with the
+// shipped defaults of 10 and 5. At the shipped defaults the 200KB level scores 6, below the
+// two-fileset level's 7, so this exact layout is not starved on a real cluster.
+// test_falls_back_at_product_default_config below covers a layout that is.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_falls_back_when_top_level_has_one_fileset) {
+    std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
+            {1, 104857600, 100}, // fileset 1: 100MB  -- base, level {1,2}, score 3*2-2+3 = 7
+            {2, 104857600, 200}, // fileset 2: 100MB
+            {3, 204800, 300},    // fileset 3: 200KB  -- own level, alone, score 3*1-2+7 = 8
+            {4, 500000, 400},    // active, never a candidate
+    };
+
+    auto metadata = create_tablet_metadata_with_sstables(sstables_info);
+
+    ASSIGN_OR_ABORT(
+            CompactionCandidateResult result,
+            LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta()));
+
+    // The single-fileset level cannot be compacted, so the two-fileset level must be taken instead.
+    ASSERT_EQ(2, result.candidate_filesets.size());
+    EXPECT_EQ(1, result.candidate_filesets[0][0].fileset_id().hi());
+    EXPECT_EQ(2, result.candidate_filesets[1][0].fileset_id().hi());
+    EXPECT_TRUE(result.merge_base_level);
+    EXPECT_EQ(200, result.max_max_rss_rowid);
+}
+
+// Test 22: Every level holds exactly one fileset -- the fallback must still decline.
+// Guards the other direction of test 21: falling back may not lower the two-fileset minimum.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_no_fallback_when_every_level_has_one_fileset) {
+    std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
+            {1, 104857600, 100}, // 100MB
+            {2, 4194304, 200},   // 4MB   -- 25x smaller, own level
+            {3, 204800, 300},    // 200KB -- 20x smaller, own level
+            {4, 500000, 400},    // active
+    };
+
+    auto metadata = create_tablet_metadata_with_sstables(sstables_info);
+
+    ASSIGN_OR_ABORT(
+            CompactionCandidateResult result,
+            LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta()));
+
+    EXPECT_EQ(0, result.candidate_filesets.size());
+    EXPECT_FALSE(result.merge_base_level);
+}
+
+// Test 23: the same starvation, reached at the SHIPPED config rather than this fixture's.
+//
+// The defaults are pk_index_size_tiered_min_level_size = 131072, _level_multiplier = 10 and
+// _max_level = 5, so max_level_size = 131072 * 10^5. There the level bonus tops out at 6 and a
+// single small fileset can only *tie* a two-fileset level, never outscore it:
+//
+//   two 100MB filesets   -> level_bonus 3, score 3*2-2+3 = 7
+//   one 200KB fileset    -> level_bonus 5, score 3*1-2+5 = 6   (not starved)
+//   one fileset < 131072 -> level_bonus 6, score 3*1-2+6 = 7   (ties)
+//
+// A tie is enough, because LevelComparator breaks it on `fileset_indexes[0] >` and filesets are
+// ordered oldest-first, so the newest single-fileset level sorts ahead of the compactable one and
+// *priority_levels.begin() lands on the level that cannot be compacted. The boundary is exact:
+// 131071 bytes reproduces it, 131072 does not.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_falls_back_at_product_default_config) {
+    config::pk_index_size_tiered_level_multiplier = 10;
+    config::pk_index_size_tiered_max_level = 5;
+    // min_level_size is already the shipped 131072; TearDown restores all three.
+
+    std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
+            {1, 104857600, 100}, // fileset 1: 100MB   -- base, level {1,2}, score 7
+            {2, 104857600, 200}, // fileset 2: 100MB
+            {3, 131071, 300},    // fileset 3: one byte under min_level_size -- own level, score 7
+            {4, 500000, 400},    // active, never a candidate
+    };
+
+    auto metadata = create_tablet_metadata_with_sstables(sstables_info);
+
+    ASSIGN_OR_ABORT(
+            CompactionCandidateResult result,
+            LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta()));
+
+    ASSERT_EQ(2, result.candidate_filesets.size());
+    EXPECT_EQ(1, result.candidate_filesets[0][0].fileset_id().hi());
+    EXPECT_EQ(2, result.candidate_filesets[1][0].fileset_id().hi());
+    EXPECT_TRUE(result.merge_base_level);
+    EXPECT_EQ(200, result.max_max_rss_rowid);
+}
+
+// Test 24: the other side of test 23's boundary. At the shipped config a fileset of exactly
+// min_level_size scores 6, strictly below the two-fileset level's 7, so the pre-existing code
+// already selected the compactable level and the fallback changes nothing here.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_no_starvation_at_min_level_size_boundary) {
+    config::pk_index_size_tiered_level_multiplier = 10;
+    config::pk_index_size_tiered_max_level = 5;
+
+    std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
+            {1, 104857600, 100}, // 100MB -- level {1,2}, score 7
+            {2, 104857600, 200}, // 100MB
+            {3, 131072, 300},    // exactly min_level_size -- own level, score 6
+            {4, 500000, 400},    // active
+    };
+
+    auto metadata = create_tablet_metadata_with_sstables(sstables_info);
+
+    ASSIGN_OR_ABORT(
+            CompactionCandidateResult result,
+            LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta()));
+
+    ASSERT_EQ(2, result.candidate_filesets.size());
+    EXPECT_EQ(1, result.candidate_filesets[0][0].fileset_id().hi());
+    EXPECT_EQ(2, result.candidate_filesets[1][0].fileset_id().hi());
+}
+
+namespace {
+
+void add_ranged_sstable(PersistentIndexSstableMetaPB* meta, int64_t fileset_id_hi, uint64_t max_rss_rowid, bool shared,
+                        const std::string& start_key, const std::string& end_key) {
+    auto* sstable = meta->add_sstables();
+    sstable->set_filename(std::to_string(fileset_id_hi) + "_" + std::to_string(max_rss_rowid) + ".sst");
+    sstable->mutable_fileset_id()->set_hi(fileset_id_hi);
+    sstable->mutable_fileset_id()->set_lo(0);
+    sstable->set_filesize(100000);
+    sstable->set_max_rss_rowid(max_rss_rowid);
+    sstable->set_shared(shared);
+    sstable->mutable_range()->set_start_key(start_key);
+    sstable->mutable_range()->set_end_key(end_key);
+}
+
+std::vector<int64_t> candidate_fileset_ids(const CompactionCandidateResult& result) {
+    std::vector<int64_t> ids;
+    for (const auto& fileset : result.candidate_filesets) {
+        ids.push_back(fileset.front().fileset_id().hi());
+        for (const auto& sstable : fileset) {
+            EXPECT_EQ(ids.back(), sstable.fileset_id().hi());
+        }
+    }
+    return ids;
+}
+
+} // namespace
+
+// UNSHARE rewrites the filesets from the first to the last one holding a file the tablet cannot keep. The private
+// base fileset in front of a shared one stays, and so does the private fileset behind it; the rewrite leaves the base
+// level out.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_unshare_starts_at_the_first_fileset_needing_rewrite) {
+    PersistentIndexSstableMetaPB meta;
+    add_ranged_sstable(&meta, 1, 100, /*shared=*/false, "b", "c");
+    add_ranged_sstable(&meta, 2, 200, /*shared=*/true, "d", "e");
+    add_ranged_sstable(&meta, 2, 210, /*shared=*/true, "f", "g");
+    add_ranged_sstable(&meta, 3, 300, /*shared=*/false, "h", "i");
+
+    ASSIGN_OR_ABORT(auto result, LakePersistentIndexSizeTieredCompactionStrategy::pick_unshare_candidates(
+                                         meta, SstSeekRange("a", "z")));
+    EXPECT_EQ((std::vector<int64_t>{2}), candidate_fileset_ids(result));
+    ASSERT_EQ(2, result.candidate_filesets[0].size());
+    EXPECT_FALSE(result.merge_base_level);
+    EXPECT_EQ(210, result.max_max_rss_rowid);
+}
+
+// When the base fileset is shared, the rewrite starts at it and merges the base level. A private fileset between two
+// that need a rewrite is rewritten with them, since the publish replaces one contiguous run of filesets.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_unshare_from_a_shared_base_merges_the_base_level) {
+    PersistentIndexSstableMetaPB meta;
+    add_ranged_sstable(&meta, 1, 100, /*shared=*/true, "b", "c");
+    add_ranged_sstable(&meta, 2, 200, /*shared=*/false, "d", "e");
+    add_ranged_sstable(&meta, 3, 300, /*shared=*/true, "f", "g");
+    add_ranged_sstable(&meta, 4, 400, /*shared=*/false, "h", "i");
+
+    ASSIGN_OR_ABORT(auto result, LakePersistentIndexSizeTieredCompactionStrategy::pick_unshare_candidates(
+                                         meta, SstSeekRange("a", "z")));
+    EXPECT_EQ((std::vector<int64_t>{1, 2, 3}), candidate_fileset_ids(result));
+    EXPECT_TRUE(result.merge_base_level);
+    EXPECT_EQ(300, result.max_max_rss_rowid);
+}
+
+// The size-tiered pick never compacts the newest fileset, nor a lone one. UNSHARE does.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_unshare_picks_a_lone_shared_fileset) {
+    PersistentIndexSstableMetaPB meta;
+    add_ranged_sstable(&meta, 1, 100, /*shared=*/true, "b", "c");
+    add_ranged_sstable(&meta, 1, 110, /*shared=*/true, "d", "e");
+
+    ASSIGN_OR_ABORT(auto size_tiered,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(meta));
+    EXPECT_TRUE(size_tiered.candidate_filesets.empty());
+
+    ASSIGN_OR_ABORT(auto result, LakePersistentIndexSizeTieredCompactionStrategy::pick_unshare_candidates(
+                                         meta, SstSeekRange("a", "z")));
+    EXPECT_EQ((std::vector<int64_t>{1}), candidate_fileset_ids(result));
+    ASSERT_EQ(2, result.candidate_filesets[0].size());
+    EXPECT_TRUE(result.merge_base_level);
+    EXPECT_EQ(110, result.max_max_rss_rowid);
+}
+
+// A private file that reaches past the tablet range needs a rewrite too, so the rewrite can start at it.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest,
+       test_unshare_starts_at_a_private_sstable_outside_the_range) {
+    PersistentIndexSstableMetaPB meta;
+    add_ranged_sstable(&meta, 1, 100, /*shared=*/false, "b", "c");
+    // The tablet range stops before "m", so "m" itself is outside it.
+    add_ranged_sstable(&meta, 2, 200, /*shared=*/false, "d", "m");
+    add_ranged_sstable(&meta, 3, 300, /*shared=*/true, "f", "g");
+
+    ASSIGN_OR_ABORT(auto result, LakePersistentIndexSizeTieredCompactionStrategy::pick_unshare_candidates(
+                                         meta, SstSeekRange("a", "m")));
+    EXPECT_EQ((std::vector<int64_t>{2, 3}), candidate_fileset_ids(result));
+    EXPECT_FALSE(result.merge_base_level);
+    EXPECT_EQ(300, result.max_max_rss_rowid);
+}
+
+// A tablet that already owns all of its index files privately, inside its range, has nothing to rewrite. An empty
+// start key is a valid key (an empty VARCHAR primary key), so a file starting at it still declares a usable range.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest,
+       test_unshare_picks_nothing_when_every_sstable_is_private_and_in_range) {
+    PersistentIndexSstableMetaPB meta;
+    add_ranged_sstable(&meta, 1, 100, /*shared=*/false, "", "c");
+    add_ranged_sstable(&meta, 2, 200, /*shared=*/false, "d", "e");
+    add_ranged_sstable(&meta, 2, 210, /*shared=*/false, "f", "g");
+    ASSERT_TRUE(meta.sstables(0).range().has_start_key());
+
+    ASSIGN_OR_ABORT(auto result, LakePersistentIndexSizeTieredCompactionStrategy::pick_unshare_candidates(
+                                         meta, SstSeekRange("", "z")));
+    EXPECT_TRUE(result.candidate_filesets.empty());
+    EXPECT_FALSE(result.merge_base_level);
 }
 
 } // namespace starrocks::lake

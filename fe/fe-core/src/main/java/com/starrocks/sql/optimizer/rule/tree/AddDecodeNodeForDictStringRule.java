@@ -29,6 +29,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -485,6 +486,9 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                     newPrunedPredicates,
                                     scanOperator.getProjection(), scanOperator.isUsePkIndex(),
                                     scanOperator.getVectorSearchOptions());
+                    newOlapScan.setParallelRangeScan(scanOperator.isParallelRangeScan());
+                    newOlapScan.setGroupedRangeScan(scanOperator.isGroupedRangeScan());
+                    newOlapScan.setOrderedPhysicalCUniqueIds(scanOperator.getOrderedPhysicalCUniqueIds());
                     newOlapScan.setScanOptimizeOption(scanOperator.getScanOptimizeOption());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
                     newOlapScan.setGlobalDicts(globalDicts);
@@ -500,7 +504,12 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                     context.stringColumnIdToDictColumnIds))
                             .setStatistics(optExpression.getStatistics())
                             .setCost(optExpression.getCost());
-                    return visitProjectionAfter(builder.build(), context);
+                    OptExpression rewritten = builder.build();
+                    if (scanOperator.isGroupedRangeScan()) {
+                        // Dictionary encoding leaves the numeric grouping columns and their ownership unchanged.
+                        rewritten.setOutputProperty(optExpression.getOutputProperty());
+                    }
+                    return visitProjectionAfter(rewritten, context);
                 }
             }
             return visitProjectionAfter(optExpression, context);
@@ -974,6 +983,16 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     continue;
                 }
 
+                // Condition 1.1: an aggregate-state column stores a serialized aggregate state, not
+                // the values its type describes. The BE reads it with an aggregate function built
+                // from the agg state descriptor and never looks at the column type, so it would
+                // decode the dictionary codes as if they were still the original values.
+                Column aggStateCheck = scanOperator.getColRefToColumnMetaMap().get(column);
+                if (aggStateCheck != null
+                        && aggStateCheck.getAggregationType() == AggregateType.AGG_STATE_UNION) {
+                    continue;
+                }
+
                 ColumnStatistic columnStatistic =
                         GlobalStateMgr.getCurrentState().getStatisticStorage()
                                 .getColumnStatistic(table, column.getName());
@@ -987,7 +1006,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 // Condition 3: the varchar column has collected global dict
                 Column columnObj = table.getColumn(column.getName());
                 if (columnObj != null
-                        && IDictManager.getInstance().hasGlobalDict(table.getId(), columnObj.getColumnId(), version)) {
+                        && IDictManager.getInstance().hasGlobalDict(table, columnObj.getColumnId(), version)) {
                     Optional<ColumnDict> dict =
                             IDictManager.getInstance().getGlobalDict(table.getId(), columnObj.getColumnId());
                     // cache reaches capacity limit, randomly eliminate some keys

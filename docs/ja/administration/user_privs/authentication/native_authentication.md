@@ -2,9 +2,11 @@
 displayed_sidebar: docs
 description: "SQL コマンドでネイティブ（パスワードベース）認証によるユーザー作成・管理を行います。"
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ネイティブ認証
+
 
 StarRocks 内で SQL コマンドを使用して、ネイティブ認証を通じてユーザーを作成および管理します。
 
@@ -15,6 +17,8 @@ StarRocks のネイティブ認証は、パスワードベースの認証方法�
 システム定義のロール `user_admin` を持つユーザーは、StarRocks 内でユーザーの作成、変更、削除が可能です。
 
 :::
+
+StarRocks クラスターが作成されると、システムは自動的に root 権限を持つ `root` ユーザーを生成します。`root` ユーザーとロールはシステムのすべての権限を持っているため、新しいユーザーとロールを作成して、リスクのある操作を防ぐことをお勧めします。`root` ユーザーのパスワードを適切に管理してください。
 
 ## ユーザーの作成
 
@@ -60,7 +64,6 @@ ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
 > **NOTE**
 >
 > - どのユーザーも自分のパスワードを特権なしでリセットできます。
-> - `root` ユーザー自身のみがそのパスワードを設定できます。パスワードを忘れて StarRocks に接続できない場合は、[Reset lost root password](#失われた-root-パスワードのリセット) を参照してください。
 
 以下の例はどちらも `jack` のパスワードを `54321` にリセットします。
 
@@ -78,7 +81,7 @@ ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
 
 #### 失われた root パスワードのリセット
 
-`root` ユーザーのパスワードを忘れて StarRocks に接続できない場合は、次の手順に従ってリセットできます。
+`root` ユーザー自身のみがそのパスワードを設定できます。`root` ユーザーのパスワードを忘れて StarRocks に接続できない場合は、次の手順に従ってリセットできます。
 
 1. **すべての FE ノード** の設定ファイル **fe/conf/fe.conf** に次の設定項目を追加して、ユーザー認証を無効にします。
 

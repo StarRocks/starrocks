@@ -133,13 +133,12 @@ TupleDescriptor* CacheSelectScannerTest::_create_tuple_desc(SlotDesc* descs) {
     DescriptorTbl* tbl = nullptr;
     CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size)
                   .ok());
-    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
-    auto* tuple_desc = row_desc->tuple_descriptors()[0];
+    auto* tuple_desc = tbl->get_tuple_descriptor(row_tuples[0]);
     return tuple_desc;
 }
 
 TEST_F(CacheSelectScannerTest, TestUnknowFormat) {
-    SlotDesc slot_desc[] = {{"Id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+    SlotDesc slot_desc[] = {{"Id", TYPE_INT_DESC}, {""}};
     auto scanner = std::make_shared<CacheSelectScanner>();
     auto* range = _create_scan_range("jni_scan_range", 0, 0, THdfsFileFormat::UNKNOWN);
     auto* tuple_desc = _create_tuple_desc(slot_desc);

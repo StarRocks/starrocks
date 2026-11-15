@@ -1,4 +1,4 @@
--- name: test_parallel_compaction_pk_table @cloud @sequential
+-- name: test_parallel_compaction_pk_table @cloud @sequential @slow
 create database test_parallel_compaction_pk_${uuid0};
 -- result:
 -- !result
@@ -19,9 +19,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_parallel_2' and TABLE_SCHEMA='test_parallel_compaction_pk_${uuid0}';
--- result:
-11495
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -44,6 +41,7 @@ SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.table
 -- result:
 5
 -- !result
+[UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
 SELECT COUNT(*) FROM pk_parallel_2;
 -- result:
 10
@@ -64,19 +62,22 @@ SELECT * FROM pk_parallel_2 ORDER BY k1, k2;
 UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 -- result:
 -- !result
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE pk_parallel_2 COMPACT;
+function: wait_compaction_committed("pk_parallel_2", ${version_before})
+-- result:
+None
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
-SELECT sleep(30);
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
+SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
--- !result
-SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
--- result:
-3
 -- !result
 SELECT COUNT(*) FROM pk_parallel_2;
 -- result:
@@ -101,7 +102,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 DROP DATABASE test_parallel_compaction_pk_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_pk_high_parallel @cloud @sequential
+-- name: test_parallel_compaction_pk_high_parallel @cloud @sequential @slow
 create database test_parallel_compaction_pk_high_${uuid0};
 -- result:
 -- !result
@@ -122,9 +123,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_parallel_5' and TABLE_SCHEMA='test_parallel_compaction_pk_high_${uuid0}';
--- result:
-11453
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -156,6 +154,7 @@ SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.table
 -- result:
 8
 -- !result
+[UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
 SELECT COUNT(*) FROM pk_parallel_5;
 -- result:
 16
@@ -182,19 +181,22 @@ SELECT * FROM pk_parallel_5 ORDER BY k1, k2;
 UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 -- result:
 -- !result
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE pk_parallel_5 COMPACT;
+function: wait_compaction_committed("pk_parallel_5", ${version_before})
+-- result:
+None
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
-SELECT sleep(30);
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
+SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
--- !result
-SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
--- result:
-4
 -- !result
 SELECT COUNT(*) FROM pk_parallel_5;
 -- result:
@@ -225,7 +227,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 DROP DATABASE test_parallel_compaction_pk_high_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_dup_table @cloud @sequential
+-- name: test_parallel_compaction_dup_table @cloud @sequential @slow
 create database test_parallel_compaction_dup_${uuid0};
 -- result:
 -- !result
@@ -246,9 +248,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='dup_parallel' and TABLE_SCHEMA='test_parallel_compaction_dup_${uuid0}';
--- result:
-11406
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -271,6 +270,7 @@ SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.table
 -- result:
 5
 -- !result
+[UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
 SELECT COUNT(*) FROM dup_parallel;
 -- result:
 10
@@ -291,19 +291,22 @@ SELECT * FROM dup_parallel ORDER BY k1, k2;
 UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 -- result:
 -- !result
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE dup_parallel COMPACT;
+function: wait_compaction_committed("dup_parallel", ${version_before})
+-- result:
+None
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
-SELECT sleep(30);
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
+SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
--- !result
-SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
--- result:
-3
 -- !result
 SELECT COUNT(*) FROM dup_parallel;
 -- result:
@@ -328,7 +331,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 DROP DATABASE test_parallel_compaction_dup_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_agg_table @cloud @sequential
+-- name: test_parallel_compaction_agg_table @cloud @sequential @slow
 create database test_parallel_compaction_agg_${uuid0};
 -- result:
 -- !result
@@ -349,9 +352,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='agg_parallel' and TABLE_SCHEMA='test_parallel_compaction_agg_${uuid0}';
--- result:
-11354
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -374,6 +374,7 @@ SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.table
 -- result:
 5
 -- !result
+[UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
 SELECT COUNT(*) FROM agg_parallel;
 -- result:
 6
@@ -390,19 +391,22 @@ SELECT * FROM agg_parallel ORDER BY k1, k2;
 UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 -- result:
 -- !result
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE agg_parallel COMPACT;
+function: wait_compaction_committed("agg_parallel", ${version_before})
+-- result:
+None
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
-SELECT sleep(30);
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
+SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
--- !result
-SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
--- result:
-3
 -- !result
 SELECT COUNT(*) FROM agg_parallel;
 -- result:
@@ -423,7 +427,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 DROP DATABASE test_parallel_compaction_agg_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_unique_table @cloud @sequential
+-- name: test_parallel_compaction_unique_table @cloud @sequential @slow
 create database test_parallel_compaction_uniq_${uuid0};
 -- result:
 -- !result
@@ -444,9 +448,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='uniq_parallel' and TABLE_SCHEMA='test_parallel_compaction_uniq_${uuid0}';
--- result:
-11547
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -469,6 +470,7 @@ SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.table
 -- result:
 5
 -- !result
+[UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
 SELECT COUNT(*) FROM uniq_parallel;
 -- result:
 7
@@ -486,19 +488,22 @@ SELECT * FROM uniq_parallel ORDER BY k1, k2;
 UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 -- result:
 -- !result
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE uniq_parallel COMPACT;
+function: wait_compaction_committed("uniq_parallel", ${version_before})
+-- result:
+None
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
-SELECT sleep(30);
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
+SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
--- !result
-SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
--- result:
-3
 -- !result
 SELECT COUNT(*) FROM uniq_parallel;
 -- result:
@@ -520,7 +525,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 DROP DATABASE test_parallel_compaction_uniq_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_disabled @cloud @sequential
+-- name: test_parallel_compaction_disabled @cloud @sequential @slow
 create database test_parallel_compaction_disabled_${uuid0};
 -- result:
 -- !result
@@ -541,9 +546,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_no_parallel' and TABLE_SCHEMA='test_parallel_compaction_disabled_${uuid0}';
--- result:
-11388
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -556,13 +558,19 @@ INSERT INTO pk_no_parallel VALUES (3, 3, 'c', 300), (4, 4, 'd', 400);
 INSERT INTO pk_no_parallel VALUES (5, 5, 'e', 500), (6, 6, 'f', 600);
 -- result:
 -- !result
+INSERT INTO pk_no_parallel VALUES (7, 7, 'g', 700), (8, 8, 'h', 800);
+-- result:
+-- !result
+INSERT INTO pk_no_parallel VALUES (9, 9, 'i', 900), (10, 10, 'j', 1000);
+-- result:
+-- !result
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
 -- result:
-3
+5
 -- !result
 SELECT COUNT(*) FROM pk_no_parallel;
 -- result:
-6
+10
 -- !result
 SELECT * FROM pk_no_parallel ORDER BY k1, k2;
 -- result:
@@ -572,24 +580,27 @@ SELECT * FROM pk_no_parallel ORDER BY k1, k2;
 4	4	d	400
 5	5	e	500
 6	6	f	600
+7	7	g	700
+8	8	h	800
+9	9	i	900
+10	10	j	1000
 -- !result
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE pk_no_parallel COMPACT;
+function: wait_compaction_committed("pk_no_parallel", ${version_before})
 -- result:
--- !result
-SELECT sleep(30);
--- result:
-1
+None
 -- !result
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
 -- result:
-3
+1
 -- !result
 SELECT COUNT(*) FROM pk_no_parallel;
 -- result:
-6
+10
 -- !result
 SELECT * FROM pk_no_parallel ORDER BY k1, k2;
 -- result:
@@ -599,11 +610,15 @@ SELECT * FROM pk_no_parallel ORDER BY k1, k2;
 4	4	d	400
 5	5	e	500
 6	6	f	600
+7	7	g	700
+8	8	h	800
+9	9	i	900
+10	10	j	1000
 -- !result
 DROP DATABASE test_parallel_compaction_disabled_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_alter_property @cloud @sequential
+-- name: test_parallel_compaction_alter_property @cloud @sequential @slow
 create database test_parallel_compaction_alter_${uuid0};
 -- result:
 -- !result
@@ -730,7 +745,7 @@ PROPERTIES (
 DROP DATABASE test_parallel_compaction_alter_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_pk_with_updates @cloud @sequential
+-- name: test_parallel_compaction_pk_with_updates @cloud @sequential @slow
 create database test_parallel_compaction_pk_upd_${uuid0};
 -- result:
 -- !result
@@ -751,9 +766,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_with_updates' and TABLE_SCHEMA='test_parallel_compaction_pk_upd_${uuid0}';
--- result:
-11523
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -782,6 +794,7 @@ SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.table
 -- result:
 7
 -- !result
+[UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
 SELECT COUNT(*) FROM pk_with_updates;
 -- result:
 7
@@ -799,19 +812,22 @@ SELECT * FROM pk_with_updates ORDER BY k1, k2;
 UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 -- result:
 -- !result
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE pk_with_updates COMPACT;
+function: wait_compaction_committed("pk_with_updates", ${version_before})
+-- result:
+None
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
-SELECT sleep(30);
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
+SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
--- !result
-SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
--- result:
-4
 -- !result
 SELECT COUNT(*) FROM pk_with_updates;
 -- result:
@@ -833,7 +849,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 DROP DATABASE test_parallel_compaction_pk_upd_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_pk_large_data @cloud @sequential
+-- name: test_parallel_compaction_pk_large_data @cloud @sequential @slow
 create database test_parallel_compaction_pk_large_${uuid0};
 -- result:
 -- !result
@@ -853,9 +869,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_large_data' and TABLE_SCHEMA='test_parallel_compaction_pk_large_${uuid0}';
--- result:
-11473
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -878,6 +891,7 @@ SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.table
 -- result:
 5
 -- !result
+[UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
 SELECT COUNT(*) FROM pk_large_data;
 -- result:
 5000
@@ -889,19 +903,22 @@ SELECT MIN(k1), MAX(k1) FROM pk_large_data;
 UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 -- result:
 -- !result
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE pk_large_data COMPACT;
+function: wait_compaction_committed("pk_large_data", ${version_before})
+-- result:
+None
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
-SELECT sleep(60);
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
+SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
--- !result
-SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
--- result:
-3
 -- !result
 SELECT COUNT(*) FROM pk_large_data;
 -- result:
@@ -917,7 +934,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 DROP DATABASE test_parallel_compaction_pk_large_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_multiple_buckets @cloud @sequential
+-- name: test_parallel_compaction_multiple_buckets @cloud @sequential @slow
 create database test_parallel_compaction_buckets_${uuid0};
 -- result:
 -- !result
@@ -938,9 +955,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_multi_buckets' and TABLE_SCHEMA='test_parallel_compaction_buckets_${uuid0}';
--- result:
-11423
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -963,6 +977,7 @@ SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.
 -- result:
 10
 -- !result
+[UC]rowset_before=SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
 SELECT COUNT(*) FROM pk_multi_buckets;
 -- result:
 15
@@ -988,19 +1003,22 @@ SELECT * FROM pk_multi_buckets ORDER BY k1, k2;
 UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 -- result:
 -- !result
+[UC]version_before=SELECT MAX(MAX_VERSION) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE pk_multi_buckets COMPACT;
+function: wait_compaction_committed("pk_multi_buckets", ${version_before})
+-- result:
+None
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
-SELECT sleep(30);
+[UC]rowset_after=SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
+SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
--- !result
-SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
--- result:
-8
 -- !result
 SELECT COUNT(*) FROM pk_multi_buckets;
 -- result:

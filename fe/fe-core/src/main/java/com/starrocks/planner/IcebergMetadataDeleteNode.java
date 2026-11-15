@@ -78,4 +78,11 @@ public class IcebergMetadataDeleteNode extends PlanNode {
     public ScalarOperator getPredicate() {
         return predicate;
     }
+
+    @Override
+    public boolean canEvaluateRuntimeFilter() {
+        // Decomposes into an iceberg metadata-delete operator, which never calls
+        // Operator::eval_runtime_bloom_filters(): a filter parked here is silently never applied.
+        return false;
+    }
 }

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW DATABASES lists databases in your current StarRocks cluster or an external data source."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW DATABASES

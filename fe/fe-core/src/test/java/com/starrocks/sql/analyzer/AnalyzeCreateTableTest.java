@@ -507,6 +507,47 @@ public class AnalyzeCreateTableTest {
     }
 
     @Test
+    public void testIcebergPartitionTransformOnDecimalsWithDifferentScales() throws Exception {
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        AnalyzeTestUtil.getStarRocksAssert().withCatalog(createIcebergCatalogStmt);
+
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, "iceberg_catalog", "iceberg_db");
+                result = new Database();
+                minTimes = 0;
+
+                metadata.tableExists((ConnectContext) any, "iceberg_catalog", "iceberg_db", anyString);
+                result = false;
+            }
+        };
+
+        AnalyzeTestUtil.getConnectContext().setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        AnalyzeTestUtil.getConnectContext().setDatabase("test");
+
+        // Analyzing a transform on one decimal column must not prevent later analyses on
+        // decimal columns with a different scale in the same FE process: the resolved builtin
+        // is a shared singleton whose wildcard decimal signature has to stay intact.
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d1 decimal(18, 4)) partition by truncate(d1, 5)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d2 decimal(12, 2)) partition by truncate(d2, 3)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d1 decimal(12, 2)) partition by bucket(d1, 8)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d2 decimal(18, 4)) partition by bucket(d2, 8)");
+        // decimal128 goes through a separate builtin singleton
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d1 decimal(38, 6)) partition by truncate(d1, 5)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d2 decimal(30, 2)) partition by truncate(d2, 3)");
+
+        AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
+    }
+
+    @Test
     public void testGeneratedColumnWithExternalTable() throws Exception {
         analyzeFail("create external table ex_hive_tbl0 (col_tinyint tinyint null comment \"column tinyint\"," +
                 "col_varchar varchar(5), col_boolean boolean null comment \"column boolean\", col_new int" +

@@ -15,6 +15,7 @@
 #include "http/action/greplog_action.h"
 
 #include "common/greplog.h"
+#include "http/utils.h"
 #include "platform/http/http_channel.h"
 #include "platform/http/http_headers.h"
 #include "platform/http/http_request.h"
@@ -24,30 +25,18 @@ namespace starrocks {
 
 const int64_t GREP_LOG_LIMIT = 1000000;
 
-Status get_int64_param(HttpRequest* req, const std::string& name, int64_t* value) {
-    const std::string& str_value = req->param(name);
-    if (!str_value.empty()) {
-        try {
-            *value = std::stoll(str_value);
-        } catch (const std::exception& e) {
-            return Status::InternalError("Invalid param " + name + ": " + str_value);
-        }
-    }
-    return Status::OK();
-}
-
 void GrepLogAction::handle(HttpRequest* req) {
     if (req->method() != HttpMethod::GET) {
         HttpChannel::send_reply(req, HttpStatus::METHOD_NOT_ALLOWED, "Method Not Allowed");
         return;
     }
     int64_t start_ts = 0;
-    int64_t end_ts = 0;
-    if (!get_int64_param(req, "start_ts", &start_ts).ok()) {
+    if (!req->param("start_ts").empty() && !parse_int64_param("start_ts", req->param("start_ts"), &start_ts).ok()) {
         HttpChannel::send_reply(req, HttpStatus::BAD_REQUEST, "Invalid param start_ts");
         return;
     }
-    if (!get_int64_param(req, "end_ts", &end_ts).ok()) {
+    int64_t end_ts = 0;
+    if (!req->param("end_ts").empty() && !parse_int64_param("end_ts", req->param("end_ts"), &end_ts).ok()) {
         HttpChannel::send_reply(req, HttpStatus::BAD_REQUEST, "Invalid param end_ts");
         return;
     }
@@ -57,11 +46,8 @@ void GrepLogAction::handle(HttpRequest* req) {
         level = "I";
     }
     int64_t limit = GREP_LOG_LIMIT;
-    if (!get_int64_param(req, "limit", &limit).ok()) {
-        HttpChannel::send_reply(req, HttpStatus::BAD_REQUEST, "Invalid param limit");
-        return;
-    }
-    if (limit <= 0 || limit > GREP_LOG_LIMIT) {
+    if (!req->param("limit").empty() &&
+        !parse_int64_param("limit", req->param("limit"), &limit, 1, GREP_LOG_LIMIT).ok()) {
         HttpChannel::send_reply(req, HttpStatus::BAD_REQUEST, "Invalid param limit");
         return;
     }

@@ -22,6 +22,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergEncryption;
 import com.starrocks.connector.iceberg.IcebergPartitionData;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.qe.ShowResultSet;
@@ -146,6 +147,14 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         }
 
         Table table = context.table();
+        // Registering files written elsewhere bypasses the sinks, which are where an encrypted table's data
+        // gets its per-file keys: the files would be committed with no key_metadata and sit in a table
+        // configured to be encrypted as plaintext. Refuse rather than let the table silently hold them.
+        if (IcebergEncryption.declaresEncryption(table.properties())) {
+            throw new StarRocksConnectorException(
+                    "%s is not supported on encrypted Iceberg table %s: the files it registers are not encrypted "
+                            + "with keys recorded in this table", "add_files", table.name());
+        }
         PartitionSpec spec = table.spec();
         if (spec.isPartitioned() && spec.fields().stream().anyMatch(f -> !f.transform().isIdentity())) {
             throw new StarRocksConnectorException(
@@ -176,13 +185,7 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                                       String location, boolean recursive, String fileFormat) throws IOException {
         LOGGER.info("Adding files from location: {}", location);
 
-        // Get the file system for the location
-        URI locationUri = new Path(location).toUri();
-        FileSystem fileSystem = FileSystem.get(locationUri,
-                context.hdfsEnvironment().getConfiguration());
-
-        // Discover data files in the location
-        List<DataFile> dataFiles = discoverDataFiles(context, table, fileSystem, location, recursive, fileFormat);
+        List<DataFile> dataFiles = discoverFilesFromLocation(context, table, location, recursive, fileFormat);
 
         if (dataFiles.isEmpty()) {
             LOGGER.warn("No data files found at location: {}", location);
@@ -198,6 +201,14 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         // Commit the transaction
         appendFiles.commit();
         LOGGER.info("Successfully added {} files to table", dataFiles.size());
+    }
+
+    // Also used by add_equality_delete_files, which turns each discovered file into an equality delete file.
+    List<DataFile> discoverFilesFromLocation(IcebergTableProcedureContext context, Table table, String location,
+                                             boolean recursive, String fileFormat) throws IOException {
+        URI locationUri = new Path(location).toUri();
+        FileSystem fileSystem = FileSystem.get(locationUri, context.hdfsEnvironment().getConfiguration());
+        return discoverDataFiles(context, table, fileSystem, location, recursive, fileFormat);
     }
 
     private List<DataFile> discoverDataFiles(IcebergTableProcedureContext context, Table table, FileSystem fileSystem,

@@ -2,6 +2,7 @@
 keywords: ['xiugai'] 
 displayed_sidebar: docs
 description: "修改处于 PAUSED 状态的 Routine Load 导入作业。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER ROUTINE LOAD
@@ -97,7 +98,7 @@ FROM data_source
 
 ## 示例
 
-1. 将导入作业的属性 `desired_concurrent_number` 调大至 `5`，以提高导入任务的并行度。任务的并行度的详细说明，参见[如何提高导入性能](../../../../faq/loading/Routine_load_faq.md#1-如何提高导入性能)。
+1. 将导入作业的属性 `desired_concurrent_number` 调大至 `5`，以提高导入任务的并行度。任务的并行度的详细说明，参见[如何提高导入性能](../../../../faq/data_migration/loading/Routine_load_faq.md#1-如何提高导入性能)。
 
     ```SQL
     ALTER ROUTINE LOAD FOR example_tbl_ordertest

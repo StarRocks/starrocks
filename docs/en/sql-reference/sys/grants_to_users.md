@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "System view showing the privileges granted to each user in StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # grants_to_users
@@ -9,7 +10,7 @@ You can view the privileges granted to users by querying the view `grants_to_use
 
 :::note
 
-By default, only users or roles with the `user_admin` role can access this view. You can grant other users the SELECT privilege on this view using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md).
+By default, only users or roles with the `user_admin` role can access this view. You can grant other users the SELECT privilege on this view using [GRANT](../sql-statements/account-management/GRANT.md).
 
 :::
 

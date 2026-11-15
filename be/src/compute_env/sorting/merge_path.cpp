@@ -624,7 +624,7 @@ void detail::LeafNode::process_input(const int32_t parallel_idx) {
 }
 
 ChunkPtr detail::LeafNode::_generate_ordinal(const size_t chunk_id, const size_t num_rows) {
-    static TypeDescriptor s_type_desc = TypeDescriptor(TYPE_BIGINT);
+    static TypeDescriptor s_type_desc = TYPE_BIGINT_DESC;
     static Chunk::SlotHashMap s_slot_map = {{0, 0}};
     MutableColumnPtr ordinal_column = ColumnHelper::create_column(s_type_desc, false);
     ordinal_column->resize(num_rows);
@@ -644,7 +644,7 @@ ChunkPtr detail::LeafNode::_generate_ordinal(const size_t chunk_id, const size_t
 
 MergePathCascadeMerger::MergePathCascadeMerger(const size_t chunk_size, const int32_t degree_of_parallelism,
                                                std::vector<ExprContext*> sort_exprs, const SortDescs& sort_descs,
-                                               const TupleDescriptor* tuple_desc, const TTopNType::type topn_type,
+                                               RecordDescriptor record_desc, const TTopNType::type topn_type,
                                                const int64_t offset, const int64_t limit,
                                                std::vector<MergePathChunkProvider> chunk_providers,
                                                TLateMaterializeMode::type mode)
@@ -653,7 +653,7 @@ MergePathCascadeMerger::MergePathCascadeMerger(const size_t chunk_size, const in
           _degree_of_parallelism(degree_of_parallelism),
           _sort_exprs(std::move(sort_exprs)),
           _sort_descs(sort_descs),
-          _tuple_desc(tuple_desc),
+          _record_desc(std::move(record_desc)),
           _topn_type(topn_type),
           _offset(offset),
           _limit(limit),
@@ -1157,7 +1157,7 @@ void MergePathCascadeMerger::_init_late_materialization() {
         }
     }
     size_t non_orderby_materialized_cost_per_level = 0;
-    for (auto* slot : _tuple_desc->slots()) {
+    for (const auto* slot : _record_desc.slots()) {
         if (early_materialized_slots.count(slot->id()) > 0) {
             continue;
         }
@@ -1189,7 +1189,7 @@ void MergePathCascadeMerger::_init_late_materialization() {
     } else {
         locality_decay_factor = 5.5;
     }
-    static TypeDescriptor s_auxiliary_column_type = TypeDescriptor(TYPE_BIGINT);
+    static TypeDescriptor s_auxiliary_column_type = TYPE_BIGINT_DESC;
     const size_t total_late_materialized_cost = s_auxiliary_column_type.get_slot_size() * level_size +
                                                 non_orderby_materialized_cost_per_level * locality_decay_factor;
 

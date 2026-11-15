@@ -78,6 +78,24 @@ public class PaimonViewTest {
     }
 
     @Test
+    public void testFormatRelationsQualifiesTablesAfterCte() {
+        // A leading CTE reference must not short-circuit qualification of the remaining real tables
+        PaimonView view = new PaimonView(1L, "paimon_catalog", "sample_db", "my_view",
+                Collections.emptyList(), "WITH cte AS (SELECT 1) SELECT * FROM cte, t");
+
+        TableRelation cteRelation = new TableRelation(new TableName(null, null, "cte"));
+        TableRelation tableRelation = new TableRelation(new TableName(null, null, "t"));
+        List<TableRelation> relations = Lists.newArrayList(cteRelation, tableRelation);
+
+        view.formatRelations(relations, Lists.newArrayList("cte"));
+
+        assertNull(cteRelation.getName().getCatalog());
+        assertNull(cteRelation.getName().getDb());
+        assertEquals("paimon_catalog", tableRelation.getName().getCatalog());
+        assertEquals("sample_db", tableRelation.getName().getDb());
+    }
+
+    @Test
     public void testFormatRelationsWithDbButNoCatalog() {
         // Table reference with db but no catalog should get paimon catalog
         PaimonView view = new PaimonView(1L, "paimon_catalog", "sample_db", "my_view",

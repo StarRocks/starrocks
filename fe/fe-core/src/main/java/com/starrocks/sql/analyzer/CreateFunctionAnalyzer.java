@@ -126,6 +126,9 @@ public class CreateFunctionAnalyzer {
             }
             slotRef.setType(argsMap.get(slotRef.getColName()));
         });
+        SavedSqlGeoValidator.validate(expr);
+        AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                expr, AIFunctionUsageAnalyzer.PlacementContext.SQL_UDF_BODY);
 
         FunctionName functionName = FunctionRefAnalyzer.resolveFunctionName(
                 stmt.getFunctionRef(),

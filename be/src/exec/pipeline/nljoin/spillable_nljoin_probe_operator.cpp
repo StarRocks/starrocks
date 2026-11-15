@@ -233,18 +233,14 @@ void SpillableNLJoinProbeOperator::_init_chunk_stream() const {
     }
 }
 
-void SpillableNLJoinProbeOperatorFactory::_init_row_desc() {
-    for (auto& tuple_desc : _left_row_desc.tuple_descriptors()) {
-        for (auto& slot : tuple_desc->slots()) {
-            _col_types.emplace_back(slot);
-            _probe_column_count++;
-        }
+void SpillableNLJoinProbeOperatorFactory::_init_col_types() {
+    for (auto* slot : _left_record_desc.slots()) {
+        _col_types.emplace_back(slot);
+        _probe_column_count++;
     }
-    for (auto& tuple_desc : _right_row_desc.tuple_descriptors()) {
-        for (auto& slot : tuple_desc->slots()) {
-            _col_types.emplace_back(slot);
-            _build_column_count++;
-        }
+    for (auto* slot : _right_record_desc.slots()) {
+        _col_types.emplace_back(slot);
+        _build_column_count++;
     }
 }
 
@@ -259,7 +255,7 @@ Status SpillableNLJoinProbeOperatorFactory::prepare(RuntimeState* state) {
 
     _cross_join_context->ref();
 
-    _init_row_desc();
+    _init_col_types();
     RETURN_IF_ERROR(ExprExecutor::prepare(_join_conjuncts, state));
     RETURN_IF_ERROR(ExprExecutor::open(_join_conjuncts, state));
     RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, state));

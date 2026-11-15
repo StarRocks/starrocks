@@ -90,6 +90,33 @@ class StatisticSQLBuilderTest {
     }
 
     @Test
+    void buildQueryExternalStatPartitionsNotUpdatedSinceMatchesBothUuidsAndGrace() {
+        String hashed = StatisticUtils.hashTableUuidForPkStorage(TABLE_UUID);
+        String sql = StatisticSQLBuilder.buildQueryExternalStatPartitionsNotUpdatedSinceSQL(TABLE_UUID,
+                ImmutableList.of("c1", "c'2"), 86400);
+        Assertions.assertTrue(sql.startsWith("SELECT partition_name FROM external_column_statistics"), sql);
+        Assertions.assertTrue(sql.contains("table_uuid in ('" + hashed + "', '" + TABLE_UUID + "')"), sql);
+        Assertions.assertTrue(sql.contains("AND COLUMN_NAME IN ('c1', 'c''2') GROUP BY partition_name"), sql);
+        Assertions.assertTrue(sql.endsWith("HAVING max(update_time) < date_sub(now(), INTERVAL 86400 SECOND)"), sql);
+    }
+
+    @Test
+    void buildDropExternalStatSQLForDroppedPartitionsMatchesBothUuidsAndEscapes() {
+        String trickyUUID = "iceberg.db.o'brien\\table.uuid";
+        String hashed = StatisticUtils.hashTableUuidForPkStorage(trickyUUID);
+        String sql = StatisticSQLBuilder.buildDropExternalStatSQLForDroppedPartitions(
+                trickyUUID, ImmutableList.of("p'1", "dt=2024-01-01"), ImmutableList.of("c1", "c\\2"));
+        Assertions.assertTrue(sql.startsWith("DELETE FROM external_column_statistics WHERE "), sql);
+        Assertions.assertTrue(sql.contains("table_uuid in ('" + hashed + "', 'iceberg.db.o''brien\\\\table.uuid')"),
+                "dropped-partition delete must match both the hashed and the raw uuid: " + sql);
+        Assertions.assertTrue(sql.contains("PARTITION_NAME IN ('p''1', 'dt=2024-01-01')"), sql);
+        // Only the job's columns, whose cache the job refreshes.
+        Assertions.assertTrue(sql.endsWith("COLUMN_NAME IN ('c1', 'c\\\\2')"), sql);
+        // Key columns only: the shared-data statistics table is UNIQUE_KEYS, whose DELETE rejects anything else.
+        Assertions.assertFalse(sql.contains("update_time"), sql);
+    }
+
+    @Test
     void buildDropExternalHistogramSQLForRawUuidOnlyMatchesRawUuid() {
         String hashed = StatisticUtils.hashTableUuidForPkStorage(TABLE_UUID);
         String sql = StatisticSQLBuilder.buildDropExternalHistogramSQLForRawUuid(TABLE_UUID, ImmutableList.of("col1"));
@@ -97,6 +124,24 @@ class StatisticSQLBuilderTest {
                 "cleanup delete must target only the raw uuid: " + sql);
         Assertions.assertFalse(sql.contains(hashed),
                 "cleanup delete must never also match the hashed uuid (it holds the fresh data): " + sql);
+    }
+
+    // The existence checks must cover exactly the rows the raw-keyed cleanup DELETEs would remove: the raw uuid only
+    // (never the hash), the same partitions and columns, filtering on key columns only.
+    @Test
+    void existsChecksMatchTheRawKeyedCleanupScope() {
+        String hashed = StatisticUtils.hashTableUuidForPkStorage(TABLE_UUID);
+        String sql = StatisticSQLBuilder.buildExistsExternalStatRawPartitionsSQL(
+                TABLE_UUID, ImmutableList.of("p1", "p'2"), ImmutableList.of("col1", "col2"));
+        Assertions.assertEquals("SELECT 1 FROM _statistics_.external_column_statistics WHERE TABLE_UUID = '" +
+                TABLE_UUID + "' AND PARTITION_NAME IN ('p1', 'p''2') AND COLUMN_NAME IN ('col1', 'col2') LIMIT 1", sql);
+        Assertions.assertFalse(sql.contains(hashed), sql);
+
+        String histogramSql = StatisticSQLBuilder.buildExistsExternalHistogramRawColumnsSQL(
+                TABLE_UUID, ImmutableList.of("c'1", "c2"));
+        Assertions.assertEquals("SELECT 1 FROM _statistics_.external_histogram_statistics WHERE TABLE_UUID = '" +
+                TABLE_UUID + "' AND COLUMN_NAME IN ('c''1', 'c2') LIMIT 1", histogramSql);
+        Assertions.assertFalse(histogramSql.contains(hashed), histogramSql);
     }
 
     @Test
@@ -144,5 +189,20 @@ class StatisticSQLBuilderTest {
         Assertions.assertTrue(sql.contains("TABLE_UUID = 'iceberg.db.o''brien\\\\table.uuid'"), sql);
         Assertions.assertTrue(sql.contains("PARTITION_NAME IN ('p''1')"), sql);
         Assertions.assertTrue(sql.contains("COLUMN_NAME IN ('c\\\\1')"), sql);
+    }
+
+    @Test
+    void nameBasedDeletesEscapeNames() {
+        String sql = StatisticSQLBuilder.buildDropExternalStatSQL("ice'berg", "d'b", "o'brien\\table");
+        Assertions.assertTrue(sql.contains("CATALOG_NAME = 'ice''berg'"), sql);
+        Assertions.assertTrue(sql.contains("DB_NAME = 'd''b'"), sql);
+        Assertions.assertTrue(sql.contains("TABLE_NAME = 'o''brien\\\\table'"), sql);
+
+        String histogramSql = StatisticSQLBuilder.buildDropExternalHistogramSQL("ice'berg", "d'b", "o'brien",
+                ImmutableList.of("c'1"));
+        Assertions.assertTrue(histogramSql.contains("catalog_name = 'ice''berg'"), histogramSql);
+        Assertions.assertTrue(histogramSql.contains("db_name = 'd''b'"), histogramSql);
+        Assertions.assertTrue(histogramSql.contains("table_name = 'o''brien'"), histogramSql);
+        Assertions.assertTrue(histogramSql.contains("column_name in ('c''1')"), histogramSql);
     }
 }

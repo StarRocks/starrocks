@@ -1,6 +1,8 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "FE ノードが例外に遭遇した場合に StarRocks クラスター内のメタデータをリカバリーする方法。"
+products: [oss, enterprise, anywhere]
 ---
 
 # メタデータのリカバリー
@@ -75,7 +77,7 @@ recoveryTracker should overlap or follow on disk last VLSN of 6,684,650 recovery
 :::tip
 
 - このバグは StarRocks v3.1 で修正されています。この問題を回避するには、クラスターを v3.1 以降にアップグレードしてください。
-- この解決策は、FE ノードの半数以上がこの問題に遭遇した場合には適用できません。[最後の手段](#7-measure-of-the-last-resort) に従って問題を修正する必要があります。
+- この解決策は、FE ノードの半数以上がこの問題に遭遇した場合には適用できません。[最後の手段](#10-最後の手段) に従って問題を修正する必要があります。
 
 :::
 
@@ -718,6 +720,6 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
 
 :::
 
-- [bdbje_reset_election_group](./management/FE_configuration.md#bdbje_reset_election_group)
-- [metadata_enable_recovery_mode](./management/FE_configuration.md#metadata_enable_recovery_mode)
-- [metadata_ignore_unknown_operation_type](./management/FE_configuration.md#metadata_ignore_unknown_operation_type)
+- [bdbje_reset_election_group](./configuration/FE_parameters/FE_parameters.md#bdbje_reset_election_group)
+- [metadata_enable_recovery_mode](./configuration/FE_parameters/FE_parameters.md#metadata_enable_recovery_mode)
+- [metadata_ignore_unknown_operation_type](./configuration/FE_parameters/FE_parameters.md#metadata_ignore_unknown_operation_type)

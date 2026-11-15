@@ -45,11 +45,13 @@ set(COMPUTE_ENV_SPILL_TEST_FILES
     load_spill/load_chunk_spiller_test.cpp
     load_spill/load_spill_block_manager_test.cpp
     load_spill/load_spill_block_merge_executor_test.cpp
+    spill/dir_manager_test.cpp
     spill/operator_mem_resource_manager_test.cpp
     spill/query_spill_manager_test.cpp
     spill/spill_block_manager_test.cpp
     spill/spill_metrics_test.cpp
     spill/spill_test.cpp
+    spill/nested_geo_serde_test.cpp
 )
 
 set(COMPUTE_ENV_STAROS_TEST_FILES
@@ -66,18 +68,22 @@ if ("${USE_STAROS}" STREQUAL "ON")
 endif()
 
 add_executable(compute_env_test
+        ai_executor_test.cpp
+        arrow_io_thread_pool_test.cpp
         buffer_control_block_test.cpp
         compute_env_test.cpp
         compute_env_test_main.cpp
         data_stream_mgr_test.cpp
         fragment_dict_state_test.cpp
         load/load_stream_mgr_test.cpp
+        load/stream_context_mgr_test.cpp
         load/stream_load_context_test.cpp
         load/stream_load_metrics_test.cpp
         load/stream_load_pipe_test.cpp
         load/time_bounded_stream_load_pipe_test.cpp
         load_path_state_helper_test.cpp
         load_path_mgr_test.cpp
+        local_pass_through_buffer_test.cpp
         profile_report_worker_test.cpp
         query/file_scan_split_context_test.cpp
         query/fragment_runtime_state_test.cpp

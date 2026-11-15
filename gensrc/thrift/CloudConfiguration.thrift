@@ -35,4 +35,11 @@ struct TCloudConfiguration {
     2: optional list<TCloudProperty> deprecated_cloud_properties; // Deprecated
     3: optional map<string, string> cloud_properties;
     4: optional bool azure_use_native_sdk;
+    // Set only on credentials the catalog vends per table with a lifetime (Iceberg REST vended credentials).
+    // Epoch millis, FE clock: once it passes, the backend asks the coordinator for a newer configuration through
+    // FrontendService.refreshScanCredentials and keeps using this one until it gets it. Unset means never refresh.
+    5: optional i64 refresh_after_ms;
+    // Random per scan node, sent with refresh_after_ms: the backend returns it in the refresh request, so only a
+    // holder of these credentials can ask for their renewal.
+    6: optional string refresh_token;
 }

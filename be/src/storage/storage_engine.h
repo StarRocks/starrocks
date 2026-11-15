@@ -67,10 +67,6 @@ namespace bthread {
 class Executor;
 }
 
-namespace starrocks::lake {
-class LocalPkIndexManager;
-} // namespace starrocks::lake
-
 namespace starrocks {
 
 class DataDir;
@@ -257,10 +253,6 @@ public:
 
     UpdateManager* update_manager() { return _update_manager.get(); }
 
-#ifdef USE_STAROS
-    lake::LocalPkIndexManager* local_pk_index_manager() { return _local_pk_index_manager.get(); }
-#endif
-
     bool check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id);
 
     RowsetId next_rowset_id() { return _rowset_id_generator->next_id(); };
@@ -323,8 +315,6 @@ public:
 
     bool is_as_cn() { return !_options.need_write_cluster_id; }
 
-    bool enable_light_pk_compaction_publish();
-
 protected:
     static StorageEngine* _s_instance;
 
@@ -335,6 +325,7 @@ protected:
 private:
     // Friend class for testing
     friend class StorageEngineCompactionTest;
+    friend class StorageEngineCacheExpireTest;
     friend class TabletUpdatesTest;
 
     // Instance should be inited from `static open()`
@@ -363,9 +354,11 @@ private:
 
     // All these xxx_callback() functions are for Background threads
     // update cache expire thread
+    void _expire_caches(int64_t vector_cache_now);
     void* _update_cache_expire_thread_callback(void* arg);
     // update cache evict thread
     void* _update_cache_evict_thread_callback(void* arg);
+    void* _lake_metacache_adjust_thread_callback(void* arg);
 
     // unused rowset monitor thread
     void* _unused_rowset_monitor_thread_callback(void* arg);
@@ -438,6 +431,8 @@ private:
     // thread to expire update cache;
     std::thread _update_cache_expire_thread;
     std::thread _update_cache_evict_thread;
+    // thread to shrink and regrow the lake metadata caches with the process memory usage
+    std::thread _lake_metacache_adjust_thread;
     std::thread _unused_rowset_monitor_thread;
     // thread to monitor snapshot expiry
     std::thread _garbage_sweeper_thread;
@@ -531,10 +526,6 @@ private:
     std::priority_queue<std::pair<std::chrono::steady_clock::time_point, int64_t>,
                         std::vector<std::pair<std::chrono::steady_clock::time_point, int64_t>>, std::greater<>>
             _schedule_apply_tasks;
-
-#ifdef USE_STAROS
-    std::unique_ptr<lake::LocalPkIndexManager> _local_pk_index_manager;
-#endif
 };
 
 /// Load min_garbage_sweep_interval and max_garbage_sweep_interval from config,

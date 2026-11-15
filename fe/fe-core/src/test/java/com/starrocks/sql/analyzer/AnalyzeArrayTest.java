@@ -91,4 +91,21 @@ public class AnalyzeArrayTest {
         analyzeSuccess("select null_or_empty([1, 2, 3])");
         analyzeSuccess("select null_or_empty([[1, 2], [1, 4]])");
     }
+
+    @Test
+    public void testUntypedNullInArrayPosition() {
+        // An untyped NULL reaches resolvePolymorphicArrayFunction as NullType. Casting it to ArrayType
+        // threw ClassCastException whenever the element argument was a complex type, even though the
+        // same call with a scalar element already resolved.
+        analyzeSuccess("select array_contains(NULL, 1)");
+        analyzeSuccess("select array_contains(NULL, 'x')");
+        analyzeSuccess("select array_contains(NULL, NULL)");
+        analyzeSuccess("select array_contains(NULL, [1, 2])");
+        analyzeSuccess("select array_contains(NULL, row(20, 'world'))");
+        analyzeSuccess("select array_position(NULL, 1)");
+        analyzeSuccess("select array_position(NULL, [1, 2])");
+        // Typed arrays and a NULL element keep working.
+        analyzeSuccess("select array_contains([1, 2], NULL)");
+        analyzeSuccess("select array_contains(cast(NULL as array<int>), 1)");
+    }
 }

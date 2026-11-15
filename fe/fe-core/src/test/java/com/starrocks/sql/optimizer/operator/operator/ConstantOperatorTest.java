@@ -15,16 +15,65 @@
 package com.starrocks.sql.optimizer.operator.operator;
 
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 public class ConstantOperatorTest {
+    @Test
+    public void testCastToCharTruncatesToLength() {
+        // POST-1335 / QuickSight: CAST(1775580223839 AS CHAR(10)) -> "1775580223" (first 10 chars).
+        ConstantOperator bigint = ConstantOperator.createBigint(1775580223839L);
+        ConstantOperator asChar10 = bigint.castToExplicitly(new CharType(10)).get();
+        Assertions.assertEquals("1775580223", asChar10.getVarchar());
+        Assertions.assertEquals(10, asChar10.getVarchar().length());
+
+        // Chained: CAST(CAST(1775580223839 AS CHAR(10)) AS DECIMAL) -> 1775580223.
+        ConstantOperator asDecimal = asChar10.castTo(DecimalType.DEFAULT_DECIMAL128).get();
+        Assertions.assertEquals(1775580223L, asDecimal.getDecimal().longValue());
+
+        // String source truncates too.
+        Assertions.assertEquals("hello",
+                ConstantOperator.createVarchar("hello world").castToExplicitly(new CharType(5)).get().getVarchar());
+    }
+
+    @Test
+    public void testCastToVarcharAndWildcardCharDoNotTruncate() {
+        ConstantOperator bigint = ConstantOperator.createBigint(1775580223839L);
+        // VARCHAR(N) is not truncated.
+        Assertions.assertEquals("1775580223839", bigint.castTo(new VarcharType(10)).get().getVarchar());
+        // Wildcard CHAR (no length, len == -1) is not truncated.
+        Assertions.assertEquals("1775580223839", bigint.castTo(CharType.CHAR).get().getVarchar());
+    }
+
+    @Test
+    public void testGenericCharConversionPreservesOversizedValues() {
+        Assertions.assertEquals("1775580223839",
+                ConstantOperator.createBigint(1775580223839L).castTo(new CharType(10)).get().getVarchar());
+        Assertions.assertEquals("hello world",
+                ConstantOperator.createVarchar("hello world").castTo(new CharType(5)).get().getVarchar());
+    }
+
+    @Test
+    public void testExplicitCharCastCountsCodePoints() {
+        ConstantOperator value = ConstantOperator.createVarchar("中😀文abc");
+        Assertions.assertEquals("中😀", value.castToExplicitly(new CharType(2)).get().getVarchar());
+        Assertions.assertEquals("", value.castToExplicitly(new CharType(0)).get().getVarchar());
+        Assertions.assertEquals("中😀文abc", value.castToExplicitly(new CharType(6)).get().getVarchar());
+    }
+
     @Test
     public void testCastToDateValid() throws Exception {
         String[][] testCases = {
@@ -150,6 +199,76 @@ public class ConstantOperatorTest {
         ConstantOperator time = ConstantOperator.createTime(now.getHour() * 3600D + now.getMinute() * 60D + now.getSecond());
         ConstantOperator datetime = ConstantOperator.createDatetime(now);
         Assertions.assertEquals(datetime, time.castTo(DateType.DATETIME).get());
+    }
+
+    @Test
+    public void testExplicitBinaryCharCastTruncatesDecodedUtf8() {
+        ConstantOperator binary = ConstantOperator.createBinary("中😀文".getBytes(StandardCharsets.UTF_8),
+                VarbinaryType.VARBINARY);
+        Assertions.assertEquals("中😀", binary.castToExplicitly(new CharType(2)).get().getVarchar());
+        Assertions.assertEquals("中😀文", binary.castTo(new CharType(2)).get().getVarchar());
+        ConstantOperator invalid = ConstantOperator.createBinary(new byte[] {(byte) 0xe4, (byte) 0xb8},
+                VarbinaryType.VARBINARY);
+        Assertions.assertTrue(invalid.castToExplicitly(new CharType(1)).isEmpty());
+    }
+
+    @Test
+    public void testCastBinaryToStringKeepsTheBytes() {
+        byte[] bytes = "zz".getBytes(StandardCharsets.UTF_8);
+        ConstantOperator binary = ConstantOperator.createBinary(bytes, VarbinaryType.VARBINARY);
+
+        // The BE casts binary to string by handing the underlying bytes over untouched, folding must agree.
+        String folded = binary.castTo(VarcharType.VARCHAR).get().getVarchar();
+        Assertions.assertEquals("zz", folded);
+        Assertions.assertFalse(folded.startsWith("[B@"), folded);
+
+        // The folded value used to be the identity hash code of the byte[], so it differed on every call.
+        Assertions.assertEquals(folded, binary.castTo(VarcharType.VARCHAR).get().getVarchar());
+        Assertions.assertEquals(binary.castTo(VarcharType.VARCHAR).get(), binary.castTo(VarcharType.VARCHAR).get());
+
+        // An equal but distinct constant, i.e. a different byte[] instance, folds to the same value.
+        ConstantOperator otherInstance =
+                ConstantOperator.createBinary("zz".getBytes(StandardCharsets.UTF_8), VarbinaryType.VARBINARY);
+        Assertions.assertEquals(folded, otherInstance.castTo(VarcharType.VARCHAR).get().getVarchar());
+
+        // CHAR and sized VARCHAR take the same path, the BE does not truncate to the target length either.
+        Assertions.assertEquals("zz", binary.castTo(CharType.CHAR).get().getVarchar());
+        Assertions.assertEquals("zz", binary.castTo(TypeFactory.createVarcharType(1)).get().getVarchar());
+    }
+
+    @Test
+    public void testCastBinaryToBinaryKeepsTheBytes() {
+        byte[] bytes = "zz".getBytes(StandardCharsets.UTF_8);
+        ConstantOperator binary = ConstantOperator.createBinary(bytes, VarbinaryType.VARBINARY);
+
+        Assertions.assertArrayEquals(bytes, binary.castTo(VarbinaryType.VARBINARY).get().getBinary());
+        Assertions.assertArrayEquals(bytes, binary.castTo(TypeFactory.createVarbinary(10)).get().getBinary());
+    }
+
+    @Test
+    public void testCastNonUtf8BinaryToStringIsNotFolded() {
+        // 0xFF is not valid UTF-8: decoding it would substitute U+FFFD and the folded constant would no
+        // longer carry the bytes the BE would produce, so the cast has to be left to the BE.
+        ConstantOperator binary = ConstantOperator.createBinary(new byte[] {(byte) 0xFF}, VarbinaryType.VARBINARY);
+        Assertions.assertEquals(Optional.empty(), binary.castTo(VarcharType.VARCHAR));
+        Assertions.assertEquals(Optional.empty(), binary.castTo(CharType.CHAR));
+    }
+
+    @Test
+    public void testCastBinaryToOtherTypesIsNotFolded() {
+        ConstantOperator binary =
+                ConstantOperator.createBinary("12".getBytes(StandardCharsets.UTF_8), VarbinaryType.VARBINARY);
+
+        // The BE only supports casting a binary value to a string, folding anything else would make the
+        // constant path disagree with the non-folded one.
+        Assertions.assertEquals(Optional.empty(), binary.castTo(IntegerType.INT));
+        Assertions.assertEquals(Optional.empty(), binary.castTo(IntegerType.BIGINT));
+        Assertions.assertEquals(Optional.empty(), binary.castTo(FloatType.DOUBLE));
+        Assertions.assertEquals(Optional.empty(), binary.castTo(DateType.DATE));
+
+        // A null binary constant used to be folded into the literal string "null".
+        Assertions.assertEquals(Optional.empty(),
+                ConstantOperator.createNull(VarbinaryType.VARBINARY).castTo(VarcharType.VARCHAR));
     }
 
     @Test

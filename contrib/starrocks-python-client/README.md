@@ -176,7 +176,7 @@ user_stats_mv = MaterializedView(
     'user_stats_mv',
     metadata,
     definition='SELECT id, COUNT(*) AS cnt FROM my_core_table GROUP BY id',
-    starrocks_refresh='ASYNC'
+    starrocks_refresh='ON_CHANGE'
 )
 
 # Create the view and MV in the database
@@ -221,7 +221,7 @@ In `alembic.ini`, set the `sqlalchemy.url` to your StarRocks connection string.
 sqlalchemy.url = starrocks://root@localhost:9030/mydatabase
 ```
 
-It's better to print the log from this `starrocks-sqlalchemy` when runing alembic command. You can add following logging configration in the `alembic.ini` file.
+It's better to print the log from this `starrocks-sqlalchemy` when runing alembic command. You can add following logging configuration in the `alembic.ini` file.
 
 ```ini
 # alembic.ini

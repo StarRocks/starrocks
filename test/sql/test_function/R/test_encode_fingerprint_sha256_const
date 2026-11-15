@@ -1,0 +1,45 @@
+-- name: test_encode_fingerprint_sha256_const_arg @sequential
+CREATE TABLE t_fp_const (k INT, v INT)
+  DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_fp_const SELECT generate_series, generate_series FROM TABLE(generate_series(1, 5000));
+-- result:
+-- !result
+SELECT count(encode_fingerprint_sha256(v, 'x')) FROM t_fp_const;
+-- result:
+5000
+-- !result
+SELECT count(encode_fingerprint_sha256(v, 7)) FROM t_fp_const;
+-- result:
+5000
+-- !result
+SELECT count(encode_fingerprint_sha256('x', v)) FROM t_fp_const;
+-- result:
+5000
+-- !result
+SELECT count(encode_fingerprint_sha256(v, k, 'x', 7)) FROM t_fp_const;
+-- result:
+5000
+-- !result
+SELECT count(*) FROM t_fp_const WHERE encode_fingerprint_sha256(v, CAST(k AS INT)) = encode_fingerprint_sha256(v, k);
+-- result:
+5000
+-- !result
+SELECT count(*) FROM t_fp_const WHERE k = 7 AND encode_fingerprint_sha256(v, CAST(7 AS INT)) = encode_fingerprint_sha256(v, k);
+-- result:
+1
+-- !result
+SELECT DISTINCT length(encode_fingerprint_sha256(v, 'x')) FROM t_fp_const;
+-- result:
+32
+-- !result
+SELECT count(encode_fingerprint_sha256(v, CAST(NULL AS INT))) FROM t_fp_const;
+-- result:
+5000
+-- !result
+SELECT count(*) FROM t_fp_const;
+-- result:
+5000
+-- !result

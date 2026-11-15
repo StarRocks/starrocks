@@ -90,6 +90,10 @@ public abstract class BulkLoadJob extends LoadJob {
 
     // include broker desc and data desc
     protected BrokerFileGroupAggInfo fileGroupAggInfo = new BrokerFileGroupAggInfo();
+    // The ids of the target tables. Persisted because fileGroupAggInfo is rebuilt only for a pending job, and only
+    // on the leader.
+    @SerializedName("tids")
+    protected Set<Long> tableIds = Sets.newHashSet();
     protected List<TabletCommitInfo> commitInfos = Lists.newArrayList();
     protected List<TabletFailInfo> failInfos = Lists.newArrayList();
 
@@ -124,6 +128,18 @@ public abstract class BulkLoadJob extends LoadJob {
             // with `SET enable_tablet_pre_split = false` still honors that intent after FE failover.
             sessionVariables.put(SessionVariable.ENABLE_TABLET_PRE_SPLIT,
                     Boolean.toString(var.isEnableTabletPreSplit()));
+            // Same reason, for multi-node tablet write, and one more: a Broker Load is planned long
+            // after this statement returns, so the submitting session may have SET these to
+            // something else -- or be gone -- by then. LoadPlanner reads them back from here and
+            // hands them to the sink, so the load plans the session that was actually asked. The
+            // mode especially: it defaults to `auto`, so losing an explicit `off` is the opposite of
+            // the instruction, not merely an optimisation lost.
+            sessionVariables.put(SessionVariable.LAKE_MULTI_NODE_TABLET_WRITE_MODE,
+                    var.getLakeMultiNodeTabletWriteMode());
+            sessionVariables.put(SessionVariable.LAKE_MULTI_NODE_WRITE_MAX_NODES,
+                    Integer.toString(var.getLakeMultiNodeWriteMaxNodes()));
+            sessionVariables.put(SessionVariable.LAKE_MULTI_NODE_WRITE_BYTES_PER_NODE,
+                    Long.toString(var.getLakeMultiNodeWriteBytesPerNode()));
             sessionVariables.put(CURRENT_QUALIFIED_USER_KEY, ConnectContext.get().getQualifiedUser());
             sessionVariables.put(CURRENT_USER_IDENT_KEY, ConnectContext.get().getCurrentUserIdentity().toString());
         } else {
@@ -190,6 +206,7 @@ public abstract class BulkLoadJob extends LoadJob {
                 fileGroup.parse(db, dataDescription);
                 fileGroupAggInfo.addFileGroup(fileGroup);
             }
+            tableIds = fileGroupAggInfo.getAllTableIds();
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
@@ -214,6 +231,16 @@ public abstract class BulkLoadJob extends LoadJob {
             }
         }
         return result;
+    }
+
+    @Override
+    public Set<Long> getTableIds() {
+        // Empty when the target tables are unknown, as for a finished job persisted by an older version.
+        return tableIds;
+    }
+
+    public static void setTableIds(BulkLoadJob bulkLoadJob, Set<Long> tableIds) {
+        bulkLoadJob.tableIds = tableIds;
     }
 
     @Override

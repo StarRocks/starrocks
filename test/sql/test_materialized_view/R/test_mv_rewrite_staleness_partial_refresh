@@ -1,0 +1,64 @@
+-- name: test_mv_rewrite_staleness_partial_refresh
+CREATE TABLE base (
+  dt DATE NOT NULL,
+  v  INT  NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt)
+PARTITION BY RANGE(dt) (
+  PARTITION p01 VALUES [('2026-07-01'), ('2026-07-02')),
+  PARTITION p02 VALUES [('2026-07-02'), ('2026-07-03'))
+)
+DISTRIBUTED BY HASH(dt) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO base VALUES ('2026-07-01', 10), ('2026-07-02', 20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv0
+PARTITION BY (dt)
+DISTRIBUTED BY HASH(dt) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+  "replication_num" = "1",
+  "mv_rewrite_staleness_second" = "1",
+  "partition_refresh_number" = "1"
+)
+AS SELECT dt, sum(v) AS sv FROM base GROUP BY dt;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv0 WITH SYNC MODE;
+select sleep(3);
+-- result:
+1
+-- !result
+INSERT INTO base VALUES ('2026-07-02', 5);
+-- result:
+-- !result
+INSERT INTO base VALUES ('2026-07-01', 100);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv0 PARTITION START ('2026-07-01') END ('2026-07-02') WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT dt, sum(v) AS sv FROM base WHERE dt >= '2026-07-01' AND dt < '2026-07-03' GROUP BY dt", "mv0", "UNION")
+-- result:
+True
+-- !result
+SELECT dt, sum(v) AS sv FROM base WHERE dt >= '2026-07-01' AND dt < '2026-07-03' GROUP BY dt ORDER BY dt;
+-- result:
+2026-07-01	110
+2026-07-02	25
+-- !result
+function: print_hit_materialized_view("SELECT dt, sum(v) AS sv FROM base WHERE dt >= '2026-07-01' AND dt < '2026-07-02' GROUP BY dt", "mv0")
+-- result:
+True
+-- !result
+SELECT dt, sum(v) AS sv FROM base WHERE dt >= '2026-07-01' AND dt < '2026-07-02' GROUP BY dt ORDER BY dt;
+-- result:
+2026-07-01	110
+-- !result
+drop materialized view mv0;
+-- result:
+-- !result
+drop table base force;
+-- result:
+-- !result

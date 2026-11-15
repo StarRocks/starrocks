@@ -77,8 +77,9 @@ Status CacheSelectScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* ch
 }
 
 Status CacheSelectScanner::_fetch_orc() {
-    std::unique_ptr<ORCHdfsFileStream> input_stream = std::make_unique<ORCHdfsFileStream>(
-            _file.get(), _file->get_size().value(), _shared_buffered_input_stream.get());
+    ASSIGN_OR_RETURN(const int64_t file_size, _file->get_size());
+    std::unique_ptr<ORCHdfsFileStream> input_stream =
+            std::make_unique<ORCHdfsFileStream>(_file.get(), file_size, _shared_buffered_input_stream.get());
     input_stream->set_app_stats(&_app_stats);
 
     std::unique_ptr<orc::Reader> reader;
@@ -181,10 +182,11 @@ Status CacheSelectScanner::_fetch_orc() {
 }
 
 Status CacheSelectScanner::_fetch_parquet() {
+    ASSIGN_OR_RETURN(const int64_t file_size, _file->get_size());
     // create file reader
-    std::shared_ptr<parquet::FileReader> reader = std::make_shared<parquet::FileReader>(
-            4096, _file.get(), _file->get_size().value(), _scanner_ctx->datacache_options,
-            _shared_buffered_input_stream.get(), nullptr);
+    std::shared_ptr<parquet::FileReader> reader =
+            std::make_shared<parquet::FileReader>(4096, _file.get(), file_size, _scanner_ctx->datacache_options,
+                                                  _shared_buffered_input_stream.get(), nullptr);
 
     RETURN_IF_ERROR(reader->init(&_scanner_ctx->format_scan_context));
 

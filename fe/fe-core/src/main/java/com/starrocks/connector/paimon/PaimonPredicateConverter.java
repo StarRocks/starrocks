@@ -220,7 +220,12 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, P
                     return null;
                 }
                 String literal = ((BinaryString) objectLiteral).toString();
-                if (literal.length() > 1 && literal.indexOf("%") == literal.length() - 1 && literal.charAt(0) != '%') {
+                // startsWith compares the prefix against the file statistics as a plain string, so a pattern
+                // still holding SQL wildcards prunes data files that do hold matching rows: '_' matches any
+                // single character, and '\' escapes the character behind it, including a trailing '%' that is
+                // then not a wildcard at all. FlussPredicateConverter rejects the same two.
+                if (literal.length() > 1 && literal.indexOf("%") == literal.length() - 1 && literal.charAt(0) != '%'
+                        && literal.indexOf('_') < 0 && literal.indexOf('\\') < 0) {
                     return builder.startsWith(idx, BinaryString.fromString(literal.substring(0, literal.length() - 1)));
                 }
             }
@@ -268,11 +273,18 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, P
                 case DECIMALV2:
                 case DECIMAL32:
                 case DECIMAL64:
-                case DECIMAL128:
+                case DECIMAL128: {
+                    // paimon serializes the literal with the column's precision/scale
+                    if (!(dataType instanceof DecimalType)) {
+                        return null;
+                    }
+                    DecimalType columnType = (DecimalType) dataType;
                     BigDecimal bigDecimal = operator.getDecimal();
-                    PrimitiveType type = operator.getType().getPrimitiveType();
-                    return Decimal.fromBigDecimal(bigDecimal, PrimitiveType.getMaxPrecisionOfDecimal(type),
-                            PrimitiveType.getDefaultScaleOfDecimal(type));
+                    if (bigDecimal.stripTrailingZeros().scale() > columnType.getScale()) {
+                        return null;
+                    }
+                    return Decimal.fromBigDecimal(bigDecimal, columnType.getPrecision(), columnType.getScale());
+                }
                 case HLL:
                 case VARCHAR:
                 case CHAR:
@@ -374,10 +386,6 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, P
 
         public String visitVariableReference(ColumnRefOperator operator, Void context) {
             return operator.getName();
-        }
-
-        public String visitCastOperator(CastOperator operator, Void context) {
-            return operator.getChild(0).accept(this, context);
         }
     }
 }

@@ -44,19 +44,10 @@ public:
         DCHECK(_function != nullptr);
     }
 
-    ~StateMergeFunction() override {
-        if (_nested_ctx != nullptr) {
-            delete _nested_ctx;
-        }
-    }
-
     Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) override {
         if (_function == nullptr) {
             return Status::InternalError("AggStateBaseFunction is nullptr  for " + _agg_state_desc.get_func_name());
         }
-        _nested_ctx =
-                FunctionContext::create_context(context->state(), context->mem_pool(),
-                                                _agg_state_desc.get_return_type(), _agg_state_desc.get_arg_types());
         return Status::OK();
     }
 
@@ -67,6 +58,17 @@ public:
                                       " not match with arg_nullables size " + std::to_string(_arg_nullables.size())));
 
         SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultAggStateMergeFunctionAllocator);
+
+        // Drive the wrapped aggregate through a nested FunctionContext backed by a MemPool private to
+        // this execute() call. The combinator object is shared across pipeline drivers and evaluated
+        // concurrently, so the pool must not be shared (MemPool is not thread-safe); allocating it on
+        // the stack also bounds its lifetime to this call, so the variable-length agg state copied out
+        // per row (e.g. array_agg_distinct's keys, which _function->destroy() does not reclaim from the
+        // pool) is released here instead of accumulating for the whole fragment.
+        MemPool nested_mem_pool;
+        FunctionContext* nested_ctx = FunctionContext::create_context(
+                context->state(), &nested_mem_pool, _agg_state_desc.get_return_type(), _agg_state_desc.get_arg_types());
+        DeferOp defer_nested_ctx([&]() { delete nested_ctx; });
 
         bool is_result_nullable = _agg_state_desc.is_result_nullable() || _arg_nullables[0];
         ASSIGN_OR_RETURN(ColumnPtr new_column, _convert_to_nullable_column(columns[0], is_result_nullable, true));
@@ -93,10 +95,10 @@ public:
                     result->append_nulls(1);
                     continue;
                 }
-                _function->create(_nested_ctx, agg_state);
-                _function->merge(_nested_ctx, data_column, agg_state, i);
-                _function->finalize_to_column(_nested_ctx, agg_state, result.get());
-                _function->destroy(_nested_ctx, agg_state);
+                _function->create(nested_ctx, agg_state);
+                _function->merge(nested_ctx, data_column, agg_state, i);
+                _function->finalize_to_column(nested_ctx, agg_state, result.get());
+                _function->destroy(nested_ctx, agg_state);
             }
         } else {
             for (size_t i = 0; i < chunk_size; i++) {
@@ -104,18 +106,14 @@ public:
                     result->append_nulls(1);
                     continue;
                 }
-                _function->create(_nested_ctx, agg_state);
-                _function->merge(_nested_ctx, new_column.get(), agg_state, i);
-                _function->finalize_to_column(_nested_ctx, agg_state, result.get());
-                _function->destroy(_nested_ctx, agg_state);
+                _function->create(nested_ctx, agg_state);
+                _function->merge(nested_ctx, new_column.get(), agg_state, i);
+                _function->finalize_to_column(nested_ctx, agg_state, result.get());
+                _function->destroy(nested_ctx, agg_state);
             }
         }
         return result;
     }
-
-private:
-    // for nested function, the nested function's context is injected to the parent function's context.
-    FunctionContext* _nested_ctx;
 };
 
 } // namespace starrocks

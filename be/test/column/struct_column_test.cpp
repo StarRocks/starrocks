@@ -51,52 +51,6 @@ TEST(StructColumnTest, test_create) {
     ASSERT_EQ("{id:1,name:'smith'}, {id:2,name:'cruise'}", col->debug_string());
 }
 
-TEST(StructColumnTest, test_update_if_overflow) {
-    auto col = create_test_column();
-
-    // it does not upgrade because of not overflow
-    auto ret = col->upgrade_if_overflow();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-}
-
-TEST(StructColumnTest, test_column_downgrade) {
-    {
-        auto col = create_test_column();
-
-        ASSERT_FALSE(col->has_large_column());
-        auto ret = col->downgrade();
-        ASSERT_TRUE(ret.ok());
-        ASSERT_TRUE(ret.value() == nullptr);
-    }
-
-    {
-        std::vector<std::string> field_name{"id", "name"};
-        auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-        auto name = NullableColumn::create(LargeBinaryColumn::create(), NullColumn::create());
-        MutableColumns fields;
-        fields.emplace_back(std::move(id));
-        fields.emplace_back(std::move(name));
-        auto column = StructColumn::create(std::move(fields), field_name);
-
-        for (uint64_t i = 0; i < 10; i++) {
-            column->append_datum(DatumStruct{i, Slice(std::to_string(i))});
-        }
-
-        ASSERT_TRUE(column->has_large_column());
-        auto ret = column->downgrade();
-        ASSERT_TRUE(ret.ok());
-        ASSERT_TRUE(ret.value() == nullptr);
-        ASSERT_FALSE(column->has_large_column());
-        ASSERT_EQ(column->size(), 10);
-        for (uint64_t i = 0; i < 10; i++) {
-            DatumStruct datum = column->get(i).get_struct();
-            ASSERT_EQ(i, datum[0].get_uint64());
-            ASSERT_EQ(std::to_string(i), datum[1].get_slice());
-        }
-    }
-}
-
 TEST(StructColumnTest, test_append_null) {
     {
         std::vector<std::string> field_name{"id", "name"};

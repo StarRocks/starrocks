@@ -114,16 +114,6 @@ void RuntimeFilterProbeDescriptor::close(RuntimeState* state) {
     }
 }
 
-void RuntimeFilterProbeDescriptor::replace_probe_expr_ctx(RuntimeState* state, const RowDescriptor& row_desc,
-                                                          ExprContext* new_probe_expr_ctx) {
-    // close old probe expr
-    _probe_expr_ctx->close(state);
-    // create new probe expr and open it.
-    _probe_expr_ctx = state->obj_pool()->add(new ExprContext(new_probe_expr_ctx->root()));
-    WARN_IF_ERROR(_probe_expr_ctx->prepare(state), "prepare probe expr failed");
-    WARN_IF_ERROR(_probe_expr_ctx->open(state), "open probe expr failed");
-}
-
 std::string RuntimeFilterProbeDescriptor::debug_string() const {
     std::stringstream ss;
     ss << "RFDptr(filter_id=" << _filter_id << ", probe_expr=";
@@ -154,6 +144,23 @@ void RuntimeFilterProbeDescriptor::add_observer(RuntimeState* state, ReadyObserv
 }
 
 static const int default_runtime_filter_wait_timeout_ms = 1000;
+
+static bool only_reference_existent_slots(ExprContext* expr, const Chunk* chunk) {
+    std::vector<SlotId> slot_ids;
+    expr->root()->get_slot_ids(&slot_ids);
+    return std::ranges::all_of(slot_ids, [chunk](SlotId id) { return chunk->is_slot_exist(id); });
+}
+
+// A runtime filter attached to an operator whose output does not carry every column it references
+// (e.g. a partitioned global filter on a hash join whose partition_exprs span tables joined later)
+// cannot be evaluated there.
+static bool can_evaluate_on_chunk(RuntimeFilterProbeDescriptor* rf_desc, const Chunk* chunk) {
+    if (!only_reference_existent_slots(rf_desc->probe_expr_ctx(), chunk)) {
+        return false;
+    }
+    return std::ranges::all_of(*rf_desc->partition_by_expr_contexts(),
+                               [chunk](ExprContext* expr) { return only_reference_existent_slots(expr, chunk); });
+}
 
 RuntimeFilterProbeCollector::RuntimeFilterProbeCollector() : _wait_timeout_ms(default_runtime_filter_wait_timeout_ms) {}
 
@@ -276,32 +283,15 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
             continue;
         }
 
-        auto only_reference_existent_slots = [&](ExprContext* expr) {
-            std::vector<SlotId> slot_ids;
-            int n = expr->root()->get_slot_ids(&slot_ids);
-            DCHECK(slot_ids.size() == n);
-
-            // do not allow struct subfield
-            if (expr->root()->get_subfields(nullptr) > 0) {
-                return false;
-            }
-
-            for (auto slot_id : slot_ids) {
-                if (!partial_chunk->is_slot_exist(slot_id)) {
-                    return false;
-                }
-            }
-
-            return true;
-        };
-
         auto* probe_expr = rf_desc->probe_expr_ctx();
         auto* partition_by_exprs = rf_desc->partition_by_expr_contexts();
 
-        bool can_use_rf_on_partial_chunk = only_reference_existent_slots(probe_expr);
+        // do not allow struct subfield
+        bool can_use_rf_on_partial_chunk = probe_expr->root()->get_subfields(nullptr) == 0;
         for (auto* part_by_expr : *partition_by_exprs) {
-            can_use_rf_on_partial_chunk &= only_reference_existent_slots(part_by_expr);
+            can_use_rf_on_partial_chunk &= part_by_expr->root()->get_subfields(nullptr) == 0;
         }
+        can_use_rf_on_partial_chunk &= can_evaluate_on_chunk(rf_desc, partial_chunk);
 
         // skip runtime filter that references a non-existent column for the partial chunk
         if (!can_use_rf_on_partial_chunk) {
@@ -453,6 +443,10 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeMember
         if (filter->type() == RuntimeFilterSerializeType::IN_FILTER) {
             continue;
         }
+        // do_evaluate only runs filters chosen here, so this check covers it as well.
+        if (!can_evaluate_on_chunk(rf_desc, chunk)) {
+            continue;
+        }
         auto& selection = eval_context.running_context.use_merged_selection
                                   ? eval_context.running_context.merged_selection
                                   : eval_context.running_context.selection;
@@ -501,49 +495,6 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeMember
     }
     if (!seletivity_map.empty()) {
         chunk->filter(merged_selection);
-    }
-}
-
-static bool contains_dict_mapping_expr(Expr* expr) {
-    if (expr->is_dictmapping_expr()) {
-        return true;
-    }
-
-    return std::any_of(expr->children().begin(), expr->children().end(),
-                       [](Expr* child) { return contains_dict_mapping_expr(child); });
-}
-
-static bool contains_dict_mapping_expr(RuntimeFilterProbeDescriptor* probe_desc) {
-    auto* probe_expr_ctx = probe_desc->probe_expr_ctx();
-    if (probe_expr_ctx == nullptr) {
-        return false;
-    }
-    return contains_dict_mapping_expr(probe_expr_ctx->root());
-}
-
-void RuntimeFilterProbeCollector::push_down(const RuntimeState* state, TPlanNodeId target_plan_node_id,
-                                            RuntimeFilterProbeCollector* parent, const std::vector<TupleId>& tuple_ids,
-                                            std::set<TPlanNodeId>& local_rf_waiting_set) {
-    if (this == parent) return;
-    auto iter = parent->_descriptors.begin();
-    while (iter != parent->_descriptors.end()) {
-        RuntimeFilterProbeDescriptor* desc = iter->second;
-        if (!desc->can_push_down_runtime_filter()) {
-            ++iter;
-            continue;
-        }
-        if (desc->is_bound(tuple_ids) &&
-            !(state->broadcast_join_right_offsprings().contains(target_plan_node_id) &&
-              state->non_broadcast_rf_ids().contains(desc->filter_id())) &&
-            !contains_dict_mapping_expr(desc)) {
-            add_descriptor(desc);
-            if (desc->is_local()) {
-                local_rf_waiting_set.insert(desc->build_plan_node_id());
-            }
-            iter = parent->_descriptors.erase(iter);
-        } else {
-            ++iter;
-        }
     }
 }
 

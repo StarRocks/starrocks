@@ -143,16 +143,6 @@ public:
     // Returns a string representation in DFS order of the plan rooted at this.
     std::string debug_string() const;
 
-    virtual void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector);
-    void push_down_join_runtime_filter_to_children(RuntimeState* state, RuntimeFilterProbeCollector* collector);
-
-    void push_down_join_runtime_filter_recursively(RuntimeState* state) {
-        push_down_join_runtime_filter(state, &_runtime_filter_collector);
-        for (auto* child : _children) {
-            child->push_down_join_runtime_filter_recursively(state);
-        }
-    }
-
     // Make the node store the slot mappings from input slot to output slot of ancestor nodes (include itself).
     // It is used for pipeline to rewrite runtime in filters.
     virtual void push_down_tuple_slot_mappings(RuntimeState* state,
@@ -173,7 +163,7 @@ public:
 
     int id() const { return _id; }
     TPlanNodeType::type type() const { return _type; }
-    const RowDescriptor& row_desc() const { return _row_descriptor; }
+    const RecordDescriptor& record_desc() const { return _record_descriptor; }
     int64_t rows_returned() const { return _num_rows_returned; }
     int64_t limit() const { return _limit; }
     bool reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
@@ -221,7 +211,7 @@ protected:
     std::set<TPlanNodeId> _local_rf_waiting_set;
 
     std::vector<ExecNode*> _children;
-    RowDescriptor _row_descriptor;
+    RecordDescriptor _record_descriptor;
 
     // debug-only: if _debug_action is not INVALID, node will perform action in
     // _debug_phase

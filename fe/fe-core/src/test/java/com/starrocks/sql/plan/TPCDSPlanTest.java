@@ -22,7 +22,11 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class TPCDSPlanTest extends TPCDSPlanTestBase {
     Map<String, Long> tpcdsStats = null;
@@ -41,6 +45,97 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
     @AfterEach
     public void tearDown() {
         setTPCDSTableStats(tpcdsStats);
+    }
+
+    /**
+     * Q05 joins web_site onto a column that reaches it from the nullable side of a LEFT OUTER
+     * JOIN, so the resulting runtime filter fits in neither child of that join: the left side
+     * does not have the column, and filtering the right side would change which left rows get
+     * NULL-extended. The join itself is the only place it can sit -- and a hash-join build
+     * operator does consume a local runtime in-filter, so the placement does real work.
+     *
+     * This is the shape that makes JoinNode.canEvaluateRuntimeFilter() matter: declaring a join
+     * unable to use a runtime filter would silently drop this one, which no result-comparing
+     * test would notice because the query would still return the same rows, just more slowly.
+     */
+    @Test
+    public void testRuntimeFilterStaysOnOuterJoinWhenProbeColumnIsNullable() throws Exception {
+        String plan = getVerboseExplain(Q05);
+        Assertions.assertTrue(nodeTypesHoldingRuntimeFilter(plan).contains("HASH JOIN"),
+                "expected a probe runtime filter recorded on a join node, plan was:\n" + plan);
+    }
+
+    private static Set<String> nodeTypesHoldingRuntimeFilter(String verbosePlan) {
+        Pattern nodeHeader = Pattern.compile("^\\s*\\|?-*\\s*\\d+:([A-Za-z][\\w -]*)");
+        Set<String> holders = new HashSet<>();
+        String current = "<none>";
+        for (String line : verbosePlan.split("\n")) {
+            Matcher m = nodeHeader.matcher(line);
+            if (m.find()) {
+                current = m.group(1).trim();
+            }
+            if (line.contains("probe runtime filters")) {
+                holders.add(current);
+            }
+        }
+        return holders;
+    }
+
+    // The Q75 shape: the item filter of the broadcast join under the build side of the outer join reaches
+    // store_returns through ss_item_sk = sr_item_sk, since store_returns is the side the outer join does not preserve.
+    private static final String SIDEWAYS_RF_SQL = "select sr_return_quantity, ss_quantity from store_returns "
+            + "%s join[shuffle] (select ss_item_sk, ss_ticket_number, ss_quantity from store_sales "
+            + "join[broadcast] item on ss_item_sk = i_item_sk where i_category = 'Books') s "
+            + "on sr_ticket_number = s.ss_ticket_number and sr_item_sk %s s.ss_item_sk";
+
+    @Test
+    public void testRuntimeFilterPushedSidewaysIntoOuterJoinProbeSide() throws Exception {
+        String plan = getVerboseExplain(String.format(SIDEWAYS_RF_SQL, "right outer", "="));
+        int itemFilter = filterBuiltOn(plan, "i_item_sk");
+        Assertions.assertTrue(probeFiltersOfScan(plan, "store_returns").contains(itemFilter), plan);
+        Assertions.assertTrue(probeFiltersOfScan(plan, "store_sales").contains(itemFilter), plan);
+        Assertions.assertTrue(plan.matches("(?s).*filter_id = " + itemFilter + ", build_expr = \\(\\d+: i_item_sk\\), "
+                + "remote = true.*"), plan);
+    }
+
+    @Test
+    public void testRuntimeFilterNotPushedSidewaysIntoPreservedSide() throws Exception {
+        String plan = getVerboseExplain(String.format(SIDEWAYS_RF_SQL, "left outer", "="));
+        int itemFilter = filterBuiltOn(plan, "i_item_sk");
+        Assertions.assertFalse(probeFiltersOfScan(plan, "store_returns").contains(itemFilter), plan);
+    }
+
+    @Test
+    public void testRuntimeFilterNotPushedSidewaysOnNullSafeEqual() throws Exception {
+        String plan = getVerboseExplain(String.format(SIDEWAYS_RF_SQL, "right outer", "<=>"));
+        int itemFilter = filterBuiltOn(plan, "i_item_sk");
+        Assertions.assertFalse(probeFiltersOfScan(plan, "store_returns").contains(itemFilter), plan);
+    }
+
+    private static int filterBuiltOn(String verbosePlan, String column) {
+        Matcher m = Pattern.compile("filter_id = (\\d+), build_expr = \\(\\d+: " + column + "\\)").matcher(verbosePlan);
+        Assertions.assertTrue(m.find(), verbosePlan);
+        return Integer.parseInt(m.group(1));
+    }
+
+    private static Set<Integer> probeFiltersOfScan(String verbosePlan, String table) {
+        Pattern nodeHeader = Pattern.compile("^\\s*\\|?-*\\s*\\d+:([A-Za-z][\\w -]*)");
+        Pattern probe = Pattern.compile("filter_id = (\\d+), probe_expr = ");
+        Set<Integer> filters = new HashSet<>();
+        boolean inTable = false;
+        for (String line : verbosePlan.split("\n")) {
+            if (nodeHeader.matcher(line).find()) {
+                inTable = false;
+            }
+            if (line.contains("table: " + table + ",")) {
+                inTable = true;
+            }
+            Matcher m = probe.matcher(line);
+            if (inTable && m.find()) {
+                filters.add(Integer.parseInt(m.group(1)));
+            }
+        }
+        return filters;
     }
 
     @Test

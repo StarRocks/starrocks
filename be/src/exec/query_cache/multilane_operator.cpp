@@ -80,7 +80,14 @@ bool MultilaneOperator::need_input() const {
     return std::all_of(_owner_to_lanes.begin(), _owner_to_lanes.end(), [this](auto& pair) {
         auto lane_id = pair.second;
         auto& lane = _lanes[lane_id];
-        return lane.last_chunk_received || lane.processor->need_input();
+        // A lane whose processor finished before its last chunk arrived must not block input.
+        // NLJoinProbeOperator with an empty build side is the case that shows up: _skip_probe()
+        // makes its need_input() false forever. last_chunk_received can only be set by
+        // push_chunk(), so without the is_finished() term this deadlocks -- need_input() stays
+        // false, the driver never pushes, and the last chunk that would set the flag never
+        // arrives, while is_finished() still waits on _input_finished. The passthrough branch
+        // above already treats a finished lane as available.
+        return lane.last_chunk_received || lane.processor->is_finished() || lane.processor->need_input();
     });
 }
 bool MultilaneOperator::has_output() const {
@@ -88,7 +95,18 @@ bool MultilaneOperator::has_output() const {
     for (const auto& [_, lane_id] : _owner_to_lanes) {
         auto& lane = _lanes[lane_id];
         auto processor_is_finished = lane.processor->is_finished();
-        auto need_send_eof_chunk = !passthrough_mode && processor_is_finished && !lane.eof_sent;
+        // Gated on last_chunk_received, not on is_finished() alone. The lane EOF is what makes
+        // CacheOperator populate the entry and then release_lane(), and a released lane is handed
+        // to the next owner by reset_lane(), which erases the old owner from _owner_to_lanes. A
+        // processor that finished early -- the empty build side above -- still has input on the
+        // way, and a chunk arriving after the reassignment would look up an owner that is no
+        // longer mapped: _owner_to_lanes[lane_owner] is operator[], so in a release build it
+        // inserts a default 0 and the chunk lands in someone else's lane. Waiting for the last
+        // chunk cannot deadlock, because need_input() above already lets input drain into a
+        // finished lane and _finish() forces last_chunk_received on every lane when the input
+        // really is exhausted.
+        auto need_send_eof_chunk =
+                !passthrough_mode && processor_is_finished && lane.last_chunk_received && !lane.eof_sent;
         auto need_send_chunk = !processor_is_finished && lane.processor->has_output();
 
         if (need_send_eof_chunk || need_send_chunk) {
@@ -207,7 +225,9 @@ Status MultilaneOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk)
     auto& lane = _lanes[_owner_to_lanes[lane_owner]];
 
     lane.last_chunk_received = is_last_chunk;
-    if (!chunk->is_empty()) {
+    // The lane may have finished early (see need_input()). A finished processor produces nothing
+    // more, so its remaining input is accounted for and dropped instead of pushed into it.
+    if (!chunk->is_empty() && !lane.processor->is_finished()) {
         RETURN_IF_ERROR(lane.processor->push_chunk(state, chunk));
     }
 
@@ -219,7 +239,8 @@ Status MultilaneOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk)
 
 StatusOr<ChunkPtr> MultilaneOperator::_pull_chunk_from_lane(RuntimeState* state, Lane& lane, bool passthrough_mode) {
     auto processor_is_finished = lane.processor->is_finished();
-    auto need_send_eof = !passthrough_mode && processor_is_finished && !lane.eof_sent;
+    // Same gate as has_output(); see the note there.
+    auto need_send_eof = !passthrough_mode && processor_is_finished && lane.last_chunk_received && !lane.eof_sent;
     auto need_send_chunk = !processor_is_finished && lane.processor->has_output();
 
     auto create_eof_chunk = [&lane]() -> auto {
@@ -240,7 +261,7 @@ StatusOr<ChunkPtr> MultilaneOperator::_pull_chunk_from_lane(RuntimeState* state,
 
     ASSIGN_OR_RETURN(auto chunk, lane.processor->pull_chunk(state));
 
-    processor_is_finished = lane.processor->is_finished();
+    processor_is_finished = lane.processor->is_finished() && lane.last_chunk_received;
     lane.eof_sent = processor_is_finished;
 
     if (chunk != nullptr) {

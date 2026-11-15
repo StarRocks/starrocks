@@ -1,0 +1,75 @@
+-- name: test_global_late_materialize_cte
+CREATE TABLE `lm_t` (
+  `k1` bigint NULL,
+  `v1` varchar(255) NULL,
+  `v2` varchar(255) NULL,
+  `v3` varchar(255) NULL,
+  `v9` varchar(255) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO lm_t VALUES
+(1, 'a1', 'x', 'c1', 'm1'),
+(2, 'a2', 'x', 'c2', 'm2'),
+(3, 'a3', 'y', 'c3', 'm3'),
+(4, 'a4', 'y', 'c4', 'm4'),
+(5, 'a5', 'x', 'c5', 'm5'),
+(6, 'a6', 'z', 'c6', 'm6'),
+(7, 'a7', 'z', 'c7', 'm7'),
+(8, 'a8', 'x', 'c8', 'm8'),
+(9, 'a9', 'y', 'c9', 'm9'),
+(10, 'a10', 'z', 'c10', 'm10');
+-- result:
+-- !result
+set cbo_cte_reuse_rate = 0;
+-- result:
+-- !result
+set enable_global_late_materialization = true;
+-- result:
+-- !result
+set enable_global_late_materialization_cost_based = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+with c1 as (select k1, v1, v2 from lm_t order by k1 limit 5),
+     c2 as (select count(*) as n from lm_t),
+     c3 as (select y.k1 as k, count(*) as cnt, max(x.v9) as m from lm_t x
+            join c1 y on y.k1 = x.k1 group by y.k1)
+select c2.n, a.k1, a.v1, a.v2, coalesce(z.cnt, 13) as cnt, z.m
+from c1 a cross join c2 left outer join c3 z on a.v1 = a.k1
+order by a.k1 limit 14;
+-- result:
+10	1	a1	x	13	None
+10	2	a2	x	13	None
+10	3	a3	y	13	None
+10	4	a4	y	13	None
+10	5	a5	x	13	None
+-- !result
+with c as (select k1, v1, v2, v3 from lm_t),
+     d as (select count(*) as n from c where v2 = 'x')
+select a.k1, a.v1, d.n from c a cross join d order by a.k1 limit 5;
+-- result:
+1	a1	4
+2	a2	4
+3	a3	4
+4	a4	4
+5	a5	4
+-- !result
+with c as (select k1, v1, v2, v3 from lm_t),
+     d as (select count(*) as n from c where v3 = 'c7')
+select a.k1, a.v2, d.n from c a cross join d order by a.k1 limit 5;
+-- result:
+1	x	1
+2	x	1
+3	y	1
+4	y	1
+5	x	1
+-- !result

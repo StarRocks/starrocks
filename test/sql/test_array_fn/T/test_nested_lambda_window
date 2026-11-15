@@ -1,0 +1,12 @@
+-- name: test_nested_lambda_window
+-- A nested array_map whose inner lambda captures the outer lambda argument, over a CONSTANT nested
+-- array, used as a window-function argument. The analytic node keeps array_length() inline (unlike
+-- an ORDER BY copy, which the optimizer extracts), so the BE runs extract_outer_common_exprs and
+-- assigns array_length(a) a synthetic common-expr slot id. That synthetic slot used to leak out of
+-- the nested array_map through the enclosing lambda's captured slots and get looked up via
+-- Chunk::get_column_by_slot_id on the input chunk, crashing the BE.
+select count(array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]])) over ();
+-- the exact fuzzer shape: the offset skips past the single row, so the result is empty
+select count(array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]])) over () order by array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) desc limit 7, 100;
+-- the window still works across several rows
+select x, count(array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]])) over () from (select 3 as x union all select 1 union all select 2) t order by x desc;

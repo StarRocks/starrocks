@@ -14,6 +14,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -23,6 +24,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.lake.LakeMaterializedView;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterMVClauseAnalyzerVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AggregateType;
@@ -36,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -141,6 +144,37 @@ public class AlterMvOrderByAnalyzerTest {
                 new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k2", "k1"))));
         assertTrue(ex.getMessage().contains("only supported on range-distributed materialized views"),
                 "expected range-distributed-only message, got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testAlterMvOrderByInRangeColocateGroupMustKeepColocatePrefix() throws Exception {
+        MaterializedView mv = dupRangeMv();
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        colocateTableIndex.addTableToGroup(DB_ID, mv, "g:k1", new ColocateTableIndex.GroupId(DB_ID, MV_ID), true);
+        mv.setColocateGroup("g:k1");
+        try {
+            assertDoesNotThrow(() -> new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k1", "v1"))));
+            SemanticException ex = assertThrows(SemanticException.class, () ->
+                    new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k2", "k1"))));
+            assertEquals("The sort key of a materialized view in a range colocate group must start with its colocate "
+                    + "columns [k1] (same order and types). Got: [k2, k1]", ex.getDetailMsg());
+        } finally {
+            colocateTableIndex.removeTable(MV_ID, mv, true);
+        }
+    }
+
+    /**
+     * A materialized view whose colocate_with is set but that is in no range colocate group, as a crash between its
+     * creation and its colocate group membership can leave it, has no group to align a rewrite with: rejected.
+     */
+    @Test
+    public void testAlterMvOrderByColocateWithoutRangeColocateGroupRejected() {
+        MaterializedView mv = dupRangeMv();
+        mv.setColocateGroup("g:k1");
+        SemanticException ex = assertThrows(SemanticException.class, () ->
+                new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k1", "v1"))));
+        assertTrue(ex.getMessage().contains("not supported on a materialized view with 'colocate_with'"),
+                "expected colocate_with message, got: " + ex.getMessage());
     }
 
     @Test

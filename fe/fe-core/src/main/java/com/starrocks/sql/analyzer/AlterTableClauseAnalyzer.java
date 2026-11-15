@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
@@ -52,7 +53,7 @@ import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.connector.iceberg.procedure.IcebergTableProcedure;
 import com.starrocks.connector.iceberg.procedure.NamedArgument;
-import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -67,6 +68,7 @@ import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
+import com.starrocks.sql.ast.AlterTableDictColumnsClause;
 import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -238,6 +240,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
                 || properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_FPP)) {
             // do nothing, these 2 properties will be analyzed when creating alter job
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS)) {
+            // do nothing, this property will be analyzed when creating alter job (compression dict)
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
             if (WriteQuorum.findTWriteQuorumByName(properties.get(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
@@ -315,10 +319,10 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                                 " must be bool type(false/true)");
             }
 
-            if (!table.isCloudNativeTable()) {
+            if (!table.isCloudNativeTableOrMaterializedView()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
-                                " only support cloud native table");
+                                " only support cloud native table or materialized view");
             }
 
             boolean fileBundling = properties.get(
@@ -337,7 +341,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                                 "(both split and aggregate). Please wait until old metadata versions are vacuumed");
             }
 
-            if (!((LakeTable) olapTable).checkLakeRollupAllowFileBundling()) {
+            if (!LakeTableHelper.checkLakeRollupAllowFileBundling(olapTable)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
                                 " cannot be updated now because this table contains LakeRollup created in old version." +
@@ -372,14 +376,17 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             PropertyAnalyzer.analyzeEnableLoadProfile(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
             PropertyAnalyzer.analyzeEnableStatisticCollectOnFirstLoad(properties);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT)) {
+            PropertyAnalyzer.parseBooleanStrictly(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT,
+                    properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT));
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS
-                        || olapTable.isCloudNativeTableOrMaterializedView()) {
+                        && !olapTable.isCloudNativeTableOrMaterializedView()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Property " + PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES +
-                                    " not support primary keys table or cloud native table");
+                                    " not support shared-nothing primary keys table");
                 }
             }
             PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties);
@@ -496,6 +503,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             } catch (AnalysisException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
             }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE)) {
+            if (!(table instanceof OlapTable) || !((OlapTable) table).isRangeDistribution()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        PropertyAnalyzer.TABLET_RESHARD_TARGET_SIZE_RANGE_ONLY_MSG);
+            }
+            PropertyAnalyzer.analyzeTableTabletReshardTargetSize(
+                    properties.get(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE), true);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
             if (!properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).equalsIgnoreCase("true") &&
                     !properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).equalsIgnoreCase("false")) {
@@ -587,6 +601,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 int idx = columnNames.indexOf(column);
                 if (idx == -1) {
                     throw new SemanticException("Unknown column '%s' does not exist", column);
+                }
+                // Sort key columns are encoded on the BE via an order-preserving KeyCoder; reject
+                // types without one (JSON/complex/floating-point/metric/variant/TIME) so ALTER ...
+                // ORDER BY fails cleanly instead of crashing the BE short-key encoder on rewrite.
+                if (!columnDefs.get(idx).getType().canDistributedBy()) {
+                    throw new SemanticException("Sort key column[" + column + "] type not supported: "
+                            + columnDefs.get(idx).getType().toSql());
                 }
                 sortKeyIdxes.add(idx);
             }
@@ -778,6 +799,9 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                     new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
                                     tableName, null))
                             .collect(Collectors.toList()))), context);
+            SavedSqlGeoValidator.validate(expr);
+            AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                    expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -878,6 +902,9 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
                                         tableName, null))
                                 .collect(Collectors.toList()))), context);
+                SavedSqlGeoValidator.validate(expr);
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
                 // check if contain aggregation
                 List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -947,6 +974,27 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
     }
 
     @Override
+    public Void visitAlterTableDictColumnsClause(AlterTableDictColumnsClause clause, ConnectContext context) {
+        if (!table.isOlapTable() && !table.isCloudNativeTable()) {
+            throw new SemanticException("DISABLE/ENABLE DICTIONARY only supports OLAP tables");
+        }
+        if (clause.getColumns() == null || clause.getColumns().isEmpty()) {
+            throw new SemanticException("DISABLE/ENABLE DICTIONARY requires at least one column");
+        }
+        for (String colName : clause.getColumns()) {
+            Column column = table.getColumn(colName);
+            if (column == null) {
+                throw new SemanticException("Column: " + colName + " does not exist in table " + table.getName());
+            }
+            if (!column.getType().isStringType()) {
+                throw new SemanticException("Column: " + colName + " is not a string column; low-cardinality " +
+                        "dictionary only applies to string columns");
+            }
+        }
+        return null;
+    }
+
+    @Override
     public Void visitDropColumnClause(DropColumnClause clause, ConnectContext context) {
         if (Strings.isNullOrEmpty(clause.getColName())) {
             throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(clause.getColName()));
@@ -975,11 +1023,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
         }
 
-        if (!table.isOlapTable() && !table.isCloudNativeTable()) {
-            throw new SemanticException("Add field only support olap table");
+        if (!table.isOlapTable() && !table.isCloudNativeTable() && !table.isIcebergTable()) {
+            throw new SemanticException("Add field only support olap table and iceberg table");
         }
 
-        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        Column baseColumn = table.isIcebergTable() ? table.getColumn(columnName)
+                : ((OlapTable) table).getBaseColumn(columnName);
         StructFieldDesc fieldDesc = clause.getFieldDesc();
         StructFieldDescAnalyzer.analyze(fieldDesc, baseColumn, false);
         return null;
@@ -992,11 +1041,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
         }
 
-        if (!table.isOlapTable() && !table.isCloudNativeTable()) {
-            throw new SemanticException("Drop field only support olap table");
+        if (!table.isOlapTable() && !table.isCloudNativeTable() && !table.isIcebergTable()) {
+            throw new SemanticException("Drop field only support olap table and iceberg table");
         }
 
-        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        Column baseColumn = table.isIcebergTable() ? table.getColumn(columnName)
+                : ((OlapTable) table).getBaseColumn(columnName);
         StructFieldDesc fieldDesc = new StructFieldDesc(clause.getFieldName(), clause.getNestedParentFieldNames(), null, null);
         StructFieldDescAnalyzer.analyze(fieldDesc, baseColumn, true);
         return null;
@@ -1049,6 +1099,9 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                     new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
                                     tableName, null))
                             .collect(Collectors.toList()))), context);
+            SavedSqlGeoValidator.validate(expr);
+            AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                    expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -1123,6 +1176,9 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
 
         FeNameFormat.checkColumnName(clause.getNewColName());
+        if (table != null && table.isNativeTableOrMaterializedView()) {
+            FeNameFormat.checkVirtualColumnNameNotUsed(clause.getNewColName());
+        }
         return null;
     }
 
@@ -1270,8 +1326,9 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                     throw new SemanticException("Duplicate ORDER BY column '" + sk + "'");
                 }
                 // A range rollup's ORDER BY columns become its range sort-key (tablet-boundary) columns, so
-                // they must be sortable -- reject JSON and other non-distributable types, mirroring base-table
-                // and rollup key validation (createRangeRollupJob re-derives key flags from these columns).
+                // they must be encodable as a key on the BE -- reject JSON/complex/floating-point/metric/
+                // variant and TIME (all excluded by canDistributedBy()), mirroring base-table and rollup
+                // key validation (createRangeRollupJob re-derives key flags from these columns).
                 Column sortKeyColumn = table.getColumn(sk);
                 if (sortKeyColumn != null && !sortKeyColumn.getType().canDistributedBy()) {
                     throw new SemanticException("ORDER BY column '" + sk + "' has non-sortable type '"
@@ -1418,7 +1475,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         Map<String, String> copiedProperties = clause.getProperties() == null ? Maps.newHashMap()
                 : Maps.newHashMap(clause.getProperties());
         try {
-            long tabletReshardTargetSize = PropertyAnalyzer.analyzeTabletReshardTargetSize(copiedProperties, true);
+            long tabletReshardTargetSize = PropertyAnalyzer.analyzeTabletReshardTargetSize(copiedProperties, true,
+                    ((OlapTable) table).getTabletReshardTargetSize());
             clause.setTabletReshardTargetSize(tabletReshardTargetSize);
         } catch (Exception e) {
             throw new SemanticException(e.getMessage(), e);
@@ -1435,6 +1493,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
     public Void visitMergeTabletClause(MergeTabletClause clause, ConnectContext context) {
         if (!table.isCloudNativeTableOrMaterializedView()) {
             throw new SemanticException("Merge tablet only support cloud native tables");
+        }
+
+        // A merge of this shape cannot attribute the rows of a segment its sources share, and fails at
+        // publish for good rather than at submission. Say so here, where the user is looking.
+        if (TabletReshardUtils.tabletMergeUnsupported((OlapTable) table)) {
+            throw new SemanticException("Merge tablet is not supported on a range-distributed primary key table "
+                    + "whose ORDER BY differs from the primary key");
         }
 
         if (clause.getPartitionNames() != null && clause.getTabletGroupList() != null) {
@@ -1467,7 +1532,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         Map<String, String> copiedProperties = clause.getProperties() == null ? Maps.newHashMap()
                 : Maps.newHashMap(clause.getProperties());
         try {
-            long tabletReshardTargetSize = PropertyAnalyzer.analyzeTabletReshardTargetSize(copiedProperties, true);
+            long tabletReshardTargetSize = PropertyAnalyzer.analyzeTabletReshardTargetSize(copiedProperties, true,
+                    ((OlapTable) table).getTabletReshardTargetSize());
             clause.setTabletReshardTargetSize(tabletReshardTargetSize);
         } catch (Exception e) {
             throw new SemanticException(e.getMessage(), e);
@@ -1939,6 +2005,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
         }
         clause.setAnalyzedArgs(constantArgs);
+
+        // add_equality_delete_files registers every file under its location; a WHERE clause would be silently ignored
+        if (clause.getWhere() != null &&
+                icebergTableProcedure.getOperation() == IcebergTableOperation.ADD_EQUALITY_DELETE_FILES) {
+            throw new SemanticException("WHERE is not supported for %s", icebergTableProcedure.getProcedureName());
+        }
 
         if (clause.getWhere() != null && icebergTableProcedure.getOperation() == IcebergTableOperation.REWRITE_DATA_FILES) {
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();

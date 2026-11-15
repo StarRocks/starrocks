@@ -50,6 +50,7 @@ include "AgentService.thrift"
 include "ResourceUsage.thrift"
 include "MVMaintenance.thrift"
 include "DataCache.thrift"
+include "CloudConfiguration.thrift"
 
 // These are supporting structs for JniFrontend.java, which serves as the glue
 // between our C++ execution environment and the Java frontend.
@@ -79,6 +80,10 @@ struct TAuthenticateParams {
     // Used by FE.checkAuth on the BE HTTP auth path so BE handlers can demand
     // admin/operate-level checks without round-tripping the role check themselves.
     6: optional TPrivilegeRequirement required_privilege;
+    // Credential shape: "basic" (or unset) means `passwd` is a plaintext password; "bearer" means `passwd`
+    // carries a token. Projection of the FE-side AuthCredentialKind wire names; unset defaults to basic
+    // for backward compatibility with older BEs.
+    7: optional string auth_type;
 }
 
 struct TColumnDesc {
@@ -372,6 +377,11 @@ struct TGetTablesParams {
   // If not set, match default_catalog
   22: optional string catalog_name
   23: optional string table_name
+
+  // Remaining query_timeout (seconds) of the outer user query. Forwarded by the BE schema scanner so the
+  // FE side can bound internal reads (e.g. task_run_history for information_schema.materialized_views) by
+  // the user's query_timeout instead of statistic_collect_query_timeout when the request is not FE-evaluated.
+  24: optional i64 query_timeout
 }
 
 struct TTableStatus {
@@ -431,8 +441,9 @@ struct TMaterializedViewStatus {
     35: optional string refresh_policy
     36: optional string resource_group
     37: optional string query_rewrite_status_reason
-    38: optional string last_freshness_confirmed_at
-    39: optional string base_table_refresh_version_times
+    // Ids 38/39 must stay as branch-4.1 shipped them in 4.1.4: rolling upgrade runs new BEs against old FEs.
+    38: optional string base_table_refresh_version_times
+    39: optional string last_freshness_confirmed_at
 }
 
 struct TListPipesParams {
@@ -626,6 +637,12 @@ struct TGetLoadsParams {
     18: optional i64 load_finish_time_to_ms
     19: optional i64 create_time_from_ms
     20: optional i64 create_time_to_ms
+    // Only return loads whose job id >= this value. Setting the field is how a caller
+    // declares it understands TGetLoadsResult.next_job_id_offset; FE returns the whole
+    // result set unpaged when it is absent, so an old BE keeps its previous behavior.
+    21: optional i64 start_job_id_offset
+    // The querying user. FE returns only the load jobs this user may see, and none when it is unset.
+    22: optional Types.TUserIdentity current_user_ident
 }
 
 struct TTrackingLoadInfo {
@@ -690,6 +707,8 @@ struct TLoadInfo {
 
 struct TGetLoadsResult {
     1: optional list<TLoadInfo> loads
+    // max job id in loads + 1, if set to 0 or absent, it means reaches end
+    2: optional i64 next_job_id_offset
 }
 
 struct TRoutineLoadJobInfo {
@@ -873,6 +892,22 @@ struct TAuditStatisticsItem {
     3: optional i64 table_id
 }
 
+// Additive observed AI task statistics; token usage counts distinguish unknown from reported zero.
+struct TAIExecutionStatistics {
+    1: optional i64 task_count
+    2: optional i64 request_count
+    3: optional i64 retry_count
+    4: optional i64 timeout_count
+    5: optional i64 error_count
+    6: optional i64 http_time_ns
+    7: optional i64 prompt_tokens
+    8: optional i64 completion_tokens
+    9: optional i64 total_tokens
+    10: optional i64 prompt_usage_count
+    11: optional i64 completion_usage_count
+    12: optional i64 total_usage_count
+}
+
 struct TAuditStatistics {
     3: optional i64 scan_rows
     4: optional i64 scan_bytes
@@ -884,6 +919,7 @@ struct TAuditStatistics {
     9: optional list<TAuditStatisticsItem> stats_items
     11: optional i64 read_local_cnt
     12: optional i64 read_remote_cnt
+    13: optional TAIExecutionStatistics ai_statistics
 }
 
 struct TReportAuditStatisticsParams {
@@ -1020,6 +1056,8 @@ struct TLoadTxnBeginRequest {
     // The real value of timeout should be i32. i64 ensures the compatibility of interface.
     10: optional i64 timeout
     11: optional Types.TUniqueId request_id
+    // "basic" (or unset) => `passwd` is a plaintext password; "bearer" => `passwd` carries a token.
+    12: optional string auth_type
 
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
@@ -1092,6 +1130,8 @@ struct TStreamLoadPutRequest {
     56: optional string payload_compression_type
     // CDC envelope format
     57: optional PlanNodes.TEnvelopeType envelope
+    // "basic" (or unset) => `passwd` is a plaintext password; "bearer" => `passwd` carries a token.
+    58: optional string auth_type
 
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
@@ -1119,6 +1159,9 @@ struct TMergeCommitRequest {
     // (currently `_statistics_.rejected_records`); any other db/tbl
     // falls back to the normal user/passwd check regardless of token.
     9: optional string internal_token;
+    // "basic" (default when unset) or "bearer"; when "bearer", `passwd` carries the token.
+    // Unset is exactly equivalent to "basic", which is what makes a rolling FE/BE upgrade safe.
+    10: optional string auth_type;
 }
 
 struct TMergeCommitResult {
@@ -1194,6 +1237,8 @@ struct TLoadTxnCommitRequest {
     13: optional list<Types.TTabletFailInfo> failInfos
     // The timeout for prepared transaction. Only valid if this requerst is sent by rpc loadTxnPrepare
     14: optional i32 prepared_timeout_second
+    // "basic" (or unset) => `passwd` is a plaintext password; "bearer" => `passwd` carries a token.
+    15: optional string auth_type
 }
 
 struct TLoadTxnCommitResult {
@@ -1216,6 +1261,8 @@ struct TLoadTxnRollbackRequest {
     10: optional TTxnCommitAttachment txnCommitAttachment
     11: optional list<Types.TTabletFailInfo> failInfos
     12: optional list<Types.TTabletCommitInfo> commitInfos
+    // "basic" (or unset) => `passwd` is a plaintext password; "bearer" => `passwd` carries a token.
+    13: optional string auth_type
 }
 
 struct TGetLoadTxnStatusResult {
@@ -1660,6 +1707,34 @@ struct TPartitionMetaInfo {
     // tablets. Only meaningful for tables with an async vector index (shared-data).
     33: optional i64 min_vi_built_version
     34: optional i64 max_vi_built_version
+    // Last time this partition was scanned by a query (unix seconds). In-memory only on FE
+    // (not persisted); 0/absent = never accessed, or the value was lost on FE restart/failover.
+    35: optional i64 last_access_time
+    // Last time this partition was modified by a user write (load/DML, excluding compaction),
+    // in unix seconds. 0/absent = unknown.
+    36: optional i64 last_update_time
+    // The version the partition's incremental vacuum has advanced to; everything below it is reclaimed.
+    // Equals visible_version once vacuum catches up, and is smaller while a reclaim backlog remains.
+    37: optional i64 vacuum_version
+}
+
+// Ask one FE for its local in-memory partition query-access times of a table, so the querying FE
+// can aggregate (max) across all FEs. Best-effort: callers tolerate a missing/slow FE.
+struct TPartitionAccessTimeTableRef {
+    1: optional i64 db_id
+    2: optional i64 table_id
+}
+
+struct TGetPartitionAccessTimesRequest {
+    // One entry per requested table. SHOW PARTITIONS sends a single element; partitions_meta sends the
+    // whole page so a single RPC per FE covers many tables (O(FEs) round-trips, not O(tables * FEs)).
+    // Logical partition ids are globally unique, so the response merges into one logicalPartitionId -> ms map.
+    1: optional list<TPartitionAccessTimeTableRef> tables
+}
+
+struct TGetPartitionAccessTimesResponse {
+    1: optional Status.TStatus status
+    2: optional map<i64, i64> partition_id_to_access_time_ms // logicalPartitionId -> lastAccessTime(ms)
 }
 
 struct TGetPartitionsMetaResponse {
@@ -2311,6 +2386,15 @@ struct TUpdateFailPointRequest {
     2: optional bool is_enable;
     3: optional i32 times;
     4: optional double probability;
+    // Pause mode: park threads reaching this failpoint until it is disabled. A pause request also
+    // sets is_enable = false, so a frontend that predates this field disables the failpoint instead
+    // of enabling it. Readers must check `pause` before `is_enable`.
+    5: optional bool pause;
+    // Pause timeout, snapshotted by the arming frontend and carried with the request, exactly as
+    // PUpdateFailPointStatusRequest.pause_timeout_second is for backends. Receivers must NOT re-read
+    // their own config at park time: that would let ADMIN SET FRONTEND CONFIG between arming and
+    // parking desynchronize the frontends from each other and from the backends.
+    6: optional i32 pause_timeout_second;
 }
 
 struct TUpdateFailPointResponse {
@@ -2411,6 +2495,14 @@ struct TGetTabletMetadataRequest {
     5: optional i64 version;
 }
 
+// Extension point for TCloudTabletMeta. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TCloudTabletMeta
+// fields belong on TCloudTabletMeta itself, whose remaining numbers are free.
+struct TCloudTabletMetaExt {
+}
+
 // Subset of tablet metadata fields needed to construct a version-1 TabletMetadataPB
 // on CN. The shape currently overlaps with AgentService.TCreateTabletReq; the two
 // must be kept in sync per the NOTE on TCreateTabletReq. Higher versions will need
@@ -2422,11 +2514,12 @@ struct TCloudTabletMeta {
     3: optional bool enable_persistent_index;
     4: optional AgentService.TPersistentIndexType persistent_index_type;
     5: optional AgentService.TCompactionStrategy compaction_strategy;
-    6: optional AgentService.TFlatJsonConfig flat_json_config;
+    6: optional Descriptors.TFlatJsonConfig flat_json_config;
     7: optional map<i64, Types.TTabletRange> tablet_ranges;
     8: optional i64 gtid;
     9: optional Types.TCompressionType compression_type;
     10: optional i32 compression_level;
+    11: optional TCloudTabletMetaExt ext;
 }
 
 struct TGetTabletMetadataResponse {
@@ -2451,6 +2544,36 @@ struct TFeMetricsResult {
     1: optional Status.TStatus status
     // JSON payload identical to the FE `/metrics?type=json` output, parsed by the BE scanner.
     2: optional string json_metrics
+}
+
+// Asked by a backend whose scan node carries a TCloudConfiguration with refresh_after_ms set, once that time
+// has passed. refresh_token is the one that configuration carried; the coordinator answers with the scan node's
+// current configuration, renewing it first if it is due.
+struct TRefreshScanCredentialsRequest {
+    1: optional Types.TUniqueId query_id;
+    2: optional i32 plan_node_id;
+    3: optional string refresh_token;
+}
+
+struct TRefreshScanCredentialsResponse {
+    1: optional Status.TStatus status;
+    2: optional CloudConfiguration.TCloudConfiguration cloud_configuration;
+}
+
+// Columns of one external table whose statistics a query found missing or expired.
+struct TTriggerExternalAnalyzeTable {
+    1: optional string table_uuid;
+    2: optional list<string> columns;
+}
+
+// Sent by a follower to the leader: query-triggered external table analyze runs only on the leader, because
+// it writes the edit log. Best effort; a dropped request is raised again by the next query.
+struct TTriggerExternalAnalyzeRequest {
+    1: optional list<TTriggerExternalAnalyzeTable> tables;
+}
+
+struct TTriggerExternalAnalyzeResponse {
+    1: optional Status.TStatus status;
 }
 
 service FrontendService {
@@ -2574,6 +2697,8 @@ service FrontendService {
 
     TGetPartitionsMetaResponse getPartitionsMeta(1: TGetPartitionsMetaRequest request)
 
+    TGetPartitionAccessTimesResponse getPartitionAccessTimes(1: optional TGetPartitionAccessTimesRequest request)
+
     TReportLakeCompactionResponse reportLakeCompaction(1: TReportLakeCompactionRequest request)
 
     TListSessionsResponse listSessions(1: TListSessionsRequest request)
@@ -2615,4 +2740,8 @@ service FrontendService {
     // when `enable_http_auth` is on. Returns OK status when the user/password pair is
     // valid for the given host, or an error status otherwise.
     TFeResult checkAuth(1: optional TAuthenticateParams request)
+
+    TRefreshScanCredentialsResponse refreshScanCredentials(1: optional TRefreshScanCredentialsRequest request)
+
+    TTriggerExternalAnalyzeResponse triggerExternalAnalyze(1: optional TTriggerExternalAnalyzeRequest request)
 }

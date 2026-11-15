@@ -62,6 +62,10 @@ public:
         return _value.compare_exchange_strong(old_value, new_value);
     }
 
+    // The number of threads the pool is currently supposed to run, which follows configuration
+    // changes immediately, unlike the actual number that only converges as threads come and go.
+    int32_t expect_num() const { return LIMIT_SETTER_EXPECT_NUM(_value.load(std::memory_order_relaxed)); }
+
 private:
     std::atomic<int64_t> _value{0};
 };

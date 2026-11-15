@@ -17,6 +17,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage/primary_index.h"
 #include "storage/tablet.h"
 #include "storage/tablet_updates.h"
@@ -57,8 +58,8 @@ Status LocalPrimaryKeyCompactionConflictResolver::segment_iterator(
     auto pkey_schema = generate_pkey_schema();
     RowsetReleaseGuard guard(_rowset->shared_from_this());
     const auto& schema = _rowset->schema();
-    ASSIGN_OR_RETURN(auto segment_iters,
-                     _rowset->get_segment_iterators2(pkey_schema, schema, MetaLoadMode::NONE, 0, &stats));
+    ASSIGN_OR_RETURN(auto segment_iters, _rowset->get_segment_iterators2(pkey_schema, schema, MetaLoadMode::NONE, 0,
+                                                                         &stats, get_pk_vector_chunk_size()));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset->num_segments(), "itrs.size != num_segments");
     // init delvec loader
     auto delvec_loader = std::make_unique<LocalDelvecLoader>(_tablet->data_dir()->get_meta());
@@ -69,7 +70,10 @@ Status LocalPrimaryKeyCompactionConflictResolver::segment_iterator(
     params.base_version = _base_version;
     params.new_version = _new_version;
     params.delvec_loader = delvec_loader.get();
-    params.index = _index;
+    params.replace_rows = [this](uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                                 const Column& pks) {
+        return _index->replace(rssid, rowid_start, replace_indexes, pks);
+    };
     return handler(params, segment_iters, [&](uint32_t rssid, const DelVectorPtr& dv, uint32_t num_dels) {
         *_total_deletes += num_dels;
         _delvecs->emplace_back(rssid, dv);

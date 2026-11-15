@@ -1,0 +1,7 @@
+position: 60
+label: 'Deployment'
+collapsible: true
+collapsed: true
+link:
+  id: deployment
+  type: doc

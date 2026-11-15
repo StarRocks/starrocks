@@ -1,12 +1,15 @@
 ---
+sidebar_position: 60
 description: Kafka Routine Load 使用存算分离存储
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # 通过 Routine Load 向 StarRocks 存算分离集群导入 Kafka 数据
 
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
+import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 
 ## 关于 Routine Load
 
@@ -49,6 +52,10 @@ Routine load 是一种使用 Apache Kafka 或在本实验中使用 Redpanda，�
 
 `curl` 用于下载 Compose 文件和生成数据的脚本。通过在操作系统提示符下运行 `curl` 或 `curl.exe` 检查是否已安装 curl。如果未安装 curl，[在此获取 curl](https://curl.se/)。
 
+### MinIO AIStor 许可证
+
+本指南使用 MinIO AIStor 作为对象存储，它需要许可证。免费版许可证即可满足需求。获取许可证的说明将在本指南后面提供。
+
 ### Python
 
 需要 Python 3 和 Apache Kafka 的 Python 客户端 `kafka-python`。
@@ -86,7 +93,7 @@ Routine load 是一种使用 Apache Kafka 或在本实验中使用 Redpanda，�
 - 一个计算节点（CN）
 - 对象存储
 
-本指南使用 MinIO，它是兼容 S3 的对象存储提供商。MinIO 根据 GNU Affero 通用公共许可证提供。
+本指南使用 MinIO AIStor，它是兼容 S3 的对象存储。MinIO AIStor 需要许可证。
 
 ### 下载实验文件
 
@@ -105,6 +112,10 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/routine-load-shared-data/gen.py
 ```
+
+### 获取 MinIO AIStor 许可证
+
+<AIStorLicense />
 
 ## 启动 StarRocks、MinIO 和 Redpanda
 
@@ -738,7 +749,7 @@ Kafka 的代理连接信息。格式为 `<kafka_broker_name_or_ip>:<broker_ port
 
 [StarRocks 架构](../introduction/Architecture.md)
 
-本实验使用的示例非常简单。Routine Load 具有更多选项和功能。[了解更多](../loading/RoutineLoad.md)。
+本实验使用的示例非常简单。Routine Load 具有更多选项和功能。[了解更多](../loading/kafka/RoutineLoad.md)。
 
 [JSONPath](https://goessner.net/articles/JsonPath/)
 ```

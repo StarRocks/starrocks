@@ -1,18 +1,30 @@
 ---
+sidebar_position: 60
 description: 直接从 Delta Lake 查询数据
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
-import Intro from '../../_assets/catalog/_deltalake_intro.mdx'
 import DatabricksParams from '../../_assets/catalog/_databricks_params.mdx'
 
 # Delta Lake catalog
 
-<Intro />
+Delta Lake catalog 是一种 external catalog，允许您在不导入的情况下查询 Delta Lake 中的数据。
+
+此外，您还可以通过基于 Delta Lake catalogs 使用 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 直接转换和导入 Delta Lake 中的数据。StarRocks 从 v2.5 开始支持 Delta Lake catalogs。
+
+为了确保在 Delta Lake 集群上成功执行 SQL 工作负载，您的 StarRocks 集群必须能够访问 Delta Lake 集群的存储系统和元存储。StarRocks 支持以下存储系统和元存储：
+
+- 分布式文件系统 (HDFS) 或对象存储，如 AWS S3、Microsoft Azure Storage、Google GCS 或其他兼容 S3 的存储系统（例如 MinIO）
+
+- 元存储如 Hive metastore 或 AWS Glue
+
+:::note
+如果选择 AWS S3 作为存储，可以使用 HMS 或 AWS Glue 作为元存储。如果选择其他存储系统，则只能使用 HMS 作为元存储。
+:::
 
 ## 使用说明
 
 - StarRocks 支持的 Delta Lake 文件格式是 Parquet。Parquet 文件支持以下压缩格式：SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION。
-- StarRocks 不支持 Delta Lake 的数据类型为 MAP 和 STRUCT。
 
 ## 集成准备
 
@@ -30,7 +42,7 @@ import DatabricksParams from '../../_assets/catalog/_databricks_params.mdx'
 
 在上述三种身份验证方法中，实例配置文件是最广泛使用的。
 
-有关更多信息，请参见 [AWS IAM 中的身份验证准备](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)。
+有关更多信息，请参见 [AWS IAM 中的身份验证准备](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)。
 
 ### HDFS
 
@@ -152,7 +164,7 @@ Delta Lake catalog 的描述。此参数是可选的。
 | aws.glue.access_key           | 否   | 您的 AWS IAM 用户的访问密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS Glue，必须指定此参数。 |
 | aws.glue.secret_key           | 否   | 您的 AWS IAM 用户的密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS Glue，必须指定此参数。 |
 
-有关如何选择访问 AWS Glue 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS Glue 的身份验证参数](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)。
+有关如何选择访问 AWS Glue 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS Glue 的身份验证参数](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)。
 
 <DatabricksParams />
 
@@ -202,7 +214,7 @@ Delta Lake catalog 的描述。此参数是可选的。
 | aws.s3.access_key           | 否   | 您的 IAM 用户的访问密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，必须指定此参数。 |
 | aws.s3.secret_key           | 否   | 您的 IAM 用户的密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，必须指定此参数。 |
 
-有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
+有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
 
 ##### S3 兼容存储系统
 
@@ -449,10 +461,10 @@ Delta Lake catalog 的描述。此参数是可选的。
 | enable_deltalake_table_cache                       | -        | true         | 是否在 Delta Lake 的元数据缓存中启用表缓存。 |
 | enable_deltalake_json_meta_cache                   | -        | true         | 是否为 Delta Log JSON 文件启用缓存。 |
 | deltalake_json_meta_cache_ttl_sec                  | 秒       | 48 * 60 * 60 | Delta Log JSON 文件缓存的生存时间 (TTL)。 |
-| deltalake_json_meta_cache_memory_usage_ratio       | -        | 0.1          | Delta Log JSON 文件缓存占用的 JVM 堆内存的最大比例。 |
+| deltalake_json_meta_cache_memory_usage_ratio       | -        | 0.1          | Delta Log JSON 文件缓存占用的 JVM 堆内存的最大比例。FE 配置项 `deltalake_json_meta_cache_global_memory_ratio` 大于 `0` 时该属性不生效。 |
 | enable_deltalake_checkpoint_meta_cache             | -        | true         | 是否为 Delta Log Checkpoint 文件启用缓存。 |
 | deltalake_checkpoint_meta_cache_ttl_sec            | 秒       | 48 * 60 * 60 | Delta Log Checkpoint 文件缓存的生存时间 (TTL)。  |
-| deltalake_checkpoint_meta_cache_memory_usage_ratio | -        | 0.1          | Delta Log Checkpoint 文件缓存占用的 JVM 堆内存的最大比例。 |
+| deltalake_checkpoint_meta_cache_memory_usage_ratio | -        | 0.1          | Delta Log Checkpoint 文件缓存占用的 JVM 堆内存的最大比例。FE 配置项 `deltalake_checkpoint_meta_cache_global_memory_ratio` 大于 `0` 时该属性不生效。 |
 
 ### 示例
 

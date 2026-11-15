@@ -20,12 +20,14 @@
 
 #include "base/logging.h"
 #include "base/utility/defer_op.h"
+#include "common/config_metrics_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "jni.h"
 #include "runtime/java/java_runtime.h"
 #include "runtime/java/jni_env.h"
 #include "runtime/java/jvm_helper.h"
+#include "runtime/mem_tracker.h"
 
 #define CHECK_JNI_EXCEPTION(env, message)                                                       \
     if (jthrowable thr = env->ExceptionOccurred(); thr) {                                       \
@@ -105,16 +107,84 @@ Status JVMMetrics::init() {
     _get_name = env->GetMethodID(memory_pool_mxbean_cls, "getName", "()Ljava/lang/String;");
     CHECK_JNI_EXCEPTION(env, "get method getName failed")
 
+    _initialized.store(true, std::memory_order_release);
     return Status::OK();
 }
 
-void JVMMetrics::install(MetricRegistry* registry) {
-    if (!registry->register_hook("jvm_metrics", [this] {
-            auto status = update();
-            if (!status.ok()) {
-                LOG(WARNING) << "update jvm metrics failed: " << status.to_string();
+StatusOr<bool> JVMMetrics::is_jvm_created() {
+    JavaVM* vm = nullptr;
+    // The mock libjvm leaves the count untouched and returns JNI_ERR, so it must be initialized.
+    jsize num_vms = 0;
+    if (JNI_GetCreatedJavaVMs(&vm, 1, &num_vms) != JNI_OK) {
+        return Status::NotSupported("JNI_GetCreatedJavaVMs failed, java runtime is unavailable");
+    }
+    return num_vms > 0;
+}
+
+void JVMMetrics::_update_if_jvm_ready() {
+    if (!_initialized.load(std::memory_order_acquire)) {
+        if (_jvm_unavailable.load(std::memory_order_acquire)) {
+            return;
+        }
+        std::lock_guard<std::mutex> l(_init_lock);
+        if (!_initialized.load(std::memory_order_acquire)) {
+            auto created = is_jvm_created();
+            if (!created.ok()) {
+                // Stop polling: the mock libjvm prints to stderr on every call.
+                _jvm_unavailable.store(true, std::memory_order_release);
+                LOG(WARNING) << "jvm metrics are disabled: " << created.status().to_string();
+                return;
             }
-        })) {
+            if (!created.value()) {
+                // No JVM yet. Never create one just to collect metrics; check again next round.
+                return;
+            }
+            // A JVM that is still being created may refuse to attach this thread, so a failure
+            // here is retried on the next round.
+            auto status = init();
+            if (!status.ok()) {
+                LOG_EVERY_N(WARNING, 20) << "init jvm metrics failed, will retry: " << status.to_string();
+                return;
+            }
+        }
+    }
+
+    auto status = update();
+    if (!status.ok()) {
+        LOG(WARNING) << "update jvm metrics failed: " << status.to_string();
+    }
+    // Run even when the collection failed, so that turning enable_jvm_memory_tracker off still
+    // releases the charge while the JVM keeps failing to report, e.g. on a Java OutOfMemoryError.
+    _update_mem_tracker(status.ok());
+}
+
+void JVMMetrics::set_mem_tracker(MemTracker* mem_tracker) {
+    std::lock_guard<std::mutex> l(_mem_tracker_lock);
+    _mem_tracker = mem_tracker;
+}
+
+void JVMMetrics::_update_mem_tracker(bool collected) {
+    std::lock_guard<std::mutex> l(_mem_tracker_lock);
+    if (_mem_tracker == nullptr) {
+        return;
+    }
+    int64_t tracked = 0;
+    if (config::enable_jvm_memory_tracker) {
+        if (!collected) {
+            // Keep the last charge: the JVM still holds that memory, and after a partial failure
+            // the gauges mix values from different rounds.
+            return;
+        }
+        // Committed rather than used: the JVM keeps committed memory after a GC frees objects in
+        // it, and that memory is not available to the rest of BE.
+        tracked = jvm_heap_committed_bytes.value() + jvm_non_heap_committed_bytes.value();
+    }
+    // enable_jvm_memory_tracker is mutable; when it is off, release whatever was tracked before.
+    _mem_tracker->consume(tracked - _mem_tracker->consumption());
+}
+
+void JVMMetrics::install(MetricRegistry* registry) {
+    if (!registry->register_hook("jvm_metrics", [this] { _update_if_jvm_ready(); })) {
         return;
     }
 

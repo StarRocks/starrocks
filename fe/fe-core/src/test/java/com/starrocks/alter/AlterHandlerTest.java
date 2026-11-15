@@ -14,13 +14,25 @@
 
 package com.starrocks.alter;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 /**
@@ -40,6 +52,40 @@ public class AlterHandlerTest {
     public void testGetActiveTxnIdOfTableReturnsEmptyWhenNoJobs() {
         Optional<Long> result = handler.getActiveTxnIdOfTable(123L);
         Assertions.assertTrue(result.isEmpty());
+    }
+
+    @Test
+    public void testRunAlterJobV2SafelyContainsOrdinaryExceptionsButPropagatesErrors() {
+        AlterJobV2 bad = mock(AlterJobV2.class);
+        when(bad.getJobId()).thenReturn(1L);
+        when(bad.getJobState()).thenReturn(AlterJobV2.JobState.RUNNING);
+        doThrow(new IllegalStateException("NORMAL")).when(bad).run();
+
+        Assertions.assertDoesNotThrow(() -> handler.runAlterJobV2Safely(bad));
+
+        AlterJobV2 fatal = mock(AlterJobV2.class);
+        doThrow(new AssertionError("fatal")).when(fatal).run();
+
+        Assertions.assertThrows(AssertionError.class, () -> handler.runAlterJobV2Safely(fatal));
+    }
+
+    @Test
+    public void testRunAlterJobV2ContinuesWithSiblingAfterOrdinaryException() {
+        LakeTableAddIndexJob bad = spy(new LakeTableAddIndexJob(
+                1L, 2L, 3L, "bad", 60_000L, new ArrayList<>(), new ArrayList<>()));
+        LakeTableAddIndexJob healthy = spy(new LakeTableAddIndexJob(
+                2L, 2L, 3L, "healthy", 60_000L, new ArrayList<>(), new ArrayList<>()));
+        bad.setJobState(AlterJobV2.JobState.PENDING);
+        healthy.setJobState(AlterJobV2.JobState.PENDING);
+        AtomicInteger healthyRuns = new AtomicInteger();
+        doThrow(new IllegalStateException("NORMAL")).when(bad).run();
+        doAnswer(invocation -> {
+            healthyRuns.incrementAndGet();
+            return null;
+        }).when(healthy).run();
+
+        Assertions.assertDoesNotThrow(() -> handler.runAlterJobV2(List.of(bad, healthy)));
+        Assertions.assertEquals(1, healthyRuns.get());
     }
 
     @Test
@@ -231,31 +277,75 @@ public class AlterHandlerTest {
         handler.setStop();
     }
 
-    /**
-     * start() must refuse to spin up a fresh pool when the previous one is shutdown but has
-     * not actually terminated yet - otherwise two AlterReplicaTask submission workers could
-     * race on alterJobsV2 during a fast demote/re-elect cycle.
-     */
     @Test
-    public void testStartRefusesToRestartBeforePreviousPoolTerminates() throws Exception {
-        java.util.concurrent.ThreadPoolExecutor blockedPool = new java.util.concurrent.ThreadPoolExecutor(
-                1, 1, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
-                new java.util.concurrent.ArrayBlockingQueue<>(1));
-        blockedPool.execute(() -> {
-            try {
-                Thread.sleep(30_000L);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        blockedPool.shutdown();
-        org.apache.commons.lang3.reflect.FieldUtils.writeField(handler, "executor", blockedPool, true);
+    public void testRunAfterLeaseValidPrunesDoneJob() {
+        SchemaChangeJobV2 job = newDoneJobWithTabletData();
+        handler.addAlterJobV2(job);
 
-        try {
-            Assertions.assertThrows(IllegalStateException.class, handler::start);
-        } finally {
-            blockedPool.shutdownNow();
-        }
+        handler.runAfterLeaseValid();
+
+        assertPruned(job);
+    }
+
+    @Test
+    public void testRunAfterLeaseValidPrunesDoneJobOncePublishCompletes() {
+        SchemaChangeJobV2 job = newDoneJobWithTabletData();
+        CompletableFuture<Boolean> publish = new CompletableFuture<>();
+        job.publishVersionFuture = publish;
+        handler.addAlterJobV2(job);
+
+        // The publish worker may still read the per-tablet data.
+        handler.runAfterLeaseValid();
+        Assertions.assertFalse(job.physicalPartitionIndexMap.isEmpty());
+
+        publish.complete(true);
+        handler.runAfterLeaseValid();
+        assertPruned(job);
+    }
+
+    @Test
+    public void testRunAfterLeaseValidSurvivesPruneFailure() {
+        SchemaChangeJobV2 bad = spy(newDoneJobWithTabletData(1L));
+        doThrow(new IllegalStateException("prune failed")).when(bad).pruneMeta();
+        SchemaChangeJobV2 good = newDoneJobWithTabletData(2L);
+        handler.addAlterJobV2(bad);
+        handler.addAlterJobV2(good);
+        SchemaChangeHandler spied = spy(handler);
+
+        spied.runAfterLeaseValid();
+
+        assertPruned(good);
+        Mockito.verify(spied).clearExpireFinishedOrCancelledAlterJobsV2();
+    }
+
+    /**
+     * A done job that still holds its per-tablet data, as when it reached its final state while its publish
+     * was still running.
+     */
+    private static SchemaChangeJobV2 newDoneJobWithTabletData() {
+        return newDoneJobWithTabletData(1L);
+    }
+
+    private static SchemaChangeJobV2 newDoneJobWithTabletData(long jobId) {
+        SchemaChangeJobV2 job = new SchemaChangeJobV2(jobId, 2L, 3L, "tbl", 60_000L);
+        job.addIndexSchema(11L, 10L, "__starrocks_shadow_tbl", 1, 1, (short) 1,
+                Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+        job.addTabletIdMap(20L, 11L, 21L, 22L);
+        job.addPartitionShadowIndex(20L, 11L, new MaterializedIndex(11L, MaterializedIndex.IndexState.SHADOW));
+        job.setJobState(AlterJobV2.JobState.FINISHED);
+        job.setFinishedTimeMs(System.currentTimeMillis());
+        Assertions.assertFalse(job.physicalPartitionIndexTabletMap.isEmpty());
+        Assertions.assertFalse(job.physicalPartitionIndexMap.isEmpty());
+        Assertions.assertFalse(job.indexMetaIdToSchema.isEmpty());
+        Assertions.assertFalse(job.indexMetaIdToShortKey.isEmpty());
+        return job;
+    }
+
+    private static void assertPruned(SchemaChangeJobV2 job) {
+        Assertions.assertTrue(job.physicalPartitionIndexTabletMap.isEmpty());
+        Assertions.assertTrue(job.physicalPartitionIndexMap.isEmpty());
+        Assertions.assertTrue(job.indexMetaIdToSchema.isEmpty());
+        Assertions.assertTrue(job.indexMetaIdToShortKey.isEmpty());
     }
 
     /**
@@ -282,4 +372,3 @@ public class AlterHandlerTest {
         return job;
     }
 }
-

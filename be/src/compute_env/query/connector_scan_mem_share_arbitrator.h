@@ -23,9 +23,19 @@ namespace starrocks::pipeline {
 struct ConnectorScanOperatorMemShareArbitrator {
     static constexpr double kChunkBufferMemRatio = 0.5;
     static constexpr int64_t kDefaultDataSourceMemBytes = 64 * 1024 * 1024;
+    // Fraction of `scan_mem_limit` handed out as equal per-node floors before the remainder is split
+    // proportionally to the observed per-chunk-source cost. A purely proportional split gives the
+    // node with the most expensive chunk sources the most memory, which lets it run even more of
+    // them and report an even higher total; a cheap but hot node can be squeezed towards zero even
+    // though it is the one that would have finished early and returned its share.
+    static constexpr double kNodeFloorRatio = 0.5;
 
     int64_t query_mem_limit = 0;
     int64_t scan_mem_limit = 0;
+    // Scan nodes that have not finished yet. The floors are divided among these rather than among
+    // all the nodes in the plan, so a node that has run to completion stops holding a reservation
+    // that the nodes still scanning could use.
+    std::atomic<int> active_scan_node_number = 1;
     std::atomic<int64_t> total_chunk_source_mem_bytes = 0;
 
     ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit, int connector_scan_node_number,

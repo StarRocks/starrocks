@@ -50,8 +50,7 @@ ColumnRef* find_first_column_ref(Expr* expr) {
 
 } // namespace
 
-Status convert_to_arrow_schema(const RowDescriptor& row_desc,
-                               const std::unordered_map<int64_t, std::string>& id_to_col_name,
+Status convert_to_arrow_schema(const std::unordered_map<int64_t, std::string>& id_to_col_name,
                                std::shared_ptr<arrow::Schema>* result,
                                const std::vector<ExprContext*>& output_expr_ctxs,
                                const std::vector<std::string>* output_column_names, int32_t flight_sql_version) {
@@ -73,7 +72,7 @@ Status convert_to_arrow_schema(const RowDescriptor& row_desc,
         } else if (auto it = id_to_col_name.find(id); it != id_to_col_name.end()) {
             col_name = it->second;
         } else {
-            LOG(WARNING) << "Can't find the RefSlot in the row_desc.";
+            LOG(WARNING) << "Can't find the RefSlot in the record descriptor.";
         }
 
         if (flight_sql_version <= 0) {

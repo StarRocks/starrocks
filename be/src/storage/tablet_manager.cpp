@@ -1411,6 +1411,18 @@ void TabletManager::_build_tablet_stat() {
         for (const auto& tablet : all_tablets_by_shard) {
             TTabletStat stat;
             stat.tablet_id = tablet->tablet_id();
+            // Which version the row count below describes. The FE cannot infer it: this cache is
+            // rebuilt only every tablet_stat_cache_update_interval_second, so a successful RPC may
+            // well be answered with counts from well before the caller's current visible version.
+            // Reporting the version lets the FE tell the two apart without comparing clocks across
+            // machines.
+            //
+            // The count and the version are read under separate locks, so a publish landing between
+            // the two would pair one version's count with another version's number -- precisely the
+            // confusion this field exists to remove. Bracket the read and report the version only
+            // when nothing moved; otherwise leave it unset, which the FE reads as "unknown" and
+            // treats as untrusted, and the next rebuild reports it.
+            int64_t version_before = tablet->max_continuous_version();
             if (tablet->updates()) {
                 auto [row_num, data_size] = tablet->updates()->num_rows_and_data_size();
                 stat.__set_row_num(row_num);
@@ -1420,6 +1432,9 @@ void TabletManager::_build_tablet_stat() {
                 stat.__set_row_num(tablet->num_rows());
             }
             stat.__set_version_count(tablet->version_count());
+            if (tablet->max_continuous_version() == version_before) {
+                stat.__set_version(version_before);
+            }
             _tablet_stat_cache.emplace(tablet->tablet_id(), stat);
         }
     }

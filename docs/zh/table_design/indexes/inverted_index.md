@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "How to create and use full-text inverted indexes in StarRocks to accelerate text keyword searches by indexing individual words."
 toc_max_heading_level: 4
 sidebar_position: 50
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
@@ -105,6 +106,9 @@ ALTER TABLE t DROP index idx;
 - `<col_name> (NOT) MATCH_ALL 'keyword1, keyword2'`
 
 其中，keyword 必须为字符串字面量，不支持表达式。
+
+对于可为空的索引列，值为 `NULL` 的行不会出现在 `NOT MATCH`、`NOT MATCH_ANY` 和 `NOT MATCH_ALL` 的查询结果中。
+
 1. 创建一个表并插入几行测试数据。
 
       ```SQL

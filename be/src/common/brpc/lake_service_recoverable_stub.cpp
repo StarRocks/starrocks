@@ -20,8 +20,9 @@
 
 namespace starrocks {
 
-LakeService_RecoverableStub::LakeService_RecoverableStub(const butil::EndPoint& endpoint, std::string protocol)
-        : _endpoint(endpoint), _protocol(std::move(protocol)) {}
+LakeService_RecoverableStub::LakeService_RecoverableStub(const butil::EndPoint& endpoint, std::string protocol,
+                                                         int64_t connection_group_seed)
+        : _endpoint(endpoint), _connection_group_seed(connection_group_seed), _protocol(std::move(protocol)) {}
 
 LakeService_RecoverableStub::~LakeService_RecoverableStub() = default;
 
@@ -41,7 +42,10 @@ Status LakeService_RecoverableStub::reset_channel(int64_t next_connection_group)
     if (_protocol != "http") {
         // http does not support these.
         options.connection_type = config::brpc_connection_type;
-        options.connection_group = std::to_string(next_connection_group);
+        // The seed keeps sibling stubs on distinct connection_groups (distinct TCP connections under
+        // connection_type=single); the epoch suffix lets a single stub obtain a fresh connection when recovering from
+        // EHOSTDOWN.
+        options.connection_group = std::to_string(_connection_group_seed) + "_" + std::to_string(next_connection_group);
     }
     options.max_retry = 3;
     std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
@@ -57,6 +61,17 @@ Status LakeService_RecoverableStub::reset_channel(int64_t next_connection_group)
         _stub.reset(ptr.release());
     }
     return Status::OK();
+}
+
+bool LakeService_RecoverableStub::reset_channel_if_failed() {
+    // Read the epoch before the check, so that the reset is a no-op if RecoverableClosure resets the channel first.
+    const int64_t next_connection_group = _connection_group.load() + 1;
+    auto current = stub();
+    auto* channel = current == nullptr ? nullptr : dynamic_cast<brpc::ChannelBase*>(current->channel());
+    if (channel == nullptr || channel->CheckHealth() == 0) {
+        return false;
+    }
+    return reset_channel(next_connection_group).ok();
 }
 
 void LakeService_RecoverableStub::publish_version(::google::protobuf::RpcController* controller,

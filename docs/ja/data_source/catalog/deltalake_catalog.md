@@ -1,18 +1,30 @@
 ---
+sidebar_position: 60
 description: Delta Lake から直接データをクエリする
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
-import Intro from '../../_assets/catalog/_deltalake_intro.mdx'
 import DatabricksParams from '../../_assets/catalog/_databricks_params.mdx'
 
 # Delta Lake catalog
 
-<Intro />
+Delta Lake カタログは、取り込みなしで Delta Lake からデータをクエリすることを可能にする一種の external catalog です。
+
+また、Delta Lake カタログに基づいて [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) を使用することで、Delta Lake から直接データを変換およびロードすることができます。StarRocks は v2.5 以降の Delta Lake カタログをサポートしています。
+
+Delta Lake クラスターでの SQL ワークロードを成功させるためには、StarRocks クラスターが Delta Lake クラスターのストレージシステムとメタストアにアクセスできる必要があります。StarRocks は以下のストレージシステムとメタストアをサポートしています。
+
+- 分散ファイルシステム (HDFS) または AWS S3、Microsoft Azure Storage、Google GCS、その他の S3 互換ストレージシステム（例: MinIO）などのオブジェクトストレージ
+
+- Hive メタストアや AWS Glue などのメタストア
+
+:::note
+ストレージとして AWS S3 を選択した場合、メタストアとして HMS または AWS Glue を使用できます。他のストレージシステムを選択した場合、メタストアとして使用できるのは HMS のみです。
+:::
 
 ## 使用上の注意
 
 - StarRocks がサポートする Delta Lake のファイル形式は Parquet です。Parquet ファイルは次の圧縮形式をサポートしています: SNAPPY, LZ4, ZSTD, GZIP, NO_COMPRESSION。
-- StarRocks がサポートしていない Delta Lake のデータ型は MAP と STRUCT です。
 
 ## 統合準備
 
@@ -30,7 +42,7 @@ Delta Lake クラスターが AWS S3 をストレージとして使用してい�
 
 上記の3つの認証方法の中で、インスタンスプロファイルが最も広く使用されています。
 
-詳細については、 [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication) を参照してください。
+詳細については、 [Preparation for authentication in AWS IAM](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication) を参照してください。
 
 ### HDFS
 
@@ -152,7 +164,7 @@ Delta Lake データをクエリする前に、Hive メタストアノードの�
 | aws.glue.access_key           | No       | AWS IAM ユーザーのアクセスキーです。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。 |
 | aws.glue.secret_key           | No       | AWS IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。 |
 
-AWS Glue にアクセスするための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、 [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue) を参照してください。
+AWS Glue にアクセスするための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、 [Authentication parameters for accessing AWS Glue](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue) を参照してください。
 
 <DatabricksParams />
 
@@ -202,7 +214,7 @@ Delta Lake クラスターのストレージとして AWS S3 を選択した場�
 | aws.s3.access_key           | No       | IAM ユーザーのアクセスキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメータを指定する必要があります。 |
 | aws.s3.secret_key           | No       | IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメータを指定する必要があります。 |
 
-AWS S3 にアクセスするための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、 [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
+AWS S3 にアクセスするための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、 [Authentication parameters for accessing AWS S3](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
 
 ##### S3 互換ストレージシステム
 
@@ -449,10 +461,10 @@ v3.3.3 以降、Delta Lake Catalog は [Metadata Local Cache and Retrieval](#app
 | enable_deltalake_table_cache                       | -        | true         | Delta Lake のメタデータキャッシュで Table Cache を有効にするかどうか。 |
 | enable_deltalake_json_meta_cache                   | -        | true         | Delta Log JSON ファイルのキャッシュを有効にするかどうか。 |
 | deltalake_json_meta_cache_ttl_sec                  | Second   | 48 * 60 * 60 | Delta Log JSON ファイルキャッシュの有効期限 (TTL)。 |
-| deltalake_json_meta_cache_memory_usage_ratio       | -        | 0.1          | Delta Log JSON ファイルキャッシュが占める JVM ヒープサイズの最大比率。 |
+| deltalake_json_meta_cache_memory_usage_ratio       | -        | 0.1          | Delta Log JSON ファイルキャッシュが占める JVM ヒープサイズの最大比率。FE 設定項目 `deltalake_json_meta_cache_global_memory_ratio` が `0` より大きい場合は無視されます。 |
 | enable_deltalake_checkpoint_meta_cache             | -        | true         | Delta Log Checkpoint ファイルのキャッシュを有効にするかどうか。 |
 | deltalake_checkpoint_meta_cache_ttl_sec            | Second   | 48 * 60 * 60 | Delta Log Checkpoint ファイルキャッシュの有効期限 (TTL)。  |
-| deltalake_checkpoint_meta_cache_memory_usage_ratio | -        | 0.1          | Delta Log Checkpoint ファイルキャッシュが占める JVM ヒープサイズの最大比率。 |
+| deltalake_checkpoint_meta_cache_memory_usage_ratio | -        | 0.1          | Delta Log Checkpoint ファイルキャッシュが占める JVM ヒープサイズの最大比率。FE 設定項目 `deltalake_checkpoint_meta_cache_global_memory_ratio` が `0` より大きい場合は無視されます。 |
 
 ### 例
 

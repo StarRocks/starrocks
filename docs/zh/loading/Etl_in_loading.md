@@ -1,6 +1,8 @@
 ---
+sidebar_position: 150
 displayed_sidebar: docs
 description: "在导入过程中实现数据转换：列映射、过滤条件及派生列表达式在多种导入方式中的应用。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 导入过程中实现数据转换
@@ -123,7 +125,7 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 
 #### 从本地文件系统导入
 
-如果 `file1.csv` 文件存储在本地文件系统，可以通过如下语句，创建 [Stream Load](../loading/StreamLoad.md) 导入作业来实现数据导入：
+如果 `file1.csv` 文件存储在本地文件系统，可以通过如下语句，创建 [Stream Load](./StreamLoad.md) 导入作业来实现数据导入：
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
@@ -142,7 +144,7 @@ curl --location-trusted -u <username>:<password> \
 
 #### 从 HDFS 导入
 
-如果 `file1.csv` 文件存储在 HDFS 上，可以通过如下语句，创建 [Broker Load](../loading/hdfs_load.md) 导入作业来实现数据导入：
+如果 `file1.csv` 文件存储在 HDFS 上，可以通过如下语句，创建 [Broker Load](./hdfs_load.md) 导入作业来实现数据导入：
 
 ```SQL
 LOAD LABEL test_db.label1
@@ -164,7 +166,7 @@ WITH BROKER;
 
 #### 从 Kafka 导入
 
-如果 `file1.csv` 文件里的数据存储在 Kafka 集群的 `topic1` 中，可以通过如下语句，创建 [Routine Load](../loading/RoutineLoad.md) 导入作业来实现数据导入：
+如果 `file1.csv` 文件里的数据存储在 Kafka 集群的 `topic1` 中，可以通过如下语句，创建 [Routine Load](./kafka/RoutineLoad.md) 导入作业来实现数据导入：
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table101 ON table1
@@ -222,7 +224,7 @@ SELECT * FROM table1;
 
 #### 从本地文件系统导入
 
-如果 `file1.csv` 文件存储在本地文件系统，可以通过如下语句，创建 [Stream Load](../loading/StreamLoad.md) 导入作业来实现数据导入：
+如果 `file1.csv` 文件存储在本地文件系统，可以通过如下语句，创建 [Stream Load](./StreamLoad.md) 导入作业来实现数据导入：
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
@@ -238,7 +240,7 @@ curl --location-trusted -u <username>:<password> \
 
 #### 从 HDFS 导入
 
-如果 `file1.csv` 文件存储在 HDFS 上，可以通过如下语句，创建 [Broker Load](../loading/hdfs_load.md) 导入作业来实现数据导入：
+如果 `file1.csv` 文件存储在 HDFS 上，可以通过如下语句，创建 [Broker Load](./hdfs_load.md) 导入作业来实现数据导入：
 
 ```SQL
 LOAD LABEL test_db.label2
@@ -257,7 +259,7 @@ WITH BROKER;
 
 #### 从 Kafka 导入
 
-如果 `file1.csv` 文件的数据存储在 Kafka 集群的 `topic1` 中，可以通过如下语句，创建 [Routine Load](../loading/RoutineLoad.md) 导入作业来实现导入：
+如果 `file1.csv` 文件的数据存储在 Kafka 集群的 `topic1` 中，可以通过如下语句，创建 [Routine Load](./kafka/RoutineLoad.md) 导入作业来实现导入：
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table102 ON table1
@@ -310,7 +312,7 @@ SELECT * FROM table1;
 
 #### 从本地文件系统导入
 
-如果 `file2.csv` 文件存储在本地文件系统，可以通过如下语句，创建 [Stream Load](../loading/StreamLoad.md) 导入作业来实现数据导入：
+如果 `file2.csv` 文件存储在本地文件系统，可以通过如下语句，创建 [Stream Load](./StreamLoad.md) 导入作业来实现数据导入：
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
@@ -331,7 +333,7 @@ curl --location-trusted -u <username>:<password> \
 
 #### 从 HDFS 导入
 
-如果 `file2.csv` 文存储在 HDFS 上，可以通过如下语句，创建 [Broker Load](../loading/hdfs_load.md) 导入作业来实现数据导入：
+如果 `file2.csv` 文存储在 HDFS 上，可以通过如下语句，创建 [Broker Load](./hdfs_load.md) 导入作业来实现数据导入：
 
 ```SQL
 LOAD LABEL test_db.label3
@@ -354,7 +356,7 @@ WITH BROKER;
 
 #### 从 Kafka 导入
 
-如果 `file2.csv` 文件的数据存储在 Kafka 集群的 `topic2` 中，可以通过如下语句，创建 [Routine Load](../loading/RoutineLoad.md) 导入作业来实现导入：
+如果 `file2.csv` 文件的数据存储在 Kafka 集群的 `topic2` 中，可以通过如下语句，创建 [Routine Load](./kafka/RoutineLoad.md) 导入作业来实现导入：
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table2 ON table2
@@ -410,7 +412,7 @@ SELECT * FROM table2;
 
 ### 导入数据
 
-可以通过如下语句，创建 [Broker Load](../loading/hdfs_load.md) 导入作业，获取文件路径 `/user/starrocks/data/input/` 中分区字段 `date` 的信息，并通过使用通配符 (*) 指定将该文件路径下所有数据文件都导入到 `table1` 表中：
+可以通过如下语句，创建 [Broker Load](./hdfs_load.md) 导入作业，获取文件路径 `/user/starrocks/data/input/` 中分区字段 `date` 的信息，并通过使用通配符 (*) 指定将该文件路径下所有数据文件都导入到 `table1` 表中：
 
 ```SQL
 LOAD LABEL test_db.label4

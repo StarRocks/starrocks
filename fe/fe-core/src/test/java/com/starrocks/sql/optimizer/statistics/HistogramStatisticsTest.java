@@ -282,6 +282,24 @@ public class HistogramStatisticsTest {
         Assertions.assertNotEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(), leftHistogram);
         Assertions.assertNotEquals(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram(), rightHistogram);
         Assertions.assertEquals(83576, estimated.getOutputRowCount(), 0.1);
+
+        // Histogram row counts exclude nulls, but the input cardinality still includes them.
+        double leftNullFraction = 0.2;
+        double rightNullFraction = 0.3;
+        Statistics statisticsWithNulls = Statistics.buildFrom(statistics)
+                .addColumnStatistic(leftColumnRefOperator,
+                        ColumnStatistic.buildFrom(statistics.getColumnStatistic(leftColumnRefOperator))
+                                .setNullsFraction(leftNullFraction)
+                                .build())
+                .addColumnStatistic(rightColumnRefOperator,
+                        ColumnStatistic.buildFrom(statistics.getColumnStatistic(rightColumnRefOperator))
+                                .setNullsFraction(rightNullFraction)
+                                .build())
+                .build();
+        Statistics estimatedWithNulls = PredicateStatisticsCalculator.statisticsCalculate(
+                binaryPredicateOperator, statisticsWithNulls);
+        Assertions.assertEquals(83576 * (1 - leftNullFraction) * (1 - rightNullFraction),
+                estimatedWithNulls.getOutputRowCount(), 0.1);
     }
 
     @Test
@@ -620,21 +638,21 @@ public class HistogramStatisticsTest {
         mcvLeft = new HashMap<>();
         mcvLeft.put("10", 300L);
         mcvLeft.put("22", 100L);
-        histogramLeft = new Histogram(null, mcvLeft);
+        histogramLeft = new Histogram(List.of(), mcvLeft);
         columnStatisticLeft = new ColumnStatistic(1, 50, 0, 4, 500,
                 histogramLeft, ColumnStatistic.StatisticType.ESTIMATE);
 
         mcvRight = new HashMap<>();
         mcvRight.put("22", 80L);
         mcvRight.put("9", 50L);
-        histogramRight = new Histogram(null, mcvRight);
+        histogramRight = new Histogram(List.of(), mcvRight);
         columnStatisticRight = new ColumnStatistic(1, 50, 0, 4, 500,
                 histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
 
         Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(
                 columnStatisticLeft, IntegerType.BIGINT, columnStatisticRight, IntegerType.BIGINT);
         Assertions.assertTrue(exist.isPresent());
-        Assertions.assertNull(exist.get().getBuckets());
+        Assertions.assertTrue(exist.get().getBuckets().isEmpty());
         Assertions.assertEquals(exist.get().getMCV().size(), 1);
         Assertions.assertEquals(exist.get().getMCV().get("22").longValue(), 100 * 80);
 

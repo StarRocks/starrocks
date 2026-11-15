@@ -3,4 +3,5 @@ label: 'Binary'
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
+  type: doc
+  id: binary-functions

@@ -33,6 +33,7 @@
 
 namespace starrocks {
 
+struct RangeGroupTask;
 class RuntimeProfile;
 class RuntimeState;
 
@@ -58,6 +59,9 @@ struct TabletReaderParams {
     enum class RangeEndOperation { LT = 0, LE, EQ };
 
     TabletReaderParams();
+
+    // Immutable query ownership clip, independent of the query range union.
+    std::shared_ptr<const RangeGroupTask> grouped_range_task;
 
     ReaderType reader_type = READER_QUERY;
 
@@ -127,8 +131,8 @@ struct TabletReaderParams {
     bool enable_join_runtime_filter_pushdown = false;
     bool enable_predicate_col_late_materialize = false;
     // Set by the scan source (OlapChunkSource / LakeDataSource) when a predicate for this scan is
-    // evaluated ABOVE the segment iterator; routes vector-filter queries to exact brute-force so a
-    // segment-level ANN k-limit cannot under-return. See design doc §7.
+    // evaluated ABOVE the segment iterator. The vector filter resolver uses this fact to route to
+    // exact brute-force when the top-k underfill fallback is enabled. See design doc §7.
     bool has_predicate_above_iterator = false;
 
 public:

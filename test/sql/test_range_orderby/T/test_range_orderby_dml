@@ -1,0 +1,59 @@
+-- name: test_range_orderby_dml @cloud
+-- SQL integration: write paths on a range-distributed PRIMARY KEY table whose ORDER BY
+-- differs from the primary key. Routing and dedup live in primary-key space, so upsert,
+-- UPDATE, condition update and DELETE must behave exactly as on any other primary key table.
+-- Partial update has rules of its own on this shape; those live in
+-- test_range_orderby_partial_update.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null,
+    v2 varchar(32) not null,
+    v3 int not null
+)
+primary key(k1, k2)
+order by(v1, v2)
+properties('replication_num' = '1');
+
+insert into t values
+    (1, 1, 500, 'e', 1),
+    (1, 2, 400, 'd', 2),
+    (2, 1, 300, 'c', 3),
+    (2, 2, 200, 'b', 4),
+    (3, 1, 100, 'a', 5);
+select * from t order by k1, k2;
+
+-- Upsert with sort key values that move the row to the other end of the sort order.
+insert into t values (2, 1, 999, 'z', 30);
+select * from t order by k1, k2;
+select count(*) from t;
+
+-- Read paths: a primary key point lookup, a sort key range, and an aggregate.
+select * from t where k1 = 2 and k2 = 1;
+select k1, k2, v1 from t where v1 >= 400 order by k1, k2;
+select sum(v3), count(distinct v2) from t;
+
+-- UPDATE with a WHERE clause rewrites whole rows, sort key columns included.
+update t set v1 = 50, v2 = 'y' where k1 = 1 and k2 = 2;
+select * from t order by k1, k2;
+update t set v3 = 7 where k1 = 2 and k2 = 2;
+select * from t order by k1, k2;
+
+-- Condition update: the row is replaced only when the condition column advances.
+insert into t properties("merge_condition" = "v1") values (3, 1, 10, 'q', 91);
+select * from t where k1 = 3 and k2 = 1;
+insert into t properties("merge_condition" = "v1") values (3, 1, 1000, 'w', 92);
+select * from t where k1 = 3 and k2 = 1;
+
+-- DELETE by primary key and by a sort key predicate.
+delete from t where k1 = 1 and k2 = 1;
+delete from t where v1 < 300;
+select * from t order by k1, k2;
+select count(*) from t;
+
+drop database db_${uuid0} force;

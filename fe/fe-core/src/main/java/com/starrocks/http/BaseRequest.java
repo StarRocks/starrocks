@@ -59,6 +59,12 @@ public class BaseRequest {
     private boolean isAuthorized = false;
     private QueryStringDecoder decoder;
 
+    // How the parameters of a request are parsed. WebUtils.sanitizeHttpReqUri parses a uri the same way, so that
+    // the values it masks are the values the actions read.
+    static QueryStringDecoder newQueryStringDecoder(String uri) {
+        return new QueryStringDecoder(uri);
+    }
+
     public BaseRequest(ChannelHandlerContext ctx, HttpRequest request) {
         this.context = ctx;
         this.request = request;
@@ -120,7 +126,7 @@ public class BaseRequest {
     public String getSingleParameter(String key) {
         String uri = request.uri();
         if (decoder == null) {
-            decoder = new QueryStringDecoder(uri);
+            decoder = newQueryStringDecoder(uri);
         }
 
         List<String> values = decoder.parameters().get(key);
@@ -134,7 +140,7 @@ public class BaseRequest {
     public String getSingleParameter(String key, String defaultValue) {
         String uri = request.uri();
         if (decoder == null) {
-            decoder = new QueryStringDecoder(uri);
+            decoder = newQueryStringDecoder(uri);
         }
 
         List<String> values = decoder.parameters().get(key);
@@ -159,7 +165,7 @@ public class BaseRequest {
     public List<String> getArrayParameter(String key) {
         String uri = request.uri();
         if (decoder == null) {
-            decoder = new QueryStringDecoder(uri);
+            decoder = newQueryStringDecoder(uri);
         }
 
         return decoder.parameters().get(key);
@@ -168,7 +174,7 @@ public class BaseRequest {
     public Map<String, List<String>> getAllParameters() {
         String uri = request.uri();
         if (decoder == null) {
-            decoder = new QueryStringDecoder(uri);
+            decoder = newQueryStringDecoder(uri);
         }
 
         return decoder.parameters();

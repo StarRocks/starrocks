@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ARRAY_DISTINCT関数は配列から重複する要素を削除します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_distinct

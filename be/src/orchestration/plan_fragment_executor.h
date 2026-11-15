@@ -44,13 +44,13 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
 
 class ExecNode;
-class RowDescriptor;
 class DataSink;
 class DataStreamMgr;
 class DescriptorTbl;
@@ -107,7 +107,7 @@ public:
 
     // prepare for execution. Call this prior to open().
     // This call won't block.
-    // runtime_state() and row_desc() will not be valid until prepare() is called.
+    // runtime_state() and record_desc() will not be valid until prepare() is called.
     // If request.query_options.mem_limit > 0, it is used as an approximate limit on the
     // number of bytes this query can consume at runtime.
     // The query will be aborted (MEM_LIMIT_EXCEEDED) if it goes over that limit.
@@ -134,7 +134,7 @@ public:
 
     void set_runtime_state(RuntimeState* runtime_state) { _runtime_state = runtime_state; }
 
-    const RowDescriptor& row_desc();
+    const RecordDescriptor& record_desc();
 
     // Profile information for plan and output sink.
     RuntimeProfile* profile();

@@ -20,6 +20,7 @@
 
 #include <chrono>
 #include <fstream>
+#include <functional>
 #include <thread>
 
 #include "base/path/filesystem_util.h"
@@ -41,10 +42,10 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
-#include "storage/lake/update_manager.h"
 #include "storage/replication_utils.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -73,8 +74,9 @@ public:
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->txn_log_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384, 16384);
         _replication_txn_manager =
                 std::make_unique<lake::ReplicationTxnManager>(_tablet_manager.get(), local_snapshot_client_for_test());
 
@@ -233,7 +235,7 @@ protected:
     std::string _test_dir;
     std::shared_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<lake::ReplicationTxnManager> _replication_txn_manager;
 
     int64_t _transaction_id = 300;
@@ -775,6 +777,32 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_rowset_meta_col
     }
 }
 
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, rejects_encrypted_shared_nothing_rowset_files) {
+    const std::vector<std::pair<std::string, std::function<void(RowsetMetaPB*)>>> cases = {
+            {"segment", [](RowsetMetaPB* meta) { meta->add_segment_encryption_metas("source-encrypted"); }},
+            {"delete", [](RowsetMetaPB* meta) { meta->add_delfile_encryption_metas("source-encrypted"); }},
+            {"update", [](RowsetMetaPB* meta) { meta->add_updatefile_encryption_metas("source-encrypted"); }},
+    };
+
+    for (const auto& [file_type, set_encryption_meta] : cases) {
+        SCOPED_TRACE(file_type);
+        RowsetMetaPB rowset_meta_pb;
+        rowset_meta_pb.set_rowset_id("0");
+        rowset_meta_pb.set_num_segments(1);
+        rowset_meta_pb.set_num_delete_files(1);
+        rowset_meta_pb.set_num_update_files(1);
+        rowset_meta_pb.set_rowset_seg_id(5);
+        set_encryption_meta(&rowset_meta_pb);
+        RowsetMeta rowset_meta(rowset_meta_pb);
+
+        TxnLogPB::OpWrite op_write;
+        std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+        Status status = lake::ReplicationTxnManager::convert_rowset_meta(rowset_meta, 12345, &op_write, &filename_map);
+
+        EXPECT_TRUE(status.is_not_supported()) << status;
+    }
+}
+
 TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_build_file_converters_handles_cols_files) {
     // Verify that build_file_converters handles .cols files alongside .dat files
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
@@ -918,8 +946,9 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_build_file_converters_d
     auto location_provider = std::make_shared<lake::FixedLocationProvider>(test_dir);
     ASSERT_TRUE(FileSystem::Default()->create_dir_recursive(location_provider->segment_root_location(1)).ok());
     auto mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-    auto update_manager = std::make_unique<lake::UpdateManager>(location_provider, mem_tracker.get());
-    auto tablet_manager = std::make_unique<lake::TabletManager>(location_provider, update_manager.get(), 16384);
+    auto primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(location_provider, mem_tracker.get());
+    auto tablet_manager =
+            std::make_unique<lake::TabletManager>(location_provider, primary_key_manager.get(), 16384, 16384);
 
     TReplicateSnapshotRequest request;
     request.tablet_id = 1;
@@ -969,8 +998,9 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_build_file_converters_d
     auto location_provider = std::make_shared<lake::FixedLocationProvider>(test_dir);
     ASSERT_TRUE(FileSystem::Default()->create_dir_recursive(location_provider->segment_root_location(1)).ok());
     auto mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-    auto update_manager = std::make_unique<lake::UpdateManager>(location_provider, mem_tracker.get());
-    auto tablet_manager = std::make_unique<lake::TabletManager>(location_provider, update_manager.get(), 16384);
+    auto primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(location_provider, mem_tracker.get());
+    auto tablet_manager =
+            std::make_unique<lake::TabletManager>(location_provider, primary_key_manager.get(), 16384, 16384);
 
     TReplicateSnapshotRequest request;
     request.tablet_id = 1;
@@ -1059,6 +1089,34 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_meta_for_pk
     for (const auto& [old_name, pair] : filename_map) {
         EXPECT_TRUE(lake::is_cols(pair.first));
     }
+}
+
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, rejects_encrypted_shared_nothing_dcg_files) {
+    DeltaColumnGroupSnapshotPB non_pk_snapshot;
+    non_pk_snapshot.add_rowset_id("source-rowset");
+    non_pk_snapshot.add_segment_id(0);
+    auto* non_pk_list = non_pk_snapshot.add_dcg_lists();
+    non_pk_list->add_versions(1);
+    auto* non_pk_dcg = non_pk_list->add_dcgs();
+    non_pk_dcg->add_column_ids()->add_column_ids(1);
+    non_pk_dcg->add_column_files("source-non-pk.cols");
+    non_pk_dcg->add_encryption_metas("source-encrypted");
+
+    std::unordered_map<std::string, uint32_t> rowset_id_to_seg_id = {{"source-rowset", 5}};
+    DeltaColumnGroupMetadataPB target_non_pk_meta;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> non_pk_filename_map;
+    Status non_pk_status = lake::ReplicationTxnManager::convert_dcg_meta_for_non_pk(
+            non_pk_snapshot, rowset_id_to_seg_id, 12345, &target_non_pk_meta, &non_pk_filename_map);
+    EXPECT_TRUE(non_pk_status.is_not_supported()) << non_pk_status;
+
+    auto source_pk_dcg = std::make_shared<DeltaColumnGroup>();
+    source_pk_dcg->init(1, {{1}}, {"source-pk.cols"}, {"source-encrypted"});
+    std::unordered_map<uint32_t, DeltaColumnGroupList> pk_dcgs = {{5, {source_pk_dcg}}};
+    DeltaColumnGroupMetadataPB target_pk_meta;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> pk_filename_map;
+    Status pk_status =
+            lake::ReplicationTxnManager::convert_dcg_meta_for_pk(pk_dcgs, 12345, &target_pk_meta, &pk_filename_map);
+    EXPECT_TRUE(pk_status.is_not_supported()) << pk_status;
 }
 
 // Test convert_dcg_column_unique_ids

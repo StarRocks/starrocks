@@ -88,14 +88,17 @@ from .datatype import (
     SMALLINT,
     STRING,
     STRUCT,
+    TIME,
     TINYINT,
     VARBINARY,
     VARCHAR,
+    VARIANT,
 )
 from .engine.interfaces import ReflectedMVState, ReflectedState, ReflectedViewState
 from .reflection import StarRocksInspector, StarRocksTableDefinitionParser
 from .sql.ddl import (
     AlterMaterializedView,
+    AlterTableColumns,
     AlterTableDistribution,
     AlterTableEngine,
     AlterTableKey,
@@ -160,10 +163,12 @@ ischema_names = {
     "char": CHAR,
     "string": STRING,
     "json": JSON,
+    "variant": VARIANT,
     # === Date and time ===
     "date": DATE,
     "datetime": DATETIME,
     "timestamp": DATETIME,
+    "time": TIME,
     # == binary ==
     "binary": BINARY,
     "varbinary": VARBINARY,
@@ -180,6 +185,7 @@ colspecs = base_colspecs | {
     sqltypes.Date: DATE,
     sqltypes.DateTime: DATETIME,
     sqltypes.DECIMAL: DECIMAL,
+    sqltypes.Time: TIME,
 }
 
 class StarRocksTypeCompiler(MySQLTypeCompiler):
@@ -252,6 +258,9 @@ class StarRocksTypeCompiler(MySQLTypeCompiler):
 
     def visit_BITMAP(self, type_, **kw):
         return "BITMAP"
+
+    def visit_VARIANT(self, type_, **kw):
+        return "VARIANT"
 
     def visit_BLOB(self, type_, **kw):
         return "BINARY"
@@ -538,6 +547,19 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
                     f"key column '{col_list[last_key_col_index].name}'."
                 )
 
+    def _refresh_clause_for_server(self, refresh: str, object_name: str) -> str:
+        rendered = utils.render_refresh_for_server(refresh, self.dialect.server_version_info or ())
+        if rendered != refresh and utils.is_untimed_async_refresh(refresh):
+            import warnings
+
+            warnings.warn(
+                f"REFRESH ASYNC without EVERY is rejected from StarRocks 26.2 on; it was sent as "
+                f"REFRESH ON_CHANGE for '{object_name}'. Declare ON_CHANGE in the metadata instead.",
+                DeprecationWarning,
+                stacklevel=4,
+            )
+        return rendered
+
     def post_create_table(self, table: sa_schema.Table, **kw: Any) -> str:
         """
         Appends StarRocks-specific clauses to a CREATE TABLE or CREATE MATERIALIZED VIEW statement.
@@ -624,7 +646,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
 
         # Handle MV-specific REFRESH clause
         if refresh := opts.get(TableInfoKey.REFRESH):
-            table_opts.append(f"REFRESH {str(refresh)}")
+            table_opts.append(f"REFRESH {self._refresh_clause_for_server(str(refresh), table.name)}")
 
         # Properties
         properties = opts.get(TableInfoKey.PROPERTIES)
@@ -1064,7 +1086,8 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
 
         # ALTER REFRESH
         if alter.refresh is not None:
-            statements.append(f"ALTER MATERIALIZED VIEW {mv_name} REFRESH {alter.refresh}")
+            refresh = self._refresh_clause_for_server(str(alter.refresh), alter.mv_name)
+            statements.append(f"ALTER MATERIALIZED VIEW {mv_name} REFRESH {refresh}")
 
         # ALTER PROPERTIES
         if alter.properties is not None:
@@ -1158,6 +1181,35 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         """
         table_name = format_table_name(self, alter.table_name, alter.schema)
         return f"ALTER TABLE {table_name} PARTITION BY {alter.partition_by}"
+
+    def visit_alter_table_columns(self, alter: AlterTableColumns, **kw: Any) -> str:
+        """Compile a combined ALTER TABLE ADD/DROP COLUMN DDL for StarRocks.
+
+        Renders every column change as a clause of a single ALTER TABLE
+        statement so StarRocks submits them as one schema-change job:
+
+            ALTER TABLE t ADD COLUMN a INT, DROP COLUMN c, ADD COLUMN b INT
+        """
+        table_name = format_table_name(self, alter.table_name, alter.schema)
+
+        clauses: List[str] = []
+        for column in alter.adds:
+            clauses.append(f"ADD COLUMN {self.get_column_specification(column, **kw)}")
+        for column_name in alter.drops:
+            clauses.append(f"DROP COLUMN {self.preparer.quote(column_name)}")
+
+        if not clauses:
+            raise exc.CompileError(
+                f"ALTER TABLE {table_name} has no column changes to apply."
+            )
+
+        # notice users about such a time consuming operation
+        from_db_clause = f"FROM {alter.schema} " if alter.schema else ""
+        show_clause = f"SHOW ALTER TABLE COLUMN {from_db_clause}WHERE TableName='{alter.table_name}'"
+        logger.info(f"You probably should use ({show_clause}) to check the execution status "
+                    f"of the column schema change before doing another ALTER TABLE statement.")
+
+        return f"ALTER TABLE {table_name} " + ", ".join(clauses)
 
     def visit_alter_table_distribution(self, alter: AlterTableDistribution, **kw: Any) -> str:
         """Compile ALTER TABLE DISTRIBUTED BY DDL for StarRocks."""
@@ -1335,12 +1387,20 @@ class StarRocksDialect(MySQLDialect_pymysql):
         Args:
             connection: The SQLAlchemy connection object.
 
+        Prefers the read-only ``@@run_mode`` global variable, which needs no
+        privilege (StarRocks PR #69247). Falls back to ``ADMIN SHOW FRONTEND
+        CONFIG`` (needs OPERATE) for servers without that variable.
+
         Returns:
             The run_mode as a string ('shared_data' or 'shared_nothing').
-
-        Raises:
-            exc.DBAPIError: If the query fails.
         """
+        try:
+            value = connection.execute(text("SELECT @@run_mode")).scalar()
+            if value:
+                return value.lower()
+        except exc.DBAPIError as e:
+            logger.debug(f"@@run_mode unavailable, falling back to ADMIN SHOW FRONTEND CONFIG: {e}")
+
         try:
             result = connection.execute(text("ADMIN SHOW FRONTEND CONFIG LIKE 'run_mode'"))
             rows = result.fetchall()
@@ -1642,11 +1702,30 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     @staticmethod
     def gen_show_alter_table_statement(table_name: str, alter_type: str,
-            schema: Optional[str] = None, state: str = 'RUNNING') -> str:
-        """Generate the SHOW ALTER TABLE OPTIMIZE statement for a given table."""
+            schema: Optional[str] = None, state: Optional[str] = 'RUNNING',
+            order_by: Optional[str] = None, limit: Optional[int] = None,
+            bind_table_name: bool = False) -> str:
+        """Generate a SHOW ALTER TABLE [ COLUMN | OPTIMIZE ] statement for a table.
+
+        Args:
+            table_name: The name of the table to filter on.
+            alter_type: ``COLUMN`` or ``OPTIMIZE``.
+            schema: The schema (StarRocks database) of the table.
+            state: Filter on a job state (e.g. ``RUNNING``); pass ``None`` to
+                return jobs in any state.
+            order_by: An ``ORDER BY`` expression, e.g. ``JobId DESC``.
+            limit: A ``LIMIT`` row count.
+            bind_table_name: Render the table predicate as the bound parameter
+                ``:table_name`` instead of a literal, so the caller can pass it
+                through the driver (the caller then binds ``table_name``).
+        """
         from_db_clause = f"FROM `{schema}` " if schema else ""
+        table_predicate = ":table_name" if bind_table_name else f"'{table_name}'"
         state_clause = f" AND State='{state}'" if state else ""
-        stmt = f"SHOW ALTER TABLE {alter_type} {from_db_clause}WHERE TableName='{table_name}'{state_clause}"
+        order_by_clause = f" ORDER BY {order_by}" if order_by else ""
+        limit_clause = f" LIMIT {int(limit)}" if limit else ""
+        stmt = (f"SHOW ALTER TABLE {alter_type} {from_db_clause}"
+                f"WHERE TableName={table_predicate}{state_clause}{order_by_clause}{limit_clause}")
         # logger.debug("generate show alter table statement: %s", stmt)
         return stmt
 

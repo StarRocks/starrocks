@@ -242,6 +242,9 @@ template <LogicalType LT, typename T = RunTimeCppType<LT>>
 class ApproxTopKAggregateFunction final
         : public AggregateFunctionBatchHelper<ApproxTopKState<LT>, ApproxTopKAggregateFunction<LT, T>> {
 public:
+    // approx_top_k returns an array (empty, never NULL), even over a nullable input or an empty window frame.
+    bool is_result_non_nullable() const override { return true; }
+
     using CppType = RunTimeCppType<LT>;
     using InputColumnType = RunTimeColumnType<LT>;
 

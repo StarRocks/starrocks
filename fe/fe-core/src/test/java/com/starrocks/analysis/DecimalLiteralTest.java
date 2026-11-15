@@ -504,4 +504,64 @@ public class DecimalLiteralTest {
             Assertions.assertEquals(expected, integer);
         }
     }
+
+    @Test
+    public void testGetHashValueOfDecimal256() throws AnalysisException {
+        // The buffer must be the 32-byte little-endian two's-complement int256 of the scaled
+        // value: the BE crc32-hashes exactly those raw bytes when bucketing rows on a
+        // decimal256 distribution key, so any other layout prunes point lookups to the
+        // wrong tablet.
+        String[] testCases = new String[] {
+                "0.0",
+                "99.526",
+                "-99.526",
+                Strings.repeat("9", 73) + "." + Strings.repeat("9", 3),
+                "-" + Strings.repeat("9", 73) + "." + Strings.repeat("9", 3),
+                "0.001",
+                "-0.001",
+                "3.14",
+                "-3.14",
+                "12345678901234567890.123",
+                "-12345678901234567890.123",
+        };
+        Type decimal256Type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 3);
+        BigInteger twoTo256 = BigInteger.ONE.shiftLeft(256);
+        BigInteger byteMask = BigInteger.valueOf(0xff);
+        for (String tc : testCases) {
+            DecimalLiteral decimalLiteral = new DecimalLiteral(tc);
+            ByteBuffer buffer = decimalLiteral.getHashValue(decimal256Type);
+            Assertions.assertEquals(32, buffer.limit(), tc);
+            BigInteger scaled = decimalLiteral.getValue().multiply(new BigDecimal("1000")).toBigIntegerExact();
+            // interpret the scaled value as an unsigned 256-bit integer (two's complement)
+            BigInteger unsigned = scaled.mod(twoTo256);
+            for (int i = 0; i < 32; ++i) {
+                byte expected = unsigned.shiftRight(8 * i).and(byteMask).byteValue();
+                Assertions.assertEquals(expected, buffer.get(i), tc + " byte " + i);
+            }
+        }
+    }
+
+    @Test
+    public void testGetHashValueOfDecimal256KnownBytes() throws AnalysisException {
+        Type decimal256Type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 3);
+
+        // 99.526 scaled by 10^3 is 99526 = 0x184C6
+        ByteBuffer positive = new DecimalLiteral("99.526").getHashValue(decimal256Type);
+        Assertions.assertEquals(32, positive.limit());
+        Assertions.assertEquals((byte) 0xC6, positive.get(0));
+        Assertions.assertEquals((byte) 0x84, positive.get(1));
+        Assertions.assertEquals((byte) 0x01, positive.get(2));
+        for (int i = 3; i < 32; ++i) {
+            Assertions.assertEquals((byte) 0x00, positive.get(i));
+        }
+
+        // -1.000 scaled by 10^3 is -1000; two's complement is 0xFF...FFFC18
+        ByteBuffer negative = new DecimalLiteral("-1.000").getHashValue(decimal256Type);
+        Assertions.assertEquals(32, negative.limit());
+        Assertions.assertEquals((byte) 0x18, negative.get(0));
+        Assertions.assertEquals((byte) 0xFC, negative.get(1));
+        for (int i = 2; i < 32; ++i) {
+            Assertions.assertEquals((byte) 0xFF, negative.get(i));
+        }
+    }
 }

@@ -39,7 +39,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
 import com.starrocks.common.PatternMatcher;
@@ -73,6 +72,7 @@ import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTemporaryTablesInfoRequest;
 import com.starrocks.thrift.TGetTemporaryTablesInfoResponse;
 import com.starrocks.thrift.TKeywordInfo;
+import com.starrocks.thrift.TPartitionAccessTimeTableRef;
 import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
@@ -132,20 +132,17 @@ public class InformationSchemaDataSource {
         List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
         LOG.debug("get db names: {}", dbNames);
 
-        for (String fullName : dbNames) {
-
+        for (String dbName : dbNames) {
             try {
-                Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
+                Authorizer.checkAnyActionOnOrInDb(context, catalogName, dbName);
             } catch (AccessDeniedException e) {
                 continue;
             }
 
-            final String dbName = ClusterNamespace.getNameFromFullName(fullName);
-
             if (!PatternMatcher.matchPattern(authInfo.getPattern(), dbName, matcher, caseSensitive)) {
                 continue;
             }
-            authorizedDbs.add(fullName);
+            authorizedDbs.add(dbName);
         }
         return new AuthDbRequestResult(authorizedDbs, context);
     }
@@ -231,6 +228,7 @@ public class InformationSchemaDataSource {
             ConnectContext context = new ConnectContext();
             context.setCurrentUserIdentity(authContext.getCurrentUserIdentity());
             context.setCurrentRoleIds(authContext.getCurrentRoleIds());
+            context.setGroups(authContext.getGroups());
             return context;
         }
     }
@@ -411,6 +409,13 @@ public class InformationSchemaDataSource {
             }
         }
 
+        // Cross-FE aggregated (best-effort) access times, scoped to exactly the tables returned in THIS
+        // page: accumulate this FE's local values during the walk, then after the page is built fetch the
+        // other FEs' values for the page's tables in a single batch RPC (outside any lock) and backfill
+        // the rows. Scoping to the page keeps a paged scan from re-sending every remaining table id.
+        List<TPartitionAccessTimeTableRef> pageTableRefs = new ArrayList<>();
+        List<Long> pageLogicalIds = new ArrayList<>();
+
         for (Element ele : sortedElements) {
             Table table = ele.table;
             if (!table.isNativeTableOrMaterializedView()) {
@@ -439,6 +444,13 @@ public class InformationSchemaDataSource {
                 }
                 OlapTable olapTable = (OlapTable) table;
                 PartitionInfo tblPartitionInfo = olapTable.getPartitionInfo();
+                // Record this table for the post-loop access-time backfill. Nothing access-time related
+                // runs under this table lock anymore: the whole cluster-aggregated collection happens after
+                // the page is built, via a single getAccessTimes call outside every lock.
+                TPartitionAccessTimeTableRef pageRef = new TPartitionAccessTimeTableRef();
+                pageRef.setDb_id(ele.dbId);
+                pageRef.setTable_id(olapTable.getId());
+                pageTableRefs.add(pageRef);
                 // normal partition
                 for (Partition partition : olapTable.getPartitions()) {
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
@@ -448,6 +460,7 @@ public class InformationSchemaDataSource {
                         genPartitionMetaInfo(ele.dbId, olapTable, tblPartitionInfo, partition, physicalPartition,
                                 partitionMetaInfo, false /* isTemp */);
                         pList.add(partitionMetaInfo);
+                        pageLogicalIds.add(partition.getId());
                     }
                 }
                 // temp partition
@@ -459,6 +472,7 @@ public class InformationSchemaDataSource {
                         genPartitionMetaInfo(ele.dbId, olapTable, tblPartitionInfo, partition, physicalPartition,
                                 partitionMetaInfo, true /* isTemp */);
                         pList.add(partitionMetaInfo);
+                        pageLogicalIds.add(partition.getId());
                     }
                 }
                 if (pList.size() >= Config.max_get_partitions_meta_result_count) {
@@ -467,6 +481,17 @@ public class InformationSchemaDataSource {
                 }
             } finally {
                 locker.unLockTableWithIntensiveDbLock(ele.dbId, table.getId(), LockType.READ);
+            }
+        }
+        // The page's table set is now known. Collect access times outside any lock.
+        if (Config.enable_collect_partition_access_time) {
+            Map<Long, Long> accessTimes =
+                    GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr().getAccessTimes(pageTableRefs);
+            for (int i = 0; i < pList.size(); i++) {
+                long accessMs = accessTimes.getOrDefault(pageLogicalIds.get(i), 0L);
+                if (accessMs > 0) {
+                    pList.get(i).setLast_access_time(accessMs / 1000);
+                }
             }
         }
         resp.partitions_meta_infos = pList;
@@ -494,10 +519,8 @@ public class InformationSchemaDataSource {
         DistributionInfo distributionInfo = partition.getDistributionInfo();
         // DISTRIBUTION_KEY
         partitionMetaInfo.setDistribution_key(PartitionsProcDir.distributionKeyAsString(table, distributionInfo));
-        // BUCKETS: each physical partition can carry its own bucket count (e.g. ADD PHYSICAL PARTITION),
-        // so prefer the per-physical value and fall back to the table-level distribution default.
-        partitionMetaInfo.setBuckets(physicalPartition.getBucketNum() > 0 ?
-                physicalPartition.getBucketNum() : distributionInfo.getBucketNum());
+        // BUCKETS
+        partitionMetaInfo.setBuckets(physicalPartition.getActualBucketNum(distributionInfo));
         // REPLICATION_NUM
         partitionMetaInfo.setReplication_num(partitionInfo.getReplicationNum(partition.getId()));
         // DATA_SIZE
@@ -539,6 +562,8 @@ public class InformationSchemaDataSource {
                     table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
             // METADATA_SWITCH_VERSION
             partitionMetaInfo.setMetadata_switch_version(physicalPartition.getMetadataSwitchVersion());
+            // VACUUM_VERSION: success watermark of the last completed incremental vacuum pass.
+            partitionMetaInfo.setVacuum_version(physicalPartition.getLastSuccVacuumVersion());
             // MIN_VI_BUILT_VERSION / MAX_VI_BUILT_VERSION
             // Vector-index built-version span across this partition's base-index tablets, for
             // observability (null = no vector index). Async: actual [min, max] — MIN < VISIBLE_VERSION
@@ -558,6 +583,11 @@ public class InformationSchemaDataSource {
         partitionMetaInfo.setStorage_size(physicalPartition.storageDataSize() + physicalPartition.getExtraFileSize());
         // TABLET_BALANCED
         partitionMetaInfo.setTablet_balanced(physicalPartition.isTabletBalanced());
+        // LAST_UPDATE_TIME (last user write, excluding compaction; persisted, cross-FE consistent)
+        long lastUpdateTimeMs = physicalPartition.getLastUpdateTime();
+        if (lastUpdateTimeMs > 0) {
+            partitionMetaInfo.setLast_update_time(lastUpdateTimeMs / 1000);
+        }
     }
 
     // tables
@@ -708,7 +738,8 @@ public class InformationSchemaDataSource {
 
         AuthorizationMgr authMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
-            for (RolePrivilegeCollectionV2 role : authMgr.getApplicableRoles(currentUser)) {
+            for (RolePrivilegeCollectionV2 role : authMgr.getApplicableRoles(currentUser,
+                    result.authContext.getGroups(), result.authContext.getCurrentRoleIds())) {
                 String roleName = role.getName();
                 String roleHost = "%";
 
@@ -834,7 +865,7 @@ public class InformationSchemaDataSource {
             if (partition.getVisibleVersionTime() > lastUpdateTime) {
                 lastUpdateTime = partition.getVisibleVersionTime();
             }
-            MaterializedIndex baseIndex = partition.getLatestBaseIndex();
+            MaterializedIndex baseIndex = partition.getQueryableBaseIndex();
             totalRowsOfTable = baseIndex.getRowCount() + totalRowsOfTable;
             totalBytesOfTable = baseIndex.getDataSize() + totalBytesOfTable;
         }

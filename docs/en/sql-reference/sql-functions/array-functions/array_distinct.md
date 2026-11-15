@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Removes duplicate elements from an array."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_distinct

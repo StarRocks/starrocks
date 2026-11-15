@@ -20,6 +20,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.connector.delta.DeltaDataType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.FileType;
+import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
@@ -574,6 +576,14 @@ public class ColumnTypeConverter {
             return DATETIME;
         }
 
+        public Type visit(org.apache.paimon.types.VariantType variantType) {
+            return VariantType.VARIANT;
+        }
+
+        public Type visit(org.apache.paimon.types.BlobType blobType) {
+            return FileType.FILE;
+        }
+
         public Type visit(org.apache.paimon.types.ArrayType arrayType) {
             return new ArrayType(fromPaimonType(arrayType.getElementType()));
         }
@@ -650,6 +660,8 @@ public class ColumnTypeConverter {
                     return DataTypes.CHAR(CharType.MAX_LENGTH);
                 case VARBINARY:
                     return DataTypes.VARBINARY(VarBinaryType.MAX_LENGTH);
+                case VARIANT:
+                    return DataTypes.VARIANT();
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:
@@ -681,6 +693,122 @@ public class ColumnTypeConverter {
         }
 
         throw new StarRocksConnectorException("Unsupported complex column type %s", type);
+    }
+
+    public static Type fromFlussType(org.apache.fluss.types.DataType type) {
+        return type.accept(FlussTypeToSRTypeVisitor.INSTANCE);
+    }
+
+    private static class FlussTypeToSRTypeVisitor extends org.apache.fluss.types.DataTypeDefaultVisitor<Type> {
+        private static final FlussTypeToSRTypeVisitor INSTANCE = new FlussTypeToSRTypeVisitor();
+
+        @Override
+        public Type visit(org.apache.fluss.types.CharType charType) {
+            return TypeFactory.createCharType(charType.getLength());
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.StringType stringType) {
+            return TypeFactory.createDefaultCatalogString();
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.BooleanType booleanType) {
+            return TypeFactory.createType(PrimitiveType.BOOLEAN);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.BinaryType binaryType) {
+            return TypeFactory.createType(PrimitiveType.VARBINARY);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.BytesType bytesType) {
+            return TypeFactory.createType(PrimitiveType.VARBINARY);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.DecimalType decimalType) {
+            return TypeFactory.createUnifiedDecimalType(decimalType.getPrecision(), decimalType.getScale());
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.TinyIntType tinyIntType) {
+            return TypeFactory.createType(PrimitiveType.TINYINT);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.SmallIntType smallIntType) {
+            return TypeFactory.createType(PrimitiveType.SMALLINT);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.IntType intType) {
+            return TypeFactory.createType(PrimitiveType.INT);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.BigIntType bigIntType) {
+            return TypeFactory.createType(PrimitiveType.BIGINT);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.FloatType floatType) {
+            return TypeFactory.createType(PrimitiveType.FLOAT);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.DoubleType doubleType) {
+            return TypeFactory.createType(PrimitiveType.DOUBLE);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.DateType dateType) {
+            return TypeFactory.createType(PrimitiveType.DATE);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.TimeType timeType) {
+            // StarRocks TIME does not preserve the fractional-second precision of Fluss TIME(p).
+            return TypeFactory.createType(PrimitiveType.TIME);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.TimestampType timestampType) {
+            return TypeFactory.createType(PrimitiveType.DATETIME);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.LocalZonedTimestampType localZonedTimestampType) {
+            return TypeFactory.createType(PrimitiveType.DATETIME);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.ArrayType arrayType) {
+            return new ArrayType(fromFlussType(arrayType.getElementType()));
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.MapType mapType) {
+            return new MapType(fromFlussType(mapType.getKeyType()), fromFlussType(mapType.getValueType()));
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.RowType rowType) {
+            List<org.apache.fluss.types.DataField> fields = rowType.getFields();
+            ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+            for (org.apache.fluss.types.DataField field : fields) {
+                String fieldName = field.getName();
+                Type fieldType = fromFlussType(field.getType());
+                structFields.add(new StructField(fieldName, fieldType));
+            }
+            return new StructType(structFields);
+        }
+
+        @Override
+        protected Type defaultMethod(org.apache.fluss.types.DataType dataType) {
+            return UNKNOWN_TYPE;
+        }
     }
 
     public static Type fromKuduType(ColumnSchema columnSchema) {
@@ -737,6 +865,11 @@ public class ColumnTypeConverter {
     }
 
     public static Type fromIcebergType(org.apache.iceberg.types.Type icebergType) {
+        Type type = convertIcebergType(icebergType);
+        return type.hasNestedGeoType() ? UnknownType.UNKNOWN_TYPE : type;
+    }
+
+    private static Type convertIcebergType(org.apache.iceberg.types.Type icebergType) {
         if (icebergType == null) {
             return NullType.NULL;
         }
@@ -812,15 +945,34 @@ public class ColumnTypeConverter {
                 return com.starrocks.type.DateType.TIME;
             case VARIANT:
                 return VariantType.VARIANT;
+            case UNKNOWN:
+                // Iceberg v3 `unknown`: always null and never stored in data files, so it reads as NULL.
+                // A concrete type keeps an enclosing struct/list/map readable.
+                return NullType.NULL;
+            case GEOGRAPHY:
+                Types.GeographyType geography = (Types.GeographyType) icebergType;
+                if ((geography.crs() == null || geography.crs().equals("OGC:CRS84"))
+                        && (geography.algorithm() == null || geography.algorithm().name().equals("SPHERICAL"))) {
+                    return ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
+                            new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
+                                    GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
+                                    GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326));
+                }
+                return UnknownType.UNKNOWN_TYPE;
             case FIXED:
+            case GEOMETRY:
+                // External geo metadata is transported separately by IcebergApiConverter.
+                // Recognition must not expose WKB as ordinary SQL binary values.
+                return UnknownType.UNKNOWN_TYPE;
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
         return TypeFactory.createType(primitiveType);
     }
 
-    private static ArrayType convertToArrayTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
-        return new ArrayType(fromIcebergType(icebergType.asNestedType().asListType().elementType()));
+    private static Type convertToArrayTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
+        Type elementType = fromIcebergType(icebergType.asNestedType().asListType().elementType());
+        return elementType.isUnknown() ? UnknownType.UNKNOWN_TYPE : new ArrayType(elementType);
     }
 
     private static Type convertToMapTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
@@ -1103,4 +1255,3 @@ public class ColumnTypeConverter {
         return true;
     }
 }
-

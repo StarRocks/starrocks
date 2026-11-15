@@ -17,6 +17,8 @@ package com.starrocks.sql.optimizer.rule.mv;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -76,6 +78,21 @@ public class KeyInferenceTest extends PlanTestBase {
         assertInferenceContains("select pk,v1 from tprimary;", "Key{unique=true, columns=pk,v1}");
         assertInferenceContains("select v1 from tprimary;", "Key{unique=false, columns=v1}");
         assertInferenceContains("select pk+1 from tprimary;", "Key{unique=false, columns=expr}");
+    }
+
+    @Test
+    public void testAIProjectUsesProjectLikeKeyInference() throws Exception {
+        ExecPlan plan = getExecPlan("select pk from tprimary");
+        ColumnRefOperator output = plan.getOutputColumns().get(0);
+        Map<ColumnRefOperator, com.starrocks.sql.optimizer.operator.scalar.ScalarOperator> slots =
+                Map.of(output, output);
+        OptExpression project = OptExpression.create(new PhysicalProjectOperator(slots, Map.of()),
+                plan.getPhysicalPlan());
+        OptExpression aiProject = OptExpression.create(new PhysicalAIProjectOperator(slots, Map.of()),
+                plan.getPhysicalPlan());
+
+        Assertions.assertEquals(KeyInference.infer(project, null).getKeys(),
+                KeyInference.infer(aiProject, null).getKeys());
     }
 
     @Test

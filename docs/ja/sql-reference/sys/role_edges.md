@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "role_edges ビューをクエリしてロールの被付与者を確認できます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # role_edges
@@ -9,7 +10,7 @@ description: "role_edges ビューをクエリしてロールの被付与者を�
 
 :::note
 
-デフォルトでは、`user_admin` ロールを持つユーザーまたはロールのみがこのビューにアクセスできます。他のユーザーにこのビューの SELECT 権限を付与するには、[GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) を使用してください。
+デフォルトでは、`user_admin` ロールを持つユーザーまたはロールのみがこのビューにアクセスできます。他のユーザーにこのビューの SELECT 権限を付与するには、[GRANT](../sql-statements/account-management/GRANT.md) を使用してください。
 
 :::
 

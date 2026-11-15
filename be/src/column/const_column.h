@@ -48,6 +48,7 @@ public:
     bool is_nullable() const override { return _data->is_nullable(); }
     bool is_json() const override { return _data->is_json(); }
     bool is_variant() const override { return _data->is_variant(); }
+    bool is_file() const override { return _data->is_file(); }
     bool is_array() const override { return _data->is_array(); }
 
     bool is_null(size_t index) const override { return _data->is_null(0); }
@@ -168,6 +169,19 @@ public:
         }
     }
 
+    // serialize_batch() writes _data->serialize(0, ...) -- the persisted encoding -- into every row.
+    uint32_t serialize_batch_fixed_row_size() const override { return _data->serialize_size(0); }
+
+    void serialize_size_compact_batch(Buffer<uint64_t>& sizes, size_t chunk_size) const override {
+        if (chunk_size == 0) {
+            return;
+        }
+        const uint32_t row_bytes = _data->serialize_size(0);
+        for (size_t i = 0; i < chunk_size; ++i) {
+            sizes[i] += row_bytes;
+        }
+    }
+
     const uint8_t* deserialize_and_append(const uint8_t* pos) override {
         ++_size;
         if (_data->empty()) {
@@ -265,12 +279,6 @@ public:
     }
 
     void check_or_die() const override;
-
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-
-    StatusOr<MutableColumnPtr> downgrade() override;
-
-    bool has_large_column() const override { return _data->has_large_column(); }
 
     void mutate_each_subcolumn() override { _data = (std::move(*_data)).mutate(); }
 

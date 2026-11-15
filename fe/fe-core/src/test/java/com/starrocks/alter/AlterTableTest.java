@@ -539,4 +539,20 @@ public class AlterTableTest extends StarRocksTestBase {
             Assertions.assertTrue(e.getMessage().contains("table has location property and cannot be colocated"));
         }
     }
+
+    @Test
+    public void testAlterOrderBySortKeyTypeRestriction() throws Exception {
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test_alter_sortkey_type (k1 INT, c JSON, v INT)\n" +
+                        "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');");
+        // ALTER TABLE ... ORDER BY makes c the sort key; JSON has no BE key coder, so it must be
+        // rejected instead of crashing the BE short-key encoder on rewrite.
+        // The DdlException from processModifySortKeyColumn is surfaced wrapped as an AlterJobException.
+        Throwable t = assertThrows(AlterJobException.class, () -> {
+            AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "ALTER TABLE test_alter_sortkey_type ORDER BY (c)", connectContext);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
+        });
+        Assertions.assertTrue(t.getMessage().contains("Sort key column[c] type not supported"), t.getMessage());
+    }
 }

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "用指定字符串中的字符替换源字符串中的对应字符。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # translate

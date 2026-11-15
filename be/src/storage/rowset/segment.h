@@ -63,6 +63,7 @@ class IndexReadOptions;
 class Schema;
 class SegmentIterator;
 class SegmentReadOptions;
+struct OlapReaderStatistics;
 
 class BitmapIndexIterator;
 class ColumnReader;
@@ -103,8 +104,9 @@ public:
 
     ~Segment();
 
+    // If |stats| is not null and this call reads the footer, the read is added to it.
     Status open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                const LakeIOOptions& lake_io_opts);
+                const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats = nullptr);
 
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
@@ -112,8 +114,13 @@ public:
                                                      const SegmentReadOptions& read_options,
                                                      ChunkIteratorPtr* reusable_slot);
 
+    // Opens the `.cols` file |idx| of |dcg|. The result is not cached, so every caller reads the
+    // footer again: |lake_io_opts| decides whether that read fills the local data cache, and the
+    // read is added to |stats| when it is not null.
     StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
-                                                       const TabletSchemaCSPtr& read_tablet_schema);
+                                                       const TabletSchemaCSPtr& read_tablet_schema,
+                                                       const LakeIOOptions& lake_io_opts = {},
+                                                       OlapReaderStatistics* stats = nullptr);
 
     uint64_t id() const { return _segment_id; }
 
@@ -188,6 +195,11 @@ public:
 
     FileSystem* file_system() const { return _fs.get(); }
 
+    // Use this instead of file_system() whenever the FileSystem must outlive this Segment.
+    // The .vi reader is stored inside the tenann index cache entry, which is not bound to
+    // the Segment/SegmentIterator that loaded it, so a raw FileSystem* would dangle there.
+    const std::shared_ptr<FileSystem>& shared_file_system() const { return _fs; }
+
     const TabletSchema& tablet_schema() const { return *_tablet_schema; }
 
     const TabletSchemaCSPtr tablet_schema_share_ptr() { return _tablet_schema.schema(); }
@@ -195,6 +207,11 @@ public:
     const std::string& file_name() const { return _segment_file_info.path; }
 
     const FileInfo& file_info() const { return _segment_file_info; }
+
+    // Open a file handle over this segment's data file with encryption + bundling applied. Anything
+    // that reads segment data directly must use this; a raw new_random_access_file misreads bundled
+    // or encrypted segments.
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_segment_read_file(const LakeIOOptions& lake_io_opts = {});
 
     uint32_t num_rows() const { return _num_rows; }
 
@@ -206,7 +223,8 @@ public:
 
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
-    Status load_index(const LakeIOOptions& lake_io_opts = {});
+    // If |stats| is not null, the read of the index page is added to it; only the call that loads counts.
+    Status load_index(const LakeIOOptions& lake_io_opts = {}, OlapReaderStatistics* stats = nullptr);
     bool has_loaded_index() const;
 
     Status new_inverted_index_iterator(uint32_t cid, InvertedIndexIterator** iter, const SegmentReadOptions& opts,
@@ -223,9 +241,8 @@ public:
     // read short_key_index, for data check, just used in unit test now
     Status get_short_key_index(std::vector<std::string>* sk_index_values);
 
-    // for cloud native tablet metadata cache.
-    // after the segment is inserted into metadata cache, various indexes will be loaded later when used,
-    // so the segment size in the cache needs to be updated when indexes are loading.
+    // Update the cloud-native segment cache charge. For share-nothing rowsets,
+    // mark the segment dirty when its memory usage may have changed.
     void update_cache_size();
 
     bool is_default_column(const TabletColumn& column) { return !_column_readers.contains(column.unique_id()); }
@@ -245,6 +262,8 @@ public:
 
     // for ut test
     void set_num_rows(uint32_t num_rows) { _num_rows = num_rows; }
+
+    bool consume_lazy_mem_update() { return _lazy_mem_update.exchange(false, std::memory_order_acq_rel); }
 
 #ifdef BE_TEST
     static void toggle_batch_update_cache_mode(bool enabled) { _s_allow_batch_update_mode = enabled; }
@@ -280,7 +299,7 @@ private:
         TabletSchemaCSPtr _schema;
     };
 
-    Status _load_index(const LakeIOOptions& lake_io_opts);
+    Status _load_index(const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats);
 
     void _reset();
 
@@ -298,7 +317,7 @@ private:
 
     // open segment file and read the minimum amount of necessary information (footer)
     Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                 const LakeIOOptions& lake_io_opts);
+                 const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats);
     Status _create_column_readers(SegmentFooterPB* footer);
 
     Status _check_column_unique_id_uniqueness(SegmentFooterPB* footer,
@@ -335,6 +354,10 @@ private:
     // short key index decoder
     std::unique_ptr<ShortKeyIndexDecoder> _sk_index_decoder;
 
+    // Published size of the loaded short key index. Memory samplers must not inspect
+    // its handle or decoder while another reader is still loading it.
+    std::atomic<size_t> _loaded_key_index_mem_usage{0};
+
     std::unique_ptr<FileEncryptionInfo> _encryption_info;
 
     std::atomic_int _batch_on_flags_counter{0};
@@ -344,6 +367,9 @@ private:
     lake::TabletManager* _tablet_manager = nullptr;
     // used to guarantee that segment will be opened at most once in a thread-safe way
     OnceFlag _open_once;
+
+    // for share nothing, set to true after update_cache_size() is called
+    std::atomic<bool> _lazy_mem_update{false};
 #ifdef BE_TEST
     static bool _s_allow_batch_update_mode;
 #endif

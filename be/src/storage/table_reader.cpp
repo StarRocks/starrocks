@@ -66,7 +66,6 @@ Status TableReader::init(const TableReaderParams& params) {
     RETURN_IF_ERROR(_partition_param->init(nullptr));
     _location_param = std::make_unique<OlapTableLocationParam>(params.location_param);
     _nodes_info = std::make_unique<StarRocksNodesInfo>(params.nodes_info);
-    _row_desc = std::make_unique<RowDescriptor>(_schema_param->tuple_desc());
     return Status::OK();
 }
 

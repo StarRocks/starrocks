@@ -1,6 +1,5 @@
 -- name: test_vector_index_refine @sequential @native
 
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 
 -- =====================================================================
 -- Quantized vector index + enable_vector_index_refine on/off.
@@ -126,4 +125,3 @@ DROP TABLE IF EXISTS t_hnsw_flat;
 DROP TABLE IF EXISTS t_novi;
 DROP TABLE IF EXISTS __refine_rows;
 
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");

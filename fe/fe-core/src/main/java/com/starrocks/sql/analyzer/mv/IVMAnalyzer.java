@@ -61,6 +61,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -194,16 +195,16 @@ public class IVMAnalyzer {
      * - If incremental refresh is supported, the result must not be none.
      */
     public Optional<IVMAnalyzeResult> rewrite(MaterializedView.RefreshMode refreshMode) {
-        return rewriteInternal(refreshMode, null, refreshMode.isIncremental());
+        return rewriteInternal(refreshMode, null);
     }
 
     public Optional<IVMAnalyzeResult> rewriteForRefresh(MaterializedView.RefreshMode refreshMode,
                                                         int pinnedEncodeRowIdVersion) {
-        return rewriteInternal(refreshMode, pinnedEncodeRowIdVersion, false);
+        return rewriteInternal(refreshMode, pinnedEncodeRowIdVersion);
     }
 
     private Optional<IVMAnalyzeResult> rewriteInternal(MaterializedView.RefreshMode refreshMode,
-                                                       Integer pinnedVersion, boolean runTrial) {
+                                                       Integer pinnedVersion) {
         if (!refreshMode.isIncremental() && !refreshMode.isAuto()) {
             return Optional.empty();
         }
@@ -217,16 +218,10 @@ public class IVMAnalyzer {
             RowIdStrategy strategy = hasComputedRowId
                     ? RowIdStrategy.QUERY_COMPUTED
                     : RowIdStrategy.AUTO_INCREMENT;
-            // Trial-rewrite catches drift the analyzer-level checks can't: e.g. a new logical
-            // operator without a matching IvmDelta*Rule, or a combinator's metadata that no
-            // longer matches the BE state-union path. CREATE only; refresh builds the real plan next.
-            if (runTrial) {
-                IvmTrialRewriter.runTrial(connectContext, statement, queryStatement);
-            }
             IVMAnalyzeResult result = IVMAnalyzeResult.of(queryStatement, strategy, refreshMode);
             return Optional.of(result);
         } catch (SemanticException e) {
-            // Already has a self-describing message (rewriteImpl or IvmTrialRewriter). Don't re-wrap.
+            // Already has a self-describing message from rewriteImpl. Don't re-wrap.
             if (refreshMode.isIncremental()) {
                 throw e;
             }
@@ -438,7 +433,7 @@ public class IVMAnalyzer {
 
             // A metric-state union's finalize is the identity (the merged state IS the result), so
             // the select item itself becomes the state column — no separate hidden copy. The refresh
-            // side finds it via IvmRewriter.bindStateColumnsForAggregate.
+            // side finds it via IvmRewriter.bindMvColumnsForAggregate.
             if (isCollapsibleUnionAggregate(aggFuncExpr, bareAggregateItems)) {
                 collapsedInfos.add(aggFunctionInfo);
                 substitutionMap.put(aggFuncExpr, intermediateAggFuncExpr);
@@ -454,6 +449,7 @@ public class IVMAnalyzer {
 
         // Build the row ID from the group keys, normalized like the refresh aggregate (see normalizeGroupKeys).
         List<Expr> rowIdKeys = normalizeGroupKeys(groupByExprs);
+        validateRowIdKeyTypes(rowIdKeys);
         int encodeRowIdVersion = (pinnedEncodeRowIdVersion != null)
                 ? IvmOpUtils.getEncodeRowIdVersionChecked(pinnedEncodeRowIdVersion)
                 : IvmOpUtils.deduceEncodeRowIdVersion(rowIdKeys);
@@ -515,6 +511,20 @@ public class IVMAnalyzer {
         return ExprSubstitutionVisitor.rewrite(expr, substitutionMap);
     }
 
+    // encode_fingerprint_sha256 dispatches on APPLY_FOR_ALL_SCALAR_TYPE, so a complex key contributes no
+    // bytes at all -- not even a null marker -- and every value of it hashes to the same row id.
+    private static void validateRowIdKeyTypes(List<Expr> rowIdKeys) {
+        for (Expr key : rowIdKeys) {
+            Type type = key.getType();
+            if (type != null && !type.isScalarType()) {
+                throw new SemanticException(
+                        "IVMAnalyzer does not support complex type %s as a group by / distinct key, but got: %s. "
+                                + "Such a key is encoded into the mv's row id, which supports scalar types only.",
+                        type.toSql(), key.toString());
+            }
+        }
+    }
+
     private static void validateAggregateFunctionInWhitelist(FunctionCallExpr aggFuncExpr, String aggFuncName) {
         Predicate<Type[]> rule = IVM_SUPPORTED_AGG_FUNCTIONS.get(aggFuncName.toLowerCase());
         if (rule == null) {
@@ -540,7 +550,7 @@ public class IVMAnalyzer {
             String mode = properties.get(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE);
             MaterializedView.RefreshMode parsed;
             try {
-                parsed = MaterializedView.RefreshMode.valueOf(mode.toUpperCase());
+                parsed = MaterializedView.RefreshMode.valueOf(mode.toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
                 throw new SemanticException("Invalid refresh_mode: " + mode +
                         ". Only INCREMENTAL, PCT are supported.");

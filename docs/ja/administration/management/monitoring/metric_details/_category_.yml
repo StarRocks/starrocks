@@ -1,7 +1,7 @@
-position: 100
-label: 'メトリクス詳細'
+position: 10
+label: '一般的なモニタリングメトリクス'
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
-  title: 'メトリクス詳細'
+  type: doc
+  id: metric_details

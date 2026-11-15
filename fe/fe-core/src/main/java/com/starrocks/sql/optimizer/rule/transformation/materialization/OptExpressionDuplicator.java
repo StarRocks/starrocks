@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.base.QueryGroupDistributionSpec;
 import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
@@ -54,6 +55,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
@@ -234,7 +236,20 @@ public class OptExpressionDuplicator {
             if (scanOperator instanceof LogicalOlapScanOperator) {
                 LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) scanOperator;
                 LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
-                if (olapScan.getDistributionSpec() instanceof HashDistributionSpec) {
+                if (olapScan.getDistributionSpec() instanceof QueryGroupDistributionSpec grouped) {
+                    List<DistributionCol> columns = grouped.getOrderedCColumns().stream()
+                            .map(col -> new DistributionCol(getNewDistributionColRef(col).getId(), col.isNullStrict()))
+                            .toList();
+                    EquivalentDescriptor descriptor = new EquivalentDescriptor(grouped.getTableId(),
+                            grouped.getEquivalentDescriptor().getPartitionIds());
+                    descriptor.initDistributionUnionFind(columns);
+                    updateDistributionUnionFind(descriptor.getNullStrictUnionFind(),
+                            grouped.getEquivalentDescriptor().getNullStrictUnionFind());
+                    updateDistributionUnionFind(descriptor.getNullRelaxUnionFind(),
+                            grouped.getEquivalentDescriptor().getNullRelaxUnionFind());
+                    olapScanBuilder.setDistributionSpec(new QueryGroupDistributionSpec(grouped.getTableId(), columns,
+                            grouped.getOrderedPhysicalCUniqueIds(), descriptor));
+                } else if (olapScan.getDistributionSpec() instanceof HashDistributionSpec) {
                     HashDistributionSpec newHashDistributionSpec =
                             processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec());
                     olapScanBuilder.setDistributionSpec(newHashDistributionSpec);
@@ -572,10 +587,14 @@ public class OptExpressionDuplicator {
         @Override
         public OptExpression visitLogicalLimit(OptExpression optExpression, Void context) {
             List<OptExpression> inputs = processChildren(optExpression);
-            LogicalSetOperator setOperator = (LogicalSetOperator) optExpression.getOp();
-            LogicalSetOperator.Builder opBuilder = OperatorBuilderFactory.build(optExpression.getOp());
-            opBuilder.withOperator(setOperator);
-            processSetOperator(setOperator, opBuilder);
+            // A limit carries only its offset and row count -- it has no output column list to
+            // remap, so copying the operator and letting processCommon rewrite the projection
+            // and predicate is the whole job. This body used to be a copy of visitLogicalUnion,
+            // which cast the operator to LogicalSetOperator and could therefore never succeed:
+            // any limit reaching the duplicator threw ClassCastException.
+            LogicalLimitOperator limitOperator = (LogicalLimitOperator) optExpression.getOp();
+            LogicalLimitOperator.Builder opBuilder = OperatorBuilderFactory.build(optExpression.getOp());
+            opBuilder.withOperator(limitOperator);
             processCommon(opBuilder);
             return OptExpression.create(opBuilder.build(), inputs);
         }

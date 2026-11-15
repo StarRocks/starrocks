@@ -20,6 +20,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Partition stores some necessary information used in the planner stage
@@ -42,6 +43,12 @@ public class Partition implements PartitionInfo {
     @Override
     public long getModifiedTime() {
         return modifiedTime;
+    }
+
+    @Override
+    public TimeUnit getModifiedTimeUnit() {
+        // Values come from java.sql.Timestamp.getTime() in the schema resolvers (epoch milliseconds).
+        return TimeUnit.MILLISECONDS;
     }
 
     @Override

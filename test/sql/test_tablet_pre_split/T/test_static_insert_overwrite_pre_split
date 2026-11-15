@@ -1,0 +1,49 @@
+-- name: test_static_insert_overwrite_pre_split @cloud @sequential
+-- A static INSERT OVERWRITE loads into a temporary partition that already exists, so it used to
+-- return from the pre-split hook without doing anything and write the whole overwrite into the
+-- partition's single tablet. This covers the newly reachable shape: an UNPARTITIONED
+-- range-distributed target.
+--
+-- Unlike the row-id derived tier, the sampled tier's count is bounded below by two once it is
+-- reached, so the split here is deterministic rather than estimate-dependent -- which is why this
+-- asserts it. tablet_pre_split_target_size is what makes it worthwhile at test scale; only pre-split
+-- granularity depends on it, and the background split/merge daemon keeps using
+-- tablet_reshard_target_size, so it converges the finer tablets back afterwards.
+admin set frontend config ("tablet_pre_split_target_size" = "1048576");
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table src (k int, v bigint) properties('replication_num' = '1');
+insert into src select x, x from table(generate_series(1, 100000)) as g(x);
+select count(*), sum(v) from src;
+
+set enable_range_distribution = true;
+create table dst (k int, v bigint) order by (k) properties('replication_num' = '1');
+set enable_range_distribution = false;
+
+-- A range-distributed partition is created with exactly one tablet.
+SELECT BUCKETS FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'dst' AND IS_TEMP = false;
+
+insert overwrite dst select k, v from src;
+
+-- Asserted right after the overwrite returns: the background split/merge daemon runs on a minutes
+-- cadence, so more than one tablet this soon is the load's own pre-split. The exact count follows
+-- the cluster's compute-node count, so only the widening is asserted.
+SELECT BUCKETS > 1 AS pre_split_widened_the_partition
+FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'dst' AND IS_TEMP = false;
+select count(*), count(distinct k), sum(v), min(k), max(k) from dst;
+
+-- A second overwrite, now over an already-split layout, must still replace the contents exactly.
+insert overwrite dst select k, v * 2 from src;
+select count(*), sum(v) from dst;
+SELECT BUCKETS > 1 AS still_split
+FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'dst' AND IS_TEMP = false;
+
+admin set frontend config ("tablet_pre_split_target_size" = "0");
+drop table dst;
+drop table src;
+drop database db_${uuid0};

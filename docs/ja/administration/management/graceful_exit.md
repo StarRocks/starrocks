@@ -1,6 +1,8 @@
 ---
+sidebar_position: 130
 displayed_sidebar: docs
 description: "StarRocks v3.3 以降、ノード再起動やローリングアップグレード中の実行中クエリへの影響を最小化する Graceful Exit メカニズム。"
+products: [oss, enterprise, anywhere]
 ---
 
 # Graceful Exit
@@ -48,12 +50,8 @@ stop_fe.sh -g
 
 **Leader FE**
 
-- 読み取りリクエストの処理は、Follower と同じです。
-- 書き込みリクエストの処理には以下が必要です：
-
-  - BDBJE のクローズ。
-  - 新しいリーダー選出の完了を許可。
-  - 後続の書き込みを新しく選出されたリーダーにリダイレクト。
+- リクエストの処理は Follower と同じです。リーダー FE は接続がドレインされるのを待ってから終了します。
+- リーダー FE は終了前にリーダーの役割を引き継ぎません。プロセスの終了後、残りの FE から新しいリーダーが選出されます。
 
 #### タイムアウト制御
 

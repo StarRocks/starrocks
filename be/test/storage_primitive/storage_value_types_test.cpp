@@ -138,6 +138,36 @@ TEST(StorageValueTypesTest, StatisticsDefaultToZero) {
     EXPECT_EQ(0, writer_stats.segment_count);
 }
 
+TEST(StorageValueTypesTest, MergeSegmentInitPhaseStatistics) {
+    // Parallel rowset readers contribute to an existing total. Neither an empty reader nor a later
+    // reader should reset or drop a phase that was already measured.
+    const auto phases = {
+            &OlapReaderStatistics::segment_init_prepare_ns,     &OlapReaderStatistics::rowid_range_filter_ns,
+            &OlapReaderStatistics::precomputed_range_filter_ns, &OlapReaderStatistics::tablet_range_filter_ns,
+            &OlapReaderStatistics::del_vector_apply_ns,         &OlapReaderStatistics::segment_init_finalize_ns};
+    OlapReaderStatistics total;
+    OlapReaderStatistics first;
+    OlapReaderStatistics second;
+    int64_t value = 1;
+    for (auto phase : phases) {
+        total.*phase = value;
+        first.*phase = value * 10;
+        second.*phase = value * 100;
+        ++value;
+    }
+    total.merge_from(first);
+    total.merge_from(OlapReaderStatistics{});
+    total.merge_from(second);
+
+    value = 1;
+    for (auto phase : phases) {
+        EXPECT_EQ(value * 111, total.*phase);
+        EXPECT_EQ(value * 10, first.*phase);
+        EXPECT_EQ(value * 100, second.*phase);
+        ++value;
+    }
+}
+
 TEST(StorageValueTypesTest, AggregateTypeStringSemantics) {
     EXPECT_EQ(STORAGE_AGGREGATE_SUM, get_aggregation_type_by_string("sum"));
     EXPECT_EQ(STORAGE_AGGREGATE_SUM, get_aggregation_type_by_string("SUM"));
@@ -252,6 +282,7 @@ TEST(StorageValueTypesTest, VectorSearchOptionStoresAssignedValues) {
     option.vector_slot_id = 4;
     option.query_params = {{"metric_type", "l2"}};
     option.vector_range = 0.5;
+    option.has_vector_range = true;
     option.result_order = 1;
     option.refine_distance = true;
     option.pq_refine_factor = 2.5;
@@ -267,6 +298,7 @@ TEST(StorageValueTypesTest, VectorSearchOptionStoresAssignedValues) {
     EXPECT_EQ(4, option.vector_slot_id);
     EXPECT_EQ("l2", option.query_params["metric_type"]);
     EXPECT_DOUBLE_EQ(0.5, option.vector_range);
+    EXPECT_TRUE(option.has_vector_range);
     EXPECT_EQ(1, option.result_order);
     EXPECT_TRUE(option.refine_distance);
     EXPECT_DOUBLE_EQ(2.5, option.pq_refine_factor);

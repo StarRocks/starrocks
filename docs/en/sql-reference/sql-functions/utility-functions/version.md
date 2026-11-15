@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the current version of the MySQL database."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # version
@@ -39,4 +40,4 @@ mysql> select version();
 
 ## References
 
-[current_version](../utility-functions/current_version.md)
+[current_version](./current_version.md)

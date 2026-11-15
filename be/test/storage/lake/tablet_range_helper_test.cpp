@@ -17,8 +17,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <array>
+
 #include "base/testutil/assert.h"
 #include "column/binary_column.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "gen_cpp/AgentService_types.h"
@@ -26,6 +29,7 @@
 #include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/primary_key_encoder.h"
+#include "testutil/column_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::lake {
@@ -174,11 +178,10 @@ TEST(TabletRangeHelperTest, test_create_sst_seek_range_from) {
     TabletRangePB range_pb;
     auto lower = range_pb.mutable_lower_bound();
     auto v0 = lower->add_values();
-    TypeDescriptor type_int(TYPE_INT);
-    v0->mutable_type()->CopyFrom(type_int.to_protobuf());
+    v0->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v0->set_value("1");
     auto v1 = lower->add_values();
-    v1->mutable_type()->CopyFrom(type_int.to_protobuf());
+    v1->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v1->set_value("2");
     range_pb.set_lower_bound_included(true);
 
@@ -186,15 +189,107 @@ TEST(TabletRangeHelperTest, test_create_sst_seek_range_from) {
     ASSERT_OK(res.status());
     ASSERT_FALSE(res.value().seek_key.empty());
 
-    // Case 2: different order -> Should return InternalError
+    // Case 2: the sort key is a permutation of the keys. A primary-key tablet's range is always in
+    // primary-key space, so the sort key does not enter the encoding and the result is unchanged.
     schema_pb.clear_sort_key_idxes();
     schema_pb.add_sort_key_idxes(1);
     schema_pb.add_sort_key_idxes(0);
-    auto tablet_schema_wrong = TabletSchema::create(schema_pb);
-    auto res2 = TabletRangeHelper::create_sst_seek_range_from(range_pb, tablet_schema_wrong);
-    ASSERT_FALSE(res2.ok());
-    ASSERT_TRUE(res2.status().is_internal_error());
-    ASSERT_THAT(res2.status().to_string(), testing::HasSubstr("Sort key index 0 must be 0, but is 1"));
+    auto reordered_schema = TabletSchema::create(schema_pb);
+    auto res2 = TabletRangeHelper::create_sst_seek_range_from(range_pb, reordered_schema);
+    ASSERT_OK(res2.status());
+    ASSERT_EQ(res.value().seek_key, res2.value().seek_key);
+
+    // Case 3: ORDER BY a value column -- still primary-key space, still the same encoding.
+    schema_pb.clear_sort_key_idxes();
+    schema_pb.add_sort_key_idxes(2);
+    schema_pb.add_sort_key_idxes(0);
+    auto separate_sort_key_schema = TabletSchema::create(schema_pb);
+    ASSERT_TRUE(separate_sort_key_schema->has_separate_sort_key());
+    auto res3 = TabletRangeHelper::create_sst_seek_range_from(range_pb, separate_sort_key_schema);
+    ASSERT_OK(res3.status());
+    ASSERT_EQ(res.value().seek_key, res3.value().seek_key);
+}
+
+TEST(TabletRangeHelperTest, test_range_key_idxes) {
+    TabletSchemaPB schema_pb;
+    auto add_column = [&](const char* name, bool is_key) {
+        auto c = schema_pb.add_column();
+        c->set_name(name);
+        c->set_type("INT");
+        c->set_is_key(is_key);
+        c->set_is_nullable(!is_key);
+        c->set_aggregation(is_key ? "NONE" : "REPLACE");
+    };
+    add_column("c0", true);
+    add_column("c1", true);
+    add_column("c2", false);
+    schema_pb.add_sort_key_idxes(2);
+    schema_pb.add_sort_key_idxes(0);
+
+    // A primary-key tablet routes by primary key whatever its physical order is.
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    EXPECT_EQ(std::vector<ColumnId>({0, 1}), TabletRangeHelper::range_key_idxes(*TabletSchema::create(schema_pb)));
+
+    // Every other key model keeps the historical sort-key boundary semantics.
+    schema_pb.set_keys_type(DUP_KEYS);
+    EXPECT_EQ(std::vector<ColumnId>({2, 0}), TabletRangeHelper::range_key_idxes(*TabletSchema::create(schema_pb)));
+}
+
+TEST(TabletRangeHelperTest, test_primary_key_range_filter_with_separate_sort_key) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    const std::array<std::string, 3> column_names = {"c0", "c1", "c2"};
+    for (int i = 0; i < 3; ++i) {
+        auto* column = schema_pb.add_column();
+        column->set_name(column_names[i]);
+        column->set_type("INT");
+        column->set_is_key(i < 2);
+        column->set_is_nullable(false);
+    }
+    schema_pb.add_sort_key_idxes(2);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    TabletRangePB range;
+    range.mutable_lower_bound()->CopyFrom(make_int_tuple_pb(2));
+    *range.mutable_lower_bound()->add_values() = make_int_tuple_pb(0).values(0);
+    range.set_lower_bound_included(true);
+    range.mutable_upper_bound()->CopyFrom(make_int_tuple_pb(4));
+    *range.mutable_upper_bound()->add_values() = make_int_tuple_pb(0).values(0);
+    range.set_upper_bound_included(false);
+
+    auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), 4);
+    const std::vector<std::pair<int32_t, int32_t>> keys = {{1, 9}, {2, 0}, {3, 5}, {4, 0}};
+    for (const auto& [c0, c1] : keys) {
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(c0));
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(c1));
+        chunk->get_column_raw_ptr_by_index(2)->append_datum(Datum(100));
+    }
+
+    ASSIGN_OR_ABORT(auto pk_filter, PrimaryKeyRangeFilter::create(range, tablet_schema));
+    ASSIGN_OR_ABORT(auto filter, pk_filter.build(*chunk));
+    ASSERT_EQ(4, filter.size());
+    EXPECT_EQ(0, filter[0]);
+    EXPECT_EQ(1, filter[1]);
+    EXPECT_EQ(1, filter[2]);
+    EXPECT_EQ(0, filter[3]);
+
+    // The same instance is reused chunk after chunk during a compaction: a second call must not be
+    // polluted by the encoded keys of the first.
+    auto chunk2 = ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), 2);
+    for (const auto& [c0, c1] : std::vector<std::pair<int32_t, int32_t>>{{0, 0}, {2, 5}}) {
+        chunk2->get_column_raw_ptr_by_index(0)->append_datum(Datum(c0));
+        chunk2->get_column_raw_ptr_by_index(1)->append_datum(Datum(c1));
+        chunk2->get_column_raw_ptr_by_index(2)->append_datum(Datum(100));
+    }
+    ASSIGN_OR_ABORT(auto filter2, pk_filter.build(*chunk2));
+    ASSERT_EQ(2, filter2.size());
+    EXPECT_EQ(0, filter2[0]);
+    EXPECT_EQ(1, filter2[1]);
+
+    ASSIGN_OR_ABORT(auto empty,
+                    pk_filter.build(*ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), 0)));
+    EXPECT_TRUE(empty.empty());
 }
 
 // NULL on a non-nullable PK column is treated as type-minimum (MIN sentinel from FE).
@@ -216,8 +311,7 @@ TEST(TabletRangeHelperTest, test_non_nullable_key_null_fills_type_min) {
     TabletRangePB range_pb;
     auto lower = range_pb.mutable_lower_bound();
     auto v0 = lower->add_values();
-    TypeDescriptor type_int(TYPE_INT);
-    v0->mutable_type()->CopyFrom(type_int.to_protobuf());
+    v0->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v0->set_variant_type(VariantTypePB::NULL_VALUE);
     range_pb.set_lower_bound_included(true);
 
@@ -245,8 +339,7 @@ TEST(TabletRangeHelperTest, test_create_sst_seek_range_requires_v2_encoding) {
     TabletRangePB range_pb;
     auto lower = range_pb.mutable_lower_bound();
     auto v0 = lower->add_values();
-    TypeDescriptor type_int(TYPE_INT);
-    v0->mutable_type()->CopyFrom(type_int.to_protobuf());
+    v0->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v0->set_value("1");
     range_pb.set_lower_bound_included(true);
 
@@ -722,29 +815,27 @@ TEST(TabletRangeHelperTest, test_sst_seek_range_null_as_min_on_non_nullable_pk) 
     schema_pb.add_sort_key_idxes(1);
     auto tablet_schema = TabletSchema::create(schema_pb);
 
-    TypeDescriptor type_int(TYPE_INT);
-
     // Build range [(100, NULL), (200, NULL)) where NULL represents MIN from FE.
     TabletRangePB range_pb;
     {
         auto* lower = range_pb.mutable_lower_bound();
         auto* v0 = lower->add_values();
-        v0->mutable_type()->CopyFrom(type_int.to_protobuf());
+        v0->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
         v0->set_value("100");
         v0->set_variant_type(VariantTypePB::NORMAL_VALUE);
         auto* v1 = lower->add_values();
-        v1->mutable_type()->CopyFrom(type_int.to_protobuf());
+        v1->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
         v1->set_variant_type(VariantTypePB::NULL_VALUE);
         range_pb.set_lower_bound_included(true);
     }
     {
         auto* upper = range_pb.mutable_upper_bound();
         auto* v0 = upper->add_values();
-        v0->mutable_type()->CopyFrom(type_int.to_protobuf());
+        v0->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
         v0->set_value("200");
         v0->set_variant_type(VariantTypePB::NORMAL_VALUE);
         auto* v1 = upper->add_values();
-        v1->mutable_type()->CopyFrom(type_int.to_protobuf());
+        v1->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
         v1->set_variant_type(VariantTypePB::NULL_VALUE);
         range_pb.set_upper_bound_included(false);
     }
@@ -758,11 +849,9 @@ TEST(TabletRangeHelperTest, test_sst_seek_range_null_as_min_on_non_nullable_pk) 
 
     auto encode_key = [&](int32_t v1, int32_t v2) {
         auto chunk = std::make_unique<Chunk>();
-        auto col1 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
-        col1->append_datum(Datum(v1));
+        auto col1 = ColumnTestHelper::build_column<int32_t>({v1});
         chunk->append_column(std::move(col1), (SlotId)0);
-        auto col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
-        col2->append_datum(Datum(v2));
+        auto col2 = ColumnTestHelper::build_column<int32_t>({v2});
         chunk->append_column(std::move(col2), (SlotId)1);
 
         MutableColumnPtr pk_column;
@@ -841,8 +930,7 @@ TEST(TabletRangeHelperTest, test_sst_seek_range_null_as_min_unsupported_type) {
     TabletRangePB range_pb;
     auto* lower = range_pb.mutable_lower_bound();
     auto* v0 = lower->add_values();
-    TypeDescriptor type_desc(TYPE_FLOAT);
-    v0->mutable_type()->CopyFrom(type_desc.to_protobuf());
+    v0->mutable_type()->CopyFrom(TYPE_FLOAT_DESC.to_protobuf());
     v0->set_variant_type(VariantTypePB::NULL_VALUE);
     range_pb.set_lower_bound_included(true);
 
@@ -1001,6 +1089,85 @@ TEST(TabletRangeHelperTest, validate_new_tablet_ranges_happy_path_unbounded_pare
     ASSERT_TRUE(s.ok()) << s;
 }
 
+namespace {
+
+// Re-encodes a bound the way FE serializes it: PScalarType::len is left unset for
+// non-string types (TypeSerializer.scalarTypeToProtobuf), whereas BE's
+// TypeDescriptor::to_protobuf always sets it. Same declared type, different bytes.
+static TuplePB as_fe_encoded_tuple(TuplePB tuple_pb) {
+    for (int i = 0; i < tuple_pb.values_size(); ++i) {
+        tuple_pb.mutable_values(i)->mutable_type()->mutable_types(0)->mutable_scalar_type()->clear_len();
+    }
+    return tuple_pb;
+}
+
+// [lower, upper) with FE-encoded bounds. nullopt skips the corresponding bound.
+static TabletRangePB make_fe_encoded_int_range_pb(std::optional<int32_t> lower, std::optional<int32_t> upper) {
+    TabletRangePB r;
+    if (lower.has_value()) {
+        *r.mutable_lower_bound() = as_fe_encoded_tuple(make_int_tuple_pb(*lower));
+        r.set_lower_bound_included(true);
+    }
+    if (upper.has_value()) {
+        *r.mutable_upper_bound() = as_fe_encoded_tuple(make_int_tuple_pb(*upper));
+        r.set_upper_bound_included(false);
+    }
+    return r;
+}
+
+} // namespace
+
+// Regression: the endpoint checks must compare a bound's value, not its serialized bytes.
+// A bounded parent's range is written by BE (PScalarType::len set) while the new-tablet
+// ranges arrive from FE (len unset), so a byte-level comparison rejected every alignment
+// split of an already-split tablet. The rejection fell back to an identical tablet, so the
+// layout never changed, the range-colocate group never re-stabilised, and the size-driven
+// split stayed blocked behind the unstable-group guard.
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_accepts_fe_encoded_bounds_on_bounded_parent) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    auto ranges = as_pb_list({make_fe_encoded_int_range_pb(0, 50), make_fe_encoded_int_range_pb(50, 100)});
+    // Guard the premise: the two encodings really are byte-distinct, so this case would
+    // have been rejected before the fix.
+    ASSERT_NE(parent.upper_bound().SerializeAsString(),
+              ranges.Get(ranges.size() - 1).upper_bound().SerializeAsString());
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_TRUE(s.ok()) << s;
+}
+
+// The relaxation covers the encoding only: a genuinely different endpoint value is still
+// rejected, so malformed FE input cannot slip a non-tiling split through.
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_fe_encoded_last_upper_value_mismatch_rejected) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    auto ranges = as_pb_list({make_fe_encoded_int_range_pb(0, 50), make_fe_encoded_int_range_pb(50, 99)});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_invalid_argument()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("last.upper_bound != old_tablet_range.upper_bound"));
+}
+
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_fe_encoded_first_lower_value_mismatch_rejected) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    auto ranges = as_pb_list({make_fe_encoded_int_range_pb(1, 50), make_fe_encoded_int_range_pb(50, 100)});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_invalid_argument()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("first.lower_bound != old_tablet_range.lower_bound"));
+}
+
+// A tuple arity mismatch must not read as equality now that the comparison walks positions
+// instead of delegating to whole-message equality.
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_arity_mismatch_rejected) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    TabletRangePB only = make_int_range_pb(0, 100);
+    // Give the child's upper bound a second value so its arity no longer matches the parent's.
+    *only.mutable_upper_bound()->add_values() = make_int_tuple_pb(7).values(0);
+    auto ranges = as_pb_list({only});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_invalid_argument()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("last.upper_bound != old_tablet_range.upper_bound"));
+}
+
 // =============================================================================
 // validate_range_structural / validate_range_transition: schema-aware validators
 // for the metadata-only trailing sort-key ADD.
@@ -1039,8 +1206,7 @@ static TabletSchemaSPtr make_range_schema(int num_sort_keys, int64_t schema_id =
 
 static void add_int_val(TuplePB* t, int32_t v) {
     auto* pb = t->add_values();
-    TypeDescriptor td(TYPE_INT);
-    pb->mutable_type()->CopyFrom(td.to_protobuf());
+    pb->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     pb->set_value(std::to_string(v));
     pb->set_variant_type(VariantTypePB::NORMAL_VALUE);
 }
@@ -1216,10 +1382,10 @@ TEST(TabletRangeHelperTest, validate_range_transition_accepts_reencoded_prefix) 
     old_schema->to_schema_pb(old_meta.mutable_schema());
     auto* old_range = old_meta.mutable_range();
     auto* lo = old_range->mutable_lower_bound()->add_values();
-    lo->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    lo->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     lo->set_value("1"); // variant_type intentionally left unset (defaults to NORMAL_VALUE)
     auto* hi = old_range->mutable_upper_bound()->add_values();
-    hi->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    hi->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     hi->set_value("2");
     old_range->set_lower_bound_included(true);
     old_range->set_upper_bound_included(false);

@@ -110,6 +110,7 @@ import com.starrocks.thrift.TStringLiteral;
 import com.starrocks.thrift.TVarType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.InvalidType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 
@@ -431,7 +432,10 @@ public final class ExprToThrift {
 
         @Override
         public Void visitSubqueryExpr(Subquery node, TExprNode msg) {
-            return null;
+            // A subquery has to be rewritten into a join/apply by the optimizer. Serializing it would produce a
+            // TExprNode without a node_type, which the BE rejects with an unhelpful thrift error.
+            throw new StarRocksPlannerException(
+                    "Subquery needs to be rewritten before it can be sent to the backend.", ErrorType.INTERNAL_ERROR);
         }
 
         @Override
@@ -510,6 +514,9 @@ public final class ExprToThrift {
                 if (fn.hasVarArgs()) {
                     msg.setVararg_start_idx(fn.getNumArgs() - 1);
                 }
+                if (fn.isAI() && node.getAIProviderId() != null) {
+                    msg.setAi_provider_id(node.getAIProviderId());
+                }
             }
             return null;
         }
@@ -560,6 +567,10 @@ public final class ExprToThrift {
         @Override
         public Void visitCastExpr(CastExpr node, TExprNode msg) {
             msg.node_type = TExprNodeType.CAST_EXPR;
+            if (!node.isImplicit() && node.getType().isChar()
+                    && ((ScalarType) node.getType()).getLength() >= 0) {
+                msg.setCast_char_truncate(true);
+            }
             msg.setOpcode(ExprOpcodeRegistry.getCastOpcode());
             Type childType = node.getChild(0).getType();
             if (childType.isComplexType() || childType.isDecimalOfAnyVersion() || childType.isChar()

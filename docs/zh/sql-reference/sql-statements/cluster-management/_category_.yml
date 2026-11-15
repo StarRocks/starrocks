@@ -3,4 +3,5 @@ label: '集群管理'
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
+  type: doc
+  id: cluster-management

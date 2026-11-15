@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "columns 包含所有表或视图中列的信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # columns

@@ -529,8 +529,10 @@ public class CreateTableAnalyzerTest {
         // sort-key-order validation is exercised regardless of the suite's ambient run mode.
         connectContext.getSessionVariable().setEnableRangeDistribution(true);
         try {
-            // PK columns: (v1, v2), Sort keys: (v2, v1) -> Should fail
-            String sql1 = "CREATE TABLE test_create_table_db.pk_table_wrong_order\n" +
+            // PK columns: (v1, v2), Sort keys: (v2, v1). A permutation of the primary key is still a
+            // sort key that differs from it, so this is the supported ORDER BY != PK shape rather than a
+            // mistake -- file_bundling defaults on, which is the only remaining requirement.
+            String sql1 = "CREATE TABLE test_create_table_db.pk_table_permuted_order\n" +
                     "(\n" +
                     "    v1 int not null,\n" +
                     "    v2 int not null,\n" +
@@ -538,7 +540,7 @@ public class CreateTableAnalyzerTest {
                     ") PRIMARY KEY(v1, v2)\n" +
                     "ORDER BY(v2, v1)\n" +
                     "PROPERTIES (\"replication_num\" = \"1\");";
-            analyzeFail(sql1, "The sort columns must be same with primary key columns and the order must be consistent");
+            analyzeSuccess(sql1);
 
             // PK columns: (v1, v2), Sort keys: (v1, v2) -> Should pass
             String sql2 = "CREATE TABLE test_create_table_db.pk_table_correct_order\n" +
@@ -550,6 +552,16 @@ public class CreateTableAnalyzerTest {
                     "ORDER BY(v1, v2)\n" +
                     "PROPERTIES (\"replication_num\" = \"1\");";
             analyzeSuccess(sql2);
+
+            String sqlWithSeparateSortKey = "CREATE TABLE test_create_table_db.pk_table_separate_sort_key\n" +
+                    "(v1 int not null, v2 int not null, v3 int) PRIMARY KEY(v1, v2)\n" +
+                    "ORDER BY(v3) PROPERTIES (\"replication_num\" = \"1\", \"file_bundling\" = \"true\");";
+            analyzeSuccess(sqlWithSeparateSortKey);
+
+            String sqlWithoutFileBundling = "CREATE TABLE test_create_table_db.pk_table_no_bundle\n" +
+                    "(v1 int not null, v2 int not null, v3 int) PRIMARY KEY(v1, v2)\n" +
+                    "ORDER BY(v3) PROPERTIES (\"replication_num\" = \"1\", \"file_bundling\" = \"false\");";
+            analyzeFail(sqlWithoutFileBundling, "require file_bundling=true");
 
             // range distribution off -> Should pass even if order is different (hash-distributed)
             connectContext.getSessionVariable().setEnableRangeDistribution(false);
@@ -566,6 +578,63 @@ public class CreateTableAnalyzerTest {
         } finally {
             connectContext.getSessionVariable().setEnableRangeDistribution(false);
         }
+    }
+
+    @Test
+    public void testDupTableSortKeyTypeRestriction() {
+        // A sort key column is encoded on the BE via a KeyCoder; types without one (JSON, TIME, ...)
+        // crash the short-key encoder, so they must be rejected at CREATE TABLE for duplicate key
+        // tables under BOTH range and non-range distribution (#11611).
+        connectContext.getSessionVariable().setEnableRangeDistribution(true);
+        try {
+            // JSON sort key, range distribution -> reject (JSON has no BE key coder).
+            analyzeFail("CREATE TABLE test_create_table_db.dup_range_json_sortkey\n" +
+                    "(k1 int, c json) DUPLICATE KEY(k1) ORDER BY(c)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");",
+                    "Sort key column[c] type not supported");
+
+            // TIME sort key, range distribution -> reject (canDistributedBy() allows TIME, but the BE
+            // has no TIME key coder; canDistributedBy() excludes it).
+            analyzeFail("CREATE TABLE test_create_table_db.dup_range_time_sortkey\n" +
+                    "(k1 int, c time) DUPLICATE KEY(k1) ORDER BY(c)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");",
+                    "Sort key column[c] type not supported");
+
+            // A normal (int) sort key -> pass. The ORDER BY reference uses a different case than the
+            // column definition to confirm case-insensitive resolution (matching OlapTableFactory).
+            analyzeSuccess("CREATE TABLE test_create_table_db.dup_range_int_sortkey\n" +
+                    "(k1 int, c int) DUPLICATE KEY(k1) ORDER BY(C)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");");
+
+            // Non-range distribution: the same crash is reachable (the sort key is still short-key
+            // encoded), so JSON/TIME must be rejected here too.
+            connectContext.getSessionVariable().setEnableRangeDistribution(false);
+            analyzeFail("CREATE TABLE test_create_table_db.dup_norange_json_sortkey\n" +
+                    "(k1 int, c json) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) ORDER BY(c)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");",
+                    "Sort key column[c] type not supported");
+            analyzeFail("CREATE TABLE test_create_table_db.dup_norange_time_sortkey\n" +
+                    "(k1 int, c time) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) ORDER BY(c)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");",
+                    "Sort key column[c] type not supported");
+
+            // Non-range int sort key still passes.
+            analyzeSuccess("CREATE TABLE test_create_table_db.dup_norange_int_sortkey\n" +
+                    "(k1 int, c int) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) ORDER BY(c)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");");
+        } finally {
+            connectContext.getSessionVariable().setEnableRangeDistribution(false);
+        }
+    }
+
+    @Test
+    public void testTimeKeyColumnRejected() {
+        // TIME has no BE key coder, so it can't be a key column (a key column is also the implicit
+        // short/sort key). canDistributedBy() now excludes TIME, so ColumnDefAnalyzer rejects it.
+        analyzeFail("CREATE TABLE test_create_table_db.time_key_tbl\n" +
+                "(k1 time, v int) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(v)\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");",
+                "Invalid data type of key column");
     }
 
     @Test

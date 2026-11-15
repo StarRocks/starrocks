@@ -25,9 +25,9 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
@@ -50,7 +50,11 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
     IndexValuesWithVerPB& index_value_ver = _merge_pb_scratch;
     index_value_ver.Clear();
     if (!index_value_ver.ParseFromArray(value.data, value.size)) {
-        return Status::InternalError("Failed to parse index value ver");
+        // These bytes were written as a serialized IndexValuesWithVerPB into the SST
+        // data block, so a parse failure means the persisted content is corrupted
+        // (usually a bad local cache copy). Compaction callers key their
+        // drop-corrupted-cache handling off is_corruption().
+        return Status::Corruption("Failed to parse index value ver");
     }
     if (index_value_ver.values_size() == 0) {
         return Status::OK();

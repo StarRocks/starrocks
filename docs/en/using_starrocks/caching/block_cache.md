@@ -3,9 +3,9 @@ displayed_sidebar: docs
 sidebar_position: 20
 toc_max_heading_level: 2
 description: "How to configure and use Data Cache in StarRocks to cache data blocks from remote storage (object storage, HDFS) on local disk, accelerating queries in..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
-import CacheStats from '../../_assets/commonMarkdown/_cache_stats.mdx'
 
 # Data Cache
 
@@ -28,11 +28,11 @@ You can configure Data Cache using the following CN(BE) configuration items:
 
 ### Cache directory
 
-- [storage_root_path](../../administration/management/BE_configuration.md#storage_root_path) (In shared-data clusters, this item is used to specify the root path where the cached data is stored.)
+- [storage_root_path](../../administration/configuration/BE_parameters/BE_parameters.md#storage_root_path) (In shared-data clusters, this item is used to specify the root path where the cached data is stored.)
 
 ### Cache disk size
 
-- [datacache_disk_size](../../administration/management/BE_configuration.md#datacache_disk_size)
+- [datacache_disk_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_size)
 
 ## View Data Cache status
 
@@ -71,6 +71,8 @@ You can download the following Grafana Dashboard templates based on your StarRoc
 
 - [Dashboard template for StarRocks shared-data cluster on virtual machines](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-for-vm.json)
 - [Dashboard template for StarRocks shared-data cluster on Kubernetes](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-for-k8s.json)
+
+For more instructions on setting up a monitoring and alerting service for StarRocks, see [Monitor and Alert with Prometheus and Grafana](../../administration/management/monitoring/prometheus_grafana.md).
 
 ### Important metrics
 
@@ -121,8 +123,6 @@ Follow these steps to clear the cached data on a CN node:
 
 - If the `datacache.enable` property is set to `false` for a cloud-native table, Data Cache will not be enabled for the table.
 - If the `datacache.partition_duration` property is set to a specific time range, data beyond the time range will not be cached.
-
-<CacheStats />
 
 ## Known issues
 

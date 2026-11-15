@@ -1,0 +1,98 @@
+-- name: test_query_cache_global_late_materialization
+-- Global late materialization makes the scan emit row positions and defers the wide columns to a
+-- lookup fragment that PlanFragmentBuilder moves into preExecutedFragments -- it is not a child of
+-- the FetchNode, only referenced by node id, so normalizeSubTree() never walks it. FetchNode itself
+-- had no toNormalForm(), so it fell through to PlanNode's empty default, which sets not even a
+-- node_type.
+--
+-- The result: with GLM on, the scan reads the same row-position columns whichever wide column the
+-- query actually wants, the deferred column's identity lives only in the invisible lookup fragment,
+-- and two queries deferring DIFFERENT columns produce the same digest. Whichever ran first
+-- populated the per-tablet entries and the second inherited its answer.
+--
+-- The join must be below the aggregation so it sits inside a cached lane, and the build side must
+-- carry a wide column that the query really consumes (otherwise it is pruned and never deferred).
+CREATE TABLE gb (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+
+-- s1 is 180 chars and s2 is 100, so length(...) = 180 selects every build row for s1 and none for s2.
+CREATE TABLE gw (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL,
+  s1 varchar(200),
+  s2 varchar(200)
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+
+INSERT INTO gb
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 50, 1
+FROM TABLE(generate_series(1, 620));
+
+INSERT INTO gw
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, generate_series, 1, repeat('a', 180), repeat('b', 100)
+FROM TABLE(generate_series(1, 200000));
+
+set pipeline_dop = 1;
+set query_cache_hot_partition_num = 100;
+-- The cost-based gate wants a TopN-with-limit or a limit-after-join at the plan root; this shape
+-- has an aggregation there, so GLM is forced on to reach the same plan a top-level LIMIT would.
+set enable_global_late_materialization = true;
+set enable_global_late_materialization_cost_based = false;
+
+-- Ground truth.
+set enable_query_cache = false;
+select ifnull(sum(s),0) from (select gb.c1, sum(gb.v1) s from gb
+  join (select c1 as k, s1 from gw order by ts limit 10) b
+  on gb.ts > b.k and length(b.s1) = 180 group by gb.c1) x;
+select ifnull(sum(s),0) from (select gb.c1, sum(gb.v1) s from gb
+  join (select c1 as k, s2 from gw order by ts limit 10) b
+  on gb.ts > b.k and length(b.s2) = 180 group by gb.c1) x;
+
+-- Cache on, s1 first: it populates the per-tablet entries, then s2 must NOT inherit them.
+set enable_query_cache = true;
+select ifnull(sum(s),0) from (select gb.c1, sum(gb.v1) s from gb
+  join (select c1 as k, s1 from gw order by ts limit 10) b
+  on gb.ts > b.k and length(b.s1) = 180 group by gb.c1) x;
+select ifnull(sum(s),0) from (select gb.c1, sum(gb.v1) s from gb
+  join (select c1 as k, s2 from gw order by ts limit 10) b
+  on gb.ts > b.k and length(b.s2) = 180 group by gb.c1) x;
+
+-- The other direction, on a table whose entries are still cold.
+CREATE TABLE gb2 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+
+INSERT INTO gb2
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 50, 1
+FROM TABLE(generate_series(1, 620));
+
+set enable_query_cache = true;
+select ifnull(sum(s),0) from (select gb2.c1, sum(gb2.v1) s from gb2
+  join (select c1 as k, s2 from gw order by ts limit 10) b
+  on gb2.ts > b.k and length(b.s2) = 180 group by gb2.c1) x;
+select ifnull(sum(s),0) from (select gb2.c1, sum(gb2.v1) s from gb2
+  join (select c1 as k, s1 from gw order by ts limit 10) b
+  on gb2.ts > b.k and length(b.s1) = 180 group by gb2.c1) x;

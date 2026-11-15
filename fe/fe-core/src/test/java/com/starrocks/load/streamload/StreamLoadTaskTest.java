@@ -37,6 +37,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.Warehouse;
@@ -142,12 +143,68 @@ public class StreamLoadTaskTest {
             {
                 coord.join(anyInt);
                 result = true;
+                // The coordinator itself is healthy here, the load simply produced no rows.
+                coord.getExecStatus();
+                result = Status.OK;
                 coord.getLoadCounters();
                 returns(null, loadCounters);
             }
         };
 
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_ROWS_IMPORTED.formatErrorMsg(),
+                () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
+    }
+
+    // ---- A load whose rows were all rejected must still record where they are logged: without the tracking
+    // URL, information_schema.load_tracking_logs cannot return them and the error does not point to them ----
+    @Test
+    public void testAllRowsRejectedRecordsTrackingUrl() {
+        Map<String, String> loadCounters = Maps.newHashMap();
+        loadCounters.put(LoadEtlTask.DPP_NORMAL_ALL, "0");
+        loadCounters.put(LoadEtlTask.DPP_ABNORMAL_ALL, "4");
+        loadCounters.put(LoadJob.UNSELECTED_ROWS, "0");
+        loadCounters.put(LoadJob.LOADED_BYTES, "100");
+        String trackingUrl = "http://127.0.0.1:8040/api/_load_error_log?file=error_log_test";
+
+        streamLoadTask.setCoordinator(coord);
+        new Expectations() {
+            {
+                coord.join(anyInt);
+                result = true;
+                coord.getExecStatus();
+                result = Status.OK;
+                coord.getLoadCounters();
+                result = loadCounters;
+                coord.getTrackingUrl();
+                result = trackingUrl;
+            }
+        };
+
+        StarRocksException e = ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                ERR_NO_ROWS_IMPORTED.formatErrorMsg(),
+                () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
+        Assertions.assertTrue(e.getMessage().contains("tracking_url: " + trackingUrl), e.getMessage());
+        String recordedTrackingUrl = Deencapsulation.getField(streamLoadTask, "trackingUrl");
+        Assertions.assertEquals(trackingUrl, recordedTrackingUrl);
+    }
+
+    @Test
+    public void testCancelledLoadReportsCancelReason() {
+        streamLoadTask.setCoordinator(coord);
+        new Expectations() {
+            {
+                coord.join(anyInt);
+                result = true;
+                coord.getExecStatus();
+                result = new Status(TStatusCode.CANCELLED, "cancelled by test");
+                coord.getLoadCounters();
+                result = null;
+            }
+        };
+
+        // A cancelled load never reports its counters. The user must see why it was cancelled instead of
+        // "no rows imported", which reads like a data problem.
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, "cancelled by test",
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
     }
 
@@ -173,6 +230,32 @@ public class StreamLoadTaskTest {
         Assertions.assertEquals(1000L, loadInfo.getNum_scan_bytes());
         Assertions.assertEquals("http://error.log", loadInfo.getUrl());
         Assertions.assertEquals("Error message", loadInfo.getError_msg());
+    }
+
+    @Test
+    public void testReplayVisibleWithManualLoadTxnCommitAttachment() {
+        ManualLoadTxnCommitAttachment attachment = mock(ManualLoadTxnCommitAttachment.class);
+        when(attachment.getLoadedRows()).thenReturn(100L);
+        when(attachment.getFilteredRows()).thenReturn(10L);
+        when(attachment.getUnselectedRows()).thenReturn(5L);
+        when(attachment.getLoadedBytes()).thenReturn(1000L);
+        when(attachment.getErrorLogUrl()).thenReturn("http://error.log");
+
+        TransactionState txnState = new TransactionState();
+        txnState.setTxnCommitAttachment(attachment);
+        txnState.setReason("Replay visible");
+        txnState.setFinishTime(System.currentTimeMillis());
+
+        streamLoadTask.replayOnVisible(txnState);
+
+        TLoadInfo loadInfo = streamLoadTask.toThrift().get(0);
+        Assertions.assertEquals("100%", loadInfo.getProgress());
+        Assertions.assertEquals(100L, loadInfo.getNum_sink_rows());
+        Assertions.assertEquals(10L, loadInfo.getNum_filtered_rows());
+        Assertions.assertEquals(5L, loadInfo.getNum_unselected_rows());
+        Assertions.assertEquals(1000L, loadInfo.getNum_scan_bytes());
+        Assertions.assertEquals("http://error.log", loadInfo.getUrl());
+        Assertions.assertEquals("Replay visible", loadInfo.getError_msg());
     }
 
     @Test

@@ -36,6 +36,7 @@ import com.starrocks.proto.TxnFinishStatePB;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
+import com.starrocks.transaction.TransactionState.TxnPrepareMode;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
@@ -72,10 +73,59 @@ public class TransactionStateTest {
                 3000, "label123", UUIDUtil.genTUniqueId(),
                 LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
+        transactionState.setReason("persistent reason");
+        transactionState.setTemporaryReason("temporary reason");
 
         String json = GsonUtils.GSON.toJson(transactionState);
         TransactionState readTransactionState = GsonUtils.GSON.fromJson(json, TransactionState.class);
         Assertions.assertEquals(transactionState.getCoordinator().ip, readTransactionState.getCoordinator().ip);
+        Assertions.assertEquals("persistent reason", readTransactionState.getReason());
+        Assertions.assertFalse(json.contains("temporary reason"));
+    }
+
+    // The tablets a commit skipped stay in memory until the transaction is committed and reports them: they follow
+    // the copy on write copies of the state, each copy owning its own map, and they are never persisted.
+    @Test
+    public void testIgnoredTabletsFollowCopiesAndAreNotPersisted() {
+        TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L),
+                3000, "label_ignored_tablets", UUIDUtil.genTUniqueId(),
+                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+        Map<Long, List<Long>> ignoredTabletsByPartition = new HashMap<>();
+        ignoredTabletsByPartition.put(30000L, Lists.newArrayList(40000L, 40001L));
+        transactionState.setIgnoredTablets(20000L, ignoredTabletsByPartition);
+
+        TransactionState copiedState = new TransactionState(transactionState);
+        assertEquals(Map.of(20000L, ignoredTabletsByPartition), copiedState.getIgnoredTablets());
+
+        // a prepare that skips nothing for the table clears it, without touching the state it was copied from
+        copiedState.setIgnoredTablets(20000L, new HashMap<>());
+        assertTrue(copiedState.getIgnoredTablets().isEmpty());
+        assertEquals(1, transactionState.getIgnoredTablets().size());
+
+        String json = GsonUtils.GSON.toJson(transactionState);
+        TransactionState readTransactionState = GsonUtils.GSON.fromJson(json, TransactionState.class);
+        assertTrue(readTransactionState.getIgnoredTablets().isEmpty());
+    }
+
+    @Test
+    public void testSetHasSendTaskKeepsPublishVersionTime() {
+        TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L),
+                3000, "label_send_task", UUIDUtil.genTUniqueId(),
+                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+        transactionState.setHasSendTask(true);
+        Assertions.assertTrue(transactionState.hasSendTask());
+        assertEquals(-1, transactionState.getPublishVersionTime());
+        assertEquals(-1, transactionState.getPublishRequestSentTime());
+        transactionState.recordPublishRequestSentTime();
+        long firstRequestSentTime = transactionState.getPublishRequestSentTime();
+        Assertions.assertTrue(firstRequestSentTime > 0);
+        // A later request carrying the same txn keeps the time of the first one.
+        transactionState.recordPublishRequestSentTime();
+        assertEquals(firstRequestSentTime, transactionState.getPublishRequestSentTime());
+        transactionState.updateSendTaskTime();
+        Assertions.assertTrue(transactionState.getPublishVersionTime() > 0);
     }
 
     @Test
@@ -98,8 +148,12 @@ public class TransactionStateTest {
         partitionCommitInfo.getTabletStats().put(40000L, stat);
         tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
         original.putIdToTableCommitInfo(20000L, tableCommitInfo);
+        original.setHasSendTask(true);
+        original.recordPublishRequestSentTime();
 
         TransactionState copied = new TransactionState(original);
+        Assertions.assertTrue(copied.hasSendTask());
+        assertEquals(original.getPublishRequestSentTime(), copied.getPublishRequestSentTime());
         Assertions.assertSame(original.getTableIdList(), copied.getTableIdList());
         Assertions.assertSame(original.getCoordinator(), copied.getCoordinator());
         Assertions.assertSame(original.getErrorReplicas(), copied.getErrorReplicas());
@@ -261,6 +315,15 @@ public class TransactionStateTest {
             assertEquals(Config.prepared_transaction_default_timeout_second * 1000L, txn.getPreparedTimeoutMs());
             assertFalse(txn.isTimeout(2000 + Config.prepared_transaction_default_timeout_second * 1000L));
             assertTrue(txn.isTimeout(2000 + Config.prepared_transaction_default_timeout_second * 1000L + 10));
+
+            txn.setPreparedTimeAndTimeout(3000, 0);
+            assertEquals(Config.prepared_transaction_default_timeout_second * 1000L, txn.getPreparedTimeoutMs());
+            assertFalse(txn.isTimeout(3000 + Config.prepared_transaction_default_timeout_second * 1000L));
+            assertTrue(txn.isTimeout(3000 + Config.prepared_transaction_default_timeout_second * 1000L + 10));
+
+            txn.setPreparedTimeAndTimeout(4000, 10_000, TxnPrepareMode.INTERNAL_ONE_PHASE);
+            assertEquals(txn.getPrepareTime() + txn.getTimeoutMs(), txn.getTimeoutDeadlineMs());
+            assertTrue(txn.isTimeout(txn.getPrepareTime() + txn.getTimeoutMs() + 1));
 
             txn.setTransactionStatus(TransactionStatus.COMMITTED);
             assertFalse(txn.isTimeout(4000));

@@ -55,7 +55,12 @@ public:
                                     const std::shared_ptr<FileSystem>& fs) {
         return Status::OK();
     }
-    virtual StatusOr<std::pair<FileInfo, PersistentIndexSstableRangePB>> flush_sst_writer() { return Status::OK(); }
+    // Only meaningful for writers that actually produce an SST; callers must gate the call on
+    // has_file_info(), which is false here, so the default is unreachable. Never return Status::OK()
+    // from a StatusOr: it is rewritten into an opaque InternalError instead of carrying a value.
+    virtual StatusOr<std::pair<FileInfo, PersistentIndexSstableRangePB>> flush_sst_writer() {
+        return Status::NotSupported("flush_sst_writer() called on a writer that produces no SST file");
+    }
     virtual bool has_file_info() const { return false; }
     // Rowids (within the just-flushed segment) that lost primary-key dedup and must be masked by a
     // delete vector at publish. Non-empty only for the unsort writer; the caller moves them out once
@@ -70,8 +75,12 @@ public:
 
 class PkTabletSSTWriter : public DefaultSSTWriter {
 public:
-    PkTabletSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id)
-            : _tablet_schema_ptr(std::move(tablet_schema_ptr)), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
+    // `txn_id` is the load or compaction transaction the sstables are written for; it prefixes their file names.
+    PkTabletSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id)
+            : _tablet_schema_ptr(std::move(tablet_schema_ptr)),
+              _tablet_mgr(tablet_mgr),
+              _tablet_id(tablet_id),
+              _txn_id(txn_id) {}
     ~PkTabletSSTWriter() override = default;
     Status append_sst_record(const Chunk& data, const std::vector<uint64_t>* rssid_rowids = nullptr,
                              const std::vector<uint32_t>* column_indexes = nullptr) override;
@@ -95,6 +104,7 @@ protected:
     TabletSchemaCSPtr _tablet_schema_ptr;
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
+    int64_t _txn_id;
 
 private:
     std::unique_ptr<PersistentIndexSstableStreamBuilder> _pk_sst_builder;

@@ -109,13 +109,9 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
             LOG.warn("CoordinatorBackendAssigner already running, skip duplicate start()");
             return;
         }
-        // Refuse to overlap with a previous worker that did not drain. After {@link #stop()}
-        // succeeds the executor is both shutdown and terminated; if it is only shutdown we may
-        // still have a live worker from the previous leader session.
-        if (singleExecutor != null && !singleExecutor.isTerminated()) {
-            throw new IllegalStateException(
-                    "CoordinatorBackendAssigner previous worker has not terminated; refuse to start a new one");
-        }
+        // No restart guard: BatchWriteMgr.onStopped() calls stop() (which waits until the runSchedule
+        // worker terminates) before the batch-write daemon clears isRunning, so the re-activation
+        // cleanliness gate has already guaranteed the previous worker terminated before start() runs.
         singleExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
                 1, "coordinator-be-assigner", true);
         singleExecutor.submit(this::runSchedule);
@@ -124,29 +120,23 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
 
     @Override
     public synchronized void stop() {
-        // shutdownNow() interrupts the runSchedule worker so its blocking poll() returns;
-        // runSchedule treats InterruptedException as an exit signal. Wait boundedly for the
-        // worker to actually exit so a subsequent start() does not race a still-alive worker
-        // against a freshly created one.
-        if (singleExecutor != null && !singleExecutor.isShutdown()) {
-            singleExecutor.shutdownNow();
-        }
+        // shutdownNow() interrupts the runSchedule worker so its blocking poll() returns; runSchedule
+        // treats InterruptedException as an exit signal. Wait until the worker actually exits (no
+        // deadline) so BatchWriteMgr.onStopped() - which calls this before it lets the batch-write
+        // daemon clear isRunning - does not report the daemon quiescent while this worker is still
+        // alive, and so the state clears below always run against a terminated schedule loop.
         if (singleExecutor != null) {
+            singleExecutor.shutdownNow();
             boolean terminated = false;
-            try {
-                terminated = singleExecutor.awaitTermination(
-                        Config.leader_demotion_drain_timeout_sec, TimeUnit.SECONDS);
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                LOG.warn("Interrupted while waiting for coordinator-be-assigner to terminate");
-            }
-            if (!terminated) {
-                // The executor remains shutdown-but-not-terminated, so a subsequent start()
-                // refuses to spin up a parallel worker; the stuck worker plus a new one would
-                // corrupt warehouseMetas.
-                LOG.error("CoordinatorBackendAssigner worker did not exit within {}s; refusing future restart",
-                        Config.leader_demotion_drain_timeout_sec);
-                return;
+            while (!terminated) {
+                try {
+                    terminated = singleExecutor.awaitTermination(1, TimeUnit.MINUTES);
+                    if (!terminated) {
+                        LOG.warn("coordinator-be-assigner worker has not exited after shutdownNow; still waiting");
+                    }
+                } catch (InterruptedException ie) {
+                    Thread.interrupted();
+                }
             }
         }
         // Now that the schedule loop has terminated, drop the leader-session state it owned.

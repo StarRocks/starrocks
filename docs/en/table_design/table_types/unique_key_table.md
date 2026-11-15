@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 50
 description: "How to create and use Unique Key tables in StarRocks to deduplicate rows on a unique key, returning only the latest value per key. Largely superseded by..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Unique Key table
@@ -76,7 +77,7 @@ DISTRIBUTED BY HASH(order_id);
 
 ## What to do next
 
-After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Loading options](../../loading/Loading_intro.md).
+After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Loading options](../../loading/loading_introduction/loading_introduction.mdx).
 
 :::note
 

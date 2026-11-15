@@ -1,0 +1,46 @@
+-- name: test_paimon_parquet_compaction
+create external catalog paimon_static_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"enable_get_stats_from_external_metadata" = "true",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set paimon_reader_mode = 'native';
+[ORDER]select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 order by id;
+select count(*), sum(amount), count(amount) from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1;
+select count(*) from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 where amount in (10,20) or id=2;
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 where amount >= 40 order by id;
+function: assert_paimon_reader("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 order by id", "pk_parquet_unmerged_v1", "native")
+[ORDER]select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 order by id;
+select count(*), sum(amount), count(amount) from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1;
+select count(*) from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 where amount in (10,20) or id=2;
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 where amount >= 40 order by id;
+function: assert_paimon_reader("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 order by id", "pk_parquet_compacted_v1", "starrocks")
+set paimon_reader_mode = 'jni';
+[ORDER]select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 order by id;
+select count(*), sum(amount), count(amount) from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1;
+select count(*) from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 where amount in (10,20) or id=2;
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 where amount >= 40 order by id;
+function: assert_paimon_reader("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 order by id", "pk_parquet_unmerged_v1", "jni")
+[ORDER]select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 order by id;
+select count(*), sum(amount), count(amount) from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1;
+select count(*) from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 where amount in (10,20) or id=2;
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 where amount >= 40 order by id;
+function: assert_paimon_reader("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 order by id", "pk_parquet_compacted_v1", "jni")
+set paimon_reader_mode = 'auto';
+[ORDER]select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 order by id;
+select count(*), sum(amount), count(amount) from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1;
+select count(*) from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 where amount in (10,20) or id=2;
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 where amount >= 40 order by id;
+function: assert_paimon_reader("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 order by id", "pk_parquet_unmerged_v1", "native")
+[ORDER]select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 order by id;
+select count(*), sum(amount), count(amount) from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1;
+select count(*) from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 where amount in (10,20) or id=2;
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 where amount >= 40 order by id;
+function: assert_paimon_reader("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 order by id", "pk_parquet_compacted_v1", "starrocks")
+set catalog default_catalog;
+drop catalog paimon_static_${uuid0};

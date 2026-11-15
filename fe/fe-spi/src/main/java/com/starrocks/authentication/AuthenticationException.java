@@ -18,6 +18,31 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.StarRocksException;
 
 public class AuthenticationException extends StarRocksException {
+    /**
+     * True when the failure came from the directory / IdP being unusable (connection refused, timeout, JWKS
+     * fetch failed) rather than from the credential being wrong. Callers that remember failures must not
+     * remember these: the same credential will be valid again as soon as the service recovers.
+     */
+    private boolean transientFailure;
+
+    /**
+     * Why it failed, for the failure-reason metric and the log only - never for the client (see
+     * {@link AuthFailureReason}). Defaults to {@link AuthFailureReason#BAD_CREDENTIAL}: most throw
+     * sites really are "the credentials are wrong", and the ones that are not annotate themselves
+     * at the throw site, which is the only place that actually knows.
+     */
+    private AuthFailureReason reason = AuthFailureReason.BAD_CREDENTIAL;
+
+    public AuthFailureReason getReason() {
+        return reason;
+    }
+
+    /** Tag the reason at the throw site: {@code throw new AuthenticationException(msg).withReason(MALFORMED);} */
+    public AuthenticationException withReason(AuthFailureReason reason) {
+        this.reason = reason;
+        return this;
+    }
+
     public AuthenticationException(String msg) {
         super(msg);
     }
@@ -28,5 +53,14 @@ public class AuthenticationException extends StarRocksException {
 
     public AuthenticationException(ErrorCode errorCode, Object... objs) {
         super(errorCode, objs);
+    }
+
+    public AuthenticationException asTransient() {
+        this.transientFailure = true;
+        return this;
+    }
+
+    public boolean isTransientFailure() {
+        return transientFailure;
     }
 }

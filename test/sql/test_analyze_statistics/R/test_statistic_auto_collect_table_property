@@ -1,0 +1,82 @@
+-- name: test_statistic_auto_collect_table_property
+create database analyze_auto_collect_${uuid0};
+-- result:
+-- !result
+use analyze_auto_collect_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_collect (k1 int, v1 int)
+DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_statistic_collect_on_first_load' = 'false');
+-- result:
+-- !result
+CREATE TABLE t_skip (k1 int, v1 int)
+DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_statistic_collect_on_first_load' = 'false',
+            'enable_statistic_auto_collect' = 'false');
+-- result:
+-- !result
+insert into t_collect select generate_series, generate_series from table(generate_series(1, 1000));
+-- result:
+-- !result
+insert into t_skip select generate_series, generate_series from table(generate_series(1, 1000));
+-- result:
+-- !result
+function: assert_query_contains("show create table t_skip", '"enable_statistic_auto_collect" = "false"')
+-- result:
+None
+-- !result
+drop stats t_collect;
+-- result:
+-- !result
+drop stats t_skip;
+-- result:
+-- !result
+create analyze full database analyze_auto_collect_${uuid0};
+-- result:
+-- !result
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 2, "desc": "wait for the database analyze job to finish"}
+  result=show analyze job where `Database` = 'analyze_auto_collect_${uuid0}';
+  CHECK: re.search("FINISH", ${result}) != None
+} END LOOP
+
+select count(*) from _statistics_.column_statistics where table_name = 'analyze_auto_collect_${uuid0}.t_collect';
+-- result:
+2
+-- !result
+select count(*) from _statistics_.column_statistics where table_name = 'analyze_auto_collect_${uuid0}.t_skip';
+-- result:
+0
+-- !result
+[UC]first_job=show analyze job where `Database` = 'analyze_auto_collect_${uuid0}';
+drop analyze ${first_job.split()[0]};
+-- result:
+-- !result
+alter table t_skip set ('enable_statistic_auto_collect' = 'true');
+-- result:
+-- !result
+function: assert_query_not_contains("show create table t_skip", "enable_statistic_auto_collect")
+-- result:
+None
+-- !result
+create analyze full database analyze_auto_collect_${uuid0};
+-- result:
+-- !result
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 2, "desc": "wait for the database analyze job to finish"}
+  result=show analyze job where `Database` = 'analyze_auto_collect_${uuid0}';
+  CHECK: re.search("FINISH", ${result}) != None
+} END LOOP
+
+select count(*) from _statistics_.column_statistics where table_name = 'analyze_auto_collect_${uuid0}.t_skip';
+-- result:
+2
+-- !result
+[UC]second_job=show analyze job where `Database` = 'analyze_auto_collect_${uuid0}';
+drop analyze ${second_job.split()[0]};
+-- result:
+-- !result
+drop database analyze_auto_collect_${uuid0};
+-- result:
+-- !result

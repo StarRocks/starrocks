@@ -16,16 +16,21 @@
 
 #include <filesystem>
 
+#include "base/failpoint/fail_point.h"
+#include "base/time/time.h"
 #include "cache/disk_cache/block_cache.h"
 #ifdef WITH_STARCACHE
 #include "cache/datacache.h"
 #endif
 #include "common/config_scan_io_fwd.h"
+#include "common/util/thrift_client_cache.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/global_dict/parser.h"
+#include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/query/query_runtime_state.h"
 #include "connector/hive/hive_chunk_sink.h"
 #include "connector/hive/iceberg_global_late_materialization_context.h"
+#include "connector/hive/paimon/paimon_cpp_loader.h"
 #include "connector/hive/scanner/cache_select_scanner.h"
 #include "connector/hive/scanner/hdfs_scanner_avro.h"
 #include "connector/hive/scanner/hdfs_scanner_json.h"
@@ -40,6 +45,8 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "fs/fs_factory.h"
+#include "gen_cpp/FrontendService.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
@@ -70,15 +77,59 @@ StatusOr<std::unique_ptr<ConnectorSinkProvider>> HiveConnector::create_sink_prov
 
 // ================================
 
+namespace {
+const TCloudConfiguration* cloud_configuration_of(const THdfsScanNode& hdfs_scan_node) {
+    return hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr;
+}
+
+// Asks the coordinator for the current configuration of this scan node's vended credentials.
+StatusOr<TCloudConfiguration> fetch_scan_credentials(RuntimeState* state, int32_t plan_node_id,
+                                                     const TCloudConfiguration& current) {
+    auto* fragment_state = state->fragment_runtime_state();
+    if (fragment_state == nullptr) {
+        return Status::NotSupported("no coordinator address to refresh scan credentials from");
+    }
+    const int timeout_ms = config::scan_credential_refresh_rpc_timeout_ms;
+    if (timeout_ms <= 0) {
+        return Status::NotSupported("scan credential refresh is turned off");
+    }
+    TRefreshScanCredentialsRequest request;
+    request.__set_query_id(state->query_id());
+    request.__set_plan_node_id(plan_node_id);
+    request.__set_refresh_token(current.refresh_token);
+    TRefreshScanCredentialsResponse response;
+    // The coordinator may have to call the catalog. File opens of this scan node wait meanwhile; reads of files
+    // already open do not. Not retried: the current credentials are kept and asked about again later.
+    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+            fragment_state->fe_addr(),
+            [&request, &response](FrontendServiceConnection& client) {
+                client->refreshScanCredentials(response, request);
+            },
+            timeout_ms, 0));
+    RETURN_IF_ERROR(Status(response.status));
+    if (!response.__isset.cloud_configuration) {
+        return Status::InternalError("coordinator returned no cloud configuration");
+    }
+    return std::move(response.cloud_configuration);
+}
+} // namespace
+
 HiveDataSourceProvider::HiveDataSourceProvider(const TPlanNode& plan_node)
-        : _plan_node_id(plan_node.node_id), _hdfs_scan_node(plan_node.hdfs_scan_node) {
+        : _plan_node_id(plan_node.node_id),
+          _hdfs_scan_node(plan_node.hdfs_scan_node),
+          _cloud_configuration(cloud_configuration_of(_hdfs_scan_node),
+                               config::scan_credential_refresh_rpc_timeout_ms > 0) {
     if (_hdfs_scan_node.__isset.bucket_properties) {
         _bucket_properties = _hdfs_scan_node.bucket_properties;
     }
 }
 
+// A short-lived provider per lookup (Iceberg global late materialization): it would lose a renewal and its retry
+// backoff with every lookup and ask the coordinator each time, so it keeps the deployed credentials.
 HiveDataSourceProvider::HiveDataSourceProvider(int32_t plan_node_id, const THdfsScanNode& hdfs_scan_node)
-        : _plan_node_id(plan_node_id), _hdfs_scan_node(hdfs_scan_node) {
+        : _plan_node_id(plan_node_id),
+          _hdfs_scan_node(hdfs_scan_node),
+          _cloud_configuration(cloud_configuration_of(_hdfs_scan_node), false) {
     if (_hdfs_scan_node.__isset.bucket_properties) {
         _bucket_properties = _hdfs_scan_node.bucket_properties;
     }
@@ -243,6 +294,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     RETURN_IF_ERROR(_init_partition_values());
     RETURN_IF_ERROR(_init_extended_values());
     if (_partition_filter.filter_by_eval) {
+        COUNTER_UPDATE(_scan_ranges_pruned_by_partition_value_counter, 1);
         _no_more_chunks = true;
         return Status::OK();
     }
@@ -404,6 +456,30 @@ Status HiveDataSource::_init_extended_values() {
     RETURN_IF_ERROR(ExprExecutor::prepare(_scanner_ctx.extended_col_expr_ctxs, _runtime_state));
     RETURN_IF_ERROR(ExprExecutor::open(_scanner_ctx.extended_col_expr_ctxs, _runtime_state));
 
+    // Extended columns (e.g. Iceberg `_file`, `$spec_id`) are constant per scan range and are
+    // appended to the chunk after the file reader runs, so the readers never evaluate the
+    // single-slot conjuncts on them. Evaluate those conjuncts here, the same way identity
+    // partition conjuncts are, and skip the whole scan range when they reject the values.
+    auto extended_chunk = std::make_shared<Chunk>();
+    std::vector<ExprContext*> ctxs;
+    const auto& by_slot = _scanner_ctx.format_scan_context.conjuncts.by_slot;
+    for (size_t i = 0; i < _scanner_ctx.extended_col_slots.size(); i++) {
+        SlotId slot_id = _scanner_ctx.extended_col_slots[i]->id();
+        auto it = by_slot.find(slot_id);
+        if (it == by_slot.end()) continue;
+        int extended_col_idx = _scanner_ctx.index_in_extended_columns[i];
+        ASSIGN_OR_RETURN(auto value_col, _scanner_ctx.extended_col_expr_ctxs[extended_col_idx]->evaluate(nullptr));
+        DCHECK(value_col->is_constant());
+        extended_chunk->append_column(std::move(value_col), slot_id);
+        ctxs.insert(ctxs.end(), it->second.begin(), it->second.end());
+    }
+    if (!ctxs.empty()) {
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(ctxs, extended_chunk.get()));
+        if (!extended_chunk->has_rows()) {
+            _partition_filter.filter_by_eval = true;
+        }
+    }
+
     return Status::OK();
 }
 
@@ -476,6 +552,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     }
     if (hdfs_scan_node.__isset.can_use_min_max_opt) {
         _scanner_ctx.format_scan_context.options.use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
+        _scanner_ctx.format_scan_context.options.min_max_values_of_all_slots = hdfs_scan_node.can_use_min_max_opt;
     }
     // can_use_any_column is set by PruneHDFSScanColumnRule when every queried column is
     // a partition column and a placeholder materialized column was injected to satisfy
@@ -484,6 +561,21 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     // min/max optimization is active.
     if (hdfs_scan_node.__isset.can_use_any_column) {
         _scanner_ctx.format_scan_context.options.can_use_any_column = hdfs_scan_node.can_use_any_column;
+    }
+    // The placeholder is never a partition column of the FE, so a materialized slot that is the source of an Iceberg
+    // partition transform is a column the query reads (a file stores it as data).
+    if (_scanner_ctx.format_scan_context.options.can_use_any_column) {
+        if (auto* iceberg_table = dynamic_cast<const IcebergTableDescriptor*>(_scanner_ctx.hive_table)) {
+            std::unordered_set<std::string> source_names;
+            for (const auto& name : iceberg_table->partition_source_column_names()) {
+                source_names.insert(_scanner_ctx.formatted_name(name));
+            }
+            for (auto* slot : _scanner_ctx.materialize_slots) {
+                if (source_names.contains(_scanner_ctx.formatted_name(slot->col_name()))) {
+                    _scanner_ctx.format_scan_context.options.any_column_queried_slots.insert(slot->id());
+                }
+            }
+        }
     }
     if (hdfs_scan_node.__isset.can_use_count_opt) {
         _scanner_ctx.format_scan_context.options.use_count_opt = hdfs_scan_node.can_use_count_opt;
@@ -620,6 +712,10 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
             ADD_COUNTER(_runtime_profile, "ParquetLazyFullTriggerCount", TUnit::UNIT);
     _scanner_ctx.profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _scanner_ctx.profile.scan_ranges_size = ADD_COUNTER(_runtime_profile, "ScanRangesSize", TUnit::BYTES);
+    _scan_ranges_pruned_by_partition_value_counter =
+            ADD_COUNTER(_runtime_profile, "ScanRangesPrunedByPartitionValue", TUnit::UNIT);
+    _scanner_ctx.profile.scan_ranges_pruned_by_file_stats_counter =
+            ADD_COUNTER(_runtime_profile, "ScanRangesPrunedByFileStats", TUnit::UNIT);
 
     _scanner_ctx.profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
     _scanner_ctx.profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
@@ -666,6 +762,8 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadCounter", TUnit::UNIT, prefix);
         _scanner_ctx.profile.datacache_skip_read_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadBytes", TUnit::BYTES, prefix);
+        _scanner_ctx.profile.datacache_read_error_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadErrorCounter", TUnit::UNIT, prefix);
         _scanner_ctx.profile.datacache_read_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheReadTimer", prefix);
         _scanner_ctx.profile.datacache_read_peer_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadPeerCounter", TUnit::UNIT, prefix);
@@ -798,10 +896,23 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         native_file_path = std::string(_scanner_ctx.hive_table->get_base_path()) +
                            (start_with_slash ? scan_range.relative_path : "/" + scan_range.relative_path);
     }
+    if (scan_range.__isset.use_paimon_native_reader && scan_range.use_paimon_native_reader) {
+        // Paimon native scan ranges leave full_path unset so that HDFSBackendSelector hashes on the
+        // per-split relative_path. Build the FileSystem from the table path in the descriptor instead.
+        if (const auto* paimon_desc = dynamic_cast<const PaimonTableDescriptor*>(_scanner_ctx.hive_table);
+            paimon_desc != nullptr && !paimon_desc->get_paimon_table_path().empty()) {
+            native_file_path = paimon_desc->get_paimon_table_path();
+        }
+    }
 
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
-    auto fsOptions =
-            FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
+    const int32_t plan_node_id = _provider->_plan_node_id;
+    _cloud_configuration = _provider->_cloud_configuration.get(
+            [state, plan_node_id](const TCloudConfiguration& current) {
+                return fetch_scan_credentials(state, plan_node_id, current);
+            },
+            [] { return UnixMillis(); });
+    auto fsOptions = FSOptions(_cloud_configuration.get());
 
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
     if (hdfs_scan_node.__isset.column_access_paths && _scanner_ctx.format_scan_context.column_access_paths.empty()) {
@@ -823,6 +934,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
     RETURN_IF_ERROR(_init_global_dicts(&_scanner_ctx));
     _scanner_ctx.runtime_filter_collector = _runtime_filters;
+    // ConnectorChunkSource calls DataSource::set_driver_sequence() in its constructor,
+    // well before open() reaches here, so this value is already final.  See
+    // HdfsScannerContext::driver_sequence for why it is carried at all.
+    _scanner_ctx.driver_sequence = runtime_membership_filter_eval_context.driver_sequence;
     _scanner_ctx.tuple_desc = _tuple_desc;
     if (const auto* hdfs_desc = dynamic_cast<const HdfsTableDescriptor*>(_scanner_ctx.hive_table)) {
         _scanner_ctx.avro_schema_json = hdfs_desc->get_avro_schema_json();
@@ -881,6 +996,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.use_paimon_jni_reader) {
         use_paimon_jni_reader = scan_range.use_paimon_jni_reader;
     }
+    bool use_paimon_native_reader = false;
+    if (scan_range.__isset.use_paimon_native_reader) {
+        use_paimon_native_reader = scan_range.use_paimon_native_reader;
+    }
     bool use_odps_jni_reader = false;
     if (scan_range.__isset.use_odps_jni_reader) {
         use_odps_jni_reader = scan_range.use_odps_jni_reader;
@@ -889,6 +1008,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     bool use_iceberg_jni_metadata_reader = false;
     if (scan_range.__isset.use_iceberg_jni_metadata_reader) {
         use_iceberg_jni_metadata_reader = scan_range.use_iceberg_jni_metadata_reader;
+    }
+
+    bool use_fluss_jni_reader = false;
+    if (scan_range.__isset.use_fluss_jni_reader) {
+        use_fluss_jni_reader = scan_range.use_fluss_jni_reader;
     }
 
     bool use_kudu_jni_reader = false;
@@ -909,8 +1033,15 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = new CacheSelectScanner();
     } else if (_scanner_ctx.format_scan_context.options.use_partition_column_value_only) {
         scanner = new HdfsPartitionScanner();
+    } else if (use_paimon_native_reader) {
+        // Loads the paimon-cpp shim on first use; fails the query with an
+        // actionable error (suggesting paimon_reader_mode='JNI') when the
+        // paimon libraries are absent from be/lib/paimon-cpp-lib.
+        ASSIGN_OR_RETURN(scanner, create_paimon_cpp_scanner());
     } else if (use_paimon_jni_reader) {
         scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();
+    } else if (use_fluss_jni_reader) {
+        scanner = create_fluss_jni_scanner(jni_scanner_create_options).release();
     } else if (use_hudi_jni_reader) {
         scanner = create_hudi_jni_scanner(jni_scanner_create_options).release();
     } else if (use_odps_jni_reader) {
@@ -946,7 +1077,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                 serde_lib = file_desc->get_serde_lib();
             }
             if (serde_lib == OPENXJSON_SERDE_LIB) {
-                scanner = new HdfsJsonScanner();
+                // TODO: FileTableDescriptor doesn't carry serde properties from FE yet, so
+                // column name mapping ("mapping.<column>") only works for HdfsTableDescriptor.
+                scanner = hdfs_desc != nullptr ? new HdfsJsonScanner(hdfs_desc->get_serde_properties())
+                                               : new HdfsJsonScanner();
             } else {
                 scanner = new HdfsTextScanner();
             }
@@ -1084,6 +1218,21 @@ void HiveDataSourceProvider::prepare_scan_ranges(const std::vector<TScanRangePar
 
 void HiveDataSourceProvider::default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) {
     DataSourceProvider::default_data_source_mem_bytes(min_value, max_value);
+    // Pinning min == max here is deliberate: it makes the largest file this scan will touch the
+    // whole initial estimate, and discards the per-field term that
+    // ConnectorScanNode::_estimate_data_source_mem_bytes() would otherwise apply.
+    //
+    // The reasoning is that this path is mainly parquet, where the file length is a real physical
+    // ceiling on one reader's footprint -- the coalesced IO buffers, the per-column page buffers and
+    // the per-column dictionaries all come out of that file -- whereas `slots.size() *
+    // PER_FIELD_MEM_BYTES` is a flat per-column guess that ignores the file entirely. On the many
+    // small files that Hive tables usually consist of, the per-field term over-estimates by orders
+    // of magnitude and would cut io task concurrency for no reason, so we prefer to stay on the
+    // slightly conservative, file-derived bound.
+    //
+    // The known gap is the opposite direction: a dictionary-encoded column of long strings expands
+    // to far more memory than the file it came from, and no file-size prior can see that. The
+    // measured estimate takes over once the first chunk source closes; the first one is unprotected.
     // here we compute as default mem bytes = max(MIN_SIZE, min(max_file_length, MAX_SIZE))
     int64_t size = std::max(*min_value, std::min(_max_file_length * 3 / 2, *max_value));
     *min_value = *max_value = size;

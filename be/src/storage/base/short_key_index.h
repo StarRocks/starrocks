@@ -170,7 +170,7 @@ class ShortKeyIndexDecoder {
 public:
     ShortKeyIndexDecoder() = default;
 
-    // client should assure that body is available when this class is used
+    // client should assure that body is available when this class is used.
     Status parse(const Slice& body, const ShortKeyFooterPB& footer);
 
     ShortKeyIndexIterator begin() const {
@@ -201,12 +201,17 @@ public:
 
     uint32_t num_items() const {
         DCHECK(_parsed);
-        return _footer.num_items();
+        return _num_items;
     }
 
     uint32_t num_rows_per_block() const {
         DCHECK(_parsed);
-        return _footer.num_rows_per_block();
+        return _num_rows_per_block;
+    }
+
+    uint32_t num_segment_rows() const {
+        DCHECK(_parsed);
+        return _num_segment_rows;
     }
 
     Slice key(ssize_t ordinal) const {
@@ -216,11 +221,14 @@ public:
     }
 
     int64_t mem_usage() const {
-        return sizeof(ShortKeyIndexDecoder) + sizeof(uint32_t) * _offsets.size() + _key_data.size +
-               _footer.ByteSizeLong() - sizeof(_footer);
+        return sizeof(ShortKeyIndexDecoder) + sizeof(uint32_t) * _offsets.size() + _key_data.size;
     }
 
 private:
+    // Parse and runtime-validate the page body (KeyContent^N, KeyOffset(vint)^N) into
+    // _offsets / _key_data.
+    Status parse_body(const Slice& body, uint32_t num_items, uint32_t key_bytes, uint32_t offset_bytes);
+
     template <bool lower_bound>
     ShortKeyIndexIterator seek(const Slice& key) const {
         auto comparator = [](const Slice& lhs, const Slice& rhs) { return lhs.compare(rhs) < 0; };
@@ -234,7 +242,9 @@ private:
     bool _parsed{false};
 
     // All following fields are only valid after parse has been executed successfully
-    ShortKeyFooterPB _footer;
+    uint32_t _num_items{0};
+    uint32_t _num_rows_per_block{0};
+    uint32_t _num_segment_rows{0};
     std::vector<uint32_t> _offsets;
     Slice _key_data;
 };

@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -41,7 +42,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
+import com.google.common.collect.RangeMap;
 import com.google.common.collect.Sets;
+import com.google.common.collect.TreeRangeMap;
 import com.google.gson.annotations.SerializedName;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
@@ -78,12 +81,12 @@ import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.SnapshotCopyValidator;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.ColocatePersistInfo;
-import com.starrocks.persist.ColocateRangePersistInfo;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.qe.ConnectContext;
@@ -110,10 +113,8 @@ import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
-import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
-import com.starrocks.system.Backend;
-import com.starrocks.system.ComputeNode;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -238,6 +239,15 @@ public class OlapTable extends Table {
     @SerializedName(value = "bfFpp")
     protected double bfFpp;
 
+    // columns that use a column-level compression dictionary (a ZSTD dictionary)
+    @SerializedName(value = "zstdCompressionColumns")
+    protected Set<ColumnId> zstdCompressionColumns;
+    // Per-column data page size for the columns above, in bytes. A column absent from
+    // this map (or mapped to 0) keeps the BE default. Kept strictly in step with
+    // zstdCompressionColumns: the key set is always a subset of it.
+    @SerializedName(value = "zstdCompressionPageSizes")
+    protected Map<ColumnId, Integer> zstdCompressionPageSizes;
+
     @SerializedName(value = "colocateGroup")
     protected String colocateGroup;
 
@@ -295,6 +305,11 @@ public class OlapTable extends Table {
 
     protected Map<Long, Long> doubleWritePartitions = new HashMap<>();
 
+    // Online optimize: temp partition id -> the source partition version its rewrite copies. Absent until the
+    // job fixes it; until then a load committing a double write leaves the temp partition out, because the
+    // rewrite will copy that load from the source partition. See OnlineOptimizeJobV2.fixRewriteVersion.
+    protected Map<Long, Long> doubleWriteRewriteVersions = new HashMap<>();
+
     // Both the following two flags are used by StarMgrMetaSyncer
     private long lastCollectProfileTime = 0;
 
@@ -306,6 +321,10 @@ public class OlapTable extends Table {
     // It's not persisted but resolved in QueryAnalyzer, so only exists if it's in the context of query
     public volatile Long dbId;
 
+    // Not persisted. True on the private object copyOnlyForQuery fills, so copying it again is known not to
+    // read a published table -- see SnapshotCopyValidator for why this is a mark and not a metastore lookup.
+    private boolean planningSnapshot = false;
+
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -316,6 +335,8 @@ public class OlapTable extends Table {
 
         this.bfColumns = null;
         this.bfFpp = 0;
+        this.zstdCompressionColumns = null;
+        this.zstdCompressionPageSizes = null;
 
         this.colocateGroup = null;
 
@@ -347,6 +368,8 @@ public class OlapTable extends Table {
 
         this.bfColumns = null;
         this.bfFpp = 0;
+        this.zstdCompressionColumns = null;
+        this.zstdCompressionPageSizes = null;
 
         this.colocateGroup = null;
 
@@ -382,6 +405,8 @@ public class OlapTable extends Table {
     // Only Copy necessary metadata for query.
     // We don't do deep copy, because which is very expensive;
     public void copyOnlyForQuery(OlapTable olapTable) {
+        SnapshotCopyValidator.validateCopySource(this);
+        olapTable.planningSnapshot = true;
         olapTable.id = this.id;
         olapTable.name = this.name;
         olapTable.type = this.type;
@@ -397,6 +422,14 @@ public class OlapTable extends Table {
             olapTable.bfColumns.addAll(bfColumns);
         } else {
             olapTable.bfColumns = null;
+        }
+        if (zstdCompressionColumns != null) {
+            olapTable.zstdCompressionColumns = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+            olapTable.zstdCompressionColumns.addAll(zstdCompressionColumns);
+            olapTable.zstdCompressionPageSizes =
+                    zstdCompressionPageSizes == null ? null : Maps.newHashMap(zstdCompressionPageSizes);
+        } else {
+            olapTable.zstdCompressionColumns = null;
         }
 
         olapTable.keysType = this.keysType;
@@ -440,6 +473,11 @@ public class OlapTable extends Table {
         if (this.bfColumns != null) {
             olapTable.bfColumns = Sets.newHashSet(this.bfColumns);
         }
+        if (this.zstdCompressionColumns != null) {
+            olapTable.zstdCompressionColumns = Sets.newHashSet(this.zstdCompressionColumns);
+            olapTable.zstdCompressionPageSizes =
+                    this.zstdCompressionPageSizes == null ? null : Maps.newHashMap(this.zstdCompressionPageSizes);
+        }
         olapTable.bfFpp = this.bfFpp;
         if (this.curBinlogConfig != null) {
             olapTable.curBinlogConfig = new BinlogConfig(this.curBinlogConfig);
@@ -448,16 +486,35 @@ public class OlapTable extends Table {
         olapTable.maxColUniqueId = new AtomicInteger(this.maxColUniqueId.get());
     }
 
+    /** Whether this object is a private planning copy made by {@link #copyOnlyForQuery}, not a published table. */
+    public boolean isPlanningSnapshot() {
+        return planningSnapshot;
+    }
+
     public void addDoubleWritePartition(long sourcePartitionId, long tempPartitionId) {
         doubleWritePartitions.put(sourcePartitionId, tempPartitionId);
     }
 
     public void clearDoubleWritePartition() {
         doubleWritePartitions.clear();
+        doubleWriteRewriteVersions.clear();
     }
 
     public Map<Long, Long> getDoubleWritePartitions() {
         return doubleWritePartitions;
+    }
+
+    public void setDoubleWriteRewriteVersion(long tempPartitionId, long version) {
+        doubleWriteRewriteVersions.put(tempPartitionId, version);
+    }
+
+    /**
+     * The source partition version the online optimize rewrite of this temp partition copies, or null while the job
+     * has not fixed it yet.
+     */
+    @Nullable
+    public Long getDoubleWriteRewriteVersion(long tempPartitionId) {
+        return doubleWriteRewriteVersions.get(tempPartitionId);
     }
 
     public boolean hasShardGroupChanged() {
@@ -732,6 +789,31 @@ public class OlapTable extends Table {
         }
         fullSchema = newFullSchema;
         updateSchemaIndex();
+        // A ColumnId is only a name, so an entry left behind by a dropped column does not
+        // just linger: re-creating a column with that name would resolve the stale id again
+        // and silently switch the compression dictionary on for it. The schema index has
+        // just been rebuilt, and every schema mutation ends up here -- fast schema
+        // evolution, the shadow-index jobs and edit-log replay alike -- so this is the one
+        // place that can keep the set honest.
+        if (zstdCompressionColumns != null) {
+            zstdCompressionColumns.removeIf(columnId -> idToColumn.get(columnId) == null);
+            if (zstdCompressionPageSizes != null) {
+                zstdCompressionPageSizes.keySet().removeIf(columnId -> idToColumn.get(columnId) == null);
+                if (zstdCompressionPageSizes.isEmpty()) {
+                    zstdCompressionPageSizes = null;
+                }
+            }
+            if (zstdCompressionColumns.isEmpty()) {
+                zstdCompressionColumns = null;
+                zstdCompressionPageSizes = null;
+            }
+        }
+
+        // The column set just changed and the cache is keyed by column NAME, so DROP COLUMN c +
+        // ADD COLUMN c would otherwise hand the new column the old one's min/max. Called on every
+        // schema-change job and on their replay; the calls from metadata load are a no-op because
+        // nothing is cached yet.
+        invalidateMinMaxStats();
         // update max column unique id
         int maxColUniqueId = getMaxColUniqueId();
         for (Column column : fullSchema) {
@@ -799,7 +881,7 @@ public class OlapTable extends Table {
             Optional<PhysicalPartition> firstPhysicalPartition = partition.getSubPartitions().stream().findFirst();
             if (firstPhysicalPartition.isPresent()) {
                 PhysicalPartition physicalPartition = firstPhysicalPartition.get();
-                return physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
+                return physicalPartition.getQueryableMaterializedIndices(IndexExtState.VISIBLE);
             }
         }
         return Lists.newArrayList();
@@ -998,18 +1080,73 @@ public class OlapTable extends Table {
         return partitionInfo;
     }
 
+    /**
+     * How long to wait for the targeted nodes to acknowledge a drop of their auto-increment map.
+     * Mutable only so a test can pin the strict variant's refusal without sitting out a full minute.
+     */
+    @VisibleForTesting
+    static long dropAutoIncrementMapTimeoutMs = 60L * 1000L;
+
+    /**
+     * Strict invalidation: tell every registered node, alive or not, to drop its cached
+     * auto-increment map for this table, and report failure unless all of them acknowledged.
+     *
+     * <p>Both callers move the table's counter, so an interval a node reserved earlier must not
+     * outlive the change - it would hand out ids below the value just set, or ids already issued.
+     * They differ in what they do about it:
+     *
+     * <ul>
+     * <li>{@code ALTER TABLE ... AUTO_INCREMENT} ({@code LocalMetastore.alterTableAutoIncrement})
+     * uses the result as a gate: it raises the counter only if this returned true.</li>
+     * <li>RESTORE ({@code RestoreJob}) calls this and <em>discards</em> the result, so a timeout
+     * here does not stop it from recovering the counter. That gap is pre-existing and tracked
+     * separately; do not read this contract as if RESTORE were guarded.</li>
+     * </ul>
+     *
+     * <p>RESTORE still needs this variant rather than the best-effort one, for a reason that has
+     * nothing to do with the return value: targeting a node that is not alive leaves its task queued
+     * in {@link AgentTaskQueue}, which is what lets {@code ReportHandler} resend it once that node
+     * reports again. The best-effort variant never builds that task, so such a node would never be
+     * told at all. And it does come back: a node goes {@code isAlive == false} after failed
+     * heartbeats and is marked alive again on the next successful one <em>without restarting</em>
+     * ({@code ComputeNode.handleHbResponse}), so its in-memory interval survives the outage.
+     *
+     * @see #sendDropAutoIncrementMapTaskBestEffort() for the drop path, which must not block
+     */
     public boolean sendDropAutoIncrementMapTask() {
-        Set<Long> nodeIds = Sets.newHashSet();
-        List<Backend> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
-        for (Backend backend : backends) {
-            nodeIds.add(backend.getId());
-        }
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        Set<Long> nodeIds = Sets.newHashSet(clusterInfo.getBackendIds(false));
+        nodeIds.addAll(clusterInfo.getComputeNodeIds(false));
+        return doSendDropAutoIncrementMapTask(nodeIds);
+    }
 
-        List<ComputeNode> computeNodes = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
-        for (ComputeNode cn : computeNodes) {
-            nodeIds.add(cn.getId());
-        }
+    /**
+     * Best-effort invalidation: tell only the nodes that are alive, and do not wait for the rest.
+     *
+     * <p>For DROP TABLE / DROP DATABASE, where the result carries no guarantee and none is needed:
+     * table ids come from {@code getNextId()} and are never reused, so a stale entry left behind on
+     * a node that is not alive can never be hit by a future table.
+     *
+     * <p>Waiting for such a node is not merely useless here, it is harmful.
+     * {@link AgentBatchTask#run()} silently drops a task whose target node is gone or not alive, so
+     * no response ever arrives and nobody counts that latch mark down - the caller burns the full
+     * latch timeout. DROP DATABASE runs this once per auto-increment table while holding the
+     * database WRITE lock, so a single dead node turns into (table count * timeout) of lock hold
+     * time and stalls every other operation on the database.
+     *
+     * <p>The predicate is {@code isAlive()} - the same one {@code AgentBatchTask.run()} applies, so
+     * a node that passes here is a node the dispatch path will really send to - and not
+     * {@code isAvailable()}: a decommissioning node is alive, still serves loads, and still holds a
+     * map worth dropping.
+     */
+    public boolean sendDropAutoIncrementMapTaskBestEffort() {
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        Set<Long> nodeIds = Sets.newHashSet(clusterInfo.getBackendIds(true));
+        nodeIds.addAll(clusterInfo.getComputeNodeIds(true));
+        return doSendDropAutoIncrementMapTask(nodeIds);
+    }
 
+    private boolean doSendDropAutoIncrementMapTask(Set<Long> nodeIds) {
         AgentBatchTask batchTask = new AgentBatchTask();
 
         for (long nodeId : nodeIds) {
@@ -1019,23 +1156,31 @@ public class OlapTable extends Table {
         }
 
         boolean ok = true;
+        boolean allQueued = true;
         if (batchTask.getTaskNum() > 0) {
             MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<>(batchTask.getTaskNum());
             for (AgentTask task : batchTask.getAllTasks()) {
                 latch.addMark(task.getBackendId(), -1L);
                 ((DropAutoIncrementMapTask) task).setLatch(latch);
-                AgentTaskQueue.addTask(task);
+                if (!AgentTaskQueue.addTask(task)) {
+                    // Not enqueued (duplicate signature, or this node is demoting / not the leader):
+                    // no BE response will ever arrive, so do not wait for it. This runs inside the
+                    // DROP TABLE WAL applier during a demotion drain - waiting out the full latch
+                    // timeout there would burn the drain budget for nothing.
+                    allQueued = false;
+                    latch.markedCountDown(task.getBackendId(), -1L);
+                }
             }
             AgentTaskExecutor.submit(batchTask);
 
-            // estimate timeout, at most 10 min
-            long timeout = 60L * 1000L;
+            long timeout = dropAutoIncrementMapTimeoutMs;
             try {
                 LOG.info("begin to send drop auto increment map tasks to BE, total {} tasks. timeout: {}",
                         batchTask.getTaskNum(), timeout);
-                ok = latch.await(timeout, TimeUnit.MILLISECONDS);
+                ok = latch.await(timeout, TimeUnit.MILLISECONDS) && allQueued;
             } catch (InterruptedException e) {
                 LOG.warn("InterruptedException: ", e);
+                ok = false;
             }
 
             if (!ok) {
@@ -1193,12 +1338,17 @@ public class OlapTable extends Table {
      * - For random distribution, if mutable bucket num is not set, we will set it with a deduced value.
      */
     public void inferDistribution(DistributionInfo info) throws DdlException {
+        inferDistribution(info, getDefaultReplicationNum());
+    }
+
+    public void inferDistribution(DistributionInfo info, short replicationNum) throws DdlException {
         if (info.getType() == DistributionInfo.DistributionInfoType.HASH) {
             // infer bucket num
             if (info.getBucketNum() == 0) {
                 int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
                         FeConstants.DEFAULT_INFER_BUCKET_NUM_RECENT_PARTITION_NUM,
-                        Config.enable_auto_tablet_distribution);
+                        Config.enable_auto_tablet_distribution,
+                        replicationNum);
                 info.setBucketNum(numBucket);
             }
         } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
@@ -1207,7 +1357,7 @@ public class OlapTable extends Table {
             if (numBucket > 0) {
                 info.setBucketNum((int) numBucket);
             } else if (info.getBucketNum() == 0) {
-                numBucket = CatalogUtils.calPhysicalPartitionBucketNum(isLightWeightTabletCreation());
+                numBucket = CatalogUtils.calPhysicalPartitionBucketNum(this, replicationNum);
                 info.setBucketNum((int) numBucket);
             }
         } else if (info.getType() == DistributionInfo.DistributionInfoType.RANGE) {
@@ -1256,12 +1406,41 @@ public class OlapTable extends Table {
         }
     }
 
+    /**
+     * Drop this table's cached column min/max values.
+     *
+     * <p>{@code ColumnMinMaxMgr} keeps them keyed by (table id, column name) and validates an entry
+     * by comparing the table-level {@code max(visibleVersionTime)} it was loaded at against the
+     * current one, accepting the entry when it is not older. Loading data is the only operation that
+     * reliably advances that stamp. DDL does not:
+     *
+     * <ul>
+     *   <li>REPLACE PARTITION and INSERT OVERWRITE move the temporary {@link Partition} object into
+     *       the formal list as it stands, so the table-level maximum goes BACKWARDS whenever that
+     *       partition was loaded before the one it replaces;</li>
+     *   <li>dropping the most recently loaded partition moves it backwards the same way;</li>
+     *   <li>RECOVER PARTITION brings data back without necessarily raising it;</li>
+     *   <li>a fast schema change does not touch partitions at all, yet DROP COLUMN c + ADD COLUMN c
+     *       gives a brand new column the previous one's cache entry, since the key is the name.</li>
+     * </ul>
+     *
+     * <p>In every one of those cases a stale entry keeps passing the version check for as long as it
+     * lives -- the cache has no TTL -- so min()/max() constant-folds to values that no longer exist.
+     * Hence the explicit invalidation, hooked into the low-level mutators below rather than into the
+     * DDL entry points: these run identically on the leader and on edit-log replay, so followers
+     * (which fold min/max from their own cache) drop the entry too.
+     */
+    private void invalidateMinMaxStats() {
+        IMinMaxStatsMgr.invalidateTable(this);
+    }
+
     public void addPartition(Partition partition) {
         idToPartition.put(partition.getId(), partition);
         nameToPartition.put(partition.getName(), partition);
         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
             physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
         }
+        invalidateMinMaxStats();
     }
 
     public void removePhysicalPartition(PhysicalPartition physicalPartition) {
@@ -1294,6 +1473,7 @@ public class OlapTable extends Table {
         physicalPartitionIdToPartitionId.keySet().removeAll(partition.getSubPartitions()
                 .stream().map(PhysicalPartition::getId)
                 .collect(Collectors.toList()));
+        invalidateMinMaxStats();
     }
 
     protected RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
@@ -1329,9 +1509,26 @@ public class OlapTable extends Table {
     }
 
     /**
+     * Drop a partition. A force drop with a positive `retentionPeriod` (seconds) is still non-recoverable but
+     * keeps the partition's tablets for that period, see `dropPartitionWithRetention`. With 0 the table's own
+     * force drop applies: the tablets go on the next recycle bin pass (MaterializedView keeps them for a
+     * while, see its override).
+     */
+    public void dropPartition(long dbId, String partitionName, boolean isForceDrop, long retentionPeriod) {
+        if (isForceDrop && retentionPeriod > 0) {
+            dropPartitionWithRetention(dbId, partitionName, retentionPeriod);
+        } else {
+            dropPartition(dbId, partitionName, isForceDrop);
+        }
+    }
+
+    /**
      *  Try to retain the partition for a while to avoid tablet missing errors.
      *  This method is used in `insert overwrite`, `mv rewrite` etc. scenarios,
      *  where we don't want to delete data immediately
+     *
+     *  It is always a force drop: the partition cannot be recovered, only the erase of its tablets waits
+     *  for `partitionRetentionPeriod` seconds.
      *
      *  This method is not thread safe. The caller should ensure that this method is called under lock.
      */
@@ -1350,8 +1547,9 @@ public class OlapTable extends Table {
 
             removePartitionFromInnerState(partition);
         } else {
-            // if `partitionRetentionPeriod` is not valid, fallback to drop partition forcefully
-            dropPartition(dbId, partitionName, true);
+            // if `partitionRetentionPeriod` is not valid, fallback to drop partition forcefully.
+            // Call the private variant: MaterializedView overrides the public one to call back here.
+            dropPartition(dbId, partitionName, true, false);
         }
     }
 
@@ -1588,6 +1786,45 @@ public class OlapTable extends Table {
         }
     }
 
+    public Set<ColumnId> getZstdCompressionColumnIds() {
+        return zstdCompressionColumns;
+    }
+
+    public Set<String> getZstdCompressionColumnNames() {
+        if (zstdCompressionColumns == null) {
+            return null;
+        }
+
+        Set<String> columnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        for (ColumnId columnId : zstdCompressionColumns) {
+            Column column = idToColumn.get(columnId);
+            if (column == null) {
+                LOG.warn("can not find column by column id: {}, maybe the column has been dropped.", columnId);
+                continue;
+            }
+            columnNames.add(column.getName());
+        }
+        if (columnNames.isEmpty()) {
+            return null;
+        } else {
+            return columnNames;
+        }
+    }
+
+    public Map<ColumnId, Integer> getZstdCompressionPageSizes() {
+        return zstdCompressionPageSizes;
+    }
+
+    public void setZstdCompressionColumns(Set<ColumnId> zstdCompressionColumns) {
+        setZstdCompressionColumns(zstdCompressionColumns, null);
+    }
+
+    public void setZstdCompressionColumns(Set<ColumnId> zstdCompressionColumns,
+                                          Map<ColumnId, Integer> zstdCompressionPageSizes) {
+        this.zstdCompressionPageSizes = zstdCompressionPageSizes;
+        this.zstdCompressionColumns = zstdCompressionColumns;
+    }
+
     public List<Index> getCopiedIndexes() {
         if (indexes == null) {
             return Lists.newArrayList();
@@ -1609,6 +1846,7 @@ public class OlapTable extends Table {
             this.indexes = new TableIndexes(null);
         }
         this.indexes.setIndexes(indexes);
+        tryToAssignIndexId();
     }
 
     public String getColocateGroup() {
@@ -1687,7 +1925,7 @@ public class OlapTable extends Table {
         long rowCount = 0;
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
             for (PhysicalPartition partition : entry.getValue().getSubPartitions()) {
-                rowCount += partition.getLatestBaseIndex().getRowCount();
+                rowCount += partition.getQueryableBaseIndex().getRowCount();
             }
         }
         return rowCount;
@@ -1891,6 +2129,10 @@ public class OlapTable extends Table {
             partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, dataCacheInfo);
         }
 
+        // This swaps the partition maps directly instead of going through addPartition() /
+        // removePartitionFromInnerState(), so it needs its own call.
+        invalidateMinMaxStats();
+
         return oldPartition;
     }
 
@@ -1994,7 +2236,7 @@ public class OlapTable extends Table {
         for (Partition partition : getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long version = physicalPartition.getVisibleVersion();
-                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (MaterializedIndex index : physicalPartition.getQueryableMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
                         totalCount += tablet.getRowCount(version);
                     }
@@ -2253,6 +2495,16 @@ public class OlapTable extends Table {
         return tableProperty != null && tableProperty.isSetEnableStatisticCollectOnFirstLoad();
     }
 
+    public boolean enableStatisticAutoCollect() {
+        return tableProperty == null || tableProperty.enableStatisticAutoCollect();
+    }
+
+    public void setEnableStatisticAutoCollect(boolean enable) {
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT,
+                Boolean.toString(enable));
+        tableProperty.buildEnableStatisticAutoCollect();
+    }
+
     public void setEnableStatisticCollectOnFirstLoad(boolean enable) {
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
                 Boolean.valueOf(enable).toString());
@@ -2295,6 +2547,19 @@ public class OlapTable extends Table {
         return tableProperty.getBucketSize();
     }
 
+    // The table's own split/merge target size, or 0 when it follows the cluster-wide target.
+    // The table's size is in force only while the cluster-wide target is positive.
+    public long getTabletReshardTargetSizeOverride(long clusterTargetSize) {
+        return clusterTargetSize > 0 ? tableProperty.getTabletReshardTargetSize() : 0L;
+    }
+
+    // Effective tablet split/merge target size of this table.
+    public long getTabletReshardTargetSize() {
+        long clusterTargetSize = Config.tablet_reshard_target_size;
+        long override = getTabletReshardTargetSizeOverride(clusterTargetSize);
+        return override > 0 ? override : clusterTargetSize;
+    }
+
     public Long getMutableBucketNum() {
         return tableProperty.getMutableBucketNum();
     }
@@ -2308,6 +2573,13 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE,
                         String.valueOf(bucketSize));
         tableProperty.buildBucketSize();
+    }
+
+    public void setTabletReshardTargetSize(long size) {
+        Preconditions.checkArgument(size > 0, "tablet_reshard_target_size must be positive: %s", size);
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE,
+                String.valueOf(size));
+        tableProperty.buildTabletReshardTargetSize();
     }
 
     public void setMutableBucketNum(long bucketNum) {
@@ -2386,7 +2658,12 @@ public class OlapTable extends Table {
     }
 
     public void setHasDelete() {
-        tableProperty.setHasDelete(true);
+        if (!hasDelete()) {
+            tableProperty.setHasDelete(true);
+            // Query copies retain the old flag but share physical partitions. Invalidate those
+            // plans before a DELETE visible version can be published on the shared partitions.
+            lastSchemaUpdateTime.set(System.nanoTime());
+        }
     }
 
     public void setDataCachePartitionDuration(PeriodDuration duration) {
@@ -2424,6 +2701,18 @@ public class OlapTable extends Table {
         tableProperty.setHasForbiddenGlobalDict(hasForbiddenGlobalDict);
     }
 
+    public boolean isNoDictColumn(String columnName) {
+        return tableProperty != null && tableProperty.isNoDictColumn(columnName);
+    }
+
+    public java.util.Set<String> getNoDictColumns() {
+        return tableProperty == null ? java.util.Collections.emptySet() : tableProperty.getNoDictColumns();
+    }
+
+    public void setNoDictColumns(java.util.Set<String> noDictColumns) {
+        tableProperty.setNoDictColumns(noDictColumns);
+    }
+
     // return true if partition with given name already exist, both in partitions
     // and temp partitions.
     // return false otherwise
@@ -2457,6 +2746,57 @@ public class OlapTable extends Table {
             tempPartitions.dropPartition(partitionName, needDropTablet);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
+            }
+        }
+    }
+
+    /**
+     * Checks that {@link #replaceMatchPartitions} can promote the given temporary partitions without leaving two
+     * formal partitions whose ranges overlap. A temporary partition replaces the formal partition its name points
+     * at, if there is one, so it may overlap that partition and no other.
+     */
+    public void checkReplaceMatchPartitions(List<String> tempPartitionNames) throws DdlException {
+        if (!(partitionInfo instanceof RangePartitionInfo rangeInfo)) {
+            return;
+        }
+        Map<Long, Range<PartitionKey>> tempRanges = rangeInfo.getIdToRange(true);
+        // temporary ranges never overlap each other, every one is checked against the others when it is created
+        RangeMap<PartitionKey, String> promotedRanges = TreeRangeMap.create();
+        Set<Long> replacedPartitionIds = Sets.newHashSet();
+        for (String tempPartitionName : tempPartitionNames) {
+            Partition tempPartition = tempPartitions.getPartition(tempPartitionName);
+            if (tempPartition == null) {
+                continue;
+            }
+            Partition replaced = nameToPartition.get(tempPartitionName.substring(
+                    tempPartitionName.indexOf(AnalyzerUtils.PARTITION_NAME_PREFIX_SPLIT) + 1));
+            if (replaced != null) {
+                replacedPartitionIds.add(replaced.getId());
+            }
+            Range<PartitionKey> range = tempRanges.get(tempPartition.getId());
+            if (range != null && !range.isEmpty()) {
+                promotedRanges.put(range, tempPartitionName);
+            }
+        }
+        if (promotedRanges.asMapOfRanges().isEmpty()) {
+            return;
+        }
+        // All formal ranges rather than the range index: on a table whose ranges already overlap, the index can hold
+        // one entry for two partitions that start at the same key.
+        for (Map.Entry<Long, Range<PartitionKey>> entry : rangeInfo.getIdToRange(false).entrySet()) {
+            if (replacedPartitionIds.contains(entry.getKey()) || entry.getValue().isEmpty()) {
+                continue;
+            }
+            Map<Range<PartitionKey>, String> overlapping = promotedRanges.subRangeMap(entry.getValue()).asMapOfRanges();
+            if (!overlapping.isEmpty()) {
+                String tempPartitionName = overlapping.values().iterator().next();
+                Range<PartitionKey> tempRange = tempRanges.get(tempPartitions.getPartition(tempPartitionName).getId());
+                Partition partition = idToPartition.get(entry.getKey());
+                throw new DdlException(String.format(
+                        "temporary partition %s [%s, %s) overlaps partition %s [%s, %s), which it does not replace",
+                        tempPartitionName, tempRange.lowerEndpoint().toSql(), tempRange.upperEndpoint().toSql(),
+                        partition == null ? entry.getKey() : partition.getName(),
+                        entry.getValue().lowerEndpoint().toSql(), entry.getValue().upperEndpoint().toSql()));
             }
         }
     }
@@ -2803,22 +3143,14 @@ public class OlapTable extends Table {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         if (colocateTableIndex.isColocateTable(getId())) {
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(getId());
-            // For range colocate groups, journal the range mgr state ahead of OP_COLOCATE_ADD_TABLE_V2
-            // so the record lands after OP_CREATE_TABLE is durably written. A crash between this
-            // record and the add-table record leaves only an orphan range entry on a fresh grpId,
-            // which is harmless because the next create on the same colocate_with name allocates a
-            // new grpId via getNextId().
             if (colocateTableIndex.isRangeColocateGroup(groupId)) {
-                List<ColocateRange> ranges = colocateTableIndex.getColocateRanges(groupId.grpId);
-                if (!ranges.isEmpty()) {
-                    GlobalStateMgr.getCurrentState().getEditLog().logColocateRangeUpdate(
-                            ColocateRangePersistInfo.create(groupId.grpId, ranges));
-                }
+                colocateTableIndex.logAddTableToRangeGroup(groupId, getId());
+            } else {
+                List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+                ColocatePersistInfo colocatePersistInfo = ColocatePersistInfo.createForAddTable(groupId, getId(),
+                        backendsPerBucketSeq);
+                GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(colocatePersistInfo);
             }
-            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
-            ColocatePersistInfo colocatePersistInfo = ColocatePersistInfo.createForAddTable(groupId, getId(),
-                    backendsPerBucketSeq);
-            GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(colocatePersistInfo);
         }
 
         DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), this);
@@ -2873,41 +3205,105 @@ public class OlapTable extends Table {
         if (indexMetaIdToMeta.size() <= 1) {
             return;
         }
-        TableName tableName = new TableName(null, getName());
-        ConnectContext session = ConnectContext.buildInner();
-        Optional<SelectAnalyzer.SlotRefTableNameCleaner> visitorOpt = Optional.empty();
         for (MaterializedIndexMeta indexMeta : indexMetaIdToMeta.values()) {
             if (indexMeta.getIndexMetaId() == baseIndexMetaId) {
                 continue;
             }
-            List<Column> columns = indexMeta.getSchema();
-            // Note: Add this try-catch block to avoid the failure of analyzing rollup index meta since this
-            // method will be called in replay method.
-            // And the failure of analyzing rollup index meta will only affect the associated synchronized mvs and
-            // will not affect the whole system.
-            try {
-                for (Column column : columns) {
-                    Expr definedExpr = column.getDefineExpr();
-                    if (definedExpr == null) {
-                        continue;
-                    }
-                    if (visitorOpt.isEmpty()) {
-                        SelectAnalyzer.SlotRefTableNameCleaner visitor = MVUtils.buildSlotRefTableNameCleaner(
-                                session, this, tableName);
-                        visitorOpt = Optional.of(visitor);
-                    }
-                    Preconditions.checkArgument(visitorOpt.isPresent(), "visitor should not be null");
-                    definedExpr.accept(visitorOpt.get(), null);
-                    ExpressionAnalyzer.analyzeExpression(definedExpr, new AnalyzeState(),
-                            new Scope(RelationId.anonymous(),
-                                    new RelationFields(this.getBaseSchema().stream()
-                                            .map(col -> new Field(col.getName(), col.getType(),
-                                                    tableName, null))
-                                            .collect(Collectors.toList()))), session);
+            if (indexMeta.getSyncMvDefinition() != null) {
+                try {
+                    analyzeRollupIndexMeta(indexMeta);
+                } catch (SemanticException e) {
+                    // Only authoritative catalog reload failures are fatal at image startup.
+                    // The shared analyzer also serves detached live/replay job validation.
+                    throw new SyncMaterializedViewRecoveryException(getName(), indexMeta.getIndexMetaId(), e);
                 }
-            } catch (Exception e) {
-                LOG.warn("Analyze rollup index meta failed, index id: {}, table:{}", indexMeta.getIndexMetaId(), getName(), e);
+            } else {
+                try {
+                    analyzeRollupIndexMeta(indexMeta);
+                } catch (Exception e) {
+                    LOG.warn("Analyze rollup index meta failed, index id: {}, table:{}",
+                            indexMeta.getIndexMetaId(), getName(), e);
+                }
             }
+        }
+    }
+
+    /** Strictly recover and analyze a particular rollup against the registered base schema. */
+    public void analyzeRollupIndexMeta(MaterializedIndexMeta indexMeta) {
+        analyzeRollupIndexMeta(indexMeta, null);
+    }
+
+    /** Analyze detached metadata against a proposed source schema without changing the catalog. */
+    public void analyzeRollupIndexMeta(MaterializedIndexMeta indexMeta, List<Column> sourceSchema) {
+        try {
+            if (indexMeta.getSyncMvDefinition() != null) {
+                indexMeta.setWhereClause(indexMeta.getSyncMvDefinition().restore(indexMeta.getSchema()));
+            }
+            TableName tableName = new TableName(null, getName());
+            ConnectContext session = ConnectContext.buildInner();
+            if (sourceSchema == null) {
+                sourceSchema = getBaseSchema();
+                String indexName = getIndexNameByMetaId(indexMeta.getIndexMetaId());
+                // Original/visible indexes must keep the visible base's bindings while ALTER shadows coexist.
+                // Only a registered ALTER target with a durable definition uses the registered base-shadow schema.
+                // Legacy recovery keeps its original visible-base scope.
+                if (indexMeta.getSyncMvDefinition() != null && indexName != null &&
+                        !Column.removeNamePrefix(indexName).equals(indexName)) {
+                    String baseIndexName = getIndexNameByMetaId(baseIndexMetaId);
+                    for (Map.Entry<Long, MaterializedIndexMeta> entry : indexMetaIdToMeta.entrySet()) {
+                        String name = getIndexNameByMetaId(entry.getKey());
+                        if (name != null && !name.equals(baseIndexName) &&
+                                Column.removeNamePrefix(name).equalsIgnoreCase(baseIndexName)) {
+                            sourceSchema = entry.getValue().getSchema();
+                            break;
+                        }
+                    }
+                }
+            }
+            // Do not use fullSchema: unrelated derived MV columns cannot establish source provenance.
+            Set<String> sourceColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            for (Column column : sourceSchema) {
+                sourceColumnNames.add(Column.removeNamePrefix(column.getName()));
+            }
+            Scope scope = new Scope(RelationId.anonymous(), new RelationFields(sourceSchema.stream()
+                    .map(column -> new Field(Column.removeNamePrefix(column.getName()), column.getType(), tableName, null))
+                    .collect(Collectors.toList())));
+            SelectAnalyzer.SlotRefTableNameCleaner cleaner =
+                    new SelectAnalyzer.SlotRefTableNameCleaner(scope, session);
+            for (Column column : indexMeta.getSchema()) {
+                Expr expr = column.getDefineExpr();
+                if (expr == null) {
+                    if (indexMeta.getSyncMvDefinition() != null &&
+                            !sourceColumnNames.contains(Column.removeNamePrefix(column.getName()))) {
+                        throw new SemanticException("Synchronous MV source column %s is not in base schema", column.getName());
+                    }
+                    continue;
+                }
+                expr.accept(cleaner, null);
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), scope, session);
+                if (indexMeta.getSyncMvDefinition() != null) {
+                    AnalyzerUtils.verifyNoAggregateFunctions(expr, "Synchronous MV per-row definition");
+                    if (column.getAggStateDesc() != null &&
+                            !column.getAggStateDesc().equals(expr.getType().getAggStateDesc())) {
+                        throw new SemanticException("Synchronous MV aggregate state for column %s "
+                                + "does not match its definition", column.getName());
+                    }
+                }
+            }
+            Expr where = indexMeta.getWhereClause();
+            if (where != null) {
+                where.accept(cleaner, null);
+                ExpressionAnalyzer.analyzeExpression(where, new AnalyzeState(), scope, session);
+                if (indexMeta.getSyncMvDefinition() != null) {
+                    AnalyzerUtils.verifyNoAggregateFunctions(where, "Synchronous MV WHERE");
+                }
+                if (!where.getType().isBoolean()) {
+                    throw new SemanticException("Synchronous MV WHERE expression must be BOOLEAN");
+                }
+            }
+        } catch (Exception e) {
+            throw new SemanticException("Failed to analyze rollup index " + indexMeta.getIndexMetaId() +
+                    " on table " + getName() + ": " + e.getMessage(), e);
         }
     }
 
@@ -2936,7 +3332,10 @@ public class OlapTable extends Table {
         // which make things easier.
         dropAllTempPartitions();
         if (!replay && hasAutoIncrementColumn()) {
-            sendDropAutoIncrementMapTask();
+            // Best-effort: the table is going away and its id is never reused, so an entry left on
+            // a node that is not alive is unreachable dead memory. Waiting for such a node would
+            // cost a full latch timeout per table with the database WRITE lock held.
+            sendDropAutoIncrementMapTaskBestEffort();
         }
 
         updateBaseCompactionForbiddenTimeRanges(true);
@@ -3012,6 +3411,26 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ").join(bfColumnNames));
         }
 
+        // columns using a compression dictionary. Both halves are keyed by ColumnId, which is the
+        // column's original name, so the page size has to be looked up by the same id the name is
+        // resolved from -- re-deriving an id from the current name loses it after RENAME COLUMN.
+        if (zstdCompressionColumns != null && !zstdCompressionColumns.isEmpty()) {
+            List<String> specs = Lists.newArrayListWithCapacity(zstdCompressionColumns.size());
+            for (ColumnId columnId : zstdCompressionColumns) {
+                Column column = idToColumn.get(columnId);
+                if (column == null) {
+                    continue;
+                }
+                Integer pageSize = zstdCompressionPageSizes == null ? null : zstdCompressionPageSizes.get(columnId);
+                String columnName = column.getName();
+                specs.add(pageSize == null || pageSize <= 0 ? columnName : columnName + ":" + pageSize);
+            }
+            if (!specs.isEmpty()) {
+                Collections.sort(specs, String.CASE_INSENSITIVE_ORDER);
+                properties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, Joiner.on(", ").join(specs));
+            }
+        }
+
         // colocate group
         String colocateGroup = getColocateGroup();
         if (colocateGroup != null) {
@@ -3029,6 +3448,13 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, bucketSize.toString());
         }
 
+        // tablet split/merge target size of a range-distributed table
+        long tabletReshardTargetSize = tableProperty.getTabletReshardTargetSize();
+        if (tabletReshardTargetSize > 0) {
+            properties.put(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE,
+                    String.valueOf(tabletReshardTargetSize));
+        }
+
         // mutable bucket num
         Long mutableBucketNum = getMutableBucketNum();
         if (mutableBucketNum > 0) {
@@ -3044,6 +3470,10 @@ public class OlapTable extends Table {
         if (isSetEnableStatisticCollectOnFirstLoad()) {
             properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
                     Boolean.toString(enableStatisticCollectOnFirstLoad()));
+        }
+
+        if (!enableStatisticAutoCollect()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT, "false");
         }
 
         // base compaction forbidden time ranges

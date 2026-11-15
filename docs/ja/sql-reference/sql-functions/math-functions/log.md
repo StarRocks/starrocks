@@ -1,11 +1,12 @@
 ---
 displayed_sidebar: docs
 description: "数値の対数を指定された基数で計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # log
 
-数値の対数を指定された基数（または基底）で計算します。基数が指定されていない場合、この関数は [ln](../math-functions/ln.md) と同等です。
+数値の対数を指定された基数（または基底）で計算します。基数が指定されていない場合、この関数は [ln](./ln.md) と同等です。
 
 ## Syntax
 
@@ -15,7 +16,7 @@ log([base,] arg)
 
 ## Parameters
 
-- `base`: 任意。基数です。DOUBLE データ型のみサポートされています。このパラメータが指定されていない場合、この関数は [ln](../math-functions/ln.md) と同等です。
+- `base`: 任意。基数です。DOUBLE データ型のみサポートされています。このパラメータが指定されていない場合、この関数は [ln](./ln.md) と同等です。
 
 > **NOTE**
 >

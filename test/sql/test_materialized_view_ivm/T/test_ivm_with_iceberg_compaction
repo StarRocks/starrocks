@@ -1,0 +1,107 @@
+-- name: test_ivm_with_iceberg_compaction
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+
+create table t1 (k int, v int);
+
+-- Two separate commits so the first compaction has more than one file to merge.
+insert into t1 values (1, 10);
+insert into t1 values (2, 20);
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+set enable_materialized_view_rewrite = false;
+
+CREATE MATERIALIZED VIEW test_mv1
+DISTRIBUTED BY HASH(k)
+REFRESH DEFERRED MANUAL
+properties ("refresh_mode" = "incremental")
+AS SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='test_mv1';
+
+-- Baseline: first refresh bootstraps the TVR anchor through PCT.
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT k, v FROM test_mv1 ORDER BY k;
+
+-- ==============================================================
+-- Case A: one compaction closing the delta, after an append.
+-- Passed before the fix too; kept because it is the shape that masked the bug.
+-- ==============================================================
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (3, 30);
+[UC]ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE rewrite_data_files(rewrite_all = true);
+
+-- Guard the premise: compaction must really have committed a REPLACE snapshot,
+-- otherwise the cases below would silently assert nothing.
+SELECT count(1) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1$snapshots WHERE operation = 'replace';
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT k, v FROM test_mv1 ORDER BY k;
+
+-- ==============================================================
+-- Case B: two back-to-back compactions closing the delta, after an append.
+-- The reported failure: refresh died with "tvr delta lineage inconsistent".
+-- ==============================================================
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (4, 40);
+[UC]ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE rewrite_data_files(rewrite_all = true);
+[UC]ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE rewrite_data_files(rewrite_all = true);
+SELECT count(1) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1$snapshots WHERE operation = 'replace';
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT k, v FROM test_mv1 ORDER BY k;
+
+-- ==============================================================
+-- Case C: compaction only, with no append since the last refresh.
+-- Needs just one compaction: refresh died with "no tvr delta traits found".
+-- ==============================================================
+[UC]ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE rewrite_data_files(rewrite_all = true);
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT k, v FROM test_mv1 ORDER BY k;
+
+-- The anchor must move past the compaction, not merely survive it: a stalled
+-- anchor re-derives the same delta and reports SUCCESS again instead of SKIPPED.
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+
+-- ==============================================================
+-- Case D: compaction in the middle of the delta, followed by an append.
+-- The surviving delta must reach over the REPLACE to the range end without
+-- losing the appended row.
+-- ==============================================================
+[UC]ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE rewrite_data_files(rewrite_all = true);
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (5, 50);
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT k, v FROM test_mv1 ORDER BY k;
+
+-- Compaction is routine table maintenance; it must never inactivate the MV.
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_mv1';
+
+-- MV contents must equal a direct read of the base table.
+SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY k;
+
+DROP MATERIALIZED VIEW test_mv1;
+
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop database db_${uuid0} force;
+drop catalog mv_iceberg_${uuid0};

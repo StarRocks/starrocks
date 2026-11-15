@@ -1,6 +1,8 @@
 ---
+sidebar_position: 150
 displayed_sidebar: docs
 description: "Stream Load・Broker Load・Routine Load で列マッピング・フィルタ条件・派生列式を使用したロード時のデータ変換が可能です。"
+products: [oss, enterprise, anywhere]
 ---
 
 # ロード時のデータ変換
@@ -124,7 +126,7 @@ StarRocks テーブルにロードしたいデータファイルには、StarRoc
 
 #### ローカルファイルシステムからデータをロードする
 
-`file1.csv` がローカルファイルシステムに保存されている場合、次のコマンドを実行して [Stream Load](../loading/StreamLoad.md) ジョブを作成します。
+`file1.csv` がローカルファイルシステムに保存されている場合、次のコマンドを実行して [Stream Load](./StreamLoad.md) ジョブを作成します。
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
@@ -143,7 +145,7 @@ curl --location-trusted -u <username>:<password> \
 
 #### HDFS クラスターからデータをロードする
 
-`file1.csv` が HDFS クラスターに保存されている場合、次のステートメントを実行して [Broker Load](../loading/hdfs_load.md) ジョブを作成します。
+`file1.csv` が HDFS クラスターに保存されている場合、次のステートメントを実行して [Broker Load](./hdfs_load.md) ジョブを作成します。
 
 ```SQL
 LOAD LABEL test_db.label1
@@ -165,7 +167,7 @@ WITH BROKER;
 
 #### Kafka クラスターからデータをロードする
 
-`file1.csv` のデータが Kafka クラスターの `topic1` に公開されている場合、次のステートメントを実行して [Routine Load](../loading/RoutineLoad.md) ジョブを作成します。
+`file1.csv` のデータが Kafka クラスターの `topic1` に公開されている場合、次のステートメントを実行して [Routine Load](./kafka/RoutineLoad.md) ジョブを作成します。
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table101 ON table1
@@ -223,7 +225,7 @@ MySQL [test_db]> SELECT * FROM table1;
 
 #### ローカルファイルシステムからデータをロードする
 
-`file1.csv` がローカルファイルシステムに保存されている場合、次のコマンドを実行して [Stream Load](../loading/StreamLoad.md) ジョブを作成します。
+`file1.csv` がローカルファイルシステムに保存されている場合、次のコマンドを実行して [Stream Load](./StreamLoad.md) ジョブを作成します。
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
@@ -239,7 +241,7 @@ curl --location-trusted -u <username>:<password> \
 
 #### HDFS クラスターからデータをロードする
 
-`file1.csv` が HDFS クラスターに保存されている場合、次のステートメントを実行して [Broker Load](../loading/hdfs_load.md) ジョブを作成します。
+`file1.csv` が HDFS クラスターに保存されている場合、次のステートメントを実行して [Broker Load](./hdfs_load.md) ジョブを作成します。
 
 ```SQL
 LOAD LABEL test_db.label2
@@ -258,7 +260,7 @@ WITH BROKER;
 
 #### Kafka クラスターからデータをロードする
 
-`file1.csv` のデータが Kafka クラスターの `topic1` に公開されている場合、次のステートメントを実行して [Routine Load](../loading/RoutineLoad.md) ジョブを作成します。
+`file1.csv` のデータが Kafka クラスターの `topic1` に公開されている場合、次のステートメントを実行して [Routine Load](./kafka/RoutineLoad.md) ジョブを作成します。
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table102 ON table1
@@ -311,7 +313,7 @@ MySQL [test_db]> SELECT * FROM table1;
 
 #### ローカルファイルシステムからデータをロードする
 
-`file2.csv` がローカルファイルシステムに保存されている場合、次のコマンドを実行して [Stream Load](../loading/StreamLoad.md) ジョブを作成します。
+`file2.csv` がローカルファイルシステムに保存されている場合、次のコマンドを実行して [Stream Load](./StreamLoad.md) ジョブを作成します。
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
@@ -332,7 +334,7 @@ curl --location-trusted -u <username>:<password> \
 
 #### HDFS クラスターからデータをロードする
 
-`file2.csv` が HDFS クラスターに保存されている場合、次のステートメントを実行して [Broker Load](../loading/hdfs_load.md) ジョブを作成します。
+`file2.csv` が HDFS クラスターに保存されている場合、次のステートメントを実行して [Broker Load](./hdfs_load.md) ジョブを作成します。
 
 ```SQL
 LOAD LABEL test_db.label3
@@ -355,7 +357,7 @@ WITH BROKER;
 
 #### Kafka クラスターからデータをロードする
 
-`file2.csv` のデータが Kafka クラスターの `topic2` に公開されている場合、次のステートメントを実行して [Routine Load](../loading/RoutineLoad.md) ジョブを作成します。
+`file2.csv` のデータが Kafka クラスターの `topic2` に公開されている場合、次のステートメントを実行して [Routine Load](./kafka/RoutineLoad.md) ジョブを作成します。
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table201 ON table2
@@ -413,7 +415,7 @@ MySQL [test_db]> SELECT * FROM table2;
 
 ### HDFS クラスターからデータをロードする
 
-次のステートメントを実行して [Broker Load](../loading/hdfs_load.md) ジョブを作成します。このジョブでは、`/user/starrocks/data/input/` ファイルパスから `date` パーティションフィールドの値を抽出し、ワイルドカード (*) を使用してファイルパス内のすべてのデータファイルを `table1` にロードすることを指定します。
+次のステートメントを実行して [Broker Load](./hdfs_load.md) ジョブを作成します。このジョブでは、`/user/starrocks/data/input/` ファイルパスから `date` パーティションフィールドの値を抽出し、ワイルドカード (*) を使用してファイルパス内のすべてのデータファイルを `table1` にロードすることを指定します。
 
 ```SQL
 LOAD LABEL test_db.label4

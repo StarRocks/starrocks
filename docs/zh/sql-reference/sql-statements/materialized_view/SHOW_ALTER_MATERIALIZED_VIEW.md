@@ -2,6 +2,7 @@
 keywords: ['xiugai'] 
 displayed_sidebar: docs
 description: "查看同步物化视图的构建状态。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW ALTER MATERIALIZED VIEW
@@ -20,6 +21,7 @@ description: "查看同步物化视图的构建状态。"
 
 ```SQL
 SHOW ALTER MATERIALIZED VIEW [ { FROM | IN } db_name]
+[WHERE TableName|CreateTime|FinishedTime|State] [ORDER BY] [LIMIT]
 ```
 
 ## 参数
@@ -27,6 +29,7 @@ SHOW ALTER MATERIALIZED VIEW [ { FROM | IN } db_name]
 | **参数** | **必选** | **说明**                                                     |
 | -------- | -------- | ------------------------------------------------------------ |
 | db_name  | 否       | 待查看的数据库名称。如果不指定该参数，则默认使用当前数据库。 |
+| WHERE、ORDER BY、LIMIT | 否 | 对返回的作业进行过滤、排序和截断。支持的列为 `TableName`、`CreateTime`、`FinishedTime` 和 `State`。`FinishTime` 作为 `FinishedTime` 的别名同样接受。 |
 
 ## 返回
 

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Inserts data into a specific table or overwrites a specific table with data."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # INSERT
@@ -56,8 +57,9 @@ INSERT statements support configuring PROPERTIES from v3.4.0 onwards.
 | Property         | Description                                                  |
 | ---------------- | ------------------------------------------------------------ |
 | timeout          | The timeout duration of the INSERT job. Unit: Seconds. You can also set the timeout duration for INSERT within the session or globally using the variable `insert_timeout`. |
-| strict_mode      | Whether to enable strict mode while loading data using INSERT from FILES(). Valid values: `true` (Default) and `false`. When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../../../loading/load_concept/strict_mode.md). You can also enable strict mode for INSERT from FILES() within the session or globally using the variable `enable_insert_strict`. |
+| strict_mode      | Whether to enable strict mode while loading data using INSERT from FILES(). Valid values: `true` (Default) and `false`. When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../../../loading/strict_mode.md). You can also enable strict mode for INSERT from FILES() within the session or globally using the variable `enable_insert_strict`. |
 | max_filter_ratio | The maximum error tolerance of INSERT from FILES(). It's the maximum ratio of data records that can be filtered out due to inadequate data quality. When the ratio of unqualified data records reaches this threshold, the job fails. Default value: `0`. Range: [0, 1]. You can also set the maximum error tolerance for INSERT from FILES() within the session or globally using the variable `insert_max_filter_ratio`. |
+| merge_condition  | The name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source record has a greater or equal value than the destination record in the specified column. This property is supported only for Primary Key tables, and is supported from v3.5.8, v4.0.1, and v4.1.0 onwards. You cannot specify a primary key column as the condition. For more information, see [Conditional updates](../../../loading/Load_to_Primary_Key_tables.md#conditional-updates). |
 
 :::note
 
@@ -95,7 +97,7 @@ The behavior of the new Dynamic Overwrite semantic is much different:
 
 When overwriting a partitioned table as a whole, new data records will replace the data in their corresponding partitions. If there are partitions that are not involved, they will be left alone, instead of being truncated or deleted. And if there are new data records correspond to a non-existent partition, the system will create the partition.
 
-The Dynamic Overwrite semantic is disabled by default. To enable it, you need to set the system variable `dynamic_overwrite` to `true`.
+The Dynamic Overwrite semantic is disabled by default. To enable it, you need to set the system variable `dynamic_overwrite` to `true`. This variable applies only to StarRocks native tables. INSERT OVERWRITE into an Iceberg table always overwrites only the partitions that receive new data, regardless of this variable.
 
 Enable Dynamic Overwrite in the current session:
 

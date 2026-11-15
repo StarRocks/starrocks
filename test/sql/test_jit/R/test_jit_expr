@@ -1,4 +1,4 @@
--- name: test case when and cmp jit
+-- name: test case when and cmp jit @native
 Create table t ( int0 int not null, int1 int not null, nint0 int , nint1 int) ENGINE=OLAP DUPLICATE KEY(int0)  DISTRIBUTED BY HASH(int0) BUCKETS 4 PROPERTIES("replication_num" = "1");
 -- result:
 -- !result

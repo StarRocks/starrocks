@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW STORAGE VOLUMES lists all storage volumes in your StarRocks cluster."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW STORAGE VOLUMES

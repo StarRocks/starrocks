@@ -138,4 +138,22 @@ public class RoutineLoadScheduler extends LeaderDaemon {
     private List<RoutineLoadJob> getNeedScheduleRoutineJobs() {
         return routineLoadManager.getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE));
     }
+
+    // This daemon drives the (deliberately unjournaled) NEED_SCHEDULE -> RUNNING transition, so it
+    // owns restoring it on demotion: map every RUNNING job back to its durable NEED_SCHEDULE shape
+    // (dropping the leader-session task bookkeeping) so a re-elected leader in this same process
+    // re-divides the job exactly like a restarted FE. job.state is journal-visible (PAUSE/RESUME/STOP
+    // replay mutates it on these same objects), so demotion waits for this daemon to quiesce BEFORE
+    // starting the follower replayer - this reset never races replayed state changes.
+    @Override
+    protected void onStopped() {
+        for (RoutineLoadJob job : routineLoadManager.getRoutineLoadJobByState(
+                Sets.newHashSet(RoutineLoadJob.JobState.RUNNING))) {
+            try {
+                job.resetToLastDurableStateOnDemotion();
+            } catch (Throwable t) {
+                LOG.warn("reset routine load job {} on leader handoff failed", job.getId(), t);
+            }
+        }
+    }
 }

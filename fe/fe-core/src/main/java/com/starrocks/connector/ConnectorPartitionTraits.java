@@ -28,6 +28,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.partitiontraits.BenchmarkPartitionTraits;
 import com.starrocks.connector.partitiontraits.CachedPartitionTraits;
 import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
+import com.starrocks.connector.partitiontraits.FlussPartitionTraits;
 import com.starrocks.connector.partitiontraits.HivePartitionTraits;
 import com.starrocks.connector.partitiontraits.HudiPartitionTraits;
 import com.starrocks.connector.partitiontraits.IcebergPartitionTraits;
@@ -75,6 +76,7 @@ public abstract class ConnectorPartitionTraits {
                     .put(Table.TableType.KUDU, KuduPartitionTraits::new)
                     .put(Table.TableType.JDBC, JDBCPartitionTraits::new)
                     .put(Table.TableType.DELTALAKE, DeltaLakePartitionTraits::new)
+                    .put(Table.TableType.FLUSS, FlussPartitionTraits::new)
                     .put(Table.TableType.BENCHMARK, BenchmarkPartitionTraits::new)
                     .build();
 
@@ -138,15 +140,24 @@ public abstract class ConnectorPartitionTraits {
      * operations (currently Iceberg) will use the pinned snapshot instead of the live one.
      * Other connectors store the range but ignore it in their partition methods.
      */
-    public static ConnectorPartitionTraits build(Table table, TvrVersionRange pinnedVersionRange) {
-        ConnectorPartitionTraits traits = build(table);
+    public static ConnectorPartitionTraits build(MaterializedView mv, Table table,
+                                                 TvrVersionRange pinnedVersionRange) {
+        ConnectorPartitionTraits traits = build(mv, table);
         if (pinnedVersionRange != null) {
             traits.setPinnedVersionRange(pinnedVersionRange);
         }
         return traits;
     }
 
-    private static ConnectorPartitionTraits buildWithoutCache(Table table) {
+    public static ConnectorPartitionTraits build(Table table, TvrVersionRange pinnedVersionRange) {
+        return build(null, table, pinnedVersionRange);
+    }
+
+    /**
+     * Build the partition traits for the table without the query-context cache wrapper, whatever the current
+     * thread's context.
+     */
+    public static ConnectorPartitionTraits buildWithoutCache(Table table) {
         ConnectorPartitionTraits res = build(table.getType());
         res.table = table;
         return res;
@@ -224,7 +235,11 @@ public abstract class ConnectorPartitionTraits {
     }
 
     /**
-     * The max of refresh ts for all partitions
+     * The max refresh/modified timestamp over the table's partitions, in EPOCH MILLISECONDS.
+     * Implementations must convert the connector's native modified-time unit (see
+     * {@link com.starrocks.connector.PartitionInfo#getModifiedTimeUnit()}) to milliseconds, because
+     * callers compare this value against wall-clock-millis baselines (e.g. the MV rewrite staleness
+     * check against lastFreshnessConfirmedAt).
      */
     public abstract Optional<Long> maxPartitionRefreshTs();
 

@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import com.starrocks.type.BooleanType;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
@@ -386,10 +387,27 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
 
             Function fn = ExprUtils.getBuiltinFunction(FunctionSet.IF, argumentTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            fn = rectifyDecimalIfFunction(fn, elseOperator.getType());
             elseOperator = new CallOperator(FunctionSet.IF, fn.getReturnType(), ifArgs, fn);
 
         }
         return elseOperator;
+    }
+
+    /**
+     * The builtin if(BOOLEAN, DECIMAL, DECIMAL) signatures declare a wildcard decimal return type,
+     * so taking it as-is yields an expression typed DECIMAL(-1,-1). Both branches built above carry
+     * the very same concrete type, so use it: otherwise the BE cannot build a result column for the
+     * expression and aborts. This mirrors what DecimalV3FunctionAnalyzer does for if() written by users.
+     */
+    private static Function rectifyDecimalIfFunction(Function fn, Type branchType) {
+        if (!fn.getReturnType().isWildcardDecimal() || !branchType.isDecimalV3() || branchType.isWildcardDecimal()) {
+            return fn;
+        }
+        Function newFn = fn.copy();
+        newFn.setArgsType(new Type[] {BooleanType.BOOLEAN, branchType, branchType});
+        newFn.setRetType(branchType);
+        return newFn;
     }
 
     static boolean isThreeStageMoreEfficient(ConnectContext connectContext, OptExpression input,

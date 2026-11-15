@@ -1,0 +1,18 @@
+-- name: test_dump_tablet_metadata_cache_local_reads @cloud @sequential
+
+CREATE DATABASE db_${uuid0};
+USE db_${uuid0};
+CREATE TABLE standalone_meta (k INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("replication_num"="1", "file_bundling"="false",
+           "light_weight_tablet_creation"="true");
+CREATE TABLE bundled_meta (k INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("replication_num"="1", "file_bundling"="true",
+           "light_weight_tablet_creation"="true");
+INSERT INTO standalone_meta VALUES (1);
+INSERT INTO bundled_meta VALUES (1);
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} bash ${root_path}/sql/test_dump_tablet_metadata/T/check_dump_tablet_metadata.sh
+CLEANUP {
+    DROP DATABASE IF EXISTS ${db[0]} FORCE;
+} END CLEANUP

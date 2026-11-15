@@ -1,9 +1,9 @@
 ---
 displayed_sidebar: docs
 description: "ETL ステートメントを非同期タスクとして送信し、バックグラウンドで実行またはスケジュール実行します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
-import PropertyWarehouse from '../../../../_assets/commonMarkdown/property_warehouse_tip_default.mdx'
 
 # SUBMIT TASK
 
@@ -20,7 +20,7 @@ ETL ステートメントを非同期タスクとして送信します。
 
 - [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (v3.0 以降)
 - [INSERT](../INSERT.md) (v3.0 以降)
-- [CACHE SELECT](../../../../data_source/block_cache_warmup.md) (v3.3 以降)
+- [CACHE SELECT](../../../../data_source/data_cache/block_cache_warmup.md) (v3.3 以降)
 
 タスクの一覧は `INFORMATION_SCHEMA.tasks` をクエリすることで確認でき、タスクの実行履歴は `INFORMATION_SCHEMA.task_runs` をクエリすることで確認できます。詳細については、[使用上の注意](#使用上の注意)を参照してください。
 
@@ -46,8 +46,6 @@ AS <etl_statement>
 | `session.enable_profile` | Boolean | タスクのクエリプロファイルを有効にするかどうか。デフォルト: `false`。 |
 | `session.new_planner_optimize_timeout` | Integer | クエリオプティマイザのタイムアウト時間。単位: ミリ秒。デフォルト: `3000`。 |
 
-<PropertyWarehouse />
-
 例えば、以下のステートメントは、クエリプロファイルを有効にし、クエリタイムアウトを増加させるセッションプロパティを持つ `test_task` という名前のタスクを送信します：
 
 ```SQL
@@ -66,7 +64,7 @@ AS insert into t2 select * from t1;
 | task_name          | はい     | タスクの名前です。                                                                               |
 | schedule_start     | いいえ      | スケジュールされたタスクの開始時間です。                                                                 |
 | schedule_interval  | いいえ      | スケジュールされたタスクが実行される間隔で、最小間隔は10秒です。          |
-| etl_statement      | はい     | 非同期タスクとして送信したい ETL ステートメントです。StarRocks は現在、[CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) と [INSERT](../../loading_unloading/INSERT.md) の非同期タスクの送信をサポートしています。 |
+| etl_statement      | はい     | 非同期タスクとして送信したい ETL ステートメントです。StarRocks は現在、[CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) と [INSERT](../INSERT.md) の非同期タスクの送信をサポートしています。 |
 
 ## 戻り値
 
@@ -109,6 +107,7 @@ SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 | task_check_interval_second   | 3600              | 無効な Task を削除する時間間隔です。単位: 秒。    |
 | task_runs_ttl_second         | 86400             | TaskRun が有効である期間です。単位: 秒。有効期間を超えた TaskRun は自動的に削除されます。さらに、`FAILED` および `SUCCESS` 状態の TaskRun も自動的に削除されます。`TaskRun` は定期タスクの個々の実行を示します。  |
 | task_runs_concurrency        | 4                 | 並行して実行できる TaskRun の最大数です。  |
+| task_runs_dispatch_interval_ms | 1000          | Leader FE が実行中の TaskRun を確認し、pending の TaskRun をディスパッチする間隔です。単位: ミリ秒。FE を再起動せずに変更できます。新しい間隔は現在のディスパッチ周期が終わった後に有効になります。 |
 | task_runs_queue_length       | 500               | 実行待ちの TaskRun の最大数です。デフォルト値を超えると、受信タスクは一時停止されます。 |
 | task_runs_max_history_number | 10000             | 保持する TaskRun レコードの最大数です。 |
 | task_min_schedule_interval_s | 10                | Task 実行の最小間隔です。単位: 秒。 |

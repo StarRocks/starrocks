@@ -1,0 +1,43 @@
+-- name: test_json_subfield_mv_catalog_poisoning
+-- An asynchronous materialized view whose definition narrows a JSON subfield with a CAST used to
+-- poison its base table. MV refresh is an INSERT and does not copy its source table, so the v2 JSON
+-- path rewrite registered the synthesized extended column -- typed by whatever the MV asked for --
+-- on the live OlapTable. Every later statement reading that path picked the pinned column up:
+--   * get_json_string(j,'$.a') returned NULL for rows whose value is not an integer,
+--   * a predicate on the same expression stopped matching those rows while a projection still
+--     showed them, so the two disagreed,
+--   * dropping the MV did not undo any of it, and
+--   * creating another MV that reads the path at a different type failed outright with
+--     "type of exprs is not match slot's, expr_type=BIGINT, slot_type=VARCHAR".
+-- The base table below carries no flat_json property: this is purely the FE rewrite.
+create table base (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into base values
+  (1, parse_json('{"a":1}')),
+  (2, parse_json('{"a":"str"}')),
+  (3, parse_json('{"a":3}'));
+set cbo_json_v2_rewrite = true;
+select k, get_json_string(j, '$.a') as as_str from base order by k;
+select count(*) as str_cnt from base where get_json_string(j, '$.a') = 'str';
+create materialized view mv1 distributed by hash(k) buckets 1 refresh manual
+  properties("replication_num"="1") as select k, cast(j->'$.a' as bigint) as a from base;
+refresh materialized view mv1 with sync mode;
+select k, get_json_string(j, '$.a') as as_str from base order by k;
+select count(*) as str_cnt from base where get_json_string(j, '$.a') = 'str';
+-- Control at the point of maximum damage: the very same two reads with the rewrite off. On the
+-- unfixed build these two still answered correctly while the two above did not, and that gap is
+-- precisely the bug -- the rewrite has no licence to disagree with its own switched-off self.
+set cbo_json_v2_rewrite = false;
+select k, get_json_string(j, '$.a') as as_str from base order by k;
+select count(*) as str_cnt from base where get_json_string(j, '$.a') = 'str';
+set cbo_json_v2_rewrite = true;
+drop materialized view mv1;
+select k, get_json_string(j, '$.a') as as_str from base order by k;
+-- Dropping the MV never undid the pinning, so the control has to be repeated here too.
+set cbo_json_v2_rewrite = false;
+select k, get_json_string(j, '$.a') as as_str from base order by k;
+set cbo_json_v2_rewrite = true;
+create materialized view mv2 distributed by hash(k) buckets 1 refresh manual
+  properties("replication_num"="1") as select k, get_json_string(j, '$.a') as a from base;
+refresh materialized view mv2 with sync mode;
+select k, a from mv2 order by k;

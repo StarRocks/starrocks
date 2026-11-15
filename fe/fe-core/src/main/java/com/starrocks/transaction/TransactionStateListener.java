@@ -17,17 +17,20 @@ package com.starrocks.transaction;
 
 import java.util.List;
 
-// TransactionStateListener will be created by the FE master process before it commit a transaction.
-// Used to check if a transaction can be committed and save some information in the TransactionState.
+// TransactionStateListener will be created by the FE master process before it prepares or commits a transaction.
+// Used to check state transitions and save table-specific information in the TransactionState.
 public interface TransactionStateListener {
     String getTableName();
 
-    // This method is called by the FE master before changing the in-memory TransactionState to COMMITTED.
-    void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
+    // This method is called before changing the in-memory TransactionState to PREPARED.
+    void prePrepared(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
             List<TabletFailInfo> failedTablets) throws TransactionException;
 
-    // This method is called by the FE master after changing the in-memory TransactionState to COMMITTED and before writing
-    // the edit log.
+    // This method is called before changing a PREPARED transaction to COMMITTED.
+    default void preCommit(TransactionState txnState) throws TransactionException {
+    }
+
+    // This method is called after changing the in-memory TransactionState to PREPARED and before writing the edit log.
     void preWriteCommitLog(TransactionState txnState);
 
     // This method is called by the FE master after changed the TransactionState to ABORTED and *AFTER* released the writer

@@ -1,6 +1,8 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "ストレージとコンピューティングが分離されている共有データ StarRocks クラスタを手動でデプロイする方法。"
+products: [oss]
 ---
 
 import Tabs from '@theme/Tabs';
@@ -11,9 +13,9 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
 <ManualPrep />
 
-このトピックでは、共有データ StarRocks クラスタ（ストレージとコンピューティングが分離されている）を手動でデプロイする方法について説明します。他のインストールモードについては、[デプロイメント概要](../deployment/deployment_overview.md)を参照してください。
+このトピックでは、共有データ StarRocks クラスタ（ストレージとコンピューティングが分離されている）を手動でデプロイする方法について説明します。他のインストールモードについては、[デプロイメント概要](./deployment.md)を参照してください。
 
-共有なし StarRocks クラスタ（BE がストレージとコンピューティングの両方を担当する）をデプロイするには、[共有なし StarRocks を手動でデプロイする](../deployment/deploy_manually.md)を参照してください。
+共有なし StarRocks クラスタ（BE がストレージとコンピューティングの両方を担当する）をデプロイするには、[共有なし StarRocks を手動でデプロイする](./deploy_manually.md)を参照してください。
 
 ## 概要
 
@@ -43,7 +45,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
    mkdir -p <meta_dir>
    ```
 
-2. 以前に準備した[StarRocks FE デプロイメントファイル](../deployment/prepare_deployment_files.md)を保存しているディレクトリに移動し、FE 設定ファイル **fe/conf/fe.conf** を修正します。
+2. 以前に準備した[StarRocks FE デプロイメントファイル](./preparation/prepare_deployment_files.md)を保存しているディレクトリに移動し、FE 設定ファイル **fe/conf/fe.conf** を修正します。
 
    a. 共有データの実行モードを設定します。
 
@@ -58,7 +60,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
       meta_dir = <meta_dir>
       ```
 
-   c. [環境設定チェックリスト](../deployment/environment_configurations.md#fe-ポート)で言及されている FE ポートが占有されている場合は、FE 設定ファイルで有効な代替ポートを割り当てる必要があります。
+   c. [環境設定チェックリスト](./preparation/environment_configurations.md#fe-ポート)で言及されている FE ポートが占有されている場合は、FE 設定ファイルで有効な代替ポートを割り当てる必要があります。
 
       ```YAML
       http_port = aaaa               # デフォルト: 8030
@@ -90,7 +92,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
       JAVA_HOME = <path_to_JDK>
       ```
 
-   高度な設定項目については、[パラメータ設定 - FE 設定項目](../administration/management/FE_configuration.md)を参照してください。
+   高度な設定項目については、[パラメータ設定 - FE 設定項目](../administration/configuration/FE_parameters/FE_parameters.md)を参照してください。
 
 3. FE ノードを起動します。
 
@@ -110,7 +112,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
      > **注意**
      >
-     > FQDN アクセスを有効にして FE ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](../deployment/environment_configurations.md#ホスト名)を参照してください。
+     > FQDN アクセスを有効にして FE ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](./preparation/environment_configurations.md#ホスト名)を参照してください。
 
 4. FE ログを確認して、FE ノードが正常に起動したかどうかを確認します。
 
@@ -137,7 +139,7 @@ BEノードは共有なしクラスタにのみ追加でき、CNノードは共�
    mkdir -p <storage_root_path>
    ```
 
-2. 以前に準備した[StarRocks BE デプロイメントファイル](../deployment/prepare_deployment_files.md)を保存しているディレクトリに移動し、CN 設定ファイル **be/conf/cn.conf** を修正します。
+2. 以前に準備した[StarRocks BE デプロイメントファイル](./preparation/prepare_deployment_files.md)を保存しているディレクトリに移動し、CN 設定ファイル **be/conf/cn.conf** を修正します。
 
    a. 設定項目 `storage_root_path` にデータディレクトリを指定します。複数のボリュームはセミコロン (;) で区切ります。例: `/data1;/data2`。
 
@@ -159,9 +161,9 @@ BEノードは共有なしクラスタにのみ追加でき、CNノードは共�
 
       > **注意**
       >
-      > データはディレクトリ **`<storage_root_path>/starlet_cache`** にキャッシュされます。
+      > v3.4.0 以降、データはディレクトリ **`<storage_root_path>/datacache`** にキャッシュされます。CN の起動時に、`<storage_root_path>/starlet_cache` 内の既存のキャッシュデータは自動的にこのディレクトリに移動されます。それ以前のバージョンでは、データはディレクトリ **`<storage_root_path>/starlet_cache`** にキャッシュされます。
 
-   b. [環境設定チェックリスト](../deployment/environment_configurations.md)で言及されている CN ポートが占有されている場合は、CN 設定ファイルで有効な代替ポートを割り当てる必要があります。
+   b. [環境設定チェックリスト](./preparation/environment_configurations.md)で言及されている CN ポートが占有されている場合は、CN 設定ファイルで有効な代替ポートを割り当てる必要があります。
 
       ```YAML
       be_port = vvvv                   # デフォルト: 9060
@@ -189,7 +191,7 @@ BEノードは共有なしクラスタにのみ追加でき、CNノードは共�
       JAVA_HOME = <path_to_JDK>
       ```
 
-   高度な設定項目については、[パラメータ設定 - BE 設定項目](../administration/management/BE_configuration.md)を参照してください。CN のパラメータのほとんどは BE から継承されています。
+   高度な設定項目については、[パラメータ設定 - BE 設定項目](../administration/configuration/BE_parameters/BE_parameters.md)を参照してください。CN のパラメータのほとんどは BE から継承されています。
 
 3. CN ノードを起動します。
 
@@ -199,7 +201,7 @@ BEノードは共有なしクラスタにのみ追加でき、CNノードは共�
 
    > **注意**
    >
-   > - FQDN アクセスを有効にして CN ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](../deployment/environment_configurations.md#ホスト名)を参照してください。
+   > - FQDN アクセスを有効にして CN ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](./preparation/environment_configurations.md#ホスト名)を参照してください。
    > - CN ノードを起動する際にパラメータ `--host_type` を指定する必要はありません。
 
 4. CN ログを確認して、CN ノードが正常に起動したかどうかを確認します。
@@ -326,7 +328,7 @@ BEノードは共有なしクラスタにのみ追加でき、CNノードは共�
    > **注意**
    >
    > - 上記のコマンドを使用して、1 回に 1 つの Follower FE ノードを追加できます。
-   > - Observer FE ノードを追加したい場合は、`ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"=` を実行します。詳細な手順については、[ALTER SYSTEM - FE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md)を参照してください。
+   > - Observer FE ノードを追加したい場合は、`ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"` を実行します。詳細な手順については、[ALTER SYSTEM - FE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md)を参照してください。
 
 3. 新しい FE インスタンスでターミナルを起動し、メタデータストレージ用の専用ディレクトリを作成し、StarRocks FE デプロイメントファイルを保存しているディレクトリに移動し、FE 設定ファイル **fe/conf/fe.conf** を修正します。詳細な手順については、[ステップ 1: Leader FE ノードを起動する](#ステップ-1-leader-fe-ノードを起動する)を参照してください。基本的には、FE ノードを起動するためのコマンドを除いて、ステップ 1 の手順を繰り返すことができます。
 
@@ -621,7 +623,7 @@ PROPERTIES (
 
 ##### `datacache.partition_duration`
 
-ホットデータの有効期間。ローカルディスクキャッシュが有効になっている場合、すべてのデータがキャッシュにロードされます。キャッシュがいっぱいになると、StarRocks はキャッシュから最近使用されていないデータを削除します。クエリが削除されたデータをスキャンする必要がある場合、StarRocks はデータが現在の時点からの有効期間内にあるかどうかを確認します。データが有効期間内にある場合、StarRocks はデータを再度キャッシュにロードします。データが有効期間内にない場合、StarRocks はそれをキャッシュにロードしません。このプロパティは文字列値で、次の単位で指定できます: `YEAR`、`MONTH`、`DAY`、および `HOUR`。例えば、`7 DAY` や `12 HOUR` です。指定されていない場合、すべてのデータがホットデータとしてキャッシュされます。
+ホットパーティションの時間範囲で、現在時刻からさかのぼって計算されます。DATE または DATETIME 列でパーティション化されたテーブルでは、クエリがパーティションをスキャンする際、そのパーティションの範囲がこの時間範囲と重なる場合 (List パーティションの場合は、パーティション値がこの時間範囲内にある場合) にのみ、StarRocks はスキャンしたデータをキャッシュに投入します。その他のパーティションへのクエリは、すでにキャッシュされているデータは読み取りますが、キャッシュには投入せず、メモリ上の Page Cache も使用しません。このプロパティはクエリ時にパーティションの境界に基づいて判定され、データのロード時刻には基づきません。また、すでにキャッシュされているデータを削除することはありません。単一の DATE または DATETIME 列で Range パーティション化されたテーブル、または DATE または DATETIME 列で List パーティション化されたテーブル以外には効果がありません。このプロパティは `<数値> <単位>` 形式の文字列値で、単位には `YEAR`、`MONTH`、`WEEK`、`DAY`、`HOUR`、`MINUTE`、`SECOND` (大文字と小文字を区別せず、単数形・複数形のどちらも可) を指定できます。例えば、`7 DAY` や `12 HOUR` です。`1 DAY 12 HOUR` のように複数の組を組み合わせることができますが、`YEAR`、`MONTH`、`WEEK` を `HOUR`、`MINUTE`、`SECOND` と組み合わせることはできません。指定されていない場合、すべてのパーティションへのクエリがキャッシュに投入します。
 
 > **NOTE**
 >
@@ -646,7 +648,7 @@ mysql> SHOW PROC "/dbs/xxxxx";
 
 ### 共有データ StarRocks クラスターへのデータロード
 
-共有データ StarRocks クラスターは、StarRocks が提供するすべてのロード方法をサポートしています。詳細は [Loading options](../loading/Loading_intro.md) を参照してください。
+共有データ StarRocks クラスターは、StarRocks が提供するすべてのロード方法をサポートしています。詳細は [Loading options](../loading/loading_introduction/loading_introduction.mdx) を参照してください。
 
 ### 共有データ StarRocks クラスターでのクエリ
 
@@ -694,4 +696,4 @@ FE または CN ノードを起動する際に発生するエラーを特定す�
 
 ## 次に行うこと
 
-StarRocks クラスタをデプロイした後、初期管理手順については[デプロイ後のセットアップ](../deployment/post_deployment_setup.md)を参照してください。
+StarRocks クラスタをデプロイした後、初期管理手順については[デプロイ後のセットアップ](./manage_deployment/post_deployment_setup.md)を参照してください。

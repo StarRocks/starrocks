@@ -26,6 +26,7 @@
 namespace starrocks {
 
 class BaseLoadPathMgr;
+class AIExecutor;
 class DataStreamMgr;
 class DictionaryCacheManager;
 class RuntimeEnv;
@@ -95,6 +96,7 @@ public:
     LoadSpillBlockMergeExecutor* load_spill_block_merge_executor() const {
         return _load_spill_block_merge_executor.get();
     }
+    AIExecutor* ai_executor() const { return _ai_executor.get(); }
 
 private:
     Status _init_workgroup(const ComputeEnvOptions& options, int64_t max_executor_threads);
@@ -124,6 +126,7 @@ private:
     std::unique_ptr<ProfileReportWorker> _profile_report_worker;
     std::unique_ptr<BaseLoadPathMgr> _load_path_mgr;
     std::unique_ptr<LoadSpillBlockMergeExecutor> _load_spill_block_merge_executor;
+    std::unique_ptr<AIExecutor> _ai_executor;
 };
 
 } // namespace starrocks

@@ -41,6 +41,7 @@ import com.starrocks.connector.elasticsearch.EsMajorVersion;
 import com.starrocks.connector.elasticsearch.EsMetaStateTracker;
 import com.starrocks.connector.elasticsearch.EsRestClient;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
+import com.starrocks.connector.elasticsearch.SearchContext;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -106,7 +107,8 @@ public class EsTable extends Table implements GsonPostProcessable {
     private String mappingType = null;
     private String transport = "http";
 
-    private EsTablePartitions esTablePartitions;
+    // What the last sync of the index metadata brought in. Swapped as a whole, never written in place.
+    private volatile MetaSnapshot metaSnapshot = MetaSnapshot.EMPTY;
 
     // Whether to enable docvalues scan optimization for fetching fields more fast, default to true
     private boolean enableDocValueScan = true;
@@ -134,8 +136,6 @@ public class EsTable extends Table implements GsonPostProcessable {
     // version would be used to be compatible with different ES Cluster
     public EsMajorVersion majorVersion = null;
 
-    // record the latest and recently exception when sync ES table metadata (mapping, shard location)
-    private Throwable lastMetaDataSyncException = null;
     // used for catalog to identify the remote table.
     private String catalogName = null;
     private String dbName = null;
@@ -158,14 +158,6 @@ public class EsTable extends Table implements GsonPostProcessable {
         this.catalogName = catalogName;
         this.dbName = dbName;
         validate(properties);
-    }
-
-    public Map<String, String> fieldsContext() {
-        return esMetaStateTracker.searchContext().fetchFieldsContext();
-    }
-
-    public Map<String, String> docValueContext() {
-        return esMetaStateTracker.searchContext().docValueFieldsContext();
     }
 
     public int maxDocValueFields() {
@@ -462,38 +454,92 @@ public class EsTable extends Table implements GsonPostProcessable {
     }
 
     public EsTablePartitions getEsTablePartitions() {
-        return esTablePartitions;
+        return metaSnapshot.getPartitions();
     }
 
-    public void setEsTablePartitions(EsTablePartitions esTablePartitions) {
-        this.esTablePartitions = esTablePartitions;
+    /**
+     * The index metadata of one sync, taken once by a query: the shard routing and the field mappings it plans
+     * and runs with then all come from the same sync.
+     */
+    public MetaSnapshot getMetaSnapshot() {
+        return metaSnapshot;
     }
 
     public EsMajorVersion esVersion() {
         return majorVersion;
     }
 
-    public Throwable getLastMetaDataSyncException() {
-        return lastMetaDataSyncException;
-    }
-
-    public void setLastMetaDataSyncException(Throwable lastMetaDataSyncException) {
-        this.lastMetaDataSyncException = lastMetaDataSyncException;
-    }
-
-    private EsMetaStateTracker esMetaStateTracker;
-
     /**
      * sync es index meta from remote ES Cluster
+     *
+     * <p>Every sync fills a fresh {@link SearchContext} and publishes what it found in one swap, so a query never
+     * sees a mapping that is half refilled or that belongs to another sync than the shard routing.
      *
      * @param client esRestClient
      */
     public void syncTableMetaData(EsRestClient client) throws Exception {
-        if (esMetaStateTracker == null) {
-            esMetaStateTracker = new EsMetaStateTracker(client, this);
+        SearchContext searchContext = new EsMetaStateTracker(client, this).run();
+        metaSnapshot = new MetaSnapshot(searchContext.tablePartitions(), searchContext.fetchFieldsContext(),
+                searchContext.docValueFieldsContext(), null);
+    }
+
+    /**
+     * Records a failed sync: the table reports the failure and has no shard routing until a sync succeeds. The
+     * field mappings of the last successful sync are kept.
+     */
+    public void markMetaDataSyncFailed(Throwable e) {
+        MetaSnapshot last = metaSnapshot;
+        metaSnapshot = new MetaSnapshot(null, last.getFieldsContext(), last.getDocValueContext(), e);
+    }
+
+    /**
+     * Not a lock target, also when it lives in an internal database (ENGINE=ELASTICSEARCH). The data is in
+     * Elasticsearch, ALTER TABLE rejects the table, and the only thing written after it is published -- the index
+     * metadata the background sync brings in -- is swapped in as one immutable {@link MetaSnapshot}, by a thread
+     * that never held the meta lock anyway. Planning reaches no Elasticsearch node. So the reference a query
+     * resolves is already a consistent snapshot, and it does not drag the other tables of the statement into a
+     * whole-phase lock.
+     */
+    @Override
+    public boolean isMetaLockTarget() {
+        return false;
+    }
+
+    /**
+     * The shard routing, field mappings and sync failure of one sync, published together. Immutable.
+     */
+    public static final class MetaSnapshot {
+        private static final MetaSnapshot EMPTY = new MetaSnapshot(null, Map.of(), Map.of(), null);
+
+        private final EsTablePartitions partitions;
+        private final Map<String, String> fieldsContext;
+        private final Map<String, String> docValueContext;
+        private final Throwable syncException;
+
+        private MetaSnapshot(EsTablePartitions partitions, Map<String, String> fieldsContext,
+                             Map<String, String> docValueContext, Throwable syncException) {
+            this.partitions = partitions;
+            this.fieldsContext = Map.copyOf(fieldsContext);
+            this.docValueContext = Map.copyOf(docValueContext);
+            this.syncException = syncException;
         }
-        esMetaStateTracker.run();
-        this.esTablePartitions = esMetaStateTracker.searchContext().tablePartitions();
+
+        // null until a sync succeeds, and after one fails
+        public EsTablePartitions getPartitions() {
+            return partitions;
+        }
+
+        public Map<String, String> getFieldsContext() {
+            return fieldsContext;
+        }
+
+        public Map<String, String> getDocValueContext() {
+            return docValueContext;
+        }
+
+        public Throwable getSyncException() {
+            return syncException;
+        }
     }
 
     @Override

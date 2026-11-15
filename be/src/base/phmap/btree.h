@@ -1082,6 +1082,10 @@ public:
     reference value(size_type i) { return params_type::element(slot(i)); }
     const_reference value(size_type i) const { return params_type::element(slot(i)); }
 
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#endif
     // Getters/setter for the child at position i in the node.
     btree_node* child(size_type i) const { return GetField<3>()[i]; }
     btree_node*& mutable_child(size_type i) { return GetField<3>()[i]; }
@@ -1091,6 +1095,9 @@ public:
         mutable_child(i) = c;
         c->set_position((field_type)i);
     }
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
     void init_child(int i, btree_node* c) {
         set_child(i, c);
         c->set_parent(this);

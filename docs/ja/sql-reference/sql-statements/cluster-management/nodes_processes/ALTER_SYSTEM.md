@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ALTER SYSTEM は、クラスタ内の FE、BE、CN、Broker ノード、およびメタデータスナップショットを管理します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER SYSTEM
@@ -20,7 +21,7 @@ description: "ALTER SYSTEM は、クラスタ内の FE、BE、CN、Broker ノー
 - Follower FE を追加します。
 
   ```SQL
-  ALTER SYSTEM ADD FOLLOWER "<fe_host>:<edit_log_port>"[, ...]
+  ALTER SYSTEM ADD FOLLOWER "<fe_host>:<edit_log_port>"
   ```
 
   新しい Follower FE のステータスは `SHOW PROC '/frontends'\G` を実行して確認できます。
@@ -28,13 +29,13 @@ description: "ALTER SYSTEM は、クラスタ内の FE、BE、CN、Broker ノー
 - Follower FE を削除します。
 
   ```SQL
-  ALTER SYSTEM DROP FOLLOWER "<fe_host>:<edit_log_port>"[, ...]
+  ALTER SYSTEM DROP FOLLOWER "<fe_host>:<edit_log_port>"
   ```
 
 - Observer FE を追加します。
 
   ```SQL
-  ALTER SYSTEM ADD OBSERVER "<fe_host>:<edit_log_port>"[, ...]
+  ALTER SYSTEM ADD OBSERVER "<fe_host>:<edit_log_port>"
   ```
 
   新しい Observer FE のステータスは `SHOW PROC '/frontends'\G` を実行して確認できます。
@@ -42,13 +43,26 @@ description: "ALTER SYSTEM は、クラスタ内の FE、BE、CN、Broker ノー
 - Observer FE を削除します。
 
   ```SQL
-  ALTER SYSTEM DROP OBSERVER "<fe_host>:<edit_log_port>"[, ...]
+  ALTER SYSTEM DROP OBSERVER "<fe_host>:<edit_log_port>"
   ```
+
+- Leader ロールを別の Follower FE にグレースフルに引き継ぎます（プロセスを再起動せず、その場で降格）。
+
+  ```SQL
+  ALTER SYSTEM TRANSFER LEADER TO "<fe_host>:<edit_log_port>" [FORCE]
+  ```
+
+  ターゲットは稼働中の Follower FE である必要があります。このステートメントは現在の Leader FE 上で実行され、Leader ロールをターゲットの Follower に引き継ぎます。その後、元の Leader は再起動せずにその場で Follower に降格します。新しい Leader は `SHOW PROC '/frontends'\G` で確認できます。`FORCE` を指定すると、BDBJE レイヤーで既に進行中の Leader 切り替えを置き換えます。`FORCE` を指定しない場合、そのような切り替えが進行中であればこのステートメントは失敗します。並行して実行された `TRANSFER LEADER` ステートメントは Leader 上で直列に実行されます。待機中のステートメントは前のステートメントの完了を待ち、実行の順番が来た時点でこの FE が既に Leader でなければエラーを返します（2 回目の切り替えは発生しません）。
+
+  失敗時のセマンティクス：切り替え自体が失敗した場合（例：ターゲットが内部の 30 秒ウィンドウ内に追いつけない、またはクラスタメンバーシップが未確定の場合）、ステートメントはエラーを返し、現在の Leader は変更されません（安全な結果であり、再試行できます）。切り替えが成功しても、元の Leader が `leader_demotion_drain_timeout_sec` 以内に処理中の作業を排出できない場合、元の Leader プロセスは終了して Follower として再起動します。新しい Leader には影響しません。
+
+  共有データ（shared-data）クラスタではこのステートメントはサポートされておらず、エラーを返します。共有データモードでリーダーシップを移すには、現在の Leader FE を再起動して選挙をトリガーしてください。
 
 | **パラメータ**      | **必須** | **説明**                                                     |
 | ------------------ | ------------ | ------------------------------------------------------------------- |
 | fe_host            | はい          | FE インスタンスのホスト名または IP アドレス。インスタンスに複数の IP アドレスがある場合は、設定項目 `priority_networks` の値を使用します。 |
 | edit_log_port      | はい          | FE ノードの BDB JE 通信ポート。デフォルト: `9010`。          |
+| FORCE              | いいえ        | BDBJE レイヤーで既に進行中の Leader 切り替えを置き換えます。指定しない場合、そのような切り替えが進行中であればステートメントは失敗します。並行する `TRANSFER LEADER` ステートメントは直列に実行されるため `FORCE` は不要です。 |
 
 ### BE
 
@@ -64,10 +78,10 @@ description: "ALTER SYSTEM は、クラスタ内の FE、BE、CN、Broker ノー
 
   > **注意**
   >
-  > 単一レプリカテーブルのタブレットを格納している BE ノードは削除できません。
+  > `FORCE` を指定しない場合、単一レプリカテーブルのタブレットを格納している BE ノードは削除できません。`FORCE` を指定すると、このチェックを行わずに BE ノードを削除します。その BE ノード上の単一レプリカテーブルのタブレットは失われる可能性があります。
 
   ```SQL
-  ALTER SYSTEM DROP BACKEND "<be_host>:<heartbeat_service_port>"[, ...]
+  ALTER SYSTEM DROP BACKEND "<be_host>:<heartbeat_service_port>"[, ...] [FORCE]
   ```
 
 - BE ノードを退役させます。
@@ -110,7 +124,7 @@ description: "ALTER SYSTEM は、クラスタ内の FE、BE、CN、Broker ノー
 
 ### Broker
 
-- Broker ノードを追加します。Broker ノードを使用して、HDFS やクラウドストレージから StarRocks にデータをロードできます。詳細は [Loading](../../../../loading/Loading_intro.md) を参照してください。
+- Broker ノードを追加します。Broker ノードを使用して、HDFS やクラウドストレージから StarRocks にデータをロードできます。詳細は [Loading](../../../../loading/loading_introduction/loading_introduction.mdx) を参照してください。
 
   ```SQL
   ALTER SYSTEM ADD BROKER <broker_name> "<broker_host>:<broker_ipc_port>"[, ...]
@@ -150,14 +164,14 @@ description: "ALTER SYSTEM は、クラスタ内の FE、BE、CN、Broker ノー
 ALTER SYSTEM CREATE IMAGE
 ```
 
-イメージの作成は Leader FE 上での非同期操作です。操作の開始時刻と終了時刻は FE ログファイル **fe.log** で確認できます。`triggering a new checkpoint manually...` のようなログはイメージ作成が開始されたことを示し、`finished save image...` のようなログはイメージが作成されたことを示します。
+イメージの作成は Leader FE でトリガーされる非同期操作です。操作の開始時刻と終了時刻は FE ログファイル **fe.log** で確認できます。Leader FE の **fe.log** にある `triggering a new checkpoint manually...` のようなログはイメージ作成が開始されたことを示し、`finished save image...` のようなログはイメージが作成されたことを示します。v3.4.0 以降、Leader FE はイメージを作成するチェックポイントワーカーとして FE を 1 つ選択し、Leader FE よりもヒープ使用率の低い FE を優先します（`checkpoint_only_on_leader` が `true` に設定されている場合を除く）。そのため、`finished save image...` のログはその FE の **fe.log** に出力されます。それより前のバージョンでは、イメージは Leader FE で作成されます。
 
 ## 使用上の注意
 
 - FE、BE、CN、または Broker ノードの追加と削除は同期操作です。ノード削除操作をキャンセルすることはできません。
 - 単一 FE クラスタでは FE ノードを削除することはできません。
 - 複数 FE クラスタでは Leader FE ノードを直接削除することはできません。削除するには、まず再起動する必要があります。StarRocks が新しい Leader FE を選出した後、以前のものを削除できます。
-- 残りの BE ノードの数がデータレプリカの数より少ない場合、BE ノードを削除することはできません。たとえば、クラスタに 3 つの BE ノードがあり、データを 3 つのレプリカで保存している場合、BE ノードを削除することはできません。また、4 つの BE ノードと 3 つのレプリカがある場合、1 つの BE ノードを削除できます。
+- 共有なしクラスタでは、残りの利用可能な BE ノードの数がデータレプリカの数より少ない場合、BE ノードをデコミッションすることはできません。たとえば、クラスタに 3 つの BE ノードがあり、データを 3 つのレプリカで保存している場合、BE ノードをデコミッションすることはできません。また、4 つの BE ノードと 3 つのレプリカがある場合、1 つの BE ノードをデコミッションできます。`DROP BACKEND` はこのチェックを行いません。`FORCE` を指定しない場合、単一レプリカテーブルのタブレットを格納している BE ノードのみを拒否します。
 - BE ノードを削除することと退役させることの違いは、BE ノードを削除する場合、StarRocks はそれをクラスタから強制的に削除し、削除後にタブレットを補完しますが、BE ノードを退役させる場合、StarRocks はまず退役された BE ノード上のタブレットを他のノードに移行し、その後ノードを削除します。
 
 ## 例
@@ -168,10 +182,10 @@ ALTER SYSTEM CREATE IMAGE
 ALTER SYSTEM ADD FOLLOWER "x.x.x.x:9010";
 ```
 
-例 2: 2 つの Observer FE ノードを同時に削除します。
+例 2: Observer FE ノードを削除します。
 
 ```SQL
-ALTER SYSTEM DROP OBSERVER "x.x.x.x:9010","x.x.x.x:9010";
+ALTER SYSTEM DROP OBSERVER "x.x.x.x:9010";
 ```
 
 例 3: BE ノードを追加します。
@@ -208,4 +222,10 @@ ALTER SYSTEM DROP BROKER amazon_s3 "x.x.x.x:8000", "x.x.x.x:8000";
 
 ```SQL
 ALTER SYSTEM DROP ALL BROKER amazon_s3;
+```
+
+例 9: Leader ロールを特定の Follower FE に引き継ぎます。
+
+```SQL
+ALTER SYSTEM TRANSFER LEADER TO "x.x.x.x:9010";
 ```

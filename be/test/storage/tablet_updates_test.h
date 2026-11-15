@@ -381,7 +381,10 @@ public:
 
     TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool multi_column_pk = false,
                                   int64_t schema_id = 0, int32_t schema_version = 0, bool add_v3 = false) {
-        srand(GetCurrentTimeMicros());
+        // Deliberately no srand() here. This helper never calls rand(), and re-seeding mid-test
+        // restarts the caller's sequence: `create_tablet(rand(), rand())` followed by another
+        // `create_tablet(rand(), rand())` replays the same two values whenever both seeds land in
+        // the same microsecond, so both calls end up on ONE tablet id (target == base).
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -862,6 +865,7 @@ public:
     void test_schema_change_optimiazation_adding_generated_column(bool enable_persistent_index);
     void test_pk_dump(size_t rowset_cnt);
     void update_and_recover(bool enable_persistent_index);
+    void test_skip_apply(bool enable_persistent_index);
     void test_recover_rowset_sorter();
     void test_get_column_values_with_invalid_rssid(bool enable_persistent_index);
 

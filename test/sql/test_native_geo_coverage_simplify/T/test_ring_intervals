@@ -1,0 +1,9 @@
+-- name: test_native_geo_coverage_simplify_ring_intervals
+
+SET pipeline_dop=4;
+CREATE TABLE ring_intervals_${uuid0} (id INT,wkt VARCHAR(1024)) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES("replication_num"="1");
+INSERT INTO ring_intervals_${uuid0} VALUES (1,'POLYGON ((0 0,16 0,16 16,12 16,12 4,10 4,10 14,6 14,6 4,4 4,4 16,0 16,0 0),(7 1,7 3,9 3,9 1,7 1))'),(2,'POLYGON ((7 15,9 15,9 17,7 17,7 15))'),(3,'POLYGON ((7.5 1.5,8.5 1.5,8 2.5,7.5 1.5))'),(4,NULL),(5,'MULTIPOLYGON EMPTY');
+SELECT id,IF(wkt IS NULL,f IS NULL,ST_AsBinary(f)=ST_AsBinary(ST_GeomFromText(wkt,'EPSG:3857'))),IF(wkt IS NULL,t IS NULL,ST_AsBinary(t)=ST_AsBinary(ST_GeomFromText(wkt,'EPSG:3857'))),IF(wkt IS NULL,d IS NULL,ST_AsBinary(d)=ST_AsBinary(ST_GeomFromText(wkt,'EPSG:3857'))) FROM (SELECT id,wkt,ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:3857'),0.125,FALSE) OVER() f,ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:3857'),0.125,TRUE) OVER() t,ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:3857'),0.125) OVER() d FROM ring_intervals_${uuid0}) s ORDER BY id;
+SET pipeline_dop=1;
+SELECT id,IF(wkt IS NULL,f IS NULL,ST_AsBinary(f)=ST_AsBinary(ST_GeomFromText(wkt,'EPSG:3857'))),IF(wkt IS NULL,t IS NULL,ST_AsBinary(t)=ST_AsBinary(ST_GeomFromText(wkt,'EPSG:3857'))),IF(wkt IS NULL,d IS NULL,ST_AsBinary(d)=ST_AsBinary(ST_GeomFromText(wkt,'EPSG:3857'))) FROM (SELECT id,wkt,ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:3857'),0.125,FALSE) OVER() f,ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:3857'),0.125,TRUE) OVER() t,ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:3857'),0.125) OVER() d FROM ring_intervals_${uuid0}) s ORDER BY id;
+DROP TABLE ring_intervals_${uuid0};

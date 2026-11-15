@@ -60,6 +60,7 @@ bool JsonDocumentStreamParser::_check_and_new_doc_stream_iterator() {
     do {
         _batch_size = std::min(_batch_size * 8, cur_left_len);
         _doc_stream = _parser->iterate_many(_data + _last_begin_offset, cur_left_len, _batch_size);
+        _doc_stream_offset = _last_begin_offset;
         _doc_stream_itr = _doc_stream.begin();
 
         // skip the last parsed object
@@ -96,7 +97,7 @@ Status JsonDocumentStreamParser::_get_current_impl(simdjson::ondemand::object* r
                 *row = _curr;
                 _curr_ready = true;
 
-                _last_begin_offset = _doc_stream_itr.current_index();
+                _last_begin_offset = _doc_stream_offset + _doc_stream_itr.current_index();
 
                 if (!_first_object_parsed) {
                     _first_object_parsed = true;
@@ -111,6 +112,11 @@ Status JsonDocumentStreamParser::_get_current_impl(simdjson::ondemand::object* r
              * and the following function will try to reset the batch_size until _len - _last_begin_offset.
             */
             if (!_check_and_new_doc_stream_iterator()) {
+                // Even the rest of the input in a single batch has no document left: it is an incomplete document
+                // larger than the batch size, see truncated_tail().
+                if (_doc_stream_itr.error() == simdjson::EMPTY) {
+                    return Status::EndOfFile("all documents of the stream are iterated");
+                }
                 throw;
             }
         }
@@ -165,7 +171,7 @@ std::string JsonDocumentStreamParser::left_bytes_string(size_t sz) noexcept {
         return {};
     }
 
-    auto off = _doc_stream_itr.current_index();
+    auto off = _doc_stream_offset + _doc_stream_itr.current_index();
     if (off >= _len) {
         return {};
     }
@@ -176,6 +182,21 @@ std::string JsonDocumentStreamParser::left_bytes_string(size_t sz) noexcept {
 
 size_t JsonDocumentStreamParser::truncated_bytes() const noexcept {
     return _doc_stream.truncated_bytes();
+}
+
+std::string_view JsonDocumentStreamParser::truncated_tail() const noexcept {
+    // truncated_bytes() is computed from the batch parsed last, so it is only valid once the stream is exhausted
+    // (EMPTY): in the middle of a multi-batch stream it can underflow to 4294967295.
+    if (_data == nullptr || _doc_stream_itr.error() != simdjson::EMPTY) {
+        return {};
+    }
+    // Every document stream, including the ones rebuilt for a larger batch size, ends at the end of the input. The
+    // tail starts at the first structural character of the incomplete document, so trailing whitespace is never one.
+    size_t truncated = _doc_stream.truncated_bytes();
+    if (truncated == 0 || truncated > _len) {
+        return {};
+    }
+    return {_data + _len - truncated, truncated};
 }
 
 Status JsonArrayParser::parse(char* data, size_t len, size_t allocated) noexcept {

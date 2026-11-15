@@ -1,6 +1,8 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "Recover StarRocks cluster metadata when FE nodes fail to restart, fail to serve requests, or need metadata restored from backup."
+products: [oss, enterprise, anywhere]
 ---
 
 # Metadata Recovery
@@ -76,7 +78,7 @@ You can follow these steps to fix this issue:
 :::tip
 
 - This bug has been fixed in StarRocks v3.1. You can avoid this issue by upgrading your cluster to v3.1 or later. 
-- This solution does not apply if more than half of the FE nodes have encountered this issue. You must follow the instructions provided in [Measure of the last resort](#7-measure-of-the-last-resort) to fix the issue.
+- This solution does not apply if more than half of the FE nodes have encountered this issue. You must follow the instructions provided in [Measure of the last resort](#10-measure-of-the-last-resort) to fix the issue.
 
 :::
 
@@ -725,6 +727,6 @@ You must remove the following configuration once the metadata recovery is comple
 
 :::
 
-- [bdbje_reset_election_group](./management/FE_configuration.md#bdbje_reset_election_group)
-- [metadata_enable_recovery_mode](./management/FE_configuration.md#metadata_enable_recovery_mode)
-- [metadata_ignore_unknown_operation_type](./management/FE_configuration.md#metadata_ignore_unknown_operation_type)
+- [bdbje_reset_election_group](./configuration/FE_parameters/FE_parameters.md#bdbje_reset_election_group)
+- [metadata_enable_recovery_mode](./configuration/FE_parameters/FE_parameters.md#metadata_enable_recovery_mode)
+- [metadata_ignore_unknown_operation_type](./configuration/FE_parameters/FE_parameters.md#metadata_ignore_unknown_operation_type)

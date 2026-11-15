@@ -267,6 +267,9 @@ struct BloomFilterBuilderFunctor {
 // TODO currently we don't support bloom filter index for tinyint/hll/float/double
 Status BloomFilterIndexWriter::create(const BloomFilterOptions& bf_options, const TypeInfoPtr& typeinfo,
                                       std::unique_ptr<BloomFilterIndexWriter>* res) {
+    if (bf_options.use_ngram && bf_options.gram_num == 0) {
+        return Status::InvalidArgument("NGRAMBF index requires gram_num greater than zero");
+    }
     return field_type_dispatch_bloomfilter(typeinfo->type(), BloomFilterBuilderFunctor(), res, bf_options, typeinfo);
 }
 

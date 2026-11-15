@@ -1,13 +1,15 @@
 ---
+sidebar_position: 140
 displayed_sidebar: docs
 description: "How to perform INSERT, UPDATE, DELETE, partial update, and conditional update on Primary Key tables in StarRocks using Stream Load, Broker Load, or Routine..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Change data through loading
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
-[Primary Key tables](../table_design/table_types/primary_key_table.md) provided by StarRocks allow you to make data changes to StarRocks tables by running [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), or [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) jobs. These data changes include inserts, updates, and deletions. However, Primary Key tables do not support changing data by using [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) or [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md).
+[Primary Key tables](../table_design/table_types/primary_key_table.md) provided by StarRocks allow you to make data changes to StarRocks tables by running [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), or [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) jobs. These data changes include inserts, updates, and deletions. However, Primary Key tables do not support changing data by using [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md).
 
 StarRocks also supports partial updates and conditional updates.
 
@@ -598,6 +600,7 @@ The conditional update feature is designed to resolve data disorder. If the sour
 > - You cannot specify different columns as update conditions for the same batch of data.
 > - DELETE operations do not support conditional updates.
 > - In versions earlier than v3.1.3, partial updates and conditional updates cannot be used simultaneously. From v3.1.3 onwards, StarRocks supports using partial updates with conditional updates.
+> - In shared-nothing clusters, partial updates in column mode cannot be used with conditional updates, and such a load fails. In shared-data clusters, partial updates in column mode support conditional updates from v4.1.1 onwards.
 
 ### Data examples
 
@@ -654,7 +657,7 @@ Run a load to update the records whose `id` values are `101` and `102`, respecti
       -T example5.csv -XPUT \
       http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
   ```
-- Run a Insert Load job:
+- Run an INSERT job (supported from v3.5.8, v4.0.1, and v4.1.0 onwards):
   ```SQL
   INSERT INTO test_db.table5 properties("merge_condition" = "version")
   VALUES (101, 2, 70), (102, 3, 100);

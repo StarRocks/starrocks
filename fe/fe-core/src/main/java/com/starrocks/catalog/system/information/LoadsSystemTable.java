@@ -20,12 +20,18 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.load.LoadJobRedaction;
+import com.starrocks.load.LoadJobVisibility;
+import com.starrocks.load.LoadJobVisibility.Access;
+import com.starrocks.load.LoadJobVisibility.VisibleTask;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadMultiStmtTask;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TGetLoadsParams;
 import com.starrocks.thrift.TGetLoadsResult;
@@ -38,7 +44,11 @@ import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -87,38 +97,25 @@ public class LoadsSystemTable {
         try {
             LoadRequestFilter filter = LoadRequestFilter.from(request);
 
-            LoadMgr loadMgr = GlobalStateMgr.getCurrentState().getLoadMgr();
-            if (request.isSetJob_id()) {
-                LoadJob loadJob = loadMgr.getLoadJob(request.getJob_id());
-                appendLoadJob(loads, loadJob, request, filter);
-            } else if (filter.dbId != null) {
-                List<LoadJob> loadJobs;
-                if (request.isSetLabel()) {
-                    loadJobs = loadMgr.getLoadJobsByDb(filter.dbId, request.getLabel(), true);
-                } else {
-                    loadJobs = loadMgr.getLoadJobsByDb(filter.dbId, null, false);
-                }
-                for (LoadJob loadJob : loadJobs) {
-                    appendLoadJob(loads, loadJob, request, filter);
-                }
-            } else {
-                String label = request.isSetLabel() ? request.getLabel() : null;
-                List<LoadJob> loadJobs = loadMgr.getLoadJobs(label);
-                for (LoadJob loadJob : loadJobs) {
-                    appendLoadJob(loads, loadJob, request, filter);
-                }
-            }
+            boolean paged = request.isSetStart_job_id_offset();
+            long startJobIdOffset = paged ? request.getStart_job_id_offset() : 0;
 
-            StreamLoadMgr streamLoadMgr = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
-            if (request.isSetJob_id()) {
-                AbstractStreamLoadTask streamLoadTask = streamLoadMgr.getTaskById(request.getJob_id());
-                appendStreamLoadTask(loads, streamLoadTask, request, filter);
-            } else {
-                List<AbstractStreamLoadTask> streamLoadTaskList = streamLoadMgr.getTaskByName(request.getLabel());
-                if (streamLoadTaskList != null) {
-                    for (AbstractStreamLoadTask streamLoadTask : streamLoadTaskList) {
-                        appendStreamLoadTask(loads, streamLoadTask, request, filter);
-                    }
+            // Load job ids and stream load task ids are both drawn from the one global id
+            // allocator, so merging the two managers and sorting by id gives the stable total
+            // order a cursor needs.
+            List<Candidate> candidates = Lists.newArrayList();
+            collectLoadJobs(candidates, request, filter, startJobIdOffset);
+            collectStreamLoadTasks(candidates, request, filter, startJobIdOffset);
+            candidates.sort(Comparator.comparingLong(Candidate::id));
+
+            for (Candidate candidate : candidates) {
+                loads.addAll(candidate.rows().get());
+                // Cut the page at a job boundary so one job's rows never straddle two pages.
+                if (paged && loads.size() >= Config.max_get_loads_result_count) {
+                    result.setNext_job_id_offset(candidate.id() + 1);
+                    LOG.debug("getLoads page is full, returned rows: {}, next_job_id_offset: {}",
+                            loads.size(), candidate.id() + 1);
+                    break;
                 }
             }
             result.setLoads(loads);
@@ -145,32 +142,117 @@ public class LoadsSystemTable {
         Long getLoadFinishTimeMs();
     }
 
-    private static void appendLoadJob(List<TLoadInfo> loads, LoadJob loadJob, TGetLoadsParams request,
-                                      LoadRequestFilter filter) {
-        if (loadJob == null || !matchFilter(loadJob, filter)) {
-            return;
-        }
-        loads.add(loadJob.toThrift());
+    /**
+     * One page unit: a job id to order and resume by, plus a lazy generator for its rows.
+     * The rows stay unmaterialized so a candidate past the page cut costs nothing.
+     */
+    private record Candidate(long id, Supplier<List<TLoadInfo>> rows) {
     }
 
-    private static void appendStreamLoadTask(List<TLoadInfo> loads, AbstractStreamLoadTask task, TGetLoadsParams request,
-                                             LoadRequestFilter filter) {
-        if (task == null) {
-            return;
-        }
-
-        if (!(task instanceof StreamLoadMultiStmtTask)) {
-            if (matchFilter(task, filter)) {
-                loads.addAll(task.toThrift());
+    private static void collectLoadJobs(List<Candidate> candidates, TGetLoadsParams request,
+                                        LoadRequestFilter filter, long startJobIdOffset) {
+        LoadMgr loadMgr = GlobalStateMgr.getCurrentState().getLoadMgr();
+        if (request.isSetJob_id()) {
+            addLoadJob(candidates, loadMgr.getLoadJob(request.getJob_id()), filter, startJobIdOffset);
+        } else if (filter.dbId != null) {
+            List<LoadJob> loadJobs;
+            if (request.isSetLabel()) {
+                loadJobs = loadMgr.getLoadJobsByDb(filter.dbId, request.getLabel(), true);
+            } else {
+                loadJobs = loadMgr.getLoadJobsByDb(filter.dbId, null, false);
+            }
+            for (LoadJob loadJob : loadJobs) {
+                addLoadJob(candidates, loadJob, filter, startJobIdOffset);
             }
         } else {
-            StreamLoadMultiStmtTask multiTask = (StreamLoadMultiStmtTask) task;
-            for (AbstractStreamLoadTask childTask : multiTask.getTasks()) {
-                if (matchFilter(childTask, filter)) {
-                    loads.addAll(childTask.toThrift());
+            String label = request.isSetLabel() ? request.getLabel() : null;
+            for (LoadJob loadJob : loadMgr.getLoadJobs(label)) {
+                addLoadJob(candidates, loadJob, filter, startJobIdOffset);
+            }
+        }
+    }
+
+    private static void addLoadJob(List<Candidate> candidates, LoadJob loadJob,
+                                   LoadRequestFilter filter, long startJobIdOffset) {
+        if (loadJob == null || loadJob.getId() < startJobIdOffset || !matchFilter(loadJob, filter)) {
+            return;
+        }
+        // With the rule off the view checks nothing, as before it.
+        Access access = LoadJobVisibility.isEnabled() ? LoadJobVisibility.accessOf(filter.caller, loadJob) : Access.FULL;
+        if (access == Access.NONE) {
+            return;
+        }
+        candidates.add(new Candidate(loadJob.getId(), () -> Lists.newArrayList(access == Access.FULL
+                ? loadJob.toThrift() : LoadJobRedaction.redact(loadJob.toThrift(), loadJob.getFailMsg()))));
+    }
+
+    private static void collectStreamLoadTasks(List<Candidate> candidates, TGetLoadsParams request,
+                                               LoadRequestFilter filter, long startJobIdOffset) {
+        StreamLoadMgr streamLoadMgr = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+        if (request.isSetJob_id()) {
+            long jobId = request.getJob_id();
+            if (LoadJobVisibility.isEnabled()) {
+                // A statement of a multi-statement transaction is authorized with the transaction, then picked out.
+                AbstractStreamLoadTask task = streamLoadMgr.getRegisteredTaskById(jobId);
+                addStreamLoadTask(candidates, task, filter, startJobIdOffset,
+                        statement -> task.getId() == jobId || statement.getId() == jobId);
+            } else {
+                addStreamLoadTask(candidates, streamLoadMgr.getTaskById(jobId), filter, startJobIdOffset,
+                        statement -> true);
+            }
+            return;
+        }
+        List<AbstractStreamLoadTask> streamLoadTaskList = streamLoadMgr.getTaskByName(request.getLabel());
+        if (streamLoadTaskList == null) {
+            return;
+        }
+        for (AbstractStreamLoadTask streamLoadTask : streamLoadTaskList) {
+            addStreamLoadTask(candidates, streamLoadTask, filter, startJobIdOffset, statement -> true);
+        }
+    }
+
+    private static void addStreamLoadTask(List<Candidate> candidates, AbstractStreamLoadTask task,
+                                          LoadRequestFilter filter, long startJobIdOffset,
+                                          Predicate<AbstractStreamLoadTask> statements) {
+        if (task == null || task.getId() < startJobIdOffset) {
+            return;
+        }
+        // The children of a multi-statement task are still filtered one by one, but the task is a single
+        // page unit keyed by the parent id. Children are allocated after their parent, so
+        // resuming at parentId + 1 clears the parent and every child it owns.
+        Collection<? extends AbstractStreamLoadTask> tasks =
+                task instanceof StreamLoadMultiStmtTask multiTask ? multiTask.getTasks() : List.of(task);
+        List<VisibleTask> matched = Lists.newArrayList();
+        if (LoadJobVisibility.isEnabled()) {
+            // Authorizing locks the target tables, so skip a task none of whose statements the request asks for.
+            if (tasks.stream().noneMatch(oneTask -> statements.test(oneTask) && matchFilter(oneTask, filter))) {
+                return;
+            }
+            // The statements of a multi-statement transaction are authorized together.
+            for (VisibleTask visibleTask : LoadJobVisibility.visibleTasks(filter.caller, task)) {
+                if (statements.test(visibleTask.task()) && matchFilter(visibleTask.task(), filter)) {
+                    matched.add(visibleTask);
+                }
+            }
+        } else {
+            for (AbstractStreamLoadTask oneTask : tasks) {
+                if (matchFilter(oneTask, filter)) {
+                    matched.addAll(LoadJobVisibility.allTasksInFull(oneTask));
                 }
             }
         }
+        if (matched.isEmpty()) {
+            return;
+        }
+        candidates.add(new Candidate(task.getId(), () -> {
+            List<TLoadInfo> rows = Lists.newArrayList();
+            for (VisibleTask visibleTask : matched) {
+                for (TLoadInfo info : visibleTask.task().toThrift()) {
+                    rows.add(visibleTask.access() == Access.FULL ? info : LoadJobRedaction.redact(info, null));
+                }
+            }
+            return rows;
+        }));
     }
 
     private static boolean matchFilter(Job job, LoadRequestFilter filter) {
@@ -213,6 +295,8 @@ public class LoadsSystemTable {
 
     @VisibleForTesting
     static class LoadRequestFilter {
+        // The querying user. Only the jobs this user may see are returned.
+        ConnectContext caller;
         Long dbId;
         String tableName;
         String user;
@@ -227,6 +311,7 @@ public class LoadsSystemTable {
         @VisibleForTesting
         static LoadRequestFilter from(TGetLoadsParams request) {
             LoadRequestFilter filter = new LoadRequestFilter();
+            filter.caller = LoadJobVisibility.callerOf(request);
 
             if (request.isSetDb() && !Strings.isNullOrEmpty(request.getDb())) {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(request.getDb());

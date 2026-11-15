@@ -22,6 +22,14 @@ Map the FE surface for SQL parsing, optimization, metadata, coordination, and sh
 - AST nodes stay immutable after parsing.
 - Connectors and plugins should depend on FE SPI boundaries, not FE internals.
 - Shared test utilities belong in `fe/fe-testing/` instead of ad hoc local fixtures.
+- An HTTP action has queued every write of its response by the time `handleRequest` returns: `HttpServerHandler` handles the requests of one connection one at a time, and starts the next pipelined one only then. A response written later, from another thread, would be cut into by the next response.
+
+## Observability Touchpoints
+
+Apply the [Observability Awareness policy](../policies/observability-awareness.md) to the existing FE mechanisms used by the affected path:
+
+- **Query and Load Profiles**: Follow BE profile reports through FE aggregation, finalization, storage, and exposure. Ensure a new path preserves the existing profile lifecycle and does not drop reports, aggregate them incorrectly, or finish the profile prematurely.
+- **Metrics**: Inspect the owning component's existing metric registration, update, and cleanup path. Keep those metrics accurate when adding branches, retries, fallbacks, or terminal outcomes; extend the nearby metric set when an important new state or outcome would otherwise be missing, following [Adding/Modifying FE Metrics](../../fe/AGENTS.md#addingmodifying-fe-metrics).
 
 ## Test and Validation
 

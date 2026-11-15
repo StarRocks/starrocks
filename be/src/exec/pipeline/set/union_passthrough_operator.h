@@ -81,12 +81,11 @@ class UnionPassthroughOperatorFactory final : public OperatorFactory {
 public:
     UnionPassthroughOperatorFactory(int32_t id, int32_t plan_node_id,
                                     UnionPassthroughOperator::SlotMap* dst2src_slot_map,
-                                    const std::vector<SlotDescriptor*>& dst_slots,
-                                    const std::vector<SlotDescriptor*>& src_slots)
+                                    std::vector<SlotDescriptor*> dst_slots, std::vector<SlotDescriptor*> src_slots)
             : OperatorFactory(id, "union_passthrough", plan_node_id),
               _dst2src_slot_map(dst2src_slot_map),
-              _dst_slots(dst_slots),
-              _src_slots(src_slots) {}
+              _dst_slots(std::move(dst_slots)),
+              _src_slots(std::move(src_slots)) {}
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<UnionPassthroughOperator>(this, _id, _plan_node_id, driver_sequence, _dst2src_slot_map,
@@ -97,8 +96,8 @@ private:
     // It will be nullptr, if _pass_through_slot_maps of UnionNode is empty.
     UnionPassthroughOperator::SlotMap* _dst2src_slot_map;
 
-    const std::vector<SlotDescriptor*>& _dst_slots;
-    const std::vector<SlotDescriptor*>& _src_slots;
+    const std::vector<SlotDescriptor*> _dst_slots;
+    const std::vector<SlotDescriptor*> _src_slots;
 };
 
 } // namespace starrocks::pipeline

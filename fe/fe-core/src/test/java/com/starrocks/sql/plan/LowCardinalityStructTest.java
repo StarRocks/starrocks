@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.utframe.StarRocksAssert;
@@ -429,8 +430,7 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 "  |  5 <-> [10: row, struct<`col1` int(11)>, true]\n" +
                 "  |  6 <-> DictDecode([9: VARCHAR_COL, INT, true], [upper[(<place-holder>); args: VARCHAR; result: " +
                 "VARCHAR; args nullable: true; result nullable: true]])\n" +
-                "  |  7 <-> row[([4: INTEGER_COL, INT, true]); args: INT; result: struct<`col1` int(11)>; args " +
-                "nullable: true; result nullable: true].col1[true]\n" +
+                "  |  7 <-> [10: row, struct<`col1` int(11)>, true].col1[true]\n" +
                 "  |  8 <-> row[(1); args: TINYINT; result: struct<`col1` tinyint(4)>; args nullable: false; " +
                 "result nullable: true].col1[true]"), plan);
     }
@@ -667,11 +667,11 @@ public class LowCardinalityStructTest extends PlanTestBase {
         new Expectations(dictManager) {
             {
                 // Explicitly model: VARCHAR_COL has no dict; other columns keep the default behavior.
-                dictManager.hasGlobalDict(anyLong, ColumnId.create("VARCHAR_COL"), anyLong);
+                dictManager.hasGlobalDict((OlapTable) any, ColumnId.create("VARCHAR_COL"), anyLong);
                 result = false;
                 minTimes = 0;
 
-                dictManager.hasGlobalDict(anyLong, (ColumnId) any, anyLong);
+                dictManager.hasGlobalDict((OlapTable) any, (ColumnId) any, anyLong);
                 result = true;
                 minTimes = 0;
             }
@@ -694,7 +694,7 @@ public class LowCardinalityStructTest extends PlanTestBase {
         IDictManager dictManager = IDictManager.getInstance();
         new Expectations(dictManager) {
             {
-                dictManager.hasGlobalDict(anyLong, ColumnId.create("VARCHAR_COL"), anyLong);
+                dictManager.hasGlobalDict((OlapTable) any, ColumnId.create("VARCHAR_COL"), anyLong);
                 result = false;
             }
         };

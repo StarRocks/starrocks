@@ -18,9 +18,12 @@
 #include <memory>
 
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/schema.h"
 #include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "exec/exec_env.h"
 #include "fs/fs_util.h"
@@ -209,6 +212,56 @@ protected:
     int64_t _rowset_id;
     int64_t _version;
 };
+
+TEST_F(CompactionParallelizationTest, horizontal_chunk_size_uses_total_row_size) {
+    const auto old_compaction_memory_limit_per_worker = config::compaction_memory_limit_per_worker;
+    const auto old_vector_chunk_size = config::vector_chunk_size;
+    DeferOp restore_config([&]() {
+        config::compaction_memory_limit_per_worker = old_compaction_memory_limit_per_worker;
+        config::vector_chunk_size = old_vector_chunk_size;
+    });
+    config::compaction_memory_limit_per_worker = 640 * 1024 * 1024;
+    config::vector_chunk_size = 4096;
+
+    create_tablet_schema(UNIQUE_KEYS);
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, _engine->get_stores()[0]);
+    ASSERT_OK(tablet->init());
+    for (int i = 0; i < 5; ++i) {
+        write_new_version(tablet);
+    }
+
+    _engine->compaction_manager()->update_tablet(tablet);
+    CompactionCandidate compaction_candidate;
+    ASSERT_TRUE(_engine->compaction_manager()->pick_candidate(&compaction_candidate));
+    auto compaction_task = compaction_candidate.tablet->create_compaction_task();
+    ASSERT_NE(nullptr, dynamic_cast<HorizontalCompactionTask*>(compaction_task.get()));
+
+    int64_t total_row_size = 0;
+    for (const auto& rowset : compaction_task->input_rowsets()) {
+        rowset->rowset_meta()->set_total_row_size(1L * 1024 * 1024 * 1024);
+        total_row_size += rowset->total_row_size();
+    }
+    const auto expected_chunk_size = CompactionUtils::get_read_chunk_size(
+            config::compaction_memory_limit_per_worker, config::vector_chunk_size, compaction_task->input_rows_num(),
+            total_row_size, compaction_task->segment_iterator_num());
+    const auto disk_size_based_chunk_size = CompactionUtils::get_read_chunk_size(
+            config::compaction_memory_limit_per_worker, config::vector_chunk_size, compaction_task->input_rows_num(),
+            compaction_task->input_rowsets_size(), compaction_task->segment_iterator_num());
+    ASSERT_NE(expected_chunk_size, disk_size_based_chunk_size);
+
+    int32_t actual_chunk_size = 0;
+    SyncPoint::GetInstance()->SetCallBack("HorizontalCompactionTask::_horizontal_compact_data:chunk_size",
+                                          [&](void* arg) { actual_chunk_size = *static_cast<int32_t*>(arg); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("HorizontalCompactionTask::_horizontal_compact_data:chunk_size");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    ASSERT_OK(dynamic_cast<HorizontalCompactionTask*>(compaction_task.get())->run_impl());
+    EXPECT_EQ(expected_chunk_size, actual_chunk_size);
+}
 
 /*
  select and execute new compaction task while the other one is in the execution progress：

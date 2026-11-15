@@ -1,5 +1,4 @@
 -- name: test_create_vector_index @sequential @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 
 CREATE TABLE `t_test_vector_table` (
   `id` bigint(20) NOT NULL COMMENT "",
@@ -26,11 +25,9 @@ ALTER TABLE t_test_vector_table drop index index_vector2;
 
 DROP TABLE t_test_vector_table;
 
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
 
 -- name: test_vector_index @sequential @native
 
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 
 CREATE TABLE `t_test_vector_table` (
   `id` bigint(20) NOT NULL COMMENT "",
@@ -54,4 +51,3 @@ select * from (select id, approx_l2_distance([1,1,1,1,1], vector1) score from t_
 DROP TABLE t_test_vector_table;
 
 
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");

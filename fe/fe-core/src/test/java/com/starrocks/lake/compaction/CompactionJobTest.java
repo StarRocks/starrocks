@@ -191,4 +191,60 @@ public class CompactionJobTest {
         };
         Assertions.assertEquals(job.getSuccessCompactInputFileSize(), 0);
     }
+
+    @Test
+    public void testAbortIsIdempotent() {
+        Database db = new Database();
+        Table table = new Table(Table.TableType.CLOUD_NATIVE);
+        PhysicalPartition partition = new PhysicalPartition(0, 1, new MaterializedIndex());
+        CompactionJob job = new CompactionJob(db, table, partition, 10010, true, null, "", null);
+        List<CompactionTask> list = new ArrayList<>();
+        list.add(new CompactionTask(100));
+        job.setTasks(list);
+
+        int[] abortCount = {0};
+        new MockUp<CompactionTask>() {
+            @Mock
+            public boolean abort() {
+                abortCount[0]++;
+                return true; // delivered
+            }
+        };
+
+        // abort() may be re-issued every scheduler tick; once delivered it must not resend. isAborted()
+        // flips false->true exactly once, so a caller can abort the transaction exactly once.
+        Assertions.assertFalse(job.isAborted());
+        job.abort();
+        Assertions.assertTrue(job.isAborted());
+        job.abort();
+        job.abort();
+        Assertions.assertEquals(1, abortCount[0]);
+    }
+
+    @Test
+    public void testAbortRetriesWhenDeliveryFails() {
+        Database db = new Database();
+        Table table = new Table(Table.TableType.CLOUD_NATIVE);
+        PhysicalPartition partition = new PhysicalPartition(0, 1, new MaterializedIndex());
+        CompactionJob job = new CompactionJob(db, table, partition, 10010, true, null, "", null);
+        List<CompactionTask> list = new ArrayList<>();
+        list.add(new CompactionTask(100));
+        job.setTasks(list);
+
+        int[] abortCount = {0};
+        new MockUp<CompactionTask>() {
+            @Mock
+            public boolean abort() {
+                abortCount[0]++;
+                return abortCount[0] > 1; // first attempt fails to deliver, later attempts succeed
+            }
+        };
+
+        job.abort(); // delivery fails -> not marked aborted
+        Assertions.assertFalse(job.isAborted());
+        job.abort(); // retried -> delivered -> marked aborted
+        Assertions.assertTrue(job.isAborted());
+        job.abort(); // already delivered -> no resend
+        Assertions.assertEquals(2, abortCount[0]);
+    }
 }

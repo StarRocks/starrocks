@@ -30,6 +30,7 @@
 #include "storage/index/inverted/builtin/builtin_inverted_writer.h"
 #include "storage/index/inverted/builtin/builtin_simple_analyzer.h"
 #include "storage/index/inverted/inverted_index_common.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/tablet_index.h"
 #include "storage/types.h"
@@ -1295,6 +1296,28 @@ TEST_F(BuiltinInvertedIndexTest, test_simple_analyzer) {
 
     analyzer2.tokenize(nullptr, 0, tokens);
     ASSERT_TRUE(tokens.empty());
+}
+
+TEST_F(BuiltinInvertedIndexTest, test_is_builtin_inverted_index) {
+    {
+        TabletIndex tablet_index;
+        ASSERT_FALSE(is_builtin_inverted_index(tablet_index));
+    }
+    {
+        TabletIndex tablet_index;
+        tablet_index.add_common_properties(INVERTED_IMP_KEY, TYPE_CLUCENE);
+        ASSERT_FALSE(is_builtin_inverted_index(tablet_index));
+    }
+    {
+        TabletIndex tablet_index;
+        tablet_index.add_common_properties(INVERTED_IMP_KEY, TYPE_BUILTIN);
+        ASSERT_TRUE(is_builtin_inverted_index(tablet_index));
+    }
+    {
+        TabletIndex tablet_index;
+        tablet_index.add_common_properties(INVERTED_IMP_KEY, "invalid");
+        ASSERT_FALSE(is_builtin_inverted_index(tablet_index));
+    }
 }
 
 } // namespace starrocks

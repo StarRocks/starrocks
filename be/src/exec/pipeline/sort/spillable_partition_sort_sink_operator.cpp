@@ -96,14 +96,16 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
     };
 
     Status ret_status;
-    auto defer = DeferOp([&]() {
-        SpillProcessTasksBuilder task_builder(state);
-        task_builder.finally(set_call_back_function);
-        Status st = _chunks_sorter->spill_channel()->execute(task_builder);
-        ret_status = ret_status.ok() ? st : ret_status;
-    });
+    {
+        auto defer = DeferOp([&]() {
+            SpillProcessTasksBuilder task_builder(state);
+            task_builder.finally(set_call_back_function);
+            Status st = _chunks_sorter->spill_channel()->execute(task_builder);
+            ret_status = ret_status.ok() ? st : ret_status;
+        });
 
-    ret_status = _chunks_sorter->done(state);
+        ret_status = _chunks_sorter->done(state);
+    } // Complete the final task before constructing the returned Status.
     return ret_status;
 }
 
@@ -137,9 +139,12 @@ OperatorPtr SpillablePartitionSortSinkOperatorFactory::create(int32_t degree_of_
 
     auto sort_context = _sort_context_factory->create(driver_sequence);
     sort_context->add_partition_chunks_sorter(chunks_sorter);
+    // Anchor the spill channel to the sort context, which owns the sorter the spill tasks reference
+    // (see SpillProcessOperator prepare/close).
+    spill_channel->set_guarded_context(sort_context.get());
     auto ope = std::make_shared<SpillablePartitionSortSinkOperator>(
             this, _id, _plan_node_id, driver_sequence, chunks_sorter, _sort_exec_exprs, _order_by_types,
-            _materialized_tuple_desc, sort_context.get(), _runtime_filter_hub);
+            _materialized_record_desc, sort_context.get(), _runtime_filter_hub);
 
     return ope;
 }

@@ -16,8 +16,17 @@ package com.starrocks.alter.reshard;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -30,25 +39,30 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TabletReshardUtilsTest {
 
     private long savedTargetSize;
     private int savedMaxSplitCount;
+    private long savedMinSplitSize;
 
     @BeforeEach
     public void setup() {
         savedTargetSize = Config.tablet_reshard_target_size;
         savedMaxSplitCount = Config.tablet_reshard_max_split_count;
+        savedMinSplitSize = Config.tablet_reshard_min_split_size;
         Config.tablet_reshard_target_size = 10L * 1024 * 1024 * 1024; // 10G
         Config.tablet_reshard_max_split_count = 1024;
+        Config.tablet_reshard_min_split_size = 2L * 1024 * 1024 * 1024; // 2G
     }
 
     @AfterEach
     public void teardown() {
         Config.tablet_reshard_target_size = savedTargetSize;
         Config.tablet_reshard_max_split_count = savedMaxSplitCount;
+        Config.tablet_reshard_min_split_size = savedMinSplitSize;
     }
 
     @Test
@@ -107,6 +121,63 @@ public class TabletReshardUtilsTest {
         assertEquals(1, TabletReshardUtils.calcSplitCount(Long.MAX_VALUE, unsafeTarget));
     }
 
+    /**
+     * A merge of a range-distributed primary-key table whose ORDER BY differs from the primary key
+     * cannot attribute the rows of a segment its sources share, so it is refused. The predicate must
+     * answer for exactly that shape -- MetaUtils.hasSeparateSortKey already folds the range-distribution
+     * test into itself -- and must never throw from a scheduling decision.
+     */
+    @Test
+    public void tabletMergeUnsupported_onlyForTheSeparateSortKeyShape() {
+        new MockUp<OlapTable>() {
+            @Mock
+            public long getBaseIndexMetaId() {
+                return 1L;
+            }
+        };
+
+        assertFalse(TabletReshardUtils.tabletMergeUnsupported(null), "a null table is not a shape to refuse");
+
+        OlapTable table = new OlapTable();
+        new MockUp<MetaUtils>() {
+            @Mock
+            public boolean hasSeparateSortKey(OlapTable olapTable, long indexMetaId) {
+                return true;
+            }
+        };
+        assertTrue(TabletReshardUtils.tabletMergeUnsupported(table));
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public boolean hasSeparateSortKey(OlapTable olapTable, long indexMetaId) {
+                return false;
+            }
+        };
+        assertFalse(TabletReshardUtils.tabletMergeUnsupported(table));
+    }
+
+    /**
+     * The base index meta can go away underneath a scheduling pass. Answering "not this shape" leaves
+     * the decision to the BE backstop, which is the only other place that can still refuse; throwing
+     * here would instead abort the whole statistics pass.
+     */
+    @Test
+    public void tabletMergeUnsupported_missingIndexMetaDoesNotThrow() {
+        new MockUp<OlapTable>() {
+            @Mock
+            public long getBaseIndexMetaId() {
+                return 1L;
+            }
+        };
+        new MockUp<MetaUtils>() {
+            @Mock
+            public boolean hasSeparateSortKey(OlapTable olapTable, long indexMetaId) {
+                throw new IllegalArgumentException("no MaterializedIndexMeta for indexMetaId");
+            }
+        };
+        assertFalse(TabletReshardUtils.tabletMergeUnsupported(new OlapTable()));
+    }
+
     @Test
     public void mergeGroupCap_equalsTarget() {
         assertEquals(10L, TabletReshardUtils.mergeGroupCap(10L));
@@ -116,26 +187,26 @@ public class TabletReshardUtilsTest {
     public void needSplit_threshold() {
         long t = Config.tablet_reshard_target_size;
         long splitTrigger = TabletReshardUtils.splitThreshold(t);
-        assertFalse(TabletReshardUtils.needSplit(t));
-        assertFalse(TabletReshardUtils.needSplit(splitTrigger - 1));
-        assertTrue(TabletReshardUtils.needSplit(splitTrigger));
-        assertTrue(TabletReshardUtils.needSplit(t * 100));
+        assertFalse(TabletReshardUtils.needSplit(t, t));
+        assertFalse(TabletReshardUtils.needSplit(splitTrigger - 1, t));
+        assertTrue(TabletReshardUtils.needSplit(splitTrigger, t));
+        assertTrue(TabletReshardUtils.needSplit(t * 100, t));
     }
 
     @Test
     public void needMerge_strictlyLess() {
         long t = Config.tablet_reshard_target_size;
         long pairThresh = TabletReshardUtils.mergePairThreshold(t);
-        assertTrue(TabletReshardUtils.needMerge(pairThresh - 1));
-        assertFalse(TabletReshardUtils.needMerge(pairThresh));    // strict <
-        assertFalse(TabletReshardUtils.needMerge(t));
+        assertTrue(TabletReshardUtils.needMerge(pairThresh - 1, t));
+        assertFalse(TabletReshardUtils.needMerge(pairThresh, t));    // strict <
+        assertFalse(TabletReshardUtils.needMerge(t, t));
     }
 
     @Test
     public void needMerge_targetZeroDisabled() {
         Config.tablet_reshard_target_size = 0L;
-        assertFalse(TabletReshardUtils.needMerge(0));
-        assertFalse(TabletReshardUtils.needMerge(100));
+        assertFalse(TabletReshardUtils.needMerge(0, Config.tablet_reshard_target_size));
+        assertFalse(TabletReshardUtils.needMerge(100, Config.tablet_reshard_target_size));
     }
 
     @Test
@@ -200,18 +271,94 @@ public class TabletReshardUtilsTest {
     }
 
     @Test
-    public void safeComputeParallelismFloor_returnsZeroWhenComputeFails() {
-        // computeParallelismFloor resolves warehouse / compute-node state via StarMgr and can throw
-        // (e.g. the warehouse no longer exists). safeComputeParallelismFloor must swallow that and
-        // fall back to "no floor" (0) so a single table's warehouse error cannot abort the scan.
-        new MockUp<TabletReshardUtils>() {
+    public void safeComputeNodeCountForTable_returnsZeroWhenResolutionFails() {
+        // The resolution goes through the warehouse manager and can throw (e.g. the warehouse no
+        // longer exists, or has no usable worker). It must swallow that and fall back to 0 so a single
+        // table's warehouse error cannot abort the scan; 0 in turn means "no floor" for auto-merge and
+        // no adaptive signal from that scan. The planner does NOT come through here -- it resolves via
+        // adaptiveSplitBoundForTable, which propagates instead.
+        new MockUp<WarehouseManager>() {
             @Mock
-            public static int computeParallelismFloor(long tableId) {
+            public ComputeResource getBackgroundComputeResource(long tableId) {
                 throw new RuntimeException("warehouse unavailable");
             }
         };
-        assertEquals(0, TabletReshardUtils.safeComputeParallelismFloor(123L));
+        assertEquals(0, TabletReshardUtils.safeComputeNodeCountForTable(123L));
     }
+
+
+
+    @Test
+    public void adaptiveRuleOn_whileTheIndexHoldsLessThanBoundTargets() {
+        long floor = 2L << 30;
+        // 24 GiB against a bound of 8 and a 10 GiB target: well short of 80 GiB, so the rule is on.
+        assertTrue(TabletReshardUtils.adaptiveRuleOn(24L << 30, 10L << 30, 8, floor));
+        // A nearly empty index is too; the floor, not the gate, keeps it from being carved into slivers.
+        assertTrue(TabletReshardUtils.adaptiveRuleOn(100L << 20, 10L << 30, 8, floor));
+        // Bound x target of data or more: the index is the size rule's.
+        assertFalse(TabletReshardUtils.adaptiveRuleOn(80L << 30, 10L << 30, 8, floor));
+        assertFalse(TabletReshardUtils.adaptiveRuleOn(100L << 30, 10L << 30, 8, floor));
+        // An unresolved warehouse, or a zero floor, keeps it off.
+        assertFalse(TabletReshardUtils.adaptiveRuleOn(24L << 30, 10L << 30, 0, floor));
+        assertFalse(TabletReshardUtils.adaptiveRuleOn(24L << 30, 10L << 30, 8, 0L));
+    }
+
+    @Test
+    public void adaptiveRuleOn_isOffWhenTheMinimumReachesTheTarget() {
+        long saved = Config.tablet_reshard_min_split_size;
+        try {
+            // A minimum at or above the target reads as a zero floor, which is the documented off switch.
+            Config.tablet_reshard_min_split_size = 10L << 30;
+            assertFalse(TabletReshardUtils.adaptiveRuleOn(24L << 30, 10L << 30, 8,
+                    TabletReshardUtils.adaptiveSplitFloor(10L << 30)));
+            Config.tablet_reshard_min_split_size = 40L << 30;
+            assertFalse(TabletReshardUtils.adaptiveRuleOn(24L << 30, 10L << 30, 8,
+                    TabletReshardUtils.adaptiveSplitFloor(10L << 30)));
+        } finally {
+            Config.tablet_reshard_min_split_size = saved;
+        }
+    }
+
+    @Test
+    public void theBoundIsDerivedFromTheCapItIsGivenNotTheLiveConfig() {
+        int saved = Config.tablet_reshard_max_split_count;
+        try {
+            // A caller that derives the merge floor and this bound from one decision must sample the
+            // cap once and hand it to both. If this re-read the live config instead, a change landing
+            // between the two reads would put the floor above the bound -- an index could then be
+            // mergeable and under-provisioned at the same time, which is the overlap the bound exists
+            // to prevent. The two values below are the ones that make that visible.
+            Config.tablet_reshard_max_split_count = 2;
+            assertEquals(50, TabletReshardUtils.adaptiveSplitBound(50, 100),
+                    "the bound must come from the cap it was given");
+            assertEquals(2, TabletReshardUtils.parallelismFloor(50, Config.tablet_reshard_max_split_count),
+                    "and this is the floor the live config would have produced -- above that bound");
+        } finally {
+            Config.tablet_reshard_max_split_count = saved;
+        }
+    }
+
+    @Test
+    public void anUnresolvableWarehouseIsFatalToThePlannerAndSurvivableToTheScan() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource getBackgroundComputeResource(long tableId) {
+                throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_UNAVAILABLE, "wh");
+            }
+        };
+
+        // The planner must not read "warehouse temporarily unavailable" as "this index needs nothing":
+        // that produces an empty plan, which its caller is entitled to latch as deterministic, and the
+        // fingerprint would never move again on an unchanged layout.
+        assertThrows(ErrorReportException.class, () -> TabletReshardUtils.adaptiveSplitBoundForTable(1L),
+                "the planner's resolution must propagate");
+
+        // The scan is the caller that should degrade instead -- it has a whole cluster left to walk,
+        // and its output is only a signal the planner re-decides.
+        assertEquals(0, TabletReshardUtils.safeComputeNodeCountForTable(1L),
+                "the scan's resolution must fall back");
+    }
+
 
     @Test
     public void parallelismFloor_clampsAndBounds() {
@@ -229,6 +376,64 @@ public class TabletReshardUtilsTest {
         assertEquals(1, TabletReshardUtils.parallelismFloor(5, 0));
     }
 
+    @Test
+    public void testNeedSplitAndMergeAgainstExplicitTarget() {
+        long target = 1L << 30;
+        long splitTrigger = TabletReshardUtils.splitThreshold(target);
+        assertTrue(TabletReshardUtils.needSplit(splitTrigger, target));
+        assertFalse(TabletReshardUtils.needSplit(splitTrigger - 1, target));
+        long pairThresh = TabletReshardUtils.mergePairThreshold(target);
+        assertTrue(TabletReshardUtils.needMerge(pairThresh - 1, target));
+        assertFalse(TabletReshardUtils.needMerge(pairThresh, target));
+        assertFalse(TabletReshardUtils.needMerge(0, 0));
+    }
+
+    @Test
+    public void adaptiveRuleOn_isOffForATableTargetBelowTheMinimum() {
+        // A 1 GiB table target under the 2 GiB minimum: the floor reads as 0 and the rule stays off.
+        assertFalse(TabletReshardUtils.adaptiveRuleOn(100L << 30, 1L << 30, 8,
+                TabletReshardUtils.adaptiveSplitFloor(1L << 30)));
+    }
+
+    @Test
+    public void canSplitInto_needsEveryPieceAtTheFloor() {
+        assertTrue(TabletReshardUtils.canSplitInto(4L << 30, 2, 2L << 30));
+        assertFalse(TabletReshardUtils.canSplitInto((4L << 30) - 1, 2, 2L << 30));
+        assertTrue(TabletReshardUtils.canSplitInto(6L << 30, 3, 2L << 30));
+        assertFalse(TabletReshardUtils.canSplitInto(6L << 30, 4, 2L << 30));
+    }
+
+    @Test
+    public void adaptiveSplitFloor_isTheMinimumWhileItSitsBelowTheTarget() {
+        // The setup pins the minimum at 2 GiB.
+        assertEquals(2L << 30, TabletReshardUtils.adaptiveSplitFloor(10L << 30));
+    }
+
+    @Test
+    public void adaptiveRuleOn_usesTheFloorItIsHandedNotTheConfiguration() {
+        // A caller reads the floor once and hands it to both the gate and the fill. Change the configuration
+        // after that reading: the gate must follow the floor it was given, or the two could disagree.
+        long floor = TabletReshardUtils.adaptiveSplitFloor(10L << 30);
+        Config.tablet_reshard_min_split_size = 10L << 30;   // would switch the rule off if read again
+        assertTrue(TabletReshardUtils.adaptiveRuleOn(24L << 30, 10L << 30, 8, floor));
+    }
+
+    @Test
+    public void adaptiveSplitFloor_isZeroWhereTheAdaptiveRuleIsOff() {
+        // A minimum at or above the target is the documented off switch of the adaptive rule; the floor must
+        // read as "no child at all" there, not as a floor equal to the target.
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(2L << 30));
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(1L << 30));
+        // A target that disables reshard altogether.
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(0L));
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(-3L));
+        // A non-positive minimum has no validator on it; it must not turn into "children of any size".
+        Config.tablet_reshard_min_split_size = 0L;
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(10L << 30));
+        Config.tablet_reshard_min_split_size = -1L;
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(10L << 30));
+    }
+
     /**
      * Static check of the convergence invariants. These two inequalities are what prevent
      * split↔merge oscillation. If they ever fail, the algorithm can ping-pong indefinitely.
@@ -243,7 +448,7 @@ public class TabletReshardUtilsTest {
         // 1. Two adjacent post-split pieces (each >= splitTrigger / 2 under uniform row width)
         //    must NOT satisfy needMerge: their pair sum >= splitTrigger > pairThresh required.
         long minPiece = splitTrigger / 2;
-        assertFalse(TabletReshardUtils.needMerge(minPiece + minPiece),
+        assertFalse(TabletReshardUtils.needMerge(minPiece + minPiece, t),
                 "split output pair must not be a merge candidate");
 
         // 2. Merged group cap must be strictly below split trigger (otherwise merge output
@@ -279,5 +484,110 @@ public class TabletReshardUtilsTest {
         assertEquals(100L, TabletReshardUtils.minVectorIndexBuiltVersion(index, Lists.newArrayList(101L)));
         // empty -> 0
         assertEquals(0L, TabletReshardUtils.minVectorIndexBuiltVersion(index, Collections.emptyList()));
+    }
+
+    // A reshard whose source tablet lives in a materialized index that an earlier reshard already
+    // superseded must be rejected at admission. Such an index passes every other check -- it is
+    // still returned by getIndex, its state is still NORMAL, and it still owns the tablet -- so
+    // without this gate the job is admitted, its publish resolves no live tablet, and it spins in
+    // RUNNING forever with an empty error message. Easy to hit because SHOW TABLET keeps listing
+    // the superseded tablets (after a split the old parent is still the first row).
+    @Test
+    public void checkIndexNotSuperseded_rejectsSupersededIndex() {
+        MaterializedIndex oldIndex = new MaterializedIndex(100L, 100L, IndexState.NORMAL, 0L);
+        oldIndex.addTablet(new LakeTablet(1000L), null, false);
+        PhysicalPartition partition = new PhysicalPartition(1L, 0L, oldIndex);
+
+        // Nothing has superseded it yet: the check passes.
+        assertDoesNotThrowStarRocks(() ->
+                TabletReshardUtils.checkIndexNotSuperseded(partition, oldIndex, 1000L, "db", "t"));
+
+        // A later reshard installs a new version of the same index meta.
+        MaterializedIndex newIndex = new MaterializedIndex(200L, 100L, IndexState.NORMAL, 0L);
+        newIndex.addTablet(new LakeTablet(2000L), null, false);
+        partition.addMaterializedIndex(newIndex, true);
+
+        StarRocksException e = assertThrows(StarRocksException.class, () ->
+                TabletReshardUtils.checkIndexNotSuperseded(partition, oldIndex, 1000L, "db", "t"));
+        assertTrue(e.getMessage().contains("superseded by index 200"), e.getMessage());
+        assertTrue(e.getMessage().contains("1000"), e.getMessage());
+        // The replacement tablet ids are spelled out: the partition-level SHOW PROC path this message
+        // used to point at needs system-level OPERATE, which a user holding only ALTER on the table --
+        // enough to trigger this rejection -- does not have.
+        assertTrue(e.getMessage().contains("[2000]"), e.getMessage());
+
+        // The live index is still accepted.
+        assertDoesNotThrowStarRocks(() ->
+                TabletReshardUtils.checkIndexNotSuperseded(partition, newIndex, 2000L, "db", "t"));
+    }
+
+    // A partition can hold far more tablets than belong in an error string, so the list is truncated
+    // with the full count kept.
+    @Test
+    public void checkIndexNotSuperseded_truncatesLongTabletList() {
+        MaterializedIndex oldIndex = new MaterializedIndex(100L, 100L, IndexState.NORMAL, 0L);
+        oldIndex.addTablet(new LakeTablet(1000L), null, false);
+        PhysicalPartition partition = new PhysicalPartition(1L, 0L, oldIndex);
+
+        MaterializedIndex newIndex = new MaterializedIndex(200L, 100L, IndexState.NORMAL, 0L);
+        for (int i = 0; i < 25; ++i) {
+            newIndex.addTablet(new LakeTablet(2000L + i), null, false);
+        }
+        partition.addMaterializedIndex(newIndex, true);
+
+        StarRocksException e = assertThrows(StarRocksException.class, () ->
+                TabletReshardUtils.checkIndexNotSuperseded(partition, oldIndex, 1000L, "db", "t"));
+        assertTrue(e.getMessage().contains("2019]"), e.getMessage());
+        assertTrue(e.getMessage().contains("(first 20 of 25)"), e.getMessage());
+        assertFalse(e.getMessage().contains("2020"), e.getMessage());
+    }
+
+    // Admission-time counterpart of the check above. The factory builds a job from a snapshot taken
+    // under a lock it then releases, so a source index that was live at creation can be superseded --
+    // or removed outright -- before the job reserves the table. Both leave the job with nothing live
+    // to reshard, so both are rejected.
+    @Test
+    public void checkIndexStillLatest_rejectsSupersededOrRemovedIndex() {
+        MaterializedIndex oldIndex = new MaterializedIndex(100L, 100L, IndexState.NORMAL, 0L);
+        oldIndex.addTablet(new LakeTablet(1000L), null, false);
+        PhysicalPartition partition = new PhysicalPartition(1L, 0L, oldIndex);
+
+        // Still the latest version of its meta: admission proceeds.
+        assertDoesNotThrowStarRocks(() ->
+                TabletReshardUtils.checkIndexStillLatest(partition, 100L, 100L, "db", "t"));
+
+        // A reshard job admitted first installs a new version of the same index meta.
+        MaterializedIndex newIndex = new MaterializedIndex(200L, 100L, IndexState.NORMAL, 0L);
+        newIndex.addTablet(new LakeTablet(2000L), null, false);
+        partition.addMaterializedIndex(newIndex, true);
+
+        StarRocksException e = assertThrows(StarRocksException.class, () ->
+                TabletReshardUtils.checkIndexStillLatest(partition, 100L, 100L, "db", "t"));
+        assertTrue(e.getMessage().contains("superseded by index 200"), e.getMessage());
+        assertTrue(e.getMessage().contains("[2000]"), e.getMessage());
+
+        // The winner of that race is of course still admissible.
+        assertDoesNotThrowStarRocks(() ->
+                TabletReshardUtils.checkIndexStillLatest(partition, 200L, 100L, "db", "t"));
+
+        // Index meta gone from the partition entirely: there is nothing left to reshard, and
+        // installing a successor would fail addMaterializedIndex's precondition well past the job's
+        // no-abort boundary.
+        partition.deleteMaterializedIndexByMetaId(100L);
+        e = assertThrows(StarRocksException.class, () ->
+                TabletReshardUtils.checkIndexStillLatest(partition, 200L, 100L, "db", "t"));
+        assertTrue(e.getMessage().contains("was removed after"), e.getMessage());
+    }
+
+    private interface ThrowingRunnable {
+        void run() throws StarRocksException;
+    }
+
+    private static void assertDoesNotThrowStarRocks(ThrowingRunnable r) {
+        try {
+            r.run();
+        } catch (StarRocksException e) {
+            throw new AssertionError("unexpected StarRocksException: " + e.getMessage(), e);
+        }
     }
 }

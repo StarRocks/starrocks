@@ -14,6 +14,7 @@
 
 #pragma once
 #include <map>
+#include <memory>
 
 #include "base/hash/hash.h"
 #include "base/hash/hash_std.hpp"
@@ -25,9 +26,17 @@
 
 namespace starrocks {
 
+class MemTracker;
+
 // To manage pass through chunks between sink/sources in the same process.
 using ChunkUniquePtrVector = std::vector<std::pair<ChunkUniquePtr, int32_t>>;
 class PassThroughChannel;
+
+// A channel is shared by the local sink and the local receiver of one
+// [fragment_instance_id, dest_node_id] pair, and both of them keep using it while they are being
+// torn down. Ownership is therefore shared: the PassThroughChunkBuffer publishes the channel, but
+// it does not outlive every user of it. See PassThroughContext below.
+using PassThroughChannelPtr = std::shared_ptr<PassThroughChannel>;
 
 class PassThroughChunkBuffer {
 public:
@@ -42,9 +51,10 @@ public:
             return hash;
         }
     };
-    PassThroughChunkBuffer(const TUniqueId& query_id);
+    PassThroughChunkBuffer(const TUniqueId& query_id, std::shared_ptr<MemTracker> query_mem_tracker);
     ~PassThroughChunkBuffer();
-    PassThroughChannel* get_or_create_channel(const Key& key);
+    PassThroughChannelPtr get_or_create_channel(const Key& key);
+    MemTracker* query_mem_tracker() const { return _query_mem_tracker.get(); }
     int ref() { return ++_ref_count; }
     int unref() {
         _ref_count -= 1;
@@ -54,7 +64,10 @@ public:
 private:
     std::mutex _mutex;
     const TUniqueId _query_id;
-    std::unordered_map<Key, PassThroughChannel*, KeyHash> _key_to_channel;
+    // The query tracker shared by every fragment instance of the query on this BE, handed to each
+    // channel when it is created. Null when the query has none.
+    const std::shared_ptr<MemTracker> _query_mem_tracker;
+    std::unordered_map<Key, PassThroughChannelPtr, KeyHash> _key_to_channel;
     int _ref_count{1};
 };
 
@@ -71,11 +84,16 @@ public:
     bool is_cancelled() const;
 
 private:
-    // hold this chunk buffer to avoid early deallocation.
+    // Only used by init(), which runs while the owning fragment still holds its
+    // PassThroughChunkBufferGuard. Never dereferenced afterwards.
     PassThroughChunkBuffer* _chunk_buffer;
     TUniqueId _fragment_instance_id;
     PlanNodeId _node_id;
-    PassThroughChannel* _channel = nullptr;
+    // Owning reference. The PassThroughChunkBuffer is released per fragment
+    // (FragmentContext::destroy_pass_through_chunk_buffer), which can happen before the pipelines
+    // that hold this context are torn down; keeping a strong reference here is what makes the
+    // channel outlive both the sink and the receiver instead of only the buffer.
+    PassThroughChannelPtr _channel;
 };
 
 class PassThroughChunkBufferManager {
@@ -84,7 +102,11 @@ public:
     // We don't care open/close by which fragment instance,
     // just to want to make sure that fragment instances in a query can
     // share the same `PassThroughChunkBuffer*` struct
-    void open_fragment_instance(const TUniqueId& query_id);
+    // `query_mem_tracker` is the query tracker shared by the sender and receiver instances (they always
+    // belong to the same query on this BE). Buffered chunks are parked on it while they wait in a
+    // channel, so they stay inside the query, resource group and process budgets. Without it they are
+    // parked on the process tracker. Every fragment instance of a query must pass the same tracker.
+    void open_fragment_instance(const TUniqueId& query_id, std::shared_ptr<MemTracker> query_mem_tracker);
     void close_fragment_instance(const TUniqueId& query_id);
     PassThroughChunkBuffer* get(const TUniqueId& query_id);
     void close();

@@ -15,8 +15,10 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "common/status.h"
 #include "fs/fs.h"
@@ -43,7 +45,12 @@ struct CompactConflictResolveParams {
     int64_t base_version = 0;
     int64_t new_version = 0;
     DelvecLoader* delvec_loader = nullptr;
-    PrimaryIndex* index = nullptr;
+    // Hand the surviving rows back to whichever primary index owns them. A callback rather than a
+    // PrimaryIndex*, because the shared-data index is not a PrimaryIndex -- and `replace` is the
+    // only thing this resolver ever asked of it.
+    std::function<Status(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                         const Column& pks)>
+            replace_rows;
 };
 
 class PrimaryKeyCompactionConflictResolver {

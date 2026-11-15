@@ -18,4 +18,8 @@ select * from hive_catalog_${uuid0}.hive_oss_db.t_openx_json_partition order by 
 
 select * from hive_catalog_${uuid0}.hive_oss_db.t_openx_json_snappy order by c1 asc;
 
+select * from hive_catalog_${uuid0}.hive_oss_db.t_openx_col_mapping order by c1 asc;
+
+select * from hive_catalog_${uuid0}.hive_oss_db.t_openx_fan_out_mapping order by c1 asc;
+
 drop catalog hive_catalog_${uuid0};

@@ -18,6 +18,7 @@ set(FS_TEST_FILES
     azure/utils_test.cpp
     bundle_file_test.cpp
     credential/cloud_configuration_factory_test.cpp
+    credential/refreshable_cloud_configuration_test.cpp
     encrypt_file_test.cpp
     file_utils_test.cpp
     filesystem_core_test.cpp

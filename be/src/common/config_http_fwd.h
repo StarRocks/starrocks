@@ -32,9 +32,14 @@ CONF_mInt32(download_low_speed_time, "300");
 // to forward compatibility, will be removed later
 CONF_mBool(enable_token_check, "true");
 
-// Whether to require Basic Auth for external BE HTTP endpoints. Internal endpoints
-// (BE-to-BE clone, internal load download, health probe, Prometheus metrics) are always
-// exempt. Default false for backward compatibility. Immutable; requires a BE restart to change.
+// Whether to require Basic Auth for the BE HTTP endpoints. Default false for backward
+// compatibility. Immutable; requires a BE restart to change. When true:
+// - Exempt are the token-gated internal transport (BE-to-BE tablet clone and internal load
+//   download: /api/_tablet/_download, /api/_download_load), and the Stream Load and transaction
+//   endpoints, which authenticate inside the handler.
+// - Every other endpoint requires a user the FE leader authenticates, including the health probe
+//   and the Prometheus metrics (/api/health, /metrics, /metrics/memory), which need no privilege.
+//   Most admin endpoints also require a SYSTEM privilege, such as OPERATE.
 CONF_Bool(enable_http_auth, "false");
 
 // Whether to enable the BE `/api/_stop_be` HTTP endpoint. When `false`, requests

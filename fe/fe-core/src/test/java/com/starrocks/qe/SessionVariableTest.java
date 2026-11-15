@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.qe;
 
+import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TBinaryEncodingFormat;
 import com.starrocks.thrift.TBinaryEncodingLevel;
@@ -23,6 +24,118 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 public class SessionVariableTest {
+
+    @Test
+    public void testAITopNThresholdRegistersValidatedSetter() throws Exception {
+        Assertions.assertEquals(SessionVariable.class.getMethod("setAiTopnPushdownMaxGlobalLimit", long.class),
+                SessionVariable.SETTER_MAP.get("aiTopnPushdownMaxGlobalLimit"));
+    }
+
+    @Test
+    public void testBroadcastCostMultiplierState() throws Exception {
+        SessionVariable variables = new SessionVariable();
+        variables.replayFromJson("{\"exec_mem_limit\":4294967296}");
+        Assertions.assertEquals(1000.0, variables.getBroadcastMemExceededPenaltyFactor());
+        Assertions.assertEquals(4294967296L, variables.getMaxExecMemByte());
+
+        variables.setBroadcastMemExceededPenaltyFactor(2.5);
+        Assertions.assertEquals(2.5, variables.getNonDefaultVariables()
+                .get(SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR).actualValue);
+        SessionVariable clone = variables.clone();
+        SessionVariable restored = new SessionVariable();
+        restored.replayFromJson(variables.getJsonString());
+        Assertions.assertEquals(2.5, clone.getBroadcastMemExceededPenaltyFactor());
+        Assertions.assertEquals(2.5, restored.getBroadcastMemExceededPenaltyFactor());
+        clone.setBroadcastMemExceededPenaltyFactor(1.0);
+        Assertions.assertEquals(2.5, variables.getBroadcastMemExceededPenaltyFactor());
+
+        double maxMultiplier = SessionVariable.MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR;
+        variables.setBroadcastMemExceededPenaltyFactor(maxMultiplier);
+        Assertions.assertEquals(maxMultiplier, variables.getBroadcastMemExceededPenaltyFactor());
+        variables.setBroadcastMemExceededPenaltyFactor(2.5);
+        for (double value : new double[] {0.0, -1.0, 0.999, Math.nextUp(maxMultiplier), maxMultiplier + 1,
+                Double.MAX_VALUE, Double.NaN,
+                Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
+            SemanticException error = Assertions.assertThrows(SemanticException.class,
+                    () -> variables.setBroadcastMemExceededPenaltyFactor(value));
+            Assertions.assertTrue(error.getMessage().contains("a finite number in [1.0, " + maxMultiplier + "]"));
+            Assertions.assertEquals(2.5, variables.getBroadcastMemExceededPenaltyFactor());
+        }
+    }
+
+    @Test
+    public void testBroadcastMemThresholdState() throws Exception {
+        SessionVariable variables = new SessionVariable();
+        Assertions.assertEquals(2147483648L, variables.getBroadcastMemThreshold());
+        variables.replayFromJson("{\"exec_mem_limit\":4294967296}");
+        Assertions.assertEquals(4294967296L, variables.getMaxExecMemByte());
+        Assertions.assertEquals(2147483648L, variables.getBroadcastMemThreshold());
+
+        variables.setBroadcastMemThreshold(1024);
+        Assertions.assertEquals(1024L,
+                variables.getNonDefaultVariables().get(SessionVariable.BROADCAST_MEM_THRESHOLD).actualValue);
+        SessionVariable clone = variables.clone();
+        SessionVariable restored = new SessionVariable();
+        restored.replayFromJson(variables.getJsonString());
+        Assertions.assertEquals(1024L, clone.getBroadcastMemThreshold());
+        Assertions.assertEquals(1024L, restored.getBroadcastMemThreshold());
+        clone.setBroadcastMemThreshold(Long.MAX_VALUE);
+        Assertions.assertEquals(1024L, variables.getBroadcastMemThreshold());
+        Assertions.assertEquals(Long.MAX_VALUE, clone.getBroadcastMemThreshold());
+        Assertions.assertThrows(SemanticException.class, () -> variables.setBroadcastMemThreshold(-1));
+        Assertions.assertEquals(1024L, variables.getBroadcastMemThreshold());
+    }
+
+    @Test
+    public void testAITopNThresholdValidationAndState() throws Exception {
+        SessionVariable variables = new SessionVariable();
+        Assertions.assertTrue(variables.isEnableAITopnPushdown());
+        Assertions.assertEquals(1000, variables.getAITopnPushdownMaxGlobalLimit());
+        variables.replayFromJson("{}");
+        Assertions.assertTrue(variables.isEnableAITopnPushdown());
+        Assertions.assertEquals(1000, variables.getAITopnPushdownMaxGlobalLimit());
+
+        variables.setAiTopnPushdownMaxGlobalLimit(0);
+        variables.setEnableAITopnPushdown(false);
+        Assertions.assertEquals(false,
+                variables.getNonDefaultVariables().get(SessionVariable.ENABLE_AI_TOPN_PUSHDOWN).actualValue);
+        Assertions.assertEquals(0L,
+                variables.getNonDefaultVariables().get(SessionVariable.AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT).actualValue);
+        SessionVariable clone = variables.clone();
+        SessionVariable restored = new SessionVariable();
+        restored.replayFromJson(variables.getJsonString());
+        Assertions.assertFalse(clone.isEnableAITopnPushdown());
+        Assertions.assertFalse(restored.isEnableAITopnPushdown());
+        Assertions.assertEquals(0, clone.getAITopnPushdownMaxGlobalLimit());
+        Assertions.assertEquals(0, restored.getAITopnPushdownMaxGlobalLimit());
+
+        clone.setAiTopnPushdownMaxGlobalLimit(Long.MAX_VALUE);
+        clone.setEnableAITopnPushdown(true);
+        Assertions.assertTrue(clone.isEnableAITopnPushdown());
+        Assertions.assertFalse(variables.isEnableAITopnPushdown());
+        Assertions.assertEquals(Long.MAX_VALUE, clone.getAITopnPushdownMaxGlobalLimit());
+        Assertions.assertEquals(0, variables.getAITopnPushdownMaxGlobalLimit());
+        Assertions.assertThrows(SemanticException.class, () -> variables.setAiTopnPushdownMaxGlobalLimit(-1));
+        Assertions.assertEquals(0, variables.getAITopnPushdownMaxGlobalLimit());
+    }
+
+    @Test
+    public void testPaimonReaderMode() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        Assertions.assertEquals(SessionVariable.PaimonReaderMode.AUTO, sessionVariable.getPaimonReaderMode());
+
+        Assertions.assertEquals("AUTO",
+                VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "auto"));
+        Assertions.assertEquals("JNI",
+                VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "jNi"));
+        String nativeMode = VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "native");
+        Assertions.assertEquals("NATIVE", nativeMode);
+        sessionVariable.setPaimonReaderMode(nativeMode);
+        Assertions.assertEquals(SessionVariable.PaimonReaderMode.NATIVE, sessionVariable.getPaimonReaderMode());
+
+        Assertions.assertThrows(DdlException.class,
+                () -> VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "invalid"));
+    }
 
     @Test
     public void testNonDefaultVariables() {
@@ -220,4 +333,22 @@ public class SessionVariableTest {
                 SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 512}");
         Assertions.assertEquals(4096, sessionVariable.getScanLakePartitionNumLimit());
     }
+
+    @Test
+    public void testGroupedRangeModeIsSessionOnlyAndIndependentOfParallel() throws Exception {
+        SessionVariable variables = new SessionVariable();
+        Assertions.assertFalse(variables.isRangeScanExecutionOverride());
+        variables.setRangeScanExecutionMode("GROUPED");
+        Assertions.assertTrue(variables.isGroupedRangeScan());
+        Assertions.assertFalse(variables.isParallelRangeScan());
+        Assertions.assertEquals("grouped", variables.clone().getRangeScanExecutionMode());
+        var field = SessionVariable.class.getDeclaredField("rangeScanExecutionMode");
+        Assertions.assertEquals(VariableMgr.SESSION_ONLY, field.getAnnotation(VariableMgr.VarAttr.class).flag());
+        Assertions.assertThrows(IllegalArgumentException.class, () -> variables.setRangeScanExecutionMode("auto"));
+        Assertions.assertTrue(variables.isGroupedRangeScan());
+        variables.setRangeScanExecutionMode("parallel");
+        Assertions.assertTrue(variables.isParallelRangeScan());
+        Assertions.assertFalse(variables.isGroupedRangeScan());
+    }
+
 }

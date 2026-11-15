@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Calculates the set consisting elements unique to lhs and rhs."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_xor

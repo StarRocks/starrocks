@@ -164,6 +164,27 @@ TEST_F(TabletMgrTest, CreateTablet) {
     ASSERT_TRUE(create_st.ok());
 }
 
+// The reported stats must say which tablet version they were computed from: without it the FE
+// cannot tell a fresh snapshot from one this cache served from before the caller's load, and an
+// exact COUNT(*) folded from those numbers goes stale (StarRocks issue #72271).
+TEST_F(TabletMgrTest, GetTabletStatReportsVersion) {
+    TCreateTabletReq create_tablet_req = get_create_tablet_request(111, 3333);
+    std::vector<DataDir*> data_dirs;
+    data_dirs.push_back(_data_dirs[0]);
+    ASSERT_TRUE(_tablet_mgr->create_tablet(create_tablet_req, data_dirs).ok());
+    TabletSharedPtr tablet = _tablet_mgr->get_tablet(111);
+    ASSERT_TRUE(tablet != nullptr);
+
+    TTabletStatResult result;
+    _tablet_mgr->get_tablet_stat(&result);
+
+    auto stat = result.tablets_stats.find(111);
+    ASSERT_NE(result.tablets_stats.end(), stat);
+    ASSERT_TRUE(stat->second.__isset.row_num);
+    ASSERT_TRUE(stat->second.__isset.version);
+    EXPECT_EQ(tablet->max_continuous_version(), stat->second.version);
+}
+
 TEST_F(TabletMgrTest, DropTablet) {
     TCreateTabletReq create_tablet_req = get_create_tablet_request(111, 3333);
     std::vector<DataDir*> data_dirs;

@@ -36,7 +36,6 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
@@ -47,6 +46,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
@@ -123,6 +123,7 @@ import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -151,6 +152,7 @@ public class ExpressionAnalyzer {
     }
 
     public void analyze(Expr expression, AnalyzeState analyzeState, Scope scope) {
+        analyzeState.registerLocalScope(scope);
         Visitor visitor = new Visitor(analyzeState, session);
         bottomUpAnalyze(visitor, expression, scope);
     }
@@ -161,6 +163,7 @@ public class ExpressionAnalyzer {
     }
 
     public void analyzeWithVisitor(Expr expression, AnalyzeState analyzeState, Scope scope, Visitor visitor) {
+        analyzeState.registerLocalScope(scope);
         bottomUpAnalyze(visitor, expression, scope);
     }
 
@@ -450,6 +453,21 @@ public class ExpressionAnalyzer {
         }
 
         @Override
+        public Void visit(ParseNode node, Scope scope) {
+            node.accept(this, scope);
+            if (node instanceof Expr expression) {
+                PolymorphicFunctionAnalyzer.checkMapKeyType(expression.getType(), expression.getPos());
+                if (expression instanceof FunctionCallExpr call && call.getFn() != null) {
+                    // The final argument type also covers varargs.
+                    for (Type argumentType : call.getFn().getArgs()) {
+                        PolymorphicFunctionAnalyzer.checkMapKeyType(argumentType, expression.getPos());
+                    }
+                }
+            }
+            return null;
+        }
+
+        @Override
         public Void visitExpression(Expr node, Scope scope) {
             throw new SemanticException("not yet implemented: expression analyzer for " + node.getClass().getName(),
                     node.getPos());
@@ -713,6 +731,8 @@ public class ExpressionAnalyzer {
             // construct a new scope to analyze the lambda function
             Scope lambdaScope = new Scope(args, scope);
             ExpressionAnalyzer.analyzeExpression(node.getChild(0), this.analyzeState, lambdaScope, this.session);
+            AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                    node.getChild(0), AIFunctionUsageAnalyzer.PlacementContext.LAMBDA_FUNCTION_BODY);
             node.setType(FunctionType.FUNCTION);
             scope.clearLambdaInputs();
             return null;
@@ -757,11 +777,11 @@ public class ExpressionAnalyzer {
         public Void visitBinaryPredicate(BinaryPredicate node, Scope scope) {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
+            final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
 
             Type compatibleType =
                     TypeManager.getCompatibleTypeForBinary(!node.getOp().isNotRangeComparison(), type1, type2);
             // check child type can be cast
-            final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
             if (!TypeManager.canCastTo(type1, compatibleType)) {
                 throw new SemanticException(String.format(ERROR_MSG, type1.toSql(), type2.toSql()), node.getPos());
             }
@@ -798,6 +818,15 @@ public class ExpressionAnalyzer {
                 String msg = String.format("No matching function with signature: %s(%s)", funcOpName, Joiner.on(", ")
                         .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
                 throw new SemanticException(msg, node.getPos());
+            }
+            String fnName = fn.getFunctionName().getFunction();
+            if (FunctionSet.SECONDS_ADD.equals(fnName) || FunctionSet.SECONDS_SUB.equals(fnName)) {
+                // A literal amount with more than 6 decimals is refused here already, so that a definition that uses it,
+                // such as a generated column or a view, is refused when it is created rather than each time it is used
+                BigDecimal seconds = IntervalSeconds.literalValue(node.getChild(1));
+                if (seconds != null) {
+                    IntervalSeconds.split(seconds, node.getPos());
+                }
             }
             node.setType(fn.getReturnType());
             return null;
@@ -901,14 +930,17 @@ public class ExpressionAnalyzer {
                         "subquery must return the same number of columns as provided by the IN predicate",
                         node.getPos());
             }
-
+            if (leftTypes.stream().anyMatch(Type::isGeoType) || rightTypes.stream().anyMatch(Type::isGeoType)) {
+                throw new SemanticException("InPredicate of GEOGRAPHY/GEOMETRY types is not supported", node.getPos());
+            }
             for (int i = 0; i < rightTypes.size(); ++i) {
                 if (leftTypes.get(i).isJsonType() || rightTypes.get(i).isJsonType() || leftTypes.get(i).isMapType() ||
                         rightTypes.get(i).isMapType() || leftTypes.get(i).isStructType() ||
                         rightTypes.get(i).isStructType()) {
                     throw new SemanticException("InPredicate of JSON, Map, Struct types is not supported");
                 }
-                if (!TypeManager.canCastTo(leftTypes.get(i), rightTypes.get(i))) {
+                if (leftTypes.get(i).hasNestedGeoType() || rightTypes.get(i).hasNestedGeoType() ||
+                        !TypeManager.canCastTo(leftTypes.get(i), rightTypes.get(i))) {
                     throw new SemanticException(
                             "in predicate type " + leftTypes.get(i).toSql() + " with type " + rightTypes.get(i).toSql()
                                     + " is invalid");
@@ -1151,6 +1183,9 @@ public class ExpressionAnalyzer {
                 node.setFn(fn);
                 node.setType(fn.getReturnType());
                 FunctionAnalyzer.analyze(node);
+                verifyNoAIInConditionalFunction(node);
+                checkGetQueryProfileAccess(node);
+                Authorizer.checkAIFunctionUsage(session, node);
                 return null;
             }
 
@@ -1175,6 +1210,9 @@ public class ExpressionAnalyzer {
                     node.setFn(fn);
                     node.setType(fn.getReturnType());
                     FunctionAnalyzer.analyze(node);
+                    verifyNoAIInConditionalFunction(node);
+                    checkGetQueryProfileAccess(node);
+                    Authorizer.checkAIFunctionUsage(session, node);
                     return null;
                 }
                 // Try to provide a more user-friendly error message for positional calls
@@ -1189,7 +1227,30 @@ public class ExpressionAnalyzer {
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
+            verifyNoAIInConditionalFunction(node);
+            checkGetQueryProfileAccess(node);
+            Authorizer.checkAIFunctionUsage(session, node);
             return null;
+        }
+
+        // get_query_profile() serves the same payload as ANALYZE PROFILE through a BE-side RPC that carries no
+        // caller identity, so the access rule is applied here, once the call has resolved to the builtin; a UDF
+        // that happens to share the name never touches the profile RPC and is left alone.
+        private void checkGetQueryProfileAccess(FunctionCallExpr node) {
+            if (Authorizer.isGetQueryProfileBuiltin(node.getFn()) && node.getChildren().size() == 1) {
+                Authorizer.checkGetQueryProfileAccess(session, node.getChild(0));
+            }
+        }
+
+        private void verifyNoAIInConditionalFunction(FunctionCallExpr node) {
+            String resolvedFunctionName = node.getFn().functionName();
+            if (FunctionSet.IF.equalsIgnoreCase(resolvedFunctionName)
+                    || FunctionSet.IFNULL.equalsIgnoreCase(resolvedFunctionName)
+                    || FunctionSet.NULLIF.equalsIgnoreCase(resolvedFunctionName)
+                    || FunctionSet.COALESCE.equalsIgnoreCase(resolvedFunctionName)) {
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        node, AIFunctionUsageAnalyzer.PlacementContext.CONDITIONAL_EXPRESSION);
+            }
         }
 
         /**
@@ -1593,7 +1654,8 @@ public class ExpressionAnalyzer {
 
             Type compatibleType = BooleanType.BOOLEAN;
             if (null != caseExpr) {
-                compatibleType = TypeManager.getCompatibleTypeForCaseWhen(whenTypes);
+                compatibleType = whenTypes.stream().anyMatch(Type::hasNestedGeoType) ? InvalidType.INVALID :
+                        TypeManager.getCompatibleTypeForCaseWhen(whenTypes);
             }
 
             for (Type type : whenTypes) {
@@ -1624,6 +1686,8 @@ public class ExpressionAnalyzer {
             }
 
             node.setType(returnType);
+            AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                    node, AIFunctionUsageAnalyzer.PlacementContext.CONDITIONAL_EXPRESSION);
             return null;
         }
 
@@ -1663,7 +1727,7 @@ public class ExpressionAnalyzer {
             String funcType = node.getFuncType();
             if (funcType.equalsIgnoreCase(FunctionSet.DATABASE) || funcType.equalsIgnoreCase(FunctionSet.SCHEMA)) {
                 node.setType(VarcharType.VARCHAR);
-                node.setStrValue(ClusterNamespace.getNameFromFullName(session.getDatabase()));
+                node.setStrValue(session.getDatabase());
             } else if (funcType.equalsIgnoreCase(FunctionSet.USER)
                     || funcType.equalsIgnoreCase(FunctionSet.SESSION_USER)) {
                 node.setType(VarcharType.VARCHAR);

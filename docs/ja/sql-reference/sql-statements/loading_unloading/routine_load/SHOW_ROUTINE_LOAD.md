@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Routine Load ジョブの実行情報を表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW ROUTINE LOAD
@@ -12,6 +13,8 @@ import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadP
 Routine Load ジョブの実行情報を表示します。
 
 <RoutineLoadPrivNote />
+
+SHOW ROUTINE LOAD は、ロード先テーブルに対して少なくとも 1 つの権限を持つ場合、または OPERATE 権限を持つ場合に、Routine Load ジョブを表示します。ロード先テーブルに対する SELECT 権限がない場合、`JobProperties`、`DataSourceProperties`、`CustomProperties`、`ErrorLogUrls`、`TrackingSQL`、`OtherMsg` は NULL になり、`ReasonOfStateChanged` はエラーコードのみを保持します。`root` ユーザーはすべての Routine Load ジョブの完全な情報を参照できます。ロード先テーブルが削除された Routine Load ジョブは、`root` ユーザーにのみ完全な情報が表示され、OPERATE 権限を持つユーザーには上記のフィールドを除いた情報が表示されます。
 
 ## 構文
 
@@ -51,7 +54,7 @@ SHOW [ALL] ROUTINE LOAD [ FOR [<db_name>.]<job_name> | FROM <db_name> ]
 | EndTime              | ロードジョブが `STOPPED` 状態になった日時。 |
 | DbName               | ロードジョブのターゲットテーブルが属するデータベース。  |
 | TableName            | ロードジョブのターゲットテーブル。                                |
-| State                | ロードジョブのステータス。含まれる状態:<ul><li>`NEED_SCHEDULE`: ロードジョブはスケジュール待ちです。CREATE ROUTINE LOAD または RESUME ROUTINE LOAD を使用して Routine Load ジョブを作成または再開すると、ロードジョブは最初に `NEED_SCHEDULE` 状態になります。</li><li>`RUNNING`: ロードジョブは実行中です。`Statistic` と `Progress` を通じて Routine Load ジョブの消費進捗を確認できます。</li><li>`PAUSED`: ロードジョブは一時停止中です。`ReasonOfStateChanged` と `ErrorLogUrls` を参照してトラブルシューティングを行えます。エラーを修正した後、RESUME ROUTINE LOAD を使用して Routine Load ジョブを再開できます。</li><li>`CANCELLED`: ロードジョブはキャンセルされました。`ReasonOfStateChanged` と `ErrorLogUrls` を参照してトラブルシューティングを行えます。ただし、エラーを修正した後、この状態のロードジョブを復元することはできません。</li><li>`STOPPED`: ロードジョブは停止しました。この状態のロードジョブを復元することはできません。</li><li>`UNSTABLE`: ロードジョブは不安定です。Routine Load ジョブ内のタスクが遅延している場合（つまり、消費されているメッセージのタイムスタンプと現在の時間の差がこの FE パラメータ [`routine_load_unstable_threshold_second`](../../../../administration/management/FE_configuration.md#routine_load_unstable_threshold_second) を超え、データソースに未消費のメッセージが存在する場合）、Routine Load ジョブは `UNSTABLE` 状態に設定されます。</li></ul> |
+| State                | ロードジョブのステータス。含まれる状態:<ul><li>`NEED_SCHEDULE`: ロードジョブはスケジュール待ちです。CREATE ROUTINE LOAD または RESUME ROUTINE LOAD を使用して Routine Load ジョブを作成または再開すると、ロードジョブは最初に `NEED_SCHEDULE` 状態になります。</li><li>`RUNNING`: ロードジョブは実行中です。`Statistic` と `Progress` を通じて Routine Load ジョブの消費進捗を確認できます。</li><li>`PAUSED`: ロードジョブは一時停止中です。`ReasonOfStateChanged` と `ErrorLogUrls` を参照してトラブルシューティングを行えます。エラーを修正した後、RESUME ROUTINE LOAD を使用して Routine Load ジョブを再開できます。</li><li>`CANCELLED`: ロードジョブはキャンセルされました。`ReasonOfStateChanged` と `ErrorLogUrls` を参照してトラブルシューティングを行えます。ただし、エラーを修正した後、この状態のロードジョブを復元することはできません。</li><li>`STOPPED`: ロードジョブは停止しました。この状態のロードジョブを復元することはできません。</li><li>`UNSTABLE`: ロードジョブは不安定です。Routine Load ジョブ内のタスクが遅延している場合（つまり、消費されているメッセージのタイムスタンプと現在の時間の差がこの FE パラメータ [`routine_load_unstable_threshold_second`](../../../../administration/configuration/FE_parameters/FE_parameters.md#routine_load_unstable_threshold_second) を超え、データソースに未消費のメッセージが存在する場合）、Routine Load ジョブは `UNSTABLE` 状態に設定されます。</li></ul> |
 | DataSourceType       | データソースのタイプ。固定値: `KAFKA`。           |
 | CurrentTaskNum       | ロードジョブ内の現在のタスク数。                     |
 | JobProperties        | ロードジョブのプロパティ。消費されるパーティションやカラムマッピングなど。 |

@@ -1,6 +1,8 @@
 ---
+sidebar_position: 120
 displayed_sidebar: docs
 description: "StarRocks 共有データクラスタで Compaction を管理・監視し、クエリ効率を向上させる方法。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 共有データクラスタの Compaction
@@ -133,12 +135,17 @@ mysql> SHOW PROC '/compactions';
 
 #### Compaction タスクの実行詳細の表示
 
-各 compaction タスクは複数のサブタスクに分割され、それぞれがタブレットに対応します。システム定義ビュー `information_schema.be_cloud_native_compactions` をクエリすることで、各サブタスクの実行詳細を表示できます。
+`information_schema.be_cloud_native_compactions` の各行は、1 つの Tablet Compaction 実行単位を表します。
+Tablet Parallel Compaction が有効な場合、各 Parallel Subtask は、同じ Transaction ID と Tablet ID、異なる
+`SUBTASK_ID` を持つ別々の行として返されます。Parallel Compaction の merged context は実行単位ではなく
+集約用オブジェクトであるため、返されません。
 
 例:
 
 ```Plain
-mysql> SELECT * FROM information_schema.be_cloud_native_compactions;
+mysql> SELECT BE_ID, TXN_ID, TABLET_ID, VERSION, SKIPPED, RUNS, START_TIME, FINISH_TIME,
+              PROGRESS, STATUS, PROFILE
+       FROM information_schema.be_cloud_native_compactions;
 +-------+--------+-----------+---------+---------+------+---------------------+-------------+----------+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | BE_ID | TXN_ID | TABLET_ID | VERSION | SKIPPED | RUNS | START_TIME          | FINISH_TIME | PROGRESS | STATUS | PROFILE                                                                                                                                                                                         |
 +-------+--------+-----------+---------+---------+------+---------------------+-------------+----------+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -170,6 +177,44 @@ mysql> SELECT * FROM information_schema.be_cloud_native_compactions;
   - `read_local_count`: サブタスクがローカルキャッシュからデータを読み取った回数。
   - `read_remote_count`: サブタスクがリモートストレージからデータを読み取った回数。
   - `in_queue_sec`: サブタスクがキューに滞在する時間。単位: 秒。
+- `SUBTASK_ID`: 0 から始まる Parallel Subtask ID です。通常の非 Parallel Tablet Task では `NULL` です。
+  `BE_ID`、`TXN_ID`、`TABLET_ID` が同じで `SUBTASK_ID` が異なる行は、同じ Tablet Compaction の Parallel
+  実行単位です。
+
+`PROFILE` のフルチェーンフィールドは、正確に時間を照合できるようナノ秒単位で記録されます。
+
+- プロファイルの状態:
+  - `profile_final`: タスクの実行中は `false`、完了後は `true` です。実行中のプロファイルでは、現在の
+    attempt の経過時間を `task_total_ns` に加え、executor に入った後は現在の executor の経過時間も
+    `task_execute_ns` に加えます。その他のフェーズタイマーは現在のスコープを抜けたときに更新されるため、
+    実行中の `task_unaccounted_ns` は一時的に大きくなる場合があります。
+- タスク全体の時間:
+  - `queue_wait_ns`: タスクが CN の Compaction キューに入ってから worker が開始するまでの時間です。
+    `task_total_ns` には含まれません。
+  - `task_prepare_ns`: 入力 Rowset の選択、Tablet メタデータのロード、および Compaction Task の構築に
+    使用した時間です。
+  - `task_execute_ns`: Horizontal、Vertical、または Index Compaction executor 内の wall time です。
+    実行中のプロファイルでは、現在の executor の経過時間も含まれます。
+  - `task_total_ns`: CN worker がタスクの準備を開始してから、プロファイルのスナップショットまたはタスク
+    の完了までの wall time です。
+  - `task_accounted_ns`: 重複しない最上位フェーズの合計です。
+  - `task_unaccounted_ns`: `task_total_ns - task_accounted_ns` です。値が大きい場合は、未計測のフェーズ、
+    または scheduler/runtime のオーバーヘッドがあることを示します。
+- 重複しない実行フェーズ: `input_prepare_ns`、`reader_prepare_ns`、`reader_open_ns`、
+  `reader_get_next_ns`、`reader_close_ns`、`chunk_transform_ns`、`writer_create_ns`、`writer_open_ns`、
+  `writer_write_ns`、`writer_flush_ns`、`writer_finish_ns`、`writer_close_ns`、`mask_io_ns`、
+  `txn_log_build_ns`、`pk_sst_merge_ns`、`txn_log_write_ns`、`preload_compaction_state_ns`、
+  `tablet_write_log_ns`。
+- Reader 内部の詳細: `read_remote_ns`、`read_local_ns`、`create_segment_iter_ns`、`segment_init_ns`、
+  `column_iterator_init_ns`、`block_load_ns`、`block_fetch_ns`、`block_seek_ns`、`decompress_ns`、
+  `decode_dict_ns`、および Delete Vector/Filter の各タイマーです。これらは Reader フェーズに含まれるため、
+  `task_accounted_ns` に再度加算しないでください。
+- Vertical Compaction の詳細: `column_group_count`、`vertical_key_group_ns`、`vertical_value_group_ns`。
+  Column Group の時間は Reader/Writer フェーズと重複する診断値であり、加算対象ではありません。
+
+タスクが完了すると、同じ Tablet 単位のプロファイルが Tablet ID、Transaction ID、ステータス、Table ID、
+Partition ID とともに CN INFO ログに書き込まれます。タスクが `be_cloud_native_compactions` から消えた後も、
+個別タスクの詳細を追跡できます。
 
 ### Compaction タスクの設定
 
@@ -193,16 +238,16 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
 - 導入バージョン: v3.1.0
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_tables" = "11111;22222");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "11111;22222");
 ```
 
-##### lake_compaction_disable_tables
+##### lake_compaction_disable_ids
 
 - デフォルト：""
 - タイプ：String
 - 単位：-
 - 変更可能：はい
-- 説明：特定のテーブルの compaction を無効にします。これにより、すでに開始された compaction には影響しません。この項目の値はテーブル ID です。複数の値は ';' で区切られます。
+- 説明：特定のテーブルまたはパーティションの compaction を無効にします。これにより、すでに開始された compaction には影響しません。この項目の値はテーブル ID またはパーティション ID です。複数の値は ';' で区切られます。v3.4.5 および v3.5.0 より前のバージョンでは、この項目の名前は `lake_compaction_disable_tables` で、テーブル ID のみをサポートします。旧名は引き続きエイリアスとして使用できます。
 - 導入バージョン：v3.2.7
 
 #### CN パラメータ
@@ -253,6 +298,15 @@ WHERE name = "compact_threads";
 >
 > 本番環境では、`max_cumulative_compaction_num_singleton_deltas` を `100` に設定して、Compaction タスクを加速し、そのリソース消費を減らすことを推奨します。
 
+##### lake_pk_compaction_max_rowsets_per_level
+
+- デフォルト: 20
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタ内の Primary Key テーブルで、あるサイズレベルの compaction 待ちの rowset がこの数に達すると、そのレベルのスコアが最高でなくてもマージされます。Size-tiered Compaction ポリシーは各ラウンドでスコアが最も高いレベルのみをマージします。ロードが継続している間は、最新の小さな rowset のレベルが毎回最高スコアとなるため、より大きな rowset（以前の compaction の出力や中規模のロード）からなるレベルは増え続けます。その結果、クエリが読み取る segment 数が増え、compaction の完了直後に compaction スコアのスパイクとして現れます。選択されていないレベルの compaction 待ちの rowset がこの数に達し、かつそれらが選択済みの rowset と同じ compaction タスクに収まる場合、そのレベルはその compaction タスクでマージされます。`0` に設定するとこの動作は無効になります。
+- 導入バージョン: -
+
 ### Compaction タスクの手動トリガー
 
 ```SQL
@@ -292,7 +346,9 @@ Compaction はクエリパフォーマンスにとって重要であるため、
 
 ### クエリの遅延
 
-タイムリーでない Compaction によって引き起こされるクエリの遅延を特定するには、SQL プロファイル内で `SegmentsReadCount` を `TabletCount` で割った値を確認します。これが 10 以上の大きな値である場合、タイムリーでない Compaction がクエリの遅延の原因である可能性があります。
+共有データクラスタでタイムリーでない Compaction によって引き起こされるクエリの遅延を特定するには、SQL プロファイルの単一の Fragment 内で `PhySegmentsCount` を `TabletCount` で割った値を確認します。これが数十以上の大きな値である場合、タイムリーでない Compaction がクエリの遅延の原因である可能性があります。
+
+`PhySegmentsCount` は共有データスキャンでのみ提供されます。共有なしクラスタ、または `PhySegmentsCount` を含まない旧バージョンのプロファイルでは、代わりに単一の Fragment 内で `SegmentsReadCount` を `TabletCount` で割った値を使用します。共有データスキャンと共有なしスキャンの両方で、Tablet 内並列スキャンにより、複数の split reader が `SegmentsReadCount` で同じセグメントを重複してカウントする可能性があります。`PhySegmentsCount` がある場合は優先して使用してください。どちらのアーキテクチャでも、並列スキャンで代替カウンターを使用する場合、比率が高いことだけでは Compaction の問題があると判断できません。
 
 ### クラスタ内の高い Max Compaction スコア
 

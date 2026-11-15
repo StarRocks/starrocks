@@ -64,14 +64,14 @@ public class SimpleSelectorTest {
         final PartitionIdentifier partitionIdentifier1 = new PartitionIdentifier(1, 2, 3);
         PartitionStatistics statistics1 = new PartitionStatistics(partitionIdentifier1);
         statistics1.setCompactionVersion(new PartitionVersion(1, 0));
-        statistics1.setCompactionScore(new Quantiles(0.0, 0.0, 0.0));
+        statistics1.setCompactionScore(new Quantiles(1.0, 1.0, 1.0));
         statistics1.setCurrentVersion(new PartitionVersion(MIN_COMPACTION_VERSIONS, System.currentTimeMillis()));
         statisticsList.add(statistics1);
 
         final PartitionIdentifier partitionIdentifier2 = new PartitionIdentifier(1, 2, 4);
         PartitionStatistics statistics2 = new PartitionStatistics(partitionIdentifier2);
         statistics2.setCompactionVersion(new PartitionVersion(1, 0));
-        statistics2.setCompactionScore(new Quantiles(0.0, 0.0, 0.0));
+        statistics2.setCompactionScore(new Quantiles(1.0, 1.0, 1.0));
         statistics2.setCurrentVersion(new PartitionVersion(MIN_COMPACTION_VERSIONS + 1, System.currentTimeMillis()));
         statisticsList.add(statistics2);
 
@@ -87,7 +87,7 @@ public class SimpleSelectorTest {
         final PartitionIdentifier partitionIdentifier = new PartitionIdentifier(1, 2, 4);
         PartitionStatistics statistics = new PartitionStatistics(partitionIdentifier);
         statistics.setCompactionVersion(new PartitionVersion(1, 0));
-        statistics.setCompactionScore(new Quantiles(0.0, 0.0, 0.0));
+        statistics.setCompactionScore(new Quantiles(1.0, 1.0, 1.0));
         statistics.setCurrentVersion(new PartitionVersion(MIN_COMPACTION_VERSIONS + 1, System.currentTimeMillis()));
         statisticsList.add(statistics);
 
@@ -98,5 +98,18 @@ public class SimpleSelectorTest {
         PartitionStatisticsSnapshot stat = new PartitionStatisticsSnapshot(statistics);
         Assertions.assertEquals(stat.getPartition(),
                             selector.select(statisticsList, new HashSet<Long>()).get(0).getPartition());
+    }
+
+    @Test
+    public void testZeroScoreSkipsAutomaticDispatchButAllowsManualRequest() {
+        PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 3));
+        statistics.setCompactionVersion(new PartitionVersion(1, 0));
+        statistics.setCurrentVersion(new PartitionVersion(MIN_COMPACTION_VERSIONS + 1,
+                System.currentTimeMillis()));
+        statistics.setCompactionScore(new Quantiles(0.0, 0.0, 0.0));
+
+        Assertions.assertTrue(selector.select(List.of(statistics), new HashSet<>()).isEmpty());
+        statistics.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+        Assertions.assertEquals(1, selector.select(List.of(statistics), new HashSet<>()).size());
     }
 }

@@ -70,6 +70,9 @@ public:
     // Use to filter the data by range distribution key
     std::optional<SeekRange> tablet_range;
 
+    // Independent AND of query ranges and physical tablet ownership.
+    std::optional<SeekRange> task_range;
+
     PredicateTree pred_tree;
     PredicateTree pred_tree_for_zone_map;
     RuntimeFilterPredicates runtime_filter_preds;
@@ -150,8 +153,9 @@ public:
 
     // True when a predicate for this scan is evaluated ABOVE the segment iterator
     // (OlapChunkSource not_push_down_conjuncts / _non_pushdown_pred_tree). The iterator cannot fold
-    // such a predicate into the ANN candidate, so a segment-level k-limit would under-return; the
-    // vector filter resolver routes these queries to exact brute-force instead. See design doc §7.
+    // such a predicate into the ANN candidate, so a segment-level k-limit can under-return; the
+    // vector filter resolver may route these queries to exact brute-force according to the top-k
+    // underfill fallback policy. See design doc §7.
     bool has_predicate_above_iterator = false;
 
 public:

@@ -34,6 +34,11 @@ StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_
     }
 }
 
+bool is_builtin_inverted_index(const TabletIndex& tablet_index) {
+    auto imp_type = get_inverted_imp_type(tablet_index);
+    return imp_type.ok() && *imp_type == InvertedImplementType::BUILTIN;
+}
+
 std::string inverted_index_parser_type_to_string(InvertedIndexParserType parser_type) {
     switch (parser_type) {
     case InvertedIndexParserType::PARSER_NONE:

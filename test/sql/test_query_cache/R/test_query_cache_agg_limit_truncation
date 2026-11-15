@@ -1,0 +1,75 @@
+-- name: test_query_cache_agg_limit_truncation
+CREATE TABLE t1 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1", "colocate_with" = "cg1_${uuid0}");
+-- result:
+-- !result
+INSERT INTO t1
+SELECT date_add('2022-01-01', interval (generate_series % 31) day), generate_series % 4 + 1, 1
+FROM TABLE(generate_series(1, 124));
+-- result:
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+set query_cache_hot_partition_num = 100;
+-- result:
+-- !result
+set enable_query_cache = false;
+-- result:
+-- !result
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t1 group by c1 limit 10) x;
+-- result:
+4	124	31	31
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t1 group by c1 limit 10) x;
+-- result:
+4	124	31	31
+-- !result
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t1 group by c1 limit 10) x;
+-- result:
+4	124	31	31
+-- !result
+CREATE TABLE t2 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1", "colocate_with" = "cg2_${uuid0}");
+-- result:
+-- !result
+INSERT INTO t2
+SELECT date_add('2022-01-01', interval (generate_series % 31) day), generate_series % 4 + 1, 1
+FROM TABLE(generate_series(1, 124));
+-- result:
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t2 where dt >= '2022-01-01' group by c1 limit 40) x;
+-- result:
+4	124	31	31
+-- !result
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t2 where dt >= '2022-01-27' group by c1 limit 40) x;
+-- result:
+4	20	5	5
+-- !result
+set enable_query_cache = false;
+-- result:
+-- !result
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t2 where dt >= '2022-01-27' group by c1 limit 40) x;
+-- result:
+4	20	5	5
+-- !result

@@ -19,8 +19,6 @@
 
 namespace starrocks {
 
-class RowDescriptor;
-
 namespace pipeline {
 class UnifiedExecPlanFragmentParams;
 }
@@ -28,7 +26,7 @@ class UnifiedExecPlanFragmentParams;
 class PipelineSinkBuilder {
 public:
     static Status build(pipeline::PipelineBuilderContext* context, pipeline::OpFactories upstream,
-                        const pipeline::UnifiedExecPlanFragmentParams& request, const RowDescriptor& row_desc);
+                        const pipeline::UnifiedExecPlanFragmentParams& request);
 };
 
 } // namespace starrocks

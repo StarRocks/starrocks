@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "verbose_session_variables 提供包括默认值的会话变量详细信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # verbose_session_variables

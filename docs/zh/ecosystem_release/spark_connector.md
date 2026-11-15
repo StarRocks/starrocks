@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks Connector for Apache Spark 的发布说明和更新日志。"
+products: [oss]
 ---
 
 # Spark connector 版本发布
@@ -9,7 +10,7 @@ description: "StarRocks Connector for Apache Spark 的发布说明和更新日�
 
 **使用文档：**
 
-- [使用 Spark connector 导入数据至 StarRocks](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/)
+- [使用 Spark connector 导入数据至 StarRocks](https://docs.starrocks.io/zh/docs/loading/spark/Spark-connector-starrocks/)
 - [使用 Spark connector 从 StarRocks 读取数据](https://docs.starrocks.io/zh/docs/unloading/Spark_connector/)
 
 **源码下载地址：**[starrocks-connector-for-apache-spark](https://github.com/StarRocks/starrocks-connector-for-apache-spark)
@@ -21,19 +22,43 @@ description: "StarRocks Connector for Apache Spark 的发布说明和更新日�
 您可以通过以下方式获取 Spark connector 的 JAR 包：
 
 - 从 [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks) 直接下载编译好的 JAR 包。
-- 在 Maven 项目的 pom 文件添加 Spark connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/)。
-- 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/)。
+- 在 Maven 项目的 pom 文件添加 Spark connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/spark/Spark-connector-starrocks/)。
+- 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/spark/Spark-connector-starrocks/)。
 
 **版本要求：**
 
-| Connector | Spark         | StarRocks  | Java | Scala |
-| --------- | ------------- | ---------- | ---- | ----- |
-| 1.1.1     | 3.2, 3.3, 3.4 | 2.5 及以上 | 8    | 2.12  |
-| 1.1.0     | 3.2, 3.3, 3.4 | 2.5 及以上 | 8    | 2.12  |
+| Spark connector | Spark              | StarRocks     | Java | Scala |
+| --------------- | ------------------ | ------------- | ---- | ----- |
+| 1.1.4           | 4.0, 4.1           | 2.5 及以上     | 17   | 2.13  |
+| 1.1.4           | 3.3, 3.4, 3.5      | 2.5 及以上     | 8    | 2.12  |
+| 1.1.3           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上     | 8    | 2.12  |
+| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上     | 8    | 2.12  |
+| 1.1.1           | 3.2, 3.3, or 3.4   | 2.5 及以上     | 8    | 2.12  |
+| 1.1.0           | 3.2, 3.3, or 3.4   | 2.5 及以上     | 8    | 2.12  |
 
 ## 发布记录
 
 ### 1.1
+
+#### 1.1.4
+
+该版本主要包含一些新特性和改进。
+
+**新增特性**
+
+- 新增对 StarRocks catalog 的支持。[#109](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/109)
+- 新增对 `bitmap_hash64` 的支持。[#130](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/130)
+- 支持嵌套字段（Struct、Array 和 Map）。[#152](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/152)
+- 支持通过 Spark catalog 进行数据读写。[#140](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/140)
+- 支持 Spark 4.0 和 Scala 2.13。[#154](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/154)
+
+**功能优化**
+
+- 新增安全策略。[#139](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/139)
+
+**问题修复**
+
+- 修复 DataSource V2 中的过滤器下推错误。[#141](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/141)
 
 #### 1.1.3
 
@@ -74,7 +99,7 @@ description: "StarRocks Connector for Apache Spark 的发布说明和更新日�
 
 > **注意**
 >
-> 升级至本版本，涉及行为变更。详细信息，参见[升级 Spark connector](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/#升级-spark-connector)。
+> 升级至本版本，涉及行为变更。详细信息，参见[升级 Spark connector](https://docs.starrocks.io/zh/docs/loading/spark/Spark-connector-starrocks/#升级-spark-connector)。
 
 **新增特性**
 

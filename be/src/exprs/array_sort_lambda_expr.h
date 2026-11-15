@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <unordered_set>
 
 #include "column/nullable_column.h"
@@ -38,6 +39,12 @@ public:
 
     void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
 
+    ArraySortLambdaExpr(const ArraySortLambdaExpr& other)
+            : Expr(other),
+              _outer_common_exprs(other._outer_common_exprs),
+              _initial_required_slots(other._initial_required_slots),
+              _comparator_validated(other._comparator_validated.load(std::memory_order_relaxed)) {}
+
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ArraySortLambdaExpr(*this)); }
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
@@ -59,8 +66,13 @@ private:
     // the slots initially required for lambda function evaluation, excluding lambda arguments,
     // other common expressions can be evaluated based on these slots.
     std::unordered_set<SlotId> _initial_required_slots;
-    // Cache for strict weak ordering validation result to avoid duplicate checks
-    mutable bool _comparator_validated = false;
-    mutable Status _comparator_validation_status = Status::OK();
+    // Set once the lambda comparator has passed the strict weak ordering validation, so that
+    // later chunks skip it. The Expr tree is shared by every pipeline driver of the fragment
+    // (a driver only clones its ExprContext), so this is read and written concurrently and
+    // must stay a lock-free flag. Only the OK verdict is cached: an error Status owns heap
+    // state, and publishing one through a shared member races with a driver that is copying
+    // it out at the same time (use-after-free). A failing comparator fails the query anyway,
+    // so re-running the cheap sampled validation on every chunk until then costs nothing.
+    std::atomic<bool> _comparator_validated{false};
 };
 } // namespace starrocks

@@ -1,0 +1,27 @@
+-- name: test_nljoin_naaj_unmatched_probe_rows
+create table naaj_probe_${uuid0} (k int)
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into naaj_probe_${uuid0} values (10), (10), (3);
+-- result:
+-- !result
+create table naaj_build_${uuid0} (c int)
+duplicate key(c)
+distributed by hash(c) buckets 2
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into naaj_build_${uuid0} values (null), (10);
+-- result:
+-- !result
+select count(*) from naaj_probe_${uuid0} p where 10 not in (select c from naaj_build_${uuid0} b where b.c != p.k);
+-- result:
+2
+-- !result
+select count(*) from naaj_probe_${uuid0} p where 3 not in (select c from naaj_build_${uuid0} b where b.c != p.k);
+-- result:
+3
+-- !result

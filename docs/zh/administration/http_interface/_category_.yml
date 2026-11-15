@@ -1,0 +1,7 @@
+position: 60
+label: 'HTTP Interface'
+collapsible: true
+collapsed: true
+link:
+  id: http_interface
+  type: doc

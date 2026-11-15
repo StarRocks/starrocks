@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW ALTER MATERIALIZED VIEW shows the building status of synchronous materialized views."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW ALTER MATERIALIZED VIEW
@@ -17,6 +18,7 @@ This operation does not require privileges.
 
 ```SQL
 SHOW ALTER MATERIALIZED VIEW [ { FROM | IN } db_name]
+[WHERE TableName|CreateTime|FinishedTime|State] [ORDER BY] [LIMIT]
 ```
 
 Parameters in brackets [] is optional.
@@ -26,6 +28,7 @@ Parameters in brackets [] is optional.
 | **Parameter** | **Required** | **Description**                                              |
 | ------------- | ------------ | ------------------------------------------------------------ |
 | db_name       | no           | The name of the database to which the materialized view resides. If this parameter is not specified, the current database is used by default. |
+| WHERE, ORDER BY, LIMIT | no  | Filter, sort and truncate the jobs returned. The columns they accept are `TableName`, `CreateTime`, `FinishedTime` and `State`. `FinishTime` is accepted as an alias of `FinishedTime`. |
 
 ## Returns
 

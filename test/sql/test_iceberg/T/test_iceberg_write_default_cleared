@@ -1,0 +1,43 @@
+-- name: test_iceberg_write_default_cleared
+-- A column added with a DEFAULT gets an initial-default (fills older data files on read) and a write-default
+-- (used by INSERT). Clearing the default drops only the write-default: per the Iceberg spec, INSERT must then
+-- write NULL, while rows from files written before the column existed still read the initial-default.
+
+create external catalog iceberg_wdef_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create database iceberg_wdef_${uuid0}.db_${uuid0};
+set catalog iceberg_wdef_${uuid0};
+use db_${uuid0};
+
+create table t(id int) properties ("format-version" = "3", "location" = "oss://${oss_bucket}/iceberg_wdef_${uuid0}/t");
+insert into t values (1);
+
+alter table t add column c int default '7';
+insert into t (id) values (2);
+
+alter table t modify column c int default '8';
+insert into t (id) values (3);
+
+alter table t modify column c int default null;
+insert into t (id) values (4);
+
+-- expected: 1 7 (initial-default), 2 7, 3 8, 4 NULL
+select id, c from t order by id;
+-- expected: c has no default
+desc t;
+-- expected: SHOW CREATE TABLE shows no default for c, not the initial-default
+function: assert_query_contains("show create table iceberg_wdef_${uuid0}.db_${uuid0}.t", '`c` int(11) DEFAULT NULL')
+function: assert_query_not_contains("show create table iceberg_wdef_${uuid0}.db_${uuid0}.t", 'DEFAULT "7"')
+
+drop table t force;
+drop database db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_wdef_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/iceberg_wdef_${uuid0} >/dev/null || echo "exit 0" >/dev/null

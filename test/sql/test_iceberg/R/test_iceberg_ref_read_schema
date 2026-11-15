@@ -1,0 +1,144 @@
+-- name: test_iceberg_ref_read_schema
+create external catalog iceberg_ref_schema_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+create database iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/ref_schema_db_${uuid0}/db"
+);
+-- result:
+-- !result
+create table iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_ref(
+    id int,
+    a string,
+    b int
+) properties ("format-version" = "2");
+-- result:
+-- !result
+insert into iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_ref values (1, 'x', 10), (2, 'y', 20);
+-- result:
+-- !result
+alter table iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_ref create branch br1;
+-- result:
+-- !result
+alter table iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_ref create tag tg1;
+-- result:
+-- !result
+alter table iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_ref drop column b;
+-- result:
+-- !result
+alter table iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_ref add column b int;
+-- result:
+-- !result
+alter table iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_ref rename column a to a2;
+-- result:
+-- !result
+insert into iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_ref values (3, 'z', 30);
+-- result:
+-- !result
+select * from iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_ref for version as of 'br1' order by id;
+-- result:
+1	x	None
+2	y	None
+-- !result
+select a2, b from iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_ref for version as of 'br1' where b is null order by a2;
+-- result:
+x	None
+y	None
+-- !result
+select * from iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_ref for version as of 'tg1' order by id;
+-- result:
+1	x	10
+2	y	20
+-- !result
+select a, b from iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_ref for version as of 'tg1' where b = 20;
+-- result:
+y	20
+-- !result
+select * from iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_ref order by id;
+-- result:
+1	x	None
+2	y	None
+3	z	30
+-- !result
+create table iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_eq(
+    id int,
+    v string
+) properties ("format-version" = "2");
+-- result:
+-- !result
+insert into iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_eq values (1, 'a'), (2, 'b'), (3, 'c');
+-- result:
+-- !result
+create table iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_eq_deletes(
+    id int
+) properties ("format-version" = "2", "location" = "oss://${oss_bucket}/ref_schema_db_${uuid0}/t_eq_deletes");
+-- result:
+-- !result
+insert into iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_eq_deletes values (2);
+-- result:
+-- !result
+alter table iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_eq execute add_equality_delete_files(location="oss://${oss_bucket}/ref_schema_db_${uuid0}/t_eq_deletes/data", file_format="parquet", equality_columns="id");
+-- result:
+-- !result
+alter table iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_eq create tag before_rename;
+-- result:
+-- !result
+alter table iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_eq create branch br_before_rename;
+-- result:
+-- !result
+alter table iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_eq rename column id to id2;
+-- result:
+-- !result
+insert into iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_eq values (4, 'd');
+-- result:
+-- !result
+select * from iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_eq for version as of 'before_rename' order by id;
+-- result:
+1	a
+3	c
+-- !result
+select count(*) from iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_eq for version as of 'before_rename';
+-- result:
+2
+-- !result
+select v from iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_eq for version as of 'before_rename' where id >= 2 order by v;
+-- result:
+c
+-- !result
+select * from iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_eq for version as of 'br_before_rename' order by id2;
+-- result:
+1	a
+3	c
+-- !result
+select * from iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_eq order by id2;
+-- result:
+1	a
+3	c
+4	d
+-- !result
+drop table iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_ref force;
+-- result:
+-- !result
+drop table iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_eq force;
+-- result:
+-- !result
+drop table iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0}.t_eq_deletes force;
+-- result:
+-- !result
+drop database iceberg_ref_schema_${uuid0}.ref_schema_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_ref_schema_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/ref_schema_db_${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

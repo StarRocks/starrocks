@@ -21,6 +21,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec_primitive/pipeline/operator_factory.h"
 #include "gen_cpp/InternalService_types.h"
+#include "runtime/descriptors.h"
 
 namespace arrow {
 class MemoryPool;
@@ -80,7 +81,7 @@ private:
 
 class MemoryScratchSinkOperatorFactory final : public OperatorFactory {
 public:
-    MemoryScratchSinkOperatorFactory(int32_t id, const RowDescriptor& row_desc, std::vector<TExpr> t_output_expr,
+    MemoryScratchSinkOperatorFactory(int32_t id, RecordDescriptor record_desc, std::vector<TExpr> t_output_expr,
                                      FragmentContext* const fragment_ctx);
 
     ~MemoryScratchSinkOperatorFactory() override = default;
@@ -99,7 +100,7 @@ private:
     void _increment_num_sinkers_no_barrier() { _num_sinkers.fetch_add(1, std::memory_order_relaxed); }
     void _prepare_id_to_col_name_map();
 
-    const RowDescriptor _row_desc;
+    const RecordDescriptor _record_desc;
     std::shared_ptr<arrow::Schema> _arrow_schema;
     std::vector<TExpr> _t_output_expr;
     std::vector<ExprContext*> _output_expr_ctxs;

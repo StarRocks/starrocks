@@ -145,7 +145,8 @@ public:
 
     string topn_memory_stats(size_t topn);
 
-    Status update_primary_index_memory_limit(int32_t update_memory_limit_percent);
+    // Re-derive the index cache capacity from update_memory_limit_percent.
+    void refresh_mem_limits();
 
     bool keep_pindex_bf() { return _keep_pindex_bf; }
     void set_keep_pindex_bf(bool keep_pindex_bf) { _keep_pindex_bf = keep_pindex_bf; }
@@ -169,6 +170,7 @@ private:
 
     std::unique_ptr<MemTracker> _compaction_state_mem_tracker;
 
+    std::atomic<int64_t> _last_expire_cache_check_millis{0};
     std::atomic<int64_t> _last_clear_expired_cache_millis{0};
 
     // DelVector related states

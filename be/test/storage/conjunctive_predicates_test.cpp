@@ -353,8 +353,7 @@ public:
         CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
                       .ok());
 
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
-        auto* tuple_desc = row_desc->tuple_descriptors()[0];
+        auto* tuple_desc = tbl->get_tuple_descriptor(row_tuples[0]);
 
         return tuple_desc;
     }
@@ -475,6 +474,26 @@ TEST_F(ConjunctiveTestFixture, test_connector_parse_conjuncts) {
     ConstPredicateNodePtr node{&and_node};
     ASSERT_TRUE(parser.can_pushdown(node));
     ASSERT_EQ(parser.column_id(slot), 1);
+}
+
+// A slot whose column the tablet schema does not carry must simply fail to push down.
+// TabletSchema::field_index() reports "not found" as size_t(-1), so an unguarded bound
+// check treats the miss as an out-of-range index and takes the whole BE down with it.
+TEST_F(ConjunctiveTestFixture, test_olap_parser_slot_missing_from_tablet_schema) {
+    auto tablet_schema = TabletSchema::create(create_tablet_schema(LogicalType::TYPE_INT));
+    OlapPredicateParser parser(tablet_schema);
+
+    SlotDescriptor missing{1, "not_in_schema", TYPE_INT_DESC};
+    ASSERT_FALSE(parser.can_pushdown(&missing));
+}
+
+// Guards the fix above against degenerating into an unconditional false.
+TEST_F(ConjunctiveTestFixture, test_olap_parser_slot_present_in_tablet_schema) {
+    auto tablet_schema = TabletSchema::create(create_tablet_schema(LogicalType::TYPE_INT));
+    OlapPredicateParser parser(tablet_schema);
+
+    SlotDescriptor present{1, "c1", TYPE_INT_DESC};
+    ASSERT_TRUE(parser.can_pushdown(&present));
 }
 
 INSTANTIATE_TEST_SUITE_P(ConjunctiveTest, ConjunctiveTestFixture,

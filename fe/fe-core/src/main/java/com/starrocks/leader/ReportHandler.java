@@ -389,7 +389,7 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
     }
 
     private void putToQueue(ReportTask reportTask) throws Exception {
-        if (isStopped()) {
+        if (isStopRequested()) {
             // Demotion is in progress: reject so the caller can translate this into a NOT_MASTER
             // response (see LeaderImpl#report). Silently dropping would ACK the request as OK and
             // the BE would never retry against the new leader, losing the report update.
@@ -750,13 +750,18 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                                      *    partitionCommitInfos does not contain these partitions.
                                      * 4. So we will not able to get partitionCommitInfo here.
                                      *
-                                     * Just print a log to observe
+                                     * Or a load double-wrote into the temp partition of an online optimize
+                                     * and committed before the job fixed the version its rewrite copies,
+                                     * which then left the temp partition out of the transaction. Either
+                                     * way the visible transaction will never publish the partition, and
+                                     * a temp partition outlives it: clear what the BE committed for it.
                                      */
                                     LOG.info(
-                                            "failed to find partition commit info. table: {}, " +
+                                            "failed to find partition commit info, clear it. table: {}, " +
                                                     "partition: {}, tablet: {}, txn_id: {}",
                                             tabletMeta.getTableId(), physicalPartitionId, tabletId,
                                             transactionState.getTransactionId());
+                                    transactionsToClear.put(transactionId, physicalPartitionId);
                                 } else {
                                     TPartitionVersionInfo versionInfo =
                                             new TPartitionVersionInfo(physicalPartitionId,
@@ -1387,6 +1392,7 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                                     MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(index.getMetaId());
                                     Set<ColumnId> bfColumns = olapTable.getBfColumnIds();
                                     double bfFpp = olapTable.getBfFpp();
+                                    Set<ColumnId> zstdCompressionColumns = olapTable.getZstdCompressionColumnIds();
                                     TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                                             .setId(indexMeta.getSchemaId())
                                             .setKeysType(indexMeta.getKeysType())
@@ -1397,6 +1403,8 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                                             .addColumns(indexMeta.getSchema())
                                             .setBloomFilterColumnNames(bfColumns)
                                             .setBloomFilterFpp(bfFpp)
+                                            .setZstdCompressionColumns(zstdCompressionColumns,
+                                                    olapTable.getZstdCompressionPageSizes())
                                             .setIndexes(index.getMetaId() == olapTable.getBaseIndexMetaId() ?
                                                         olapTable.getCopiedIndexes() :
                                                         OlapTable.getIndexesBySchema(
@@ -1761,11 +1769,15 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
             for (long txnId : map.keySet()) {
                 long commitTime = transactionsToCommitTime.get(txnId);
                 Optional<Long> gtid = map.values().stream().flatMap(m -> m.values().stream()).map(info -> info.gtid).findFirst();
+                // A version overwrite has to be published as one again.
+                TransactionState txnState =
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, txnId);
                 PublishVersionTask task =
                         new PublishVersionTask(backendId, txnId, gtid.orElse((long) 0), dbId, commitTime,
                                 map.get(txnId).values().stream().collect(Collectors.toList()), null, null,
                                 createPublishVersionTaskTime, null,
-                                Config.enable_sync_publish, TransactionType.TXN_NORMAL);
+                                Config.enable_sync_publish, TransactionType.TXN_NORMAL,
+                                txnState != null && txnState.isVersionOverwrite());
                 batchTask.addTask(task);
                 // add to AgentTaskQueue for handling finish report.
                 AgentTaskQueue.addTask(task);
@@ -2113,7 +2125,8 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                     for (Column column : indexMeta.getSchema()) {
                         TColumn tColumn = column.toThrift();
                         tColumn.setColumn_name(column.getColumnId().getId());
-                        column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumnIds());
+                        column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumnIds(),
+                                olapTable.getZstdCompressionColumnIds(), olapTable.getZstdCompressionPageSizes());
                         columnsDesc.add(tColumn);
                     }
                     if (indexMeta.getSortKeyUniqueIds() != null) {
@@ -2482,9 +2495,9 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
             }
             TABLET_TO_DROP_TIME.clear();
         }
-        // Stop the nested resource-report consumer as part of this handler's own shutdown,
-        // so both loops drain synchronously during leader demotion.
-        resourceReportDaemon.stopGracefully(Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L));
+        // Stop the nested resource-report consumer as part of this handler's own shutdown. Fire-and-
+        // forget: its worker self-cleans in onStopped() and deregisters; the re-activation gate covers it.
+        resourceReportDaemon.stopBestEffort();
     }
 
     /**

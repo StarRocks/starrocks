@@ -127,6 +127,65 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         }
     }
 
+    // Low-cardinality global dictionary replay: the dump carries the real global dict (captured via the new
+    // global_dict section), and replay seeds it into CacheDictManager keyed by the recreated table's id, so the
+    // dict-encoding (Decode-node) optimization reproduces OFFLINE. Deliberately does NOT set
+    // USE_MOCK_DICT_MANAGER: unlike the blanket mock (which fakes a dict for every varchar column), this uses
+    // the real dict captured in the dump. Before this change, replay had no dict (the production cache has no
+    // BE to load from) and produced no Decode node at all.
+    @Test
+    public void testLowCardinalityGlobalDictReplay() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/low_cardinality_global_dict");
+        // The dump must actually carry the captured dict.
+        Assertions.assertTrue(getDumpInfoFromJson(dumpString).getTableGlobalDictMap()
+                        .getOrDefault("qd_lowcard.lc", java.util.Collections.emptyMap()).containsKey("mode"),
+                "dump should carry the global_dict for qd_lowcard.lc.mode");
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpString);
+        String plan = replayPair.second;
+        Assertions.assertTrue(plan.contains(":Decode"),
+                "expected a Decode node reproduced from the captured global dict, plan:\n" + plan);
+        Assertions.assertTrue(plan.contains("<dict id"),
+                "expected the dict-id mapping in the Decode node, plan:\n" + plan);
+    }
+
+    // ARRAY<VARCHAR> counterpart: the low-card optimization dict-encodes array-of-varchar element strings too, and
+    // the dict is keyed by the same (tableId, columnId). Verifies capture is not limited to scalar varchar and
+    // that replay reproduces the array Decode from the captured dict.
+    @Test
+    public void testArrayLowCardinalityGlobalDictReplay() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/array_low_cardinality_global_dict");
+        Assertions.assertTrue(getDumpInfoFromJson(dumpString).getTableGlobalDictMap()
+                        .getOrDefault("qd_arr_lc.arr_lc", java.util.Collections.emptyMap()).containsKey("tags"),
+                "dump should carry the global_dict for the array column qd_arr_lc.arr_lc.tags");
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpString);
+        String plan = replayPair.second;
+        // This query decodes inline (array_min/array_max output ids), so the dict shows up as scan dict-encoding
+        // and inline DictDecode expressions rather than a standalone :Decode node.
+        Assertions.assertTrue(plan.contains("dict_col=tags"),
+                "expected the array column tags to be dict-optimized at scan, plan:\n" + plan);
+        Assertions.assertTrue(plan.contains("ARRAY<INT>"),
+                "expected tags to be dict-encoded as ARRAY<INT> from the captured dict, plan:\n" + plan);
+        Assertions.assertTrue(plan.contains("DictDecode("),
+                "expected inline DictDecode reproduced from the captured array global dict, plan:\n" + plan);
+    }
+
+    // Column min/max captured from ColumnMinMaxMgr: without it, replay's manager has no BE to compute min/max, so
+    // the RewriteSimpleAggToMetaScanRule fold (MAX/MIN -> constant over UNION) would be lost. With the captured
+    // min/max seeded, replay reproduces the fold (max(v2)=99, min(v3)=30).
+    @Test
+    public void testMinMaxMetaScanReplay() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/min_max_meta_scan");
+        Assertions.assertTrue(getDumpInfoFromJson(dumpString).getTableColumnMinMaxMap()
+                        .getOrDefault("qd_minmax.mm", java.util.Collections.emptyMap()).containsKey("v2"),
+                "dump should carry the column_min_max for qd_minmax.mm");
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpString);
+        String plan = replayPair.second;
+        Assertions.assertTrue(plan.contains("0:UNION"),
+                "expected the MAX/MIN meta-scan fold (constant UNION) reproduced from the captured min/max, plan:\n" + plan);
+        Assertions.assertTrue(plan.contains("<-> 99") && plan.contains("<-> 30"),
+                "expected max(v2)=99 and min(v3)=30 folded to constants from the captured min/max, plan:\n" + plan);
+    }
+
     @Test
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
@@ -186,7 +245,11 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testTPCDS78() throws Exception {
         // check outer join with isNull predicate on inner table
         // The estimate cardinality of join should not be 0.
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"), SV);
+        // Checked with OuterJoinSemiJoinReductionRule off: its CTEs renumber the nodes and columns asserted below.
+        SessionVariable sv = new SessionVariable();
+        sv.setEnableGlobalLateMaterialization(false);
+        sv.setEnableOuterJoinSemiJoinReduction(false);
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"), sv);
         Assertions.assertTrue(replayPair.second.contains("3:HASH JOIN\n"
                 + "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n"
                 + "  |  equal join conjunct: [2: ss_ticket_number, INT, false] = [25: sr_ticket_number, INT, true]\n"
@@ -289,7 +352,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assertions.assertTrue(replayPair.second.contains("  |  <slot 40> : CAST(15: id_smallint AS INT)\n" +
                         "  |  <slot 41> : CAST(23: id_date AS DATETIME)\n" +
                         "  |  \n" +
-                        "  6:OlapScanNode\n" +
+                        "  8:OlapScanNode\n" +
                         "     TABLE: external_es_table_without_null"),
                 replayPair.second);
     }
@@ -681,7 +744,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_2"),
                         null, TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("38:HASH JOIN\n" +
+        // Do not pin the HASH JOIN plan-node id: partitioned row_number() NDV estimates
+        // can change costing enough to shift node numbering without changing this join.
+        Assertions.assertTrue(replayPair.second.contains("HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 398: substring = 361: date\n" +
@@ -775,10 +840,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 getPlanFragment(getDumpInfoFromFile("query_dump/nested_view_with_cte"),
                         null, TExplainLevel.NORMAL);
         PlanTestBase.assertContains(replayPair.second, "Project\n"
-                + "  |  <slot 7325> : 7325: count\n"
+                + "  |  <slot 7699> : 7699: count\n"
                 + "  |  limit: 100");
         PlanTestBase.assertContains(replayPair.second, "AGGREGATE (merge finalize)\n"
-                + "  |  output: count(7325: count)\n"
+                + "  |  output: count(7699: count)\n"
                 + "  |  group by: 24: mock_038, 15: mock_003, 108: mock_109, 4: mock_005, 2: mock_110, 2123: case\n"
                 + "  |  limit: 100");
     }
@@ -796,6 +861,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpInfo);
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
         sessionVariable.setEnableCBOViewBasedMvRewrite(true);
+        // The dump's session variables replace the test context's, so its default 1s MV rewrite budget applies:
+        // trying 14 view-based MVs can exceed it on a loaded CI host, and the rule then gives up without the MV.
+        sessionVariable.setOptimizerMaterializedViewTimeLimitMillis(120 * 1000);
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpInfo, sessionVariable);
         Assertions.assertTrue(replayPair.second.contains("mv_LEAF_ACC_CUBE_SHADOW_VIEW_fb70da80"), replayPair.second);
         sessionVariable.setEnableCBOViewBasedMvRewrite(false);
@@ -1291,6 +1359,17 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    public void testWindowSkewMergeSortWithHistogramJoinNulls() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/window_skew_merge_sort");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(dumpString, queryDumpInfo.getSessionVariable());
+        String plan = replayPair.second;
+
+        PlanTestBase.assertContains(plan, "ANALYTIC", "MERGING-EXCHANGE");
+    }
+
+    @Test
     public void testPushDownDistinctBelowWindowNoEmptyAnalytic() throws Exception {
         String dumpString = getDumpInfoFromFile(
                 "query_dump/push_down_distinct_below_window_empty_analytic");
@@ -1305,4 +1384,5 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "Plan contains empty analytic functions — PruneEmptyWindowRule was not called after "
                         + "PRUNE_COLUMNS_RULES in pushDownAggregation:\n" + plan);
     }
+
 }

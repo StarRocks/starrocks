@@ -16,7 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include <string>
+#include <vector>
+
 #include "base/testutil/assert.h"
+#include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "common/config_exec_fwd.h"
 #include "exec/join/join_hash_map.hpp"
 #include "exec/join/join_hash_map_helper.h"
@@ -26,6 +31,7 @@
 #include "exec/join/join_key_constructor.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -39,9 +45,9 @@ protected:
         _mem_pool = std::make_shared<MemPool>();
         _runtime_profile = create_runtime_profile();
         _runtime_state = create_runtime_state();
-        _int_type = TypeDescriptor::from_logical_type(TYPE_INT);
-        _tinyint_type = TypeDescriptor::from_logical_type(TYPE_TINYINT);
-        _varchar_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+        _int_type = TYPE_INT_DESC;
+        _tinyint_type = TYPE_TINYINT_DESC;
+        _varchar_type = TYPE_VARCHAR_DESC;
     }
     void TearDown() override {}
 
@@ -65,9 +71,8 @@ protected:
                                      bool nullable, size_t column_count = 3);
     DescriptorTbl* create_descriptor_tbl(TDescriptorTableBuilder* table_desc_builder);
     static std::shared_ptr<RuntimeProfile> create_runtime_profile();
-    std::shared_ptr<RowDescriptor> create_row_desc(TDescriptorTableBuilder* table_desc_builder);
-    std::shared_ptr<RowDescriptor> create_probe_desc(TDescriptorTableBuilder* probe_desc_builder);
-    std::shared_ptr<RowDescriptor> create_build_desc(TDescriptorTableBuilder* build_desc_builder);
+    std::shared_ptr<RecordDescriptor> create_probe_desc(TDescriptorTableBuilder* probe_desc_builder);
+    std::shared_ptr<RecordDescriptor> create_build_desc(TDescriptorTableBuilder* build_desc_builder);
     static std::shared_ptr<RuntimeState> create_runtime_state();
 
     static void check_probe_index(const Buffer<uint32_t>& probe_index, uint32_t step, uint32_t match_count,
@@ -143,8 +148,8 @@ protected:
     TypeDescriptor _int_type;
     TypeDescriptor _tinyint_type;
     TypeDescriptor _varchar_type;
-    std::shared_ptr<RowDescriptor> _probe_desc;
-    std::shared_ptr<RowDescriptor> _build_desc;
+    std::shared_ptr<RecordDescriptor> _probe_desc;
+    std::shared_ptr<RecordDescriptor> _build_desc;
 };
 
 void JoinHashMapTest::check_probe_output_slot_ids(const JoinHashTableItems& table_items,
@@ -247,8 +252,8 @@ HashTableParam JoinHashMapTest::create_table_param_int(TJoinOp::type join_type, 
         param.probe_output_slots.emplace(i);
         param.build_output_slots.emplace(i);
     }
-    param.build_row_desc = _build_desc.get();
-    param.probe_row_desc = _probe_desc.get();
+    param.build_record_desc = _build_desc.get();
+    param.probe_record_desc = _probe_desc.get();
     param.probe_output_slots = {1};
     param.build_output_slots = {4};
     param.predicate_slots = {2, 5};
@@ -381,7 +386,7 @@ MutableColumnPtr JoinHashMapTest::create_nullable_column(LogicalType LT, const B
 }
 
 ColumnPtr JoinHashMapTest::create_int32_column(uint32_t row_count, uint32_t start_value) {
-    const auto& int_type_desc = TypeDescriptor(LogicalType::TYPE_INT);
+    const auto& int_type_desc = TYPE_INT_DESC;
     MutableColumnPtr column = ColumnHelper::create_column(int_type_desc, false);
     for (int32_t i = 0; i < row_count; i++) {
         column->append_datum(Datum(static_cast<int32_t>(start_value) + i));
@@ -390,8 +395,7 @@ ColumnPtr JoinHashMapTest::create_int32_column(uint32_t row_count, uint32_t star
 }
 
 ColumnPtr JoinHashMapTest::create_binary_column(uint32_t row_count, uint32_t start_value) {
-    const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-    MutableColumnPtr column = ColumnHelper::create_column(varchar_type_desc, false);
+    MutableColumnPtr column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
     auto* binary_column = ColumnHelper::as_raw_column<BinaryColumn>(column);
     for (int32_t i = 0; i < row_count; i++) {
         std::string str = std::to_string(start_value + i);
@@ -635,7 +639,7 @@ void JoinHashMapTest::prepare_table_items(JoinHashTableItems* table_items, TJoin
                                           bool with_other_conjunct, uint32_t batch_count) {
     table_items->join_type = join_type;
     table_items->with_other_conjunct = with_other_conjunct;
-    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    const auto int_type = TYPE_INT_DESC;
     table_items->join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
     table_items->next.resize(1 + batch_count * config::vector_chunk_size, 0);
     for (size_t i = 0; i < config::vector_chunk_size; i++) {
@@ -693,7 +697,7 @@ void JoinHashMapTest::check_probe_index_column(const Column& column, const std::
 }
 
 ColumnPtr JoinHashMapTest::create_int32_nullable_column(uint32_t row_count, uint32_t start_value) {
-    const auto& int_type_desc = TypeDescriptor(LogicalType::TYPE_INT);
+    const auto& int_type_desc = TYPE_INT_DESC;
     MutableColumnPtr data_column = ColumnHelper::create_column(int_type_desc, false);
     NullColumn::MutablePtr null_column = NullColumn::create();
     for (int32_t i = 0; i < row_count; i++) {
@@ -806,14 +810,14 @@ void JoinHashMapTest::check_empty_hash_map(TJoinOp::type join_type, int num_prob
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
 
-    auto probe_row_desc = create_probe_desc(&row_desc_builder);
-    auto build_row_desc = create_build_desc(&row_desc_builder);
+    auto probe_record_desc = create_probe_desc(&row_desc_builder);
+    auto build_record_desc = create_build_desc(&row_desc_builder);
 
     HashTableParam param = create_table_param(join_type, 6);
     param.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
     param.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
-    param.probe_row_desc = probe_row_desc.get();
-    param.build_row_desc = build_row_desc.get();
+    param.probe_record_desc = probe_record_desc.get();
+    param.build_record_desc = build_record_desc.get();
 
     JoinHashTable hash_table;
     hash_table.create(param);
@@ -901,22 +905,16 @@ DescriptorTbl* JoinHashMapTest::create_descriptor_tbl(TDescriptorTableBuilder* t
     return tbl;
 }
 
-std::shared_ptr<RowDescriptor> JoinHashMapTest::create_row_desc(TDescriptorTableBuilder* table_desc_builder) {
-    std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0, 1};
-    auto* tbl = create_descriptor_tbl(table_desc_builder);
-    return std::make_shared<RowDescriptor>(*tbl, row_tuples);
-}
-
-std::shared_ptr<RowDescriptor> JoinHashMapTest::create_probe_desc(TDescriptorTableBuilder* probe_desc_builder) {
+std::shared_ptr<RecordDescriptor> JoinHashMapTest::create_probe_desc(TDescriptorTableBuilder* probe_desc_builder) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     auto* tbl = create_descriptor_tbl(probe_desc_builder);
-    return std::make_shared<RowDescriptor>(*tbl, row_tuples);
+    return std::make_shared<RecordDescriptor>(*tbl, row_tuples);
 }
 
-std::shared_ptr<RowDescriptor> JoinHashMapTest::create_build_desc(TDescriptorTableBuilder* build_desc_builder) {
+std::shared_ptr<RecordDescriptor> JoinHashMapTest::create_build_desc(TDescriptorTableBuilder* build_desc_builder) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{1};
     auto* tbl = create_descriptor_tbl(build_desc_builder);
-    return std::make_shared<RowDescriptor>(*tbl, row_tuples);
+    return std::make_shared<RecordDescriptor>(*tbl, row_tuples);
 }
 
 std::shared_ptr<RuntimeState> JoinHashMapTest::create_runtime_state() {
@@ -1058,7 +1056,7 @@ TEST_F(JoinHashMapTest, GetHashKey) {
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, CompileFixedSizeKeyColumn) {
-    auto type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    auto type = TYPE_BIGINT_DESC;
     auto data_column = ColumnHelper::create_column(type, false);
     data_column->resize(2);
 
@@ -1084,9 +1082,9 @@ TEST_F(JoinHashMapTest, ProbeNullOutput) {
     TDescriptorTableBuilder row_desc_builder;
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
-    auto row_desc = create_row_desc(&row_desc_builder);
+    auto record_desc = create_probe_desc(&row_desc_builder);
     vector<HashTableSlotDescriptor> hash_table_slot_vec;
-    for (auto& slot : row_desc->tuple_descriptors()[0]->slots()) {
+    for (auto* slot : record_desc->slots()) {
         HashTableSlotDescriptor hash_table_slot{};
         hash_table_slot.slot = slot;
         hash_table_slot.need_output = true;
@@ -1118,10 +1116,10 @@ TEST_F(JoinHashMapTest, BuildDefaultOutput) {
     TDescriptorTableBuilder row_desc_builder;
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
-    auto row_desc = create_row_desc(&row_desc_builder);
+    auto record_desc = create_probe_desc(&row_desc_builder);
 
     vector<HashTableSlotDescriptor> hash_table_slot_vec;
-    for (auto& slot : row_desc->tuple_descriptors()[0]->slots()) {
+    for (auto* slot : record_desc->slots()) {
         HashTableSlotDescriptor hash_table_slot{};
         hash_table_slot.slot = slot;
         hash_table_slot.need_output = true;
@@ -1148,7 +1146,7 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFunc) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
 
-    auto type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    auto type = TYPE_INT_DESC;
     auto build_column = ColumnHelper::create_column(type, false);
     build_column->append_default();
     build_column->append(*JoinHashMapTest::create_int32_column(10, 0), 0, 10);
@@ -1198,7 +1196,7 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
 
-    auto type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    auto type = TYPE_INT_DESC;
     auto build_column = ColumnHelper::create_column(type, true);
     build_column->append_default();
     build_column->append(*JoinHashMapTest::create_int32_nullable_column(10, 0), 0, 10);
@@ -1254,12 +1252,12 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, false, 1);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, false, 1);
 
-    auto probe_row_desc = create_probe_desc(&row_desc_builder);
-    auto build_row_desc = create_build_desc(&row_desc_builder);
+    auto probe_record_desc = create_probe_desc(&row_desc_builder);
+    auto build_record_desc = create_build_desc(&row_desc_builder);
 
     HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 2);
-    param.probe_row_desc = probe_row_desc.get();
-    param.build_row_desc = build_row_desc.get();
+    param.probe_record_desc = probe_record_desc.get();
+    param.build_record_desc = build_record_desc.get();
     param.join_keys.emplace_back(JoinKeyDesc{&_tinyint_type, false, nullptr});
 
     JoinHashTable ht;
@@ -1303,12 +1301,12 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, true, 1);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, true, 1);
 
-    auto probe_row_desc = create_probe_desc(&row_desc_builder);
-    auto build_row_desc = create_build_desc(&row_desc_builder);
+    auto probe_record_desc = create_probe_desc(&row_desc_builder);
+    auto build_record_desc = create_build_desc(&row_desc_builder);
 
     HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 2);
-    param.probe_row_desc = probe_row_desc.get();
-    param.build_row_desc = build_row_desc.get();
+    param.probe_record_desc = probe_record_desc.get();
+    param.build_record_desc = build_record_desc.get();
     param.join_keys.emplace_back(JoinKeyDesc{&_tinyint_type, false, nullptr});
 
     JoinHashTable ht;
@@ -2053,13 +2051,13 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
 
-    auto probe_row_desc = create_probe_desc(&row_desc_builder);
-    auto build_row_desc = create_build_desc(&row_desc_builder);
+    auto probe_record_desc = create_probe_desc(&row_desc_builder);
+    auto build_record_desc = create_build_desc(&row_desc_builder);
 
     HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 6);
     param.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
-    param.probe_row_desc = probe_row_desc.get();
-    param.build_row_desc = build_row_desc.get();
+    param.probe_record_desc = probe_record_desc.get();
+    param.build_record_desc = build_record_desc.get();
 
     JoinHashTable hash_table;
     hash_table.create(param);
@@ -2104,13 +2102,13 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, true);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, true);
 
-    auto probe_row_desc = create_probe_desc(&row_desc_builder);
-    auto build_row_desc = create_build_desc(&row_desc_builder);
+    auto probe_record_desc = create_probe_desc(&row_desc_builder);
+    auto build_record_desc = create_build_desc(&row_desc_builder);
 
     HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 6);
     param.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
-    param.probe_row_desc = probe_row_desc.get();
-    param.build_row_desc = build_row_desc.get();
+    param.probe_record_desc = probe_record_desc.get();
+    param.build_record_desc = build_record_desc.get();
 
     JoinHashTable hash_table;
     hash_table.create(param);
@@ -2156,14 +2154,14 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
 
-    auto probe_row_desc = create_probe_desc(&row_desc_builder);
-    auto build_row_desc = create_build_desc(&row_desc_builder);
+    auto probe_record_desc = create_probe_desc(&row_desc_builder);
+    auto build_record_desc = create_build_desc(&row_desc_builder);
 
     HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 6);
     param.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
     param.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
-    param.probe_row_desc = probe_row_desc.get();
-    param.build_row_desc = build_row_desc.get();
+    param.probe_record_desc = probe_record_desc.get();
+    param.build_record_desc = build_record_desc.get();
 
     JoinHashTable hash_table;
     hash_table.create(param);
@@ -2207,14 +2205,14 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
 
-    auto probe_row_desc = create_probe_desc(&row_desc_builder);
-    auto build_row_desc = create_build_desc(&row_desc_builder);
+    auto probe_record_desc = create_probe_desc(&row_desc_builder);
+    auto build_record_desc = create_build_desc(&row_desc_builder);
 
     HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 6);
     param.join_keys.emplace_back(JoinKeyDesc{&_varchar_type, false, nullptr});
     param.join_keys.emplace_back(JoinKeyDesc{&_varchar_type, false, nullptr});
-    param.probe_row_desc = probe_row_desc.get();
-    param.build_row_desc = build_row_desc.get();
+    param.probe_record_desc = probe_record_desc.get();
+    param.build_record_desc = build_record_desc.get();
 
     JoinHashTable hash_table;
     hash_table.create(param);
@@ -2248,6 +2246,213 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
     check_binary_column(column5, 5, 11);
     auto* column6 = result_chunk->get_column_raw_ptr_by_slot_id(5);
     check_binary_column(column6, 5, 21);
+
+    hash_table.close();
+}
+
+// The hash table used to convert a build chunk whose binary payload crossed 4GB to LargeBinaryColumn, and to downgrade
+// the probe output again. Now it keeps the BinaryColumn, whose offsets are 64-bit past 4GB. Give the build and key
+// columns of the hash table 64-bit offsets after append_chunk, and check that a one-key and a serialized two-key join
+// still match and that the output columns are BinaryColumn.
+TEST_F(JoinHashMapTest, BinaryColumnWithLargeOffsetsJoinHashTable) {
+    for (size_t num_keys : {1, 2}) {
+        SCOPED_TRACE("num_keys=" + std::to_string(num_keys));
+        TDescriptorTableBuilder row_desc_builder;
+        add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
+        add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
+
+        auto probe_record_desc = create_probe_desc(&row_desc_builder);
+        auto build_record_desc = create_build_desc(&row_desc_builder);
+
+        HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 6);
+        for (size_t i = 0; i < num_keys; i++) {
+            param.join_keys.emplace_back(JoinKeyDesc{&_varchar_type, false, nullptr});
+        }
+        param.probe_record_desc = probe_record_desc.get();
+        param.build_record_desc = build_record_desc.get();
+
+        JoinHashTable hash_table;
+        hash_table.create(param);
+
+        auto build_chunk = create_binary_build_chunk(10, false);
+        auto probe_chunk = create_binary_probe_chunk(5, 1, false);
+        Columns build_key_columns;
+        Columns probe_key_columns;
+        for (size_t i = 0; i < num_keys; i++) {
+            build_key_columns.emplace_back(build_chunk->columns()[i]);
+            probe_key_columns.emplace_back(probe_chunk->columns()[i]);
+        }
+        hash_table.append_chunk(build_chunk, build_key_columns);
+        for (auto& column : hash_table.get_build_chunk()->columns()) {
+            ColumnTestHelper::force_large_offsets(column->as_mutable_raw_ptr());
+        }
+        for (auto& column : hash_table.get_key_columns()) {
+            ColumnTestHelper::force_large_offsets(column->as_mutable_raw_ptr());
+        }
+        ASSERT_OK(hash_table.build(_runtime_state.get()));
+
+        ChunkPtr result_chunk = std::make_shared<Chunk>();
+        bool eos = false;
+        ASSERT_OK(hash_table.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos));
+
+        ASSERT_EQ(result_chunk->num_columns(), 6);
+        for (SlotId slot_id = 0; slot_id < 6; slot_id++) {
+            const ColumnPtr& column = result_chunk->get_column_by_slot_id(slot_id);
+            const Column* data_column = ColumnHelper::get_data_column(column.get());
+            EXPECT_TRUE(data_column->is_binary());
+            check_binary_column(column, 5, (slot_id % 3) * 10 + 1);
+        }
+
+        hash_table.close();
+    }
+}
+
+static MutableColumnPtr build_varchar_column(const std::vector<std::string>& values) {
+    auto column = BinaryColumn::create();
+    for (const auto& value : values) {
+        column->append(Slice(value));
+    }
+    return column;
+}
+
+static std::vector<std::string> varchar_column_values(const Column& column) {
+    const auto* binary = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(&column));
+    std::vector<std::string> values;
+    for (size_t i = 0; i < binary->size(); i++) {
+        values.push_back(binary->get_slice(i).to_string());
+    }
+    return values;
+}
+
+// With enable_hash_join_serialize_fixed_size_string, short VARCHAR build keys are encoded as fixed-size integers.
+// _get_binary_column_max_size used to skip a LargeBinaryColumn key, so a build key over 4GB can only take this path
+// now. Give the build and key columns 64-bit offsets, check that the fixed-size path is chosen, and probe with strings
+// that match, that are absent, that are longer than every build key or that end with '\0'; the last two are encoded
+// as 0xFF and must never match.
+TEST_F(JoinHashMapTest, FixedSizeStringKeyWithLargeOffsetsJoinHashTable) {
+    TQueryOptions query_options;
+    query_options.batch_size = config::vector_chunk_size;
+    query_options.__set_enable_hash_join_serialize_fixed_size_string(true);
+    auto state = std::make_shared<RuntimeState>(TUniqueId(), query_options, TQueryGlobals(), nullptr);
+    state->init_instance_mem_tracker();
+
+    // Build rows are ("i", "1i", "2i") for i in [0, 10), so the build keys are at most 1 and 2 bytes long.
+    const std::string trailing_zero("1\0", 2);
+    const std::vector<std::string> probe_col0{"1", "x", "2", "123456", trailing_zero, "3"};
+    const std::vector<std::string> probe_col1{"11", "11", "12", "11", "11", "123456"};
+    const std::vector<std::string> probe_col2{"p0", "p1", "p2", "p3", "p4", "p5"};
+
+    for (size_t num_keys : {1, 2}) {
+        SCOPED_TRACE("num_keys=" + std::to_string(num_keys));
+        TDescriptorTableBuilder row_desc_builder;
+        add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
+        add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
+
+        auto probe_record_desc = create_probe_desc(&row_desc_builder);
+        auto build_record_desc = create_build_desc(&row_desc_builder);
+
+        HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 6);
+        for (size_t i = 0; i < num_keys; i++) {
+            param.join_keys.emplace_back(JoinKeyDesc{&_varchar_type, false, nullptr});
+        }
+        param.probe_record_desc = probe_record_desc.get();
+        param.build_record_desc = build_record_desc.get();
+
+        JoinHashTable hash_table;
+        hash_table.create(param);
+
+        auto build_chunk = create_binary_build_chunk(10, false);
+        auto probe_chunk = std::make_shared<Chunk>();
+        probe_chunk->append_column(build_varchar_column(probe_col0), 0);
+        probe_chunk->append_column(build_varchar_column(probe_col1), 1);
+        probe_chunk->append_column(build_varchar_column(probe_col2), 2);
+        Columns build_key_columns;
+        Columns probe_key_columns;
+        for (size_t i = 0; i < num_keys; i++) {
+            build_key_columns.emplace_back(build_chunk->columns()[i]);
+            probe_key_columns.emplace_back(probe_chunk->columns()[i]);
+        }
+        hash_table.append_chunk(build_chunk, build_key_columns);
+        for (auto& column : hash_table.get_build_chunk()->columns()) {
+            ColumnTestHelper::force_large_offsets(column->as_mutable_raw_ptr());
+        }
+        for (auto& column : hash_table.get_key_columns()) {
+            ColumnTestHelper::force_large_offsets(column->as_mutable_raw_ptr());
+            ASSERT_TRUE(down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column.get()))
+                                ->get_offset()
+                                .is_large());
+        }
+        ASSERT_OK(hash_table.build(state.get()));
+
+        const std::vector<uint32_t> expected_key_bytes =
+                num_keys == 1 ? std::vector<uint32_t>{1} : std::vector<uint32_t>{1, 2};
+        EXPECT_EQ(expected_key_bytes, hash_table.table_items()->serialized_fixed_size_key_bytes);
+
+        ChunkPtr result_chunk = std::make_shared<Chunk>();
+        bool eos = false;
+        ASSERT_OK(hash_table.probe(state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos));
+
+        // "x" is absent, "123456" is longer than every build key and "1\0" ends with '\0', so only "1", "2" and,
+        // with one key, "3" match. With two keys, ("3", "123456") does not match because its second key is too long.
+        std::vector<std::vector<std::string>> expected{{"1", "2", "3"}, {"11", "12", "123456"}, {"p0", "p2", "p5"},
+                                                       {"1", "2", "3"}, {"11", "12", "13"},     {"21", "22", "23"}};
+        if (num_keys == 2) {
+            for (auto& values : expected) {
+                values.pop_back();
+            }
+        }
+        ASSERT_EQ(result_chunk->num_columns(), 6);
+        for (SlotId slot_id = 0; slot_id < 6; slot_id++) {
+            SCOPED_TRACE("slot_id=" + std::to_string(slot_id));
+            EXPECT_EQ(expected[slot_id], varchar_column_values(*result_chunk->get_column_by_slot_id(slot_id)));
+        }
+
+        hash_table.close();
+    }
+}
+
+// With column_view_concat_rows_limit enabled, the hash table keeps its non-key VARCHAR build columns as ColumnView.
+// Building checks the build chunk with capacity_limit_reached(), which ColumnView used to throw from. Check that the
+// build succeeds and that the probe copies the referenced rows out of the views into plain BinaryColumn.
+TEST_F(JoinHashMapTest, ColumnViewBuildColumnJoinHashTable) {
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
+
+    auto probe_record_desc = create_probe_desc(&row_desc_builder);
+    auto build_record_desc = create_build_desc(&row_desc_builder);
+
+    HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 6);
+    param.join_keys.emplace_back(JoinKeyDesc{&_varchar_type, false, nullptr});
+    param.probe_record_desc = probe_record_desc.get();
+    param.build_record_desc = build_record_desc.get();
+    // 0 keeps every view as is and never concatenates it.
+    param.column_view_concat_rows_limit = 0;
+
+    JoinHashTable hash_table;
+    hash_table.create(param);
+
+    auto build_chunk = create_binary_build_chunk(10, false);
+    auto probe_chunk = create_binary_probe_chunk(5, 1, false);
+    Columns build_key_columns{build_chunk->columns()[0]};
+    Columns probe_key_columns{probe_chunk->columns()[0]};
+    hash_table.append_chunk(build_chunk, build_key_columns);
+    for (const auto& column : hash_table.get_build_chunk()->columns()) {
+        ASSERT_TRUE(column->is_view());
+    }
+    ASSERT_OK(hash_table.build(_runtime_state.get()));
+
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
+    bool eos = false;
+    ASSERT_OK(hash_table.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos));
+
+    ASSERT_EQ(result_chunk->num_columns(), 6);
+    for (SlotId slot_id = 0; slot_id < 6; slot_id++) {
+        const ColumnPtr& column = result_chunk->get_column_by_slot_id(slot_id);
+        EXPECT_FALSE(column->is_view());
+        EXPECT_TRUE(column->is_binary());
+        check_binary_column(column, 5, (slot_id % 3) * 10 + 1);
+    }
 
     hash_table.close();
 }
@@ -2522,15 +2727,15 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyFilter) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
 
-    auto probe_row_desc = create_probe_desc(&row_desc_builder);
-    auto build_row_desc = create_build_desc(&row_desc_builder);
+    auto probe_record_desc = create_probe_desc(&row_desc_builder);
+    auto build_record_desc = create_build_desc(&row_desc_builder);
 
     JoinHashTable ht;
 
     HashTableParam param;
     param.enable_late_materialization = true;
-    param.probe_row_desc = probe_row_desc.get();
-    param.build_row_desc = build_row_desc.get();
+    param.probe_record_desc = probe_record_desc.get();
+    param.build_record_desc = build_record_desc.get();
     param.probe_output_slots = {1};
     param.build_output_slots = {4};
     param.predicate_slots = {2, 5};
@@ -2577,15 +2782,15 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyOutputAll) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
 
-    auto probe_row_desc = create_probe_desc(&row_desc_builder);
-    auto build_row_desc = create_build_desc(&row_desc_builder);
+    auto probe_record_desc = create_probe_desc(&row_desc_builder);
+    auto build_record_desc = create_build_desc(&row_desc_builder);
 
     JoinHashTable ht;
 
     HashTableParam param;
     param.enable_late_materialization = true;
-    param.probe_row_desc = probe_row_desc.get();
-    param.build_row_desc = build_row_desc.get();
+    param.probe_record_desc = probe_record_desc.get();
+    param.build_record_desc = build_record_desc.get();
     param.probe_output_slots = {1};
     param.build_output_slots = {4};
     param.predicate_slots = {2, 5};
@@ -2921,15 +3126,15 @@ TEST_F(JoinHashMapTest, TestOutputSlotsEmpty) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
 
-    auto probe_row_desc = create_probe_desc(&row_desc_builder);
-    auto build_row_desc = create_build_desc(&row_desc_builder);
+    auto probe_record_desc = create_probe_desc(&row_desc_builder);
+    auto build_record_desc = create_build_desc(&row_desc_builder);
 
     JoinHashTable ht;
 
     HashTableParam param;
     param.enable_late_materialization = false;
-    param.probe_row_desc = probe_row_desc.get();
-    param.build_row_desc = build_row_desc.get();
+    param.probe_record_desc = probe_record_desc.get();
+    param.build_record_desc = build_record_desc.get();
 
     ht.create(param);
 
@@ -2948,15 +3153,15 @@ TEST_F(JoinHashMapTest, TestOutputSlotsNormal) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
 
-    auto probe_row_desc = create_probe_desc(&row_desc_builder);
-    auto build_row_desc = create_build_desc(&row_desc_builder);
+    auto probe_record_desc = create_probe_desc(&row_desc_builder);
+    auto build_record_desc = create_build_desc(&row_desc_builder);
 
     JoinHashTable ht;
 
     HashTableParam param;
     param.enable_late_materialization = false;
-    param.probe_row_desc = probe_row_desc.get();
-    param.build_row_desc = build_row_desc.get();
+    param.probe_record_desc = probe_record_desc.get();
+    param.build_record_desc = build_record_desc.get();
     param.probe_output_slots = {1};
     param.build_output_slots = {4};
     param.predicate_slots = {2, 5};
@@ -2978,15 +3183,15 @@ TEST_F(JoinHashMapTest, TestLazyOutputSlotsEmpty) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
 
-    auto probe_row_desc = create_probe_desc(&row_desc_builder);
-    auto build_row_desc = create_build_desc(&row_desc_builder);
+    auto probe_record_desc = create_probe_desc(&row_desc_builder);
+    auto build_record_desc = create_build_desc(&row_desc_builder);
 
     JoinHashTable ht;
 
     HashTableParam param;
     param.enable_late_materialization = true;
-    param.probe_row_desc = probe_row_desc.get();
-    param.build_row_desc = build_row_desc.get();
+    param.probe_record_desc = probe_record_desc.get();
+    param.build_record_desc = build_record_desc.get();
 
     ht.create(param);
 
@@ -3005,15 +3210,15 @@ TEST_F(JoinHashMapTest, TestLazyPredicateSlotsEmpty) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
 
-    auto probe_row_desc = create_probe_desc(&row_desc_builder);
-    auto build_row_desc = create_build_desc(&row_desc_builder);
+    auto probe_record_desc = create_probe_desc(&row_desc_builder);
+    auto build_record_desc = create_build_desc(&row_desc_builder);
 
     JoinHashTable ht;
 
     HashTableParam param;
     param.enable_late_materialization = true;
-    param.probe_row_desc = probe_row_desc.get();
-    param.build_row_desc = build_row_desc.get();
+    param.probe_record_desc = probe_record_desc.get();
+    param.build_record_desc = build_record_desc.get();
     param.probe_output_slots = {1};
     param.build_output_slots = {4};
     param.predicate_slots = {};
@@ -3035,15 +3240,15 @@ TEST_F(JoinHashMapTest, TestLazyPredicateSlotsNormal) {
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
 
-    auto probe_row_desc = create_probe_desc(&row_desc_builder);
-    auto build_row_desc = create_build_desc(&row_desc_builder);
+    auto probe_record_desc = create_probe_desc(&row_desc_builder);
+    auto build_record_desc = create_build_desc(&row_desc_builder);
 
     JoinHashTable ht;
 
     HashTableParam param;
     param.enable_late_materialization = true;
-    param.probe_row_desc = probe_row_desc.get();
-    param.build_row_desc = build_row_desc.get();
+    param.probe_record_desc = probe_record_desc.get();
+    param.build_record_desc = build_record_desc.get();
     param.probe_output_slots = {1};
     param.build_output_slots = {4};
     param.predicate_slots = {2, 5};
@@ -3062,7 +3267,7 @@ TEST_F(JoinHashMapTest, TestLazyPredicateSlotsNormal) {
 TEST_F(JoinHashMapTest, TestBuildKeyConstructorForOneKeyNonNullable) {
     using BuildKeyBuilder = BuildKeyConstructorForOneKey<LogicalType::TYPE_INT>;
 
-    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    const auto int_type = TYPE_INT_DESC;
 
     JoinHashTableItems table_items;
     table_items.row_count = 10;
@@ -3088,7 +3293,7 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForOneKeyNonNullable) {
 TEST_F(JoinHashMapTest, TestBuildKeyConstructorForOneKeyNullable) {
     using BuildKeyBuilder = BuildKeyConstructorForOneKey<LogicalType::TYPE_INT>;
 
-    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    const auto int_type = TYPE_INT_DESC;
 
     JoinHashTableItems table_items;
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
@@ -3134,7 +3339,7 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForOneKeyNullable) {
 TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNonNullable) {
     using BuildKeyBuilder = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
 
-    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    const auto int_type = TYPE_INT_DESC;
 
     JoinHashTableItems table_items;
     table_items.row_count = 10;
@@ -3168,7 +3373,7 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNonNullable
 TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNullable) {
     using BuildKeyBuilder = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
 
-    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    const auto int_type = TYPE_INT_DESC;
 
     JoinHashTableItems table_items;
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
@@ -3225,7 +3430,7 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNullable) {
 TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedFixedSizeNullable) {
     using ProbeKeyBuilder = ProbeKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
 
-    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    const auto int_type = TYPE_INT_DESC;
     JoinHashTableItems table_items;
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
@@ -3280,7 +3485,7 @@ TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedFixedSizeNullable) {
 TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedNullable) {
     using BuildKeyBuilder = BuildKeyConstructorForSerialized;
 
-    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    const auto int_type = TYPE_INT_DESC;
 
     JoinHashTableItems table_items;
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
@@ -3337,7 +3542,7 @@ TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedNullable) {
 TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedNullable) {
     using ProbeKeyBuilder = ProbeKeyConstructorForSerialized;
 
-    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    const auto int_type = TYPE_INT_DESC;
     JoinHashTableItems table_items;
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
     table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});

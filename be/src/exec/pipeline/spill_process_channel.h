@@ -56,13 +56,20 @@ public:
 
     SpillProcessTask& operator=(std::function<StatusOr<ChunkPtr>()> task) {
         _task = std::move(task);
+        _is_final = false;
         return *this;
     }
 
     void reset();
 
+    // The terminal handoff enqueued by add_last_task / execute(). Only this task may run from
+    // SpillProcessChannel::close(); the data tasks before it read sink-owned state that may already be freed.
+    void mark_final() { _is_final = true; }
+    bool is_final() const { return _is_final; }
+
 private:
     std::function<StatusOr<ChunkPtr>()> _task;
+    bool _is_final = false;
 };
 
 using SpillProcessChannelPtr = std::shared_ptr<SpillProcessChannel>;
@@ -155,7 +162,7 @@ public:
     void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
     const std::shared_ptr<spill::Spiller>& spiller() { return _spiller; }
 
-    // Lifetime anchor: the spilling context (hash joiner / aggregator, a ContextWithDependency) that
+    // Lifetime anchor: the spilling context (hash joiner / aggregator / sort context, a ContextWithDependency) that
     // owns the state referenced by the spill tasks. SpillProcessOperator refs it on prepare and
     // unrefs it on close, so the context cannot close() (free that state) while spill tasks run.
     void set_guarded_context(pipeline::ContextWithDependency* context) { _guarded_context = context; }

@@ -76,6 +76,14 @@ public class MysqlChannel {
 
     private SSLChannel sslChannel;
 
+    // Compression agreed on in the handshake; takes effect once startCompression() is called after the auth OK.
+    private MysqlCompression negotiatedCompression;
+    private MysqlCompression compression;
+    // next compressed packet sequence id to send
+    private int compressedSequenceId;
+    // decompressed bytes not yet consumed by fetchOnePacket()
+    private ByteBuffer decompressedBuffer;
+
     // for log and show
     protected String remoteHostPortString;
     protected String remoteIp;
@@ -149,6 +157,26 @@ public class MysqlChannel {
         this.sslChannel = sslChannel;
     }
 
+    public void setNegotiatedCompression(MysqlCompression compression) {
+        this.negotiatedCompression = compression;
+    }
+
+    /** Switches to the compressed protocol if the client asked for it. Call after sending the auth OK. */
+    public void startCompression() {
+        compression = negotiatedCompression;
+        if (compression != null) {
+            LOG.info("use {} compressed MySQL protocol for {}", compression.getAlgorithm(), remoteHostPortString);
+        }
+    }
+
+    public MysqlCompression getCompression() {
+        return compression;
+    }
+
+    public void setCompressedSequenceId(int compressedSequenceId) {
+        this.compressedSequenceId = compressedSequenceId & 0xFF;
+    }
+
     public SSLDecoder getSSLDecoder() {
         if (this.sslChannel == null) {
             return null;
@@ -157,6 +185,13 @@ public class MysqlChannel {
     }
 
     protected int readAll(ByteBuffer dstBuf) throws IOException {
+        if (compression != null) {
+            return readAllDecompressed(dstBuf);
+        }
+        return readAllRaw(dstBuf);
+    }
+
+    private int readAllRaw(ByteBuffer dstBuf) throws IOException {
         if (sslChannel != null) {
             return sslChannel.readAll(dstBuf);
         } else {
@@ -175,6 +210,43 @@ public class MysqlChannel {
             readLen += ret;
         }
         return readLen;
+    }
+
+    private int readAllDecompressed(ByteBuffer dstBuf) throws IOException {
+        int readLen = 0;
+        while (dstBuf.hasRemaining()) {
+            if (decompressedBuffer == null || !decompressedBuffer.hasRemaining()) {
+                decompressedBuffer = readCompressedPacket();
+                if (decompressedBuffer == null) {
+                    return readLen;
+                }
+            }
+            int toCopy = Math.min(dstBuf.remaining(), decompressedBuffer.remaining());
+            ByteBuffer slice = decompressedBuffer.duplicate();
+            slice.limit(slice.position() + toCopy);
+            dstBuf.put(slice);
+            decompressedBuffer.position(decompressedBuffer.position() + toCopy);
+            readLen += toCopy;
+        }
+        return readLen;
+    }
+
+    // null when the remote closed the channel
+    private ByteBuffer readCompressedPacket() throws IOException {
+        ByteBuffer header = ByteBuffer.allocate(MysqlCompression.HEADER_LEN);
+        if (readAllRaw(header) != MysqlCompression.HEADER_LEN) {
+            return null;
+        }
+        header.flip();
+        int payloadLen = MysqlCompression.readInt3(header);
+        int seq = header.get() & 0xFF;
+        int uncompressedLen = MysqlCompression.readInt3(header);
+        ByteBuffer payload = ByteBuffer.allocate(payloadLen);
+        if (readAllRaw(payload) != payloadLen) {
+            return null;
+        }
+        setCompressedSequenceId(seq + 1);
+        return ByteBuffer.wrap(compression.decodePayload(payload.array(), uncompressedLen));
     }
 
     public int realNetRead(ByteBuffer dstBuf) throws IOException {
@@ -199,8 +271,12 @@ public class MysqlChannel {
                 return null;
             }
             if (packetId() != sequenceId) {
-                LOG.warn("receive packet sequence id[" + packetId() + "] want to get[" + sequenceId + "]");
-                throw new IOException("Bad packet sequence.");
+                if (compression == null) {
+                    LOG.warn("receive packet sequence id[" + packetId() + "] want to get[" + sequenceId + "]");
+                    throw new IOException("Bad packet sequence.");
+                }
+                // Clients only keep the compressed packets' ids in order, see MysqlPackageDecoder.
+                sequenceId = packetId();
             }
             int packetLen = packetLen();
             if ((result.capacity() - result.position()) < packetLen) {
@@ -236,12 +312,39 @@ public class MysqlChannel {
     }
 
     private void send(ByteBuffer buffer) throws IOException {
+        if (compression != null) {
+            sendCompressed(buffer);
+        } else {
+            sendRaw(buffer);
+        }
+        isSend = true;
+    }
+
+    private void sendRaw(ByteBuffer buffer) throws IOException {
         if (sslChannel != null) {
             sslChannel.write(buffer);
         } else {
             realNetSend(buffer);
         }
-        isSend = true;
+    }
+
+    private void sendCompressed(ByteBuffer buffer) throws IOException {
+        while (buffer.hasRemaining()) {
+            int len = Math.min(buffer.remaining(), MAX_PHYSICAL_PACKET_LENGTH);
+            byte[] src;
+            int off;
+            if (buffer.hasArray()) {
+                src = buffer.array();
+                off = buffer.arrayOffset() + buffer.position();
+                buffer.position(buffer.position() + len);
+            } else {
+                src = new byte[len];
+                off = 0;
+                buffer.get(src);
+            }
+            sendRaw(compression.encodePacket(src, off, len, compressedSequenceId));
+            setCompressedSequenceId(compressedSequenceId + 1);
+        }
     }
 
     public void realNetSend(ByteBuffer buffer) throws IOException {

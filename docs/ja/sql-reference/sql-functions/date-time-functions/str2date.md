@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定されたフォーマットに従って文字列をDATE値に変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # str2date
@@ -9,7 +10,7 @@ description: "指定されたフォーマットに従って文字列をDATE値�
 
 フォーマットは [date_format](./date_format.md) で説明されているものと一致している必要があります。
 
-この関数は [str_to_date](../date-time-functions/str_to_date.md) と同等ですが、異なる戻り値の型を持ちます。
+この関数は [str_to_date](./str_to_date.md) と同等ですが、異なる戻り値の型を持ちます。
 
 ## 構文
 

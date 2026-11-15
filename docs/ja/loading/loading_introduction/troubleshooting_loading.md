@@ -1,7 +1,9 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 description: "SQL インターフェース経由でデータロードジョブステータスを監視し、パフォーマンスボトルネックを特定し、StarRocks ロード操作の異常をトラブルシューティングする方法。"
 sidebar_label: Troubleshooting
+products: [oss, enterprise, anywhere]
 ---
 
 # データロードのトラブルシューティング
@@ -26,11 +28,11 @@ sidebar_label: Troubleshooting
 ロードタスクも2つの方法で監視できます：
 
 - SQL ステートメント **[SHOW LOAD](../../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md)** および **[SHOW ROUTINE LOAD TASK](../../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD_TASK.md)** を使用する。
-- システムビュー **[information_schema.loads](../../sql-reference/information_schema/loads.md)** および **statistics.loads_history** を使用する。
+- システムビュー **[information_schema.loads](../../sql-reference/information_schema/loads.md)** および **`_statistics_.loads_history`** を使用する。
 
 ### SQL ステートメント
 
-**SHOW** ステートメントは、現在のデータベースの進行中および最近完了したロードタスクを表示し、タスクのステータスを迅速に把握できます。取得される情報は、**statistics.loads_history** システムビューのサブセットです。
+**SHOW** ステートメントは、現在のデータベースの進行中および最近完了したロードタスクを表示し、タスクのステータスを迅速に把握できます。取得される情報は、**`_statistics_.loads_history`** システムビューのサブセットです。
 
 SHOW LOAD ステートメントは Broker Load、Insert Into、Spark Load タスクの情報を返し、SHOW ROUTINE LOAD TASK ステートメントは Routine Load タスクの情報を返します。
 
@@ -38,7 +40,7 @@ SHOW LOAD ステートメントは Broker Load、Insert Into、Spark Load タス
 
 #### information_schema.loads
 
-**information_schema.loads** システムビューは、最近のロードタスクに関する情報を保存し、アクティブなものと最近完了したものを含みます。StarRocks は定期的にデータを **statistics.loads_history** システムテーブルに同期し、永続的に保存します。
+**information_schema.loads** システムビューは、最近のロードタスクに関する情報を保存し、アクティブなものと最近完了したものを含みます。StarRocks は定期的にデータを **`_statistics_.loads_history`** システムテーブルに同期し、永続的に保存します。
 
 **information_schema.loads** は以下のフィールドを提供します：
 
@@ -53,7 +55,7 @@ SHOW LOAD ステートメントは Broker Load、Insert Into、Spark Load タス
 | WAREHOUSE            | ロードジョブが属するウェアハウス。                 |
 | STATE                | ロードジョブの状態。 有効な値:<ul><li>`PENDING`/`BEGIN`: ロードジョブが作成された。</li><li>`QUEUEING`/`BEFORE_LOAD`: ロードジョブがスケジュール待ちのキューにある。</li><li>`LOADING`: ロードジョブが実行中。</li><li>`PREPARING`: トランザクションが事前コミットされている。</li><li>`PREPARED`: トランザクションが事前コミットされた。</li><li>`COMMITED`: トランザクションがコミットされた。</li><li>`FINISHED`: ロードジョブが成功した。</li><li>`CANCELLED`: ロードジョブが失敗した。</li></ul> |
 | PROGRESS             | ロードジョブの ETL ステージと LOADING ステージの進捗。 |
-| TYPE                 | ロードジョブのタイプ。 Broker Load の場合、返される値は `BROKER`。INSERT の場合、返される値は `INSERT`。Stream Load の場合、返される値は `STREAM`。Routine Load の場合、返される値は `ROUTINE`。 |
+| TYPE                 | ロードジョブのタイプ。 Broker Load の場合、返される値は `BROKER`。INSERT の場合、返される値は `INSERT`。Spark Load の場合、返される値は `SPARK`。Stream Load の場合、返される値は `STREAM_LOAD`。Routine Load の場合、返される値は `ROUTINE_LOAD`。 |
 | PRIORITY             | ロードジョブの優先度。 有効な値: `HIGHEST`, `HIGH`, `NORMAL`, `LOW`, `LOWEST`。 |
 | SCAN_ROWS            | スキャンされたデータ行の数。                    |
 | SCAN_BYTES           | スキャンされたバイト数。                        |
@@ -131,9 +133,9 @@ SHOW LOAD ステートメントは Broker Load、Insert Into、Spark Load タス
 | task_num               | 実際に並行して実行されるサブタスクの数。          |
 | timeout                | ロードタスクのタイムアウト。                                    |
 
-#### statistics.loads_history
+#### `_statistics_.loads_history`
 
-**statistics.loads_history** システムビューは、デフォルトで過去3か月間のロード記録を保存します。DBA はビューの `partition_ttl` を変更して保持期間を調整できます。**statistics.loads_history** は **information_schema.loads** と一貫したスキーマを持っています。
+**`_statistics_.loads_history`** システムビューは、デフォルトで過去 30 日間のロード記録を保存します。DBA は FE 設定項目 [`loads_history_retained_days`](../../administration/configuration/FE_parameters/user_query_loading.md#loads_history_retained_days) を変更して保持期間を調整できます。StarRocks はテーブルの `partition_live_number` プロパティを `loads_history_retained_days` の値にリセットするため、このプロパティを直接変更しないでください。**`_statistics_.loads_history`** は **information_schema.loads** と一貫したスキーマを持っています。
 
 ## Load Profiles でロードパフォーマンスの問題を特定する
 
@@ -151,14 +153,14 @@ Broker Load と INSERT INTO の Load Profiles をセッションレベルで有�
 SET enable_profile = true;
 ```
 
-デフォルトでは、長時間実行されるジョブ（300 秒以上）に対してプロファイルが自動的に有効になります。このしきい値をカスタマイズするには：
+デフォルトでは、長時間実行されるジョブ（30 秒以上）に対してプロファイルが自動的に有効になります。このしきい値をカスタマイズするには：
 
 ```sql
 SET big_query_profile_threshold = 60s;
 ```
 
 :::note
-`big_query_profile_threshold` がデフォルト値 `0` に設定されている場合、デフォルトの動作はクエリのプロファイリングを無効にすることです。ただし、ロードタスクの場合、実行時間が 300 秒を超えるタスクには自動的にプロファイルが記録されます。
+v3.3.12、v3.4.2、および v3.5.0 以降、`big_query_profile_threshold` のデフォルト値は `30s` です。それ以前のバージョンでは、デフォルト値は `0` で、長時間実行されるジョブのプロファイルは自動的に記録されません。
 :::
 
 StarRocks は **Runtime Profiles** もサポートしており、長時間実行されるロードジョブの実行メトリクスを定期的に（30 秒ごとに）報告します。報告間隔をカスタマイズするには：
@@ -198,6 +200,41 @@ Load Profiles の構造は Query Profiles と同一です。詳細な手順に�
 Load Profiles を分析するには、[ANALYZE PROFILE](../../sql-reference/sql-statements/cluster-management/plan_profile/ANALYZE_PROFILE.md) を実行します。詳細な手順については、[Analyze text-based Profiles](../../best_practices/query_tuning/query_profile_text_based_analysis.md) を参照してください。
 
 プロファイルは詳細なオペレーターメトリクスを提供します。主要なコンポーネントには `OlapTableSink` オペレーターと `LoadChannel` オペレーターが含まれます。
+
+#### PreSplit ノード
+
+StarRocks が INSERT、Broker Load、または増分マテリアライズドビューのリフレッシュで Range 分散ターゲットの事前分割を試行すると、トップレベルの Load Profile に `PreSplit` ノードが含まれます。ロードで事前分割が試行されなかった場合、このノードは出力されません。
+
+このノードには、次の時間メトリクスが含まれます。
+
+| メトリック | 説明 |
+| ---------- | ---- |
+| TotalTime | ロード内のすべての事前分割試行に費やされた合計実時間。 |
+| SourceSamplingTime | ソースサンプルまたはファイルメタデータの読み取りに費やされた時間。`derived_tier` では `0` です。 |
+| PartitionAndBoundaryPlanningTime | サンプル行をターゲットパーティション別にグループ化し、分割境界を計画するために費やされた時間。 |
+| JobSubmissionTime | 計画された Tablet reshard ジョブの登録に費やされた時間。 |
+| ReshardWaitTime | ロードを続行する前に、送信済み reshard ジョブが終端状態に到達するまで待機した時間。 |
+
+このノードには、次のカウンターも含まれます。
+
+| カウンター | 説明 |
+| ---------- | ---- |
+| Attempts | ターゲットテーブルに対する事前分割の試行回数。 |
+| SampleRows | Data tier のサンプリングで保持された行数。Metadata tier と derived tier の試行では加算されません。 |
+| EstimatedInputBytes | 各試行におけるソースデータの推定バイト数。同じターゲットテーブルの試行内でインデックスごとに重複する推定値は一度だけ数えられます。 |
+| TargetPartitions | 事前分割の対象として選択されたパーティション数。 |
+| BoundariesPlanned | ターゲットパーティションおよびインデックスに対して計画された分割境界の総数。 |
+
+次の情報文字列によって実行パスを識別できます。
+
+| フィールド | 説明 |
+| ---------- | ---- |
+| LoadKinds | 事前分割を試行したロードパス。例：`INSERT-from-FILES`、`INSERT-from-table`、`Broker Load`、`incremental MV refresh`。 |
+| Tables | 事前分割を試行したターゲットテーブル。 |
+| SourceTiers | 試行された境界ソースの tier：`meta_tier`、`data_tier`、`derived_tier`。複数の値はフォールバックまたは複数テーブルの試行を示します。 |
+| Outcomes | 事前分割中に確認された送信、完了、フォールバック、またはスキップの結果。 |
+| SampleQueryIds | Data tier の内部サンプリングクエリの Query ID。 |
+| ReshardJobIds | 送信された Tablet reshard ジョブの ID。 |
 
 #### OlapTableSink オペレーター
 
@@ -496,7 +533,7 @@ select tablet_id,t.data_size,num_row,visible_version,num_version,num_rowset,num_
 
 #### BE Load
 
-これらのメトリクスは Grafana の **BE Load** カテゴリで利用可能です。このカテゴリが見つからない場合は、[最新の Grafana ダッシュボードテンプレート](../../administration/management/monitoring/Monitor_and_Alert.md#125-ダッシュボードの設定) を使用していることを確認してください。
+これらのメトリクスは Grafana の **BE Load** カテゴリで利用可能です。このカテゴリが見つからない場合は、[最新の Grafana ダッシュボードテンプレート](../../administration/management/monitoring/prometheus_grafana.md#125-ダッシュボードの設定) を使用していることを確認してください。
 
 ##### ThreadPool
 

@@ -19,11 +19,14 @@
 #include <gtest/gtest.h>
 
 #include <limits>
+#include <string>
+#include <vector>
 
 #include "common/config_http_fwd.h"
 #include "common/status.h"
 #include "common/system/master_info.h"
 #include "platform/http/ev_http_server.h"
+#include "platform/http/http_auth.h"
 #include "platform/http/http_handler.h"
 #include "platform/http/http_headers.h"
 #include "platform/http/http_request.h"
@@ -48,11 +51,15 @@ TEST(AuthFailureFromFeStatusTest, ok_returns_nullopt) {
     EXPECT_FALSE(result.has_value());
 }
 
-TEST(AuthFailureFromFeStatusTest, not_authorized_maps_to_401_with_basic_challenge) {
+static const std::vector<std::string> kBothChallenges = {"Basic realm=\"StarRocks\"",
+                                                         "Bearer realm=\"StarRocks\", error=\"invalid_token\""};
+
+TEST(AuthFailureFromFeStatusTest, not_authorized_maps_to_401_with_both_challenges) {
     auto result = auth_failure_from_fe_status(Status::NotAuthorized("bad password"));
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(HttpStatus::UNAUTHORIZED, result->http_status);
-    EXPECT_EQ("Basic realm=\"\"", result->www_authenticate);
+    // Same two lines the FE sends: a password client and a token client each find their scheme.
+    EXPECT_EQ(kBothChallenges, result->www_authenticate);
     // Body shape mirrors FE RestBaseResult — verify message round-trips into JSON.
     EXPECT_NE(std::string::npos, result->body.find("FAILED"));
     EXPECT_NE(std::string::npos, result->body.find("bad password"));
@@ -82,10 +89,10 @@ TEST(AuthFailureFromFeStatusTest, other_non_ok_maps_to_500) {
     EXPECT_TRUE(result->www_authenticate.empty());
 }
 
-TEST(MakeUnauthorizedTest, has_401_and_basic_realm) {
+TEST(MakeUnauthorizedTest, has_401_and_both_challenges) {
     auto failure = make_unauthorized("missing Basic");
     EXPECT_EQ(HttpStatus::UNAUTHORIZED, failure.http_status);
-    EXPECT_EQ("Basic realm=\"\"", failure.www_authenticate);
+    EXPECT_EQ(kBothChallenges, failure.www_authenticate);
     EXPECT_NE(std::string::npos, failure.body.find("missing Basic"));
 }
 
@@ -132,13 +139,13 @@ TEST(ToThriftPrivilegeTest, unknown_enum_value_fails_closed_as_operate) {
     EXPECT_EQ(TPrivilegeRequirement::OPERATE, to_thrift_privilege(bogus));
 }
 
-// --------- verify_http_basic_auth ---------
+// --------- verify_http_auth ---------
 // The verifier does flag-gate → Basic-Auth parse → FE master check → RPC.
 // Everything up to the RPC is unit-testable. The RPC + result handling are
 // covered end-to-end by summary/http_auth/http_auth_smoke_test.py (a real
 // cluster is needed to exercise FE's checkAuth).
 
-class VerifyHttpBasicAuthTest : public testing::Test {
+class VerifyHttpAuthTest : public testing::Test {
 public:
     void SetUp() override {
         _saved_flag = config::enable_http_auth;
@@ -168,36 +175,80 @@ protected:
     evhttp_request* _ev_req = nullptr;
 };
 
-TEST_F(VerifyHttpBasicAuthTest, flag_off_skips_verification) {
+TEST_F(VerifyHttpAuthTest, flag_off_skips_verification) {
     config::enable_http_auth = false;
     HttpRequest req(_ev_req);
     // No headers populated, no FE configured. With the flag off, none of that
     // matters — must return nullopt unconditionally.
-    auto result = verify_http_basic_auth(&req, HttpHandler::RequiredPrivilege::OPERATE);
+    auto result = verify_http_auth(&req, HttpHandler::RequiredPrivilege::OPERATE);
     EXPECT_FALSE(result.has_value());
 }
 
-TEST_F(VerifyHttpBasicAuthTest, missing_authorization_header_returns_401) {
+TEST_F(VerifyHttpAuthTest, missing_authorization_header_returns_401) {
     config::enable_http_auth = true;
     HttpRequest req(_ev_req);
-    // No Authorization header → parse_basic_auth fails → 401 with Basic challenge.
-    auto result = verify_http_basic_auth(&req, HttpHandler::RequiredPrivilege::NONE);
+    // No Authorization header → parse_auth fails → 401 with both challenges.
+    auto result = verify_http_auth(&req, HttpHandler::RequiredPrivilege::NONE);
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(HttpStatus::UNAUTHORIZED, result->http_status);
-    EXPECT_EQ("Basic realm=\"\"", result->www_authenticate);
+    EXPECT_EQ(kBothChallenges, result->www_authenticate);
 }
 
-TEST_F(VerifyHttpBasicAuthTest, malformed_authorization_returns_401) {
+TEST_F(VerifyHttpAuthTest, unknown_scheme_returns_401) {
     config::enable_http_auth = true;
     HttpRequest req(_ev_req);
-    // "Bearer" instead of "Basic" — parse_basic_auth rejects it.
-    req.set_header(HttpHeaders::AUTHORIZATION, "Bearer not-a-basic-token");
-    auto result = verify_http_basic_auth(&req, HttpHandler::RequiredPrivilege::NONE);
+    // Neither Basic nor Bearer: nothing on this port speaks Digest.
+    req.set_header(HttpHeaders::AUTHORIZATION, "Digest username=\"root\"");
+    auto result = verify_http_auth(&req, HttpHandler::RequiredPrivilege::NONE);
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(HttpStatus::UNAUTHORIZED, result->http_status);
+    EXPECT_EQ(kBothChallenges, result->www_authenticate);
 }
 
-TEST_F(VerifyHttpBasicAuthTest, unknown_fe_master_returns_503) {
+// --------- parse_auth: the Authorization header as clients actually send it ---------
+
+TEST_F(VerifyHttpAuthTest, parse_auth_reads_bearer_into_passwd_with_auth_type) {
+    HttpRequest req(_ev_req);
+    req.set_header(HttpHeaders::AUTHORIZATION, "Bearer eyJ.hdr.sig");
+    AuthInfo auth;
+    ASSERT_TRUE(parse_auth(req, &auth));
+    EXPECT_EQ("eyJ.hdr.sig", auth.passwd);
+    EXPECT_EQ(AuthInfo::AUTH_TYPE_BEARER, auth.auth_type);
+    EXPECT_TRUE(auth.user.empty()) << "a Bearer request declares no user; the FE reads it from the token";
+}
+
+TEST_F(VerifyHttpAuthTest, parse_auth_scheme_is_case_insensitive_and_value_is_trimmed) {
+    // RFC 7235: the scheme token is case-insensitive and any amount of blank separates it from
+    // the credentials. Proxies and hand-written clients produce all of these.
+    HttpRequest req(_ev_req);
+    req.set_header(HttpHeaders::AUTHORIZATION, "  bearer   eyJ.hdr.sig \t");
+    AuthInfo bearer;
+    ASSERT_TRUE(parse_auth(req, &bearer));
+    EXPECT_EQ("eyJ.hdr.sig", bearer.passwd);
+    EXPECT_EQ(AuthInfo::AUTH_TYPE_BEARER, bearer.auth_type);
+
+    req.set_header(HttpHeaders::AUTHORIZATION, "BASIC  cm9vdDpwdw=="); // root:pw
+    AuthInfo basic;
+    ASSERT_TRUE(parse_auth(req, &basic));
+    EXPECT_EQ("root", basic.user);
+    EXPECT_EQ("pw", basic.passwd);
+    EXPECT_TRUE(basic.auth_type.empty()) << "empty auth_type is what the FE reads as basic";
+}
+
+TEST_F(VerifyHttpAuthTest, parse_auth_rejects_a_scheme_without_a_value_or_glued_to_it) {
+    HttpRequest req(_ev_req);
+    AuthInfo auth;
+    req.set_header(HttpHeaders::AUTHORIZATION, "Bearer");
+    EXPECT_FALSE(parse_auth(req, &auth));
+    req.set_header(HttpHeaders::AUTHORIZATION, "Bearer   ");
+    EXPECT_FALSE(parse_auth(req, &auth));
+    req.set_header(HttpHeaders::AUTHORIZATION, "Bearertoken");
+    EXPECT_FALSE(parse_auth(req, &auth)) << "\"Bearertoken\" is not the Bearer scheme";
+    req.set_header(HttpHeaders::AUTHORIZATION, "Basiccm9vdDpwdw==");
+    EXPECT_FALSE(parse_auth(req, &auth));
+}
+
+TEST_F(VerifyHttpAuthTest, unknown_fe_master_returns_503) {
     config::enable_http_auth = true;
     // Overwrite master info with an empty endpoint. Use a high epoch so we win
     // against any state a prior test in this binary may have stored (the
@@ -210,7 +261,7 @@ TEST_F(VerifyHttpBasicAuthTest, unknown_fe_master_returns_503) {
 
     HttpRequest req(_ev_req);
     req.set_header(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo="); // root:
-    auto result = verify_http_basic_auth(&req, HttpHandler::RequiredPrivilege::OPERATE);
+    auto result = verify_http_auth(&req, HttpHandler::RequiredPrivilege::OPERATE);
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(HttpStatus::SERVICE_UNAVAILABLE, result->http_status);
     // Service-side failure ⇒ no WWW-Authenticate (the client's creds may be fine).

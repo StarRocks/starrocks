@@ -1,0 +1,268 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.planner;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.analyzer.SemanticException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
+
+public class OlapTableSinkMultiNodeWriteTest {
+    private static final List<Long> NODES = Lists.newArrayList(10L, 11L, 12L, 13L);
+
+    @Test
+    public void testOwnerComesFirst() {
+        // The owner leads the list so the node that will publish the tablet also holds part of its
+        // data, and therefore its caches.
+        List<Long> nodeIds = OlapTableSink.buildWriterNodeIds(12L, NODES, 3, 100L);
+        Assertions.assertEquals(3, nodeIds.size());
+        Assertions.assertEquals(12L, nodeIds.get(0));
+        Assertions.assertEquals(3, nodeIds.stream().distinct().count());
+        Assertions.assertTrue(NODES.containsAll(nodeIds));
+    }
+
+    @Test
+    public void testParallelismOneKeepsSingleNode() {
+        Assertions.assertEquals(Lists.newArrayList(12L),
+                OlapTableSink.buildWriterNodeIds(12L, NODES, OlapTableSink.NO_MULTI_NODE_WRITE, 100L));
+    }
+
+    @Test
+    public void testBoundedBelowAliveNodes() {
+        // lake_multi_node_write_max_nodes reaches here as the bound. Every node in the list writes its
+        // own segments, so a wide warehouse would otherwise cut one load into that many small segments.
+        // The nodes left out still run their sink instance -- their rows just travel, as they did before
+        // the feature existed -- so the bound may cost locality but must never drop or duplicate a node.
+        List<Long> nodeIds = OlapTableSink.buildWriterNodeIds(12L, NODES, 2, 100L);
+        Assertions.assertEquals(2, nodeIds.size());
+        Assertions.assertEquals(2, nodeIds.stream().distinct().count());
+        Assertions.assertEquals(12L, nodeIds.get(0));
+        Assertions.assertTrue(NODES.containsAll(nodeIds));
+    }
+
+    @Test
+    public void testClampedToAliveNodes() {
+        // "every alive node" reaches createLocation as Integer.MAX_VALUE; the list must clamp rather
+        // than repeat a node, which would make one node write the tablet twice.
+        List<Long> nodeIds = OlapTableSink.buildWriterNodeIds(12L, NODES, Integer.MAX_VALUE, 100L);
+        Assertions.assertEquals(NODES.size(), nodeIds.size());
+        Assertions.assertEquals(NODES.size(), nodeIds.stream().distinct().count());
+        Assertions.assertEquals(12L, nodeIds.get(0));
+    }
+
+    @Test
+    public void testFollowersVaryWithTabletId() {
+        // Two tablets of the same partition must not pile their extra writers onto the same node.
+        List<Long> first = OlapTableSink.buildWriterNodeIds(10L, NODES, 2, 1L);
+        List<Long> second = OlapTableSink.buildWriterNodeIds(10L, NODES, 2, 2L);
+        Assertions.assertEquals(10L, first.get(0));
+        Assertions.assertEquals(10L, second.get(0));
+        Assertions.assertNotEquals(first.get(1), second.get(1));
+    }
+
+    private static final long GB = 1024L * 1024 * 1024;
+
+    @Test
+    public void testNodesFromEstimatedSize() {
+        // The worked example: 10 GB at the 2 GB default is five nodes' worth. The caller then takes the
+        // minimum of this, lake_multi_node_write_max_nodes, and the alive node count.
+        Assertions.assertEquals(5, OlapTableSink.nodesForEstimatedSize(10 * GB, 2 * GB));
+        Assertions.assertEquals(1, OlapTableSink.nodesForEstimatedSize(2 * GB, 2 * GB));
+    }
+
+    @Test
+    public void testPartialShareDoesNotBuyANode() {
+        // Integer division: a node joins only once there is a whole share for it. Every node in the list
+        // writes its own segments and emits its own partial txn log, and open/close reach it whether or
+        // not it ends up with rows, so a node given a sliver costs more than it saves.
+        Assertions.assertEquals(4, OlapTableSink.nodesForEstimatedSize(9 * GB, 2 * GB));
+        // Below one full share the load stays on a single node, which is the feature turned off.
+        Assertions.assertEquals(1, OlapTableSink.nodesForEstimatedSize(GB, 2 * GB));
+    }
+
+    @Test
+    public void testUnknownSizeDefersToTheBound() {
+        // An unknown size is not a small size: with no estimate the node count must stay exactly what it
+        // was before this knob existed, so the value returned has to lose every min() it takes part in.
+        Assertions.assertEquals(Integer.MAX_VALUE, OlapTableSink.nodesForEstimatedSize(-1, 2 * GB));
+        Assertions.assertEquals(Integer.MAX_VALUE, OlapTableSink.nodesForEstimatedSize(0, 2 * GB));
+        // Same for a session that disables the sizing by zeroing the share.
+        Assertions.assertEquals(Integer.MAX_VALUE, OlapTableSink.nodesForEstimatedSize(10 * GB, 0));
+        Assertions.assertEquals(Integer.MAX_VALUE, OlapTableSink.nodesForEstimatedSize(10 * GB, -1));
+    }
+
+    @Test
+    public void testHugeEstimateDoesNotOverflow() {
+        // A byte count divided by a one-byte share exceeds int range; it must saturate, not wrap
+        // negative, which would make min() pick a nonsense parallelism.
+        Assertions.assertEquals(Integer.MAX_VALUE, OlapTableSink.nodesForEstimatedSize(Long.MAX_VALUE, 1));
+    }
+
+
+    @Test
+    public void testWriteModeParsing() {
+        SessionVariable sv = new SessionVariable();
+        // The default decides whether an unconfigured cluster spreads at all, so it is asserted here
+        // rather than left to the field initialiser.
+        Assertions.assertEquals(SessionVariable.MultiNodeTabletWriteMode.AUTO, sv.getMultiNodeTabletWriteMode());
+
+        for (String off : new String[] {"off", "OFF", " Off "}) {
+            sv.setLakeMultiNodeTabletWriteMode(off);
+            Assertions.assertEquals(SessionVariable.MultiNodeTabletWriteMode.OFF, sv.getMultiNodeTabletWriteMode());
+        }
+        sv.setLakeMultiNodeTabletWriteMode("FORCE");
+        Assertions.assertEquals(SessionVariable.MultiNodeTabletWriteMode.FORCE, sv.getMultiNodeTabletWriteMode());
+        // Stored normalised, so SHOW VARIABLES does not echo back whatever casing was typed.
+        Assertions.assertEquals("force", sv.getLakeMultiNodeTabletWriteMode());
+    }
+
+    @Test
+    public void testInvalidWriteModeIsRejected() {
+        // A typo must fail the SET. Storing it and resolving it later would silently pick some mode,
+        // and the one it would pick is the one that spreads.
+        SessionVariable sv = new SessionVariable();
+        Assertions.assertThrows(SemanticException.class, () -> sv.setLakeMultiNodeTabletWriteMode("on"));
+        Assertions.assertThrows(SemanticException.class, () -> sv.setLakeMultiNodeTabletWriteMode(""));
+        Assertions.assertThrows(SemanticException.class, () -> sv.setLakeMultiNodeTabletWriteMode(null));
+        // The failed SETs left the default alone.
+        Assertions.assertEquals(SessionVariable.MultiNodeTabletWriteMode.AUTO, sv.getMultiNodeTabletWriteMode());
+    }
+
+
+    @Test
+    public void testSettingsComeFromTheSubmittedSnapshot() {
+        // A Broker Load is planned long after its statement returned, so the sink must decide from
+        // what the submitting session held -- not from the session it happens to be planned under,
+        // which is the client's live one until an FE failover replaces it.
+        Map<String, String> persisted = Maps.newHashMap();
+        persisted.put(SessionVariable.LAKE_MULTI_NODE_TABLET_WRITE_MODE, "off");
+        persisted.put(SessionVariable.LAKE_MULTI_NODE_WRITE_MAX_NODES, "3");
+        persisted.put(SessionVariable.LAKE_MULTI_NODE_WRITE_BYTES_PER_NODE, "1024");
+
+        OlapTableSink.MultiNodeWriteSettings settings =
+                OlapTableSink.MultiNodeWriteSettings.fromPersisted(persisted);
+        Assertions.assertEquals(SessionVariable.MultiNodeTabletWriteMode.OFF, settings.mode());
+        Assertions.assertEquals(3, settings.maxNodes());
+        Assertions.assertEquals(1024L, settings.bytesPerNode());
+    }
+
+    @Test
+    public void testNoSnapshotLeavesTodaysBehaviour() {
+        // A stream load reaches the same planner with a map built for something else, and a job
+        // persisted before these knobs existed carries none of them. Both must keep reading the
+        // planning session rather than resolve to some default of their own.
+        Assertions.assertNull(OlapTableSink.MultiNodeWriteSettings.fromPersisted(null));
+        Assertions.assertNull(OlapTableSink.MultiNodeWriteSettings.fromPersisted(Maps.newHashMap()));
+
+        // A half-written snapshot is not a snapshot: taking the mode from it and the bound from a
+        // different moment is exactly what reading them together exists to prevent.
+        Map<String, String> partial = Maps.newHashMap();
+        partial.put(SessionVariable.LAKE_MULTI_NODE_TABLET_WRITE_MODE, "force");
+        Assertions.assertNull(OlapTableSink.MultiNodeWriteSettings.fromPersisted(partial));
+    }
+
+    @Test
+    public void testSnapshotResolvesTheModeLikeASet() {
+        // Persisted values are written by this FE, so garbage means the snapshot is corrupt; it must
+        // fail the load rather than resolve to whichever mode a silent fallback would pick.
+        Map<String, String> persisted = Maps.newHashMap();
+        persisted.put(SessionVariable.LAKE_MULTI_NODE_TABLET_WRITE_MODE, "on");
+        persisted.put(SessionVariable.LAKE_MULTI_NODE_WRITE_MAX_NODES, "3");
+        persisted.put(SessionVariable.LAKE_MULTI_NODE_WRITE_BYTES_PER_NODE, "1024");
+        Assertions.assertThrows(SemanticException.class,
+                () -> OlapTableSink.MultiNodeWriteSettings.fromPersisted(persisted));
+    }
+
+    @Test
+    public void testSettingsFromSessionMatchItsVariables() {
+        // The INSERT path has no snapshot: it is planned inside its own statement, so the live
+        // session is the submitting one and all three knobs must come from it unchanged.
+        SessionVariable sv = new SessionVariable();
+        sv.setLakeMultiNodeTabletWriteMode("force");
+        sv.setLakeMultiNodeWriteMaxNodes(2);
+        sv.setLakeMultiNodeWriteBytesPerNode(4 * GB);
+
+        OlapTableSink.MultiNodeWriteSettings settings = OlapTableSink.MultiNodeWriteSettings.from(sv);
+        Assertions.assertEquals(SessionVariable.MultiNodeTabletWriteMode.FORCE, settings.mode());
+        Assertions.assertEquals(2, settings.maxNodes());
+        Assertions.assertEquals(4 * GB, settings.bytesPerNode());
+    }
+
+    @Test
+    public void testIndexSpreadsOnlyBelowTheWriterWidth() {
+        // A partition short on tablets is the case this feature exists for.
+        Assertions.assertTrue(OlapTableSink.spreadsIndex(1, 3));
+        Assertions.assertTrue(OlapTableSink.spreadsIndex(2, 3));
+        // Bucket-level parallelism already reaches the width, so there is nothing left to win.
+        Assertions.assertFalse(OlapTableSink.spreadsIndex(3, 3));
+        // The regression this guards: five tablets against a load whose size warrants three writers.
+        // Comparing against the warehouse size instead would spread each of the five across three
+        // nodes -- fifteen delta writers, and that many segments, for a load worth three.
+        Assertions.assertFalse(OlapTableSink.spreadsIndex(5, 3));
+    }
+
+    @Test
+    public void testNoWidthMeansNoSpread() {
+        // No candidates, or a single node: nothing to spread over, and no separate emptiness check.
+        Assertions.assertFalse(OlapTableSink.spreadsIndex(1, 0));
+        Assertions.assertFalse(OlapTableSink.spreadsIndex(1, 1));
+    }
+
+    @Test
+    public void testRuntimePartitionSpreadsLikeAPlannedOne() {
+        // The shape automatic partitioning produces: one tablet, because the new partition's data
+        // boundaries have not been seen yet, on a load worth three writers.
+        List<Long> nodeIds = OlapTableSink.buildRuntimePartitionNodeIds(11L, NODES, 3, 1, 7L);
+        Assertions.assertEquals(3, nodeIds.size());
+        Assertions.assertEquals(11L, nodeIds.get(0).longValue());
+        // Same list createLocation would have built for a planned partition of the same shape.
+        Assertions.assertEquals(OlapTableSink.buildWriterNodeIds(11L, NODES, 3, 7L), nodeIds);
+    }
+
+    @Test
+    public void testRuntimePartitionWithEnoughTabletsKeepsOneNode() {
+        // Bucket-level parallelism already reaches the width, exactly as spreadsIndex decides for a
+        // planned partition.
+        Assertions.assertEquals(Lists.newArrayList(11L),
+                OlapTableSink.buildRuntimePartitionNodeIds(11L, NODES, 3, 3, 7L));
+    }
+
+    @Test
+    public void testRuntimePartitionKeepsOneNodeWithoutAWidth() {
+        // A load whose plan recorded no width did not set TOlapTableSink.enable_multi_node_write, so BE
+        // would read a multi-node list as a REPLICA set and write every row to every node in it. The
+        // no-width case has to stay a single node for that reason, not merely because it wins nothing.
+        Assertions.assertEquals(Lists.newArrayList(11L),
+                OlapTableSink.buildRuntimePartitionNodeIds(11L, NODES, OlapTableSink.NO_MULTI_NODE_WRITE, 1, 7L));
+        // The warehouse lost its other nodes since the plan was built: a recorded width it can no longer
+        // spend spreads nothing.
+        Assertions.assertEquals(Lists.newArrayList(11L),
+                OlapTableSink.buildRuntimePartitionNodeIds(11L, Lists.newArrayList(), 3, 1, 7L));
+    }
+
+    @Test
+    public void testRuntimePartitionClampedToAliveNodes() {
+        // Fewer nodes alive now than the plan resolved: the width shrinks to what is left.
+        List<Long> twoNodes = Lists.newArrayList(10L, 11L);
+        List<Long> nodeIds = OlapTableSink.buildRuntimePartitionNodeIds(11L, twoNodes, 4, 1, 7L);
+        Assertions.assertEquals(Lists.newArrayList(11L, 10L), nodeIds);
+    }
+
+}

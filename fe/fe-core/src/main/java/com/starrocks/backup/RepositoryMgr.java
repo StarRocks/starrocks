@@ -46,6 +46,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
@@ -162,6 +163,10 @@ public class RepositoryMgr extends LeaderDaemon implements Writable, GsonPostPro
         repoIdMap.remove(repo.getId());
         repoNameMap.remove(repo.getName());
         LOG.info("successfully removing repo {} from repository mgr", repo.getName());
+    }
+
+    public Collection<Repository> getAllRepositories() {
+        return repoIdMap.values();
     }
 
     public List<List<String>> getReposInfo() {

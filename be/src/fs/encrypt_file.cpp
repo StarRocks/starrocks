@@ -80,9 +80,9 @@ std::string get_openssl_errors() {
     std::ostringstream serr;
     unsigned long l;
     int line, flags;
-    const char *file, *data;
+    const char *file, *func, *data;
     char buf[256];
-    while ((l = ERR_get_error_line_data(&file, &line, &data, &flags)) != 0) {
+    while ((l = ERR_get_error_all(&file, &line, &func, &data, &flags)) != 0) {
         ERR_error_string_n(l, buf, sizeof(buf));
         serr << " " << buf << ":" << file << ":" << line << ((flags & ERR_TXT_STRING) ? data : "");
     }

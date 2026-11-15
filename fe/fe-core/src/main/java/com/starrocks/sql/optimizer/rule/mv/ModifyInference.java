@@ -52,6 +52,11 @@ public class ModifyInference extends OptExpressionVisitor<ModifyInference.Modify
         return visit(optExpression.inputAt(0), ctx);
     }
 
+    @Override
+    public ModifyOp visitPhysicalAIProject(OptExpression optExpression, Void ctx) {
+        return infer(optExpression.inputAt(0));
+    }
+
     // TODO(murphy) read from user property, support custom the ModifyOp behavior
     private ModifyOp visitOlapTable(Table table) {
         if (!table.isOlapTable()) {

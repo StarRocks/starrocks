@@ -1,0 +1,449 @@
+diff --git include/jemalloc/internal/arena_stats.h include/jemalloc/internal/arena_stats.h
+index 15f1d345..127938ff 100644
+--- include/jemalloc/internal/arena_stats.h
++++ include/jemalloc/internal/arena_stats.h
+@@ -51,6 +51,8 @@ struct arena_stats_s {
+ 	 * in pa_shard_stats_t.
+ 	 */
+ 	size_t			base; /* Derived. */
++	size_t			metadata_edata; /* Derived. */
++	size_t			metadata_rtree; /* Derived. */
+ 	size_t			resident; /* Derived. */
+ 	size_t			metadata_thp; /* Derived. */
+ 	size_t			mapped; /* Derived. */
+diff --git include/jemalloc/internal/base.h include/jemalloc/internal/base.h
+index 9b2c9fb1..8ca6e1e5 100644
+--- include/jemalloc/internal/base.h
++++ include/jemalloc/internal/base.h
+@@ -74,6 +74,8 @@ struct base_s {
+ 
+ 	/* Stats, only maintained if config_stats. */
+ 	size_t allocated;
++	size_t edata_allocated;
++	size_t rtree_allocated;
+ 	size_t resident;
+ 	size_t mapped;
+ 	/* Number of THP regions touched. */
+@@ -100,8 +102,10 @@ extent_hooks_t *base_extent_hooks_set(base_t *base,
+     extent_hooks_t *extent_hooks);
+ void *base_alloc(tsdn_t *tsdn, base_t *base, size_t size, size_t alignment);
+ edata_t *base_alloc_edata(tsdn_t *tsdn, base_t *base);
++void *base_alloc_rtree(tsdn_t *tsdn, base_t *base, size_t size);
+ void base_stats_get(tsdn_t *tsdn, base_t *base, size_t *allocated,
+-    size_t *resident, size_t *mapped, size_t *n_thp);
++    size_t *edata_allocated, size_t *rtree_allocated, size_t *resident,
++    size_t *mapped, size_t *n_thp);
+ void base_prefork(tsdn_t *tsdn, base_t *base);
+ void base_postfork_parent(tsdn_t *tsdn, base_t *base);
+ void base_postfork_child(tsdn_t *tsdn, base_t *base);
+diff --git include/jemalloc/internal/ctl.h include/jemalloc/internal/ctl.h
+index 63d27f8a..a2f06e49 100644
+--- include/jemalloc/internal/ctl.h
++++ include/jemalloc/internal/ctl.h
+@@ -53,6 +53,8 @@ typedef struct ctl_stats_s {
+ 	size_t allocated;
+ 	size_t active;
+ 	size_t metadata;
++	size_t metadata_edata;
++	size_t metadata_rtree;
+ 	size_t metadata_thp;
+ 	size_t resident;
+ 	size_t mapped;
+diff --git src/arena.c src/arena.c
+index fba416f6..6d5cb6a5 100644
+--- src/arena.c
++++ src/arena.c
+@@ -92,8 +92,10 @@ arena_stats_merge(tsdn_t *tsdn, arena_t *arena, unsigned *nthreads,
+ 	arena_basic_stats_merge(tsdn, arena, nthreads, dss, dirty_decay_ms,
+ 	    muzzy_decay_ms, nactive, ndirty, nmuzzy);
+ 
+-	size_t base_allocated, base_resident, base_mapped, metadata_thp;
+-	base_stats_get(tsdn, arena->base, &base_allocated, &base_resident,
++	size_t base_allocated, base_edata_allocated, base_rtree_allocated,
++	    base_resident, base_mapped, metadata_thp;
++	base_stats_get(tsdn, arena->base, &base_allocated,
++	    &base_edata_allocated, &base_rtree_allocated, &base_resident,
+ 	    &base_mapped, &metadata_thp);
+ 	size_t pac_mapped_sz = pac_mapped(&arena->pa_shard.pac);
+ 	astats->mapped += base_mapped + pac_mapped_sz;
+@@ -102,6 +104,8 @@ arena_stats_merge(tsdn_t *tsdn, arena_t *arena, unsigned *nthreads,
+ 	LOCKEDINT_MTX_LOCK(tsdn, arena->stats.mtx);
+ 
+ 	astats->base += base_allocated;
++	astats->metadata_edata += base_edata_allocated;
++	astats->metadata_rtree += base_rtree_allocated;
+ 	atomic_load_add_store_zu(&astats->internal, arena_internal_get(arena));
+ 	astats->metadata_thp += metadata_thp;
+ 
+diff --git src/base.c src/base.c
+index 7f4d6756..9819c00f 100644
+--- src/base.c
++++ src/base.c
+@@ -385,6 +385,8 @@ base_new(tsdn_t *tsdn, unsigned ind, const extent_hooks_t *extent_hooks,
+ 		edata_heap_new(&base->avail[i]);
+ 	}
+ 	if (config_stats) {
++		base->edata_allocated = 0;
++		base->rtree_allocated = 0;
+ 		base->allocated = sizeof(base_block_t);
+ 		base->resident = PAGE_CEILING(sizeof(base_block_t));
+ 		base->mapped = block->size;
+@@ -433,7 +435,7 @@ base_extent_hooks_set(base_t *base, extent_hooks_t *extent_hooks) {
+ 
+ static void *
+ base_alloc_impl(tsdn_t *tsdn, base_t *base, size_t size, size_t alignment,
+-    size_t *esn) {
++    size_t *esn, size_t *stats_dst) {
+ 	alignment = QUANTUM_CEILING(alignment);
+ 	size_t usize = ALIGNMENT_CEILING(size, alignment);
+ 	size_t asize = usize + alignment - QUANTUM;
+@@ -461,6 +463,14 @@ base_alloc_impl(tsdn_t *tsdn, base_t *base, size_t size, size_t alignment,
+ 	if (esn != NULL) {
+ 		*esn = (size_t)edata_sn_get(edata);
+ 	}
++	/*
++	 * Charge the caller's metadata bucket while base->mtx is still held, so
++	 * that it stays in sync with base->allocated (bumped just above, inside
++	 * base_extent_bump_alloc_post) and with the base_stats_get() reader.
++	 */
++	if (config_stats && stats_dst != NULL) {
++		*stats_dst += usize;
++	}
+ label_return:
+ 	malloc_mutex_unlock(tsdn, &base->mtx);
+ 	return ret;
+@@ -476,14 +486,14 @@ label_return:
+  */
+ void *
+ base_alloc(tsdn_t *tsdn, base_t *base, size_t size, size_t alignment) {
+-	return base_alloc_impl(tsdn, base, size, alignment, NULL);
++	return base_alloc_impl(tsdn, base, size, alignment, NULL, NULL);
+ }
+ 
+ edata_t *
+ base_alloc_edata(tsdn_t *tsdn, base_t *base) {
+ 	size_t esn;
+ 	edata_t *edata = base_alloc_impl(tsdn, base, sizeof(edata_t),
+-	    EDATA_ALIGNMENT, &esn);
++	    EDATA_ALIGNMENT, &esn, &base->edata_allocated);
+ 	if (edata == NULL) {
+ 		return NULL;
+ 	}
+@@ -491,15 +501,25 @@ base_alloc_edata(tsdn_t *tsdn, base_t *base) {
+ 	return edata;
+ }
+ 
++void *
++base_alloc_rtree(tsdn_t *tsdn, base_t *base, size_t size) {
++	return base_alloc_impl(tsdn, base, size, CACHELINE, NULL,
++	    &base->rtree_allocated);
++}
++
+ void
+-base_stats_get(tsdn_t *tsdn, base_t *base, size_t *allocated, size_t *resident,
++base_stats_get(tsdn_t *tsdn, base_t *base, size_t *allocated,
++    size_t *edata_allocated, size_t *rtree_allocated, size_t *resident,
+     size_t *mapped, size_t *n_thp) {
+ 	cassert(config_stats);
+ 
+ 	malloc_mutex_lock(tsdn, &base->mtx);
+ 	assert(base->allocated <= base->resident);
+ 	assert(base->resident <= base->mapped);
++	assert(base->edata_allocated + base->rtree_allocated <= base->allocated);
+ 	*allocated = base->allocated;
++	*edata_allocated = base->edata_allocated;
++	*rtree_allocated = base->rtree_allocated;
+ 	*resident = base->resident;
+ 	*mapped = base->mapped;
+ 	*n_thp = base->n_thp;
+diff --git src/ctl.c src/ctl.c
+index cd6f8e9f..e8d6cfb4 100644
+--- src/ctl.c
++++ src/ctl.c
+@@ -291,6 +291,8 @@ CTL_PROTO(stats_arenas_i_muzzy_nmadvise)
+ CTL_PROTO(stats_arenas_i_muzzy_purged)
+ CTL_PROTO(stats_arenas_i_base)
+ CTL_PROTO(stats_arenas_i_internal)
++CTL_PROTO(stats_arenas_i_metadata_edata)
++CTL_PROTO(stats_arenas_i_metadata_rtree)
+ CTL_PROTO(stats_arenas_i_metadata_thp)
+ CTL_PROTO(stats_arenas_i_tcache_bytes)
+ CTL_PROTO(stats_arenas_i_tcache_stashed_bytes)
+@@ -304,6 +306,8 @@ CTL_PROTO(stats_background_thread_num_threads)
+ CTL_PROTO(stats_background_thread_num_runs)
+ CTL_PROTO(stats_background_thread_run_interval)
+ CTL_PROTO(stats_metadata)
++CTL_PROTO(stats_metadata_edata)
++CTL_PROTO(stats_metadata_rtree)
+ CTL_PROTO(stats_metadata_thp)
+ CTL_PROTO(stats_resident)
+ CTL_PROTO(stats_mapped)
+@@ -792,6 +796,8 @@ static const ctl_named_node_t stats_arenas_i_node[] = {
+ 	{NAME("muzzy_purged"),	CTL(stats_arenas_i_muzzy_purged)},
+ 	{NAME("base"),		CTL(stats_arenas_i_base)},
+ 	{NAME("internal"),	CTL(stats_arenas_i_internal)},
++	{NAME("metadata_edata"),	CTL(stats_arenas_i_metadata_edata)},
++	{NAME("metadata_rtree"),	CTL(stats_arenas_i_metadata_rtree)},
+ 	{NAME("metadata_thp"),	CTL(stats_arenas_i_metadata_thp)},
+ 	{NAME("tcache_bytes"),	CTL(stats_arenas_i_tcache_bytes)},
+ 	{NAME("tcache_stashed_bytes"),
+@@ -837,6 +843,8 @@ static const ctl_named_node_t stats_node[] = {
+ 	{NAME("allocated"),	CTL(stats_allocated)},
+ 	{NAME("active"),	CTL(stats_active)},
+ 	{NAME("metadata"),	CTL(stats_metadata)},
++	{NAME("metadata_edata"),	CTL(stats_metadata_edata)},
++	{NAME("metadata_rtree"),	CTL(stats_metadata_rtree)},
+ 	{NAME("metadata_thp"),	CTL(stats_metadata_thp)},
+ 	{NAME("resident"),	CTL(stats_resident)},
+ 	{NAME("mapped"),	CTL(stats_mapped)},
+@@ -1143,6 +1151,10 @@ MUTEX_PROF_ARENA_MUTEXES
+ #undef OP
+ 		if (!destroyed) {
+ 			sdstats->astats.base += astats->astats.base;
++			sdstats->astats.metadata_edata += astats->astats
++			    .metadata_edata;
++			sdstats->astats.metadata_rtree += astats->astats
++			    .metadata_rtree;
+ 			sdstats->astats.resident += astats->astats.resident;
+ 			sdstats->astats.metadata_thp += astats->astats.metadata_thp;
+ 			ctl_accum_atomic_zu(&sdstats->astats.internal,
+@@ -1337,6 +1349,10 @@ ctl_refresh(tsdn_t *tsdn) {
+ 		ctl_stats->metadata = ctl_sarena->astats->astats.base +
+ 		    atomic_load_zu(&ctl_sarena->astats->astats.internal,
+ 			ATOMIC_RELAXED);
++		ctl_stats->metadata_edata = ctl_sarena->astats->astats
++		    .metadata_edata;
++		ctl_stats->metadata_rtree = ctl_sarena->astats->astats
++		    .metadata_rtree;
+ 		ctl_stats->resident = ctl_sarena->astats->astats.resident;
+ 		ctl_stats->metadata_thp =
+ 		    ctl_sarena->astats->astats.metadata_thp;
+@@ -3529,6 +3545,10 @@ label_return:
+ CTL_RO_CGEN(config_stats, stats_allocated, ctl_stats->allocated, size_t)
+ CTL_RO_CGEN(config_stats, stats_active, ctl_stats->active, size_t)
+ CTL_RO_CGEN(config_stats, stats_metadata, ctl_stats->metadata, size_t)
++CTL_RO_CGEN(config_stats, stats_metadata_edata, ctl_stats->metadata_edata,
++    size_t)
++CTL_RO_CGEN(config_stats, stats_metadata_rtree, ctl_stats->metadata_rtree,
++    size_t)
+ CTL_RO_CGEN(config_stats, stats_metadata_thp, ctl_stats->metadata_thp, size_t)
+ CTL_RO_CGEN(config_stats, stats_resident, ctl_stats->resident, size_t)
+ CTL_RO_CGEN(config_stats, stats_mapped, ctl_stats->mapped, size_t)
+@@ -3594,6 +3614,10 @@ CTL_RO_CGEN(config_stats, stats_arenas_i_base,
+ CTL_RO_CGEN(config_stats, stats_arenas_i_internal,
+     atomic_load_zu(&arenas_i(mib[2])->astats->astats.internal, ATOMIC_RELAXED),
+     size_t)
++CTL_RO_CGEN(config_stats, stats_arenas_i_metadata_edata,
++    arenas_i(mib[2])->astats->astats.metadata_edata, size_t)
++CTL_RO_CGEN(config_stats, stats_arenas_i_metadata_rtree,
++    arenas_i(mib[2])->astats->astats.metadata_rtree, size_t)
+ CTL_RO_CGEN(config_stats, stats_arenas_i_metadata_thp,
+     arenas_i(mib[2])->astats->astats.metadata_thp, size_t)
+ CTL_RO_CGEN(config_stats, stats_arenas_i_tcache_bytes,
+diff --git src/rtree.c src/rtree.c
+index 6496b5af..b6ac04b7 100644
+--- src/rtree.c
++++ src/rtree.c
+@@ -29,14 +29,14 @@ rtree_new(rtree_t *rtree, base_t *base, bool zeroed) {
+ 
+ static rtree_node_elm_t *
+ rtree_node_alloc(tsdn_t *tsdn, rtree_t *rtree, size_t nelms) {
+-	return (rtree_node_elm_t *)base_alloc(tsdn, rtree->base,
+-	    nelms * sizeof(rtree_node_elm_t), CACHELINE);
++	return (rtree_node_elm_t *)base_alloc_rtree(tsdn, rtree->base,
++	    nelms * sizeof(rtree_node_elm_t));
+ }
+ 
+ static rtree_leaf_elm_t *
+ rtree_leaf_alloc(tsdn_t *tsdn, rtree_t *rtree, size_t nelms) {
+-	return (rtree_leaf_elm_t *)base_alloc(tsdn, rtree->base,
+-	    nelms * sizeof(rtree_leaf_elm_t), CACHELINE);
++	return (rtree_leaf_elm_t *)base_alloc_rtree(tsdn, rtree->base,
++	    nelms * sizeof(rtree_leaf_elm_t));
+ }
+ 
+ static rtree_node_elm_t *
+diff --git src/stats.c src/stats.c
+index efc70fd3..ce7336ef 100644
+--- src/stats.c
++++ src/stats.c
+@@ -1046,7 +1046,8 @@ stats_arena_print(emitter_t *emitter, unsigned i, bool bins, bool large,
+ 	const char *dss;
+ 	ssize_t dirty_decay_ms, muzzy_decay_ms;
+ 	size_t page, pactive, pdirty, pmuzzy, mapped, retained;
+-	size_t base, internal, resident, metadata_thp, extent_avail;
++	size_t base, internal, resident, metadata_edata, metadata_rtree,
++	    metadata_thp, extent_avail;
+ 	uint64_t dirty_npurge, dirty_nmadvise, dirty_purged;
+ 	uint64_t muzzy_npurge, muzzy_nmadvise, muzzy_purged;
+ 	size_t small_allocated;
+@@ -1342,6 +1343,8 @@ stats_arena_print(emitter_t *emitter, unsigned i, bool bins, bool large,
+ 	GET_AND_EMIT_MEM_STAT(retained)
+ 	GET_AND_EMIT_MEM_STAT(base)
+ 	GET_AND_EMIT_MEM_STAT(internal)
++	GET_AND_EMIT_MEM_STAT(metadata_edata)
++	GET_AND_EMIT_MEM_STAT(metadata_rtree)
+ 	GET_AND_EMIT_MEM_STAT(metadata_thp)
+ 	GET_AND_EMIT_MEM_STAT(tcache_bytes)
+ 	GET_AND_EMIT_MEM_STAT(tcache_stashed_bytes)
+@@ -1684,8 +1687,8 @@ stats_print_helper(emitter_t *emitter, bool merged, bool destroyed,
+ 	 * These should be deleted.  We keep them around for a while, to aid in
+ 	 * the transition to the emitter code.
+ 	 */
+-	size_t allocated, active, metadata, metadata_thp, resident, mapped,
+-	    retained;
++	size_t allocated, active, metadata, metadata_edata, metadata_rtree,
++	    metadata_thp, resident, mapped, retained;
+ 	size_t num_background_threads;
+ 	size_t zero_reallocs;
+ 	uint64_t background_thread_num_runs, background_thread_run_interval;
+@@ -1693,6 +1696,8 @@ stats_print_helper(emitter_t *emitter, bool merged, bool destroyed,
+ 	CTL_GET("stats.allocated", &allocated, size_t);
+ 	CTL_GET("stats.active", &active, size_t);
+ 	CTL_GET("stats.metadata", &metadata, size_t);
++	CTL_GET("stats.metadata_edata", &metadata_edata, size_t);
++	CTL_GET("stats.metadata_rtree", &metadata_rtree, size_t);
+ 	CTL_GET("stats.metadata_thp", &metadata_thp, size_t);
+ 	CTL_GET("stats.resident", &resident, size_t);
+ 	CTL_GET("stats.mapped", &mapped, size_t);
+@@ -1718,6 +1723,10 @@ stats_print_helper(emitter_t *emitter, bool merged, bool destroyed,
+ 	emitter_json_kv(emitter, "allocated", emitter_type_size, &allocated);
+ 	emitter_json_kv(emitter, "active", emitter_type_size, &active);
+ 	emitter_json_kv(emitter, "metadata", emitter_type_size, &metadata);
++	emitter_json_kv(emitter, "metadata_edata", emitter_type_size,
++	    &metadata_edata);
++	emitter_json_kv(emitter, "metadata_rtree", emitter_type_size,
++	    &metadata_rtree);
+ 	emitter_json_kv(emitter, "metadata_thp", emitter_type_size,
+ 	    &metadata_thp);
+ 	emitter_json_kv(emitter, "resident", emitter_type_size, &resident);
+@@ -1727,9 +1736,10 @@ stats_print_helper(emitter_t *emitter, bool merged, bool destroyed,
+ 	    &zero_reallocs);
+ 
+ 	emitter_table_printf(emitter, "Allocated: %zu, active: %zu, "
+-	    "metadata: %zu (n_thp %zu), resident: %zu, mapped: %zu, "
+-	    "retained: %zu\n", allocated, active, metadata, metadata_thp,
+-	    resident, mapped, retained);
++	    "metadata: %zu (n_thp %zu, edata %zu, rtree %zu), resident: %zu, "
++	    "mapped: %zu, retained: %zu\n", allocated, active, metadata,
++		metadata_thp, metadata_edata, metadata_rtree, resident, mapped,
++	    retained);
+ 
+ 	/* Strange behaviors */
+ 	emitter_table_printf(emitter,
+diff --git test/unit/base.c test/unit/base.c
+index 15e04a8c..3e46626e 100644
+--- test/unit/base.c
++++ test/unit/base.c
+@@ -28,7 +28,8 @@ static extent_hooks_t hooks_not_null = {
+ 
+ TEST_BEGIN(test_base_hooks_default) {
+ 	base_t *base;
+-	size_t allocated0, allocated1, resident, mapped, n_thp;
++	size_t allocated0, allocated1, edata_allocated,
++	    rtree_allocated, resident, mapped, n_thp;
+ 
+ 	tsdn_t *tsdn = tsd_tsdn(tsd_fetch());
+ 	base = base_new(tsdn, 0,
+@@ -36,8 +37,8 @@ TEST_BEGIN(test_base_hooks_default) {
+ 	    /* metadata_use_hooks */ true);
+ 
+ 	if (config_stats) {
+-		base_stats_get(tsdn, base, &allocated0, &resident, &mapped,
+-		    &n_thp);
++		base_stats_get(tsdn, base, &allocated0, &edata_allocated,
++		    &rtree_allocated, &resident, &mapped, &n_thp);
+ 		expect_zu_ge(allocated0, sizeof(base_t),
+ 		    "Base header should count as allocated");
+ 		if (opt_metadata_thp == metadata_thp_always) {
+@@ -50,8 +51,8 @@ TEST_BEGIN(test_base_hooks_default) {
+ 	    "Unexpected base_alloc() failure");
+ 
+ 	if (config_stats) {
+-		base_stats_get(tsdn, base, &allocated1, &resident, &mapped,
+-		    &n_thp);
++		base_stats_get(tsdn, base, &allocated1, &edata_allocated,
++		    &rtree_allocated, &resident, &mapped, &n_thp);
+ 		expect_zu_ge(allocated1 - allocated0, 42,
+ 		    "At least 42 bytes were allocated by base_alloc()");
+ 	}
+@@ -63,7 +64,8 @@ TEST_END
+ TEST_BEGIN(test_base_hooks_null) {
+ 	extent_hooks_t hooks_orig;
+ 	base_t *base;
+-	size_t allocated0, allocated1, resident, mapped, n_thp;
++	size_t allocated0, allocated1, edata_allocated,
++	    rtree_allocated, resident, mapped, n_thp;
+ 
+ 	extent_hooks_prep();
+ 	try_dalloc = false;
+@@ -79,8 +81,8 @@ TEST_BEGIN(test_base_hooks_null) {
+ 	expect_ptr_not_null(base, "Unexpected base_new() failure");
+ 
+ 	if (config_stats) {
+-		base_stats_get(tsdn, base, &allocated0, &resident, &mapped,
+-		    &n_thp);
++		base_stats_get(tsdn, base, &allocated0, &edata_allocated,
++		    &rtree_allocated, &resident, &mapped, &n_thp);
+ 		expect_zu_ge(allocated0, sizeof(base_t),
+ 		    "Base header should count as allocated");
+ 		if (opt_metadata_thp == metadata_thp_always) {
+@@ -93,8 +95,8 @@ TEST_BEGIN(test_base_hooks_null) {
+ 	    "Unexpected base_alloc() failure");
+ 
+ 	if (config_stats) {
+-		base_stats_get(tsdn, base, &allocated1, &resident, &mapped,
+-		    &n_thp);
++		base_stats_get(tsdn, base, &allocated1, &edata_allocated,
++		    &rtree_allocated, &resident, &mapped, &n_thp);
+ 		expect_zu_ge(allocated1 - allocated0, 42,
+ 		    "At least 42 bytes were allocated by base_alloc()");
+ 	}
+diff --git test/unit/stats.c test/unit/stats.c
+index bbdbd180..467f7051 100644
+--- test/unit/stats.c
++++ test/unit/stats.c
+@@ -4,9 +4,15 @@
+ #define STRINGIFY(x) STRINGIFY_HELPER(x)
+ 
+ TEST_BEGIN(test_stats_summary) {
+-	size_t sz, allocated, active, resident, mapped;
++	size_t sz, allocated, active, resident, mapped,
++	    metadata, metadata_edata, metadata_rtree;
++	uint64_t epoch = 1;
+ 	int expected = config_stats ? 0 : ENOENT;
+ 
++	/* Refresh, so that the reads below see the current numbers. */
++	expect_d_eq(mallctl("epoch", NULL, NULL, (void *)&epoch,
++	    sizeof(epoch)), 0, "Unexpected mallctl() failure");
++
+ 	sz = sizeof(size_t);
+ 	expect_d_eq(mallctl("stats.allocated", (void *)&allocated, &sz, NULL,
+ 	    0), expected, "Unexpected mallctl() result");
+@@ -17,6 +23,13 @@ TEST_BEGIN(test_stats_summary) {
+ 	expect_d_eq(mallctl("stats.mapped", (void *)&mapped, &sz, NULL, 0),
+ 	    expected, "Unexpected mallctl() result");
+ 
++	expect_d_eq(mallctl("stats.metadata", (void *)&metadata, &sz, NULL, 0),
++	    expected, "Unexpected mallctl() result");
++	expect_d_eq(mallctl("stats.metadata_edata", (void *)&metadata_edata,
++	    &sz, NULL, 0), expected, "Unexpected mallctl() result");
++	expect_d_eq(mallctl("stats.metadata_rtree", (void *)&metadata_rtree,
++	    &sz, NULL, 0), expected, "Unexpected mallctl() result");
++
+ 	if (config_stats) {
+ 		expect_zu_le(allocated, active,
+ 		    "allocated should be no larger than active");
+@@ -24,6 +37,12 @@ TEST_BEGIN(test_stats_summary) {
+ 		    "active should be less than resident");
+ 		expect_zu_lt(active, mapped,
+ 		    "active should be less than mapped");
++		expect_zu_le(metadata_edata + metadata_rtree, metadata,
++		    "the sum of metadata_edata and metadata_rtree "
++		    "should be no larger than metadata");
++		expect_zu_gt(metadata_edata, 0,
++		    "metadata_edata should be non-zero once an arena has "
++		    "allocated extents");
+ 	}
+ }
+ TEST_END

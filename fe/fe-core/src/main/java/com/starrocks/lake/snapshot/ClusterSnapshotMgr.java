@@ -31,6 +31,7 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.proto.RetainSnapshotPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
@@ -474,6 +475,10 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         }
     }
 
+    public List<RetainSnapshotPB> getVacuumRetainSnapshots(long dbId, long tableId, long partId, long physicalPartId) {
+        return Lists.newArrayList();
+    }
+
     // keep this interface and do not remove it
     public List<Long> getVacuumRetainVersions(long dbId, long tableId, long partId, long physicalPartId) {
         List<Long> versions = Lists.newArrayList();
@@ -523,6 +528,20 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
                     GlobalStateMgr.getCurrentState().getCheckpointController(),
                     StarMgrServer.getCurrentState().getCheckpointController());
             clusterSnapshotJobScheduler.start();
+        }
+    }
+
+    /**
+     * Fire-and-forget stop for leader demotion: request stop on the inner scheduler without joining,
+     * so the single state-change thread is not blocked. The scheduler's worker self-cleans in
+     * onStopped() and deregisters on exit; the re-activation cleanliness gate verifies quiescence. The
+     * scheduler reference is nulled so the next {@link #start()} rebuilds it on re-election.
+     */
+    public void stopBestEffort() {
+        ClusterSnapshotJobScheduler scheduler = clusterSnapshotJobScheduler;
+        if (scheduler != null) {
+            scheduler.stopBestEffort();
+            clusterSnapshotJobScheduler = null;
         }
     }
 

@@ -348,10 +348,21 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         setSatisfiedPropertyWithCost(outputProperty, childrenOutputProperties);
         PhysicalPropertySet requiredProperty = context.getRequiredProperty();
         recordPlanEnumInfo(groupExpression, outputProperty, childrenOutputProperties);
+        // Whether a property is satisfied is not a pure function: HashDistributionSpec.isSatisfy() asks
+        // ColocateTableIndex whether the colocate group is stable, and ColocateTableBalancer flips that
+        // state concurrently with planning. Decide once here and hand the answer to enforceProperty(),
+        // otherwise a flip between the two questions leaves enforceProperty() with nothing to enforce
+        // and it returns null. Deciding once also keeps the plan on the safe side of the race: whatever
+        // this thread observed first is what the whole decision is built on.
+        boolean satisfyOrderProperty =
+                outputProperty.getSortProperty().isSatisfy(requiredProperty.getSortProperty());
+        boolean satisfyDistributionProperty =
+                outputProperty.getDistributionProperty().isSatisfy(requiredProperty.getDistributionProperty());
         // Enforce property if outputProperty doesn't satisfy context requiredProperty
-        if (!outputProperty.isSatisfy(requiredProperty)) {
+        if (!satisfyOrderProperty || !satisfyDistributionProperty) {
             // Enforce the property to meet the required property
-            PhysicalPropertySet enforcedProperty = enforceProperty(outputProperty, requiredProperty);
+            PhysicalPropertySet enforcedProperty =
+                    enforceProperty(outputProperty, requiredProperty, satisfyOrderProperty, satisfyDistributionProperty);
 
             // enforcedProperty is superset of requiredProperty
             if (!enforcedProperty.equals(requiredProperty)) {
@@ -468,13 +479,14 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         setPropertyWithCost(groupExpression, requiredProperty, requiredProperty, childrenOutputProperties);
     }
 
+    // satisfyOrderProperty/satisfyDistributionProperty are decided by the caller and passed in on
+    // purpose: re-asking here could give a different answer (see recordCostsAndEnforce) and leave
+    // every branch below unmatched. The caller only calls this when at least one of them is false,
+    // so the branches are exhaustive and the result is never null.
     private PhysicalPropertySet enforceProperty(PhysicalPropertySet outputProperty,
-                                                PhysicalPropertySet requiredProperty) {
-        boolean satisfyOrderProperty =
-                outputProperty.getSortProperty().isSatisfy(requiredProperty.getSortProperty());
-        boolean satisfyDistributionProperty =
-                outputProperty.getDistributionProperty().isSatisfy(requiredProperty.getDistributionProperty());
-
+                                                PhysicalPropertySet requiredProperty,
+                                                boolean satisfyOrderProperty,
+                                                boolean satisfyDistributionProperty) {
         PhysicalPropertySet enforcedProperty = null;
         if (!satisfyDistributionProperty && satisfyOrderProperty) {
             if (requiredProperty.getSortProperty().isEmpty()) {

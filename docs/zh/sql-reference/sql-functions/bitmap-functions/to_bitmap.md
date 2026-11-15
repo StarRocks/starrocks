@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将取值在 0 到 18446744073709551615 区间的 unsigned BIGINT 转换为包含该元素的 BITMAP。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # to_bitmap

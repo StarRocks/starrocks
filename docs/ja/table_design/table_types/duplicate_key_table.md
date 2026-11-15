@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "重複キーテーブルは StarRocks のデフォルトモデルで、ソートキーを定義してログデータ分析に適しています。"
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 重複キーテーブル
@@ -54,7 +55,7 @@ ORDER BY (event_time, event_type);
 
 ## 次のステップ
 
-テーブルが作成された後、さまざまなデータ取り込み方法を使用して StarRocks にデータをロードできます。StarRocks がサポートするデータ取り込み方法については、[Loading options](../../loading/Loading_intro.md) を参照してください。
+テーブルが作成された後、さまざまなデータ取り込み方法を使用して StarRocks にデータをロードできます。StarRocks がサポートするデータ取り込み方法については、[Loading options](../../loading/loading_introduction/loading_introduction.mdx) を参照してください。
 
 :::note
 

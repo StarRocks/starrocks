@@ -1,0 +1,115 @@
+-- name: test_list_partition_prune_reversed_expr
+-- A generated partition column lets the pruner rewrite a predicate on the source column onto the
+-- partition column, keeping the comparison operator. That is only sound while the expression grows
+-- with its column: an expression that runs backwards deduces a bound pointing the wrong way and
+-- prunes the partitions that hold the matching rows.
+CREATE TABLE t_reversed (
+        c1 int NOT NULL,
+        c2 bigint NULL AS (100 - c1)
+)
+DUPLICATE KEY(c1)
+PARTITION BY (c2)
+DISTRIBUTED BY HASH(c1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- c1=10 -> c2=90, c1=20 -> c2=80, c1=30 -> c2=70: the partition order is the reverse of c1's
+insert into t_reversed (c1) values (10),(20),(30);
+select count(*) from t_reversed;
+-- c1 < 20 matches c1=10, which lives on partition c2=90. Deducing c2 <= 80 keeps 80 and 70 and
+-- drops 90, so the query used to come back empty.
+select c1 from t_reversed where c1 < 20 order by c1;
+function: assert_explain_contains('select c1 from t_reversed where c1 < 20', 'partitions=3/3')
+-- c1 > 20 matches c1=30 on partition c2=70, and the deduced bound dropped that one instead
+select c1 from t_reversed where c1 > 20 order by c1;
+function: assert_explain_contains('select c1 from t_reversed where c1 > 20', 'partitions=3/3')
+select c1 from t_reversed where c1 <= 20 order by c1;
+function: assert_explain_contains('select c1 from t_reversed where c1 <= 20', 'partitions=3/3')
+select c1 from t_reversed where c1 >= 20 order by c1;
+-- equality is sound through any expression, reversing or not: a = c implies f(a) = f(c). It keeps
+-- pruning to the single partition the constant maps to.
+select c1 from t_reversed where c1 = 10 order by c1;
+function: assert_explain_contains('select c1 from t_reversed where c1 = 10', 'partitions=1/3')
+-- the three branches of a predicate must still add up to the whole table
+select count(*) from (
+        (select * from t_reversed where c1 < 20)
+        union all (select * from t_reversed where c1 >= 20)) t;
+
+-- days-until is an ordinary way to model this and fails the same way
+CREATE TABLE t_days_until (
+        c1 datetime NOT NULL,
+        c2 int NULL AS (datediff('2021-01-10', c1))
+)
+DUPLICATE KEY(c1)
+PARTITION BY (c2)
+DISTRIBUTED BY HASH(c1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- 01-01 -> 9, 01-03 -> 7, 01-05 -> 5
+insert into t_days_until (c1) values ('2021-01-01 00:00:00'),('2021-01-03 00:00:00'),('2021-01-05 00:00:00');
+select count(*) from t_days_until;
+select c1 from t_days_until where c1 < '2021-01-03 00:00:00' order by c1;
+function: assert_explain_contains("select c1 from t_days_until where c1 < '2021-01-03 00:00:00'", 'partitions=3/3')
+select c1 from t_days_until where c1 > '2021-01-03 00:00:00' order by c1;
+
+-- No collateral damage. The guard asks whether a COLUMN sits in the reversing argument, so a
+-- constant there changes nothing and the expression still grows with c1: pruning is retained.
+CREATE TABLE t_minus_const (
+        c1 int NOT NULL,
+        c2 bigint NULL AS (c1 - 7)
+)
+DUPLICATE KEY(c1)
+PARTITION BY (c2)
+DISTRIBUTED BY HASH(c1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- c1=10 -> c2=3, c1=20 -> c2=13, c1=30 -> c2=23
+insert into t_minus_const (c1) values (10),(20),(30);
+select c1 from t_minus_const where c1 < 20 order by c1;
+function: assert_explain_contains('select c1 from t_minus_const where c1 < 20', 'partitions=2/3')
+
+CREATE TABLE t_increasing (
+        c1 int NOT NULL,
+        c2 bigint NULL AS (c1 + 1)
+)
+DUPLICATE KEY(c1)
+PARTITION BY (c2)
+DISTRIBUTED BY HASH(c1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t_increasing (c1) values (10),(20),(30);
+select c1 from t_increasing where c1 < 20 order by c1;
+function: assert_explain_contains('select c1 from t_increasing where c1 < 20', 'partitions=2/3')
+
+-- The direction restriction belongs only to the rewrites that carry a comparison operator across the
+-- expression. Selecting partitions by a condition on a RANGE-partitioned table maps BOTH endpoints of
+-- each partition range through the expression and re-sorts them, so a decreasing function is correct
+-- there and must keep being accepted -- both by the validation and by the evaluation.
+CREATE TABLE t_retention (
+        dt datetime NOT NULL,
+        id int NULL
+)
+DUPLICATE KEY(dt, id)
+PARTITION BY RANGE(dt)
+(START ("2024-02-01") END ("2024-02-08") EVERY (INTERVAL 1 DAY))
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t_retention values ('2024-02-01 00:00:00',1),('2024-02-03 00:00:00',2),('2024-02-05 00:00:00',3),('2024-02-06 00:00:00',4);
+select count(*) from t_retention;
+-- days-until 2024-02-07: 02-01 -> 6, 02-03 -> 4, 02-05 -> 2, 02-06 -> 1. `datediff(...) >= 5` selects
+-- only the 02-01 partition even though the expression decreases, because both endpoints are mapped
+-- and swapped rather than the operator being carried across.
+alter table t_retention DROP PARTITIONS WHERE datediff('2024-02-07', dt) >= 5;
+select dt, id from t_retention order by id;
+
+-- Selecting partitions by an equality condition stays sound through a decreasing generated column --
+-- a = c implies f(a) = f(c) whichever way f runs -- so the directional restriction must wait until
+-- the predicate is known instead of being applied when the generated column map is built.
+CREATE TABLE t_drop_reversed (
+        c1 int NOT NULL,
+        c2 bigint NULL AS (100 - c1)
+)
+DUPLICATE KEY(c1)
+PARTITION BY (c2)
+DISTRIBUTED BY HASH(c1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t_drop_reversed (c1) values (10),(20),(30);
+select count(*) from t_drop_reversed;
+-- c1 = 10 maps to the c2 = 90 partition and only that one goes away
+alter table t_drop_reversed DROP PARTITIONS WHERE c1 = 10;
+select c1 from t_drop_reversed order by c1;

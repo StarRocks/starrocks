@@ -342,6 +342,26 @@ public class EmptyValueTest extends PlanTestBase {
     }
 
     @Test
+    public void testFullJoinEmptySideConstantKeyInHaving() throws Exception {
+        // The empty side's columns become NULL constants, so grouping on one gives a constant key that
+        // PruneGroupByKeysRule writes into HAVING. Left as `NULL <> v1`, statistics estimation refused the
+        // plan with "Constant-cmp-Column not supported here"; under OR with an aggregate the predicate cannot
+        // be pushed below the aggregate first, which is the only shape that reached it.
+        String sql = "select x.L_COMMENT, t0.v1, sum(t0.v3) from t0 full outer join " +
+                "(select * from lineitem_partition p where L_SHIPDATE = '2000-01-01') x on x.L_ORDERKEY = t0.v2 " +
+                "group by x.L_COMMENT, t0.v1 having x.L_COMMENT <> cast(t0.v1 as varchar) or sum(t0.v3) > 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "sum(3: v3)");
+        assertNotContains(plan, "NULL != ");
+
+        sql = "select x.L_COMMENT, t0.v1, count(*) from t0 full outer join " +
+                "(select * from lineitem_partition p where L_SHIPDATE = '2000-01-01') x on x.L_ORDERKEY = t0.v2 " +
+                "group by x.L_COMMENT, t0.v1 having cast(t0.v1 as varchar) = x.L_COMMENT or count(*) > 0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "count(*)");
+    }
+
+    @Test
     public void testOuterPredicate() throws Exception {
         String sql = "select t0.v2 from t0 full outer join " +
                 "(select * from lineitem_partition p where L_SHIPDATE = '2000-01-01') x on x.L_ORDERKEY = t0.v2" +
@@ -381,5 +401,66 @@ public class EmptyValueTest extends PlanTestBase {
                 "  |  <slot 3> : NULL\n" +
                 "  |  <slot 19> : 19: v2\n" +
                 "  |  <slot 21> : NULL");
+    }
+
+    @Test
+    public void testConstantRefCmpConstantRef() throws Exception {
+        // Pruning the empty join replaces joined_value with NULL. Merging the projects then creates
+        // `NULL = 'foo' AND input_value <> 0` inside a nonconstant CASE expression.
+        // The constant comparison must be folded before expression statistics are calculated.
+        String sql = "select\n" +
+                "    group_key,\n" +
+                "    case\n" +
+                "        when (\n" +
+                "            joined_value = 'foo'\n" +
+                "            and input_value <> 0\n" +
+                "        ) then joined_number\n" +
+                "        else cast(0.0 as double)\n" +
+                "    end = 0.0\n" +
+                "from\n" +
+                "    (\n" +
+                "        select\n" +
+                "            source.v1 as group_key,\n" +
+                "            source.v3 as input_value,\n" +
+                "            empty_side.joined_value as joined_value,\n" +
+                "            empty_side.joined_number as joined_number\n" +
+                "        from\n" +
+                "            t0 source\n" +
+                "            left outer join (\n" +
+                "                select\n" +
+                "                    v2 as join_key,\n" +
+                "                    'foo' as joined_value,\n" +
+                "                    cast(v3 as double) as joined_number\n" +
+                "                from\n" +
+                "                    t0\n" +
+                "                where\n" +
+                "                    1 = 0\n" +
+                "            ) empty_side on empty_side.join_key = source.v2\n" +
+                "    ) t\n";
+        String plan = getFragmentPlan(sql);
+        // After the fix the folded `NULL = 'foo'` predicate is eliminated, so the
+        // CASE collapses and the plan is produced without the ConstantRef-cmp-ConstantRef error.
+        assertContains(plan, "OlapScanNode\n     TABLE: t0");
+    }
+
+    @Test
+    public void testConstantRefCmpColumnRef() throws Exception {
+        // Empty-join pruning and project merging turn coalesce(NULL, 1) = input_value into 1 = input_value.
+        // The comparison must be normalized before expression statistics are calculated.
+        String sql = "select defaulted_value = input_value and rand() >= 0.0\n" +
+                "from (\n" +
+                "    select\n" +
+                "        coalesce(empty_side.joined_value, 1) as defaulted_value,\n" +
+                "        source.v1 as input_value\n" +
+                "    from\n" +
+                "        t0 source\n" +
+                "        left outer join (\n" +
+                "            select v1 as joined_value, v2 as join_key\n" +
+                "            from t0\n" +
+                "            where 1 = 0\n" +
+                "        ) empty_side on empty_side.join_key = source.v2\n" +
+                ") projected";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "OlapScanNode\n     TABLE: t0");
     }
 }

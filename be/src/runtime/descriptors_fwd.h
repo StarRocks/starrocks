@@ -21,7 +21,7 @@ class TableDescriptor;
 class TypeDescriptor;
 class TupleDescriptor;
 class SlotDescriptor;
-class RowDescriptor;
+class RecordDescriptor;
 class RowPositionDescriptor;
 
 } // namespace starrocks

@@ -146,6 +146,12 @@ public class TabletTaskExecutor {
                 partition -> partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size()).sum();
         int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
         long maxWaitTimeSeconds = Math.min(timeout, maxTimeout);
+        // buildCreateReplicaTasks turns the optimization off for a partition with more than one index. Do it before
+        // the latch below is sized, or the latch counts fewer tasks than are sent and stops waiting too early.
+        if (partitions.stream().anyMatch(
+                partition -> partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size() > 1)) {
+            option.setEnableTabletCreationOptimization(false);
+        }
         if (option.isEnableTabletCreationOptimization()) {
             numReplicas = numIndexes;
         }
@@ -247,7 +253,8 @@ public class TabletTaskExecutor {
         if (physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size() > 1) {
             option.setEnableTabletCreationOptimization(false);
         }
-        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+        for (MaterializedIndex index :
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             tasks.addAll(buildCreateReplicaTasks(dbId, table, physicalPartition, index, computeResource, option));
         }
         return tasks;
@@ -280,6 +287,7 @@ public class TabletTaskExecutor {
                 .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
                 .setBloomFilterColumnNames(table.getBfColumnIds())
                 .setBloomFilterFpp(table.getBfFpp())
+                .setZstdCompressionColumns(table.getZstdCompressionColumnIds(), table.getZstdCompressionPageSizes())
                 .addColumns(indexMeta.getSchema())
                 .setPrimaryKeyEncodingType(table.getPrimaryKeyEncodingType())
                 .build().toTabletSchema();
@@ -502,6 +510,16 @@ public class TabletTaskExecutor {
     static CompletableFuture<Boolean> sendTask(Long backendId, List<AgentTask> agentBatchTask) {
         return CompletableFuture.supplyAsync(() -> {
             try {
+                // Same dispatch fence as AgentBatchTask.run(): a demoting/non-leader node must not send
+                // BE agent-task RPCs. This is the only submit_tasks call site that bypasses
+                // AgentBatchTask.run(), and AgentTaskQueue.addTask refuses by returning false (not by
+                // throwing), so without this check nothing would stop the send. The RuntimeException is
+                // the lambda's established failure mode; callers count the latch down and fail the DDL.
+                GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+                if (globalStateMgr.isAgentTaskDispatchDisallowed()) {
+                    throw new RuntimeException("node is demoting or not the leader ("
+                            + globalStateMgr.getFeType() + "), refuse to send create-replica tasks");
+                }
                 ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr()
                         .getClusterInfo().getBackendOrComputeNode(backendId);
                 if (computeNode == null || !computeNode.isAlive()) {
@@ -541,6 +559,16 @@ public class TabletTaskExecutor {
                     } else {
                         break;
                     }
+                }
+                // Not finished within this interval: a leader that has begun transferring/demoting closes
+                // leader-work admission, so stop waiting for BE tablet-creation this node can no longer finish
+                // (demotion must not block for the full creation timeout); the re-elected leader re-drives it
+                // from durable state. Checked after the await so an already-finished creation still succeeds.
+                if (!GlobalStateMgr.getCurrentState().isLeaderWorkAdmissionOpen()) {
+                    String errMsg = "fail to create tablet: leader work admission is closed";
+                    LOG.warn(errMsg);
+                    countDownLatch.countDownToZero(new Status(TStatusCode.CANCELLED, "leader work admission is closed"));
+                    throw new DdlException(errMsg);
                 }
 
                 timeLeft -= waitInterval;

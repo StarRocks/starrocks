@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "リモートストレージ内のデータファイルを定義し、データロードとアンロードに使用します。"
 toc_max_heading_level: 5
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # `FILES`
@@ -383,13 +384,14 @@ AWS S3 をストレージシステムとして選択する場合、次のいず�
 
 | パラメータ                   | 必須 | 説明                                                  |
 | --------------------------- | -------- | ------------------------------------------------------------ |
+| `aws.s3.use_aws_sdk_default_behavior` | いいえ | AWS SDK のデフォルト認証情報を使用するかどうか。有効な値は `true` と `false`（デフォルト）です。 |
 | `aws.s3.use_instance_profile` | はい      | 資格情報メソッドのインスタンスプロファイルと仮想ロールを有効にするかどうかを指定します。 有効な値: `true` および `false`。デフォルト値: `false`。 |
 | `aws.s3.iam_role_arn`         | いいえ       | AWS S3 バケットに対する権限を持つ IAM ロールの ARN。AWS S3 へのアクセスの資格情報メソッドとして仮想ロールを選択する場合、このパラメータを指定する必要があります。 |
-| `aws.s3.region`               | はい      | AWS S3 バケットが存在するリージョン。例: `us-west-1`。 |
+| `aws.s3.region`               | いいえ    | AWS S3 バケットが存在するリージョン。例: `us-west-1`。このパラメーターを指定しない場合、`us-east-1` が使用されます。 |
 | `aws.s3.access_key`           | いいえ       | IAM ユーザーのアクセスキー。AWS S3 へのアクセスの資格情報メソッドとして IAM ユーザーを選択する場合、このパラメータを指定する必要があります。 |
 | `aws.s3.secret_key`           | いいえ       | IAM ユーザーのシークレットキー。AWS S3 へのアクセスの資格情報メソッドとして IAM ユーザーを選択する場合、このパラメータを指定する必要があります。 |
 
-AWS S3 へのアクセスのための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、[AWS S3 へのアクセスのための認証パラメータ](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
+AWS S3 へのアクセスのための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、[AWS S3 へのアクセスのための認証パラメータ](../../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
 
 ###### AWS STS リージョナルエンドポイント
 

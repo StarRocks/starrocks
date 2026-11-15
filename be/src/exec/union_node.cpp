@@ -264,8 +264,6 @@ Status UnionNode::_get_next_const(RuntimeState* state, ChunkPtr* chunk) {
 }
 
 void UnionNode::_move_passthrough_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chunk) {
-    const auto& tuple_descs = child(_child_idx)->row_desc().tuple_descriptors();
-
     if (!_pass_through_slot_maps.empty()) {
         for (auto* dest_slot : _tuple_desc->slots()) {
             auto slot_item = _pass_through_slot_maps[_child_idx][dest_slot->id()];
@@ -279,15 +277,7 @@ void UnionNode::_move_passthrough_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chun
             }
         }
     } else {
-        // For backward compatibility
-        // TODO(kks): when StarRocks 2.0 release, we could remove this branch.
-        size_t index = 0;
-        // When pass through, the child tuple size must be 1;
-        for (auto* src_slot : tuple_descs[0]->slots()) {
-            auto* dest_slot = _tuple_desc->slots()[index++];
-            ColumnPtr& column = src_chunk->get_column_by_slot_id(src_slot->id());
-            _move_column(dest_chunk, column, dest_slot, src_chunk->num_rows());
-        }
+        DCHECK(false) << "unreachable path";
     }
 }
 
@@ -384,12 +374,11 @@ StatusOr<pipeline::OpFactories> UnionNode::decompose_to_pipeline(pipeline::Pipel
                 context->fragment_context()->runtime_state()->desc_tbl().get_tuple_descriptor(_tuple_id);
         const auto& dst_slots = dst_tuple_desc->slots();
 
-        // When pass through, the child tuple size must be 1;
-        const auto& tuple_descs = child(i)->row_desc().tuple_descriptors();
-        const auto& src_slots = tuple_descs[0]->slots();
+        auto src_slots_view = child(i)->record_desc().slots();
+        std::vector<SlotDescriptor*> src_slots(src_slots_view.begin(), src_slots_view.end());
 
         auto union_passthrough_op = std::make_shared<UnionPassthroughOperatorFactory>(
-                context->next_operator_id(), id(), dst2src_slot_map, dst_slots, src_slots);
+                context->next_operator_id(), id(), dst2src_slot_map, dst_slots, std::move(src_slots));
         operators_list[i].emplace_back(std::move(union_passthrough_op));
         // Initialize OperatorFactory's fields involving runtime filters.
         pipeline::init_runtime_filter_for_operator(*this, operators_list[i].back().get(), context,

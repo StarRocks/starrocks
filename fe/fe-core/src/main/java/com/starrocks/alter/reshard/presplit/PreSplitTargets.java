@@ -19,8 +19,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
@@ -44,7 +48,7 @@ import java.util.List;
  * <p><b>Two slices</b>:
  * <ul>
  *   <li>{@link #findEligibleTable} — table-only structural gate (range
- *       distribution, NORMAL state, every visible index has a supported sort
+ *       distribution, NORMAL/TABLET_RESHARD state, every visible index has a supported sort
  *       key) used by the multi-partition coordinator's defensive re-check.
  *       A visible rollup no longer disqualifies the table by itself; its own
  *       sort key must still be non-empty and scalar. Returns the
@@ -102,7 +106,8 @@ final class PreSplitTargets {
         if (!table.isRangeDistribution()) {
             return SkipReason.NOT_RANGE_DISTRIBUTION;
         }
-        if (table.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (table.getState() != OlapTable.OlapTableState.NORMAL
+                && table.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             return SkipReason.TABLE_NOT_NORMAL;
         }
         // Every visible index (base or rollup) must have its own supported sort key.
@@ -145,12 +150,75 @@ final class PreSplitTargets {
      *         non-scalar sort key) -- records {@link SkipReason#HAS_MATERIALIZED_VIEW_OR_ROLLUP}.
      */
     static EligibleTarget findEligibleTarget(Database database, OlapTable olapTable) {
-        PhysicalPartition uniquePartition = findUniquePhysicalPartition(olapTable);
-        if (uniquePartition == null) {
-            PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(database.getId(), olapTable.getId(), LockType.READ);
+        try {
+            PhysicalPartition uniquePartition = findUniquePhysicalPartition(olapTable);
+            if (uniquePartition == null) {
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
+                return null;
+            }
+            return resolveFromPhysicalPartition(database, olapTable, uniquePartition);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(database.getId(), olapTable.getId(), LockType.READ);
+        }
+    }
+
+    /**
+     * Sibling of {@link #findEligibleTarget} for a static {@code INSERT OVERWRITE}, whose write
+     * lands in a temporary partition rather than in the table's visible partition. Applies the
+     * same per-partition slice (one physical partition, one base tablet) to the temporary
+     * partition named {@code tempPartitionName} and records the same {@link SkipReason}s, so the
+     * two gates cannot drift.
+     *
+     * @return the resolved {@link EligibleTarget} whose {@code partitionId} is the temporary
+     *         partition's physical partition id, or {@code null} after recording the failing
+     *         {@link SkipReason} -- the same reasons {@link #findEligibleTarget} records for the
+     *         same situations.
+     */
+    static EligibleTarget findEligibleTemporaryTarget(Database database, OlapTable olapTable, String tempPartitionName) {
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(database.getId(), olapTable.getId(), LockType.READ);
+        try {
+            // Resolve through the temp-scoped by-name accessor: it is the only lookup that cannot
+            // return a live partition. OlapTable.getPartition(long) and getPhysicalPartition(long)
+            // search both the visible and the temporary namespace, and getPartition(String) searches
+            // only the visible one, so an id-based or unscoped lookup could resolve a partition that
+            // is still serving queries -- and resharding that one is never what the overwrite asked for.
+            Partition partition = olapTable.getPartition(tempPartitionName, true);
+            if (partition == null) {
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
+                return null;
+            }
+            // Same single-physical-partition contract findUniquePhysicalPartition applies on the
+            // visible side; taking the default sub-partition would silently ignore the others.
+            Collection<PhysicalPartition> physicalPartitions = partition.getSubPartitions();
+            if (physicalPartitions.size() != 1) {
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
+                return null;
+            }
+            return resolveFromPhysicalPartition(database, olapTable, physicalPartitions.iterator().next());
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(database.getId(), olapTable.getId(), LockType.READ);
+        }
+    }
+
+    /**
+     * The per-partition slice both resolvers apply once they have a physical partition: one base-index
+     * tablet, and every visible index resolvable. Shared rather than repeated so the visible-partition
+     * and temporary-partition gates cannot drift apart — they must accept and reject the same shapes for
+     * the same recorded reasons, or an operator reading the skip metric would be told different stories
+     * about the same table.
+     */
+    private static EligibleTarget resolveFromPhysicalPartition(
+            Database database, OlapTable olapTable, PhysicalPartition partition) {
+        if (olapTable.getState() == OlapTable.OlapTableState.TABLET_RESHARD
+                && GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
+                        .isPhysicalPartitionReshardingLocked(olapTable, partition.getId())) {
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.TABLE_NOT_NORMAL);
             return null;
         }
-        MaterializedIndex baseIndex = uniquePartition.getIndex(olapTable.getBaseIndexMetaId());
+        MaterializedIndex baseIndex = partition.getIndex(olapTable.getBaseIndexMetaId());
         if (baseIndex == null) {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
             return null;
@@ -159,12 +227,48 @@ final class PreSplitTargets {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.MULTIPLE_BASE_INDEX_TABLETS);
             return null;
         }
-        List<IndexPreSplitTarget> indexTargets = resolveVisibleIndexTargets(olapTable, uniquePartition);
+        List<IndexPreSplitTarget> indexTargets = resolveVisibleIndexTargets(olapTable, partition);
         if (indexTargets == null) {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
             return null;
         }
-        return new EligibleTarget(database, olapTable, uniquePartition.getId(), indexTargets);
+        return new EligibleTarget(database, olapTable, partition.getId(), indexTargets);
+    }
+
+    /**
+     * Whether {@code partition} holds no rows, judged from its base index. The index row count alone
+     * cannot answer this: {@code TabletStatMgr} refreshes it only periodically, so for minutes after a
+     * load a partition that now holds data still reads zero, and splitting it then would reshape a
+     * populated tablet from boundaries sampled off the new load alone. A partition no load has ever
+     * committed to is still at its initial visible version, which publish advances synchronously.
+     */
+    static boolean isEmptyPartition(PhysicalPartition partition, MaterializedIndex baseIndex) {
+        return partition.getVisibleVersion() <= PhysicalPartition.PARTITION_INIT_VERSION
+                && baseIndex.getRowCount() == 0;
+    }
+
+    /**
+     * Re-reads the physical partition {@code target} resolved, under the table lock as the coordinator's own gate
+     * reads it, and says why it cannot be carved.
+     *
+     * @return {@code null} when it is still empty by {@link #isEmptyPartition};
+     *         {@link SkipReason#PARTITION_NOT_EMPTY} when it holds rows; {@link SkipReason#METADATA_NOT_RESOLVED}
+     *         when it or its base index is gone, since the lock taken to resolve it has been released.
+     */
+    static SkipReason checkStillEmpty(EligibleTarget target) {
+        OlapTable table = target.olapTable();
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(target.database().getId(), table.getId(), LockType.READ);
+        try {
+            PhysicalPartition partition = table.getPhysicalPartition(target.partitionId());
+            MaterializedIndex baseIndex = partition == null ? null : partition.getIndex(table.getBaseIndexMetaId());
+            if (baseIndex == null) {
+                return SkipReason.METADATA_NOT_RESOLVED;
+            }
+            return isEmptyPartition(partition, baseIndex) ? null : SkipReason.PARTITION_NOT_EMPTY;
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(target.database().getId(), table.getId(), LockType.READ);
+        }
     }
 
     /**

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "StarRocks は、データクエリと分析を容易にする豊富な関数セットを提供しています。"
 sidebar_position: 0.5
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 関数

@@ -28,6 +28,11 @@
 namespace starrocks::lake {
 class TabletRangeHelper {
 public:
+    // Returns the schema column indexes used to encode tablet boundaries. Range-distributed
+    // primary-key tablets always route in primary-key space, even when their physical sort key
+    // is different. Other key models retain the historical sort-key boundary semantics.
+    static std::vector<ColumnId> range_key_idxes(const TabletSchema& tablet_schema);
+
     /**
      * @brief Create a SeekRange from TabletRangePB.
      *
@@ -111,6 +116,28 @@ public:
     // and old range are read from `old_meta`.
     static Status validate_range_transition(const TabletMetadataPB& old_meta, const TabletSchema& new_schema,
                                             const TabletRangePB& new_range);
+};
+
+// Row selection over a tablet's PK-space half-open range. This is intentionally a row filter rather
+// than a segment seek: a tablet with ORDER BY != PK has segments ordered by the sort key, so its PK
+// range cannot be mapped to a contiguous rowid span.
+//
+// Everything except the encode-and-compare is decided by (range, schema) alone, so it is computed
+// once here instead of per chunk -- an UNSHARE compaction runs this over thousands of chunks.
+// Not thread-safe: the encoder's output column is reused, so give each compaction task its own.
+class PrimaryKeyRangeFilter {
+public:
+    static StatusOr<PrimaryKeyRangeFilter> create(const TabletRangePB& tablet_range_pb,
+                                                  const TabletSchemaCSPtr& tablet_schema);
+
+    // Returns one byte per row of |chunk|: 1 to keep, 0 to drop. Empty for an empty chunk.
+    StatusOr<Filter> build(const Chunk& chunk);
+
+private:
+    SstSeekRange _seek_range;
+    Schema _pkey_schema;
+    PrimaryKeyEncodingType _encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2;
+    MutableColumnPtr _encoded_keys;
 };
 
 } // namespace starrocks::lake

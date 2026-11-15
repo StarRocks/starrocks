@@ -26,9 +26,11 @@
 
 namespace starrocks {
 
+enum class PrimaryKeyEncodingType;
 class Tablet;
 class HashIndex;
-class ParallelPublishContext;
+class ParallelUpsertContext;
+struct ParallelPublishSlot;
 
 const uint64_t ROWID_MASK = 0xffffffff;
 
@@ -42,7 +44,8 @@ public:
     using tablet_rowid_t = uint64_t;
 
     PrimaryIndex();
-    PrimaryIndex(const Schema& pk_schema);
+    // |encoding_type| is the encoding of every key passed to this index.
+    PrimaryIndex(const Schema& pk_schema, PrimaryKeyEncodingType encoding_type);
     virtual ~PrimaryIndex();
 
     // Fetch all primary keys from the tablet associated with this index into memory
@@ -76,22 +79,23 @@ public:
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                   DeletesMap* deletes);
 
-    // support parallel upsert with thread pool
-    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, IOStat* stat = nullptr,
-                  ParallelPublishContext* ctx = nullptr);
+    // Parallel-publish overload. The active-memtable write happens synchronously here; on a
+    // cloud-native index the SST / inactive-memtable lookup of the replaced old values is submitted
+    // to `ctx`'s runner, which is why `slot` -- whose `pk_column` owns the bytes `keys` points into
+    // -- must outlive the join.
+    //
+    // When `ctx->defers_lookup()` the lookup task appends the replaced rowids to the context and the
+    // caller must join the runner and call flush_memtable(); otherwise the lookup completes before
+    // this returns and the context is appended to synchronously. Either way the caller must not
+    // append them again.
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, ParallelPublishSlot* slot,
+                  ParallelUpsertContext* ctx, IOStat* stat = nullptr);
 
-    // Parallel-publish overload that upserts an arbitrary subset of rows by absolute rowids:
-    // pks[i] is upserted at (rssid, rowids[i]). The active-memtable write happens synchronously
-    // in the caller; the SST/inactive-memtable lookup of replaced old values is submitted to
-    // ctx->token. Each call requires its own slot in `ctx` (caller must `extend_slots()` first).
-    //
-    // Replaced old rowids are appended to `ctx->deletes` under `ctx->mutex` by the lookup task.
-    // Caller is expected to drive `ctx->token->wait()` and `flush_memtable()` once all upsert
-    // submissions are done.
-    //
-    // Only supported on cloud-native persistent index (returns NotSupported otherwise).
-    Status upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks, IOStat* stat,
-                  ParallelPublishContext* ctx);
+    // Same, for an arbitrary subset of rows addressed by absolute rowid: pks[i] lands at
+    // (rssid, rowids[i]). Only supported on the cloud-native persistent index (returns NotSupported
+    // otherwise).
+    Status upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks, ParallelPublishSlot* slot,
+                  ParallelUpsertContext* ctx, IOStat* stat = nullptr);
 
     // replace old values and insert when key not exist.
     // Used in compaction apply & publish.
@@ -192,7 +196,7 @@ public:
     bool need_rebuild() const;
 
 protected:
-    void _set_schema(const Schema& pk_schema);
+    void _set_schema(const Schema& pk_schema, PrimaryKeyEncodingType encoding_type);
 
 private:
     Status _do_load(Tablet* tablet);
@@ -209,7 +213,8 @@ private:
                                          uint32_t idx_end, DeletesMap* deletes, IOStat* stat);
 
     Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
-                                         uint32_t idx_end, IOStat* stat, ParallelPublishContext* ctx);
+                                         uint32_t idx_end, ParallelPublishSlot* slot, ParallelUpsertContext* ctx,
+                                         IOStat* stat);
 
     Status _erase_persistent_index(const Column& key_col, DeletesMap* deletes);
 

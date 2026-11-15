@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -29,6 +30,7 @@
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
 #include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment_writer.h"
 
 namespace starrocks {
@@ -63,6 +65,8 @@ public:
     ~SegmentMetaCollecterTest() { delete_file(_segment_name); }
 
 protected:
+    static const OlapReaderStatistics& stats_of(const SegmentMetaCollecter& collecter) { return collecter._stats; }
+
     std::string _segment_name;
     TabletSchemaCSPtr _tablet_schema;
     SegmentSharedPtr _segment;
@@ -158,7 +162,7 @@ TEST_F(SegmentMetaCollecterTest, test_init_with_dcg_options) {
     EXPECT_OK(collecter2.init(&params, non_pk_options));
 }
 
-TEST_F(SegmentMetaCollecterTest, test_collect_dict_json_column_success) {
+TEST_F(SegmentMetaCollecterTest, test_collect_flat_json_meta_fields) {
     // Create a proper JSON segment with actual data
     TabletSchemaPB json_schema_pb;
     auto json_col = json_schema_pb.add_column();
@@ -207,14 +211,25 @@ TEST_F(SegmentMetaCollecterTest, test_collect_dict_json_column_success) {
     // Open the JSON segment
     FileInfo json_file_info{.path = json_segment_name, .encryption_meta = encryption_pair.encryption_meta};
     ASSIGN_OR_ABORT(auto json_segment, Segment::open(fs, json_file_info, 0, json_tablet_schema));
+    const auto* root_reader = json_segment->column(0);
+    ASSERT_NE(nullptr, root_reader);
+    ASSERT_TRUE(root_reader->is_flat_json());
+    ASSERT_NE(nullptr, root_reader->sub_readers());
 
-    // Test dictionary collection from JSON column
+    uint64_t child_mem_footprint = 0;
+    for (const auto& child : *root_reader->sub_readers()) {
+        child_mem_footprint += child->total_mem_footprint();
+    }
+    ASSERT_GT(child_mem_footprint, 0);
+    ASSERT_EQ(child_mem_footprint, root_reader->total_mem_footprint());
+
+    // Test metadata collection from a Flat JSON column.
     SegmentMetaCollecter json_collecter(json_segment);
     SegmentMetaCollecterParams params;
-    params.fields.emplace_back("dict_merge");
-    params.field_type.emplace_back(LogicalType::TYPE_ARRAY);
-    params.cids.emplace_back(0);
-    params.read_page.emplace_back(true); // Need to read page for JSON
+    params.fields = {META_DICT_MERGE, META_COLUMN_SIZE};
+    params.field_type = {LogicalType::TYPE_ARRAY, LogicalType::TYPE_BIGINT};
+    params.cids = {0, 0};
+    params.read_page = {true, false};
     params.tablet_schema = json_tablet_schema;
     params.low_cardinality_threshold = 1000;
     SegmentMetaCollectOptions options;
@@ -222,13 +237,13 @@ TEST_F(SegmentMetaCollecterTest, test_collect_dict_json_column_success) {
     EXPECT_OK(json_collecter.open());
 
     auto array_col = create_array_column();
-
-    // Test successful dictionary collection for JSON column
-    Status status = json_collecter._collect_dict(0, array_col.get(), LogicalType::TYPE_ARRAY);
-
-    ASSERT_OK(status);
+    auto column_size_col = Int64Column::create();
+    std::vector<Column*> columns{array_col.get(), column_size_col.get()};
+    ASSERT_OK(json_collecter.collect(&columns));
     EXPECT_GT(array_col->size(), 0);
     EXPECT_EQ("[['Beijing','Shanghai'], ['Alice','Bob']]", array_col->debug_string());
+    ASSERT_EQ(1, column_size_col->size());
+    EXPECT_EQ(static_cast<int64_t>(root_reader->total_mem_footprint()), column_size_col->get(0).get_int64());
 }
 
 TEST_F(SegmentMetaCollecterTest, test_collect_multiple_meta_fields) {
@@ -436,6 +451,92 @@ TEST_F(SegmentMetaCollecterTest, test_collect_with_dcg_loader_non_pk) {
     EXPECT_OK(collecter.collect(&columns));
     EXPECT_EQ(1, col->size());
     EXPECT_EQ(0, col->get(0).get_int64());
+}
+
+// A metadata scan opens the `.cols` segment again every time it runs. Its footer read has to fill the local
+// data cache, like the other reads of the scan, and count towards the scan's statistics.
+TEST_F(SegmentMetaCollecterTest, test_dcg_segment_open_fills_data_cache) {
+    TabletSchemaPB schema_pb;
+    for (int i = 0; i < 2; i++) {
+        auto col = schema_pb.add_column();
+        col->set_name("c" + std::to_string(i));
+        col->set_type("INT");
+        col->set_is_key(i == 0);
+        col->set_is_nullable(false);
+        col->set_unique_id(i);
+    }
+    auto schema = TabletSchema::create(schema_pb);
+
+    const std::string dir = "./meta_reader_test_dcg_open";
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(dir));
+    (void)fs->delete_dir_recursive(dir);
+    ASSERT_OK(fs->create_dir_recursive(dir));
+    DeferOp defer_op([&] { (void)fs->delete_dir_recursive(dir); });
+    const std::string segment_path = dir + "/seg.dat";
+    const std::string cols_path = dir + "/update.cols";
+    auto write_segment = [&](const std::string& path) {
+        ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(path));
+        SegmentWriter writer(std::move(wf), 0, schema, SegmentWriterOptions());
+        ASSERT_OK(writer.init());
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        for (int v : {1, 2, 3}) {
+            c0->append(v);
+            c1->append(v * 10);
+        }
+        auto chunk = std::make_shared<Chunk>(Columns{c0, c1}, std::make_shared<Schema>(schema->schema()));
+        ASSERT_OK(writer.append_chunk(*chunk));
+        uint64_t file_size, index_size, footer_pos;
+        ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_pos));
+    };
+    ASSERT_NO_FATAL_FAILURE(write_segment(segment_path));
+    ASSERT_NO_FATAL_FAILURE(write_segment(cols_path));
+    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, FileInfo{.path = segment_path}, 0, schema));
+
+    // Column uid 1 lives in `update.cols`.
+    auto dcg = std::make_shared<DeltaColumnGroup>();
+    dcg->init(1, {{1}}, {"update.cols"});
+    auto mock_loader = std::make_shared<MockDeltaColumnGroupLoader>();
+    mock_loader->set_dcgs({dcg});
+
+    std::vector<bool> cols_skip_fill;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("Segment::_open:footer_file_options", [&](void* arg) {
+        auto* path_and_opts = static_cast<std::pair<const std::string*, const RandomAccessFileOptions*>*>(arg);
+        if (*path_and_opts->first == cols_path) {
+            cols_skip_fill.push_back(path_and_opts->second->skip_fill_local_cache);
+        }
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+
+    SegmentMetaCollecter collecter(segment);
+    SegmentMetaCollecterParams params;
+    params.fields = {META_COUNT_COL};
+    params.field_type = {TYPE_BIGINT};
+    params.cids = {1};
+    params.read_page = {true};
+    params.tablet_schema = schema;
+    SegmentMetaCollectOptions options;
+    options.is_primary_keys = true;
+    options.tablet_id = 12345;
+    options.pk_rowsetid = 1;
+    options.dcg_loader = mock_loader;
+    ASSERT_OK(collecter.init(&params, options));
+    ASSERT_OK(collecter.open());
+
+    ASSERT_EQ(1, cols_skip_fill.size());
+    EXPECT_FALSE(cols_skip_fill[0]);
+    // The base segment was opened before the scan, so the one segment counted is the `.cols` segment.
+    EXPECT_EQ(1, stats_of(collecter).segments_opened);
+
+    auto count_col = Int64Column::create();
+    std::vector<Column*> columns = {count_col.get()};
+    ASSERT_OK(collecter.collect(&columns));
+    EXPECT_EQ(3, count_col->get(0).get_int64());
 }
 
 // Integration test for reading from DCG segments with actual column files

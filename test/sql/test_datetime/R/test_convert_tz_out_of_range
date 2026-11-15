@@ -1,0 +1,103 @@
+-- name: test_convert_tz_out_of_range
+CREATE DATABASE db_${uuid0};
+-- result:
+-- !result
+USE db_${uuid0};
+-- result:
+-- !result
+set sql_dialect='StarRocks';
+-- result:
+-- !result
+select convert_tz('9999-12-31 23:00:00', '-05:00', 'UTC');
+-- result:
+None
+-- !result
+select convert_tz('0000-01-01 01:00:00', '+08:00', 'UTC');
+-- result:
+None
+-- !result
+select convert_tz('9999-12-31 20:00:00', 'America/New_York', 'UTC');
+-- result:
+None
+-- !result
+select convert_tz('0000-01-01 01:00:00', 'Asia/Shanghai', 'UTC');
+-- result:
+None
+-- !result
+select convert_tz('9999-12-31 23:00:00', 'UTC', '-05:00');
+-- result:
+9999-12-31 18:00:00
+-- !result
+select convert_tz('2024-01-01 00:00:00', 'America/New_York', 'UTC');
+-- result:
+2024-01-01 05:00:00
+-- !result
+CREATE TABLE t1 (
+    id INT,
+    dt DATETIME,
+    from_tz VARCHAR(64),
+    to_tz VARCHAR(64)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+    (1, '9999-12-31 23:00:00', '-05:00', 'UTC'),
+    (2, '0000-01-01 01:00:00', '+08:00', 'UTC'),
+    (3, '9999-12-31 20:00:00', 'America/New_York', 'UTC'),
+    (4, '0000-01-01 01:00:00', 'Asia/Shanghai', 'UTC'),
+    (5, '9999-12-31 23:00:00', 'UTC', '-05:00'),
+    (6, '2024-01-01 00:00:00', 'America/New_York', 'UTC');
+-- result:
+-- !result
+select id, convert_tz(dt, from_tz, to_tz) from t1 order by id;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	9999-12-31 18:00:00
+6	2024-01-01 05:00:00
+-- !result
+select id, convert_tz(dt, 'America/New_York', 'UTC') from t1 order by id;
+-- result:
+1	None
+2	0000-01-01 05:56:02
+3	None
+4	0000-01-01 05:56:02
+5	None
+6	2024-01-01 05:00:00
+-- !result
+select id, convert_tz(dt, '-05:00', 'UTC') from t1 order by id;
+-- result:
+1	None
+2	0000-01-01 06:00:00
+3	None
+4	0000-01-01 06:00:00
+5	None
+6	2024-01-01 05:00:00
+-- !result
+CREATE TABLE t2 (
+    id INT,
+    dt DATETIME
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t2 SELECT id, convert_tz(dt, from_tz, to_tz) FROM t1;
+-- result:
+-- !result
+select * from t2 order by id;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	9999-12-31 18:00:00
+6	2024-01-01 05:00:00
+-- !result
+DROP DATABASE db_${uuid0};
+-- result:
+-- !result

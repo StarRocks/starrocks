@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <optional>
 #include <roaring/roaring.hh>
@@ -35,6 +36,7 @@ class PredicateTree;
 class Schema;
 class SegmentReadOptions;
 struct LakeIOOptions;
+struct OlapReaderStatistics;
 
 ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const Schema& schema,
                                       const SegmentReadOptions& options);
@@ -56,9 +58,12 @@ StatusOr<SparseRange<>> block_aligned_rowid_range_from_seek_ranges(Segment* segm
 // This wraps SegmentIterator's lookup machinery so callers outside the scan
 // path can precompute rowid windows and reuse them later.
 // Each result is std::nullopt when the corresponding range is empty on this segment.
+// If |stats| is not null, the reads made to resolve the ranges are added to it.
+// Optional scan controls preserve the caller's page-cache policy and cancellation.
 StatusOr<std::vector<std::optional<Range<rowid_t>>>> segment_seek_ranges_to_rowid_ranges(
         const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges,
-        const LakeIOOptions& lake_io_opts);
+        const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats = nullptr, bool use_page_cache = false,
+        const std::atomic<bool>* is_cancelled = nullptr);
 // Convenience wrapper for a single SeekRange.
 StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const std::shared_ptr<Segment>& segment,
                                                                           const SeekRange& range,

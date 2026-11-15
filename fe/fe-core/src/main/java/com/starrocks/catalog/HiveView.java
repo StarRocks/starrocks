@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
@@ -67,13 +68,22 @@ public class HiveView extends ConnectorView {
             if (Strings.isNullOrEmpty(name.getCatalog()) &&
                     Strings.isNullOrEmpty(name.getDb()) &&
                     cteRelationNames.contains(name.getTbl())) {
-                return;
+                continue;
             }
 
-            tableRelation.getName().setCatalog(catalogName);
+            // Keep an explicit catalog only when StarRocks knows it: the source engine may name the view's
+            // own catalog differently (e.g. Trino "hive" or Spark "spark_catalog"), so rebind unknown ones.
+            String catalog = tableRelation.getName().getCatalog();
+            if (Strings.isNullOrEmpty(catalog) || !catalogExists(catalog)) {
+                tableRelation.getName().setCatalog(catalogName);
+            }
             if (Strings.isNullOrEmpty(tableRelation.getName().getDb())) {
                 tableRelation.getName().setDb(dbName);
             }
         }
+    }
+
+    protected boolean catalogExists(String catalog) {
+        return GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalog);
     }
 }

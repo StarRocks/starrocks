@@ -14,6 +14,7 @@
 
 #include "common/system/master_info.h"
 
+#include "gen_cpp/HeartbeatService_constants.h"
 #include "gtest/gtest.h"
 
 namespace starrocks {
@@ -37,6 +38,28 @@ TEST(MasterInfoTest, basic_info_test) {
         EXPECT_TRUE(mode.has_value());
         EXPECT_EQ(TRunMode::SHARED_NOTHING, mode.value());
     }
+}
+
+TEST(MasterInfoTest, alter_finish_matched_by_job_id) {
+    TMasterInfo saved = get_master_info();
+    const int64_t bit = g_HeartbeatService_constants.IS_ALTER_FINISH_MATCHED_BY_JOB_ID_BIT;
+
+    // Same epoch as the stored master info, so the original can be put back.
+    TMasterInfo info = saved;
+    info.__isset.heartbeat_flags = false;
+    EXPECT_TRUE(update_master_info(info));
+    EXPECT_FALSE(master_matches_alter_finish_by_job_id());
+
+    info.__set_heartbeat_flags(bit | g_HeartbeatService_constants.IS_SET_DEFAULT_ROWSET_TO_BETA_BIT);
+    EXPECT_TRUE(update_master_info(info));
+    EXPECT_TRUE(master_matches_alter_finish_by_job_id());
+
+    // A later heartbeat without the bit clears it.
+    info.__set_heartbeat_flags(g_HeartbeatService_constants.IS_SET_DEFAULT_ROWSET_TO_BETA_BIT);
+    EXPECT_TRUE(update_master_info(info));
+    EXPECT_FALSE(master_matches_alter_finish_by_job_id());
+
+    EXPECT_TRUE(update_master_info(saved));
 }
 
 } // namespace starrocks

@@ -1,6 +1,8 @@
 ---
+sidebar_position: 70
 displayed_sidebar: docs
 description: "How to use SQL Digest in StarRocks to fingerprint and group SQL queries with the same structure for analysis."
+products: [oss, enterprise, anywhere]
 ---
 
 # SQL Digest

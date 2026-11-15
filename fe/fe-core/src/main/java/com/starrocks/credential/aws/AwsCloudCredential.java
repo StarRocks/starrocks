@@ -20,6 +20,7 @@ import com.staros.proto.AwsCredentialInfo;
 import com.staros.proto.AwsDefaultCredentialInfo;
 import com.staros.proto.AwsInstanceProfileCredentialInfo;
 import com.staros.proto.AwsSimpleCredentialInfo;
+import com.staros.proto.AwsWebIdentityCredentialInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
@@ -362,15 +363,11 @@ public class AwsCloudCredential implements CloudCredential {
                 awsCredentialInfo.setProfileCredential(AwsInstanceProfileCredentialInfo.newBuilder().build());
             }
         } else if (useWebIdentityProfile) {
-            if (!iamRoleArn.isEmpty()) {
-                AwsAssumeIamRoleCredentialInfo.Builder assumeIamRoleCredentialInfo =
-                        AwsAssumeIamRoleCredentialInfo.newBuilder();
-                assumeIamRoleCredentialInfo.setIamRoleArn(iamRoleArn);
-                assumeIamRoleCredentialInfo.setExternalId(externalId);
-                awsCredentialInfo.setAssumeRoleCredential(assumeIamRoleCredentialInfo.build());
-            } else {
-                awsCredentialInfo.setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build());
-            }
+            AwsWebIdentityCredentialInfo.Builder webIdentityCredentialInfo =
+                    AwsWebIdentityCredentialInfo.newBuilder();
+            webIdentityCredentialInfo.setIamRoleArn(iamRoleArn);
+            webIdentityCredentialInfo.setExternalId(externalId);
+            awsCredentialInfo.setWebIdentityCredential(webIdentityCredentialInfo.build());
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             // TODO: Support assumeRole with AK/SK
             // TODO: Support sessionToken with AK/SK

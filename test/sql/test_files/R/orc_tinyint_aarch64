@@ -1,4 +1,4 @@
--- name: orc_tinyint_aarch64
+-- name: test_orc_tinyint_aarch64
 
 create database db_${uuid0};
 use db_${uuid0};

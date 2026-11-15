@@ -3,4 +3,5 @@ label: 'Variant 函数'
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
+  type: doc
+  id: variant-functions

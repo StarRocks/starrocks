@@ -1,7 +1,9 @@
 ---
+sidebar_position: 70
 displayed_sidebar: docs
 description: "共有データクラスタの機能サポート、各機能の追加バージョン番号を記載。"
 sidebar_label: 機能サポート
+products: [oss]
 ---
 
 # 機能サポート: 共有データクラスタ

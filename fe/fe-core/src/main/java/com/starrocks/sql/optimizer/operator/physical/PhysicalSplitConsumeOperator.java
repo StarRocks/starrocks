@@ -14,6 +14,8 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
@@ -22,14 +24,21 @@ import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class PhysicalSplitConsumeOperator extends PhysicalOperator {
     private final int splitId;
     private final List<ColumnRefOperator> outputColumnRefOp;
     private final ScalarOperator splitPredicate;
+    // Global dictionaries and derived-dictionary expressions the consuming fragment needs, carried over
+    // from the exchange this operator replaces (see SkewShuffleJoinEliminationRule). The low-cardinality
+    // rewrite attaches them to the exchange; the fragment built for this consumer must still receive them.
+    private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+    private Map<Integer, ScalarOperator> globalDictsExpr = Maps.newHashMap();
 
     public PhysicalSplitConsumeOperator(int splitId, ScalarOperator splitPredicate, DistributionSpec distributionSpec,
                                         List<ColumnRefOperator> outputColumnRefOp) {
@@ -46,6 +55,22 @@ public class PhysicalSplitConsumeOperator extends PhysicalOperator {
 
     public ScalarOperator getSplitPredicate() {
         return splitPredicate;
+    }
+
+    public List<Pair<Integer, ColumnDict>> getGlobalDicts() {
+        return globalDicts;
+    }
+
+    public void setGlobalDicts(List<Pair<Integer, ColumnDict>> globalDicts) {
+        this.globalDicts = globalDicts;
+    }
+
+    public Map<Integer, ScalarOperator> getGlobalDictsExpr() {
+        return globalDictsExpr;
+    }
+
+    public void setGlobalDictsExpr(Map<Integer, ScalarOperator> globalDictsExpr) {
+        this.globalDictsExpr = globalDictsExpr;
     }
 
     @Override

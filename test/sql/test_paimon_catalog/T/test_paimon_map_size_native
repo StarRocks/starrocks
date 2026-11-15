@@ -1,0 +1,19 @@
+-- name: test_paimon_map_size_native
+create external catalog paimon_coverage_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set paimon_reader_mode = 'native';
+set enable_prune_complex_types = true;
+[ORDER]select id, map_size(attrs) from paimon_coverage_${uuid0}.paimon_test.nested_types_v1 order by id;
+[ORDER]select id, array_sort(map_keys(attrs)) from paimon_coverage_${uuid0}.paimon_test.nested_types_v1 order by id;
+[ORDER]select id, array_sort(map_values(attrs)) from paimon_coverage_${uuid0}.paimon_test.nested_types_v1 order by id;
+[ORDER]select id, map_size(attrs), attrs["a"] from paimon_coverage_${uuid0}.paimon_test.nested_types_v1 order by id;
+[ORDER]select id, detail.score from paimon_coverage_${uuid0}.paimon_test.nested_types_v1 order by id;
+set catalog default_catalog;
+drop catalog paimon_coverage_${uuid0};

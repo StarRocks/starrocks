@@ -30,7 +30,7 @@ public:
 
     static Status compress_and_serialize_chunk(const Chunk* src, ChunkPB* dst);
     static Status uncompress_and_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer,
-                                                   const RowDescriptor& row_desc);
+                                                   const RecordDescriptor& record_desc);
     static Status check_chunk_has_null(const Chunk& chunk);
 };
 

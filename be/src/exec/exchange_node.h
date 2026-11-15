@@ -90,7 +90,7 @@ private:
     std::shared_ptr<DataStreamRecvr> _stream_recvr;
 
     // our input rows are a prefix of the rows we produce
-    RowDescriptor _input_row_desc;
+    RecordDescriptor _input_record_desc;
 
     ChunkUniquePtr _input_chunk;
     bool _is_finished = false;

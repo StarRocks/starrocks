@@ -31,6 +31,7 @@ import com.starrocks.catalog.system.information.PipesSystemTable;
 import com.starrocks.catalog.system.information.RoutineLoadJobsSystemTable;
 import com.starrocks.catalog.system.information.StreamLoadsSystemTable;
 import com.starrocks.catalog.system.information.TablesConfigSystemTable;
+import com.starrocks.catalog.system.information.TabletReshardJobsTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.information.TasksSystemTable;
 import com.starrocks.catalog.system.information.TemporaryTablesTable;
@@ -85,6 +86,7 @@ public class SystemTable extends Table {
                     .add(RoutineLoadJobsSystemTable.NAME)
                     .add(StreamLoadsSystemTable.NAME)
                     .add(TablesConfigSystemTable.NAME)
+                    .add(TabletReshardJobsTable.NAME)
                     .add(TaskRunsSystemTable.NAME)
                     .add(TasksSystemTable.NAME)
                     .add(TemporaryTablesTable.NAME)

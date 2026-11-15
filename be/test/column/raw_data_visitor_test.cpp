@@ -54,8 +54,8 @@ TEST(MutableRawDataVisitorTest, VisitDecimal32Column) {
 
 TEST(MutableRawDataVisitorTest, VisitArrayColumn) {
     MutableRawDataVisitor visitor;
-    // Array of int32: [[42, 7]]
-    auto elements = ColumnTestHelper::build_column<int32_t>({42, 7});
+    // Array of int32: [[42, 7]]. ArrayColumn requires nullable elements.
+    auto elements = ColumnTestHelper::build_nullable_column<int32_t>({42, 7});
     auto offsets = ColumnTestHelper::build_column<uint32_t>({0, 2});
     auto col = ArrayColumn::create(std::move(elements), std::move(offsets));
 
@@ -158,22 +158,6 @@ TEST(RawBytesVisitorTest, VisitBinaryColumn) {
     EXPECT_EQ(memcmp(bytes + 5, "world", 5), 0);
 }
 
-// LargeBinaryColumn is BinaryColumnBase<uint64_t>; same flat-bytes semantics.
-TEST(RawBytesVisitorTest, VisitLargeBinaryColumn) {
-    RawBytesVisitor visitor;
-    auto col = LargeBinaryColumn::create();
-    col->append(Slice("hello"));
-    col->append(Slice("world"));
-
-    ASSERT_OK(col->accept(&visitor));
-    // Pointer must be exactly the column's underlying flat-bytes buffer.
-    ASSERT_EQ(visitor.result(), col->raw_bytes());
-
-    const auto* bytes = visitor.result();
-    EXPECT_EQ(memcmp(bytes, "hello", 5), 0);
-    EXPECT_EQ(memcmp(bytes + 5, "world", 5), 0);
-}
-
 TEST(RawBytesVisitorTest, VisitNullableColumn) {
     RawBytesVisitor visitor;
     auto col = ColumnTestHelper::build_nullable_column<int32_t>({42, 7});
@@ -200,8 +184,8 @@ TEST(RawBytesVisitorTest, VisitConstColumn) {
 
 TEST(RawBytesVisitorTest, VisitArrayColumn) {
     RawBytesVisitor visitor;
-    // Array of int32: [[42, 7]]
-    auto elements = ColumnTestHelper::build_column<int32_t>({42, 7});
+    // Array of int32: [[42, 7]]. ArrayColumn requires nullable elements.
+    auto elements = ColumnTestHelper::build_nullable_column<int32_t>({42, 7});
     auto offsets = ColumnTestHelper::build_column<uint32_t>({0, 2});
     auto col = ArrayColumn::create(std::move(elements), std::move(offsets));
 

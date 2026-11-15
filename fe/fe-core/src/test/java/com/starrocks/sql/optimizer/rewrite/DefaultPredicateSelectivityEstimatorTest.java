@@ -543,7 +543,7 @@ public class DefaultPredicateSelectivityEstimatorTest {
 
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtGe0, statistics), 1.0, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtGe1, statistics), 1.0, 0.0);
-        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtGe2, statistics), 0.002, 0.1);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtGe2, statistics), 0.002, 0.001);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtGe3, statistics), 0.005, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtGe4, statistics), 0.0, 0.0);
 

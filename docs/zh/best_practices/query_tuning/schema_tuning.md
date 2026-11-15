@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Best practices for optimizing StarRocks query performance through schema design, table type selection, and sort key configuration."
 sidebar_position: 50
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Schema Tuning Recipes

@@ -28,18 +28,61 @@ bool RuntimeFilterPredicate::init(int32_t driver_sequence) {
         return true;
     }
     _rf = _rf_desc->runtime_filter(driver_sequence);
+    _pass_all = _rf != nullptr && _rf->always_true() && _rf->is_pass_all();
     return _rf != nullptr;
 }
 
+// A partitioned runtime filter is an array of sub-filters; a probe row must be tested
+// against the very sub-filter its build-side counterpart went into, and _test_data_with_hash
+// performs that lookup without validating it.  Picking a different index than the
+// operator-level probe does not fail loudly -- it tests the row against a bloom filter that
+// never saw it, and the row is silently dropped.
+//
+// So the index has to be computed by the same code the operator uses, not merely by
+// equivalent-looking code.  The selection-aware compute_partition_index() overloads are NOT
+// equivalent to the RunningContext one: they have no layout.bucket_properties() branch.
+// Iceberg bucket-aware execution attaches bucket properties to LOCAL_HASH_BUCKET / COLOCATE
+// filters, where the operator hashes with the murmur3 bucket transform and indexes
+// bucketseq_to_instance[bucket_id] while the selection-aware overloads hash with CRC32 and
+// index bucketseq_to_instance[hash % size] -- unrelated functions, not an off-by-one.
+//
+// Whenever bucket properties are present, delegate to the RunningContext overload verbatim
+// rather than growing a second implementation of the transform here.
+//
+// compatibility is inert on that branch (it only gates the PARTITIONED /
+// SHUFFLE_HASH_BUCKET ReduceOp arm, and those modes never carry bucket properties into it),
+// but set it explicitly: RunningContext defaults it to true, and letting it default is what
+// made an earlier attempt at this flip the shuffle modes from ReduceOp to ModuloOp in code
+// shared with the OLAP scan path.
 Status RuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) {
-    auto column = chunk->get_column_by_id(_column_id);
-    if (_rf->num_hash_partitions() > 0) {
-        hash_values.resize(column->size());
-        RuntimeFilter::RunningContext ctx;
-        ctx.exchange_hash_function_version = _rf_desc->exchange_hash_function_version();
-        _rf->compute_partition_index(_rf_desc->layout(), {column.get()}, selection, from, to, hash_values, &ctx);
+    // A join filter that passes every row filters nothing, also no row its min/max can not hold, e.g. NaN.
+    if (_pass_all) {
+        return Status::OK();
     }
+    auto column = chunk->get_column_by_id(_column_id);
+    auto& hash_values = _running_ctx.hash_values;
+    if (_rf->num_hash_partitions() > 0) {
+        _running_ctx.exchange_hash_function_version = _rf_desc->exchange_hash_function_version();
+        if (_needs_bucket_aware_partition_index()) {
+            _running_ctx.compatibility = false;
+            _rf->compute_partition_index(_rf_desc->layout(), {column.get()}, &_running_ctx);
+        } else {
+            hash_values.resize(column->size());
+            _rf->compute_partition_index(_rf_desc->layout(), {column.get()}, selection, from, to, hash_values,
+                                         &_running_ctx);
+        }
+    }
+    if (!column->has_null()) {
+        _rf->evaluate(column.get(), hash_values, selection, from, to);
+        return Status::OK();
+    }
+    // A filter writes its has_null verdict for a NULL key without looking at selection[i], so a <=> join
+    // filter would revive NULL-key rows an earlier predicate rejected unless its result is ANDed back.
+    _input_selection.assign(selection + from, selection + to);
     _rf->evaluate(column.get(), hash_values, selection, from, to);
+    for (uint16_t i = from; i < to; i++) {
+        selection[i] &= _input_selection[i - from];
+    }
     return Status::OK();
 }
 
@@ -48,12 +91,23 @@ StatusOr<uint16_t> RuntimeFilterPredicate::evaluate(Chunk* chunk, uint16_t* sel,
     if (sel_size == 0) {
         return sel_size;
     }
+    if (_pass_all) {
+        if (target_sel != sel) {
+            memcpy(target_sel, sel, sel_size * sizeof(uint16_t));
+        }
+        return sel_size;
+    }
     auto column = chunk->get_column_by_id(_column_id);
+    auto& hash_values = _running_ctx.hash_values;
     if (_rf->num_hash_partitions() > 0) {
-        hash_values.resize(column->size());
-        RuntimeFilter::RunningContext ctx;
-        ctx.exchange_hash_function_version = _rf_desc->exchange_hash_function_version();
-        _rf->compute_partition_index(_rf_desc->layout(), {column.get()}, sel, sel_size, hash_values, &ctx);
+        _running_ctx.exchange_hash_function_version = _rf_desc->exchange_hash_function_version();
+        if (_needs_bucket_aware_partition_index()) {
+            _running_ctx.compatibility = false;
+            _rf->compute_partition_index(_rf_desc->layout(), {column.get()}, &_running_ctx);
+        } else {
+            hash_values.resize(column->size());
+            _rf->compute_partition_index(_rf_desc->layout(), {column.get()}, sel, sel_size, hash_values, &_running_ctx);
+        }
     }
     uint16_t ret = _rf->evaluate(column.get(), hash_values, sel, sel_size, target_sel);
     return ret;
@@ -164,6 +218,15 @@ Status DictColumnRuntimeFilterPredicate::prepare() {
     }
 
     return Status::OK();
+}
+
+bool RuntimeFilterPredicates::any_filter_ready() const {
+    for (const auto* pred : _rf_predicates) {
+        if (pred->get_rf_desc()->runtime_filter(_driver_sequence) != nullptr) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void RuntimeFilterPredicates::_update_selectivity_map() {

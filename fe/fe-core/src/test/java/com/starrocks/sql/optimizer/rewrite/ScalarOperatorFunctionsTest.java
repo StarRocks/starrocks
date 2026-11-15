@@ -27,6 +27,7 @@ import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +38,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -261,6 +263,15 @@ public class ScalarOperatorFunctionsTest {
     public void millisecondsAdd() {
         assertEquals("2015-03-23T09:23:55.010",
                 ScalarOperatorFunctions.millisecondsAdd(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
+    }
+
+    @Test
+    public void microsecondsAdd() {
+        assertEquals("2015-03-23T09:23:55.000010",
+                ScalarOperatorFunctions.microsecondsAdd(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
+        assertEquals("2015-03-23T09:23:54.500",
+                ScalarOperatorFunctions.microsecondsAdd(O_DT_20150323_092355, ConstantOperator.createInt(-500000))
+                        .getDatetime().toString());
     }
 
     @Test
@@ -668,6 +679,12 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void microsecondsSub() {
+        assertEquals("2015-03-23T09:23:54.999990",
+                ScalarOperatorFunctions.microsecondsSub(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
+    }
+
+    @Test
     public void year() {
         ConstantOperator date = ConstantOperator.createDatetime(LocalDateTime.of(2000, 10, 21, 12, 0));
         ConstantOperator result = ScalarOperatorFunctions.year(date);
@@ -740,6 +757,19 @@ public class ScalarOperatorFunctionsTest {
                 () -> ScalarOperatorFunctions.nextDay(O_DT_20150323_092355, ConstantOperator.createVarchar("undefine_dow"))
                         .getVarchar(),
                 "undefine_dow not supported in next_day dow_string");
+    }
+
+    @Test
+    public void nextDayWithFoldedBinaryDow() {
+        // Folding cast(<varbinary> as varchar) used to yield the java default byte[] toString(), which then
+        // poisoned every function reading the folded value: next_day reported
+        // "[B@3461c8cb not supported in next_day dow_string".
+        ConstantOperator dow = ConstantOperator
+                .createBinary("Sunday".getBytes(StandardCharsets.UTF_8), VarbinaryType.VARBINARY)
+                .castTo(VarcharType.VARCHAR).get();
+        assertEquals("Sunday", dow.getVarchar());
+        assertEquals("2015-03-29T09:23:55",
+                ScalarOperatorFunctions.nextDay(O_DT_20150323_092355, dow).getDate().toString());
     }
 
     @Test
@@ -1023,7 +1053,7 @@ public class ScalarOperatorFunctionsTest {
     @Test
     public void subtractDouble() {
         assertEquals(0.0,
-                ScalarOperatorFunctions.subtractDouble(O_DOUBLE_100, O_DOUBLE_100).getDouble(), 1);
+                ScalarOperatorFunctions.subtractDouble(O_DOUBLE_100, O_DOUBLE_100).getDouble(), 0.001);
     }
 
     @Test
@@ -1119,7 +1149,7 @@ public class ScalarOperatorFunctionsTest {
     @Test
     public void divideDouble() {
         assertEquals(1.0,
-                ScalarOperatorFunctions.divideDouble(O_DOUBLE_100, O_DOUBLE_100).getDouble(), 1);
+                ScalarOperatorFunctions.divideDouble(O_DOUBLE_100, O_DOUBLE_100).getDouble(), 0.001);
     }
 
     @Test

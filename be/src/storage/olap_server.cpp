@@ -48,6 +48,7 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/status.h"
 #include "common/storage_define.h"
 #include "common/thread/thread.h"
@@ -57,8 +58,11 @@
 #include "runtime/runtime_env.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/local_pk_index_manager.h"
-#include "storage/lake/update_manager.h"
+#include "storage/lake/metacache_adjuster.h"
+#include "storage/lake/primary_key_manager.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
 #include "storage/persistent_index_compaction_manager.h"
 #include "storage/replication_txn_manager.h"
@@ -93,6 +97,9 @@ Status StorageEngine::start_bg_threads() {
 
     _update_cache_evict_thread = std::thread([this] { _update_cache_evict_thread_callback(nullptr); });
     Thread::set_thread_name(_update_cache_evict_thread, "evict_upd_cache");
+
+    _lake_metacache_adjust_thread = std::thread([this] { _lake_metacache_adjust_thread_callback(nullptr); });
+    Thread::set_thread_name(_lake_metacache_adjust_thread, "adj_lake_meta");
 
     _unused_rowset_monitor_thread = std::thread([this] { _unused_rowset_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_unused_rowset_monitor_thread, "rowset_monitor");
@@ -317,12 +324,6 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
             _update_manager->get_pindex_compaction_mgr()->schedule([&]() {
                 return StorageEngine::instance()->tablet_manager()->pick_tablets_to_do_pk_index_major_compaction();
             });
-#ifdef USE_STAROS
-            auto update_manager = StorageEnv::GetInstance()->lake_update_manager();
-            _local_pk_index_manager->schedule([&]() {
-                return _local_pk_index_manager->pick_tablets_to_do_pk_index_major_compaction(update_manager);
-            });
-#endif
         }
     }
 
@@ -353,7 +354,7 @@ void* StorageEngine::_local_pk_index_shared_data_gc_evict_thread_callback(void* 
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-    auto lake_update_manager = StorageEnv::GetInstance()->lake_update_manager();
+    auto lake_primary_key_manager = StorageEnv::GetInstance()->lake_primary_key_manager();
 
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         SLEEP_IN_BG_WORKER(config::pindex_shared_data_gc_evict_interval_seconds);
@@ -365,8 +366,8 @@ void* StorageEngine::_local_pk_index_shared_data_gc_evict_thread_callback(void* 
                 LOG(WARNING) << "fail to walk dir. path=[" + pk_path << "] error[" << ret.to_string() << "]";
                 continue;
             }
-            lake::LocalPkIndexManager::gc(lake_update_manager, data_dir, tablet_ids);
-            lake::LocalPkIndexManager::evict(lake_update_manager, data_dir, tablet_ids);
+            lake::LocalPkIndexManager::gc(lake_primary_key_manager, data_dir, tablet_ids);
+            lake::LocalPkIndexManager::evict(lake_primary_key_manager, data_dir, tablet_ids);
         }
     }
 
@@ -656,6 +657,17 @@ void* StorageEngine::_cumulative_compaction_thread_callback(void* arg, DataDir* 
     return nullptr;
 }
 
+void StorageEngine::_expire_caches(int64_t vector_cache_now) {
+    _update_manager->expire_cache();
+#if defined(USE_STAROS) && !defined(BE_TEST)
+    StorageEnv::GetInstance()->lake_primary_key_manager()->expire_cache();
+#endif
+    auto* vector_index_cache = StorageEnv::GetInstance()->vector_index_cache();
+    if (vector_index_cache != nullptr) {
+        vector_index_cache->clear_expired(vector_cache_now);
+    }
+}
+
 void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
@@ -669,14 +681,14 @@ void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
         }
         _update_manager->set_cache_expire_ms(expire_sec * 1000);
 #if defined(USE_STAROS) && !defined(BE_TEST)
-        StorageEnv::GetInstance()->lake_update_manager()->set_cache_expire_ms(expire_sec * 1000);
+        StorageEnv::GetInstance()->lake_primary_key_manager()->set_cache_expire_ms(expire_sec * 1000);
 #endif
-        int32_t sleep_sec = std::max(1, expire_sec / 2);
+        int64_t sleep_sec = std::max(1, expire_sec / 2);
+        if (StorageEnv::GetInstance()->vector_index_cache() != nullptr && config::vector_index_cache_expire_sec > 0) {
+            sleep_sec = std::min<int64_t>(sleep_sec, std::max<int64_t>(1, config::vector_index_cache_expire_sec / 2));
+        }
         SLEEP_IN_BG_WORKER(sleep_sec);
-        _update_manager->expire_cache();
-#if defined(USE_STAROS) && !defined(BE_TEST)
-        StorageEnv::GetInstance()->lake_update_manager()->expire_cache();
-#endif
+        _expire_caches(MonotonicMillis());
     }
 
     return nullptr;
@@ -692,6 +704,11 @@ void* StorageEngine::_update_cache_evict_thread_callback(void* arg) {
             continue;
         }
 
+#if defined(USE_STAROS) && !defined(BE_TEST)
+        StorageEnv::GetInstance()->lake_primary_key_manager()->evict_cache(
+                config::primary_key_index_memory_high_percent);
+#endif
+
         // Check config valid
         int64_t memory_urgent_level = config::memory_urgent_level;
         int64_t memory_high_level = config::memory_high_level;
@@ -702,9 +719,24 @@ void* StorageEngine::_update_cache_evict_thread_callback(void* arg) {
             continue;
         }
         _update_manager->evict_cache(memory_urgent_level, memory_high_level);
-#if defined(USE_STAROS) && !defined(BE_TEST)
-        StorageEnv::GetInstance()->lake_update_manager()->evict_cache(memory_urgent_level, memory_high_level);
+    }
+    return nullptr;
+}
+
+void* StorageEngine::_lake_metacache_adjust_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
 #endif
+    lake::MetacacheAdjuster adjuster(MonoTime::Now());
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        SLEEP_IN_BG_WORKER(lake::MetacacheAdjuster::kIntervalSeconds);
+        auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
+        auto* process_mem_tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
+        if (tablet_mgr == nullptr || process_mem_tracker == nullptr || !process_mem_tracker->has_limit()) {
+            continue;
+        }
+        adjuster.adjust(tablet_mgr->metacache(), MonoTime::Now(), process_mem_tracker->limit(),
+                        process_mem_tracker->consumption());
     }
     return nullptr;
 }

@@ -575,6 +575,12 @@ Status SchemaMaterializedViewsScanner::get_materialized_views() {
         }
     }
     table_params.__set_type(TTableType::MATERIALIZED_VIEW);
+    // Forward the outer query's query_timeout (seconds) so the FE keeps the internal task_run_history read
+    // bounded by it instead of the 1h statistic_collect_query_timeout. _ss_state.timeout_ms is derived from
+    // query_options().query_timeout in init_schema_scanner_state().
+    if (_ss_state.timeout_ms > 0) {
+        table_params.__set_query_timeout(_ss_state.timeout_ms / 1000);
+    }
 
     RETURN_IF_ERROR(SchemaHelper::list_materialized_view_status(_ss_state, table_params, &_mv_results));
     _table_index = 0;

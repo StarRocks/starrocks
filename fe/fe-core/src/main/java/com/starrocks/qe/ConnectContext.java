@@ -37,19 +37,21 @@ package com.starrocks.qe;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.OAuth2AuthenticationProvider;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -75,6 +77,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.PreResolvedState;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -172,7 +175,9 @@ public class ConnectContext {
     protected String currentDb = "";
 
     // Unified access control context holding authentication and authorization information
-    protected AccessControlContext accessControlContext = new AccessControlContext();
+    // volatile: the HTTP SQL API replaces it per request (setAccessControlContext) from whichever
+    // executor thread handles that request, and later requests on the same channel read it.
+    protected volatile AccessControlContext accessControlContext = new AccessControlContext();
 
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
@@ -229,6 +234,10 @@ public class ConnectContext {
 
     protected StatementBase.ExplainLevel explainLevel;
 
+    // Set while the finished query's plan is rendered into its profile; scan nodes skip explain lines that read
+    // remote metadata, since nothing bounds that read after the query has ended.
+    protected boolean explainForProfile = false;
+
     protected TWorkGroup resourceGroup;
 
     protected volatile boolean isPending = false;
@@ -238,12 +247,22 @@ public class ConnectContext {
     private ConnectContext parent;
 
     private boolean relationAliasCaseInsensitive = false;
+    // Alias mode of the query outside the outermost connector view being expanded; null when no connector
+    // view is being expanded. A native view nested in a connector view switches back to it.
+    private Boolean relationAliasCaseInsensitiveOutsideConnectorView = null;
 
     // Keys of the views currently being expanded on the analysis path, used to detect cyclic view
     // definitions. It lives on the session (not on a single QueryAnalyzer.Visitor) so the path is
     // shared across the fresh QueryAnalyzer instances spawned for scalar/IN/EXISTS subqueries; a
     // cycle routed through a subquery would otherwise reset the per-Visitor set on every hop.
     private final Set<String> viewExpansionPath = Sets.newHashSet();
+
+    // Names of the recursive CTEs whose recursive member is currently being analyzed. Like
+    // viewExpansionPath it lives on the session (not on a single QueryAnalyzer.Visitor) so it is
+    // shared across the fresh QueryAnalyzer instances spawned for scalar/IN/EXISTS subqueries; a
+    // recursive reference routed through such a subquery would otherwise not see the enclosing
+    // recursive CTE, fall through to the optimizer and expand without end (StackOverflowError).
+    private final Set<String> recursiveCteAnalysisPath = Sets.newHashSet();
 
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
@@ -259,6 +278,16 @@ public class ConnectContext {
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
     private StatisticsLoadBudget statisticsLoadBudget;
+
+    // What the unlocked pre-pass resolved for the statement being planned, handed to the locked analyzer.
+    // Scoped to one statement: StatementPlanner clears it.
+    private final PreResolvedState preResolvedState = new PreResolvedState();
+
+    // FE-side Sample-Based Tablet Pre-Split runs before the load coordinator exists. INSERT keeps
+    // its per-statement timings here so the eventual profile can attach them. Broker Load instead
+    // uses a job-owned collector because its asynchronous work must not depend on this context's
+    // statement-level reset or on a reused client context.
+    private volatile PreSplitProfile preSplitProfile;
 
     // Query source to distinguish different types of queries
     private QuerySource querySource = QuerySource.EXTERNAL;
@@ -286,11 +315,28 @@ public class ConnectContext {
     // listeners for this connection
     private List<Listener> listeners = Lists.newArrayList();
 
+    // Upper bound on the entries the diagnostics area below keeps, so that it stays bounded for
+    // the lifetime of the connection whatever a statement records into it. The value is the
+    // MySQL default for max_error_count, and the entries kept are the first ones, as MySQL does
+    // once the limit is reached.
+    private static final int MAX_WARNING_COUNT = 64;
+
+    // Session-level SQL warning buffer (MySQL diagnostics area). Holds the diagnostics produced
+    // by the most recent statement that generated any, so they can be read back via
+    // SHOW WARNINGS / SHOW ERRORS. Cleared at the start of the next statement, except for SET,
+    // transaction control and SHOW statements, which leave it unchanged while they succeed and
+    // replace it with their own error when they fail (see StmtExecutor.execute).
+    private final List<QueryWarning> warnings = Lists.newArrayList();
+
     private boolean skipFinishSink = false;
     private FinishSinkHandler handler = null;
 
     // Track if current write is CTAS (Create Table As Select)
     private boolean isCTAS = false;
+
+    // An optimize rewrite copies logical rows into a temporary partition and must not
+    // include unrelated schema-change shadow columns in its sink tuple.
+    private boolean optimizeRewrite = false;
 
     // Per-physical-partition read-version override: if set, OlapScanNode uses the mapped version
     // instead of physicalPartition.getVisibleVersion() for each entry in this map.
@@ -303,6 +349,26 @@ public class ConnectContext {
 
     public Map<Long, Long> getScanVersionOverride() {
         return scanVersionOverride;
+    }
+
+    // Start task run id of the incremental MV refresh whose staged TVR window this connection's insert commits;
+    // see IVMInsertLoadTxnCallback.
+    private String tvrStagingOwner = null;
+
+    public void setTvrStagingOwner(String tvrStagingOwner) {
+        this.tvrStagingOwner = tvrStagingOwner;
+    }
+
+    public String getTvrStagingOwner() {
+        return tvrStagingOwner;
+    }
+
+    public void setOptimizeRewrite(boolean optimizeRewrite) {
+        this.optimizeRewrite = optimizeRewrite;
+    }
+
+    public boolean isOptimizeRewrite() {
+        return optimizeRewrite;
     }
 
     public void setTxnId(long txnId) {
@@ -594,6 +660,15 @@ public class ConnectContext {
     }
 
     /**
+     * Replace the access-control context wholesale. The HTTP SQL API authenticates each request
+     * onto a fresh one and installs it here only once the attempt has succeeded, so a refused
+     * attempt leaves nothing of itself on a context that outlives the request.
+     */
+    public void setAccessControlContext(AccessControlContext accessControlContext) {
+        this.accessControlContext = accessControlContext;
+    }
+
+    /**
      * Get the authentication context for this connection
      */
     public AccessControlContext getAccessControlContext() {
@@ -778,6 +853,7 @@ public class ConnectContext {
         startTime = Instant.now();
         returnRows = 0;
         pendingTimeSecond = 0;
+        preSplitProfile = null;
     }
 
     @VisibleForTesting
@@ -785,6 +861,24 @@ public class ConnectContext {
         startTime = start;
         returnRows = 0;
         pendingTimeSecond = 0;
+        preSplitProfile = null;
+    }
+
+    public PreSplitProfile getPreSplitProfile() {
+        return preSplitProfile;
+    }
+
+    public PreSplitProfile getOrCreatePreSplitProfile() {
+        PreSplitProfile current = preSplitProfile;
+        if (current != null) {
+            return current;
+        }
+        synchronized (this) {
+            if (preSplitProfile == null) {
+                preSplitProfile = new PreSplitProfile();
+            }
+            return preSplitProfile;
+        }
     }
 
     public void setEndTime() {
@@ -941,6 +1035,24 @@ public class ConnectContext {
         return (parent != null && parent.isKilled()) || isKilled;
     }
 
+    /**
+     * Whether this statement has been cancelled by any route, as opposed to {@link #isKilled()}, which
+     * only covers connection-scoped kills. {@code KILL QUERY}, a cancelled TaskRun and a closed client
+     * all call {@code kill(false, ...)}, which reaches only {@link StmtExecutor#cancel(String)} and
+     * leaves {@code isKilled} false. Use this wherever work outside query execution needs to notice
+     * cancellation -- by then the coordinator {@code cancel()} targets has usually already finished.
+     */
+    public boolean isStatementCancelled() {
+        if (isKilled()) {
+            return true;
+        }
+        StmtExecutor executorRef = executor;
+        if (executorRef != null && executorRef.isCancelled()) {
+            return true;
+        }
+        return parent != null && parent.isStatementCancelled();
+    }
+
     // Set kill flag to true;
     public void setKilled() {
         isKilled = true;
@@ -1037,6 +1149,14 @@ public class ConnectContext {
 
     public void setExplainLevel(StatementBase.ExplainLevel explainLevel) {
         this.explainLevel = explainLevel;
+    }
+
+    public boolean isExplainForProfile() {
+        return explainForProfile;
+    }
+
+    public void setExplainForProfile(boolean explainForProfile) {
+        this.explainForProfile = explainForProfile;
     }
 
     public TWorkGroup getResourceGroup() {
@@ -1303,8 +1423,20 @@ public class ConnectContext {
         return relationAliasCaseInsensitive;
     }
 
+    public Boolean getRelationAliasCaseInsensitiveOutsideConnectorView() {
+        return relationAliasCaseInsensitiveOutsideConnectorView;
+    }
+
+    public void setRelationAliasCaseInsensitiveOutsideConnectorView(Boolean value) {
+        this.relationAliasCaseInsensitiveOutsideConnectorView = value;
+    }
+
     public Set<String> getViewExpansionPath() {
         return viewExpansionPath;
+    }
+
+    public Set<String> getRecursiveCteAnalysisPath() {
+        return recursiveCteAnalysisPath;
     }
 
     public void setForwardTimes(int forwardTimes) {
@@ -1329,6 +1461,10 @@ public class ConnectContext {
 
     public void setQueryMVContext(QueryMaterializationContext queryMVContext) {
         this.queryMVContext = queryMVContext;
+    }
+
+    public PreResolvedState getPreResolvedState() {
+        return preResolvedState;
     }
 
     public StatisticsLoadBudget getStatisticsLoadBudget() {
@@ -1485,12 +1621,36 @@ public class ConnectContext {
     }
 
     /**
+     * A connection whose handshake was answered before the user finished the IdP login - an
+     * OAuth2 user on a client that cannot speak the OAuth2 plugin - is not logged in until the
+     * browser callback deposits the token, and until then {@code ConnectProcessor} refuses every
+     * command. Bound how long it may stay that way by the integration's {@code
+     * connect_wait_timeout}, the same bound the plugin-aware client's handshake waits for;
+     * otherwise any name could hold a connection open for the whole {@code wait_timeout} without
+     * ever logging in.
+     */
+    private boolean isLoginPendingPastTimeout(long now) {
+        AuthenticationProvider provider = accessControlContext.getAuthenticationProvider();
+        if (!(provider instanceof OAuth2AuthenticationProvider oauth2) || accessControlContext.getAuthToken() != null) {
+            return false;
+        }
+        return now - connectionStartTime > oauth2.getoAuth2Context().connectWaitTimeout() * 1000L;
+    }
+
+    /**
      * Check the connect context is timeout or not. If true, kill the connection, otherwise, return false.
      *
      * @param now : current time in milliseconds
      * @return true if timeout, false otherwise
      */
     public boolean checkTimeout(long now) {
+        if (isLoginPendingPastTimeout(now)) {
+            LOG.warn("kill connection whose OAuth2 login never completed, remote: {}, user: {}",
+                    getRemoteIP(), getQualifiedUser());
+            kill(true, "Connection closed: the OAuth2 login was not completed within connect_wait_timeout");
+            return true;
+        }
+
         long startTimeMillis = getStartTime();
         if (startTimeMillis <= 0) {
             return false;
@@ -1834,7 +1994,7 @@ public class ConnectContext {
         public List<String> toRow(long nowMs, boolean full) {
             List<String> row = Lists.newArrayList();
             row.add("" + connectionId);
-            row.add(ClusterNamespace.getNameFromFullName(getQualifiedUser()));
+            row.add(getQualifiedUser());
             // Ip + port
             if (ConnectContext.this instanceof HttpConnectContext) {
                 String remoteAddress = ((HttpConnectContext) (ConnectContext.this)).getRemoteAddress();
@@ -1842,7 +2002,7 @@ public class ConnectContext {
             } else {
                 row.add(getMysqlChannel().getRemoteHostPortString());
             }
-            row.add(ClusterNamespace.getNameFromFullName(currentDb));
+            row.add(currentDb);
             // Command
             row.add(command.toString());
             // connection start Time
@@ -1944,6 +2104,24 @@ public class ConnectContext {
 
     public List<Listener> getListeners() {
         return listeners;
+    }
+
+    // Every failure path replaces the buffer before recording its error (StmtExecutor.execute and
+    // ConnectProcessor.recordPreExecutionFailureDiagnostics), so the error a client just received
+    // in the ERR packet is never the entry dropped once the limit is reached.
+    public void addWarning(QueryWarning warning) {
+        if (warnings.size() >= MAX_WARNING_COUNT) {
+            return;
+        }
+        this.warnings.add(warning);
+    }
+
+    public List<QueryWarning> getWarnings() {
+        return ImmutableList.copyOf(warnings);
+    }
+
+    public void clearWarnings() {
+        this.warnings.clear();
     }
 
     public void onQueryFinished() {

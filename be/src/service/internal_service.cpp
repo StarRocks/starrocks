@@ -597,7 +597,8 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl, 
     // incremental scan ranges deployment.
     if (!t_request.__isset.fragment) {
         TExecPlanFragmentResult t_result;
-        Status code = orchestration::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request, &t_result);
+        Status code = orchestration::FragmentExecutor::append_incremental_scan_ranges(_exec_env, std::move(t_request),
+                                                                                      &t_result);
         copy_result_from_thrift_to_protobuf(t_result, response);
         return code;
     }
@@ -1304,7 +1305,7 @@ void PInternalServiceImplBase<T>::update_fail_point_status(google::protobuf::Rpc
                 .to_protobuf(response->mutable_status());
         return;
     }
-    fp->setMode(request->trigger_mode());
+    fp->setMode(starrocks::failpoint::trigger_mode_from_request(*request));
     Status::OK().to_protobuf(response->mutable_status());
 #else
     Status::NotSupported("FailPoint is not supported, need re-compile BE with ENABLE_FAULT_INJECTION")

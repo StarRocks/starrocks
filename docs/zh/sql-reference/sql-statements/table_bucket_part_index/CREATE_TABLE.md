@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "在 StarRocks 中创建新表，支持指定引擎和分区分桶策略。"
 keywords: ['chuang jian']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE TABLE
@@ -162,7 +163,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 ### `col_name`
 
-请注意，通常您不能创建以 `__op` 或 `__row` 开头的列名，因为这些名称格式在 StarRocks 中保留用于特殊目的，创建此类列可能会导致未定义的行为。如果您确实需要创建此类列，请将 FE 动态参数[`allow_system_reserved_names`](../../../administration/management/FE_configuration.md#allow_system_reserved_names) 设置为 `TRUE`。
+请注意，通常您不能创建以 `__op` 或 `__row` 开头的列名，因为这些名称格式在 StarRocks 中保留用于特殊目的，创建此类列可能会导致未定义的行为。对于内表，虚拟列的名称（`_tablet_id_`、`_segment_id_`、`_rss_id_`、`_source_id_`、`_row_id_`、`_rowset_id_` 和 `_dynamic_rssid_`）同样是保留名称，因为同名的表列会遮蔽虚拟列，导致两者在查询中都无法被引用。外部表不提供虚拟列，因此可以保留此类列名。如果您确实需要创建此类列，请将 FE 动态参数[`allow_system_reserved_names`](../../../administration/configuration/FE_parameters/FE_parameters.md#allow_system_reserved_names) 设置为 `TRUE`。
 
 ### `col_type`
 
@@ -642,6 +643,57 @@ PROPERTIES (
 )
 ```
 
+### 按列 ZSTD 压缩
+
+对于 Engine 类型为 `olap` 的表，可以指定部分大文本列或 JSON 列使用 ZSTD 压缩，表内其余列保持各自原有的压缩方式。它面向的是**行与行高度重复**的列（对话历史、模板化的负载等），这类列上 ZSTD 的收益远高于整表统一切换。
+
+使用时有以下限制：
+
+- 只能指定 CHAR、VARCHAR、STRING 和 JSON 类型的列。
+- 只能指定 Value 列，指定 Key 列会报错。
+- 同一个列不能在列表中重复出现。
+- 被指定的列使用 ZSTD 压缩，覆盖表级的 `compression` 设置；其余列完全不受影响。
+
+```SQL
+PROPERTIES (
+    "zstd_compression_columns"="v1,v2"
+)
+```
+
+还可以在列名后面单独指定该列的数据页大小：
+
+```SQL
+PROPERTIES (
+    "zstd_compression_columns"="v1:1m, v2:256k, v3"
+)
+```
+
+页是解压的最小单位，因此放大页能带来多少收益，取决于该列的行长相对于页有多大。
+行比页还大的列，在默认的 64 KB 下跨行的重复完全落在窗口之外，改用大页往往能小好几倍；
+而一页就装了几百行的列，这些重复本来就已经在页内被抓到，放大页几乎没有额外收益，
+却会让每次点查都多解压一整页。这就是页大小按列指定而不是全表统一的原因。
+没有写大小的列保持 BE 默认值（`data_page_size`）。可接受的取值范围是 4 KB 到 1 MB。上限取在这里，是因为到 1 MB 为止点查代价仍然有界
+（一次点查读一行约零点几毫秒），再往上压缩率的增长追不上点查代价的增长。
+
+内部字典是否真的会为某一列构建，由数据决定，而不受该属性控制：
+
+- 该列最终必须是 plain 编码。StarRocks 会根据数据自行选择编码，取值种类很少的列会被选为
+  字典编码——那本身就已经把它压得比这里的任何手段都好。在这类列上设置该属性不会有任何效果。
+- 行数不超过 256 的 CHAR/VARCHAR/STRING 列会直接被判为字典编码，因此很小的表也拿不到内部字典。JSON 列没有这条行数下限——它本来就是 plain 编码。
+- 该列在一个 Segment 内必须写满 9 个以上的数据页。第一页用来采样字典，接下来 8 页用来实测
+  它是否划算；这 9 页都不带字典写出，字典从第 10 页起才真正启用。写不到这个长度的列不会用上
+  字典——这对它也是对的：字典自身要占一个页，摊在寥寥几页上根本回不了本。
+- 那 8 个页带字典必须明显小于不带字典——默认至少小十分之一，见
+  `zstd_compression_dict_min_gain`。否则字典被丢弃，该列余下部分不带字典写出。
+
+以上都不是错误，也不改变该列用什么压缩：被指定的列仍然是 ZSTD。
+`zstd_compression_dict_pages_written` 数的是最终拿到字典的列 writer（打平 JSON 列的每个打平子列各算一个）。
+`zstd_compression_dict_build_fallback` 只数**尝试过但被否**的 writer——构建失败，或试压跑完判定不划算。
+上面那些根本没去尝试的情况（列被字典编码、或长度不够跑完试压）两个计数器都不加，
+因此两者之和并不等于被指定的列数。
+
+该属性也可以在建表后通过 `ALTER TABLE ... SET ("zstd_compression_columns" = "...")` 修改。这是一次 Schema Change：它会重写每一个 Tablet，因此存量数据也会按新设置重新编码，代价与同等规模表上的其他 Schema Change 相当，可用 `SHOW ALTER TABLE COLUMN` 跟踪进度。整个过程中表都可读，两种方式写出的 Segment 也都可读，因为每个 Segment 都记录了自己是怎么写的。
+
 ### Colocate Join
 
 如果您想使用 Colocate Join 属性，请在 `properties` 中指定。
@@ -796,7 +848,7 @@ PROPERTIES (
 )
 ```
 
-- `storage_volume`：用于存储您要创建的云原生表的存储卷的名称。如果未指定此属性，则使用默认存储卷。此属性从 v3.1 开始支持。
+- `storage_volume`：用于存储您要创建的云原生表的存储卷的名称。如果未指定此属性，则使用数据库的存储卷；如果数据库未设置存储卷，则使用默认存储卷。此属性从 v3.1 开始支持。
 
 - `datacache.enable`：是否启用本地磁盘缓存。默认值：`true`。
 
@@ -807,7 +859,7 @@ PROPERTIES (
 要启用本地磁盘缓存，您必须在 BE 配置项 `storage_root_path` 中指定磁盘目录。
 :::
 
-- `datacache.partition_duration`：热数据的有效期。启用本地磁盘缓存后，所有数据都会加载到缓存中。当缓存满时，StarRocks 会从缓存中删除最近使用较少的数据。当查询需要扫描已删除的数据时，StarRocks 会检查数据是否在有效期内。如果数据在有效期内，StarRocks 会再次将数据加载到缓存中。如果数据不在有效期内，StarRocks 则不会将其加载到缓存中。此属性是一个字符串值，可以使用以下单位指定：`YEAR`、`MONTH`、`DAY` 和 `HOUR`，例如 `7 DAY` 和 `12 HOUR`。如果未指定，所有数据都将作为热数据缓存。
+- `datacache.partition_duration`：热分区的时间范围，从当前时间向前计算。对于按 DATE 或 DATETIME 列分区的表，查询扫描某个分区时，仅当该分区的范围与此时间范围有交集（对于 List 分区，即分区值落在此时间范围内）时，StarRocks 才会将扫描的数据填充到缓存中。查询其他分区时仍可读取已缓存的数据，但不会填充缓存，也不会使用内存中的 Page Cache。该属性在查询时根据分区边界进行判断，而非根据数据导入时间，并且不会淘汰已缓存的数据。对于既不是按单个 DATE 或 DATETIME 列进行 Range 分区、也不是按 DATE 或 DATETIME 列进行 List 分区的表，该属性不生效。此属性是一个字符串值，格式为 `<数值> <单位>`，单位可以是 `YEAR`、`MONTH`、`WEEK`、`DAY`、`HOUR`、`MINUTE` 或 `SECOND`（不区分大小写，单复数均可），例如 `7 DAY` 和 `12 HOUR`。可以组合多个数值和单位，例如 `1 DAY 12 HOUR`，但 `YEAR`、`MONTH`、`WEEK` 不能与 `HOUR`、`MINUTE`、`SECOND` 组合使用。如果未指定，查询所有分区时均会填充缓存。
 
   :::note
 此属性仅在 `datacache.enable` 设置为 `true` 时可用。
@@ -870,10 +922,12 @@ SHOW ALTER TABLE COLUMN FROM test_db WHERE TableName = "test_tbl";
 
 ### 禁止 Base Compaction
 
-`base_compaction_forbidden_time_ranges`：禁止对表进行 Base Compaction 的时间范围。设置此属性后，系统仅在指定时间范围之外对符合条件的 Tablet 执行 Base Compaction。此属性从 v3.2.13 开始支持。
+`base_compaction_forbidden_time_ranges`：限制表执行 Base Compaction 的时间范围。具体效果取决于表架构和 Compaction 策略，如下所述。此属性从 v3.2.13 开始支持。
+
+对于存算分离主键表和使用 Base and Cumulative 策略的非主键表，系统在发起自动 Compaction 时检查该时段；禁止时段内仍可执行 Cumulative Compaction。对于使用 Size Tiered 策略的非主键表，此时段仅禁用删除版本数达到阈值后强制触发 Base Compaction 的条件；正常的层级选择仍可能在禁止时段选中最旧的层级。BE/CN 参数 `base_compaction_interval_seconds_since_last_operation` 在最小间隔未到期时施加相同限制。手动 `ALTER TABLE ... COMPACT` 可覆盖这些限制。
 
 :::note
-请确保在禁止 Base Compaction 期间，向表中加载的数据量不超过 500。
+对于存算一体表，请确保在禁止 Base Compaction 期间，向表中加载的数据量不超过 500。
 :::
 
 `base_compaction_forbidden_time_ranges` 的值遵循 [Quartz cron 语法](https://productresources.collibra.com/docs/collibra/latest/Content/Cron/co_quartz-cron-syntax.htm)，并且只支持这些字段：`<minute> <hour> <day-of-the-month> <month> <day-of-the-week>`，其中 `<minute>` 必须是 `*`。
@@ -951,6 +1005,38 @@ PROPERTIES (
 - `flat_json.null.factor`（可选）：列中 NULL 值的比例阈值。如果列中 NULL 值的比例高于此阈值，则 Flat JSON 不会提取该列。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.3`。
 - `flat_json.sparsity.factor`（可选）：同名列的比例阈值。如果同名列的比例低于此值，则 Flat JSON 不会提取该列。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.3`。
 - `flat_json.column.max`（可选）：Flat JSON 可提取的最大子字段数。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`100`。
+
+### 为基于范围分布的表指定 Tablet 目标大小
+
+*仅适用于基于范围分布的表*
+
+通过属性 `tablet_reshard_target_size` 可以为基于范围分布的表单独指定 Tablet 目标大小。当同名的 FE 配置项 `tablet_reshard_target_size` 为正数时，该表自动拆分、合并 Tablet 会以该属性值代替配置项的值。单位：字节。取值必须为正整数。
+
+```SQL
+PROPERTIES (
+    "tablet_reshard_target_size" = "4294967296"
+)
+```
+
+该属性没有默认值，未设置时以 FE 配置项 `tablet_reshard_target_size` 作为目标大小。在其他分布方式的表上设置该属性时，语句会报错 `tablet_reshard_target_size is only supported for range-distributed tables`。可以通过 [ALTER TABLE](ALTER_TABLE.md) 修改或删除该属性。更多信息，请参阅[数据分布 - Tablet 目标大小](../../../table_design/data_distribution/Data_distribution.md#tablet-目标大小)。
+
+### 在自动采集统计信息时跳过某张表
+
+将 `enable_statistic_auto_collect` 设置为 `false` 后，自动采集统计信息时会跳过该表。默认值：`true`。
+
+```SQL
+PROPERTIES (
+    "enable_statistic_auto_collect" = "false"
+)
+```
+
+该属性为 `false` 时：
+
+- StarRocks 提供的自动采集任务，以及通过 `CREATE ANALYZE ALL` 或 `CREATE ANALYZE DATABASE` 创建的自动采集任务，都会跳过该表。
+- 明确指定该表的采集任务（通过 `CREATE ANALYZE TABLE` 创建，或通过 `ANALYZE TABLE` 执行）仍会采集该表的统计信息。
+- 导入数据时触发的统计信息采集不受影响，它由 `enable_statistic_collect_on_first_load` 单独控制。
+
+可以通过 [ALTER TABLE](ALTER_TABLE.md) 修改该属性。物化视图不支持该属性。
 
 ## 示例
 

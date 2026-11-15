@@ -60,11 +60,8 @@ Status LocalDeltaColumnGroupLoader::load(int64_t tablet_id, RowsetId rowsetid, u
     return StorageEngine::instance()->get_delta_column_group(_meta, tablet_id, rowsetid, segment_id, INT64_MAX, pdcgs);
 }
 
-Status UpdateManager::update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-    int64_t byte_limits = RuntimeEnv::GetInstance()->process_mem_limit();
-    int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
-    _index_cache.set_capacity(byte_limits * update_mem_percent);
-    return Status::OK();
+void UpdateManager::refresh_mem_limits() {
+    _index_cache.set_capacity(RuntimeEnv::calc_max_update_memory(RuntimeEnv::GetInstance()->process_mem_limit()));
 }
 
 UpdateManager::UpdateManager(MemTracker* mem_tracker)
@@ -72,12 +69,7 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
           _update_state_cache(std::numeric_limits<size_t>::max()),
           _update_column_state_cache(std::numeric_limits<size_t>::max()) {
     _update_mem_tracker = mem_tracker;
-    int64_t preload_mem_limit = -1;
-    if (_update_mem_tracker != nullptr) {
-        preload_mem_limit = (int64_t)_update_mem_tracker->limit() *
-                            std::max(std::min(100, config::lake_pk_preload_memory_limit_percent), 0) / 100;
-    }
-    _update_state_mem_tracker = std::make_unique<MemTracker>(preload_mem_limit, "rowset_update_state", mem_tracker);
+    _update_state_mem_tracker = std::make_unique<MemTracker>(-1, "rowset_update_state", mem_tracker);
     _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "index_cache", mem_tracker);
     _del_vec_cache_mem_tracker = std::make_unique<MemTracker>(-1, "del_vec_cache", mem_tracker);
     _compaction_state_mem_tracker = std::make_unique<MemTracker>(-1, "compaction_state", mem_tracker);
@@ -85,11 +77,9 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
 
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
-
-    int64_t byte_limits = RuntimeEnv::GetInstance()->process_mem_limit();
-    int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
-    _index_cache.set_capacity(byte_limits * update_mem_percent / 100);
     _update_column_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
+
+    refresh_mem_limits();
 }
 
 UpdateManager::~UpdateManager() {
@@ -434,6 +424,16 @@ Status UpdateManager::set_cached_delta_column_group(KVStore* meta, const TabletS
 }
 
 void UpdateManager::expire_cache() {
+    const int64_t now = MonotonicMillis();
+    const int64_t check_interval_ms = std::max<int64_t>(1, _cache_expire_ms / 2);
+    int64_t last_check_ms = _last_expire_cache_check_millis.load(std::memory_order_relaxed);
+    if (last_check_ms != 0 && (now <= last_check_ms || now - last_check_ms < check_interval_ms)) {
+        return;
+    }
+    if (!_last_expire_cache_check_millis.compare_exchange_strong(last_check_ms, now, std::memory_order_relaxed)) {
+        return;
+    }
+
     StorageMetrics::instance()->update_primary_index_num.set_value(_index_cache.object_size());
     StorageMetrics::instance()->update_primary_index_bytes_total.set_value(_index_cache.size());
     {
@@ -443,7 +443,7 @@ void UpdateManager::expire_cache() {
                 _del_vec_cache.cbegin(), _del_vec_cache.cend(), 0,
                 [](const int& accumulated, const auto& p) { return accumulated + p.second->memory_usage(); }));
     }
-    if (MonotonicMillis() - _last_clear_expired_cache_millis > _cache_expire_ms) {
+    if (now - _last_clear_expired_cache_millis > _cache_expire_ms) {
         _update_state_cache.clear_expired();
         _update_column_state_cache.clear_expired();
 
@@ -457,7 +457,7 @@ void UpdateManager::expire_cache() {
                                          PrettyPrinter::print_bytes(size), orig_obj_size - obj_size,
                                          PrettyPrinter::print_bytes(orig_size - size));
 
-        _last_clear_expired_cache_millis = MonotonicMillis();
+        _last_clear_expired_cache_millis = now;
     }
 }
 

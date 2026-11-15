@@ -2,13 +2,14 @@
 displayed_sidebar: docs
 description: "如何使用 StarRocks 的异步物化视图优化数据湖（Iceberg、Hive、Hudi、Delta Lake）中的查询性能。"
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 使用物化视图加速数据湖查询
 
 本文描述了如何使用 StarRocks 的异步物化视图来优化数据湖中的查询性能。
 
-StarRocks 提供了开箱即用的数据湖查询功能，非常适用于对湖中的数据进行探查式查询分析。在大多数情况下，[Data Cache](../../../data_source/data_cache.md) 可以提供 Block 级文件缓存，避免由远程存储抖动和大量I/O操作引起的性能下降。
+StarRocks 提供了开箱即用的数据湖查询功能，非常适用于对湖中的数据进行探查式查询分析。在大多数情况下，[Data Cache](../../../data_source/data_cache/data_cache.md) 可以提供 Block 级文件缓存，避免由远程存储抖动和大量I/O操作引起的性能下降。
 
 然而，当涉及到使用湖中数据构建复杂和高效的报表，或进一步加速这些查询时，您可能仍然会遇到性能挑战。通过使用异步物化视图，您可以为数据湖中的报表和应用实现更高的并发，以及更好的性能。
 
@@ -161,7 +162,7 @@ FROM `iceberg`.`test`.`iceberg_sample_datetime_day`;
 **Description**:  Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。 <br/>
 
 
-对于 Iceberg Catalog, 从 v3.1.4 版本开始，StarRocks 支持检测分区级别的数据更改，当前只支持 Iceberg V1 表。
+对于 Iceberg Catalog, 从 v3.1.4 版本开始，StarRocks 支持检测分区级别的数据更改。
 
 ### 启用 External Catalog 物化视图的查询改写
 

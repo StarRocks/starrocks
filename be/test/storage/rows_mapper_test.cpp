@@ -572,6 +572,11 @@ TEST_F(RowsMapperTest, test_crm_file_gc) {
         dir->perform_crm_gc(config::unused_crm_file_threshold_second);
     }
     {
+        // get_stores() hands back the shared engine's DataDir, and every later test in this binary
+        // writes its rows mapper (and pkdump) files under its tmp dir, so put the directory back on
+        // the way out -- otherwise they all fail with "<tablet>_<rowset>.crm: No such file or
+        // directory".
+        DeferOp restore_tmp_dir([&]() { (void)fs::create_directories(dir->get_tmp_path()); });
         ASSERT_OK(fs::remove(dir->get_tmp_path()));
         // collect files
         dir->perform_tmp_path_scan();

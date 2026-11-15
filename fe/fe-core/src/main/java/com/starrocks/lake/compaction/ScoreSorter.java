@@ -24,6 +24,9 @@ public class ScoreSorter implements Sorter {
     @Override
     @NotNull
     public List<PartitionStatisticsSnapshot> sort(@NotNull List<PartitionStatisticsSnapshot> partitionStatistics) {
+        // Quantiles' natural order (see Quantiles#compareTo) ranks by max score first, matching
+        // the metric ScoreSelector admits on -- an admitted partition can never sort below the
+        // ambient workload solely because its debt is concentrated in a few tablets.
         return partitionStatistics.stream()
                 .filter(p -> p.getCompactionScore() != null)
                 .sorted(Comparator.comparingInt((PartitionStatisticsSnapshot stats) -> stats.getPriority().getValue()).reversed()

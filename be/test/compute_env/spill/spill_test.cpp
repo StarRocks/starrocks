@@ -29,15 +29,19 @@
 #include "base/utility/defer_op.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
+#include "column/const_column.h"
+#include "column/container_resource.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/sorting/sorting.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_local_io_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
@@ -45,6 +49,7 @@
 #include "common/statusor.h"
 #include "common/storage_define.h"
 #include "compute_env/sorting/merge.h"
+#include "compute_env/spill/input_stream_internal.h"
 #include "compute_env/spill/log_block_manager.h"
 #include "compute_env/spill/mem_table.h"
 #include "compute_env/spill/mem_tracker_guard.h"
@@ -67,6 +72,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/query_context_lifetime.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks::vectorized {
@@ -295,7 +301,7 @@ StatusOr<SpillTestContext*> no_partition_context(ObjectPool* pool, RuntimeState*
     //
     if (!order_bys.empty()) {
         RETURN_IF_ERROR(context->sort_exprs.init(order_bys, &tuple, &context->pool, runtime_state));
-        RETURN_IF_ERROR(context->sort_exprs.prepare(runtime_state, {}, {}));
+        RETURN_IF_ERROR(context->sort_exprs.prepare(runtime_state));
         RETURN_IF_ERROR(context->sort_exprs.open(runtime_state));
     }
 
@@ -467,6 +473,64 @@ TEST_F(SpillTest, unsorted_process) {
     }
 }
 
+// Pins what spiller.h documents about the two flush-stage timers on an unordered writer. The
+// default SpilledOptions gives init_partition_nums = -1 (so a RawSpillerWriter) with
+// is_unordered = true -- the shape the nested-loop join operators use. Mem tables are still
+// flushed there, so FlushMemTableTime is attributed, but _need_compact_block() bails out on
+// is_unordered, so no compaction work is ever done even with block compaction enabled.
+TEST_F(SpillTest, unordered_writer_reports_flush_stage_but_never_compacts) {
+    ObjectPool pool;
+    TExprBuilder order_by_slots_builder;
+    order_by_slots_builder << TYPE_INT;
+    auto order_by_slots = order_by_slots_builder.get_res();
+    std::vector<bool> nullables = {false, false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT << TYPE_SMALLINT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+    auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+
+    RandomChunkBuilder chunk_builder;
+    auto factory = spill::make_spilled_factory();
+
+    SpilledOptions spill_options;
+    // The default ctor delegates to SpilledOptions(-1): unordered, and not partitioned.
+    ASSERT_TRUE(spill_options.is_unordered);
+    ASSERT_EQ(-1, spill_options.init_partition_nums);
+    spill_options.mem_table_pool_size = 2;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    // Enabled deliberately: it is the is_unordered gate, not this flag, that keeps compaction away.
+    spill_options.enable_block_compaction = true;
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    for (size_t i = 0; i < 1024; ++i) {
+        auto chunk = chunk_builder.gen(tuple, nullables);
+        ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+        ASSERT_OK(spiller->_spilled_task_status);
+    }
+    ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+
+    // Mem tables were written out, so the first stage of the flush task is attributed.
+    ASSERT_GT(metrics.flush_mem_table_timer->value(), 0);
+    ASSERT_LE(metrics.flush_mem_table_timer->value(), metrics.flush_timer->value());
+    // The compaction stage never selected any block group, so nothing was merged or rewritten.
+    // compact_timer itself is not asserted to be zero: it is scoped before the _need_compact_block()
+    // early return, so entering the stage at all leaves a negligible non-zero value there.
+    ASSERT_EQ(0, metrics.compact_count->value());
+    ASSERT_EQ(0, metrics.compact_merge_timer->value());
+    ASSERT_EQ(0, metrics.compact_bytes_read->value());
+    ASSERT_EQ(0, metrics.compact_bytes_written->value());
+}
+
 struct FailedGuard {
     bool scoped_begin() const { return false; }
     void scoped_end() const {}
@@ -609,7 +673,148 @@ TEST_F(SpillTest, order_by_process) {
         }
         ASSERT_EQ(contain_rows, restored_rows);
         ASSERT_GT(metrics.compact_count->value(), 0);
+        // FlushTime must be attributable: both stages of the flush task report their own time,
+        // the merge inside compaction is separated from the IO it drives, and compaction reports
+        // the bytes it rewrote.
+        ASSERT_GT(metrics.flush_mem_table_timer->value(), 0);
+        ASSERT_GT(metrics.compact_timer->value(), 0);
+        ASSERT_GT(metrics.compact_merge_timer->value(), 0);
+        ASSERT_LE(metrics.compact_merge_timer->value(), metrics.compact_timer->value());
+        ASSERT_LE(metrics.flush_mem_table_timer->value() + metrics.compact_timer->value(),
+                  metrics.flush_timer->value());
+        ASSERT_GT(metrics.compact_bytes_read->value(), 0);
+        ASSERT_GT(metrics.compact_bytes_written->value(), 0);
     }
+}
+
+// Spill input whose BinaryColumn has 64-bit offsets through the ordered spiller and check that every row comes back in
+// order as a BinaryColumn with its value. OrderedMemTable::append() copies the input into a fresh column, so the mem
+// table itself stays small and 32-bit here; the over-4GB mem table is covered by
+// ordered_mem_table_keeps_binary_over_4g_before_sort.
+TEST_F(SpillTest, order_by_restore_large_offsets_binary) {
+    ObjectPool pool;
+    TExprBuilder order_by_slots_builder;
+    order_by_slots_builder << TYPE_INT;
+    auto order_by_slots = order_by_slots_builder.get_res();
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT << TYPE_VARCHAR;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+    auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+    const SlotId key_slot = find_first_column_ref(tuple[0]->root())->slot_id();
+    const SlotId value_slot = find_first_column_ref(tuple[1]->root())->slot_id();
+
+    // Keys start + 2 * i, each with the value "v<key>".
+    auto make_chunk = [&](int32_t start, size_t num_rows, bool large_offsets) {
+        auto keys = Int32Column::create();
+        auto values = BinaryColumn::create();
+        for (size_t i = 0; i < num_rows; i++) {
+            const int32_t key = start + 2 * static_cast<int32_t>(i);
+            const std::string value = "v" + std::to_string(key);
+            keys->append(key);
+            values->append(Slice(value));
+        }
+        if (large_offsets) {
+            ColumnTestHelper::force_large_offsets(values.get());
+        }
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(std::move(keys), key_slot);
+        chunk->append_column(std::move(values), value_slot);
+        return chunk;
+    };
+
+    auto factory = spill::make_spilled_factory();
+    SpilledOptions spill_options(&ctx->sort_exprs, &ctx->sort_descs);
+    spill_options.mem_table_pool_size = 2;
+    spill_options.spill_mem_table_bytes_size = 64 * 1024 * 1024;
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    constexpr size_t kRowsPerChunk = 100;
+    // Both chunks land in one mem table; append() copies them out of their 64-bit offsets.
+    ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, make_chunk(0, kRowsPerChunk, true), EmptyMemGuard{}));
+    ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, make_chunk(1, kRowsPerChunk, true), EmptyMemGuard{}));
+    ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    ASSERT_OK(spiller->_spilled_task_status);
+
+    std::vector<int32_t> keys;
+    std::vector<std::string> values;
+    ASSERT_OK(caller.trigger_restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    // Marks the merge cursors data-ready, which restore() requires before it reads.
+    ASSERT_TRUE(caller._spiller->has_output_data());
+    while (true) {
+        auto chunk_st = caller.restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{});
+        if (chunk_st.status().is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(chunk_st.status());
+        ASSERT_OK(spiller->_spilled_task_status);
+        const auto& chunk = chunk_st.value();
+        if (chunk == nullptr) {
+            continue;
+        }
+        const auto& key_column = chunk->get_column_by_slot_id(key_slot);
+        const auto& value_column = chunk->get_column_by_slot_id(value_slot);
+        const Column* value_data = ColumnHelper::get_data_column(value_column.get());
+        ASSERT_TRUE(value_data->is_binary());
+        for (size_t i = 0; i < chunk->num_rows(); i++) {
+            keys.push_back(key_column->get(i).get_int32());
+            values.push_back(value_column->get(i).get_slice().to_string());
+        }
+    }
+
+    ASSERT_EQ(2 * kRowsPerChunk, keys.size());
+    for (size_t i = 0; i < keys.size(); i++) {
+        ASSERT_EQ(static_cast<int32_t>(i), keys[i]);
+        ASSERT_EQ("v" + std::to_string(i), values[i]);
+    }
+}
+
+// OrderedMemTable::_do_sort() used to call upgrade_if_overflow(), which turned a mem table over 4GB into
+// LargeBinaryColumn; its slices were then spilled in the 64-bit format and could not be restored into the BinaryColumn
+// of the spill schema. The check before sorting must leave such a chunk a BinaryColumn. The column borrows a 1-byte
+// buffer and reports a payload over 4GB; it is never read, so nothing close to 4GB is allocated. With the old upgrade,
+// the check would try to materialize that payload.
+TEST_F(SpillTest, ordered_mem_table_keeps_binary_over_4g_before_sort) {
+    const bool old_zero_copy = config::enable_zero_copy_from_page_cache;
+    config::enable_zero_copy_from_page_cache = true;
+    DeferOp restore_zero_copy([old_zero_copy] { config::enable_zero_copy_from_page_cache = old_zero_copy; });
+
+    // Copy the limit: gtest asserts bind their arguments by reference, which would odr-use the static member.
+    const uint64_t capacity_limit = Column::MAX_CAPACITY_LIMIT;
+    const uint64_t element_size = (capacity_limit / 2) + 1;
+    auto owner = std::make_shared<std::string>("x");
+    ContainerResource resource(owner, owner->data(), 2 * element_size);
+    BinaryColumn::Offsets offsets;
+    offsets.emplace_back(0);
+    offsets.emplace_back(element_size);
+    offsets.emplace_back(2 * element_size);
+    auto values = BinaryColumn::create(std::move(resource), std::move(offsets));
+    ASSERT_GT(values->get_immutable_bytes().size(), capacity_limit);
+    const Column* values_ptr = values.get();
+
+    Chunk::SlotHashMap slot_map{{0, 0}};
+    Chunk chunk(Columns{std::move(values)}, slot_map);
+    ASSERT_OK(spill::OrderedMemTable::check_chunk_before_sort(chunk));
+    // The chunk keeps the very same BinaryColumn: no upgrade to LargeBinaryColumn.
+    const Column* column = chunk.get_column_raw_ptr_by_index(0);
+    EXPECT_EQ(values_ptr, column);
+    EXPECT_TRUE(column->is_binary());
+
+    // The capacity check is kept: a chunk over the row limit is still rejected. A ConstColumn reports the rows without
+    // allocating them.
+    auto value = ColumnTestHelper::build_column<Slice>({"v"});
+    Chunk too_many_rows(Columns{ConstColumn::create(std::move(value), capacity_limit + 1)}, slot_map);
+    auto status = spill::OrderedMemTable::check_chunk_before_sort(too_many_rows);
+    EXPECT_TRUE(status.is_capacity_limit_exceeded()) << status;
 }
 
 TEST_F(SpillTest, partition_process) {
@@ -1152,6 +1357,289 @@ TEST_F(SpillTest, aligned_buffer) {
     ASSERT_TRUE(is_aligned(buffer.data(), 4096));
 }
 
+// Rejects exactly the O_DIRECT opens and forwards everything else, so the container's
+// direct-IO-unsupported fallback can be driven on any platform. tmpfs used to serve this purpose
+// (it had no direct_IO), but modern kernels accept O_DIRECT on it, so the refusal has to be
+// injected rather than found.
+class RefuseDirectWriteFileSystem : public FileSystem {
+public:
+    explicit RefuseDirectWriteFileSystem(std::shared_ptr<FileSystem> delegate) : _fs(std::move(delegate)) {}
+
+    size_t direct_open_attempts() const { return _direct_open_attempts; }
+
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
+                                                              const std::string& fname) override {
+        if (opts.direct_write) {
+            ++_direct_open_attempts;
+            return Status::InvalidArgument("injected: filesystem does not support direct IO");
+        }
+        return _fs->new_writable_file(opts, fname);
+    }
+
+    Type type() const override { return _fs->type(); }
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                  const std::string& fname) override {
+        return _fs->new_sequential_file(opts, fname);
+    }
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& fname) override {
+        return _fs->new_random_access_file(opts, fname);
+    }
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& fname) override {
+        return _fs->new_writable_file(fname);
+    }
+    Status path_exists(const std::string& fname) override { return _fs->path_exists(fname); }
+    Status get_children(const std::string& dir, std::vector<std::string>* result) override {
+        return _fs->get_children(dir, result);
+    }
+    Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override {
+        return _fs->iterate_dir(dir, cb);
+    }
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
+        return _fs->iterate_dir2(dir, cb);
+    }
+    Status delete_file(const std::string& fname) override { return _fs->delete_file(fname); }
+    Status create_dir(const std::string& dirname) override { return _fs->create_dir(dirname); }
+    Status create_dir_if_missing(const std::string& dirname, bool* created) override {
+        return _fs->create_dir_if_missing(dirname, created);
+    }
+    Status create_dir_recursive(const std::string& dirname) override { return _fs->create_dir_recursive(dirname); }
+    Status delete_dir(const std::string& dirname) override { return _fs->delete_dir(dirname); }
+    Status delete_dir_recursive(const std::string& dirname) override { return _fs->delete_dir_recursive(dirname); }
+    Status sync_dir(const std::string& dirname) override { return _fs->sync_dir(dirname); }
+    StatusOr<bool> is_directory(const std::string& path) override { return _fs->is_directory(path); }
+    Status canonicalize(const std::string& path, std::string* result) override {
+        return _fs->canonicalize(path, result);
+    }
+    StatusOr<uint64_t> get_file_size(const std::string& fname) override { return _fs->get_file_size(fname); }
+    StatusOr<uint64_t> get_file_modified_time(const std::string& fname) override {
+        return _fs->get_file_modified_time(fname);
+    }
+    Status rename_file(const std::string& src, const std::string& target) override {
+        return _fs->rename_file(src, target);
+    }
+    Status link_file(const std::string& old_path, const std::string& new_path) override {
+        return _fs->link_file(old_path, new_path);
+    }
+
+private:
+    std::shared_ptr<FileSystem> _fs;
+    size_t _direct_open_attempts = 0;
+};
+
+// Records every AcquireBlockOptions the spill path asks for, then delegates so the write still
+// happens end to end (including the container's real open, so an O_DIRECT-hostile filesystem
+// exercises the buffered fallback rather than failing the test).
+class OptionsRecordingBlockManager : public spill::BlockManager {
+public:
+    explicit OptionsRecordingBlockManager(spill::BlockManager* delegate) : _delegate(delegate) {}
+    Status open() override { return _delegate->open(); }
+    void close() override { _delegate->close(); }
+    StatusOr<spill::BlockPtr> acquire_block(const spill::AcquireBlockOptions& opts) override {
+        _seen.push_back(opts);
+        return _delegate->acquire_block(opts);
+    }
+    Status release_block(spill::BlockPtr block) override { return _delegate->release_block(std::move(block)); }
+
+    const std::vector<spill::AcquireBlockOptions>& seen() const { return _seen; }
+
+private:
+    spill::BlockManager* _delegate;
+    std::vector<spill::AcquireBlockOptions> _seen;
+};
+
+// spill_enable_direct_io used to stop at the output stream: AcquireBlockOptions.direct_io was
+// never assigned, so the container opened the file buffered no matter what the session asked
+// for. Assert the session value actually reaches the block manager, for both settings, with a
+// full spill behind each so the container's open and write paths run for real.
+TEST_F(SpillTest, direct_io_option_reaches_block_manager) {
+    for (bool direct_io : {false, true}) {
+        ObjectPool pool;
+        TExprBuilder order_by_slots_builder;
+        order_by_slots_builder << TYPE_INT;
+        auto order_by_slots = order_by_slots_builder.get_res();
+        std::vector<bool> nullables = {false, false};
+        TExprBuilder tuple_slots_builder;
+        tuple_slots_builder << TYPE_INT << TYPE_SMALLINT;
+        auto tuple_slots = tuple_slots_builder.get_res();
+
+        dummy_rt_st._query_options.spill_enable_direct_io = direct_io;
+
+        auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+        ASSERT_OK(ctx_st.status());
+        auto ctx = ctx_st.value();
+        auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+
+        // A private block manager per iteration, NOT the fixture's. LogBlockManager caches
+        // containers keyed by (affinity group, dir, plan node id) and direct_io is not part of
+        // that key, so a shared manager would hand the second iteration the first one's already
+        // open buffered container and never take the O_DIRECT open path at all.
+        TUniqueId query_id = generate_uuid();
+        std::string dir_path = config::storage_root_path + "/spill_test_data/" + print_id(query_id);
+        ASSERT_OK(FileSystem::Default()->create_dir_recursive(dir_path));
+        spill::DirManager dir_mgr;
+        ASSERT_OK(dir_mgr.init(dir_path, {config::storage_root_path}));
+        spill::LogBlockManager block_mgr(query_id, &dir_mgr);
+
+        OptionsRecordingBlockManager recorder(&block_mgr);
+        SpilledOptions spill_options;
+        spill_options.mem_table_pool_size = 4;
+        spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+        spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+        spill_options.block_manager = &recorder;
+
+        RandomChunkBuilder chunk_builder;
+        auto factory = spill::make_spilled_factory();
+        auto spiller = factory->create(spill_options);
+        spiller->set_metrics(metrics);
+        SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+        ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+        for (size_t i = 0; i < 128; ++i) {
+            auto chunk = chunk_builder.gen(tuple, nullables);
+            ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+            ASSERT_OK(spiller->_spilled_task_status);
+        }
+        ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+
+        ASSERT_FALSE(recorder.seen().empty()) << "no block acquired, direct_io=" << direct_io;
+        for (const auto& opts : recorder.seen()) {
+            EXPECT_EQ(direct_io, opts.direct_io) << "direct_io not propagated, expected " << direct_io;
+        }
+    }
+    dummy_rt_st._query_options.spill_enable_direct_io = false;
+}
+
+// Not every filesystem implements direct IO, and because spill_enable_direct_io was a silent no-op
+// until now, a deployment may already run with it on such a filesystem and depend on spilling
+// working. So a failing O_DIRECT open must degrade to a buffered one rather than fail the query.
+TEST_F(SpillTest, direct_io_open_failure_falls_back_to_buffered) {
+    ObjectPool pool;
+    TExprBuilder order_by_slots_builder;
+    order_by_slots_builder << TYPE_INT;
+    auto order_by_slots = order_by_slots_builder.get_res();
+    std::vector<bool> nullables = {false, false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT << TYPE_SMALLINT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    dummy_rt_st._query_options.spill_enable_direct_io = true;
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+    auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+
+    TUniqueId query_id = generate_uuid();
+    std::string dir_path = config::storage_root_path + "/spill_test_data/" + print_id(query_id);
+    ASSERT_OK(FileSystem::Default()->create_dir_recursive(dir_path));
+    std::shared_ptr<FileSystem> posix(FileSystem::Default(), [](FileSystem*) {});
+    auto refusing_fs = std::make_shared<RefuseDirectWriteFileSystem>(std::move(posix));
+    auto dir = std::make_shared<spill::Dir>(dir_path, refusing_fs, std::numeric_limits<int64_t>::max());
+    spill::DirManager dir_mgr(std::vector<spill::DirPtr>{dir});
+    spill::LogBlockManager block_mgr(query_id, &dir_mgr);
+
+    SpilledOptions spill_options;
+    spill_options.mem_table_pool_size = 4;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    spill_options.block_manager = &block_mgr;
+
+    RandomChunkBuilder chunk_builder;
+    auto factory = spill::make_spilled_factory();
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    size_t input_rows = 0;
+    for (size_t i = 0; i < 128; ++i) {
+        auto chunk = chunk_builder.gen(tuple, nullables);
+        input_rows += chunk->num_rows();
+        ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+        ASSERT_OK(spiller->_spilled_task_status);
+    }
+    ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+
+    // The point of the test: the O_DIRECT open was attempted and refused, and every spill above
+    // still succeeded on the buffered retry. Without the fallback the first open failure
+    // propagates out of LogBlockContainer::open() and each of those ASSERT_OKs fails instead.
+    EXPECT_GT(refusing_fs->direct_open_attempts(), 0u) << "no O_DIRECT open was attempted";
+    EXPECT_GT(input_rows, 0u);
+
+    dummy_rt_st._query_options.spill_enable_direct_io = false;
+}
+
+// Child of a BufferedInputStream whose first get_next blocks until the test opens the gate, so the test
+// can hold the buffered stream's prefetch flag while another restore task asks for a prefetch.
+class GatedInputStream final : public spill::SpillInputStream {
+public:
+    explicit GatedInputStream(int num_chunks) : _remaining(num_chunks) {}
+
+    StatusOr<ChunkUniquePtr> get_next(workgroup::YieldContext& yield_ctx, spill::SerdeContext& ctx) override {
+        if (_calls.fetch_add(1) == 0) {
+            _entered.set_value();
+            _gate.wait();
+        }
+        if (_remaining-- <= 0) {
+            return Status::EndOfFile("end of gated stream");
+        }
+        return std::make_unique<Chunk>();
+    }
+    bool is_ready() override { return true; }
+    void close() override {}
+
+    void wait_entered() { _entered_future.wait(); }
+    void open_gate() { _gate_promise.set_value(); }
+    int calls() const { return _calls.load(); }
+
+private:
+    int _remaining;
+    std::atomic_int _calls{0};
+    std::promise<void> _entered;
+    std::future<void> _entered_future = _entered.get_future();
+    std::promise<void> _gate_promise;
+    std::shared_future<void> _gate = _gate_promise.get_future().share();
+};
+
+// Regression test for a lost wakeup in BufferedInputStream::prefetch. Restore tasks that found the
+// prefetch flag held used to return without doing anything; when they all landed while the holder was
+// on its way out after reading its single chunk, nothing read the next chunk and the spilled sort source
+// waited forever (row_number() over a force-spilled sort hung until query timeout). A prefetch request
+// that loses the race must be served by the task holding the flag.
+TEST_F(SpillTest, buffered_input_stream_serves_prefetch_request_that_lost_the_race) {
+    ObjectPool pool;
+    RawSpillerFixture fx(this, &pool, &dummy_rt_st, /*pool_size=*/1);
+    auto child = std::make_shared<GatedInputStream>(/*num_chunks=*/4);
+    auto stream = spill::detail::make_buffered_input_stream(/*capacity=*/4, child, fx.spiller.get());
+
+    auto holder = std::async(std::launch::async, [&stream]() {
+        workgroup::YieldContext yield_ctx;
+        spill::SerdeContext ctx;
+        return stream->prefetch(yield_ctx, ctx);
+    });
+    // The holder owns the prefetch flag and is blocked reading its chunk.
+    child->wait_entered();
+
+    workgroup::YieldContext yield_ctx;
+    spill::SerdeContext ctx;
+    // This request loses the race for the flag and returns immediately without reading.
+    ASSERT_OK(stream->prefetch(yield_ctx, ctx));
+    ASSERT_EQ(child->calls(), 1);
+
+    child->open_gate();
+    ASSERT_OK(holder.get());
+
+    // The holder served the request that lost the race: two chunks were read, not one.
+    EXPECT_EQ(child->calls(), 2);
+    ASSERT_TRUE(stream->is_ready());
+    ASSERT_OK(stream->get_next(yield_ctx, ctx).status());
+    ASSERT_TRUE(stream->is_ready());
+    ASSERT_OK(stream->get_next(yield_ctx, ctx).status());
+    ASSERT_FALSE(stream->is_ready());
+    ASSERT_FALSE(stream->eof());
+}
+
 /*
 TEST_F(SpillTest, file_group_test) {
     auto chunk = std::make_unique<Chunk>();
@@ -1181,7 +1669,7 @@ TEST_F(SpillTest, file_group_test) {
     auto order_bys = order_by_slots_builder.get_res();
 
     ASSERT_OK(sort_exprs.init(order_bys, nullptr, &pool, &dummy_rt_st));
-    ASSERT_OK(sort_exprs.prepare(&dummy_rt_st, {}, {}));
+    ASSERT_OK(sort_exprs.prepare(&dummy_rt_st));
     ASSERT_OK(sort_exprs.open(&dummy_rt_st));
 
     SortDescs descs = SortDescs::asc_null_first(1);

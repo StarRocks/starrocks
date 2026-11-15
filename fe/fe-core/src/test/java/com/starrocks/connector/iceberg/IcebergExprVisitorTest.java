@@ -34,7 +34,9 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.StringType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.expressions.Expression;
@@ -71,7 +73,8 @@ public class IcebergExprVisitorTest {
                             Types.NestedField.optional(15, "k15", Types.StringType.get()),
                             Types.NestedField.optional(16, "k16", Types.FloatType.get())
                     )),
-                    Types.NestedField.optional(17, "k17.double", Types.DoubleType.get()));
+                    Types.NestedField.optional(17, "k17.double", Types.DoubleType.get()),
+                    Types.NestedField.optional(18, "k18", Types.DecimalType.of(5, 2)));
 
     private static final ColumnRefOperator K1 = new ColumnRefOperator(3, IntegerType.INT, "k1", true, false);
     private static final ColumnRefOperator K2 = new ColumnRefOperator(4, IntegerType.INT, "k2", true, false);
@@ -90,6 +93,8 @@ public class IcebergExprVisitorTest {
     private static final SubfieldOperator K15 = new SubfieldOperator(K10, StringType.STRING, ImmutableList.of("k15"));
     private static final SubfieldOperator K16 = new SubfieldOperator(K10, FloatType.FLOAT, ImmutableList.of("k16"));
     private static final ColumnRefOperator K17 = new ColumnRefOperator(17, FloatType.DOUBLE, "k17.double", true, false);
+    private static final ColumnRefOperator K18 = new ColumnRefOperator(
+            19, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 5, 2), "k18", true, false);
     private static final ColumnRefOperator LAST_UPDATED_SEQUENCE_NUMBER = new ColumnRefOperator(
             18, IntegerType.BIGINT, IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER, true, false);
 
@@ -141,6 +146,16 @@ public class IcebergExprVisitorTest {
         expectedExpr = Expressions.equal("k4", epochSec);
         Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
                 "Generated equal expression should be correct");
+
+        // timestamps outside 1677..2262 overflow when counted in nanoseconds
+        for (LocalDateTime t : List.of(LocalDateTime.of(1500, 1, 1, 0, 0, 0, 123000),
+                LocalDateTime.of(2300, 1, 1, 0, 0), LocalDateTime.of(9999, 12, 31, 23, 59, 59))) {
+            convertedExpr = converter.convert(Lists.newArrayList(new BinaryPredicateOperator(BinaryType.LT, K4,
+                    ConstantOperator.createDatetime(t))), context);
+            long micros = Math.addExact(Math.multiplyExact(t.toEpochSecond(ZoneOffset.UTC), 1_000_000L),
+                    t.getNano() / 1000);
+            Assertions.assertEquals(Expressions.lessThan("k4", micros).toString(), convertedExpr.toString());
+        }
 
         // notEqual
         value = ConstantOperator.createBoolean(true);
@@ -358,24 +373,19 @@ public class IcebergExprVisitorTest {
         Expression convertedExpr;
         Expression expectedExpr;
 
-        // cast string column to date
+        // Non-identity casts must remain residual predicates.
         ConstantOperator value = ConstantOperator.createDate(LocalDate.parse("2022-11-11").atTime(0, 0, 0, 0));
         CastOperator cast = new CastOperator(DateType.DATE, K6);
         convertedExpr = converter.convert(Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.EQ, cast, value)), context);
-        expectedExpr = Expressions.equal("k6", "2022-11-11");
-        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
-                "Generated equal expression should be correct");
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
 
-        // cast date column to string
+        // The same applies even when the literal can be rendered in the source type.
         value = ConstantOperator.createVarchar("2022-11-11");
         cast = new CastOperator(VarcharType.VARCHAR, K3);
         convertedExpr = converter.convert(Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.LT, cast, value)), context);
-        long epochDay = LocalDate.parse("2022-11-11").toEpochDay();
-        expectedExpr = Expressions.lessThan("k3", epochDay);
-        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
-                "Generated lessThan expression should be correct");
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
 
         // cast string column to int
         // don't support cast string to int, different comparator
@@ -434,6 +444,24 @@ public class IcebergExprVisitorTest {
                 new BinaryPredicateOperator(BinaryType.EQ, cast, value)), context);
         Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
 
+        // DECIMAL 10.50 projects to BIGINT 10. Rewriting this as DECIMAL = 10.00 would prune matching files.
+        value = ConstantOperator.createBigint(10);
+        cast = new CastOperator(IntegerType.BIGINT, K18);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, cast, value)), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+        convertedExpr = converter.convertStrict(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, cast, value)), context);
+        Assertions.assertNull(convertedExpr);
+
+        // Identity casts are safe to unwrap.
+        value = ConstantOperator.createInt(11);
+        cast = new CastOperator(IntegerType.INT, K1);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, cast, value)), context);
+        expectedExpr = Expressions.equal("k1", 11);
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString());
+
     }
 
     @Test
@@ -460,7 +488,7 @@ public class IcebergExprVisitorTest {
                 BinaryType.GT, K1, ConstantOperator.createInt(10));
 
         // Build an unconvertible predicate: CAST(k6 AS INT) < 5
-        // CastOperator(INT, K6) where K6 is a string column causes getLiteralValue to return null
+        // The remaining non-identity cast cannot be converted to an Iceberg predicate.
         CastOperator cast = new CastOperator(IntegerType.INT, K6);
         BinaryPredicateOperator unconvertible = new BinaryPredicateOperator(
                 BinaryType.LT, cast, ConstantOperator.createInt(5));
@@ -560,5 +588,56 @@ public class IcebergExprVisitorTest {
                         new BinaryPredicateOperator(BinaryType.EQ, syntheticVariantColumn, ConstantOperator.createInt(10))),
                 context);
         Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+    }
+
+    // _pos is not a column of the table schema: predicates on it are left to the BE instead of failing planning
+    @Test
+    public void testMetadataColumnPredicateNotPushedDown() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+        ColumnRefOperator pos = new ColumnRefOperator(100, IntegerType.BIGINT, "_pos", true, false);
+        List<ScalarOperator> predicates = List.of(
+                new BinaryPredicateOperator(BinaryType.EQ, pos, ConstantOperator.createBigint(0)),
+                new InPredicateOperator(false, pos, ConstantOperator.createBigint(1), ConstantOperator.createBigint(2)),
+                new IsNullPredicateOperator(false, pos));
+        for (ScalarOperator predicate : predicates) {
+            Assertions.assertNull(converter.convertStrict(Lists.newArrayList(predicate), context));
+            Assertions.assertEquals(Expressions.alwaysTrue().toString(),
+                    converter.convert(Lists.newArrayList(predicate), context).toString());
+        }
+    }
+
+    @Test
+    public void testLikePrefixPushdownRejectsWildcardsAndEscapes() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        // a plain prefix is still pushed down
+        Assertions.assertEquals(Expressions.startsWith("k6", "abc").toString(),
+                convertLike(converter, context, K6, "abc%").toString());
+
+        // 'a_c%' also matches abc1 and axc2, so pushing startsWith("a_c") prunes the data files whose bounds
+        // only hold those two and the rows in them go missing
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K6, "a_c%").op(),
+                "A single-character wildcard has no prefix form");
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K15, "a_c%").op(),
+                "The same holds for a nested column");
+
+        // '\' escapes the character behind it, so the prefix as written is not what the pattern matches
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K6, "a\\_c%").op(),
+                "An escaped underscore is a literal underscore, not the two characters as written");
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K6, "abc\\%").op(),
+                "An escaped trailing percent sign is a literal, not a wildcard");
+
+        // unchanged: a wildcard anywhere but the end was never a prefix match
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K6, "%abc%").op());
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K6, "abc").op());
+    }
+
+    private static Expression convertLike(ScalarOperatorToIcebergExpr converter,
+                                          ScalarOperatorToIcebergExpr.IcebergContext context,
+                                          ScalarOperator column, String pattern) {
+        return converter.convert(Lists.newArrayList(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE, column, ConstantOperator.createVarchar(pattern))), context);
     }
 }

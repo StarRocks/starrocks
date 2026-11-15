@@ -15,6 +15,7 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
 ADD_BE_LIB(FormatCore
+        arrow/arrow_column_converter.cpp
         column_evaluator.cpp
         delta/deletion_vector.cpp
         deletion_bitmap.cpp
@@ -46,6 +47,8 @@ target_link_libraries(FormatCore PUBLIC
         Gutil
         StarRocksGen
 )
+
+target_link_libraries(FormatCore PRIVATE arrow)
 
 ADD_BE_LIB(FormatCsv
         csv/array_converter.cpp

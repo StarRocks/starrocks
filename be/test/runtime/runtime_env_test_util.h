@@ -40,6 +40,7 @@ inline void set_small_thread_pool_configs() {
     config::load_segment_thread_pool_num_max = 1;
     config::load_segment_thread_pool_queue_size = 8;
     config::put_combined_txn_log_thread_pool_num_max = 1;
+    config::load_sink_close_thread_pool_num_max = 1;
 
     config::transaction_publish_version_worker_count = 1;
     config::pk_index_parallel_execution_threadpool_max_threads = 1;

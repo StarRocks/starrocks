@@ -131,8 +131,7 @@ public class ScalarOperatorToExpr {
         private final Map<ColumnRefOperator, ScalarOperator> projectOperatorMap;
 
         public FormatterContext(Map<ColumnRefOperator, Expr> variableToSlotRef) {
-            this.colRefToExpr = variableToSlotRef;
-            this.projectOperatorMap = new HashMap<>();
+            this(variableToSlotRef, new HashMap<>());
         }
 
         public FormatterContext(Map<ColumnRefOperator, Expr> variableToSlotRef,
@@ -554,7 +553,17 @@ public class ScalarOperatorToExpr {
                     callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
                 default:
-                    List<Expr> arg = call.getChildren().stream()
+                    Preconditions.checkNotNull(call.getFunction());
+                    List<ScalarOperator> semanticChildren = call.getChildren();
+                    if (call.getFunction().isAI()) {
+                        Preconditions.checkState(!call.getFunction().hasVarArgs(),
+                                "AI functions must have fixed semantic arity");
+                        int semanticArity = call.getFunction().getNumArgs();
+                        Preconditions.checkState(call.getChildren().size() == semanticArity + 1,
+                                "AI call must contain exactly one optimizer-only occurrence child");
+                        semanticChildren = call.getChildren().subList(0, semanticArity);
+                    }
+                    List<Expr> arg = semanticChildren.stream()
                             .map(expr -> buildExpr.build(expr, context))
                             .collect(Collectors.toList());
                     if (call.isCountStar()) {
@@ -562,7 +571,6 @@ public class ScalarOperatorToExpr {
                     } else {
                         callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(call.isDistinct(), arg));
                     }
-                    Preconditions.checkNotNull(call.getFunction());
                     ((FunctionCallExpr) callExpr).setFn(call.getFunction());
                     callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;

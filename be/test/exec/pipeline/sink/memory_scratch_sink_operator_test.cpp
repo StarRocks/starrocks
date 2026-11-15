@@ -113,16 +113,16 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     std::vector<TExpr> t_output_expr;
-    RowDescriptor row_desc;
+    RecordDescriptor record_desc;
 
     MockEmptyOperatorFactory factory1(1, "mock_op_factory", 2);
     EXPECT_TRUE(factory1.prepare(_runtime_state).ok());
-    MemoryScratchSinkOperatorFactory factory2(2, row_desc, t_output_expr, _fragment_ctx);
+    MemoryScratchSinkOperatorFactory factory2(2, record_desc, t_output_expr, _fragment_ctx);
     EXPECT_TRUE(factory2.prepare(_runtime_state).ok());
 
     Status result_st;
     std::shared_ptr<arrow::RecordBatch> record_batch;
-    bool eos;
+    bool eos = false;
     std::thread t([&] { result_st = _exec_env->result_queue_mgr()->fetch_result(fragment_id, &record_batch, &eos); });
 
     Operators ops = {factory1.create(1, 1), factory2.create(1, 2)};

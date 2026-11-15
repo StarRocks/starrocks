@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public class GetRemoteFilesParams {
     private List<PartitionKey> partitionKeys;
@@ -33,6 +34,11 @@ public class GetRemoteFilesParams {
     private boolean useCache = true;
     private boolean checkPartitionExistence = true;
     private boolean enableColumnStats = false;
+    // With enableColumnStats, the columns whose file statistics the planned files must carry; null means all.
+    private Set<String> statsColumnNames;
+    // With enableColumnStats, the statistics are only wanted when they come cheap (e.g. from a cache): the scan
+    // must not change how it plans to get them, and may return files without them.
+    private boolean optionalColumnStats = false;
     private Optional<Boolean> isRecursive = Optional.empty();
     private boolean usedForDelete = false;
     // Bounded-cost statistics-scan budgets. Each cap <= 0 means that dimension is unlimited; all three
@@ -42,6 +48,10 @@ public class GetRemoteFilesParams {
     private long scanBytesCap = -1;
     private long scanFilesCap = -1;
     private long scanRowsCap = -1;
+
+    // The scan node asking, -1 if none (statistics, metadata preparation). Only names the request in the profile;
+    // it is not part of a planning's identity, so scans with the same request still share one planning.
+    private int scanNodeId = -1;
 
     protected GetRemoteFilesParams(Builder builder) {
         this.partitionKeys = builder.partitionKeys;
@@ -54,11 +64,18 @@ public class GetRemoteFilesParams {
         this.useCache = builder.useCache;
         this.checkPartitionExistence = builder.checkPartitionExistence;
         this.enableColumnStats = builder.enableColumnStats;
+        this.statsColumnNames = builder.statsColumnNames;
+        this.optionalColumnStats = builder.optionalColumnStats;
         this.isRecursive = builder.isRecursive;
         this.usedForDelete = builder.usedForDelete;
         this.scanBytesCap = builder.scanBytesCap;
         this.scanFilesCap = builder.scanFilesCap;
         this.scanRowsCap = builder.scanRowsCap;
+        this.scanNodeId = builder.scanNodeId;
+    }
+
+    public int getScanNodeId() {
+        return scanNodeId;
     }
 
     public int getPartitionSize() {
@@ -83,10 +100,13 @@ public class GetRemoteFilesParams {
                 .setUseCache(useCache)
                 .setCheckPartitionExistence(checkPartitionExistence)
                 .setEnableColumnStats(enableColumnStats)
+                .setStatsColumnNames(statsColumnNames)
+                .setOptionalColumnStats(optionalColumnStats)
                 .setUsedForDelete(usedForDelete)
                 .setScanBytesCap(scanBytesCap)
                 .setScanFilesCap(scanFilesCap)
-                .setScanRowsCap(scanRowsCap);
+                .setScanRowsCap(scanRowsCap)
+                .setScanNodeId(scanNodeId);
         if (isRecursive.isPresent()) {
             paramsBuilder.setIsRecursive(isRecursive.get());
         }
@@ -165,6 +185,14 @@ public class GetRemoteFilesParams {
         return enableColumnStats;
     }
 
+    public Set<String> getStatsColumnNames() {
+        return statsColumnNames;
+    }
+
+    public boolean isOptionalColumnStats() {
+        return optionalColumnStats;
+    }
+
     public Optional<Boolean> getIsRecursive() {
         return isRecursive;
     }
@@ -202,11 +230,14 @@ public class GetRemoteFilesParams {
         private boolean useCache = true;
         private boolean checkPartitionExistence = true;
         private boolean enableColumnStats = false;
+        private Set<String> statsColumnNames;
+        private boolean optionalColumnStats = false;
         private Optional<Boolean> isRecursive = Optional.empty();
         private boolean usedForDelete = false;
         private long scanBytesCap = -1;
         private long scanFilesCap = -1;
         private long scanRowsCap = -1;
+        private int scanNodeId = -1;
 
         public Builder setPartitionKeys(List<PartitionKey> partitionKeys) {
             this.partitionKeys = partitionKeys;
@@ -258,6 +289,16 @@ public class GetRemoteFilesParams {
             return this;
         }
 
+        public Builder setStatsColumnNames(Set<String> statsColumnNames) {
+            this.statsColumnNames = statsColumnNames == null ? null : Set.copyOf(statsColumnNames);
+            return this;
+        }
+
+        public Builder setOptionalColumnStats(boolean optionalColumnStats) {
+            this.optionalColumnStats = optionalColumnStats;
+            return this;
+        }
+
         public Builder setIsRecursive(boolean isRecursive) {
             this.isRecursive = Optional.of(isRecursive);
             return this;
@@ -280,6 +321,11 @@ public class GetRemoteFilesParams {
 
         public Builder setScanRowsCap(long scanRowsCap) {
             this.scanRowsCap = scanRowsCap;
+            return this;
+        }
+
+        public Builder setScanNodeId(int scanNodeId) {
+            this.scanNodeId = scanNodeId;
             return this;
         }
 

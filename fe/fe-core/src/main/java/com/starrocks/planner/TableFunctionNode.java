@@ -121,4 +121,11 @@ public class TableFunctionNode extends PlanNode {
     public TableFunction getTableFunction() {
         return tableFunction;
     }
+
+    @Override
+    public boolean canEvaluateRuntimeFilter() {
+        // Decomposes into a table-function operator, which never calls
+        // Operator::eval_runtime_bloom_filters(): a filter parked here is silently never applied.
+        return false;
+    }
 }

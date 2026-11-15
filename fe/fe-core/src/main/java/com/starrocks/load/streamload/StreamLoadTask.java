@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
@@ -929,7 +930,9 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 streamLoadInfo.getNegative(), channelNum, streamLoadInfo.getColumnExprDescs(), streamLoadInfo, label,
                 streamLoadInfo.getTimeout());
 
-        loadPlanner.plan();
+        // Unlike the other load paths, a transaction stream load reaches the planner holding no table lock, so let the
+        // planner take it: a schema change committing mid-plan would split the load's slots from its sink schema.
+        loadPlanner.planUnderTableLock();
 
         coord = getCoordinatorFactory().createStreamLoadScheduler(loadPlanner);
 
@@ -979,9 +982,15 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             }
             if (coord.join(waitSecond)) {
                 Status status = coord.getExecStatus();
+                // Record where the rejected rows are logged before any check below fails the load, also when
+                // every row was rejected: information_schema.load_tracking_logs reads them through this URL.
+                this.trackingUrl = coord.getTrackingUrl();
                 Map<String, String> loadCounters = coord.getLoadCounters();
                 if (loadCounters == null || loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL) == null) {
-                    throw new LoadException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
+                    // A load that was cancelled never reports its counters, so reaching this without an
+                    // OK status means the load stopped for a reason the user needs to see. Reporting
+                    // "no rows imported" here would hide it behind what looks like a data problem.
+                    throw new LoadException(status.ok() ? ERR_NO_ROWS_IMPORTED.formatErrorMsg() : status.getErrorMsg());
                 }
                 this.numRowsNormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL));
                 this.numRowsAbnormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_ABNORMAL_ALL));
@@ -989,14 +998,18 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 this.numLoadBytesTotal = Long.parseLong(loadCounters.get(LoadJob.LOADED_BYTES));
 
                 if (numRowsNormal == 0) {
-                    throw new LoadException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
+                    String msg = status.ok() ? ERR_NO_ROWS_IMPORTED.formatErrorMsg() : status.getErrorMsg();
+                    // Point to the rejected rows, as the error of a load over the max filter ratio does.
+                    if (!Strings.isNullOrEmpty(trackingUrl)) {
+                        msg += ", tracking_url: " + trackingUrl;
+                    }
+                    throw new LoadException(msg);
                 }
 
                 if (coord.isEnableLoadProfile()) {
                     collectProfile(false);
                 }
 
-                this.trackingUrl = coord.getTrackingUrl();
                 if (!status.ok()) {
                     throw new LoadException(status.getErrorMsg());
                 }
@@ -1467,20 +1480,31 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     private void replayTxnAttachment(TransactionState txnState) {
-        if (txnState.getTxnCommitAttachment() == null) {
+        TxnCommitAttachment txnCommitAttachment = txnState.getTxnCommitAttachment();
+        if (txnCommitAttachment == null) {
             return;
         }
-        StreamLoadTxnCommitAttachment attachment = (StreamLoadTxnCommitAttachment) txnState.getTxnCommitAttachment();
-        this.trackingUrl = attachment.getTrackingURL();
-        this.beforeLoadTimeMs = attachment.getBeforeLoadTimeMs();
-        this.startLoadingTimeMs = attachment.getStartLoadingTimeMs();
-        this.startPreparingTimeMs = attachment.getStartPreparingTimeMs();
-        this.finishPreparingTimeMs = attachment.getFinishPreparingTimeMs();
-        this.endTimeMs = attachment.getEndTimeMs();
-        this.numRowsNormal = attachment.getNumRowsNormal();
-        this.numRowsAbnormal = attachment.getNumRowsAbnormal();
-        this.numRowsUnselected = attachment.getNumRowsUnselected();
-        this.numLoadBytesTotal = attachment.getNumLoadBytesTotal();
+        if (txnCommitAttachment instanceof StreamLoadTxnCommitAttachment) {
+            StreamLoadTxnCommitAttachment attachment = (StreamLoadTxnCommitAttachment) txnCommitAttachment;
+            this.trackingUrl = attachment.getTrackingURL();
+            this.beforeLoadTimeMs = attachment.getBeforeLoadTimeMs();
+            this.startLoadingTimeMs = attachment.getStartLoadingTimeMs();
+            this.startPreparingTimeMs = attachment.getStartPreparingTimeMs();
+            this.finishPreparingTimeMs = attachment.getFinishPreparingTimeMs();
+            this.endTimeMs = attachment.getEndTimeMs();
+            this.numRowsNormal = attachment.getNumRowsNormal();
+            this.numRowsAbnormal = attachment.getNumRowsAbnormal();
+            this.numRowsUnselected = attachment.getNumRowsUnselected();
+            this.numLoadBytesTotal = attachment.getNumLoadBytesTotal();
+            return;
+        }
+        if (txnCommitAttachment instanceof ManualLoadTxnCommitAttachment
+                || txnCommitAttachment instanceof RLTaskTxnCommitAttachment) {
+            setLoadState(txnCommitAttachment, txnState.getReason());
+            return;
+        }
+        LOG.warn("ignore unsupported txn commit attachment {} while replaying stream load task {}",
+                txnCommitAttachment.getClass().getName(), label);
     }
 
     public OlapTable getTable() throws MetaNotFoundException {
@@ -1539,6 +1563,10 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
 
     public long getDBId() {
         return dbId;
+    }
+
+    public long getTableId() {
+        return tableId;
     }
 
     @Override

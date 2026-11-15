@@ -1,0 +1,51 @@
+-- name: test_gin_property_key_case @slow
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+CREATE DATABASE db_${uuid0};
+USE db_${uuid0};
+
+-- Upper-case property keys used to reach the BE verbatim: imp_lib made every load fail with
+-- "Can not get inverted imp type", dict_gram_num was silently dropped.
+CREATE TABLE `t_gin_upper_key` (
+  `k` int(11) NOT NULL COMMENT "",
+  `v` varchar(50) NOT NULL COMMENT "",
+  INDEX gin_v (`v`) USING GIN("IMP_LIB" = "builtin", "PARSER" = "english", "DICT_GRAM_NUM" = "4")
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+SHOW CREATE TABLE t_gin_upper_key;
+
+INSERT INTO t_gin_upper_key VALUES (1, 'hello world'), (2, 'goodbye world');
+
+SELECT k, v FROM t_gin_upper_key WHERE v MATCH 'hello' ORDER BY k;
+
+SELECT k, v FROM t_gin_upper_key ORDER BY k;
+
+-- ALTER TABLE ADD INDEX goes through the same analyzer entry point.
+CREATE TABLE `t_gin_alter_upper_key` (
+  `k` int(11) NOT NULL COMMENT "",
+  `v` varchar(50) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+CREATE INDEX gin_v ON t_gin_alter_upper_key (v) USING GIN("IMP_LIB" = "builtin", "PARSER" = "english");
+function: wait_alter_table_finish()
+
+SHOW CREATE TABLE t_gin_alter_upper_key;
+
+INSERT INTO t_gin_alter_upper_key VALUES (1, 'hello world'), (2, 'goodbye world');
+
+SELECT k, v FROM t_gin_alter_upper_key WHERE v MATCH 'goodbye' ORDER BY k;
+
+DROP DATABASE db_${uuid0} FORCE;

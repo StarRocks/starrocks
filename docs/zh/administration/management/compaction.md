@@ -1,6 +1,8 @@
 ---
+sidebar_position: 120
 displayed_sidebar: docs
 description: "存算分离集群中 Compaction 的管理和监控方法。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 存算分离集群 Compaction
@@ -131,12 +133,16 @@ mysql> SHOW PROC '/compactions';
 
 #### 查看 Compaction 任务的执行详情
 
-每个 Compaction 任务被分解为多个子任务，每个子任务对应一个 Tablet。您可以通过查询系统定义视图 `information_schema.be_cloud_native_compactions` 查看每个子任务的执行详情。
+`information_schema.be_cloud_native_compactions` 中的每一行代表一个 Tablet Compaction 执行单元。启用
+Tablet 并行 Compaction 后，每个并行 Subtask 分别占一行：它们具有相同的事务 ID 和 Tablet ID，但
+`SUBTASK_ID` 不同。并行 Compaction 的 merged context 只是聚合对象，不是实际执行单元，因此不会返回。
 
 示例：
 
 ```Plain
-mysql> SELECT * FROM information_schema.be_cloud_native_compactions;
+mysql> SELECT BE_ID, TXN_ID, TABLET_ID, VERSION, SKIPPED, RUNS, START_TIME, FINISH_TIME,
+              PROGRESS, STATUS, PROFILE
+       FROM information_schema.be_cloud_native_compactions;
 +-------+--------+-----------+---------+---------+------+---------------------+-------------+----------+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | BE_ID | TXN_ID | TABLET_ID | VERSION | SKIPPED | RUNS | START_TIME          | FINISH_TIME | PROGRESS | STATUS | PROFILE                                                                                                                                                                                         |
 +-------+--------+-----------+---------+---------+------+---------------------+-------------+----------+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -168,6 +174,37 @@ mysql> SELECT * FROM information_schema.be_cloud_native_compactions;
   - `read_local_count`：子任务从本地缓存读取数据的次数。
   - `read_remote_count`：子任务从远程存储读取数据的次数。
   - `in_queue_sec`：子任务排队的时间。单位：秒。
+- `SUBTASK_ID`：从 0 开始的并行 Subtask ID。普通非并行 Tablet Task 的值为 `NULL`。如果多行具有相同的
+  `BE_ID`、`TXN_ID` 和 `TABLET_ID`，但 `SUBTASK_ID` 不同，它们就是同一个 Tablet Compaction 的并行执行单元。
+
+`PROFILE` 中新增的全链路字段统一使用纳秒，便于精确对账：
+
+- Profile 状态：
+  - `profile_final`：任务执行中为 `false`，完成后为 `true`。实时 Profile 会将当前 attempt 已经过的时间计入
+    `task_total_ns`；进入 executor 后，也会将当前 executor 已经过的时间计入 `task_execute_ns`。其他阶段计时在
+    当前作用域退出时更新，因此实时 Profile 中的 `task_unaccounted_ns` 可能暂时偏大。
+- Task 总体耗时：
+  - `queue_wait_ns`：任务进入 CN Compaction 队列到 worker 开始执行的时间，不包含在 `task_total_ns` 中。
+  - `task_prepare_ns`：选择输入 Rowset、加载 Tablet 元数据和构造 Compaction Task 的时间。
+  - `task_execute_ns`：进入 Horizontal、Vertical 或 Index Compaction executor 后的 wall time；实时 Profile
+    还包括当前 executor 已经过的时间。
+  - `task_total_ns`：CN worker 开始准备任务到本次 Profile 快照或任务返回的总 wall time。
+  - `task_accounted_ns`：所有互不重叠的顶层阶段之和。
+  - `task_unaccounted_ns`：`task_total_ns - task_accounted_ns`。该值较大通常表示仍有阶段未打点，或存在调度、
+    runtime 开销。
+- 互不重叠的执行阶段：`input_prepare_ns`、`reader_prepare_ns`、`reader_open_ns`、`reader_get_next_ns`、
+  `reader_close_ns`、`chunk_transform_ns`、`writer_create_ns`、`writer_open_ns`、`writer_write_ns`、
+  `writer_flush_ns`、`writer_finish_ns`、`writer_close_ns`、`mask_io_ns`、`txn_log_build_ns`、
+  `pk_sst_merge_ns`、`txn_log_write_ns`、`preload_compaction_state_ns` 和 `tablet_write_log_ns`。
+- Reader 内部明细：`read_remote_ns`、`read_local_ns`、`create_segment_iter_ns`、`segment_init_ns`、
+  `column_iterator_init_ns`、`block_load_ns`、`block_fetch_ns`、`block_seek_ns`、`decompress_ns`、
+  `decode_dict_ns`，以及 Delete Vector/Filter 相关计时。这些字段包含在 Reader 顶层阶段内，不能再次累加到
+  `task_accounted_ns`。
+- Vertical Compaction 明细：`column_group_count`、`vertical_key_group_ns` 和 `vertical_value_group_ns`。
+  Column Group 时间与 Reader/Writer 阶段重叠，仅用于诊断，不能重复累加。
+
+Task 完成时，同一份单 Tablet Profile 还会连同 Tablet ID、Transaction ID、状态、Table ID 和 Partition ID
+写入 CN INFO 日志。因此，即使该任务已经从 `be_cloud_native_compactions` 中消失，仍可以追溯单任务明细。
 
 ### 配置 Compaction 任务
 
@@ -191,16 +228,16 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
 - 引入版本：v3.1.0
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_tables" = "11111;22222");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "11111;22222");
 ```
 
-##### lake_compaction_disable_tables
+##### lake_compaction_disable_ids
 
 - 默认值：""
 - 类型：String
 - 单位：-
 - 是否动态：是
-- 描述：禁止对指定表发起 Compaction 任务，已发起的任务不会受到影响。此项的值为 Table ID，如有多个值，需使用分号(;)隔开。
+- 描述：禁止对指定表或分区发起 Compaction 任务，已发起的任务不会受到影响。此项的值为 Table ID 或 Partition ID，如有多个值，需使用分号(;)隔开。在 v3.4.5 和 v3.5.0 之前的版本中，该参数名为 `lake_compaction_disable_tables`，且仅支持 Table ID。旧参数名仍可作为别名使用。
 - 引入版本：v3.2.7
 
 #### CN 参数
@@ -251,6 +288,15 @@ WHERE name = "compact_threads";
 >
 > 在生产环境中，建议将 `max_cumulative_compaction_num_singleton_deltas` 设置为 `100`，以加速 Compaction 任务并减少资源消耗。
 
+##### lake_pk_compaction_max_rowsets_per_level
+
+- 默认值：20
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，主键表的某个大小层中待合并的 Rowset 达到该数量时，即使该层得分不是最高，也会被合并。Size-tiered Compaction 策略每轮只合并得分最高的一层。持续导入时，最新写入的小 Rowset 所在层每轮得分都最高，由较大 Rowset（之前 Compaction 的产物和中等批次的导入）组成的层会一直增长，导致查询需要读取的 Segment 增多，并在 Compaction 刚完成时表现为 Compaction Score 的尖峰。当某个未被选中的层中待合并的 Rowset 达到该数量，且这些 Rowset 能与已选中的 Rowset 在同一次 Compaction 任务中合并时，该层会并入该次 Compaction 任务。设置为 `0` 表示关闭该行为。
+- 引入版本：-
+
 ### 手动触发 Compaction 任务
 
 ```SQL
@@ -290,7 +336,9 @@ CANCEL COMPACTION WHERE TXN_ID = <TXN_ID>;
 
 ### 慢查询
 
-如果是 Compaction 不及时导致的慢查询，在 SQL Profile 中，查看在单个 Fragment 内 `SegmentsReadCount` 除以 `TabletCount` 的值。如果是一个很大的值，比如几十以上，则表明是由于 Compaction 不及时导致查询慢。
+要排查存算分离集群中 Compaction 不及时导致的慢查询，可以在 SQL Profile 中查看单个 Fragment 内 `PhySegmentsCount` 除以 `TabletCount` 的值。如果是一个很大的值，比如几十以上，则可能是 Compaction 不及时导致查询慢。
+
+`PhySegmentsCount` 仅在存算分离扫描中提供。对于存算一体集群，或不包含 `PhySegmentsCount` 的旧版本 Profile，改用单个 Fragment 内 `SegmentsReadCount` 除以 `TabletCount` 的值。在存算分离和存算一体扫描中，Tablet 内并行扫描都可能导致多个 split reader 在 `SegmentsReadCount` 中重复统计同一个 segment。因此，存在 `PhySegmentsCount` 时应优先使用它；在任一架构的并行扫描中使用回退计数器时，不能仅凭较高的比值判定存在 Compaction 问题。
 
 ### 集群最大 Compaction Score 很高
 

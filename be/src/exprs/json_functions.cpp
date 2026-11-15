@@ -469,7 +469,21 @@ static StatusOr<ColumnPtr> _extract_from_flat_json(FunctionContext* context, con
     }
 
     if (config::enable_lazy_dynamic_flat_json) {
-        return _extract_with_hyper<TargetType>(state, path, json_column);
+        ASSIGN_OR_RETURN(auto result, _extract_with_hyper<TargetType>(state, path, json_column));
+        // Only a JSON root is rebuilt by merging; a scalar root is never built and stays NULL.
+        constexpr bool rebuilds_json_root = TargetType == TYPE_JSON || TargetType == TYPE_UNKNOWN;
+        if (rebuilds_json_root && state->flat_path.empty() && result->is_nullable()) {
+            // The root is the document itself, NULL exactly where the input row is. The merger marks an object
+            // with no flat values NULL, but here it is a document that none of the read paths occur in.
+            const auto& data = down_cast<const NullableColumn*>(result.get())->data_column();
+            if (columns[0]->is_nullable()) {
+                // a copy: the input column belongs to the chunk, and the result may be mutated in place
+                return NullableColumn::create(
+                        data, down_cast<const NullableColumn*>(columns[0].get())->null_column()->clone());
+            }
+            return NullableColumn::create(data, NullColumn::create(data->size(), 0));
+        }
+        return result;
     } else {
         return _extract_with_cast<TargetType>(context, state, path, json_column);
     }
@@ -645,7 +659,7 @@ StatusOr<ColumnPtr> JsonFunctions::_full_json_exists(FunctionContext* context, c
             VLOG(2) << "parse json path failed: " << path_str;
             continue;
         }
-        VLOG(2) << "json_exists for  " << path_str << " of " << json_value->to_string().value();
+        VLOG(2) << "json_exists for  " << path_str << " of " << json_value->to_string_uncheck();
         vpack::Builder builder;
         vpack::Slice slice = JsonPath::extract(json_value, *jsonpath.value(), &builder);
         result.append(!slice.isNone());
@@ -756,12 +770,12 @@ StatusOr<ColumnPtr> JsonFunctions::json_object(FunctionContext* context, const C
                 DCHECK(field_name != nullptr);
 
                 if (!field_name_slice.isString()) {
-                    VLOG(2) << "nonstring json field name" << field_name->to_string().value();
+                    VLOG(2) << "nonstring json field name" << field_name->to_string_uncheck();
                     ok = false;
                     break;
                 }
                 if (field_name_slice.stringRef().length() == 0) {
-                    VLOG(2) << "json field name could not be empty string" << field_name->to_string().value();
+                    VLOG(2) << "json field name could not be empty string" << field_name->to_string_uncheck();
                     ok = false;
                     break;
                 }
@@ -770,7 +784,7 @@ StatusOr<ColumnPtr> JsonFunctions::json_object(FunctionContext* context, const C
                     DCHECK(field_value != nullptr);
                     builder.add(field_name->to_vslice().stringRef(), field_value->to_vslice());
                 } else {
-                    VLOG(2) << "field value not exists, patch a null value" << field_name->to_string().value();
+                    VLOG(2) << "field value not exists, patch a null value" << field_name->to_string_uncheck();
                     builder.add(field_name->to_vslice().stringRef(), vpack::Value(vpack::ValueType::Null));
                 }
                 ok = true;

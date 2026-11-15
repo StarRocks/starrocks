@@ -207,8 +207,7 @@ ColumnPtr haystack_vector_and_needle_vector(const ColumnPtr& haystack_ptr, const
             auto searcher =
                     LocateCaseSensitiveUTF8::createSearcherInSmallHaystack(needle_slice.data, needle_slice.size);
 
-            const char* beg =
-                    skip_leading_utf8(haystack_slice.data, haystack_slice.data + haystack_size - 1, start - 1);
+            const char* beg = skip_leading_utf8(haystack_slice.data, haystack_slice.data + haystack_size, start - 1);
             /// searcher returns a pointer to the found substring or to the end of `haystack`.
             const char* res_pointer = searcher.search(beg, haystack_size - (beg - haystack_slice.data));
             if (!res_pointer) {

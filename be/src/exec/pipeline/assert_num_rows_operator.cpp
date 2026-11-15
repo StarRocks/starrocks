@@ -26,12 +26,10 @@ Status AssertNumRowsOperator::prepare(RuntimeState* state) {
     // AssertNumRows should return exactly one row, report error if more than one row, return null if empty input
     ChunkPtr chunk = std::make_shared<Chunk>();
 
-    for (const auto& desc : _factory->row_desc()->tuple_descriptors()) {
-        for (const auto& slot : desc->slots()) {
-            MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
-            column->append_nulls(1);
-            chunk->append_column(std::move(column), slot->id());
-        }
+    for (const auto* slot : _factory->record_desc()->slots()) {
+        MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
+        column->append_nulls(1);
+        chunk->append_column(std::move(column), slot->id());
     }
 
     _cur_chunk = std::move(chunk);

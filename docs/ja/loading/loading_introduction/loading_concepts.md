@@ -1,7 +1,9 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
 description: "StarRocks データロードの主要概念：権限、ラベル、原子性、データ型変換、列マッピング、エラー許容度（max_filter_ratio）。"
 toc_max_heading_level: 4
+products: [oss, enterprise, anywhere]
 ---
 
 # データロードに関する概念
@@ -32,7 +34,7 @@ StarRocks はすべてのデータ型のデータロードをサポートして�
 
 ## Strict mode
 
-Strict mode は、データロードのために設定できるオプションのプロパティです。ロードの動作と最終的なロードデータに影響を与えます。詳細は [Strict mode](../load_concept/strict_mode.md) を参照してください。
+Strict mode は、データロードのために設定できるオプションのプロパティです。ロードの動作と最終的なロードデータに影響を与えます。詳細は [Strict mode](../strict_mode.md) を参照してください。
 
 ## Loading modes
 

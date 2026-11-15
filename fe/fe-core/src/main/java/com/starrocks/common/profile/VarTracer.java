@@ -23,7 +23,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class VarTracer {
-    private final Map<String, Var<?>> allVars = Maps.newHashMap();
+    // Linked: vars recorded within the same millisecond keep the order they were first recorded in.
+    private final Map<String, Var<?>> allVars = Maps.newLinkedHashMap();
 
     public void record(long time, String name, String value) {
         StringVar v = new StringVar(time, name);

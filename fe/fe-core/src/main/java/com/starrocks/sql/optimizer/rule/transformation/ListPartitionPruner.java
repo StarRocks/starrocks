@@ -233,6 +233,9 @@ public class ListPartitionPruner implements PartitionPruner {
      * Only some simple conjuncts can be pruned
      */
     public static boolean canPruneWithConjunct(ScalarOperator conjunct) {
+        if (!(conjunct instanceof CompoundPredicateOperator) && containsTruncatingCharCast(conjunct)) {
+            return false;
+        }
         if (conjunct instanceof BinaryPredicateOperator) {
             BinaryPredicateOperator bop = conjunct.cast();
             return bop.getBinaryType().isEqualOrRange() && evaluateConstant(bop.getChild(1)) != null;
@@ -281,7 +284,7 @@ public class ListPartitionPruner implements PartitionPruner {
                         SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
 
                 if (call instanceof CallOperator &&
-                        OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) call).first) {
+                        OperatorFunctionChecker.onlyContainIncreasingFunctions((CallOperator) call).first) {
                     List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(call);
                     for (ColumnRefOperator ref : columnRefOperatorList) {
                         result.add(ref.getName());
@@ -369,7 +372,7 @@ public class ListPartitionPruner implements PartitionPruner {
                     continue;
                 }
                 if (!binaryPredicate.getBinaryType().isEqual()) {
-                    if (!OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) generatedExpr).first) {
+                    if (!OperatorFunctionChecker.onlyContainIncreasingFunctions((CallOperator) generatedExpr).first) {
                         // skip non-monotonic function for not equal predicate
                         continue;
                     }
@@ -378,11 +381,31 @@ public class ListPartitionPruner implements PartitionPruner {
 
             ScalarOperator result = buildDeducedConjunct(conjunct, generatedExpr, generatedColumn);
             if (result != null) {
-                extraConjuncts.add(result);
+                extraConjuncts.add(keepNullPartitions(result, generatedColumn));
             }
         }
 
         partitionConjuncts.addAll(extraConjuncts);
+    }
+
+    /**
+     * A deduced conjunct only describes the rows whose partition value is not NULL.
+     * <p>
+     * The deduction rewrites a predicate on the source column into a predicate on the generated
+     * partition column, which is sound only where the generating function is defined. For a row it
+     * maps to NULL - for example from_unixtime(ts) of a negative ts, which lands the row in the NULL
+     * (default) partition - the source predicate can still be true while the deduced predicate is
+     * not, and every comparison against the partition value map drops the NULL partitions
+     * (evalBinaryPredicate only ever unions matches out of partitionValueMap). Pruning with the
+     * deduced conjunct alone therefore removes partitions that hold matching rows, and the rows are
+     * silently missing from the result.
+     * <p>
+     * OR-ing "generated column IS NULL" keeps exactly those partitions: what the deduced predicate
+     * says nothing about, it may not prune. Where the table has no NULL partition the added branch
+     * matches nothing and pruning is unchanged.
+     */
+    private static ScalarOperator keepNullPartitions(ScalarOperator deduced, ColumnRefOperator generatedColumn) {
+        return Utils.compoundOr(deduced, new IsNullPredicateOperator(generatedColumn));
     }
 
     public static boolean checkDeduceConjunct(List<ColumnRefOperator> partitionColumnRefs,
@@ -446,6 +469,15 @@ public class ListPartitionPruner implements PartitionPruner {
 
             @Override
             public ScalarOperator visitInPredicate(InPredicateOperator operator, Void context) {
+                // The deduced conjunct may only widen the rows it keeps: c1 IN (a, b) implies
+                // f(c1) IN (f(a), f(b)), but c1 NOT IN (a, b) does not imply f(c1) NOT IN (f(a), f(b))
+                // unless f is one-to-one. With f = date_trunc('day', c1), '2024-01-02 13:00' is not in
+                // ('2024-01-02 12:00'), yet its partition value is, and that partition would be pruned
+                // with the row still in it. NOT EQUAL is refused for the same reason in
+                // normalizeNonStrictMonotonic().
+                if (operator.isNotIn()) {
+                    return null;
+                }
                 ScalarOperator result = operator.clone();
                 result.setChild(0, generatedColumn);
                 for (int i = 1; i < operator.getChildren().size(); i++) {
@@ -470,6 +502,12 @@ public class ListPartitionPruner implements PartitionPruner {
 
 
     private Pair<Set<Long>, Boolean> evalPartitionPruneFilter(ScalarOperator operator) {
+        // LiteralExprFactory does not implement explicit CHAR(N) truncation. Keep these predicates
+        // for execution instead of pruning with different values. Compound predicates recurse so
+        // an independent AND branch can still prune; an unevaluable OR branch retains all partitions.
+        if (!(operator instanceof CompoundPredicateOperator) && containsTruncatingCharCast(operator)) {
+            return Pair.create(null, true);
+        }
         Set<Long> matches = null;
         Boolean existNoEval = false;
         if (operator instanceof BinaryPredicateOperator) {
@@ -484,6 +522,13 @@ public class ListPartitionPruner implements PartitionPruner {
             existNoEval = matchesPair.second;
         }
         return matches == null ? Pair.create(null, true) : Pair.create(matches, existNoEval);
+    }
+
+    private static boolean containsTruncatingCharCast(ScalarOperator operator) {
+        if (operator instanceof CastOperator && ((CastOperator) operator).isTruncatingCharCast()) {
+            return true;
+        }
+        return operator.getChildren().stream().anyMatch(ListPartitionPruner::containsTruncatingCharCast);
     }
 
     private boolean isSinglePartitionColumn(ScalarOperator predicate) {
@@ -637,8 +682,9 @@ public class ListPartitionPruner implements PartitionPruner {
             case NE:
                 // SlotRef != Literal
                 matches.addAll(allPartitions);
-                // remove null partitions
-                matches.removeAll(nullPartitions);
+                // remove NULL-only partitions
+                matches.removeIf(id -> nullPartitions.contains(id)
+                        && (listPartitionInfo == null || listPartitionInfo.isSingleValuePartition(id)));
                 // remove partition matches literal
                 if (partitionValueMap.containsKey(literal)) {
                     if (listPartitionInfo == null) {
@@ -755,9 +801,10 @@ public class ListPartitionPruner implements PartitionPruner {
                 return Sets.newHashSet();
             }
 
-            // all partitions but remove null partitions
+            // all partitions but remove NULL-only partitions
             matches.addAll(allPartitions);
-            matches.removeAll(nullPartitions);
+            matches.removeIf(id -> nullPartitions.contains(id)
+                    && (listPartitionInfo == null || listPartitionInfo.isSingleValuePartition(id)));
         }
 
         for (int i = 1; i < inPredicate.getChildren().size(); ++i) {
@@ -804,7 +851,9 @@ public class ListPartitionPruner implements PartitionPruner {
         if (isNullPredicate.isNotNull()) {
             // is not null
             matches.addAll(allPartitions);
-            matches.removeAll(nullPartitions);
+            // all partitions but remove NULL-only partitions
+            matches.removeIf(id -> nullPartitions.contains(id)
+                    && (listPartitionInfo == null || listPartitionInfo.isSingleValuePartition(id)));
         } else {
             // is null
             matches.addAll(nullPartitions);

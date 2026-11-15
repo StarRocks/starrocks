@@ -1,6 +1,8 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "How to manually deploy a shared-data StarRocks cluster with decoupled storage and computing."
+products: [oss]
 ---
 
 import Tabs from '@theme/Tabs';
@@ -11,9 +13,9 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
 <ManualPrep />
 
-This topic describes how to manually deploy a shared-data StarRocks cluster (in which storage and computing are decoupled). For other modes of installation, see [Deployment Overview](../deployment/deployment_overview.md).
+This topic describes how to manually deploy a shared-data StarRocks cluster (in which storage and computing are decoupled). For other modes of installation, see [Deployment Overview](./deployment.md).
 
-To deploy a shared-nothing StarRocks cluster (in which BE is responsible for both storage and computing), see [Deploy Shared-nothing StarRocks Manually](../deployment/deploy_manually.md).
+To deploy a shared-nothing StarRocks cluster (in which BE is responsible for both storage and computing), see [Deploy Shared-nothing StarRocks Manually](./deploy_manually.md).
 
 ## Overview
 
@@ -43,7 +45,7 @@ The following procedures are performed on an FE instance.
    mkdir -p <meta_dir>
    ```
 
-2. Navigate to the directory that stores the [StarRocks FE deployment files](../deployment/prepare_deployment_files.md) you prepared earlier, and modify the FE configuration file **fe/conf/fe.conf**.
+2. Navigate to the directory that stores the [StarRocks FE deployment files](./preparation/prepare_deployment_files.md) you prepared earlier, and modify the FE configuration file **fe/conf/fe.conf**.
 
    a. Set shared-data run mode.
 
@@ -58,7 +60,7 @@ The following procedures are performed on an FE instance.
       meta_dir = <meta_dir>
       ```
 
-   c. If any of the FE ports mentioned in the [Environment Configuration Checklist](../deployment/environment_configurations.md#fe-ports) are occupied, you must assign valid alternatives in the FE configuration file.
+   c. If any of the FE ports mentioned in the [Environment Configuration Checklist](./preparation/environment_configurations.md#fe-ports) are occupied, you must assign valid alternatives in the FE configuration file.
 
       ```YAML
       http_port = aaaa               # Default: 8030
@@ -90,7 +92,7 @@ The following procedures are performed on an FE instance.
       JAVA_HOME = <path_to_JDK>
       ```
 
-   For information about advanced configuration items, see [Parameter Configuration - FE configuration items](../administration/management/FE_configuration.md).
+   For information about advanced configuration items, see [Parameter Configuration - FE configuration items](../administration/configuration/FE_parameters/FE_parameters.md).
 
 3. Start the FE node.
 
@@ -110,7 +112,7 @@ The following procedures are performed on an FE instance.
 
      > **CAUTION**
      >
-     > Before starting the FE node with FQDN access enabled, make sure you have assigned hostnames for all instances in **/etc/hosts**. See [Environment Configuration Checklist - Hostnames](../deployment/environment_configurations.md#hostnames) for more information.
+     > Before starting the FE node with FQDN access enabled, make sure you have assigned hostnames for all instances in **/etc/hosts**. See [Environment Configuration Checklist - Hostnames](./preparation/environment_configurations.md#hostnames) for more information.
 
 4. Check the FE logs to verify if the FE node is started successfully.
 
@@ -137,7 +139,7 @@ The following procedures are performed on the CN instances. You can deploy CN no
    mkdir -p <storage_root_path>
    ```
 
-2. Navigate to the directory that stores the [StarRocks BE deployment files](../deployment/prepare_deployment_files.md) you prepared earlier, and modify the CN configuration file **be/conf/cn.conf**.
+2. Navigate to the directory that stores the [StarRocks BE deployment files](./preparation/prepare_deployment_files.md) you prepared earlier, and modify the CN configuration file **be/conf/cn.conf**.
 
    a. Specify the data directory in the configuration item `storage_root_path`. Multiple volumes are separated by semicolon (;). Example: `/data1;/data2`.
 
@@ -159,9 +161,9 @@ The following procedures are performed on the CN instances. You can deploy CN no
 
       > **NOTE**
       >
-      > The data is cached under the directory **`<storage_root_path>/starlet_cache`**.
+      > From v3.4.0 onwards, the data is cached under the directory **`<storage_root_path>/datacache`**. When the CN starts, the existing cache data in `<storage_root_path>/starlet_cache` is automatically moved to this directory. In earlier versions, the data is cached under the directory **`<storage_root_path>/starlet_cache`**.
 
-   b. If any of the CN ports mentioned in the [Environment Configuration Checklist](../deployment/environment_configurations.md) are occupied, you must assign valid alternatives in the CN configuration file.
+   b. If any of the CN ports mentioned in the [Environment Configuration Checklist](./preparation/environment_configurations.md) are occupied, you must assign valid alternatives in the CN configuration file.
 
       ```YAML
       be_port = vvvv                   # Default: 9060
@@ -189,7 +191,7 @@ The following procedures are performed on the CN instances. You can deploy CN no
       JAVA_HOME = <path_to_JDK>
       ```
 
-   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/management/BE_configuration.md) because most of CN's parameters are inherited from BE.
+   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/configuration/BE_parameters/BE_parameters.md) because most of CN's parameters are inherited from BE.
 
 3. Start the CN node.
 
@@ -199,7 +201,7 @@ The following procedures are performed on the CN instances. You can deploy CN no
 
    > **CAUTION**
    >
-   > - Before starting the CN node with FQDN access enabled, make sure you have assigned hostnames for all instances in **/etc/hosts**. See [Environment Configuration Checklist - Hostnames](../deployment/environment_configurations.md#hostnames) for more information.
+   > - Before starting the CN node with FQDN access enabled, make sure you have assigned hostnames for all instances in **/etc/hosts**. See [Environment Configuration Checklist - Hostnames](./preparation/environment_configurations.md#hostnames) for more information.
    > - You do not need to specify the parameter `--host_type` when you start CN nodes.
 
 4. Check the CN logs to verify if the CN node is started successfully.
@@ -328,7 +330,7 @@ A high-availability FE cluster requires at least THREE Follower FE nodes in the 
    > **NOTE**
    >
    > - You can use the preceding command to add a single Follower FE nodes each time.
-   > - If you want to add Observer FE nodes, execute `ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"=`. For detailed instructions, see [ALTER SYSTEM - FE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md).
+   > - If you want to add Observer FE nodes, execute `ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"`. For detailed instructions, see [ALTER SYSTEM - FE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md).
 
 3. Launch a terminal on the new FE instance, create a dedicated directory for metadata storage, navigate to the directory that stores the StarRocks FE deployment files, and modify the FE configuration file **fe/conf/fe.conf**. For more instructions, see [Step 1: Start the Leader FE node](#step-1-start-the-leader-fe-node). Basically, you can repeat the procedures in Step 1 **except for the command used to start the FE node**.
   
@@ -624,7 +626,7 @@ Whether to enable the local disk cache.
 
 ##### `datacache.partition_duration`
 
-The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity starting from the current time. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
+The time range of the hot partitions, counted back from the current time. For a table partitioned by a DATE or DATETIME column, when a query scans a partition, StarRocks populates the cache with the scanned data only if the partition's range overlaps this time range (or, for list partitioning, if a partition value falls within it). Queries on other partitions still read data that is already cached, but they do not populate the cache and do not use the in-memory page cache. This property is checked against partition bounds at query time, not against the time when data was loaded, and it does not evict data that is already cached. It has no effect on tables that are neither range-partitioned by a single DATE or DATETIME column nor list-partitioned by a DATE or DATETIME column. This property is a string value in the format `<number> <unit>`, where the unit can be `YEAR`, `MONTH`, `WEEK`, `DAY`, `HOUR`, `MINUTE`, or `SECOND` (case-insensitive, singular or plural), for example, `7 DAY` and `12 HOUR`. You can combine several pairs, such as `1 DAY 12 HOUR`, but `YEAR`, `MONTH`, and `WEEK` cannot be combined with `HOUR`, `MINUTE`, or `SECOND`. If it is not specified, queries on all partitions populate the cache.
 
 > **NOTE**
 >
@@ -649,7 +651,7 @@ The `Type` of a table in shared-data StarRocks cluster is `CLOUD_NATIVE`. In the
 
 ### Load data into a shared-data StarRocks cluster
 
-Shared-data StarRocks clusters support all loading methods provided by StarRocks. See [Loading options](../loading/Loading_intro.md) for more information.
+Shared-data StarRocks clusters support all loading methods provided by StarRocks. See [Loading options](../loading/loading_introduction/loading_introduction.mdx) for more information.
 
 ### Query in a shared-data StarRocks cluster
 
@@ -697,4 +699,4 @@ Try the following steps to identify the errors that occur when you start the FE 
 
 ## What to do next
 
-Having deployed your StarRocks cluster, you can move on to [Post-deployment Setup](../deployment/post_deployment_setup.md) for instructions on initial management measures.
+Having deployed your StarRocks cluster, you can move on to [Post-deployment Setup](./manage_deployment/post_deployment_setup.md) for instructions on initial management measures.

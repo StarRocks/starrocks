@@ -35,11 +35,13 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "formats/scan_context.h"
+#include "formats/utils.h"
 #include "fs/fs.h"
 #include "runtime/descriptors.h"
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/predicate_parser.h"
 #include "storage_primitive/predicate_tree/predicate_tree.h"
+#include "storage_primitive/runtime_filter_predicate.h"
 
 namespace starrocks {
 
@@ -59,6 +61,7 @@ struct HdfsScannerProfile {
     RuntimeProfile::Counter* parquet_lazy_full_trigger_count_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_size = nullptr;
+    RuntimeProfile::Counter* scan_ranges_pruned_by_file_stats_counter = nullptr;
 
     RuntimeProfile::Counter* reader_init_timer = nullptr;
     RuntimeProfile::Counter* open_file_timer = nullptr;
@@ -75,6 +78,7 @@ struct HdfsScannerProfile {
     RuntimeProfile::Counter* datacache_skip_write_bytes = nullptr;
     RuntimeProfile::Counter* datacache_skip_read_counter = nullptr;
     RuntimeProfile::Counter* datacache_skip_read_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_error_counter = nullptr;
     RuntimeProfile::Counter* datacache_read_peer_counter = nullptr;
     RuntimeProfile::Counter* datacache_read_peer_bytes = nullptr;
     RuntimeProfile::Counter* datacache_read_peer_timer = nullptr;
@@ -136,6 +140,17 @@ struct HdfsScannerContext {
 
     // ===== shared scan fields =====
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
+    // Driver sequence of the owning pipeline driver, set by HiveDataSource from
+    // runtime_membership_filter_eval_context.  Mirrors what the lake connector
+    // already does; the hive path simply never plumbed it.
+    //
+    // RuntimeFilterProbeDescriptor::runtime_filter() indexes group_colocate_filter()
+    // with this value for group-colocate filters, so the -1 sentinel reads out of
+    // bounds.  Connector scans DO reach that path: bucket-aware execution on lake
+    // tables (enable_bucket_aware_execution_on_lake) produces colocate joins over
+    // Iceberg scans.  normalize_join_runtime_filter() already resolves filters with
+    // this value, so it must be real regardless of the runtime filter pushdown below.
+    int32_t driver_sequence = -1;
     const TupleDescriptor* tuple_desc = nullptr;
     FormatScanContext format_scan_context;
     HdfsScannerProfile profile;
@@ -193,6 +208,13 @@ struct HdfsScannerContext {
     //   predicate_free_pool (owns ColumnPredicates)
     //   conjuncts_manager is destroyed last
     struct PredicateState {
+        // Borrowed RuntimeFilterPredicate*, owned by the fragment-scoped
+        // runtime_state->obj_pool() like the conjuncts manager's allocations, so they
+        // outlive this struct. Holds predicate objects only -- the mutable sampling
+        // state used during evaluation lives in per-reader copies (see
+        // GroupReader::_setup_runtime_filter_predicates).
+        RuntimeFilterPredicates runtime_filter_preds;
+
         std::unique_ptr<RuntimeScanRangePruner> runtime_filter_scan_range_pruner;
         PredicateTree predicate_tree;
         std::unique_ptr<ConnectorPredicateParser> predicate_parser;
@@ -201,8 +223,8 @@ struct HdfsScannerContext {
     } predicates;
 
     // ===== methods =====
-    std::string formatted_name(const std::string& name) const {
-        return format_scan_context.options.case_sensitive ? name : boost::algorithm::to_lower_copy(name);
+    std::string formatted_name(std::string_view name) const {
+        return Utils::format_name(name, format_scan_context.options.case_sensitive);
     }
 };
 

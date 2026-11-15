@@ -32,6 +32,8 @@
 
 #include "common/config_diagnostic_fwd.h"
 #include "common/config_path_fwd.h"
+#include "common/configbase.h"
+#include "fmt/format.h"
 #include "gutil/stringprintf.h"
 
 namespace starrocks {
@@ -132,6 +134,61 @@ static void custom_prefix_formatter(std::ostream& s, const google::LogMessage& m
     s << message.basename() << ':' << message.line() << "] ";
 }
 
+// Kept in sync with the values sys_log_level is declared with in config.h.
+static bool apply_log_level(const std::string& loglevel) {
+    if (iequals(loglevel, "INFO")) {
+        FLAGS_minloglevel = 0;
+    } else if (iequals(loglevel, "WARNING")) {
+        FLAGS_minloglevel = 1;
+    } else if (iequals(loglevel, "ERROR")) {
+        FLAGS_minloglevel = 2;
+    } else if (iequals(loglevel, "FATAL")) {
+        FLAGS_minloglevel = 3;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+static bool apply_roll_mode(const std::string& rollmode) {
+    const std::string sizeflag = "SIZE-MB-";
+    if (rollmode.compare("TIME-DAY") == 0) {
+#ifndef __APPLE__
+        FLAGS_log_split_method = "day";
+#endif
+        return true;
+    }
+    if (rollmode.compare("TIME-HOUR") == 0) {
+#ifndef __APPLE__
+        FLAGS_log_split_method = "hour";
+#endif
+        return true;
+    }
+    if (rollmode.substr(0, sizeflag.length()).compare(sizeflag) != 0) {
+        return false;
+    }
+    std::string sizestr = rollmode.substr(sizeflag.size(), rollmode.size() - sizeflag.size());
+    if (sizestr.size() == 0) {
+        return false;
+    }
+    char* end = nullptr;
+    errno = 0;
+    const char* sizecstr = sizestr.c_str();
+    int64_t ret64 = strtoll(sizecstr, &end, 10);
+    if ((errno != 0) || (end != sizecstr + strlen(sizecstr))) {
+        return false;
+    }
+    auto retval = static_cast<int32_t>(ret64);
+    if (retval != ret64) {
+        return false;
+    }
+#ifndef __APPLE__
+    FLAGS_log_split_method = "size";
+#endif
+    FLAGS_max_log_size = retval;
+    return true;
+}
+
 bool init_glog(const char* basename, bool install_signal_handler) {
     std::lock_guard<std::mutex> logging_lock(logging_mutex);
 
@@ -158,17 +215,9 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     FLAGS_log_filenum_quota = config::sys_log_roll_num;
 #endif
 
-    // Set log level.
-    std::string loglevel = config::sys_log_level;
-    if (iequals(loglevel, "INFO")) {
-        FLAGS_minloglevel = 0;
-    } else if (iequals(loglevel, "WARNING")) {
-        FLAGS_minloglevel = 1;
-    } else if (iequals(loglevel, "ERROR")) {
-        FLAGS_minloglevel = 2;
-    } else if (iequals(loglevel, "FATAL")) {
-        FLAGS_minloglevel = 3;
-    } else {
+    // Set log level. sys_log_level is a validated enum config, so this only fails if the two lists
+    // drift apart.
+    if (!apply_log_level(config::sys_log_level)) {
         std::cerr << "sys_log_level needs to be INFO, WARNING, ERROR, FATAL" << std::endl;
         return false;
     }
@@ -181,44 +230,16 @@ bool init_glog(const char* basename, bool install_signal_handler) {
         FLAGS_logbuflevel = 0;
     }
 
-    // Set log roll mode.
-    std::string& rollmode = config::sys_log_roll_mode;
-    std::string sizeflag = "SIZE-MB-";
-    bool ok = false;
-    if (rollmode.compare("TIME-DAY") == 0) {
-#ifndef __APPLE__
-        FLAGS_log_split_method = "day";
-#endif
-        ok = true;
-    } else if (rollmode.compare("TIME-HOUR") == 0) {
-#ifndef __APPLE__
-        FLAGS_log_split_method = "hour";
-#endif
-        ok = true;
-    } else if (rollmode.substr(0, sizeflag.length()).compare(sizeflag) == 0) {
-#ifndef __APPLE__
-        FLAGS_log_split_method = "size";
-#endif
-        std::string sizestr = rollmode.substr(sizeflag.size(), rollmode.size() - sizeflag.size());
-        if (sizestr.size() != 0) {
-            char* end = nullptr;
-            errno = 0;
-            const char* sizecstr = sizestr.c_str();
-            int64_t ret64 = strtoll(sizecstr, &end, 10);
-            if ((errno == 0) && (end == sizecstr + strlen(sizecstr))) {
-                auto retval = static_cast<int32_t>(ret64);
-                if (retval == ret64) {
-                    FLAGS_max_log_size = retval;
-                    ok = true;
-                }
-            }
+    // Set log roll mode. A roll mode that cannot be parsed falls back to the declared default rather
+    // than failing: unusable logging is a worse outcome than logging that rolls differently than
+    // asked, and the fallback is reported once logging is up.
+    if (!apply_roll_mode(config::sys_log_roll_mode)) {
+        if (!config::fall_back_to_default("sys_log_roll_mode", config::sys_log_roll_mode,
+                                          "TIME-DAY,TIME-HOUR,SIZE-MB-nnn") ||
+            !apply_roll_mode(config::sys_log_roll_mode)) {
+            std::cerr << "sys_log_roll_mode needs to be TIME-DAY, TIME-HOUR, SIZE-MB-nnn" << std::endl;
+            return false;
         }
-    } else {
-        ok = false;
-    }
-    if (!ok) {
-        std::cerr << "sys_log_roll_mode needs to be TIME-DAY, TIME-HOUR, SIZE-MB-nnn" << std::endl;
-        return false;
     }
 
     // Set verbose modules.
@@ -240,6 +261,10 @@ bool init_glog(const char* basename, bool install_signal_handler) {
 
     logging_initialized = true;
 
+    // Config parsing runs before logging exists, so values it had to reject are reported here, where
+    // every caller of init_glog gets it rather than only the ones that remember to ask.
+    report_config_fallbacks();
+
     return true;
 }
 
@@ -258,18 +283,27 @@ std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch) {
                         tm_time.tm_min, tm_time.tm_sec, usecs);
 }
 
-void update_logging() {
-    if (iequals(config::sys_log_level, "INFO")) {
-        FLAGS_minloglevel = 0;
-    } else if (iequals(config::sys_log_level, "WARNING")) {
-        FLAGS_minloglevel = 1;
-    } else if (iequals(config::sys_log_level, "ERROR")) {
-        FLAGS_minloglevel = 2;
-    } else if (iequals(config::sys_log_level, "FATAL")) {
-        FLAGS_minloglevel = 3;
-    } else {
-        LOG(WARNING) << "update sys_log_level failed, need to be INFO, WARNING, ERROR, FATAL";
+void report_config_fallbacks() {
+    for (const auto& fallback : config::take_config_fallbacks()) {
+        std::string message =
+                fmt::format("invalid config '{}'='{}', using '{}' instead; valid values: {}", fallback.name,
+                            fallback.rejected_value, fallback.effective_value, fallback.allowed_values);
+        // On stderr as well as through glog: the log below is subject to FLAGS_minloglevel, which a
+        // sys_log_level of FATAL sets high enough to drop it, and stderr is where the message used
+        // to appear before these values were given a fallback.
+        std::cerr << message << std::endl;
+        LOG(ERROR) << message;
     }
+}
+
+Status update_logging() {
+    std::string loglevel = config::sys_log_level;
+    if (!apply_log_level(loglevel)) {
+        return Status::InvalidArgument(
+                fmt::format("sys_log_level needs to be INFO, WARNING, ERROR, FATAL, got '{}'", loglevel));
+    }
+    LOG(INFO) << "sys_log_level is now " << loglevel;
+    return Status::OK();
 }
 
 } // namespace starrocks

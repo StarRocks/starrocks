@@ -303,6 +303,11 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
         for (size_t index = 0; index < field_size; index++) {
             result->field_names.emplace_back(origin_type.field_names[index]);
             TypeDescriptor& sub_field_type = result->children.emplace_back();
+            if (mapping->get_orc_type_child_mapping(index).orc_type == nullptr) {
+                // missing from the file, read as its default with the table type
+                sub_field_type = origin_type.children.at(index);
+                continue;
+            }
             RETURN_IF_ERROR(_create_type_descriptor_by_orc(
                     origin_type.children.at(index), mapping->get_orc_type_child_mapping(index).orc_type,
                     mapping->get_orc_type_child_mapping(index).orc_mapping, &sub_field_type));
@@ -985,7 +990,7 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct,
         orc::TruthValue val = orc::TruthValue::NO;
         if (node_type == TExprNodeType::BOOL_LITERAL) {
             Expr* literal = const_cast<Expr*>(conjunct);
-            auto ptr = literal->evaluate_checked(nullptr, nullptr).value();
+            ASSIGN_OR_RETURN(auto ptr, literal->evaluate_checked(nullptr, nullptr));
             const Datum& datum = ptr->get(0);
             if (datum.get_int8()) {
                 val = orc::TruthValue::YES;

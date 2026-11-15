@@ -1,7 +1,9 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 description: "通过 SQL 接口监控数据导入作业状态、识别性能瓶颈和排查 StarRocks 导入异常。"
 sidebar_label: Troubleshooting
+products: [oss, enterprise, anywhere]
 ---
 
 # 数据导入故障排查
@@ -26,11 +28,11 @@ sidebar_label: Troubleshooting
 导入任务也可以通过两种方式进行监控：
 
 - 使用 SQL 语句 **[SHOW LOAD](../../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md)** 和 **[SHOW ROUTINE LOAD TASK](../../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD_TASK.md)**。
-- 使用系统视图 **[information_schema.loads](../../sql-reference/information_schema/loads.md)** 和 **statistics.loads_history**。
+- 使用系统视图 **[information_schema.loads](../../sql-reference/information_schema/loads.md)** 和 **`_statistics_.loads_history`**。
 
 ### SQL 语句
 
-**SHOW** 语句显示当前数据库中正在进行和最近完成的导入任务，提供任务状态的快速概览。检索到的信息是 **statistics.loads_history** 系统视图的一个子集。
+**SHOW** 语句显示当前数据库中正在进行和最近完成的导入任务，提供任务状态的快速概览。检索到的信息是 **`_statistics_.loads_history`** 系统视图的一个子集。
 
 SHOW LOAD 语句返回 Broker Load、Insert Into 和 Spark Load 任务的信息，而 SHOW ROUTINE LOAD TASK 语句返回 Routine Load 任务的信息。
 
@@ -38,7 +40,7 @@ SHOW LOAD 语句返回 Broker Load、Insert Into 和 Spark Load 任务的信息�
 
 #### information_schema.loads
 
-**information_schema.loads** 系统视图存储有关最近导入任务的信息，包括活动的和最近完成的任务。StarRocks 定期将数据同步到 **statistics.loads_history** 系统表以进行持久存储。
+**information_schema.loads** 系统视图存储有关最近导入任务的信息，包括活动的和最近完成的任务。StarRocks 定期将数据同步到 **`_statistics_.loads_history`** 系统表以进行持久存储。
 
 **information_schema.loads** 提供以下字段：
 
@@ -53,7 +55,7 @@ SHOW LOAD 语句返回 Broker Load、Insert Into 和 Spark Load 任务的信息�
 | WAREHOUSE            | 导入作业所属的仓库。                 |
 | STATE                | 导入作业的状态。有效值：<ul><li>`PENDING`/`BEGIN`：导入作业已创建。</li><li>`QUEUEING`/`BEFORE_LOAD`：导入作业在队列中等待调度。</li><li>`LOADING`：导入作业正在运行。</li><li>`PREPARING`：事务正在预提交。</li><li>`PREPARED`：事务已预提交。</li><li>`COMMITED`：事务已提交。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul> |
 | PROGRESS             | 导入作业的 ETL 阶段和 LOADING 阶段的进度。 |
-| TYPE                 | 导入作业的类型。对于 Broker Load，返回值为 `BROKER`。对于 INSERT，返回值为 `INSERT`。对于 Stream Load，返回值为 `STREAM`。对于 Routine Load，返回值为 `ROUTINE`。 |
+| TYPE                 | 导入作业的类型。对于 Broker Load，返回值为 `BROKER`。对于 INSERT，返回值为 `INSERT`。对于 Spark Load，返回值为 `SPARK`。对于 Stream Load，返回值为 `STREAM_LOAD`。对于 Routine Load，返回值为 `ROUTINE_LOAD`。 |
 | PRIORITY             | 导入作业的优先级。有效值：`HIGHEST`、`HIGH`、`NORMAL`、`LOW` 和 `LOWEST`。 |
 | SCAN_ROWS            | 扫描的数据行数。                    |
 | SCAN_BYTES           | 扫描的字节数。                        |
@@ -131,9 +133,9 @@ SHOW LOAD 语句返回 Broker Load、Insert Into 和 Spark Load 任务的信息�
 | task_num               | 实际并行执行的子任务数量。          |
 | timeout                | 导入任务的超时时间。                                    |
 
-#### statistics.loads_history
+#### `_statistics_.loads_history`
 
-**statistics.loads_history** 系统视图默认存储最近三个月的导入记录。数据库管理员可以通过修改视图的 `partition_ttl` 来调整保留期。**statistics.loads_history** 的模式与 **information_schema.loads** 一致。
+**`_statistics_.loads_history`** 系统视图默认存储最近 30 天的导入记录。数据库管理员可以通过修改 FE 配置项 [`loads_history_retained_days`](../../administration/configuration/FE_parameters/user_query_loading.md#loads_history_retained_days) 来调整保留期。请勿直接修改该表的 `partition_live_number` 属性，因为 StarRocks 会将其重置为 `loads_history_retained_days` 的值。**`_statistics_.loads_history`** 的模式与 **information_schema.loads** 一致。
 
 ## 使用 Load Profiles 识别导入性能问题
 
@@ -151,14 +153,14 @@ StarRocks 提供多种方法来启用 Load Profiles，具体取决于导入类�
 SET enable_profile = true;
 ```
 
-默认情况下，自动为运行时间超过 300 秒的作业启用配置文件。您可以通过以下方式自定义此阈值：
+默认情况下，自动为运行时间超过 30 秒的作业启用配置文件。您可以通过以下方式自定义此阈值：
 
 ```sql
 SET big_query_profile_threshold = 60s;
 ```
 
 :::note
-当 `big_query_profile_threshold` 设置为默认值 `0` 时，默认行为是禁用查询分析。然而，对于导入任务，执行时间超过 300 秒的任务会自动记录配置文件。
+自 v3.3.12、v3.4.2 和 v3.5.0 起，`big_query_profile_threshold` 的默认值为 `30s`。在更早的版本中，默认值为 `0`，即不会自动为长时间运行的作业记录配置文件。
 :::
 
 StarRocks 还支持 **Runtime Profiles**，它会定期（每 30 秒）报告长时间运行的导入作业的执行指标。您可以通过以下方式自定义报告间隔：
@@ -198,6 +200,41 @@ Load Profiles 的结构与 Query Profiles 相同。有关详细说明，请参�
 您可以通过执行 [ANALYZE PROFILE](../../sql-reference/sql-statements/cluster-management/plan_profile/ANALYZE_PROFILE.md) 来分析 Load Profiles。有关详细说明，请参见 [Analyze text-based Profiles](../../best_practices/query_tuning/query_profile_text_based_analysis.md)。
 
 配置文件提供了详细的操作符指标。关键组件包括 `OlapTableSink` 操作符和 `LoadChannel` 操作符。
+
+#### PreSplit 节点
+
+当 StarRocks 尝试为 INSERT、Broker Load 或增量物化视图刷新预分裂 Range 分布目标时，顶层 Load Profile 中会包含 `PreSplit` 节点。如果该导入没有尝试预分裂，则不会生成此节点。
+
+该节点包含以下时间指标：
+
+| 指标 | 说明 |
+| ---- | ---- |
+| TotalTime | 此次导入所有预分裂尝试消耗的总墙钟时间。 |
+| SourceSamplingTime | 读取源数据样本或文件元数据所花费的时间。`derived_tier` 的该值为 `0`。 |
+| PartitionAndBoundaryPlanningTime | 按目标分区对采样行进行分组并规划分裂边界所花费的时间。 |
+| JobSubmissionTime | 提交规划好的 Tablet reshard 作业所花费的时间。 |
+| ReshardWaitTime | 导入继续执行前，等待已提交的 reshard 作业进入终态所花费的时间。 |
+
+该节点还包含以下计数器：
+
+| 计数器 | 说明 |
+| ------ | ---- |
+| Attempts | 目标表预分裂尝试次数。 |
+| SampleRows | Data tier 采样保留的行数。Metadata tier 和 derived tier 不增加该值。 |
+| EstimatedInputBytes | 各次尝试的源数据估算字节数。同一目标表尝试中各索引重复报告的估算只计算一次。 |
+| TargetPartitions | 选中进行预分裂的目标分区数。 |
+| BoundariesPlanned | 在目标分区和索引上规划的分裂边界总数。 |
+
+以下信息字符串用于标识执行路径：
+
+| 字段 | 说明 |
+| ---- | ---- |
+| LoadKinds | 尝试预分裂的导入路径，例如 `INSERT-from-FILES`、`INSERT-from-table`、`Broker Load` 或 `incremental MV refresh`。 |
+| Tables | 尝试预分裂的目标表。 |
+| SourceTiers | 尝试过的边界来源层级：`meta_tier`、`data_tier` 或 `derived_tier`。出现多个值表示发生了回退或包含多个目标表尝试。 |
+| Outcomes | 预分裂过程中观察到的提交、完成、回退或跳过结果。 |
+| SampleQueryIds | Data tier 内部采样查询的 Query ID。 |
+| ReshardJobIds | 已提交的 Tablet reshard 作业 ID。 |
 
 #### OlapTableSink 操作符
 
@@ -496,7 +533,7 @@ select tablet_id,t.data_size,num_row,visible_version,num_version,num_rowset,num_
 
 #### BE Load
 
-这些指标在 Grafana 的 **BE Load** 类别下可用。如果找不到此类别，请确认您正在使用 [最新的 Grafana 仪表板模板](../../administration/management/monitoring/Monitor_and_Alert.md#125-配置-dashboard)。
+这些指标在 Grafana 的 **BE Load** 类别下可用。如果找不到此类别，请确认您正在使用 [最新的 Grafana 仪表板模板](../../administration/management/monitoring/prometheus_grafana.md#125-配置-dashboard)。
 
 ##### ThreadPool
 

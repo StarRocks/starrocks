@@ -1,6 +1,8 @@
 ---
+sidebar_position: 70
 displayed_sidebar: docs
 description: "How to load data into StarRocks using INSERT statements: INSERT VALUES, INSERT INTO SELECT, INSERT OVERWRITE, Dynamic Overwrite, and loading from files..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Load data using INSERT
@@ -122,7 +124,7 @@ You can append one or more rows to a specific table by using INSERT INTO VALUES 
 
 > **CAUTION**
 >
-> Inserting data via INSERT INTO VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](Loading_intro.md) for other options that suit your scenarios.
+> Inserting data via INSERT INTO VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](./loading_introduction/loading_introduction.mdx) for other options that suit your scenarios.
 
 The following example inserts two rows into the data source table `source_wiki_edit` with the label `insert_load_wikipedia`. Label is the unique identification label for each data load transaction within the database.
 
@@ -222,7 +224,7 @@ You can overwrite a specific table with one or more rows by using INSERT OVERWRI
 
 > **CAUTION**
 >
-> Overwriting data via INSERT OVERWRITE VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](Loading_intro.md) for other options that suit your scenarios.
+> Overwriting data via INSERT OVERWRITE VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](./loading_introduction/loading_introduction.mdx) for other options that suit your scenarios.
 
 Query the source table and the target table to make sure there is data in them.
 
@@ -702,7 +704,7 @@ You can set the following configuration items for INSERT transaction:
 
 | FE configuration                   | Description                                                  |
 | ---------------------------------- | ------------------------------------------------------------ |
-| insert_load_default_timeout_second | Default timeout for INSERT transaction. Unit: second. If the current INSERT transaction is not completed within the time set by this parameter, it will be canceled by the system and the status will be CANCELLED. As for current version of StarRocks, you can only specify a uniform timeout for all INSERT transactions using this parameter, and you cannot set a different timeout for a specific INSERT transaction. The default is 3600 seconds (1 hour). If the INSERT transaction cannot be completed within the specified time, you can extend the timeout by adjusting this parameter. |
+| insert_load_default_timeout_second | Deprecated. This parameter does not control the timeout of INSERT transactions. Use the session variable `insert_timeout` instead. |
 
 - **Session variables**
 

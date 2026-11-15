@@ -186,9 +186,9 @@ Status HorizontalGeneralTabletWriter::finish(SegmentPB* segment) {
 }
 
 void HorizontalGeneralTabletWriter::close() {
-    if (!_finished && !(_segments.empty() && _dels.empty() && _ssts.empty())) {
+    if (!_finished && !(_segments.empty() && _dels.empty() && _ssts.empty() && _del_ssts.empty())) {
         std::vector<std::string> full_paths_to_delete;
-        full_paths_to_delete.reserve(_segments.size() + _dels.size() + _ssts.size());
+        full_paths_to_delete.reserve(_segments.size() + _dels.size() + _ssts.size() + _del_ssts.size());
         for (const auto& f : _segments) {
             std::string path;
             if (_location_provider) {
@@ -216,11 +216,26 @@ void HorizontalGeneralTabletWriter::close() {
             }
             full_paths_to_delete.emplace_back(path);
         }
+        // Pre-built tombstone sstables live at sst_location like _ssts. Del files below the SST threshold
+        // append an empty FileInfo placeholder to stay aligned with _dels, so skip empty paths.
+        for (const auto& f : _del_ssts) {
+            if (f.path.empty()) {
+                continue;
+            }
+            std::string path;
+            if (_location_provider) {
+                path = _location_provider->sst_location(_tablet_id, f.path);
+            } else {
+                path = _tablet_mgr->sst_location(_tablet_id, f.path);
+            }
+            full_paths_to_delete.emplace_back(path);
+        }
         delete_files_async(std::move(full_paths_to_delete));
     }
     _segments.clear();
     _dels.clear();
     _ssts.clear();
+    _del_ssts.clear();
 }
 
 StatusOr<std::unique_ptr<TabletWriter>> HorizontalGeneralTabletWriter::clone() const {
@@ -229,6 +244,7 @@ StatusOr<std::unique_ptr<TabletWriter>> HorizontalGeneralTabletWriter::clone() c
                                                             _flush_pool, _bundle_file_context, _global_dicts);
     RETURN_IF_ERROR(writer->open());
     writer->set_auto_flush(auto_flush());
+    writer->set_flat_json_config(_flat_json_config);
     // Propagate the force-inline flag: spilled sorted schema changes merge through cloned writers
     // (LoadSpillPipelineMergeIterator). Without this, clones default to false and defer .vi building
     // even though the schema-change job stamped the shadow tablets' vibv as already built, so the
@@ -246,10 +262,16 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     opts.is_compaction = _is_compaction;
     opts.vector_index_build_threshold = get_vector_index_build_threshold(_schema);
 
-    if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
-        metadata && metadata->has_flat_json_config()) {
-        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
-        opts.flat_json_config->update(metadata->flat_json_config());
+    // The table's flat_json.* settings come from whoever created this writer and knows them
+    // authoritatively (see TabletWriter::set_flat_json_config): a load carries them in its open
+    // request, compaction / schema change / spark load take them from the version-pinned metadata
+    // of their VersionedTablet. They are deliberately NOT read from the tablet metadata cache: a
+    // cache miss would silently hand the segment to the be.conf globals, which happened on every
+    // cold write (a restarted node, an evicted entry, and every first write under
+    // light_weight_tablet_creation). Without a config SegmentWriter follows the globals, which is
+    // exactly what a table that sets no flat_json.* property asks for.
+    if (_flat_json_config != nullptr) {
+        opts.flat_json_config = _flat_json_config;
     }
 
     opts.global_dicts = _global_dicts;
@@ -521,9 +543,9 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
 }
 
 void VerticalGeneralTabletWriter::close() {
-    if (!_finished && !(_segments.empty() && _dels.empty() && _ssts.empty())) {
+    if (!_finished && !(_segments.empty() && _dels.empty() && _ssts.empty() && _del_ssts.empty())) {
         std::vector<std::string> full_paths_to_delete;
-        full_paths_to_delete.reserve(_segments.size() + _dels.size() + _ssts.size());
+        full_paths_to_delete.reserve(_segments.size() + _dels.size() + _ssts.size() + _del_ssts.size());
         for (const auto& f : _segments) {
             std::string path;
             if (_location_provider) {
@@ -551,11 +573,26 @@ void VerticalGeneralTabletWriter::close() {
             }
             full_paths_to_delete.emplace_back(path);
         }
+        // Tombstone sstables live at sst_location like _ssts; skip empty-path placeholders (see the
+        // horizontal writer). Always empty for the vertical (non-PK) writer, kept for symmetry.
+        for (const auto& f : _del_ssts) {
+            if (f.path.empty()) {
+                continue;
+            }
+            std::string path;
+            if (_location_provider) {
+                path = _location_provider->sst_location(_tablet_id, f.path);
+            } else {
+                path = _tablet_mgr->sst_location(_tablet_id, f.path);
+            }
+            full_paths_to_delete.emplace_back(path);
+        }
         delete_files_async(std::move(full_paths_to_delete));
     }
     _segments.clear();
     _dels.clear();
     _ssts.clear();
+    _del_ssts.clear();
 }
 
 StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_segment_writer(
@@ -566,10 +603,10 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     opts.is_compaction = _is_compaction;
     opts.vector_index_build_threshold = get_vector_index_build_threshold(_schema);
 
-    if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
-        metadata && metadata->has_flat_json_config()) {
-        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
-        opts.flat_json_config->update(metadata->flat_json_config());
+    // See HorizontalGeneralTabletWriter::reset_segment_writer: the config comes from the writer's
+    // creator, never from the tablet metadata cache.
+    if (_flat_json_config != nullptr) {
+        opts.flat_json_config = _flat_json_config;
     }
 
     WritableFileOptions wopts;

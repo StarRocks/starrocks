@@ -1,0 +1,71 @@
+-- name: test_range_partition_prune_plateau
+set time_zone = 'Asia/Shanghai';
+-- result:
+-- !result
+CREATE TABLE t_unix_ms (
+        dt bigint NOT NULL,
+        id int NULL
+)
+DUPLICATE KEY(dt, id)
+PARTITION BY RANGE(from_unixtime_ms(dt))
+(START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY))
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_unix_ms values (1609430400000,1),(1609689600000,4),(1609689600500,5),(1609776000000,6);
+-- result:
+-- !result
+select count(*) from t_unix_ms;
+-- result:
+4
+-- !result
+function: assert_explain_contains('select dt from t_unix_ms where dt < 1609689600500', 'partitions=2/9')
+-- result:
+None
+-- !result
+select dt, id from t_unix_ms where dt < 1609689600500 order by id;
+-- result:
+1609430400000	1
+1609689600000	4
+-- !result
+select dt, id from t_unix_ms where dt < 1609689600000 order by id;
+-- result:
+1609430400000	1
+-- !result
+function: assert_explain_contains('select dt from t_unix_ms where dt < 1609689600000', 'partitions=1/9')
+-- result:
+None
+-- !result
+select dt, id from t_unix_ms where dt = 1609689600500;
+-- result:
+1609689600500	5
+-- !result
+CREATE TABLE t_unix_s (
+        dt bigint NOT NULL,
+        id int NULL
+)
+DUPLICATE KEY(dt, id)
+PARTITION BY RANGE(from_unixtime(dt))
+(START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY))
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_unix_s values (1609430400,1),(1609516800,2),(1609603200,3),(1609689600,4),(1609776000,5);
+-- result:
+-- !result
+select dt, id from t_unix_s where dt < 1609689600 order by id;
+-- result:
+1609430400	1
+1609516800	2
+1609603200	3
+-- !result
+function: assert_explain_contains('select dt from t_unix_s where dt < 1609689600', 'partitions=3/9')
+-- result:
+None
+-- !result
+select dt, id from t_unix_s where dt = 1609689600;
+-- result:
+1609689600	4
+-- !result

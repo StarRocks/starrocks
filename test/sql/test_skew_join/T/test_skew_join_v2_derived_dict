@@ -1,0 +1,64 @@
+-- name: test_skew_join_v2_derived_dict
+
+set cbo_enable_low_cardinality_optimize = true;
+set low_cardinality_optimize_v2 = true;
+set enable_optimize_skew_join_v2 = true;
+
+CREATE TABLE `skew_fact` (
+  `id` int NULL,
+  `lot_state` varchar(32) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+
+-- every third row lands on id 1, the skewed join key
+insert into skew_fact
+select
+    case when generate_series % 3 = 0 then 1 else generate_series end,
+    case
+        when generate_series % 4 = 0 then 'created'
+        when generate_series % 7 = 0 then null
+        else 'running'
+    end
+from TABLE(generate_series(1, 4096));
+
+CREATE TABLE `skew_dim` (
+  `id` int NULL,
+  `tag` varchar(32) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into skew_dim
+select generate_series, concat('t', generate_series % 5)
+from TABLE(generate_series(1, 4096));
+
+[UC] analyze full table skew_fact;
+
+function: wait_global_dict_ready('lot_state', 'skew_fact')
+
+-- upper(lot_state) is a DERIVED dict defined below the shuffle that skew join v2 replaces with split
+-- produce/consume operators. ifnull() above the join is evaluated on that dict, so the fragments the
+-- rewrite creates must still carry the dict expr; it used to be dropped together with the exchange.
+function: assert_explain_verbose_contains('select ifnull(t.u, \'x\') v, count(*) c from (select distinct upper(lot_state) u, id from skew_fact) t join[skew|t.id(1)] skew_dim d on t.id = d.id group by v order by v', 'SplitCastDataSink', 'Decode')
+
+[ORDER]select ifnull(t.u, 'x') v, count(*) c
+from (select distinct upper(lot_state) u, id from skew_fact) t
+join[skew|t.id(1)] skew_dim d on t.id = d.id
+group by v
+order by v;
+
+-- the derived dict is also consumed directly (no expression on top) across the same split
+function: assert_explain_verbose_contains('select t.u, d.tag from (select distinct upper(lot_state) u, id from skew_fact) t join[skew|t.id(1)] skew_dim d on t.id = d.id where d.id <= 3 order by 1, 2', 'SplitCastDataSink', 'Decode')
+
+[ORDER]select t.u, d.tag
+from (select distinct upper(lot_state) u, id from skew_fact) t
+join[skew|t.id(1)] skew_dim d on t.id = d.id
+where d.id <= 3
+order by 1, 2;

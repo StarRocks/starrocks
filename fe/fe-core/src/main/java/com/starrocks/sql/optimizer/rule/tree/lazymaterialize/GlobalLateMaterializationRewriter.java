@@ -91,6 +91,14 @@ public class GlobalLateMaterializationRewriter {
         // stage A split projection
         root = root.getOp().accept(new SplitProjectionRewriter(), root, null);
 
+        // Splitting a projection off an operator changes what that operator outputs, and
+        // RowOutputInfo is derived bottom-up, so every ancestor's cached LogicalProperty is stale
+        // afterwards -- splitProjection only refreshes the operator it split. A Repeat then reached
+        // the passes below declaring {k1, k2, grouping ids} while it actually passes its child's
+        // columns through, and a fetch decision made against that declaration dropped a column the
+        // aggregate above still read.
+        root.clearAndInitOutputInfo();
+
         CollectorContext collectorContext = new CollectorContext(context.getColumnRefFactory());
 
         ColumnCollector columnCollector = new ColumnCollector(context);
@@ -492,11 +500,22 @@ public class GlobalLateMaterializationRewriter {
         }
 
         Map<ColumnRefOperator, ColumnRefOperator> buildUnMaterializedAlias(CollectorContext context,
-                                                                           AliasResolver resolver) {
+                                                                           AliasResolver resolver,
+                                                                           ColumnRefSet childDeferred) {
             Map<ColumnRefOperator, ColumnRefOperator> alias = Maps.newHashMap();
             resolver.resolved.forEach((k, v) -> {
-                if (!k.equals(v) && context.columnSources.containsKey(v)) {
-                    alias.put(k, v);
+                // `resolver` only knows this projection, so `v` is the column as the child names it, which is a
+                // scan column only when the child is the scan. A deferred column renamed more than once on its way
+                // up (scan col -> a -> b) reaches the second rename as another projection's output; resolve it
+                // through the aliases collected below to land back on the scan column. Without that the second
+                // rename is dropped: `b` never becomes deferred here, while the Rewriter, which follows the rename
+                // at every projection, still defers the column and strips it, leaving the consumer above reading a
+                // column nothing produces.
+                //
+                // Only a column the child still defers gets an alias; one materialized below is just a value.
+                final ColumnRefOperator origin = context.getOriginColumnRef(v);
+                if (!k.equals(origin) && childDeferred.contains(v) && context.columnSources.containsKey(origin)) {
+                    alias.put(k, origin);
                 }
             });
             return alias;
@@ -506,6 +525,10 @@ public class GlobalLateMaterializationRewriter {
         public Void visitPhysicalProject(OptExpression optExpression, CollectorContext context) {
             visitChildren(optExpression, context);
             PhysicalProjectOperator op = (PhysicalProjectOperator) optExpression.getOp();
+
+            // the columns the child hands up still deferred
+            final ColumnRefSet childDeferred = new ColumnRefSet();
+            context.unMaterializedColumns.values().forEach(childDeferred::union);
 
             AliasResolver resolver = new AliasResolver();
             resolver.addProjection(op.getCommonSubOperatorMap());
@@ -517,15 +540,23 @@ public class GlobalLateMaterializationRewriter {
             collectEarlyMaterialized(context, resolver, op.getColumnRefMap(), earlyMaterializedColumns);
 
             // collect un-materialized columns
-            final Map<ColumnRefOperator, ColumnRefOperator> alias = buildUnMaterializedAlias(context, resolver);
+            final Map<ColumnRefOperator, ColumnRefOperator> alias =
+                    buildUnMaterializedAlias(context, resolver, childDeferred);
             context.alias.putAll(alias);
 
             recordMaterializedBefore(earlyMaterializedColumns, op, context);
 
-            // remove un-projected un-materialized columns
+            // An output stays deferred only when the column it reads, as the child names it, is still deferred
+            // by the child. Matching the id against columnSources alone is not enough: an aggregate outputs its
+            // group key under the scan column's id, and above it that id can be a different value.
+            final ColumnRefSet childUnMaterialized = new ColumnRefSet();
+            context.unMaterializedColumns.values().forEach(childUnMaterialized::union);
             context.unMaterializedColumns.clear();
 
             for (ColumnRefOperator columnRefOperator : op.getColumnRefMap().keySet()) {
+                if (!childUnMaterialized.contains(resolver.resolve(columnRefOperator))) {
+                    continue;
+                }
                 final ColumnRefOperator origin = context.getOriginColumnRef(columnRefOperator);
                 if (context.columnSources.containsKey(origin)) {
                     final IdentifyOperator identifyOperator = context.columnSources.get(origin);
@@ -717,6 +748,28 @@ public class GlobalLateMaterializationRewriter {
                 }
             }
 
+            // A consumer evaluates its own predicate, so those columns have to exist by the time it
+            // runs. Nothing registered that: the deferred column stayed deferred and the predicate
+            // was left reading a column no slot backed, which surfaced far downstream in the
+            // fragment builder as "Cannot convert ColumnRefOperator to Expr".
+            //
+            // The requirement has to be recorded against the PRODUCER, in producer column ids: a
+            // consumer has no child to fetch from, and only the producer's scan can decide to read
+            // the column early. Its context is where the producer's deferred set lives; the tables
+            // that carry fetch positions are shared with this one.
+            final CollectorContext produceContext = context.cteCtxMap.get(cteId);
+            final ColumnRefSet consumerUsedColumns = consumeOperator.getUsedColumns();
+            if (produceContext != null && !consumerUsedColumns.isEmpty()) {
+                final ColumnRefSet producerSideColumns = new ColumnRefSet();
+                alias.forEach((consumerCol, producerCol) -> {
+                    if (consumerUsedColumns.contains(consumerCol)) {
+                        producerSideColumns.union(producerCol);
+                    }
+                });
+                recordMaterializedBefore(producerSideColumns, (PhysicalOperator) produce.getOp(),
+                        produceContext);
+            }
+
             return null;
         }
     }
@@ -846,6 +899,7 @@ public class GlobalLateMaterializationRewriter {
                 if (op instanceof PhysicalCTEAnchorOperator) {
                     begin = 1;
                 }
+                final ColumnRefSet pushedColumns = new ColumnRefSet();
                 for (int i = begin; i < optExpression.getInputs().size(); i++) {
                     OptExpression input = optExpression.inputAt(i);
                     final IdentifyOperator cIdx = new IdentifyOperator((PhysicalOperator) input.getOp());
@@ -853,11 +907,36 @@ public class GlobalLateMaterializationRewriter {
                     if (dependency == null || !dependency.contains(scanId)) {
                         continue;
                     }
-                    if (tryPushDownFetch(input, scanId, value, context)) {
-                        pushedScanFetch.add(scanId);
+                    // Depending on the scan is not the same as carrying the column. A CTE consumed on
+                    // both sides of a join makes both children depend on the producer's scan, and a
+                    // join condition column lives in exactly one of them. Pushing the fetch into the
+                    // side that does not output the column materialized it in the wrong branch and,
+                    // because the position was then dropped from this operator, left the column
+                    // unmaterialized for the branch whose predicate reads it -- an invalid plan.
+                    final ColumnRefSet childColumns = value.clone();
+                    childColumns.intersect(input.getOutputColumns());
+                    if (childColumns.isEmpty()) {
+                        continue;
+                    }
+                    if (tryPushDownFetch(input, scanId, childColumns, context)) {
+                        pushedColumns.union(childColumns);
                     }
                 }
 
+                // Drop the position from this operator only when every column found a home in a
+                // child. If any is left over -- a child refused the push down because it carries a
+                // small limit, say -- the position stays, so a fetch is still introduced here.
+                //
+                // Decide that on a copy. `value` is the ColumnRefSet the collector stored in
+                // fetchPositions, and that table is shared across collector contexts; removing
+                // columns from it in place tells every later reader they are already taken care of,
+                // and no fetch gets emitted for them anywhere. That produced plans whose aggregate
+                // required a column its input never materialized.
+                final ColumnRefSet remaining = value.clone();
+                remaining.except(pushedColumns);
+                if (remaining.isEmpty()) {
+                    pushedScanFetch.add(scanId);
+                }
             }
             for (IdentifyOperator pushDownedFetchPo : pushedScanFetch) {
                 context.collectorContext.fetchPositions.remove(id, pushDownedFetchPo);
@@ -1147,7 +1226,14 @@ public class GlobalLateMaterializationRewriter {
                         // acquire global dict
                         final Pair<Integer, ColumnDict> globalDict = handler.getGlobalDict(scan, lazyColumn);
                         if (globalDict != null) {
-                            globalDictsBuilder.put(globalDict.first, globalDict.second);
+                            // Key it by the id the lookup will actually ask with. resolve() maps the
+                            // column back into the scan's id space so the dictionary can be found on
+                            // the scan, but the lookup's slots are built from materializedLazyColumns,
+                            // which are in this operator's space. Shipping the scan-space id meant the
+                            // backend looked its slot up in a map that did not contain it, silently
+                            // skipped applying the dictionary, and read the raw string into a slot the
+                            // plan had already typed as the dictionary code.
+                            globalDictsBuilder.put(columnRef.getId(), globalDict.second);
                         }
                     }
                 }

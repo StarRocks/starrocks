@@ -35,6 +35,8 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ScalarOperatorToExpr;
 import com.starrocks.type.InvalidType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import org.roaringbitmap.RoaringBitmap;
 
@@ -155,6 +157,31 @@ public class ExprUtils {
         }
     }
 
+    /** Expose the root column to load/INSERT substitution while keeping analyzed struct field access. */
+    public static Expr rewriteStructFieldSlotRefs(Expr expr) {
+        ExprSubstitutionMap replacements = new ExprSubstitutionMap();
+        boolean changed = false;
+        for (SlotRef slot : collectAllSlotRefs(expr)) {
+            if (slot.getUsedStructFieldPos() == null || slot.getUsedStructFieldPos().isEmpty()
+                    || !slot.getTrueOriginType().isStructType()) {
+                continue;
+            }
+            Type type = slot.getOriginType();
+            List<String> names = new ArrayList<>();
+            for (int position : slot.getUsedStructFieldPos()) {
+                StructField field = ((StructType) type).getField(position);
+                names.add(field.getName());
+                type = field.getType();
+            }
+            SlotRef root = new SlotRef(slot.getTblName(), slot.getLabel());
+            root.setType(slot.getOriginType());
+            root.setNullable(slot.isNullable());
+            replacements.put(slot, new SubfieldExpr(root, slot.getType(), names));
+            changed = true;
+        }
+        return changed ? ExprSubstitutionVisitor.rewrite(expr, replacements) : expr;
+    }
+
     public static List<SlotRef> collectAllSlotRefs(Expr expr) {
         return collectAllSlotRefs(expr, false);
     }
@@ -195,6 +222,14 @@ public class ExprUtils {
         Preconditions.checkState(slotRef.getDesc() != null, "slot descriptor is null");
         if (slotRef.isFromLambda()) {
             return true;
+        }
+        // A slot the planner materialises for an intermediate expression -- the cast wrapping
+        // array_length() inside a lambda body, for one -- carries no column and never joins a tuple,
+        // so its descriptor has no parent. Such a slot is bound by no tuple at all. Say that instead
+        // of dereferencing the absent parent: TopN runtime-filter construction walks into nested
+        // lambda bodies and reaches exactly these slots.
+        if (slotRef.getDesc().getParent() == null) {
+            return false;
         }
         for (TupleId tupleId : tupleIds) {
             if (tupleId.equals(slotRef.getDesc().getParent().getId())) {
@@ -424,6 +459,22 @@ public class ExprUtils {
         FunctionName fnName = new FunctionName(name);
         Function searchDesc = new Function(fnName, argTypes, retType, varArgs);
         return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
+    }
+
+    // Looks up the array_agg_distinct overload for rewriting array_agg(distinct x). Returns null when no overload
+    // takes x's type: the non-strict lookup would otherwise return any overload x is castable to (e.g. DECIMALV2
+    // for VARIANT), and since no cast is planned in between, the BE would read x's column as that type and crash.
+    public static Function getArrayAggDistinctFunction(Type[] argTypes) {
+        Function fn = getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT, argTypes,
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        if (fn == null || argTypes.length != 1) {
+            return null;
+        }
+        Type argType = argTypes[0];
+        if (!argType.isNull() && !argType.matchesType(fn.getArgs()[0])) {
+            return null;
+        }
+        return fn;
     }
 
     public static boolean isAggregateFunction(String name) {

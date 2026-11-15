@@ -53,6 +53,7 @@ import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.TaskRunProcessor;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
+import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -502,6 +503,14 @@ public abstract class MVTestBase extends StarRocksTestBase {
         taskRun.executeTaskRun();
     }
 
+    /** Runs {@code taskRun} and every batch it hands on; the task must set {@link TaskRun#IS_TEST}. */
+    protected static void executeAllBatches(TaskRun taskRun) throws Exception {
+        while (taskRun != null) {
+            initAndExecuteTaskRun(taskRun);
+            taskRun = getPartitionBasedRefreshProcessor(taskRun).getNextTaskRun();
+        }
+    }
+
     protected String toPartitionVal(String val) {
         return val == null ? "NULL" : String.format("'%s'", val);
     }
@@ -757,7 +766,9 @@ public abstract class MVTestBase extends StarRocksTestBase {
         Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
         ExecuteOption executeOption = buildExecuteOption(stmt);
         TaskRun taskRun = taskManager.buildTaskRun(task, executeOption);
-        return taskManager.getMVRefreshExecPlan(taskRun, task, executeOption, stmt);
+        MVRefreshProcessor.ProcessExecPlan processExecPlan =
+                taskManager.getMVRefreshProcessExecPlan(taskRun, task, executeOption, stmt);
+        return processExecPlan == null ? null : processExecPlan.execPlan();
     }
 
     public static List<String> extractColumnValues(String sql, int columnIndex) {

@@ -44,6 +44,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -115,6 +116,21 @@ public class IndexAnalyzer {
     }
 
     /**
+     * Checks that a column of the given type can carry a BITMAP index.
+     *
+     * @throws SemanticException if the type is not supported
+     */
+    public static void checkBitmapColumnType(String columnName, PrimitiveType colType) {
+        // The BE writes the bitmap dictionary with a value-seek encoding, which 256-bit decimals do not have.
+        if (!(colType.isDateType() ||
+                colType.isFixedPointType() || (colType.isDecimalV3Type() && colType != PrimitiveType.DECIMAL256) ||
+                colType.isStringType() || colType == PrimitiveType.BOOLEAN)) {
+            throw new SemanticException(colType + " is not supported in bitmap index. "
+                    + "invalid column: " + columnName);
+        }
+    }
+
+    /**
      * Checks if a column is compatible with the specified index type and table keys type.
      *
      * @param column     the column to check
@@ -127,13 +143,8 @@ public class IndexAnalyzer {
                                    Map<String, String> properties, KeysType keysType) {
         if (indexType == IndexDef.IndexType.BITMAP) {
             String indexColName = column.getName();
-            PrimitiveType colType = column.getPrimitiveType();
-            if (!(colType.isDateType() ||
-                    colType.isFixedPointType() || colType.isDecimalV3Type() ||
-                    colType.isStringType() || colType == PrimitiveType.BOOLEAN)) {
-                throw new SemanticException(colType + " is not supported in bitmap index. "
-                        + "invalid column: " + indexColName);
-            } else if ((keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) && !column.isKey()) {
+            checkBitmapColumnType(indexColName, column.getPrimitiveType());
+            if ((keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) && !column.isKey()) {
                 throw new SemanticException(
                         "BITMAP index only used in columns of DUP_KEYS/PRIMARY_KEYS table or key columns of"
                                 + " UNIQUE_KEYS/AGG_KEYS table. invalid column: " + indexColName);
@@ -173,6 +184,8 @@ public class IndexAnalyzer {
                     "The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true");
         }
 
+        lowerCasePropertyKeys(properties);
+
         if (properties.containsKey(INVERTED_INDEX_IMP_LIB_KEY)) {
             String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
             if (!(CLUCENE.name().equalsIgnoreCase(impValue) || BUILTIN.name().equalsIgnoreCase(impValue))) {
@@ -199,6 +212,23 @@ public class IndexAnalyzer {
 
         // add default properties
         addDefaultProperties(properties);
+    }
+
+    // BE finds the GIN properties by exact lower-case key, so any other spelling must be folded before storing.
+    private static void lowerCasePropertyKeys(Map<String, String> properties) {
+        if (properties.keySet().stream().allMatch(key -> key.equals(key.toLowerCase(Locale.ROOT)))) {
+            return;
+        }
+        Map<String, String> lowerCased = new LinkedHashMap<>();
+        for (Entry<String, String> entry : properties.entrySet()) {
+            String key = entry.getKey().toLowerCase(Locale.ROOT);
+            if (lowerCased.containsKey(key)) {
+                throw new SemanticException("Duplicated index property for GIN after lower-casing the key: " + key);
+            }
+            lowerCased.put(key, entry.getValue());
+        }
+        properties.clear();
+        properties.putAll(lowerCased);
     }
 
     private static void addDefaultProperties(Map<String, String> properties) {
@@ -265,11 +295,6 @@ public class IndexAnalyzer {
 
     // VectorIndexUtil methods
     public static void checkVectorIndexValid(Column column, Map<String, String> properties, KeysType keysType) {
-        if (!Config.enable_experimental_vector) {
-            throw new SemanticException(
-                    "The vector index is disabled, enable it by setting FE config `enable_experimental_vector` to true");
-        }
-
         if (column.isAllowNull()) {
             throw new SemanticException("The vector index can only build on non-nullable column");
         }

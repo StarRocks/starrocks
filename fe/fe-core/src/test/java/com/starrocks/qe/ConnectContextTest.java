@@ -35,6 +35,9 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
+import com.starrocks.authentication.OAuth2AuthenticationProvider;
+import com.starrocks.authentication.OAuth2Context;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
@@ -74,6 +77,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.xnio.StreamConnection;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -130,12 +134,12 @@ public class ConnectContextTest {
 
         // Current db
         Assertions.assertEquals("", ctx.getDatabase());
-        ctx.setDatabase("testCluster:testDb");
-        Assertions.assertEquals("testCluster:testDb", ctx.getDatabase());
+        ctx.setDatabase("testDb");
+        Assertions.assertEquals("testDb", ctx.getDatabase());
 
         // User
-        ctx.setQualifiedUser("testCluster:testUser");
-        Assertions.assertEquals("testCluster:testUser", ctx.getQualifiedUser());
+        ctx.setQualifiedUser("testUser");
+        Assertions.assertEquals("testUser", ctx.getQualifiedUser());
 
         // Serializer
         Assertions.assertNotNull(ctx.getSerializer());
@@ -188,6 +192,23 @@ public class ConnectContextTest {
     }
 
     @Test
+    public void testPreSplitProfileLifecycle() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        Assertions.assertNull(ctx.getPreSplitProfile());
+        PreSplitProfile first = ctx.getOrCreatePreSplitProfile();
+        Assertions.assertSame(first, ctx.getPreSplitProfile());
+        Assertions.assertSame(first, ctx.getOrCreatePreSplitProfile());
+
+        ctx.setStartTime();
+        Assertions.assertNull(ctx.getPreSplitProfile(), "a new statement must not reuse the previous profile");
+        Assertions.assertNotSame(first, ctx.getOrCreatePreSplitProfile());
+
+        ctx.setStartTime(Instant.EPOCH);
+        Assertions.assertNull(ctx.getPreSplitProfile(), "the test start-time overload must reset the profile too");
+    }
+
+    @Test
     public void testSleepTimeout() {
         ConnectContext ctx = new ConnectContext(connection);
         ctx.setCommand(MysqlCommand.COM_SLEEP);
@@ -213,6 +234,40 @@ public class ConnectContextTest {
 
         // clean up
         ctx.cleanup();
+    }
+
+    /**
+     * The handshake of an OAuth2 user on an ordinary MySQL client is answered at once; the login
+     * completes when the browser callback deposits the token. Until then the connection can do
+     * nothing, and it must not be kept for the whole wait_timeout either: the integration's
+     * connect_wait_timeout closes it, the same bound the plugin-aware client's handshake waits for.
+     */
+    @Test
+    public void testAnOAuth2LoginThatNeverCompletesIsClosedAfterConnectWaitTimeout() {
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setCommand(MysqlCommand.COM_SLEEP);
+        OAuth2Context oauth2 = new OAuth2Context("http://as", "http://ts", "http://rd", "cid", "secret",
+                "jwks.json", "sub", new String[0], new String[0], 7L);
+        ctx.getAccessControlContext().setAuthenticationProvider(new OAuth2AuthenticationProvider(oauth2));
+
+        long now = ctx.getConnectionStartTime() + 7 * 1000 - 1;
+        ctx.checkTimeout(now);
+        Assertions.assertFalse(ctx.isKilled(), "still inside connect_wait_timeout");
+
+        now = ctx.getConnectionStartTime() + 7 * 1000 + 1;
+        ctx.checkTimeout(now);
+        Assertions.assertTrue(ctx.isKilled(), "the token never arrived");
+
+        // A connection whose token did arrive is logged in and lives by wait_timeout alone.
+        ConnectContext loggedIn = new ConnectContext(connection);
+        loggedIn.setCommand(MysqlCommand.COM_SLEEP);
+        loggedIn.getAccessControlContext().setAuthenticationProvider(new OAuth2AuthenticationProvider(oauth2));
+        loggedIn.setAuthToken("id-token");
+        loggedIn.setStartTime();
+        loggedIn.checkTimeout(loggedIn.getConnectionStartTime() + 7 * 1000 + 1);
+        Assertions.assertFalse(loggedIn.isKilled());
+        ctx.cleanup();
+        loggedIn.cleanup();
     }
 
     @Test
@@ -1069,5 +1124,28 @@ public class ConnectContextTest {
 
         // The timeout exception is caught internally; ERR_BAD_DB_ERROR is still thrown
         Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("nonexistent"));
+    }
+
+    @Test
+    public void testWarningBufferKeepsFirstEntriesAndStaysBounded() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        // Recording without an intervening clear stops at the limit, and the entries kept are
+        // the first ones, so the buffer cannot grow for the lifetime of the connection.
+        for (int i = 0; i < 500; i++) {
+            ctx.addWarning(new QueryWarning("Warning", "1265", "warning " + i));
+        }
+
+        List<QueryWarning> warnings = ctx.getWarnings();
+        Assertions.assertEquals(64, warnings.size());
+        Assertions.assertEquals("warning 0", warnings.get(0).getMessage());
+        Assertions.assertEquals("warning 63", warnings.get(63).getMessage());
+
+        // The limit applies to what the buffer holds, not to the connection: the next statement
+        // clears it and records into an empty buffer again.
+        ctx.clearWarnings();
+        ctx.addWarning(QueryWarning.fromErrorState(ctx.getState()));
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        Assertions.assertEquals("Error", ctx.getWarnings().get(0).getLevel());
     }
 }

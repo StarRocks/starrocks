@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns whether a JSON value is a scalar (not an object or array)."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # `is_json_scalar`

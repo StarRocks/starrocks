@@ -19,6 +19,7 @@
 #include <functional>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/metrics.h"
@@ -42,11 +43,59 @@ private:
     METRIC_DEFINE_INT_COUNTER(_unknown_counter, MetricUnit::NANOSECONDS);
 };
 
+// Metrics about the worker threads of the thread pools backing a scan executor.
+//
+// These count threads, whereas the counters in ScanExecutorMetrics count tasks. They are worth
+// exporting separately because a ScanExecutor worker occupies its pool thread for the whole
+// lifetime of the executor -- worker_thread() only returns when the pool is asked to shrink -- so
+// losing a worker is invisible in the task counters: the executor simply consumes less. Exporting
+// how many workers are expected next to how many are alive makes the loss directly observable:
+//
+//     worker_threads < expected_worker_threads  =>  workers are gone and were not replaced.
+//
+// The reverse gap is normal and transient: workers notice that the executor shrank only once they
+// wake up for a task, so they linger while the expectation has already dropped.
+//
+// One executor set is created per resource group that has exclusive executors, and all of them
+// share a single metrics instance, so the values are summed over every monitored executor, in the
+// same way as the task counters.
+//
+// The expected count has to follow the executor's own target rather than the capacity its thread
+// pool was built with: the number of workers is derived from the share of the CPUs the executor
+// set owns, so it legitimately drops whenever resource groups are reconfigured, and reporting a
+// stale capacity would make every such change look like workers had been lost.
+struct ScanThreadPoolMetrics {
+    struct Sample {
+        // Workers the executor is currently supposed to run.
+        uint64_t expected_threads = 0;
+        // Workers that are actually alive, including the ones about to start.
+        uint64_t alive_threads = 0;
+    };
+    using Sampler = std::function<Sample()>;
+
+    METRIC_DEFINE_UINT_GAUGE(expected_worker_threads, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(worker_threads, MetricUnit::NOUNIT);
+
+    void register_all_metrics(MetricRegistry* registry, const std::string& prefix);
+
+    // `key` identifies the sampler so that it can be removed again; the caller must unmonitor it
+    // before anything the sampler touches goes away.
+    void monitor(const void* key, Sampler sampler);
+    void unmonitor(const void* key);
+
+private:
+    void _update();
+
+    std::mutex _mutex;
+    std::vector<std::pair<const void*, Sampler>> _samplers;
+};
+
 struct ScanExecutorMetrics {
     QueryTypeTimeMetric execution_time;
     METRIC_DEFINE_INT_COUNTER(finished_tasks, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_CORE_LOCAL_GAUGE(running_tasks, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_CORE_LOCAL_GAUGE(pending_tasks, MetricUnit::NOUNIT);
+    ScanThreadPoolMetrics thread_pool;
 
     void register_all_metrics(MetricRegistry* registry, const std::string& prefix);
 };

@@ -1,4 +1,4 @@
--- name: test_insert_with_profile
+-- name: test_insert_with_profile @sequential
 create table t1(k int) 
 distributed by hash(k) buckets 96;
 

@@ -112,7 +112,12 @@ void PipelineBuilderContext::inherit_upstream_source_properties(SourceOperatorFa
                                                                 SourceOperatorFactory* upstream_source) {
     downstream_source->set_degree_of_parallelism(upstream_source->degree_of_parallelism());
     downstream_source->set_could_local_shuffle(upstream_source->could_local_shuffle());
+    // The partition type and the bucket properties together name the hash a later local shuffle of this
+    // source has to use to stay aligned with how the fragment's rows are spread over instances, e.g. the
+    // bucket transform of an Iceberg bucket table. Carrying the type without the properties would turn
+    // that into plain crc32.
     downstream_source->set_partition_type(upstream_source->partition_type());
+    downstream_source->set_bucket_properties(upstream_source->get_bucket_properties());
     if (!upstream_source->partition_exprs().empty() || !downstream_source->partition_exprs().empty()) {
         downstream_source->set_partition_exprs(upstream_source->partition_exprs());
     }
@@ -128,6 +133,32 @@ void PipelineBuilderContext::push_dependent_pipeline(const Pipeline* pipeline) {
 
 void PipelineBuilderContext::pop_dependent_pipeline() {
     _dependent_pipelines.pop_back();
+}
+
+void PipelineBuilderContext::bind_dependent_pipeline_between(const BuilderMark& begin, const BuilderMark& end,
+                                                             const Pipeline* dependency, bool apply_events) {
+    DCHECK_LE(begin.num_pipelines, end.num_pipelines);
+    DCHECK_LE(end.num_pipelines, _pipelines.size());
+    DCHECK_LE(begin.num_group_dependent_sources, end.num_group_dependent_sources);
+    DCHECK_LE(end.num_group_dependent_sources, _group_dependent_sources.size());
+
+    // Not optional: see the header. This is what keeps a hash join's builders ahead of its probers
+    // and its prober dop a multiple of the builder dop.
+    for (size_t i = begin.num_group_dependent_sources; i < end.num_group_dependent_sources; ++i) {
+        _group_dependent_sources[i]->add_group_dependent_pipeline(dependency);
+    }
+
+    if (!apply_events || !_fragment_context->runtime_state()->enable_wait_dependent_event()) {
+        return;
+    }
+    for (size_t i = begin.num_pipelines; i < end.num_pipelines; ++i) {
+        Pipeline* pipeline = _pipelines[i].get();
+        // The caller keeps anything that feeds `dependency` out of the range; `dependency` itself is
+        // registered after `end` for the same reason.
+        DCHECK(pipeline != dependency);
+        pipeline->pipeline_event()->set_need_wait_dependencies_finished(true);
+        pipeline->pipeline_event()->add_dependency(dependency->pipeline_event());
+    }
 }
 
 void PipelineBuilderContext::_subscribe_pipeline_event(Pipeline* pipeline) {

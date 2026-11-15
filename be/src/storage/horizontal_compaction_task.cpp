@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "base/debug/trace.h"
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
@@ -77,9 +78,14 @@ Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
     reader_params.column_access_paths = &_column_access_paths;
 
-    int32_t chunk_size = CompactionUtils::get_read_chunk_size(
-            config::compaction_memory_limit_per_worker, config::vector_chunk_size, _task_info.input_rows_num,
-            _task_info.input_rowsets_size, _task_info.segment_iterator_num);
+    int64_t total_mem_footprint = 0;
+    for (const auto& rowset : _input_rowsets) {
+        total_mem_footprint += rowset->total_row_size();
+    }
+    int32_t chunk_size = CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker,
+                                                              config::vector_chunk_size, _task_info.input_rows_num,
+                                                              total_mem_footprint, _task_info.segment_iterator_num);
+    TEST_SYNC_POINT_CALLBACK("HorizontalCompactionTask::_horizontal_compact_data:chunk_size", &chunk_size);
     VLOG(2) << "compaction task_id:" << _task_info.task_id << ", tablet=" << _tablet->tablet_id()
             << ", reader chunk size=" << chunk_size;
     reader_params.chunk_size = chunk_size;

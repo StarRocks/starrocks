@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.type.Type;
 import org.apache.commons.lang.StringUtils;
@@ -184,6 +185,7 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
         LogicalOlapScanOperator scan = (LogicalOlapScanOperator) input.getInputs().get(0).getOp();
         if (isPrimaryKey(distinctColumn.get(), scan)) {
             Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
+            newAggregations.putAll(otherMap);
             distinctMap.forEach((k, v) -> {
                 CallOperator newAgg = transformDistinctAgg(v);
                 newAggregations.put(k, newAgg);
@@ -255,9 +257,13 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
         if (StringUtils.equals(originFuncName, newFuncName)) {
             return new CallOperator(originFuncName, origin.getType(), origin.getChildren(), origin.getFunction());
         } else {
-            Function newFunc = ExprUtils.getBuiltinFunction(newFuncName, origin.getFunction().getArgs(),
+            Function builtin = ExprUtils.getBuiltinFunction(newFuncName, origin.getFunction().getArgs(),
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            return new CallOperator(newFuncName, newFunc.getReturnType(), origin.getChildren(), newFunc);
+            Preconditions.checkNotNull(builtin);
+            // multi_distinct_sum and sum share the same decimal return type; keep the analyzed types.
+            Function newFunc = ScalarOperatorUtil.withConcreteTypes(builtin, origin.getFunction().getArgs(),
+                    origin.getType());
+            return new CallOperator(newFuncName, origin.getType(), origin.getChildren(), newFunc);
         }
     }
 

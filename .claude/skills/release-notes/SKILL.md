@@ -100,13 +100,20 @@ git push -u origin release-notes-<new_tag>
 gh pr create --title "[Doc] Add release notes for StarRocks v<new_tag>" --body-file <body>
 ```
 
-Fill `.github/PULL_REQUEST_TEMPLATE.md` for the body:
+Start the body from a verbatim copy of `.github/PULL_REQUEST_TEMPLATE.md` and edit it in place:
+keep every heading, question and checkbox row, including the "I have checked the version
+labels" row and the "If yes" change types; only write the sections and set the boxes below.
 - **What type of PR**: check `- [x] Doc`.
 - **Change in behavior**: check `- [x] No` (the notes themselves don't change product
   behavior).
 - **Checklist**: this PR *is* the user documentation; leave test-case boxes unchecked.
-- **Bugfix cherry-pick branch check**: this is a docs PR, not a code backport — leave the
-  version boxes (`4.1`/`4.0`/`3.5`) unchecked unless the user says otherwise.
+- **Bugfix cherry-pick branch check**: keep this section's rows as the template has them (its
+  versions, order and indentation). Release notes go to the release's line and every newer one,
+  so the docs agree on each branch: tick the parent "I have checked the version labels" box and
+  every version box **equal to or greater than** the minor line the notes are for, comparing
+  versions numerically. Leave older lines unticked. With the template listing 4.2, 4.1, 4.0 and
+  3.5: notes for 4.0.x tick 4.0, 4.1 and 4.2; notes for 4.1.x tick 4.1 and 4.2; notes for 3.5.x
+  tick all four.
 - Append the **"Needs reviewer confirmation"** list under "What I'm doing" so reviewers
   verify the flagged entries.
 

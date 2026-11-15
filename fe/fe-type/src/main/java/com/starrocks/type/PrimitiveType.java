@@ -75,11 +75,16 @@ public enum PrimitiveType {
 
     JSON("JSON", 16),
     VARIANT("VARIANT", 16),
+    FILE("FILE", 16),
 
     FUNCTION("FUNCTION", 8),
 
     BINARY("BINARY", -1),
     VARBINARY("VARBINARY", 16),
+
+    // Reserved native identities; SQL activation requires separate capabilities.
+    GEOGRAPHY("GEOGRAPHY", 16),
+    GEOMETRY("GEOMETRY", 16),
 
     // If external table column type is unsupported, it will be converted to UNKNOWN_TYPE
     UNKNOWN_TYPE("UNKNOWN_TYPE", -1);
@@ -158,7 +163,8 @@ public enum PrimitiveType {
     static {
         ImmutableSetMultimap.Builder<PrimitiveType, PrimitiveType> builder = ImmutableSetMultimap.builder();
         builder.putAll(NULL_TYPE, BASIC_TYPE_LIST);
-        builder.putAll(NULL_TYPE, ImmutableList.of(HLL, BITMAP, PERCENTILE, JSON, VARBINARY, VARIANT));
+        builder.putAll(NULL_TYPE,
+                ImmutableList.of(HLL, BITMAP, PERCENTILE, JSON, VARBINARY, VARIANT, GEOGRAPHY, GEOMETRY));
 
         builder.putAll(BOOLEAN, BASIC_TYPE_LIST);
         builder.putAll(TINYINT, BASIC_TYPE_LIST);
@@ -227,6 +233,10 @@ public enum PrimitiveType {
 
     // Check whether 'type' can cast to 'target'
     public static boolean isImplicitCast(PrimitiveType type, PrimitiveType target) {
+        // Keep GEOMETRY casts strict until descriptor-aware cast semantics are defined.
+        if (type == GEOMETRY && target == GEOMETRY) {
+            return false;
+        }
         if (type.equals(target)) {
             return true;
         }
@@ -380,7 +390,9 @@ public enum PrimitiveType {
             case CHAR:
             case VARCHAR:
             case VARBINARY:
-                // use 16 as char type estimate size
+            case GEOGRAPHY:
+            case GEOMETRY:
+                // Use 16 as the variable-width slot size estimate.
                 typeSize = 16;
                 break;
             case HLL:
@@ -394,6 +406,7 @@ public enum PrimitiveType {
                 break;
             case JSON:
             case VARIANT:
+            case FILE:
                 typeSize = 1024;
                 break;
             default:
@@ -463,6 +476,10 @@ public enum PrimitiveType {
 
     public boolean isVariantType() {
         return this == VARIANT;
+    }
+
+    public boolean isFileType() {
+        return this == FILE;
     }
 
     public boolean isFunctionType() {

@@ -53,6 +53,13 @@ struct TTabletStat {
     2: optional i64 data_size
     3: optional i64 row_num
     4: optional i64 version_count
+    // The tablet version data_size/row_num were computed from. The BE rebuilds this snapshot only
+    // every tablet_stat_cache_update_interval_second, so a successful RPC does not by itself mean
+    // the numbers cover the version the FE currently considers visible. A version is used rather
+    // than a timestamp on purpose: it is assigned by the FE and replicated, so it is comparable
+    // across machines, whereas any wall clock here would belong to the BE. Unset by older BEs,
+    // which the FE treats as "unknown" and therefore untrusted for exact row counts.
+    5: optional i64 version
 }
 
 struct TTabletStatResult {
@@ -139,6 +146,8 @@ struct TGetTabletsInfoResult {
     1: required Status.TStatus status;
     2: optional i64 report_version;
     3: optional map<Types.TTabletId, MasterService.TTablet> tablets;
+    // Keep the FE compaction score metrics up to date when regular tablet reports are disabled.
+    4: optional i64 tablet_max_compaction_score;
 }
 
 service BackendService {

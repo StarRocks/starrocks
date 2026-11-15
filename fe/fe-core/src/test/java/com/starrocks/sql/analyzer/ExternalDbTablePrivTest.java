@@ -24,6 +24,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.MetadataMgr;
@@ -260,5 +261,97 @@ public class ExternalDbTablePrivTest {
                 "grant usage on catalog hive0 to test",
                 "revoke usage on catalog hive0 from test",
                 "you need (at least one of) the ANY privilege(s) on CATALOG hive0 for this operation");
+    }
+
+    @Test
+    public void testShowDatabasesOnExternalCatalog() throws Exception {
+        // show databases from an external catalog needs a catalog-level privilege, the same as set catalog,
+        // before ShowExecutor lists databases from the catalog's metastore (issue #81396).
+        verifyGrantRevoke(
+                "show databases from hive0",
+                "grant usage on catalog hive0 to test",
+                "revoke usage on catalog hive0 from test",
+                "you need (at least one of) the ANY privilege(s) on CATALOG hive0 for this operation");
+
+        // without an explicit FROM, the current catalog (hive0 in this test) is used for the same check.
+        verifyGrantRevoke(
+                "show databases",
+                "grant usage on catalog hive0 to test",
+                "revoke usage on catalog hive0 from test",
+                "you need (at least one of) the ANY privilege(s) on CATALOG hive0 for this operation");
+    }
+
+    @Test
+    public void testShowTablesOnExternalCatalog() throws Exception {
+        // show tables from an external catalog needs the same catalog-level privilege as show databases,
+        // before ShowExecutor resolves the database and lists tables from the catalog's metastore (issue #81396).
+        verifyGrantRevoke(
+                "show tables from hive0.tpch",
+                "grant usage on catalog hive0 to test",
+                "revoke usage on catalog hive0 from test",
+                "you need (at least one of) the ANY privilege(s) on CATALOG hive0 for this operation");
+
+        // without an explicit catalog, the current catalog (hive0 in this test) is used for the same check.
+        verifyGrantRevoke(
+                "show tables from tpch",
+                "grant usage on catalog hive0 to test",
+                "revoke usage on catalog hive0 from test",
+                "you need (at least one of) the ANY privilege(s) on CATALOG hive0 for this operation");
+    }
+
+    @Test
+    public void testTruncateTableChecksStatementCatalog() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        // The session sits in the internal catalog while the statement names hive0 explicitly.
+        ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        ctx.setDatabase(null);
+        StatementBase stmt =
+                UtFrameUtils.parseStmtWithNewParser("truncate table hive0.tpch.region", ctx);
+
+        // Without DELETE on hive0.tpch.region the statement must be rejected -- the check may not
+        // fall back to the session catalog, where the object does not exist and the native
+        // controller would let it through.
+        ctxToTestUser();
+        try {
+            Authorizer.check(stmt, ctx);
+            Assertions.fail("truncate on an external table was allowed without any privilege");
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains(
+                    "you need (at least one of) the DELETE privilege(s) on TABLE region"), e.getMessage());
+        }
+
+        // GRANT resolves the table against the session catalog -- only two-part names are accepted.
+        ctxToRoot();
+        ctx.setCurrentCatalog("hive0");
+        DDLStmtExecutor.execute(
+                UtFrameUtils.parseStmtWithNewParser("grant delete on table tpch.region to test", ctx), ctx);
+        ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+
+        ctxToTestUser();
+        Authorizer.check(stmt, ctx);
+
+        ctxToRoot();
+        ctx.setCurrentCatalog("hive0");
+        DDLStmtExecutor.execute(
+                UtFrameUtils.parseStmtWithNewParser("revoke delete on table tpch.region from test", ctx), ctx);
+        ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+
+        ctxToTestUser();
+        Assertions.assertThrows(Exception.class, () -> Authorizer.check(stmt, ctx));
+    }
+
+    @Test
+    public void testDropTableIfExistsChecksPrivWhenTableCannotBeLoaded() throws Exception {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
+                throw new StarRocksConnectorException("metadata file is missing");
+            }
+        };
+        verifyGrantRevoke(
+                "drop table if exists hive0.tpch.region",
+                "grant drop on tpch.region to test",
+                "revoke drop on tpch.region from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) on TABLE region for this operation");
     }
 }

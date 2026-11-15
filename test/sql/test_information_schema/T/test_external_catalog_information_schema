@@ -30,6 +30,8 @@ select TABLE_SCHEMA, TABLE_NAME from ice_hadoop${uuid0}.information_schema.table
 
 select TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION from ice_hadoop${uuid0}.information_schema.columns;
 
+select TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION from (select * from ice_hadoop${uuid0}.information_schema.columns limit 100000) t where TABLE_SCHEMA like 'ice_hadoop_db%' order by 1, 2, 4;
+
 drop catalog ice_hadoop${uuid0};
 
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_catalog_information_schema/${uuid0} >/dev/null || echo "exit 0" >/dev/null

@@ -13,6 +13,8 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.statistics;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 
 import java.util.Optional;
@@ -24,7 +26,25 @@ public interface IMinMaxStatsMgr {
 
     Optional<ColumnMinMax> getStatsSync(ColumnIdentifier identifier, StatsVersion version);
 
-    void removeStats(ColumnIdentifier identifier, StatsVersion version);
+    void removeStats(ColumnIdentifier identifier);
+
+    /**
+     * Drop every cached min/max entry of {@code table}.
+     *
+     * <p>A cached entry is validated against the table-level {@code max(visibleVersionTime)} under
+     * a "cached is at least as new as requested" test, which assumes that stamp only ever grows.
+     * It does not: partition-set changes move whole {@link com.starrocks.catalog.Partition}
+     * objects -- each carrying its own visible-version time -- in and out of the formal list, and a
+     * schema change need not touch it at all. So it is the callers of this method, not the version
+     * check, that keep the cache honest across DDL. See {@code OlapTable#invalidateMinMaxStats} for
+     * where it is hooked and why those points cover the follower replay path too.
+     */
+    static void invalidateTable(OlapTable table) {
+        IMinMaxStatsMgr mgr = internalInstance();
+        for (Column column : table.getColumns()) {
+            mgr.removeStats(new ColumnIdentifier(table.getId(), column.getColumnId()));
+        }
+    }
 
     static IMinMaxStatsMgr internalInstance() {
         return ColumnMinMaxMgr.getInstance();

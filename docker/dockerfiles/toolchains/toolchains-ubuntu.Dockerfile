@@ -5,9 +5,11 @@
 #   gcc           14.3.0   built from source, pinned via GCC_DOWNLOAD_URL
 #   jdk           21       apt openjdk-21-jdk (currently 21.0.11)
 #   cmake         3.31.9   pinned, downloaded from cmake.org
+#   ninja         1.11.1   apt ninja-build (env.sh selects the Ninja generator when ninja is on PATH)
 #   maven         3.8.7    apt maven
 #   lld           18.1.3   apt lld (STARROCKS_LINKER=lld)
 #   clang-format  18.1.3   apt clang-format (rocky9 ships 21; ubuntu24.04 has no clang-format-21)
+#   clangd        18.1.3   apt clangd (LSP server /usr/bin/clangd)
 #   binutils      2.42     apt binutils (as/ld)
 #   glibc         2.39     apt libc6
 
@@ -46,7 +48,7 @@ LABEL com.starrocks.commit=${COMMIT_ID}
 # Install common libraries and tools that are needed for dev environment
 RUN apt-get update -y && \
     apt-get install --no-install-recommends -y \
-    automake bison byacc ccache flex binutils libtool maven zip python3 python-is-python3 make openjdk-21-jdk git patch lld clang-format bzip2 pigz \
+    automake bison byacc ccache flex binutils libtool maven zip python3 python-is-python3 make openjdk-21-jdk git patch lld clang-format clangd ninja-build bzip2 pigz \
     wget unzip curl vim tree net-tools openssh-client xz-utils gh locales less && \
     DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata && \
     locale-gen en_US.UTF-8 && \

@@ -60,6 +60,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
+import com.starrocks.sql.analyzer.mv.IvmTrialRewriter;
 import com.starrocks.sql.analyzer.mv.MVBaseTablePartitionHandlers;
 import com.starrocks.sql.analyzer.mv.MVPartitionCheckContext;
 import com.starrocks.sql.analyzer.mv.RowIdStrategy;
@@ -146,6 +147,7 @@ import static com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter.DEFAULT
 
 public class MaterializedViewAnalyzer {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewAnalyzer.class);
+    private static final ThreadLocal<Boolean> REANALYZING_EXISTING_MV = ThreadLocal.withInitial(() -> false);
 
     private static final Set<JDBCTable.ProtocolType> SUPPORTED_JDBC_PARTITION_TYPE =
             ImmutableSet.of(JDBCTable.ProtocolType.MYSQL, JDBCTable.ProtocolType.MARIADB);
@@ -167,6 +169,17 @@ public class MaterializedViewAnalyzer {
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
+    }
+
+    /** Runs {@code analysis} as the re-analysis of an existing mv's reconstructed DDL (ALTER ... ACTIVE). */
+    public static void reanalyzeExistingMv(Runnable analysis) {
+        boolean previous = REANALYZING_EXISTING_MV.get();
+        REANALYZING_EXISTING_MV.set(true);
+        try {
+            analysis.run();
+        } finally {
+            REANALYZING_EXISTING_MV.set(previous);
+        }
     }
 
     public static Set<BaseTableInfo> getBaseTableInfos(QueryStatement queryStatement) {
@@ -288,15 +301,67 @@ public class MaterializedViewAnalyzer {
         return col;
     }
 
-    /** Move/prepend {@code __ROW_ID__} to the head of the sort-keys list. */
-    private static List<String> prependRowIdToKeys(List<String> existing) {
-        List<String> result = Lists.newArrayList(IvmOpUtils.COLUMN_ROW_ID);
-        if (existing != null) {
-            existing.stream()
-                    .filter(k -> !IvmOpUtils.COLUMN_ROW_ID.equalsIgnoreCase(k))
-                    .forEach(result::add);
+    /**
+     * How an mv's key columns relate to its sort key. A duplicate-key mv has no row identity of its own, so
+     * its key columns ARE its sort key and both lists are equal; an incremental mv is keyed by
+     * {@code __ROW_ID__}, so the two can differ.
+     */
+    private record MvKeyLayout(List<String> keyColumns, List<String> sortKeyColumns) {
+        static MvKeyLayout merged(List<String> columns) {
+            List<String> shared = columns == null ? Lists.newArrayList() : columns;
+            return new MvKeyLayout(shared, shared);
         }
-        return result;
+
+        boolean isSortKeyIndependent() {
+            return !keyColumns.equals(sortKeyColumns);
+        }
+    }
+
+    private static MvKeyLayout resolveMvKeyLayout(CreateMaterializedViewStatement statement,
+                                                  ConnectContext context) {
+        checkIvmSortKeySupported(statement, context);
+        if (statement.getRowIdStrategy() == null) {
+            // A duplicate-key mv's key columns ARE its sort key; an empty list is chosen from the columns
+            // once they exist.
+            return MvKeyLayout.merged(statement.getSortKeys());
+        }
+        // An incremental mv is keyed by __ROW_ID__ alone, whichever row-id strategy produced it. An ORDER BY
+        // is then a sort key of its own; without one the mv sorts by that key column.
+        List<String> rowIdKey = Lists.newArrayList(IvmOpUtils.COLUMN_ROW_ID);
+        return CollectionUtils.isEmpty(statement.getOrderByElements())
+                ? MvKeyLayout.merged(rowIdKey)
+                : new MvKeyLayout(rowIdKey, statement.getSortKeys());
+    }
+
+    /**
+     * A range-distributed table derives its tablet boundaries from its sort key, which the storage engine
+     * requires to equal the primary key -- and an incremental mv's primary key is the derived
+     * {@code __ROW_ID__}, a column the user cannot name. An {@code ORDER BY} there could therefore only be
+     * reinterpreted, so it is rejected. A duplicate-key mv is exempt, as it is for CREATE TABLE.
+     */
+    private static void checkIvmSortKeySupported(CreateMaterializedViewStatement statement,
+                                                ConnectContext context) {
+        if (statement.getRowIdStrategy() == null || CollectionUtils.isEmpty(statement.getOrderByElements())) {
+            return;
+        }
+        // Only for a range distribution this CREATE selects: RANGE has no SQL syntax, so an explicit desc
+        // means a reconstructed DDL, and rejecting one would leave an existing mv unable to reactivate.
+        if (statement.getDistributionDesc() == null && AnalyzerUtils.isEnableMvRangeDistribution(context)) {
+            throw new SemanticException("ORDER BY is not supported on a range-distributed incremental "
+                    + "materialized view. Add DISTRIBUTED BY HASH(...) to sort by the ORDER BY columns, "
+                    + "or remove ORDER BY.");
+        }
+    }
+
+    /**
+     * Whether an incremental mv ends up range-distributed: RANGE has no SQL syntax, so it is either
+     * selected for an omitted clause or injected by internal DDL reconstruction.
+     */
+    private static boolean usesRangeDistribution(CreateMaterializedViewStatement statement,
+                                                 boolean enableMvRangeDistribution) {
+        DistributionDesc distributionDesc = statement.getDistributionDesc();
+        return distributionDesc instanceof RangeDistributionDesc
+                || (distributionDesc == null && enableMvRangeDistribution);
     }
 
     static class MaterializedViewAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
@@ -306,6 +371,22 @@ public class MaterializedViewAnalyzer {
             HOUR,
             MINUTE,
             SECOND
+        }
+
+        private static void rejectCurrentTimeFunction(CreateMaterializedViewStatement statement) {
+            // Rejecting a re-analysis would leave an mv created before this check unable to reactivate.
+            if (REANALYZING_EXISTING_MV.get()) {
+                return;
+            }
+            Optional<FunctionCallExpr> timeFunction =
+                    AnalyzerUtils.findCurrentTimeFunction(statement.getQueryStatement());
+            if (timeFunction.isEmpty()) {
+                return;
+            }
+            throw new SemanticException(String.format("Incremental refresh does not support %s in the materialized "
+                    + "view definition: rows already in the materialized view are not re-evaluated as time passes. "
+                    + "Use refresh_mode = 'pct', or keep a time window with the partition_retention_condition "
+                    + "property", ExprToSql.toSql(timeFunction.get())), timeFunction.get().getPos());
         }
 
         @Override
@@ -351,6 +432,7 @@ public class MaterializedViewAnalyzer {
 
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
+            SavedSqlGeoValidator.validate(queryStatement);
             AnalyzerUtils.checkNondeterministicFunction(queryStatement);
             AnalyzerUtils.prohibitTimeTravelQuery(queryStatement, "create materialized view");
 
@@ -370,6 +452,9 @@ public class MaterializedViewAnalyzer {
                     statement.getQueryStopIndex()));
 
             MaterializedView.RefreshMode refreshMode = IVMAnalyzer.getRefreshMode(statement);
+            if (refreshMode.isIncremental()) {
+                rejectCurrentTimeFunction(statement);
+            }
             if (refreshMode.isIncrementalOrAuto()) {
                 IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, statement, statement.getQueryStatement());
                 Optional<IVMAnalyzer.IVMAnalyzeResult> ivmAnalyzeResult = ivmAnalyzer.rewrite(refreshMode);
@@ -427,14 +512,9 @@ public class MaterializedViewAnalyzer {
 
             // set the columns into createMaterializedViewStatement
             List<ColWithComment> colWithComments = statement.getColWithComments();
-            List<String> keyCols = statement.getSortKeys();
-            if (statement.getRowIdStrategy() == RowIdStrategy.AUTO_INCREMENT) {
-                // AUTO_INCREMENT __ROW_ID__ is the PK; force it to be the leading sort key.
-                keyCols = prependRowIdToKeys(keyCols);
-                statement.setSortKeys(keyCols);
-            }
+            MvKeyLayout keyLayout = resolveMvKeyLayout(statement, context);
             List<Pair<Column, Integer>> mvColumnPairs = genMaterializedViewColumns(statement.getKeysType(),
-                    statement.getRowIdStrategy(), queryStatement, colWithComments, keyCols);
+                    statement.getRowIdStrategy(), queryStatement, colWithComments, keyLayout);
             List<Column> mvColumns = mvColumnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
             statement.setMvColumnItems(mvColumns);
 
@@ -486,6 +566,11 @@ public class MaterializedViewAnalyzer {
             }
             // check and analyze distribution
             checkDistribution(context, statement, aliasTableMap);
+            // The trial target must observe the final target schema and normalized distribution.
+            // AUTO retains its existing fallback contract and does not run CREATE-time trial compilation.
+            if (refreshMode.isIncremental()) {
+                IvmTrialRewriter.runTrial(context, statement, queryStatement);
+            }
             return null;
         }
 
@@ -582,6 +667,26 @@ public class MaterializedViewAnalyzer {
         }
 
         /**
+         * The column list of a new incremental mv may name only the user query's columns, leaving the hidden ones
+         * the IVM rewrite added to their generated names.
+         */
+        private static List<ColWithComment> withIvmInternalColumns(List<ColWithComment> colWithComments,
+                                                                   List<String> columnNames) {
+            long queryColumnCount = columnNames.stream().filter(name -> !IvmOpUtils.isIvmInternalColumn(name)).count();
+            if (colWithComments.size() != queryColumnCount) {
+                return colWithComments;
+            }
+            List<ColWithComment> fullList = Lists.newArrayList();
+            int next = 0;
+            for (String columnName : columnNames) {
+                fullList.add(IvmOpUtils.isIvmInternalColumn(columnName)
+                        ? new ColWithComment(columnName, null, NodePosition.ZERO)
+                        : colWithComments.get(next++));
+            }
+            return fullList;
+        }
+
+        /**
          * NOTE: order or column names of the defined query may be changed when generating.
          *
          * @return : Generate materialized view's columns and corresponding output expression index pair
@@ -591,7 +696,7 @@ public class MaterializedViewAnalyzer {
                                                                        RowIdStrategy rowIdStrategy,
                                                                        QueryStatement queryStatement,
                                                                        List<ColWithComment> colWithComments,
-                                                                       List<String> keyCols) {
+                                                                       MvKeyLayout keyLayout) {
             // note: PRIMARY_KEYS uses REPLACE aggregate type for now
             AggregateType aggregateType = keysType == KeysType.DUP_KEYS ?
                     AggregateType.NONE : AggregateType.REPLACE;
@@ -601,11 +706,24 @@ public class MaterializedViewAnalyzer {
             Scope queryScope = queryStatement.getQueryRelation().getScope();
             List<Field> relationFields = queryScope.getRelationFields().getAllFields();
             if (colWithComments != null) {
+                if (rowIdStrategy != null) {
+                    colWithComments = withIvmInternalColumns(colWithComments, columnNames);
+                }
                 if (colWithComments.size() != relationFields.size()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
                 }
-                for (ColWithComment colWithComment : colWithComments) {
-                    FeNameFormat.checkColumnName(colWithComment.getColName());
+                for (int i = 0; i < colWithComments.size(); ++i) {
+                    String colName = colWithComments.get(i).getColName();
+                    // An IVM MV's re-parsed DDL lists the internal columns this analyzer generated
+                    // (__ROW_ID__, __AGG_STATE_*), whose names may hold characters a user-typed name
+                    // may not -- e.g. __AGG_STATE_count(*). Exempt only a name identical to the one
+                    // generated for that position, so a user-authored name is still checked.
+                    if (rowIdStrategy != null && IvmOpUtils.isIvmInternalColumn(colName)
+                            && colName.equals(columnNames.get(i))) {
+                        continue;
+                    }
+                    FeNameFormat.checkColumnName(colName);
+                    FeNameFormat.checkVirtualColumnNameNotUsed(colName);
                 }
             }
             List<Column> mvColumns = Lists.newArrayList();
@@ -626,6 +744,11 @@ public class MaterializedViewAnalyzer {
                             "VARIANT is not supported as a column type for materialized views: column '" +
                                     colName + "'");
                 }
+                // FILE (external file reference) has no native storage either.
+                if (type.containsFile()) {
+                    throw new SemanticException(
+                            "FILE is not supported as a column type for materialized views: column '" + colName + "'");
+                }
                 Column column = new Column(colName, type, colNullable);
                 if (IvmOpUtils.COLUMN_ROW_ID.equalsIgnoreCase(colName)) {
                     column.setIsKey(true);
@@ -645,23 +768,23 @@ public class MaterializedViewAnalyzer {
                 mvColumns.add(column);
             }
 
-            // Append the storage-filled __ROW_ID__. Final position is decided by the reorder step
-            // below (caller has already put __ROW_ID__ at the head of keyCols).
+            // Append the storage-filled __ROW_ID__. Final position is decided by the reorder step below.
             // QUERY_COMPUTED MVs already have __ROW_ID__ from the loop above (IVMAnalyzer adds it).
             if (rowIdStrategy == RowIdStrategy.AUTO_INCREMENT) {
                 mvColumns.add(createAutoIncrementRowIdColumn());
             }
 
             // set duplicate key, when sort key is set, it is dup key col.
-            if (CollectionUtils.isEmpty(keyCols)) {
-                keyCols = chooseSortKeysByDefault(mvColumns);
+            List<String> sortKeyColumns = keyLayout.sortKeyColumns();
+            if (CollectionUtils.isEmpty(sortKeyColumns)) {
+                sortKeyColumns = chooseSortKeysByDefault(mvColumns);
             }
 
-            if (keyCols.isEmpty()) {
+            if (sortKeyColumns.isEmpty()) {
                 throw new SemanticException("Sort key of materialized view is empty");
             }
 
-            if (keyCols.size() > mvColumns.size()) {
+            if (sortKeyColumns.size() > mvColumns.size()) {
                 throw new SemanticException("The number of sort key should be less than the number of columns.");
             }
 
@@ -676,18 +799,26 @@ public class MaterializedViewAnalyzer {
                 }
             }
 
+            // Key columns must lead the schema, so an independent sort key is validated but keeps its query
+            // position; the index meta refers to those columns by position instead.
+            List<String> keyColumns = keyLayout.isSortKeyIndependent()
+                    ? keyLayout.keyColumns() : sortKeyColumns;
+            if (keyLayout.isSortKeyIndependent()) {
+                Set<String> seenSortKeys = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+                for (String columnName : sortKeyColumns) {
+                    checkSortKeyColumn(columnMap, columnName);
+                    if (!seenSortKeys.add(columnName)) {
+                        throw new SemanticException("Duplicate sort key column " + columnName
+                                + " is not allowed.");
+                    }
+                }
+            }
+
             List<Pair<Column, Integer>> reorderedColumns = new ArrayList<>();
             Set<String> usedColumns = new LinkedHashSet<>();
-            for (String columnName : keyCols) {
-                Pair<Column, Integer> columnPair = columnMap.get(columnName);
-                if (columnPair == null || columnPair.first == null) {
-                    throw new SemanticException("Sort key not exists: " + columnName);
-                }
+            for (String columnName : keyColumns) {
+                Pair<Column, Integer> columnPair = checkSortKeyColumn(columnMap, columnName);
                 Column keyColumn = columnPair.first;
-                Type keyColType = keyColumn.getType();
-                if (!keyColType.canBeMVKey()) {
-                    throw new SemanticException("Type %s cannot be sort key: %s", keyColType, columnName);
-                }
                 keyColumn.setIsKey(true);
                 keyColumn.setAggregationType(null, true);
 
@@ -702,6 +833,19 @@ public class MaterializedViewAnalyzer {
                 }
             }
             return reorderedColumns;
+        }
+
+        private static Pair<Column, Integer> checkSortKeyColumn(Map<String, Pair<Column, Integer>> columnMap,
+                                                               String columnName) {
+            Pair<Column, Integer> columnPair = columnMap.get(columnName);
+            if (columnPair == null || columnPair.first == null) {
+                throw new SemanticException("Sort key not exists: " + columnName);
+            }
+            Type keyColType = columnPair.first.getType();
+            if (!keyColType.canBeMVKey()) {
+                throw new SemanticException("Type %s cannot be sort key: %s", keyColType, columnName);
+            }
+            return columnPair;
         }
 
         private List<Index> genMaterializedViewIndexes(CreateMaterializedViewStatement statement) {
@@ -1349,27 +1493,30 @@ public class MaterializedViewAnalyzer {
 
             }
 
-            boolean enableRangeDistribution = AnalyzerUtils.isEnableRangeDistribution(connectContext);
+            boolean enableMvRangeDistribution = AnalyzerUtils.isEnableMvRangeDistribution(connectContext);
 
             if (KeysType.PRIMARY_KEYS.equals(statement.getKeysType())) {
-                // Primary key MVs must be normalized first, regardless of the range-distribution default:
-                // an incremental MV is forced to hash distribution on all key columns (its row-id/merge
-                // semantics depend on it), while for a non-incremental primary key MV this is a no-op that
-                // returns the given (or absent) distribution.
-                distributionDesc = checkDistributionForPrimaryKey(statement);
-                if (distributionDesc == null && enableRangeDistribution) {
-                    // No distribution specified and range distribution is enabled: use it as the default.
+                // Incremental/AUTO primary-key MVs keep an internally injected RANGE descriptor, and an
+                // omitted clause selects RANGE when the range default applies to materialized views.
+                // Explicit HASH/RANDOM, or an omitted clause with that default off, is normalized to HASH
+                // over every target key column while preserving an explicitly requested bucket count.
+                distributionDesc = checkDistributionForPrimaryKey(statement, enableMvRangeDistribution);
+                if (distributionDesc == null && enableMvRangeDistribution) {
+                    // Still null, so the normalization above did not apply: this is a non-incremental
+                    // primary-key MV, which takes the same omitted-clause default as any other MV.
                     distributionDesc = new RangeDistributionDesc();
                     statement.setDistributionDesc(distributionDesc);
                 }
-            } else if (enableRangeDistribution) {
+            } else if (enableMvRangeDistribution) {
+                // An explicit clause is left as written: only an incremental MV normalizes one,
+                // because only its refresh depends on locating rows by primary key.
                 if (distributionDesc == null) {
-                    // If no distribution specified, use range distribution
                     distributionDesc = new RangeDistributionDesc();
                     statement.setDistributionDesc(distributionDesc);
                 }
             } else {
-                // for non primary key tables, if user not specify distribution, we use hash distribution
+                // Range distribution is not this MV's default, so fall back to the previous one:
+                // RANDOM, or HASH over the first column when allow_default_partition asks for it.
                 if (distributionDesc == null) {
                     if (connectContext.getSessionVariable().isAllowDefaultPartition()) {
                         distributionDesc = new HashDistributionDesc(0,
@@ -1390,13 +1537,21 @@ public class MaterializedViewAnalyzer {
             DistributionDescAnalyzer.analyze(distributionDesc, columnSet);
         }
 
-        private DistributionDesc checkDistributionForPrimaryKey(CreateMaterializedViewStatement statement) {
+        private DistributionDesc checkDistributionForPrimaryKey(CreateMaterializedViewStatement statement,
+                                                                  boolean enableMvRangeDistribution) {
             DistributionDesc distributionDesc = statement.getDistributionDesc();
             boolean isGeneratedByIncrementalMV = statement.getCurrentRefreshMode().isIncrementalOrAuto();
             if (!isGeneratedByIncrementalMV) {
                 return distributionDesc;
             }
-            // if the mv is primary key, we use hash distribution with all key columns.
+            // RANGE must not be normalized back to HASH.
+            if (usesRangeDistribution(statement, enableMvRangeDistribution)) {
+                RangeDistributionDesc result = new RangeDistributionDesc();
+                statement.setDistributionDesc(result);
+                return result;
+            }
+            // Incremental refresh locates rows by primary key, and hashing on every key column is
+            // what keeps a given key on exactly one tablet.
             List<String> keyColNames = statement.getMvColumnItems()
                     .stream()
                     .filter(col -> col.isKey())
@@ -1405,20 +1560,38 @@ public class MaterializedViewAnalyzer {
             int numBuckets = 0;
             if (distributionDesc != null) {
                 numBuckets = distributionDesc.getBuckets();
-                if (distributionDesc instanceof RandomDistributionDesc) {
-                    LOG.warn("Check distribution for primary key mv, ignore random distribution, " +
-                            "use hash distribution with key columns: {}",
-                            Joiner.on(",").join(keyColNames));
-                } else if (distributionDesc instanceof HashDistributionDesc) {
-                    HashDistributionDesc hashDistributionDesc = (HashDistributionDesc) distributionDesc;
-                    List<String> distColumns = hashDistributionDesc.getDistributionColumnNames();
-                    LOG.warn("Check distribution for primary key mv, ignore defined dist columns: {}, key columns: {}",
-                            Joiner.on(",").join(distColumns), Joiner.on(",").join(keyColNames));
+                String replaced = describeReplacedDistribution(distributionDesc, keyColNames);
+                if (replaced != null) {
+                    LOG.warn("Incremental materialized view {}: {} is ignored, the view is distributed by HASH({}) " +
+                                    "so that incremental refresh can locate rows by primary key. " +
+                                    "The bucket number is unchanged.",
+                            statement.getTblName(), replaced, Joiner.on(", ").join(keyColNames));
                 }
             }
             HashDistributionDesc result = new HashDistributionDesc(numBuckets, keyColNames);
             statement.setDistributionDesc(result);
             return result;
+        }
+
+        /**
+         * The distribution clause as written, rendered for a message, or null when the normalization
+         * above keeps it as written.
+         */
+        @VisibleForTesting
+        static String describeReplacedDistribution(DistributionDesc distributionDesc, List<String> keyColNames) {
+            if (distributionDesc instanceof RandomDistributionDesc) {
+                return "DISTRIBUTED BY RANDOM";
+            }
+            if (!(distributionDesc instanceof HashDistributionDesc)) {
+                return null;
+            }
+            List<String> distColumns = ((HashDistributionDesc) distributionDesc).getDistributionColumnNames();
+            if (distColumns.size() == keyColNames.size()
+                    && IntStream.range(0, distColumns.size())
+                    .allMatch(i -> distColumns.get(i).equalsIgnoreCase(keyColNames.get(i)))) {
+                return null;
+            }
+            return "DISTRIBUTED BY HASH(" + Joiner.on(", ").join(distColumns) + ")";
         }
 
         private Short autoInferReplicationNum(Map<TableName, Table> tableNameTableMap) {
@@ -1523,12 +1696,6 @@ public class MaterializedViewAnalyzer {
             if (hasSpecifiedPartitions && refreshMode.isIncrementalOrAuto()) {
                 throw new SemanticException("Partition refresh is not supported for materialized views with " +
                         "refresh_mode=" + refreshMode.name() + ". Please refresh the whole materialized view instead.",
-                        tableRef.getPos());
-            }
-            if (statement.isForceRefresh() && refreshMode.isIncrementalOrAuto()) {
-                throw new SemanticException("FORCE refresh is not supported for materialized views with " +
-                        "refresh_mode=" + refreshMode.name() +
-                        ". Please drop and re-create the materialized view instead.",
                         tableRef.getPos());
             }
             PartitionInfo partitionInfo = mv.getPartitionInfo();

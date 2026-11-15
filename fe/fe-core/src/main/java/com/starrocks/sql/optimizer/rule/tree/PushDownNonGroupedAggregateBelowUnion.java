@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.tree.exprreuse.ScalarOperatorsReuse;
@@ -98,15 +99,20 @@ public class PushDownNonGroupedAggregateBelowUnion implements TreeRewriteRule {
         }
 
         ColumnRefFactory factory = taskContext.getOptimizerContext().getColumnRefFactory();
-        return root.getOp().accept(new PushDownNonGroupedAggregateBelowUnionVisitor(factory), root, null);
+        boolean unconditionalOnly =
+                ScalarOperatorsReuse.allowThrowException(taskContext.getOptimizerContext().getSessionVariable());
+        return root.getOp().accept(new PushDownNonGroupedAggregateBelowUnionVisitor(factory, unconditionalOnly),
+                root, null);
     }
 
     private static class PushDownNonGroupedAggregateBelowUnionVisitor
             extends OptExpressionVisitor<OptExpression, Void> {
         private final ColumnRefFactory factory;
+        private final boolean unconditionalOnly;
 
-        PushDownNonGroupedAggregateBelowUnionVisitor(ColumnRefFactory factory) {
+        PushDownNonGroupedAggregateBelowUnionVisitor(ColumnRefFactory factory, boolean unconditionalOnly) {
             this.factory = factory;
+            this.unconditionalOnly = unconditionalOnly;
         }
 
         @Override
@@ -126,6 +132,35 @@ public class PushDownNonGroupedAggregateBelowUnion implements TreeRewriteRule {
                 return rewrite(ctx.get());
             }
             return optExpression;
+        }
+
+        private static boolean hasDictMappingOperator(ScalarOperator op) {
+            if (op instanceof DictMappingOperator) {
+                return true;
+            }
+            return op.getChildren().stream().anyMatch(
+                    PushDownNonGroupedAggregateBelowUnionVisitor::hasDictMappingOperator);
+        }
+
+        private static boolean hasDictMappingOperator(Map<ColumnRefOperator, ScalarOperator> mapping) {
+            if (mapping == null) {
+                return false;
+            }
+            return mapping.values().stream().anyMatch(
+                    PushDownNonGroupedAggregateBelowUnionVisitor::hasDictMappingOperator);
+        }
+
+        private static boolean hasDictMappingOperator(Operator op) {
+            if (op.getProjection() != null &&
+                    (hasDictMappingOperator(op.getProjection().getColumnRefMap())
+                            || hasDictMappingOperator(op.getProjection().getCommonSubOperatorMap()))) {
+                return true;
+            }
+            if (op instanceof PhysicalProjectOperator project && (hasDictMappingOperator(project.getColumnRefMap())
+                    || hasDictMappingOperator(project.getCommonSubOperatorMap()))) {
+                return true;
+            }
+            return false;
         }
 
         // ----------------------------------------------------------------------------------------
@@ -151,7 +186,9 @@ public class PushDownNonGroupedAggregateBelowUnion implements TreeRewriteRule {
                 return Optional.empty();
             }
             PhysicalUnionOperator union = unionExpr.getOp().cast();
-            if (!union.isUnionAll() || union.getPredicate() != null || union.hasLimit()) {
+            if (!union.isUnionAll() || union.getPredicate() != null || union.hasLimit() || hasDictMappingOperator(union)
+                    || (projectExpr != null && hasDictMappingOperator(projectExpr.getOp()))
+                    || hasDictMappingOperator(localAgg)) {
                 return Optional.empty();
             }
             return Optional.of(new RewriteContext(aggExpr, projectExpr, unionExpr));
@@ -200,7 +237,7 @@ public class PushDownNonGroupedAggregateBelowUnion implements TreeRewriteRule {
             // 2. Build a new UNION ALL operator.
             PhysicalUnionOperator newUnion = new PhysicalUnionOperator(unionOutputColumns, newChildOutputColumns,
                     true, union.getLimit(), union.getPredicate(), null,
-                    union.isFromIcebergEqualityDeleteRewrite());
+                    union.isFromIcebergEqualityDeleteRewrite(), union.getGlobalDicts());
             OptExpression newUnionExpr = OptExpression.builder()
                     .with(ctx.unionExpr())
                     .setOp(newUnion)
@@ -385,7 +422,8 @@ public class PushDownNonGroupedAggregateBelowUnion implements TreeRewriteRule {
 
             // Build the new project operator above this branch.
             Projection newProjection =
-                    ScalarOperatorsReuse.rewriteProjectionOrLambdaExpr(new Projection(newProjectMap), factory);
+                    ScalarOperatorsReuse.rewriteProjectionOrLambdaExpr(new Projection(newProjectMap), factory,
+                            unconditionalOnly);
             PhysicalProjectOperator newProject = new PhysicalProjectOperator(newProjection.getColumnRefMap(),
                     newProjection.getCommonSubOperatorMap());
             OptExpression newProjectExpr = OptExpression.builder()

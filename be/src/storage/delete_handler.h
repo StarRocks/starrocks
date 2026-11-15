@@ -34,9 +34,11 @@
 
 #pragma once
 
+#include <set>
 #include <string>
 #include <vector>
 
+#include "common/column_id.h"
 #include "common/storage_define.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -93,6 +95,15 @@ class DeleteHandler {
 public:
     // Use regular expression to extract 'column_name', 'op' and 'operands'
     static bool parse_condition(const std::string& condition_str, TCondition* condition);
+
+    // A non-key column's delete condition is dropped on non-DUP tables, so the reader never evaluates it.
+    static bool is_delete_condition_evaluated(const TabletSchema& schema, const std::string& column_name);
+
+    // Column ids the delete predicates up to |max_version| really evaluate; shares its filtering with
+    // TabletReader::_init_delete_predicates so a caller keeping them out of the unused-output set cannot
+    // disagree with what the reader reads.
+    static Status delete_predicate_column_ids(const DelPredicateArray& delete_predicates, const TabletSchema& schema,
+                                              int64_t max_version, std::set<ColumnId>* column_ids);
 };
 
 } // namespace starrocks

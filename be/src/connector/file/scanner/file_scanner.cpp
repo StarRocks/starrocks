@@ -52,7 +52,6 @@ FileScanner::FileScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfi
           _profile(profile),
           _params(params),
           _counter(counter),
-          _row_desc(nullptr),
 
           _file_format_str("UNKNOWN"),
           _schema_only(schema_only) {
@@ -92,8 +91,6 @@ Status FileScanner::init_expr_ctx() {
 
         _src_slot_descriptors.emplace_back(it->second);
     }
-
-    _row_desc = std::make_unique<RowDescriptor>(_state->desc_tbl(), std::vector<TupleId>{_params.src_tuple_id});
 
     // destination
     _dest_tuple_desc = _state->desc_tbl().get_tuple_descriptor(_params.dest_tuple_id);
@@ -167,12 +164,11 @@ Status FileScanner::open() {
 
 void FileScanner::fill_columns_from_path(starrocks::ChunkPtr& chunk, int slot_start,
                                          const std::vector<std::string>& columns_from_path, int size) {
-    auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     // fill column with partition values.
     for (int i = 0; i < columns_from_path.size(); ++i) {
         auto slot_desc = _src_slot_descriptors.at(i + slot_start);
         if (slot_desc == nullptr) continue;
-        auto col = ColumnHelper::create_column(varchar_type, slot_desc->is_nullable());
+        auto col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, slot_desc->is_nullable());
         const std::string& column_from_path = columns_from_path[i];
         Slice s(column_from_path.c_str(), column_from_path.size());
         col->append_value_multiple_times(&s, size);

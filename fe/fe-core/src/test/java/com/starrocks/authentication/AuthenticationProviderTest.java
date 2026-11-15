@@ -25,7 +25,6 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.NegotiateState;
 import com.starrocks.mysql.privilege.AuthPlugin;
-import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -35,21 +34,33 @@ import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyShort;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.spy;
 
 public class AuthenticationProviderTest {
+
+    @BeforeAll
+    public static void setUpPersistJournal() throws Exception {
+        // Real EditLog on an auto-committing pseudo journal (shields BDB): journal writes complete so the
+        // WALApplier.apply() inside logJsonObject() still runs and the DDL takes effect in memory.
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterAll
+    public static void tearDownPersistJournal() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
     private ConnectContext ctx = new ConnectContext();
 
     @Test
@@ -69,7 +80,8 @@ public class AuthenticationProviderTest {
                     .create(info.getAuthPlugin(), new String(info.getPassword()));
 
             byte[] scramble = MysqlPassword.scramble(seed, password);
-            provider.authenticate(ctx.getAccessControlContext(), testUserIdentity, scramble);
+            provider.authenticate(ctx.getAccessControlContext(), testUserIdentity,
+                    AuthCredentials.ofNativeScramble(testUserIdentity.getUser(), scramble, null));
         }
 
         // no password
@@ -77,13 +89,14 @@ public class AuthenticationProviderTest {
         UserAuthOptionAnalyzer.analyzeAuthOption(testUser, null);
         UserAuthenticationInfo info = new UserAuthenticationInfo(testUser, null);
         ctx.setAuthDataSalt(new byte[0]);
-        provider.authenticate(ctx.getAccessControlContext(), testUserIdentity, new byte[0]);
+        provider.authenticate(ctx.getAccessControlContext(), testUserIdentity,
+                AuthCredentials.ofNativeScramble(testUserIdentity.getUser(), new byte[0], null));
         try {
             ctx.setAuthDataSalt("x".getBytes(StandardCharsets.UTF_8));
             provider.authenticate(
                     ctx.getAccessControlContext(),
                     testUserIdentity,
-                    "xx".getBytes(StandardCharsets.UTF_8));
+                    AuthCredentials.ofNativeScramble(testUserIdentity.getUser(), "xx".getBytes(StandardCharsets.UTF_8), null));
             Assertions.fail();
         } catch (AuthenticationException e) {
             Assertions.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL, e.getErrorCode());
@@ -101,7 +114,7 @@ public class AuthenticationProviderTest {
             provider.authenticate(
                     ctx.getAccessControlContext(),
                     testUserIdentity,
-                    MysqlPassword.scramble(seed, "xx"));
+                    AuthCredentials.ofNativeScramble(testUserIdentity.getUser(), MysqlPassword.scramble(seed, "xx"), null));
             Assertions.fail();
         } catch (AuthenticationException e) {
             Assertions.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL, e.getErrorCode());
@@ -112,7 +125,7 @@ public class AuthenticationProviderTest {
             provider.authenticate(
                     ctx.getAccessControlContext(),
                     testUserIdentity,
-                    MysqlPassword.scramble(seed, "bb"));
+                    AuthCredentials.ofNativeScramble(testUserIdentity.getUser(), MysqlPassword.scramble(seed, "bb"), null));
 
         } catch (AuthenticationException e) {
             Assertions.fail();
@@ -124,7 +137,7 @@ public class AuthenticationProviderTest {
             provider.authenticate(
                     ctx.getAccessControlContext(),
                     testUserIdentity,
-                    remotePassword);
+                    AuthCredentials.ofNativeScramble(testUserIdentity.getUser(), remotePassword, null));
 
         } catch (AuthenticationException e) {
             Assertions.fail();
@@ -145,9 +158,6 @@ public class AuthenticationProviderTest {
             }
         };
 
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         AuthenticationMgr authenticationMgr = new AuthenticationMgr();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
@@ -207,9 +217,6 @@ public class AuthenticationProviderTest {
             }
         };
 
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         AuthenticationMgr authenticationMgr = new AuthenticationMgr();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
@@ -273,9 +280,6 @@ public class AuthenticationProviderTest {
         Config.authentication_ldap_simple_bind_dn_pattern = "uid=${USER},ou=People,dc=example,dc=com";
 
         try {
-            EditLog editLog = spy(new EditLog(null));
-            doNothing().when(editLog).logEdit(anyShort(), any());
-            GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
             AuthenticationMgr authenticationMgr = new AuthenticationMgr();
             GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);

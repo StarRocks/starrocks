@@ -65,6 +65,27 @@ TEST(EncryptionKeyTest, GenerateAndDecrypt) {
 
 class KeyCacheTest : public testing::Test {};
 
+struct TestKeyHierarchy {
+    EncryptionKeyPB root;
+    EncryptionKeyPB kek;
+};
+
+static TestKeyHierarchy seed_key_hierarchy(KeyCache* cache, const std::string& root_plain_key, int64_t kek_id) {
+    EncryptionKeyPB root_pb;
+    root_pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+    root_pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+    root_pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+    root_pb.set_plain_key(root_plain_key);
+    auto root = EncryptionKey::create_from_pb(root_pb).value();
+
+    auto kek = root->generate_key().value();
+    kek->set_id(kek_id);
+    TestKeyHierarchy hierarchy{root->pb(), kek->pb()};
+    cache->add_key(root);
+    cache->add_key(kek);
+    return hierarchy;
+}
+
 TEST_F(KeyCacheTest, AddKey) {
     KeyCache cache;
     EncryptionKey* root = nullptr;
@@ -133,6 +154,30 @@ TEST_F(KeyCacheTest, WrapEncryptionMeta) {
     }
 }
 
+TEST_F(KeyCacheTest, RejectDownstreamPlaceholderKeyType) {
+    EncryptionKeyPB master;
+    master.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+    master.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+    master.set_algorithm(EncryptionAlgorithmPB::AES_128);
+    master.set_plain_key("0000000000000000");
+
+    EncryptionKeyPB placeholder;
+    placeholder.set_id(2);
+    placeholder.set_type(EncryptionKeyTypePB::PLACEHOLDER_21);
+
+    EncryptionMetaPB metaPb;
+    *metaPb.add_key_hierarchy() = master;
+    *metaPb.add_key_hierarchy() = placeholder;
+    std::string encryption_meta;
+    ASSERT_TRUE(metaPb.SerializeToString(&encryption_meta));
+
+    KeyCache cache;
+    auto st = cache.create_encryption_meta_pair(encryption_meta);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.status().is_not_supported()) << st.status();
+    ASSERT_EQ(0, cache.size());
+}
+
 TEST_F(KeyCacheTest, RefreshKeys) {
     EncryptionKeyPB pb;
     pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
@@ -161,6 +206,32 @@ TEST_F(KeyCacheTest, RefreshKeys) {
     ASSERT_EQ(epair.info.algorithm, info.algorithm);
     ASSERT_EQ(epair.info.key, info.key);
     LOG(INFO) << cache.to_string();
+}
+
+TEST_F(KeyCacheTest, UnwrapWithoutCachePreservesTargetKeyHierarchy) {
+    KeyCache target_cache;
+    auto target_hierarchy = seed_key_hierarchy(&target_cache, "target-root-key!", 2);
+
+    KeyCache source_cache;
+    auto source_hierarchy = seed_key_hierarchy(&source_cache, "source-root-key!", 100);
+    auto source_pair = source_cache.create_encryption_meta_pair_using_current_kek().value();
+
+    ASSERT_EQ(2, target_cache.size());
+    auto source_info = target_cache.unwrap_encryption_meta_without_cache(source_pair.encryption_meta);
+    ASSERT_TRUE(source_info.ok()) << source_info.status();
+    EXPECT_EQ(source_pair.info.algorithm, source_info->algorithm);
+    EXPECT_EQ(source_pair.info.key, source_info->key);
+
+    EXPECT_EQ(2, target_cache.size());
+    EXPECT_EQ(nullptr, target_cache.get_key(source_hierarchy.root.plain_key()));
+    EXPECT_EQ(nullptr, target_cache.get_key(source_hierarchy.kek.encrypted_key()));
+
+    auto target_pair = target_cache.create_encryption_meta_pair_using_current_kek().value();
+    EncryptionMetaPB target_meta;
+    ASSERT_TRUE(target_meta.ParseFromString(target_pair.encryption_meta));
+    ASSERT_EQ(3, target_meta.key_hierarchy_size());
+    EXPECT_EQ(target_hierarchy.root.SerializeAsString(), target_meta.key_hierarchy(0).SerializeAsString());
+    EXPECT_EQ(target_hierarchy.kek.SerializeAsString(), target_meta.key_hierarchy(1).SerializeAsString());
 }
 
 } // namespace starrocks

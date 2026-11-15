@@ -185,6 +185,10 @@ class _MVRefreshTransformer(Transformer):
     def ASYNC(self, t: Token):
         return "ASYNC"
 
+    def SCHEDULE(self, t: Token):
+        # SCHEDULE added as new keyword in 4.1+, return ASYNC for backwards compatibility
+        return "ASYNC"
+
     def MANUAL(self, t: Token):
         return "MANUAL"
 
@@ -213,5 +217,7 @@ def parse_mv_refresh_clause(refresh_clause_str: str) -> dict:
         A dictionary with keys "refresh_moment" and "refresh_type". The values are like:
         - "refresh_moment": "IMMEDIATE" | "DEFERRED" | None,
         - "refresh_type": "ASYNC" | "MANUAL" | "INCREMENTAL" | None,
+        The SCHEDULE (4.1.1+) and ON_CHANGE (26.2+) keywords report as "ASYNC" so that one
+        reflected spelling matches metadata written against any release.
     """
     return _get_mv_refresh_parser().parse(refresh_clause_str)

@@ -92,7 +92,7 @@ public:
     // single stream.
     // Ownership of the receiver is shared between this DataStream mgr instance and the
     // caller.
-    std::shared_ptr<DataStreamRecvr> create_recvr(RuntimeState* state, const RowDescriptor& row_desc,
+    std::shared_ptr<DataStreamRecvr> create_recvr(RuntimeState* state, const RecordDescriptor& record_desc,
                                                   const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id,
                                                   int num_senders, int buffer_size, bool is_merging,
                                                   std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
@@ -103,7 +103,7 @@ public:
     void cancel(const TUniqueId& fragment_instance_id);
     void close();
 
-    void prepare_pass_through_chunk_buffer(const TUniqueId& query_id);
+    void prepare_pass_through_chunk_buffer(const TUniqueId& query_id, std::shared_ptr<MemTracker> query_mem_tracker);
     void destroy_pass_through_chunk_buffer(const TUniqueId& query_id);
     PassThroughChunkBuffer* get_pass_through_chunk_buffer(const TUniqueId& query_id);
 

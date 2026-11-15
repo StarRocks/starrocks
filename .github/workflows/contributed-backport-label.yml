@@ -1,0 +1,66 @@
+name: Contributed Backport Label
+run-name: Contributed Backport Label(#${{ github.event.number }})
+
+# Anti-loop helper for CD/MS->SR reverse syncs. A mergify backport PR does NOT inherit
+# labels. Copy the source main PR's `PAI-contributed` or `MS-contributed` marker before
+# the backport can merge, so ci-sync.yml skips forwarding to the originating downstream.
+#
+# RENAME TRANSITION (cd-contributed -> PAI-contributed): producers now emit `PAI-contributed`;
+# the source-PR check below accepts EITHER the old `cd-contributed` or the new `PAI-contributed`
+# so in-flight PRs still labeled with the old name keep working until they are migrated.
+#
+on:
+  pull_request_target:
+    types: [opened]
+    # All release branches (glob) — no need to update when a new branch is cut. `main`
+    # is not matched. Over-triggering is harmless: the job early-exits unless the PR is a
+    # backport whose source main PR carries the contributed marker.
+    branches:
+      - 'branch-*'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  add_label:
+    name: Add contributed labels to backport PRs
+    if: github.repository == 'StarRocks/starrocks'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.number }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      TITLE: ${{ github.event.pull_request.title }}
+    steps:
+      - name: inherit contributed labels from source main PR
+        run: |
+          set -eo pipefail
+          # A mergify backport PR: head `mergify/bp/<branch>/pr-<SR_main>`, or title `(backport #N)`.
+          src=""
+          if [[ "$HEAD_REF" =~ ^mergify/bp/.*/pr-([0-9]+)$ ]]; then
+            src="${BASH_REMATCH[1]}"
+          else
+            src=$(echo "$TITLE" | grep -oP '\(backport #\K[0-9]+' | tail -n1 || true)
+          fi
+          if [[ -z "$src" ]]; then
+            echo "not a backport PR; nothing to do"; exit 0
+          fi
+          # Does the source (main) PR carry the contributed marker? Accept the old
+          # `cd-contributed` or the new `PAI-contributed` during the rename transition.
+          if gh pr view "$src" -R "$REPO" --json labels -q '.labels[].name' | grep -qxE 'cd-contributed|PAI-contributed'; then
+            gh label create PAI-contributed -R "$REPO" -c 5319e7 -f >/dev/null 2>&1 || true
+            gh pr edit "$PR_NUMBER" -R "$REPO" --add-label PAI-contributed
+            echo "added PAI-contributed to #$PR_NUMBER (source main #$src)"
+          else
+            echo "source main #$src has no contributed marker; skip"
+          fi
+          if gh pr view "$src" -R "$REPO" --json labels -q '.labels[].name' | grep -qx 'MS-contributed'; then
+            gh label create MS-contributed -R "$REPO" -c 5319e7 -f >/dev/null 2>&1 || true
+            gh pr edit "$PR_NUMBER" -R "$REPO" --add-label MS-contributed
+            echo "added MS-contributed to #$PR_NUMBER (source main #$src)"
+          else
+            echo "source main #$src has no MS-contributed marker; skip"
+          fi

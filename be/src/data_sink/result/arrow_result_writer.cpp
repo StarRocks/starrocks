@@ -40,14 +40,12 @@ namespace starrocks {
 // - sinker: the result sink (BufferControlBlock) to which Arrow batches will be written
 // - output_expr_ctxs: a list of output expression contexts to be evaluated on the Chunk
 // - parent_profile: the parent runtime profile for performance tracking
-// - row_desc: the row descriptor (schema) of the output
 ArrowResultWriter::ArrowResultWriter(BufferControlBlock* sinker, std::vector<ExprContext*>& output_expr_ctxs,
                                      const std::vector<std::string>& output_column_names,
-                                     RuntimeProfile* parent_profile, const RowDescriptor& row_desc)
+                                     RuntimeProfile* parent_profile)
         : BufferControlResultWriter(sinker, parent_profile),
           _output_expr_ctxs(output_expr_ctxs),
-          _output_column_names(output_column_names),
-          _row_desc(row_desc) {}
+          _output_column_names(output_column_names) {}
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ init(): Initialize ArrowResultWriter                       │
@@ -55,7 +53,7 @@ ArrowResultWriter::ArrowResultWriter(BufferControlBlock* sinker, std::vector<Exp
 // [1] Init performance timer
 // [2] Check sinker is not null
 // [3] Build column ID → name map
-// [4] Convert RowDescriptor → Arrow Schema
+// [4] Convert the output expressions → Arrow Schema
 // [5] Register Arrow Schema to ResultMgr
 Status ArrowResultWriter::init(RuntimeState* state) {
     _init_profile();
@@ -65,7 +63,7 @@ Status ArrowResultWriter::init(RuntimeState* state) {
 
     std::unordered_map<int64_t, std::string> temp_id_to_col_name;
 
-    RETURN_IF_ERROR(convert_to_arrow_schema(_row_desc, temp_id_to_col_name, &_arrow_schema, _output_expr_ctxs,
+    RETURN_IF_ERROR(convert_to_arrow_schema(temp_id_to_col_name, &_arrow_schema, _output_expr_ctxs,
                                             &_output_column_names, state->arrow_flight_sql_version()));
 
     auto* query_execution_services = state->query_execution_services();

@@ -40,7 +40,8 @@ DEFINE_FAIL_POINT(expr_prepare_fragment_thread_local_call_failed);
 
 VectorizedFunctionCallExpr::VectorizedFunctionCallExpr(const TExprNode& node) : Expr(node) {}
 
-const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function_by_fid(const TFunction& fn) {
+const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function_by_fid(
+        const TFunction& fn, const std::vector<TypeDescriptor>& arg_types) {
     // branch-3.0 is 150102~150104, branch-3.1 is 150103~150105
     // refs: https://github.com/StarRocks/starrocks/pull/17803
     // @todo: remove this code when branch-3.0 is deprecated
@@ -51,6 +52,17 @@ const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function_by_fid(const
         fid = 150104;
     } else if (fn.fid == 150104 && _type.type == TYPE_ARRAY && _type.children[0].type == TYPE_DECIMAL128) {
         fid = 150105;
+    }
+    // Contract 4.3 (#79786) renumbered existing native GEOGRAPHY functions.
+    // Accept plans from the earlier registry without renumbering the current one again.
+    // 120081 is also the current ST_X(GEOMETRY): distinguish it by the native argument type,
+    // never by WKB contents. Normal GEO execution still validates the semantic descriptor.
+    if (arg_types.size() == 1 && arg_types[0].type == TYPE_GEOGRAPHY) {
+        if (fid == 120081) fid = 120090; // ST_Y(GEOGRAPHY)
+        if (fid == 120082) fid = 120170; // ST_GeometryType(GEOGRAPHY)
+    } else if (fid == 120083 && arg_types.size() == 2 && arg_types[0].type == TYPE_GEOGRAPHY &&
+               arg_types[1].type == TYPE_GEOGRAPHY) {
+        fid = 120180; // ST_Distance(GEOGRAPHY, GEOGRAPHY)
     }
     return BuiltinFunctions::find_builtin_function(fid);
 }
@@ -78,7 +90,7 @@ const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function(const TFunct
                                                                     prepare_func, close_func, true, false);
         return _agg_func_desc.get();
     } else {
-        return _get_function_by_fid(fn);
+        return _get_function_by_fid(fn, arg_types);
     }
 }
 
@@ -226,6 +238,13 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
 
 bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
                                                     const NgramBloomFilterReaderOptions& reader_options) const {
+    // Legacy NGRAMBF metadata can omit gram_num. Do not use such an index for
+    // pruning. This check must precede the cached NgramBloomFilterState because
+    // one ExprContext can scan rowsets with different index metadata.
+    if (reader_options.index_gram_num == 0) {
+        return true;
+    }
+
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
     std::unique_ptr<NgramBloomFilterState>& ngram_state = fn_ctx->get_ngram_state();
 
@@ -318,13 +337,21 @@ bool VectorizedFunctionCallExpr::split_normal_string_to_ngram(const Slice& needl
     size_t index_gram_num = reader_options.index_gram_num;
     bool index_case_sensitive = reader_options.index_case_sensitive;
 
-    auto gram_num_column = fn_ctx->get_constant_column(2);
-    if (gram_num_column != nullptr) {
+    // Defence in depth: the FE analyzer already requires a positive integer literal here.
+    // get_const_value() casts the constant's data column straight to an Int32Column, so a
+    // non-constant or NULL gram_num would be a wild read rather than a skipped optimization.
+    // Note this runs during index evaluation in the storage layer, before the function itself is
+    // ever evaluated, so ngram_search_prepare()'s own guard does not protect it.
+    if (fn_ctx->is_notnull_constant_column(2)) {
+        auto gram_num_column = fn_ctx->get_constant_column(2);
         size_t predicate_gram_num = ColumnHelper::get_const_value<TYPE_INT>(gram_num_column);
         // case like ngram_search(col,"needle", 5) when col has a 4gram bloom filter, don't use this index
         if (index_gram_num != predicate_gram_num) {
             return false;
         }
+    } else {
+        // gram_num is not a usable constant: the index cannot be matched against it.
+        return false;
     }
 
     // if ngram bloom filter is case_sensitive,but function is case insensitive

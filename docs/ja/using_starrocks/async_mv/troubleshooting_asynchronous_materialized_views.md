@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Troubleshooting guide for asynchronous materialized views in StarRocks: diagnose and fix refresh failures, query rewrite issues, and data consistency problems."
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 非同期マテリアライズドビューのトラブルシューティング
@@ -391,7 +392,7 @@ ALTER MATERIALIZED VIEW mv1 ACTIVE;
   StarRocksは、マテリアライズドビューとベーステーブルデータのデータの一貫性を確認します。デフォルトでは、マテリアライズドビューのデータが最新である場合にのみクエリが書き換えられます。この問題を解決するには、次のことができます。
 
   - マテリアライズドビューに`PROPERTIES('query_rewrite_consistency'='LOOSE')`を追加して、一貫性チェックを無効にします。
-  - `PROPERTIES('mv_rewrite_staleness_second'='5')`を追加して、一定のデータ不整合を許容します。ベーステーブルのデータが変更されているかどうかに関係なく、最後のリフレッシュがこの時間間隔の前であれば、クエリは書き換えられます。
+  - `PROPERTIES('mv_rewrite_staleness_second'='5')`を追加して、一定のデータ不整合を許容します。マテリアライズドビューの最近の「完全な」リフレッシュが確認された時刻がこの時間間隔内であれば、ベーステーブルのデータが変更されているかどうかに関係なく、クエリは書き換えられます。一部のパーティションのみを対象とするリフレッシュは、この鮮度の基準を更新しません。
 
 - **マテリアライズドビューのクエリステートメントに出力列が不足しているか確認する。**
 
@@ -446,16 +447,12 @@ SELECT dt, c_city, sum(tax) FROM tbl GROUP BY dt, c_city;
 #### 非同期マテリアライズドビューのリソースを制御するリソースグループはどれですか？その設定を調整するにはどうすればよいですか？
 
 非同期マテリアライズドビューを作成する際に `resource_group` プロパティが指定されていない場合、システムはそれをデフォルトのリソースグループ `default_mv_wg` に割り当てます。そのデフォルト設定は次のとおりです：
-- `cpu_core_limit`: 1
+- `cpu_weight_percent`: 1
 - `mem_limit`: 80%
 - `concurrency_limit`: 0
 - `spill_mem_limit_threshold`: 80%
 
-次のBE設定項目を通じて、CPU制限、メモリ制限、同時実行制限、スピルしきい値を調整できます：
-- `default_mv_resource_group_cpu_limit`
-- `default_mv_resource_group_memory_limit`
-- `default_mv_resource_group_concurrency_limit`
-- `default_mv_resource_group_spill_mem_limit_threshold`
+`default_mv_wg` は FE に保存され、永続化されます。[ALTER RESOURCE GROUP](../../sql-reference/sql-statements/cluster-management/resource_group/ALTER_RESOURCE_GROUP.md) を使用して、CPU制限、メモリ制限、同時実行制限、スピルしきい値を調整できます。例：`ALTER RESOURCE GROUP default_mv_wg WITH ('mem_limit' = '60%')`。BE設定項目 `default_mv_resource_group_cpu_limit`、`default_mv_resource_group_memory_limit`、`default_mv_resource_group_concurrency_limit`、`default_mv_resource_group_spill_mem_limit_threshold` は非推奨であり、`default_mv_wg` には影響しなくなりました。
 
 `resource_group` プロパティを指定することで、マテリアライズドビューに専用のリソースグループを割り当てることもできます。
 

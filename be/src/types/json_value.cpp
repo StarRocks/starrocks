@@ -21,6 +21,7 @@
 
 #include "base/status.h"
 #include "base/statusor.h"
+#include "common/config_json_flat_fwd.h"
 #include "types/json_value_converter.h"
 #include "velocypack/ValueType.h"
 #include "velocypack/vpack.h"
@@ -88,6 +89,19 @@ static bool is_json_start_char(char ch) {
     return ch == '{' || ch == '[' || ch == '"';
 }
 
+int JsonValue::max_nesting_depth() {
+    // A positive config value sets the cap; 0 or below falls back to the built-in default so the
+    // guard cannot be silently disabled (e.g. before config::init() runs the value is still 0).
+    int cap = config::json_max_parse_nesting_depth;
+    return cap > 0 ? cap : 1024;
+}
+
+vpack::Options JsonValue::parse_options_from_config() {
+    vpack::Options options = vpack::Options::Defaults;
+    options.maxNestingDepth = static_cast<unsigned int>(max_nesting_depth());
+    return options;
+}
+
 StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
     if (src.size > kJSONLengthLimit) {
         return Status::NotSupported("JSON string exceed maximum length 16MB");
@@ -100,8 +114,15 @@ StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
         auto end = src.get_data() + src.get_size();
         auto iter = std::find_if_not(src.get_data(), end, std::iswspace);
         if (iter != end && is_json_start_char(*iter)) {
-            // Parse it as an object or array
-            auto b = vpack::Parser::fromJson(src.get_data(), src.get_size());
+            // Parse it as an object or array. Invalid JSON is common in dirty data, so use the parser's
+            // error-code API: reporting it by throwing costs a full C++ unwind per row and serializes all
+            // threads on the unwinder lock.
+            vpack::Exception error(vpack::Exception::InternalError);
+            vpack::Options options = parse_options_from_config();
+            auto b = vpack::Parser::tryFromJson(src.get_data(), src.get_size(), &error, &options);
+            if (b == nullptr) {
+                return fromVPackException(error);
+            }
             JsonValue res;
             res.assign(*b);
             return res;
@@ -228,6 +249,15 @@ static inline int cmpInt64(int64_t left, int64_t right) {
     return 0;
 }
 
+static inline int cmpUInt64(uint64_t left, uint64_t right) {
+    if (left < right) {
+        return -1;
+    } else if (left > right) {
+        return 1;
+    }
+    return 0;
+}
+
 static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
     if (left.isObject() && right.isObject()) {
         for (auto it : vpack::ObjectIterator(left)) {
@@ -264,8 +294,9 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
                 return left.getBool() - right.getBool();
             case vpack::ValueType::SmallInt:
             case vpack::ValueType::Int:
+                return cmpInt64(left.getIntUnchecked(), right.getIntUnchecked());
             case vpack::ValueType::UInt:
-                return cmpInt64(left.getInt(), right.getInt());
+                return cmpUInt64(left.getUIntUnchecked(), right.getUIntUnchecked());
             case vpack::ValueType::Double: {
                 return cmpDouble(left.getDouble(), right.getDouble());
             }
@@ -275,10 +306,9 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
                 // other types like illegal, none, min, max are considered equal
                 return 0;
             }
-        } else if (left.isInteger() && right.isInteger()) {
-            return cmpInt64(left.getInt(), right.getInt());
         } else {
-            return cmpDouble(left.getNumber<double>(), right.getNumber<double>());
+            // mixed number encodings (Int vs UInt, integer vs Double)
+            return cmpDouble(left.getNumericValue<double>(), right.getNumericValue<double>());
         }
     } else {
         if (left.type() == vpack::ValueType::MinKey) {

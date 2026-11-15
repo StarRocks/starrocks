@@ -1,0 +1,36 @@
+-- name: test_group_by_cube_compressed_key
+-- A grouping set that drops a key substitutes a constant NULL for it, and
+-- Aggregator::_evaluate_group_by_exprs leaves such an only-null constant packed, on the stated
+-- grounds that "all hash table could handle only null". The compressed-key hash table did not: the
+-- column matched none of CompressSerializer's overloads, fell through to its generic one, and took
+-- the BE down on CHECK(false) << "unreachable". No session variable is involved, and CHECK is not
+-- DCHECK, so a release build aborts too.
+CREATE TABLE t0 (
+    c0 BIGINT NULL,
+    c1 BIGINT NULL
+)
+DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1, 4096));
+INSERT INTO t0 SELECT * FROM t0;
+
+-- The compressed key is only chosen when the optimizer has a min/max range for EVERY group-by key,
+-- and those ranges are collected asynchronously -- the first query on a column merely schedules the
+-- collection. Without this wait the case reproduces only when the cache happens to be warm.
+-- c0 holds 1..4096 and c1 0..4095, so both are far inside their raw 64 bits and get compressed.
+function: wait_min_max_stat_ready('c0', 't0')
+function: wait_min_max_stat_ready('c1', 't0')
+
+-- The statement that aborted the BE.
+SELECT DISTINCT c0 FROM t0 GROUP BY CUBE (c0) ORDER BY 1 ASC LIMIT 5;
+
+-- The row CUBE adds has to be there and has to be right, not merely not crash: 4096 groups plus
+-- the grand total, whose count covers both inserts.
+SELECT count(*) FROM (SELECT c0 FROM t0 GROUP BY CUBE (c0)) s;
+SELECT c0, count(*) FROM t0 GROUP BY ROLLUP (c0) ORDER BY 1 ASC LIMIT 3;
+SELECT c0, count(*) FROM t0 GROUP BY GROUPING SETS ((c0), ()) ORDER BY 1 ASC LIMIT 3;
+
+-- Two compressed keys, so the only-null one is written beside a neighbour whose bits it must not
+-- disturb.
+SELECT c0, c1, count(*) FROM t0 GROUP BY CUBE (c0, c1) ORDER BY 1 ASC, 2 ASC LIMIT 5;

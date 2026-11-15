@@ -30,6 +30,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "rapidjson/document.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -51,12 +52,9 @@ rapidjson::Document parse(const std::string& json) {
 
 // 3-column chunk (int64, varchar, int64) with one row.
 std::shared_ptr<Chunk> build_one_row_chunk() {
-    auto id_col = Int64Column::create();
-    id_col->append(10001);
-    auto name_col = BinaryColumn::create();
-    name_col->append("Alice");
-    auto amount_col = Int64Column::create();
-    amount_col->append(99);
+    auto id_col = ColumnTestHelper::build_column<int64_t>({10001});
+    auto name_col = ColumnTestHelper::build_column<Slice>({"Alice"});
+    auto amount_col = ColumnTestHelper::build_column<int64_t>({99});
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(std::move(id_col), 1);
@@ -206,8 +204,7 @@ TEST(RejectedRecordWriterCoreTest, BuildJsonFromRawWrapsUnderReservedKey) {
 }
 
 TEST(RejectedRecordWriterCoreTest, BuildJsonFromChunkEscapesJsonSpecialCharacters) {
-    auto name_col = BinaryColumn::create();
-    name_col->append("She said \"hi\"\\n");
+    auto name_col = ColumnTestHelper::build_column<Slice>({"She said \"hi\"\\n"});
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(std::move(name_col), 1);
 

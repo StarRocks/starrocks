@@ -128,6 +128,10 @@ AggregateFunctionPtr AggregateFactory::MakeDenseRankWindowFunction() {
     return new DenseRankWindowFunction();
 }
 
+AggregateFunctionPtr AggregateFactory::MakeCoverageWindowFunction() {
+    return new CoverageWindowFunction();
+}
+
 AggregateFunctionPtr AggregateFactory::MakeRankWindowFunction() {
     return new RankWindowFunction();
 }
@@ -152,13 +156,6 @@ static AggregateFunctionPtr get_function(const std::string& name, LogicalType ar
                                          bool is_window_function, bool is_null, TFunctionBinaryType::type binary_type,
                                          int func_version, bool is_arrow_input = false) {
     std::string func_name = name;
-    if (func_version > 1) {
-        if (name == "multi_distinct_sum") {
-            func_name = "multi_distinct_sum2";
-        } else if (name == "multi_distinct_count") {
-            func_name = "multi_distinct_count2";
-        }
-    }
 
     auto is_decimal_type = [](LogicalType lt) {
         return lt == TYPE_DECIMAL32 || lt == TYPE_DECIMAL64 || lt == TYPE_DECIMAL128 || lt == TYPE_DECIMAL256;
@@ -240,7 +237,7 @@ AggregateFunctionPtr get_aggregate_function(const std::string& agg_func_name, co
 
         // hack for accepting various arguments
         if (agg_func_name == "exchange_bytes" || agg_func_name == "exchange_speed") {
-            arg_type = TypeDescriptor(TYPE_BIGINT);
+            arg_type = TYPE_BIGINT_DESC;
         }
 
         if (agg_func_name == "array_union_agg" || agg_func_name == "array_unique_agg") {

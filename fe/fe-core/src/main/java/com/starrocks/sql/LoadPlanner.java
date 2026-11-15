@@ -32,6 +32,8 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
@@ -293,6 +295,27 @@ public class LoadPlanner {
         this.jsonOptions = options;
     }
 
+    /**
+     * {@link #plan()} under the destination table's READ lock, for a caller that holds no table or database lock of its
+     * own: the transaction stream load (StreamLoadTask).
+     *
+     * <p>The load's slots (the tuple descriptor) and the sink's schema param -- the index columns and the schema id the
+     * BE writes with, see OlapTableSink#complete -- must come from one version of the table schema. A fast schema
+     * change edits the catalog in place under the table WRITE lock; one that commits between the two reads gives the
+     * BE a write schema with a column no slot fills, which the memtable of a table that is not a primary key table
+     * keeps empty and then reads at flush. The other callers already plan under this lock or the database's; plan()
+     * does not take it itself because a file load's scan node set-up may reach remote storage.
+     */
+    public void planUnderTableLock() throws StarRocksException {
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(dbId, destTable.getId(), LockType.READ);
+        try {
+            plan();
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(dbId, destTable.getId(), LockType.READ);
+        }
+    }
+
     public void plan() throws StarRocksException {
         // 1. Generate tuple descriptor
         OlapTable olapDestTable = (OlapTable) destTable;
@@ -528,6 +551,11 @@ public class LoadPlanner {
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
                 ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);
+                ((OlapTableSink) dataSink).setEstimatedWriteBytes(totalSourceFileBytes());
+                // The knobs as the session that SUBMITTED this load had them, not as whatever session
+                // plans it now -- see MultiNodeWriteSettings.fromPersisted.
+                ((OlapTableSink) dataSink).setMultiNodeWriteSettings(
+                        OlapTableSink.MultiNodeWriteSettings.fromPersisted(sessionVariables));
                 ((OlapTableSink) dataSink).complete(mergeConditionStr);
             }
             // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
@@ -717,4 +745,31 @@ public class LoadPlanner {
     public Map<String, String> getSessionVariables() {
         return sessionVariables;
     }
+
+    // Bytes of source this load will read, summed from the file list the job already resolved.
+    //
+    // Unlike the INSERT path this is measured, not estimated -- but it is measured on the SOURCE, so a
+    // compressed or columnar input understates what actually gets written. That direction is the safe
+    // one here: it can only narrow the write set, never widen it past the node bound.
+    //
+    // Returns -1 when there is no file list (a streaming ingest reaches this planner too), which the
+    // sink reads as "no estimate" and leaves the node count to the bound alone.
+    private long totalSourceFileBytes() {
+        if (fileStatusesList == null) {
+            return -1;
+        }
+        long total = 0;
+        for (List<TBrokerFileStatus> group : fileStatusesList) {
+            if (group == null) {
+                continue;
+            }
+            for (TBrokerFileStatus file : group) {
+                if (file != null && file.size > 0) {
+                    total += file.size;
+                }
+            }
+        }
+        return total > 0 ? total : -1;
+    }
+
 }

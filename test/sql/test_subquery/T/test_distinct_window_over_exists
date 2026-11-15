@@ -1,0 +1,48 @@
+-- name: test_distinct_window_over_exists
+-- A DISTINCT aggregate over a window, filtered by an uncorrelated EXISTS.
+--
+-- DistinctAggregationOverWindowRule duplicates the subtree through OptExpressionDuplicator; the
+-- uncorrelated EXISTS becomes a join whose child carries a LIMIT, so the duplicator walks into a
+-- LogicalLimit. visitLogicalLimit was a copy of visitLogicalUnion and cast the operator to
+-- LogicalSetOperator, which can never succeed:
+--
+--   class ...operator.logical.LogicalLimitOperator cannot be cast to
+--   class ...operator.logical.LogicalSetOperator
+--
+-- No statistics are needed here -- unlike the correlated-ORDER-BY case, this one fires on empty
+-- tables.
+
+CREATE TABLE dw_t1 (
+  a int,
+  b int
+) ENGINE=OLAP
+DUPLICATE KEY(a)
+DISTRIBUTED BY HASH(a) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+
+CREATE TABLE dw_t2 (
+  c int
+) ENGINE=OLAP
+DUPLICATE KEY(c)
+DISTRIBUTED BY HASH(c) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+
+INSERT INTO dw_t1 VALUES (1, 10), (2, 20), (3, 30);
+INSERT INTO dw_t2 VALUES (1), (2);
+
+-- The defect: DISTINCT aggregate + window + uncorrelated EXISTS.
+SELECT count(DISTINCT a) OVER () FROM dw_t1 WHERE EXISTS (SELECT 1 FROM dw_t2);
+
+-- Same with a PARTITION BY. This one needs the ORDER BY: it is the only statement here whose rows
+-- are distinguishable, and the harness compares multi-row results as an exact ordered string.
+SELECT sum(DISTINCT b) OVER (PARTITION BY a) FROM dw_t1 WHERE EXISTS (SELECT 1 FROM dw_t2) ORDER BY 1;
+
+-- An explicit LIMIT reaches the repaired visitor directly; that method had never once executed
+-- successfully before the fix.
+SELECT count(DISTINCT a) OVER () FROM dw_t1 WHERE EXISTS (SELECT 1 FROM dw_t2) LIMIT 5;
+
+-- Control: a correlated EXISTS takes another path and was never affected.
+SELECT count(DISTINCT a) OVER () FROM dw_t1 WHERE EXISTS (SELECT c FROM dw_t2 WHERE dw_t2.c = dw_t1.a);
+
+-- Control: no EXISTS, so no limit inside the duplicated subtree.
+SELECT count(DISTINCT a) OVER () FROM dw_t1;

@@ -72,4 +72,11 @@ public class EnforceUniqueRowLocatorNode extends PlanNode {
     public boolean canUseRuntimeAdaptiveDop() {
         return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }
+
+    @Override
+    public boolean canEvaluateRuntimeFilter() {
+        // Decomposes into an enforce-unique-row-locator operator, which never calls
+        // Operator::eval_runtime_bloom_filters(): a filter parked here is silently never applied.
+        return false;
+    }
 }

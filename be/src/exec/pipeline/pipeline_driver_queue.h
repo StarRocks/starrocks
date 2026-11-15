@@ -51,7 +51,18 @@ public:
         _accu_consume_time.fetch_add(driver->driver_acct().get_last_time_spent());
     }
 
-    double accu_time_after_divisor() { return _accu_consume_time.load() / factor_for_normal; }
+    double accu_time_after_divisor() const { return _accu_consume_time.load() / factor_for_normal; }
+
+    // Raise the accumulated time, so that accu_time_after_divisor() is not less than min_accu_time_after_divisor.
+    void catch_up_accu_time(double min_accu_time_after_divisor);
+    // Subtract a common normalized origin; levels behind the origin restart at zero.
+    void rebase_accu_time(double origin);
+
+    void update_wait_time(int64_t wait_time_ns) {
+        _wait_time_ns.fetch_add(wait_time_ns, std::memory_order_relaxed);
+        _schedule_count.fetch_add(1, std::memory_order_relaxed);
+    }
+    DriverQueueLevelStats stats() const;
 
     void put(const DriverRawPtr driver);
     void cancel(const DriverRawPtr driver);
@@ -71,6 +82,8 @@ public:
 
 private:
     std::atomic<int64_t> _accu_consume_time = 0;
+    std::atomic<int64_t> _wait_time_ns = 0;
+    std::atomic<int64_t> _schedule_count = 0;
     DriverQueueMetrics* _metrics;
 };
 
@@ -96,6 +109,8 @@ public:
 
     bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const override { return false; }
 
+    std::vector<DriverQueueLevelStats> level_stats() const override;
+
     static double ratio_of_adjacent_queue();
     static constexpr size_t QUEUE_SIZE = 8;
 
@@ -103,6 +118,9 @@ private:
     // When the driver at the i-th level costs _level_time_slices[i],
     // it will move to (i+1)-th level.
     int _compute_driver_level(const DriverRawPtr driver) const;
+    // Should be guarded by _global_mutex.
+    void _put_back_unlocked(const DriverRawPtr driver, int level, int64_t now_ns);
+    void _rebase_accu_time_unlocked();
 
 private:
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,
@@ -116,6 +134,14 @@ private:
     int64_t _level_time_slices[QUEUE_SIZE];
 
     size_t _num_drivers = 0;
+
+    // The largest accu_time_after_divisor() of the levels picked since the last common rebase. No
+    // non-empty level is below it, because a level turning from empty to non-empty catches up to it.
+    // Without the catch-up, a level that has been empty for a long time, such as a level of heavy queries,
+    // would keep its small accumulated time and be picked before every other level until it caught up,
+    // which could starve level 0 for seconds.
+    // Rebase all levels and this watermark together before a catch-up target approaches the int64 limit.
+    double _min_accu_time_after_divisor = 0;
 
     mutable std::mutex _global_mutex;
     std::condition_variable _cv;

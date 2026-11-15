@@ -153,7 +153,9 @@ LookUpOperator::LookUpOperator(OperatorFactory* factory, int32_t id, int32_t pla
 }
 
 Status LookUpOperator::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(Operator::prepare(state));
+    // SourceOperator::prepare registers the driver observer into _observable only when the event scheduler is on,
+    // so the inherited defer_notify() is a no-op under the poll scheduler, where observer() is null.
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
     _query_ctx = state->query_ctx()->get_shared_ptr();
     _init_counter(state);
     _dispatcher->attach_query_ctx(state->query_ctx());

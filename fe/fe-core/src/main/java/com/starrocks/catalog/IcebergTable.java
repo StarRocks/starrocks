@@ -31,6 +31,7 @@ import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
+import com.starrocks.connector.iceberg.procedure.AddEqualityDeleteFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.AddFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.CherryPickSnapshotProcedure;
 import com.starrocks.connector.iceberg.procedure.ExpireSnapshotsProcedure;
@@ -40,6 +41,8 @@ import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RewriteDataFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RewriteManifestsProcedure;
 import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
+import com.starrocks.connector.iceberg.procedure.RollbackToTimestampProcedure;
+import com.starrocks.connector.iceberg.procedure.SetCurrentSnapshotProcedure;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.expression.ExprToThrift;
@@ -60,6 +63,7 @@ import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TCompressedPartitionMap;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.TIcebergPartitionInfo;
+import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TPartitionMap;
 import com.starrocks.thrift.TSortOrder;
@@ -98,6 +102,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.getBucketSourceIdWithBucketNum;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 
@@ -107,6 +112,8 @@ public class IcebergTable extends Table {
     private static final String PARQUET_FORMAT = "parquet";
     public static final String DATA_SEQUENCE_NUMBER = "$data_sequence_number";
     public static final String SPEC_ID = "$spec_id";
+    // spec id plus partition values of the file a row comes from; NULL for a file of an unpartitioned spec
+    public static final String PARTITION_KEY = "$partition_key";
     public static final String EQUALITY_DELETE_TABLE_COMMENT = "equality_delete_table_comment";
     public static final String ROW_ID = "_row_id";
     public static final String LAST_UPDATED_SEQUENCE_NUMBER = "_last_updated_sequence_number";
@@ -262,12 +269,15 @@ public class IcebergTable extends Table {
             fieldIdToIndex.put(fields.get(i).fieldId(), i);
         }
 
-        // Keep the returned indexes aligned with sortOrder.fields() order.
+        // Keep the returned indexes aligned with sortOrder.fields() order: callers pair indexes.get(i) with
+        // sortOrder.fields().get(i). A sort field whose source is not a top-level column (e.g. a struct subfield)
+        // ends the list, since skipping it would shift every later direction and null order onto the wrong column.
         for (SortField sortField : sortOrder.fields()) {
             Integer idx = fieldIdToIndex.get(sortField.sourceId());
-            if (idx != null) {
-                indexes.add(idx);
+            if (idx == null) {
+                break;
             }
+            indexes.add(idx);
         }
 
         return indexes;
@@ -403,7 +413,11 @@ public class IcebergTable extends Table {
             if (!bucketPropertySupported(column.getType())) {
                 continue;
             }
-            bucketProperties.add(new BucketProperty(TBucketFunction.MURMUR3_X86_32, bucket.second, column));
+            // Iceberg buckets a uuid by its 16 bytes, but StarRocks reads it as a 36-char string, so the BE
+            // must parse the string back to bytes before hashing when it shuffles the other side.
+            TBucketFunction func = schema.findField(bucket.first).type() instanceof Types.UUIDType
+                    ? TBucketFunction.MURMUR3_X86_32_UUID : TBucketFunction.MURMUR3_X86_32;
+            bucketProperties.add(new BucketProperty(func, bucket.second, column));
         }
 
         return bucketProperties;
@@ -447,7 +461,8 @@ public class IcebergTable extends Table {
     }
 
     // Immutable read view a time-travel query pins on its per-query IcebergTable copy: the targeted
-    // snapshot's schema and the partition specs its manifests reference, keyed by spec id.
+    // snapshot's schema and the partition specs its manifests reference, keyed by spec id. A branch read
+    // pins the current schema and no specs, so it keeps the current spec.
     private static class SnapshotReadView {
         private final Schema schema;
         private final Map<Integer, PartitionSpec> specsById;
@@ -472,6 +487,42 @@ public class IcebergTable extends Table {
         return table;
     }
 
+    // Pin the source table's read view on a table the planner derives from it over the same native table
+    // (the equality-delete rewrite builds such tables), so a time-travel read keeps the snapshot schema in
+    // the derived scans and their descriptors. Only for a freshly built, not yet shared table.
+    public void inheritReadView(IcebergTable source) {
+        this.readView = source.readView;
+    }
+
+    /**
+     * A private copy of a table published in an internal database (ENGINE=ICEBERG from a resource), for one
+     * query to plan and run on. The published object is shared by every query and read without the meta lock,
+     * and a query writes to the table it plans on: it loads the native table lazily, installs its own metrics
+     * reporter, fills the partition caches and clears the native table when it ends. On the copy those stay
+     * with the query. The native table is handed over as it is -- possibly still unloaded, in which case the
+     * copy loads it for itself -- and the related MVs and constraints are shared, since the planner only reads
+     * them.
+     */
+    public IcebergTable copyForQuery() {
+        IcebergTable table = new IcebergTable(id, name, catalogName, resourceName, catalogDBName, catalogTableName,
+                comment, fullSchema, nativeTable, icebergProperties);
+        table.createTime = createTime;
+        table.relatedMaterializedViews = relatedMaterializedViews;
+        table.setUniqueConstraints(getUniqueConstraints());
+        table.setForeignKeyConstraints(getForeignKeyConstraints());
+        return table;
+    }
+
+    /**
+     * A resource-mapping table is one object shared by every query, and it is planned without the meta lock
+     * ({@link #isMetaLockTarget}), so a query plans on a private copy ({@link #copyForQuery}). A catalog table is
+     * resolved per query already.
+     */
+    @Override
+    public Table forQueryPlanning() {
+        return isResourceMappingCatalog(getCatalogName()) ? copyForQuery() : this;
+    }
+
     // Read-spec partition fields whose source column exists in the read schema. Time travel uses the
     // targeted snapshot's spec (see getReadSpec), so partition fields added by later spec evolution
     // are not exposed; ordinary reads keep the current spec.
@@ -479,6 +530,7 @@ public class IcebergTable extends Table {
         Schema schema = getReadSchema();
         return getReadSpec().fields().stream()
                 .filter(field -> schema.findColumnName(field.sourceId()) != null)
+                .filter(IcebergApiConverter::isKnownPartitionTransform)
                 .collect(Collectors.toList());
     }
 
@@ -526,7 +578,7 @@ public class IcebergTable extends Table {
             // missing columns in historical files. write-default is irrelevant for reads.
             Types.NestedField field = iceSchema.findField(column.getName());
             if (field != null) {
-                String initialDefault = IcebergApiConverter.toInitialDefaultValueString(field);
+                String initialDefault = IcebergApiConverter.toReadInitialDefaultValueString(field);
                 if (initialDefault != null) {
                     tc.setDefault_value(initialDefault);
                 } else {
@@ -539,7 +591,9 @@ public class IcebergTable extends Table {
         }
         tIcebergTable.setColumns(tColumns);
 
-        tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(iceSchema));
+        TIcebergSchema tIcebergSchema = IcebergApiConverter.getTIcebergSchema(iceSchema);
+        IcebergApiConverter.setMappedNames(tIcebergSchema, getNativeTable().properties());
+        tIcebergTable.setIceberg_schema(tIcebergSchema);
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
         if (comment == null || !comment.equals(EQUALITY_DELETE_TABLE_COMMENT)) {
             // Resolve partition source names against the read schema so the generated
@@ -680,6 +734,19 @@ public class IcebergTable extends Table {
         return tTableDescriptor;
     }
 
+    /**
+     * Not a lock target, even when it lives in an internal database (ENGINE=ICEBERG from a resource). The data
+     * is in the Iceberg catalog, and ALTER TABLE rejects the table, so its definition is never rewritten. What
+     * a query does write -- the native table it loads, the metrics reporter, the partition caches, the
+     * clearMetadata at the end -- goes to the per-query copy the analyzer swaps in ({@link #copyForQuery}),
+     * never to the published object. Planning, which reaches the catalog for manifests and statistics, runs
+     * without the lock.
+     */
+    @Override
+    public boolean isMetaLockTarget() {
+        return false;
+    }
+
     @Override
     public boolean isSupported() {
         return true;
@@ -737,9 +804,12 @@ public class IcebergTable extends Table {
             case EXPIRE_SNAPSHOTS -> ExpireSnapshotsProcedure.getInstance();
             case REMOVE_ORPHAN_FILES -> RemoveOrphanFilesProcedure.getInstance();
             case ROLLBACK_TO_SNAPSHOT -> RollbackToSnapshotProcedure.getInstance();
+            case ROLLBACK_TO_TIMESTAMP -> RollbackToTimestampProcedure.getInstance();
+            case SET_CURRENT_SNAPSHOT -> SetCurrentSnapshotProcedure.getInstance();
             case REWRITE_DATA_FILES -> RewriteDataFilesProcedure.getInstance();
             case REWRITE_MANIFESTS -> RewriteManifestsProcedure.getInstance();
             case ADD_FILES -> AddFilesProcedure.getInstance();
+            case ADD_EQUALITY_DELETE_FILES -> AddEqualityDeleteFilesProcedure.getInstance();
             default -> throw new StarRocksConnectorException("Unsupported table operation %s", op);
         };
     }

@@ -20,6 +20,7 @@
 
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "common/global_types.h"
 #include "common/memory/mem_hook_allocator.h"
 #include "common/runtime_profile.h"
 #include "exec/pipeline/context_with_dependency.h"
@@ -37,6 +38,19 @@ struct FunctionTypes {
     TypeDescriptor result_type;
     bool has_nullable_child;
     bool is_nullable; // window function result whether is nullable
+    // Cached from AggregateFunction::is_result_non_nullable(): the aggregate declares it never emits a NULL
+    // (e.g. bitmap_union_count/count), so build its window result column non-null.
+    bool is_result_non_nullable = false;
+
+    // Nullability of the materialized window result column. A window frame can be empty, so the result is
+    // nullable when EITHER the input or the declared result is nullable -- unless the aggregate declares it
+    // never returns NULL, in which case the column is always non-nullable.
+    bool is_result_nullable() const {
+        if (is_result_non_nullable) {
+            return false;
+        }
+        return has_nullable_child || is_nullable;
+    }
 };
 
 class Analytor;
@@ -117,8 +131,7 @@ class Analytor final : public pipeline::ContextWithDependency {
 
 public:
     ~Analytor() override;
-    Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc,
-             bool use_hash_based_partition);
+    Analytor(const TPlanNode& tnode, const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition);
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     Status open(RuntimeState* state);
@@ -226,6 +239,9 @@ private:
     // buffered partition [partition_start, partition_end). Positions are local to the analytor's buffered columns.
     void _update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start, int64_t frame_end);
     void _update_window_batch_removable_cumulatively();
+    bool _are_window_results_ready(int64_t partition_start, int64_t available_end, int64_t frame_start,
+                                   int64_t frame_end, int64_t& ready_end) const;
+    bool _has_window_result_ready_check() const { return !_window_result_ready_function_index.empty(); }
 
     Status _output_result_chunk(ChunkPtr* chunk);
 
@@ -281,7 +297,6 @@ private:
     bool _is_closed = false;
     // TPlanNode is only valid in the PREPARE and INIT phase
     const TPlanNode& _tnode;
-    const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;
     const bool _use_hash_based_partition;
 
@@ -317,6 +332,10 @@ private:
     // The max align size for all window aggregate state
     size_t _max_agg_state_align_size = 1;
     std::vector<bool> _is_lead_lag_functions;
+    // Indices of the functions that reported `needs_window_result_ready_check()`, i.e. those whose
+    // result can depend on rows beyond the physical frame (currently `lead ... IGNORE NULLS`).
+    // Empty for every other query, so the per-row readiness check is skipped entirely.
+    std::vector<size_t> _window_result_ready_function_index;
     std::vector<FunctionContext*> _agg_fn_ctxs;
     std::vector<const AggregateFunction*> _agg_functions;
     std::vector<ManagedFunctionStatesPtr<Analytor>> _managed_fn_states;
@@ -329,11 +348,6 @@ private:
 
     std::vector<ExprContext*> _order_ctxs;
     MutableColumns _order_columns;
-
-    // Tuple id of the buffered tuple (identical to the input child tuple, which is
-    // assumed to come from a single SortNode). NULL if both partition_exprs and
-    // order_by_exprs are empty.
-    TTupleId _buffered_tuple_id = 0;
 
     bool _has_udaf = false;
     // There are many reasons requiring the materializing processing.
@@ -427,11 +441,10 @@ class AnalytorFactory;
 using AnalytorFactoryPtr = std::shared_ptr<AnalytorFactory>;
 class AnalytorFactory {
 public:
-    AnalytorFactory(size_t dop, const TPlanNode& tnode, const RowDescriptor& child_row_desc,
-                    const TupleDescriptor* result_tuple_desc, const bool use_hash_based_partition)
+    AnalytorFactory(size_t dop, const TPlanNode& tnode, const TupleDescriptor* result_tuple_desc,
+                    const bool use_hash_based_partition)
             : _analytors(dop),
               _tnode(tnode),
-              _child_row_desc(child_row_desc),
               _result_tuple_desc(result_tuple_desc),
               _use_hash_based_partition(use_hash_based_partition) {}
     AnalytorPtr create(int i);
@@ -439,7 +452,6 @@ public:
 private:
     Analytors _analytors;
     const TPlanNode& _tnode;
-    const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;
     const bool _use_hash_based_partition;
 };

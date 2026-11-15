@@ -89,9 +89,25 @@ public abstract class SplitAggregateRule extends TransformationRule {
     // We should also pass the const args to merge phase aggregator for performance.
     // For example, for intersect_count(user_id, dt, '20191111'),
     // We should pass '20191111' to update and merge phase aggregator in BE both.
+    //
+    // The aggregated value (argument 0) is skipped: in the merge phase it is already replaced by
+    // the intermediate column, so appending its constant again shifts every following const arg
+    // one slot to the right. BE reads these const args positionally -- approx_top_k reads arg 1/2
+    // as k/counter_num, histogram reads 1/2/3, group_concat reads 1 as the separator -- so
+    //     approx_top_k(cast(1 as tinyint), 3, 10)
+    // would otherwise plan as approx_top_k(<intermediate>, 1, 3, 10) and make BE read the TINYINT
+    // value column as k, aborting on the type mismatch.
+    //
+    // window_funnel is the exception: its argument 0 is the window_size PARAMETER, not the
+    // aggregated value, and BE reads it back in the merge phase from slot 1 precisely because it
+    // is re-appended here (see the layout comment in be/src/exprs/agg/window_funnel.h).
     protected static void appendConstantColumns(List<ScalarOperator> arguments, CallOperator aggregation) {
-        if (aggregation.getChildren().size() > 1) {
-            aggregation.getChildren().stream().filter(ScalarOperator::isConstant).forEach(arguments::add);
+        List<ScalarOperator> children = aggregation.getChildren();
+        int from = FunctionSet.WINDOW_FUNNEL.equalsIgnoreCase(aggregation.getFnName()) ? 0 : 1;
+        for (int i = from; i < children.size(); i++) {
+            if (children.get(i).isConstant()) {
+                arguments.add(children.get(i));
+            }
         }
     }
 

@@ -32,14 +32,17 @@ import com.starrocks.common.util.HashRing;
 import com.starrocks.common.util.RendezvousHashRing;
 import com.starrocks.planner.DeltaLakeScanNode;
 import com.starrocks.planner.FileTableScanNode;
+import com.starrocks.planner.FlussScanNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergMetadataScanNode;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.LanceScanNode;
 import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.CandidateWorkerProvider;
+import com.starrocks.qe.scheduler.LanceWorkerSelector;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
@@ -132,6 +135,14 @@ public class HDFSBackendSelector implements BackendSelector {
                 PaimonScanNode node = (PaimonScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
                 basePath = node.getPaimonTable().getTableLocation();
+            } else if (scanNode instanceof LanceScanNode) {
+                LanceScanNode node = (LanceScanNode) scanNode;
+                predicates = node.getScanNodePredicates();
+                basePath = node.getLanceTable().getTableLocation();
+            } else if (scanNode instanceof FlussScanNode) {
+                FlussScanNode node = (FlussScanNode) scanNode;
+                predicates = node.getScanNodePredicates();
+                basePath = node.getFlussTable().getTableLocation();
             } else if (scanNode instanceof OdpsScanNode) {
                 OdpsScanNode node = (OdpsScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
@@ -291,6 +302,12 @@ public class HDFSBackendSelector implements BackendSelector {
                 end.setEmpty(true);
                 end.setHas_more(hasMore);
                 for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
+                    // Eager Lance scans need terminal markers only where this scan has data.
+                    if (scanNode instanceof LanceScanNode &&
+                            !assignment.getOrDefault(computeNode.getId(), Collections.emptyMap())
+                                    .containsKey(scanNode.getId().asInt())) {
+                        continue;
+                    }
                     assignment.put(computeNode.getId(), scanNode.getId().asInt(), end);
                 }
             }
@@ -339,6 +356,17 @@ public class HDFSBackendSelector implements BackendSelector {
             assignedBytesPerComputeNode.put(computeNode, 0L);
             assignedScanRangesPerComputeNode.put(computeNode, 0L);
             reBalancedBytesPerComputeNode.put(computeNode, 0L);
+        }
+
+        if (scanNode instanceof LanceScanNode) {
+            // Whole-dataset Lance scans have no replica locality or native file-cache affinity.
+            // Rotate across the provider's connector workers, including its compute-node preference.
+            for (TScanRangeLocations scanRangeLocations : locations) {
+                ComputeNode worker = LanceWorkerSelector.selectWorker(workerProvider);
+                recordScanRangeAssignment(worker, null, List.of(worker), scanRangeLocations);
+            }
+            recordScanRangeStatistic();
+            return;
         }
 
         // schedule scan ranges to co-located backends.

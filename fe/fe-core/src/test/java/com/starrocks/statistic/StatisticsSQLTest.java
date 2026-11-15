@@ -23,7 +23,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -225,9 +224,16 @@ public class StatisticsSQLTest extends PlanTestBase {
                 db, t0, Lists.newArrayList("b.a", "b.c", "d.c.a"),
                 Lists.newArrayList(IntegerType.INT, IntegerType.INT, IntegerType.INT), StatsConstants.ScheduleType.ONCE,
                 Maps.newHashMap());
+        // The job above carries no analyze properties, so the params the traits read from are built
+        // explicitly here - HistogramCollectParams parses all four eagerly.
+        NativeHistogramTraits nativeTraits = new NativeHistogramTraits(histogramStatisticsCollectJob,
+                new HistogramCollectParams(ImmutableMap.of(
+                        StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.1",
+                        StatsConstants.HISTOGRAM_BUCKET_NUM, "10",
+                        StatsConstants.HISTOGRAM_MCV_SIZE, "3",
+                        StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, "none")));
         for (String col : columnNames) {
-            String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",
-                    db, t0, 3L, col, 0.1);
+            String sql = nativeTraits.buildMcvQuery(col);
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
             assertCContains(plan, "0:OlapScanNode\n" +
@@ -235,9 +241,8 @@ public class StatisticsSQLTest extends PlanTestBase {
         }
 
         for (String col : columnNames) {
-            String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                    db, t0, 0.1, 10L, ImmutableMap.of("d.c.a", "100"), col, IntegerType.INT, false);
-            sql = sql.substring(sql.indexOf("SELECT"));
+            String sql = nativeTraits.buildHistogramQuery(
+                    0.1, 10L, ImmutableMap.of("d.c.a", "100"), col, IntegerType.INT, false);
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
             assertCContains(plan, "AGGREGATE (update finalize)\n" +
@@ -256,9 +261,16 @@ public class StatisticsSQLTest extends PlanTestBase {
                 "hive0", db, t0, columnNames, Lists.newArrayList(IntegerType.INT, IntegerType.INT),
                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                 Maps.newHashMap());
+        // The job above carries no analyze properties, so the params the traits read from are built
+        // explicitly here - HistogramCollectParams parses all four eagerly.
+        ExternalHistogramTraits externalTraits = new ExternalHistogramTraits(hiveHistogramStatisticsCollectJob,
+                new HistogramCollectParams(ImmutableMap.of(
+                        StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.1",
+                        StatsConstants.HISTOGRAM_BUCKET_NUM, "10",
+                        StatsConstants.HISTOGRAM_MCV_SIZE, "3",
+                        StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, "none")));
         for (String col : columnNames) {
-            String sql = Deencapsulation.invoke(hiveHistogramStatisticsCollectJob, "buildCollectMCV",
-                    db, t0, 3L, col);
+            String sql = externalTraits.buildMcvQuery(col);
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
             assertCContains(plan, " 0:HdfsScanNode\n" +
@@ -266,9 +278,8 @@ public class StatisticsSQLTest extends PlanTestBase {
         }
 
         for (String col : columnNames) {
-            String sql = Deencapsulation.invoke(hiveHistogramStatisticsCollectJob, "buildCollectHistogram",
-                    db, t0, 0.1, 10L, ImmutableMap.of("col_struct.c1.c11", "100"), col, IntegerType.INT);
-            sql = sql.substring(sql.indexOf("SELECT"));
+            String sql = externalTraits.buildHistogramQuery(
+                    0.1, 10L, ImmutableMap.of("col_struct.c1.c11", "100"), col, IntegerType.INT);
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
             assertCContains(plan, "4:AGGREGATE (update finalize)\n" +
@@ -276,27 +287,9 @@ public class StatisticsSQLTest extends PlanTestBase {
         }
     }
 
-    @Test
-    public void testExternalHistogramSkipsBucketQueryForStringColumns() throws Exception {
-        Table region = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable(connectContext, "hive0", "tpch", "region");
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(connectContext, "hive0", "tpch");
-
-        ExternalHistogramStatisticsCollectJob job = new ExternalHistogramStatisticsCollectJob(
-                "hive0", db, region, Lists.newArrayList("r_name"), Lists.<Type>newArrayList(VarcharType.VARCHAR),
-                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
-
-        String sql = Deencapsulation.invoke(job, "buildCollectHistogram",
-                db, region, 0.1, 10L, ImmutableMap.of("a", "10"), "r_name", VarcharType.VARCHAR);
-
-        Assertions.assertTrue(sql.contains("concat('[[\"Infinity\",\"Infinity\",', " +
-                "cast(greatest(0, count(`r_name`) - 10) as varchar), ',0]]')"), sql);
-        Assertions.assertTrue(sql.contains("FROM `hive0`.`tpch`.`region`"), sql);
-        Assertions.assertFalse(sql.contains("histogram("), sql);
-        Assertions.assertFalse(sql.toLowerCase().contains("order by"), sql);
-        Assertions.assertFalse(sql.toLowerCase().contains("is not null"), sql);
-        Assertions.assertFalse(sql.toLowerCase().contains("sample("), sql);
-    }
+    // The external placeholder-bucket SQL for char-family columns is asserted end-to-end in
+    // ExternalHistogramStatisticsCollectJobTest#testBatchInsertCalculatesMcvsAndHistogramsForMultipleColumnTypes,
+    // which drives collect() rather than a private builder.
 
     @Test
     public void testEscapeFullSQL() throws Exception {
@@ -460,6 +453,53 @@ public class StatisticsSQLTest extends PlanTestBase {
                         TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 23, 8)));
         assertContains(sql, "column_name in (\"col1\", \"col2\")");
         Assertions.assertEquals(5, StringUtils.countMatches(sql, "UNION ALL"));
+    }
+
+    @Test
+    public void testExternalQueryReportsItsOwnCoverage() {
+        // The read path sizes and scales the aggregate from these two, so they have to be part of the
+        // same aggregate over the same rows as everything else - not fetched separately.
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1"),
+                Lists.newArrayList(IntegerType.INT));
+        assertContains(sql, "cast(count(distinct partition_name) as bigint)");
+        assertContains(sql, "cast(sum(hll_cardinality(ndv)) as bigint)");
+        // The version tells the backend which result shape to serialize; it must move with the shape.
+        assertContains(sql, "cast(" + StatsConstants.STATISTIC_EXTERNAL_QUERY_V4_VERSION + " as INT)");
+    }
+
+    @Test
+    public void testExternalQueryReportsTheGrowthSubsets() {
+        // Two nested subsets picked by a hash of the partition name, each with its merged distinct count and
+        // its partition count, inside the same aggregate over the deduplicated rows - no further window.
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1"),
+                Lists.newArrayList(IntegerType.INT));
+        String subset = "abs(cast(murmur_hash3_32(partition_name) as bigint)) % 3";
+        assertContains(sql, "hll_union_agg(if(" + subset + " < 1, ndv, NULL)),"
+                + " hll_union_agg(if(" + subset + " < 2, ndv, NULL)),"
+                + " cast(sum(if(" + subset + " < 1, 1, 0)) as bigint),"
+                + " cast(sum(if(" + subset + " < 2, 1, 0)) as bigint)");
+        assertContains(sql, ") dedup_t WHERE rn = 1 GROUP BY column_name");
+        Assertions.assertEquals(1, StringUtils.countMatches(sql, "over ("), sql);
+    }
+
+    @Test
+    public void testTheCoverageOnlyResultShapeIsStillAvailable() {
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1"),
+                Lists.newArrayList(IntegerType.INT), StatsConstants.STATISTIC_EXTERNAL_QUERY_V3_VERSION);
+        assertContains(sql, "cast(" + StatsConstants.STATISTIC_EXTERNAL_QUERY_V3_VERSION + " as INT)");
+        assertContains(sql, "cast(count(distinct partition_name) as bigint)");
+        Assertions.assertFalse(sql.contains("murmur_hash3_32"), sql);
+    }
+
+    @Test
+    public void testTheOlderResultShapeIsStillAvailable() {
+        // A backend that cannot serialize the coverage counts is asked the old way instead, so a rolling
+        // upgrade costs the sharper estimate for a few minutes rather than the statistics themselves.
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1"),
+                Lists.newArrayList(IntegerType.INT), StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION);
+        assertContains(sql, "cast(" + StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION + " as INT)");
+        Assertions.assertFalse(sql.contains("count(distinct partition_name)"), sql);
+        Assertions.assertFalse(sql.contains("hll_cardinality"), sql);
     }
 
     @Test

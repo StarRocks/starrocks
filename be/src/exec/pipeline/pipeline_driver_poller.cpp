@@ -14,8 +14,12 @@
 
 #include "pipeline_driver_poller.h"
 
+#include <bvar/bvar.h>
+
+#include <algorithm>
 #include <chrono>
 
+#include "base/time/time.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
@@ -33,6 +37,11 @@
 #include "runtime/time_guard.h"
 
 namespace starrocks::pipeline {
+
+// In microseconds: one pass over the blocked drivers, and the slowest single driver check in that pass. A poller is
+// one thread per executor set, so a long pass holds back every driver it is watching.
+static bvar::LatencyRecorder g_poller_pass_latency_us("pipe_poller", "pass");
+static bvar::LatencyRecorder g_poller_max_driver_check_latency_us("pipe_poller", "max_driver_check");
 
 void PipelineDriverPoller::start() {
     DCHECK(this->_polling_thread.get() == nullptr);
@@ -85,6 +94,8 @@ void PipelineDriverPoller::run_internal() {
             }
         }
 
+        const int64_t pass_start_ns = MonotonicNanos();
+        int64_t max_driver_check_ns = 0;
         {
             std::unique_lock write_lock(_local_mutex);
 
@@ -92,6 +103,7 @@ void PipelineDriverPoller::run_internal() {
                 _local_blocked_drivers.splice(_local_blocked_drivers.end(), tmp_blocked_drivers);
             }
 
+            int64_t check_start_ns = MonotonicNanos();
             auto driver_it = _local_blocked_drivers.begin();
             while (driver_it != _local_blocked_drivers.end()) {
                 auto* driver = *driver_it;
@@ -158,6 +170,10 @@ void PipelineDriverPoller::run_internal() {
                         ++driver_it;
                     }
                 }
+
+                const int64_t check_end_ns = MonotonicNanos();
+                max_driver_check_ns = std::max(max_driver_check_ns, check_end_ns - check_start_ns);
+                check_start_ns = check_end_ns;
             }
         }
 
@@ -169,6 +185,8 @@ void PipelineDriverPoller::run_internal() {
             _driver_queue->put_back(ready_drivers);
             ready_drivers.clear();
         }
+        g_poller_pass_latency_us << (MonotonicNanos() - pass_start_ns) / 1000;
+        g_poller_max_driver_check_latency_us << max_driver_check_ns / 1000;
 
         if (spin_count != 0 && spin_count % 64 == 0) {
 #ifdef __x86_64__

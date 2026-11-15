@@ -1,7 +1,9 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
 description: "StarRocks 从 v3.1 起支持 Paimon catalog，无导入直接查询 Apache Paimon 数据及转换导入。"
 toc_max_heading_level: 5
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
@@ -23,7 +25,7 @@ Paimon catalog 是一种 external catalog，可以让您在不进行数据导入
 
 ## 使用注意事项
 
-Paimon catalog 仅支持查询数据，不支持通过 Paimon catalog 在 Paimon 集群中执行 DROP、DELETE 或 INSERT 操作。
+Paimon catalog 支持查询数据，以及创建和删除 Paimon 数据库与表。不支持通过 INSERT、UPDATE、DELETE 写入数据，也不支持 CREATE TABLE LIKE 和 CREATE TABLE AS SELECT。
 
 ## Paimon to StarRocks data types
 
@@ -48,6 +50,11 @@ Paimon catalog 仅支持查询数据，不支持通过 Paimon catalog 在 Paimon
 | `ARRAY`               | `ARRAY<element_type>`       |
 | `MAP`                 | `MAP<key_type, value_type>` |
 | `ROW/STRUCT`          | `STRUCT<field1:type1, ...>` |
+| `VARIANT`             | `VARIANT`                   |
+
+:::note
+`VARIANT` 从 v4.2 版本起支持，且仅支持由 Native Reader 读取的 split（Append-Only 表以及 Primary Key 表中已完成 Compaction 的数据）。从尚未 Compaction 的 Primary Key 数据中读取 `VARIANT` 需要使用 JNI Reader，目前尚不支持，此类查询会在 Plan 阶段报错并被拒绝执行。
+:::
 
 ## 集成准备
 
@@ -65,7 +72,7 @@ Paimon catalog 仅支持查询数据，不支持通过 Paimon catalog 在 Paimon
 
 在上述三种身份验证方法中，实例配置文件是最广泛使用的。
 
-有关更多信息，请参见 [AWS IAM 中的身份验证准备](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)。
+有关更多信息，请参见 [AWS IAM 中的身份验证准备](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)。
 
 ### HDFS
 
@@ -181,7 +188,7 @@ Paimon catalog 的描述。此参数是可选的。
 | aws.s3.access_key           | 否       | 您的 IAM 用户的访问密钥。如果您使用基于 IAM 用户的身份验证方法访问 AWS S3，您必须指定此参数。 |
 | aws.s3.secret_key           | 否       | 您的 IAM 用户的秘密密钥。如果您使用基于 IAM 用户的身份验证方法访问 AWS S3，您必须指定此参数。 |
 
-有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
+有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
 
 ##### 兼容 S3 的存储系统
 
@@ -404,6 +411,15 @@ Paimon catalog 的描述。此参数是可选的。
     | gcp.gcs.service_account_private_key_id | ""            | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 在创建元服务账户时生成的 JSON 文件中的私钥 ID。              |
     | gcp.gcs.service_account_private_key    | ""            | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 在创建元服务账户时生成的 JSON 文件中的私钥。                 |
     | gcp.gcs.impersonation_service_account  | ""            | "hello"                                                      | 您要模拟的数据服务账户。                                     |
+
+#### MetadataCacheParams（可选）
+
+StarRocks 会缓存 Paimon 元数据并在后台刷新，以下可选属性用于调整该缓存。
+
+| 参数                                     | 默认值   | 说明                                                         |
+| ---------------------------------------- | -------- | ------------------------------------------------------------ |
+| paimon_meta_cache_ttl_sec                | 86400    | 缓存条目的存活时间，单位为秒。 |
+| paimon_table_cache_refresh_interval_sec  | 60       | 同一张表由查询触发的两次刷新之间的最小间隔，单位为秒。当查询读到比上次刷新更新的 Snapshot 时触发，刷新在后台执行，查询不会等待。设置为 `0` 表示只依赖周期性后台刷新。自 v4.2.0 起支持。 |
 
 ### 示例
 
@@ -683,6 +699,134 @@ SHOW CREATE CATALOG paimon_catalog_fs;
 
 ```SQL
 DROP Catalog paimon_catalog_fs;
+```
+
+## 创建和删除 Paimon 数据库与表
+
+以下操作直接创建或删除 Paimon 原生对象。示例使用已有的 `paimon_catalog_fs` catalog，其 warehouse 和存储凭证已配置。
+
+### CREATE DATABASE
+
+#### 语法
+
+```SQL
+CREATE DATABASE [IF NOT EXISTS] <catalog_name>.<database_name>;
+```
+
+#### 参数
+
+- `catalog_name`：已有的 Paimon catalog 名称。
+- `database_name`：要创建的数据库名称。
+- `IF NOT EXISTS`：数据库已存在时不报错。
+
+不支持数据库 `PROPERTIES`，数据库使用 catalog 的存储配置。
+
+#### 示例
+
+```SQL
+CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+```
+
+### CREATE TABLE
+
+#### 语法
+
+```SQL
+CREATE TABLE [IF NOT EXISTS] <catalog_name>.<database_name>.<table_name> (
+    <column_name> <column_type> [NULL | NOT NULL] [DEFAULT NULL] [COMMENT '<column_comment>']
+    [, ...]
+)
+[ENGINE = paimon]
+[PRIMARY KEY (<column_name> [, ...])]
+[COMMENT '<table_comment>']
+[PARTITION BY (<column_name> [, ...])]
+[PROPERTIES ("<key>" = "<value>" [, ...])];
+```
+
+#### 参数
+
+- **表名与引擎**：指定已有 Paimon catalog 中的数据库和新表名称。目标为 Paimon catalog 时，可以省略 `ENGINE = paimon`。`IF NOT EXISTS` 会忽略表已存在的错误，但仍会校验表定义和属性。
+- **列定义**：支持 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、FLOAT、DOUBLE、DATE、DATETIME、CHAR、VARCHAR、VARBINARY、精度不超过 38 的 DECIMAL，以及 ARRAY、MAP、STRUCT 和 VARIANT。DATETIME 映射为 Paimon TIMESTAMP(6)。VARIANT 仍受现有读取限制约束。仅支持 `DEFAULT NULL`，主键列不能设置默认值。可以通过 `COMMENT` 设置列注释和表注释。
+- **主键**：使用 `PRIMARY KEY (column, ...)` 或 `primary-key` 表属性定义。主键列不必位于表的开头，未显式指定可空性时会在 Paimon schema 中设为非空，不能显式声明为 `NULL`。同时指定两种形式时，解析后的列名及顺序必须一致。
+- **分区**：使用 `PARTITION BY (column, ...)` 指定普通分区列，不支持分区表达式和显式分区定义。
+- **表属性**：通过 `PROPERTIES` 指定 Paimon 表选项，例如 `bucket` 和 `file.format`。表使用 catalog 配置的 warehouse 和存储凭证，不允许通过表属性覆盖 catalog、存储位置、凭证或 schema。未知选项会被拒绝。部分写入相关的配置错误可能在写入时才报错。暂不支持 `fields.<column>.aggregate-function` 等动态列属性。
+
+#### 示例
+
+创建空的 append-only 分区表：
+
+```SQL
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.append_demo (
+    id BIGINT NOT NULL,
+    payload VARCHAR(100) COMMENT 'Payload',
+    dt DATE
+)
+ENGINE = paimon
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "-1",
+    "file.format" = "parquet"
+);
+```
+
+创建主键分区表：
+
+```SQL
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.pk_demo (
+    payload VARCHAR(100),
+    id BIGINT,
+    dt DATE
+)
+PRIMARY KEY (id, dt)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "2",
+    "bucket-key" = "id",
+    "file.format" = "parquet"
+);
+```
+
+也可以省略 `PRIMARY KEY (id, dt)` 子句，并在 `PROPERTIES` 中添加 `"primary-key" = "id,dt"`。
+
+#### 限制
+
+- 不支持 `DISTRIBUTED BY`、`ORDER BY`、`ROLLUP`、生成列、聚合列和 `AUTO_INCREMENT`。
+- 不支持非 NULL 的列默认值。
+- 不支持 `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`，也不支持通过 `INSERT`、`UPDATE`、`DELETE` 写入数据。
+
+### DROP TABLE
+
+#### 语法
+
+```SQL
+DROP TABLE [IF EXISTS] <catalog_name>.<database_name>.<table_name>;
+```
+
+`IF EXISTS` 表示表不存在时不报错。此操作删除 Paimon 原生表，不只是移除 StarRocks 中的表引用。
+
+#### 示例
+
+```SQL
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.append_demo;
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.pk_demo;
+```
+
+### DROP DATABASE
+
+#### 语法
+
+```SQL
+DROP DATABASE [IF EXISTS] <catalog_name>.<database_name> [FORCE];
+```
+
+`IF EXISTS` 表示数据库不存在时不报错。数据库必须为空才能删除；`FORCE` 不会启用级联删除。
+
+#### 示例
+
+删除数据库中的表后，再删除数据库：
+
+```SQL
+DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
 ```
 
 ## 查看 Paimon 表的 schema

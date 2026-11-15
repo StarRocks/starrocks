@@ -14,18 +14,30 @@
 
 #include "storage/lake/cloud_native_index_compaction_task.h"
 
+#include "common/runtime_profile.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
 
 namespace starrocks::lake {
 
 Status CloudNativeIndexCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
-    auto txn_log = std::make_shared<TxnLog>();
-    auto op_compaction = txn_log->mutable_op_compaction();
-    txn_log->set_tablet_id(_tablet.id());
-    txn_log->set_txn_id(_txn_id);
-    op_compaction->set_compact_version(_tablet.metadata()->version());
+    _context->stats->compaction_type = "cloud_native_index";
+    _context->publish_stats_snapshot();
+    std::shared_ptr<TxnLog> txn_log;
+    {
+        SCOPED_RAW_TIMER(&_context->stats->txn_log_build_ns);
+        txn_log = std::make_shared<TxnLog>();
+        auto op_compaction = txn_log->mutable_op_compaction();
+        txn_log->set_tablet_id(_tablet.id());
+        txn_log->set_txn_id(_txn_id);
+        op_compaction->set_compact_version(_tablet.metadata()->version());
+    }
     RETURN_IF_ERROR(cancel_func());
+    // An empty UNSHARE pick means no rowset of this sibling holds a shared file.
+    // It must still contribute a successful txn log to the all-sibling aggregate
+    // transaction, and it rewrites the index files the sibling cannot keep. With a
+    // sort key that is not the primary key, it must not rewrite SSTs, so its txn
+    // log is a no-op (PrimaryKeyManager::execute_index_major_compaction skips them).
     RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
     _context->progress.update(100);
     TEST_ERROR_POINT("CloudNativeIndexCompactionTask::execute::1");
@@ -33,10 +45,9 @@ Status CloudNativeIndexCompactionTask::execute(CancelFunc cancel_func, ThreadPoo
         // return txn_log to caller later
         _context->txn_log = txn_log;
     } else {
+        SCOPED_RAW_TIMER(&_context->stats->txn_log_write_ns);
         RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     }
-    VLOG(2) << "CloudNative Index compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
-            << ", statistics: " << _context->stats->to_json_stats();
     return Status::OK();
 }
 
