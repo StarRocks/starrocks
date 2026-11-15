@@ -888,6 +888,10 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitUnsetCatalogPropertiesClause(UnsetCatalogPropertiesClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitAlterTableDictColumnsClause(AlterTableDictColumnsClause clause, C context) {
         return visitNode(clause, context);
     }

@@ -16,6 +16,7 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
+import java.util.List;
 import java.util.Map;
 
 public class AlterCatalogLog implements Writable {
@@ -26,9 +27,18 @@ public class AlterCatalogLog implements Writable {
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
+    // Null on journals written before UNSET existed, and on SET journals.
+    @SerializedName(value = "unsetProperties")
+    private List<String> unsetProperties;
+
     public AlterCatalogLog(String catalogName, Map<String, String> properties) {
+        this(catalogName, properties, null);
+    }
+
+    public AlterCatalogLog(String catalogName, Map<String, String> properties, List<String> unsetProperties) {
         this.catalogName = catalogName;
         this.properties = properties;
+        this.unsetProperties = unsetProperties;
     }
 
     public String getCatalogName() {
@@ -37,6 +47,10 @@ public class AlterCatalogLog implements Writable {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public List<String> getUnsetProperties() {
+        return unsetProperties;
     }
 
 }

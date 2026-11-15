@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UnsetCatalogPropertiesClause;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import org.apache.hadoop.util.Sets;
 
@@ -128,6 +129,13 @@ public class CatalogAnalyzer {
                 }
                 // throws on a value other than true/false
                 RangerHiveCatalogProperties.parseCatalogPrefixEnabled(properties);
+            } else if (statement.getAlterClause() instanceof UnsetCatalogPropertiesClause) {
+                UnsetCatalogPropertiesClause unsetClause = (UnsetCatalogPropertiesClause) statement.getAlterClause();
+                for (String confName : unsetClause.getProperties()) {
+                    if (NOT_SUPPORT_ALTER_PROPERTIES.contains(confName)) {
+                        throw new SemanticException("Not support alter catalog property " + confName);
+                    }
+                }
             }
             return null;
         }
