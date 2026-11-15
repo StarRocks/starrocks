@@ -376,10 +376,63 @@ public class StatisticExecutor {
     // Best-effort cleanup of the stale raw-keyed rows superseded by a fresh hashed-key write.
     // Failure just means the raw row lingers a bit longer (until this partition/column is
     // collected again); it must never fail the collection job that just succeeded.
+    // The DELETE is issued only when a raw-keyed row exists in that scope (see
+    // StatisticSQLBuilder#buildExistsExternalStatRawPartitionsSQL): in shared-data mode every DELETE on these
+    // UNIQUE KEY tables later forces a compaction of the whole table, even when it matches nothing. If the
+    // existence check fails, the DELETE is skipped rather than issued blindly; the rows are retried next time.
     public boolean dropExternalStatRawPartitions(ConnectContext statsConnectCtx, String rawTableUUID,
                                                  List<String> partitionNames, List<String> columnNames) {
+        if (CollectionUtils.isEmpty(partitionNames) || CollectionUtils.isEmpty(columnNames)) {
+            return true;
+        }
+        String existsSql = StatisticSQLBuilder.buildExistsExternalStatRawPartitionsSQL(rawTableUUID, partitionNames,
+                columnNames);
+        Optional<Boolean> exists = rawKeyedRowExists(statsConnectCtx, existsSql);
+        if (exists.isEmpty()) {
+            return false;
+        }
+        if (!exists.get()) {
+            LOG.debug("No stale raw-keyed external statistic rows, skip cleanup: {}", existsSql);
+            return true;
+        }
         String sql = StatisticSQLBuilder.buildDropExternalStatSQLForPartitions(rawTableUUID, partitionNames, columnNames);
         LOG.debug("Cleanup stale raw-keyed external statistic rows SQL: {}", sql);
+        return executeRawKeyedCleanupDML(statsConnectCtx, sql);
+    }
+
+    /**
+     * Runs an existence check built by StatisticSQLBuilder#buildExistsExternalStatRawPartitionsSQL or
+     * #buildExistsExternalHistogramRawColumnsSQL. Returns true if it returned a row, false if it returned none, and
+     * empty if the check failed (the caller then skips the cleanup).
+     * <p>
+     * Like the DELETE that may follow, the check runs on the analyze job's own context, so KILL ANALYZE and the
+     * job's query timeout apply to it. The statement clock is restarted first because the query deadline is the
+     * context's start time plus its query timeout.
+     */
+    @VisibleForTesting
+    protected Optional<Boolean> rawKeyedRowExists(ConnectContext statsConnectCtx, String existsSql) {
+        int pipelineDop = statsConnectCtx.getSessionVariable().getPipelineDop();
+        try (var guard = statsConnectCtx.bindScope()) {
+            statsConnectCtx.setStartTime();
+            List<TResultBatch> batches = SimpleExecutor.getRepoExecutor().executeDQL(existsSql, statsConnectCtx);
+            for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
+                if (batch.getRows() != null && !batch.getRows().isEmpty()) {
+                    return Optional.of(true);
+                }
+            }
+            return Optional.of(false);
+        } catch (Exception e) {
+            LOG.warn("Failed to check for stale raw-keyed external statistic rows, skip cleanup | SQL {}", existsSql, e);
+            return Optional.empty();
+        } finally {
+            // SimpleExecutor#executeDQL(String, ConnectContext) overwrites the context's pipeline dop.
+            statsConnectCtx.getSessionVariable().setPipelineDop(pipelineDop);
+        }
+    }
+
+    @VisibleForTesting
+    protected boolean executeRawKeyedCleanupDML(ConnectContext statsConnectCtx, String sql) {
+        statsConnectCtx.setStartTime();
         return executeDML(statsConnectCtx, sql);
     }
 
@@ -415,9 +468,21 @@ public class StatisticExecutor {
 
     public boolean dropExternalHistogramRawColumns(ConnectContext statsConnectCtx, String rawTableUUID,
                                                    List<String> columnNames) {
+        if (CollectionUtils.isEmpty(columnNames)) {
+            return true;
+        }
+        String existsSql = StatisticSQLBuilder.buildExistsExternalHistogramRawColumnsSQL(rawTableUUID, columnNames);
+        Optional<Boolean> exists = rawKeyedRowExists(statsConnectCtx, existsSql);
+        if (exists.isEmpty()) {
+            return false;
+        }
+        if (!exists.get()) {
+            LOG.debug("No stale raw-keyed external histogram rows, skip cleanup: {}", existsSql);
+            return true;
+        }
         String sql = StatisticSQLBuilder.buildDropExternalHistogramSQLForRawUuid(rawTableUUID, columnNames);
         LOG.debug("Cleanup stale raw-keyed external histogram row SQL: {}", sql);
-        return executeDML(statsConnectCtx, sql);
+        return executeRawKeyedCleanupDML(statsConnectCtx, sql);
     }
 
     public boolean dropPartitionStatistics(ConnectContext statsConnectCtx, List<Long> pids) {
