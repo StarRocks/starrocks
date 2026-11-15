@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.IOException;
 
 /**
  * Spark and Trino resolve relation aliases case-insensitively, so a view they define can refer to one
@@ -63,5 +64,14 @@ public class IcebergViewCaseInsensitiveAliasTest extends ConnectorPlanTestBase {
         assertContains(plan, "CROSS JOIN");
         Assertions.assertFalse(connectContext.isRelationAliasCaseInsensitive());
         Assertions.assertNull(connectContext.getRelationAliasCaseInsensitiveOutsideConnectorView());
+    }
+
+    private static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
     }
 }

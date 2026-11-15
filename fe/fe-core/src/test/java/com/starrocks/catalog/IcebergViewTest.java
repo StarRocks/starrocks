@@ -15,11 +15,8 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
 import com.starrocks.analysis.TableName;
-=======
 import com.starrocks.connector.iceberg.IcebergApiConverter;
->>>>>>> 03ee9f3 ([BugFix][RB-1538] Fix Iceberg/Hive/Paimon view resolution for views created by other engines (#83290))
 import com.starrocks.sql.ast.TableRelation;
 import mockit.Expectations;
 import mockit.Mocked;
