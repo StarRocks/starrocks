@@ -58,11 +58,8 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-<<<<<<< HEAD
-import java.util.stream.Collectors;
-=======
 import java.util.Optional;
->>>>>>> 85ceece ([BugFix] Skip no-op raw-keyed external statistics cleanup DELETE (#83000))
+import java.util.stream.Collectors;
 
 public class StatisticsExecutorTest extends PlanTestBase {
     @BeforeAll
@@ -429,7 +426,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         Assertions.assertTrue(executor.dropExternalStatRawPartitions(context, "hive.db.tbl.1", List.of("p1"),
                 List.of("c1")));
-        Assertions.assertTrue(executor.dropExternalHistogramRawColumns(context, "hive.db.tbl.1", List.of("c1")));
+        Assertions.assertTrue(executor.dropExternalHistogramRawColumn(context, "hive.db.tbl.1", "c1"));
         Assertions.assertEquals(2, executor.checks.size());
         Assertions.assertTrue(executor.checks.get(0).startsWith("SELECT 1 FROM _statistics_.external_column_statistics"),
                 executor.checks.get(0));
@@ -446,7 +443,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         Assertions.assertTrue(executor.dropExternalStatRawPartitions(context, "hive.db.tbl.1", List.of("p1"),
                 List.of("c1")));
-        Assertions.assertTrue(executor.dropExternalHistogramRawColumns(context, "hive.db.tbl.1", List.of("c1")));
+        Assertions.assertTrue(executor.dropExternalHistogramRawColumn(context, "hive.db.tbl.1", "c1"));
         Assertions.assertEquals(List.of(
                 StatisticSQLBuilder.buildDropExternalStatSQLForPartitions("hive.db.tbl.1", List.of("p1"), List.of("c1")),
                 StatisticSQLBuilder.buildDropExternalHistogramSQLForRawUuid("hive.db.tbl.1", List.of("c1"))),
@@ -460,7 +457,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         Assertions.assertFalse(executor.dropExternalStatRawPartitions(context, "hive.db.tbl.1", List.of("p1"),
                 List.of("c1")));
-        Assertions.assertFalse(executor.dropExternalHistogramRawColumns(context, "hive.db.tbl.1", List.of("c1")));
+        Assertions.assertFalse(executor.dropExternalHistogramRawColumn(context, "hive.db.tbl.1", "c1"));
         Assertions.assertTrue(executor.dmls.isEmpty(), executor.dmls.toString());
     }
 
@@ -471,7 +468,6 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         Assertions.assertTrue(executor.dropExternalStatRawPartitions(context, "hive.db.tbl.1", List.of(), List.of("c1")));
         Assertions.assertTrue(executor.dropExternalStatRawPartitions(context, "hive.db.tbl.1", List.of("p1"), null));
-        Assertions.assertTrue(executor.dropExternalHistogramRawColumns(context, "hive.db.tbl.1", List.of()));
         Assertions.assertTrue(executor.checks.isEmpty());
         Assertions.assertTrue(executor.dmls.isEmpty());
     }
