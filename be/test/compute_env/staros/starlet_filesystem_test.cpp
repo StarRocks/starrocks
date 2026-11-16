@@ -207,8 +207,9 @@ TEST_P(StarletFileSystemTest, test_write_and_read) {
     ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(uri));
     ASSIGN_OR_ABORT(auto nr, rf->read_at(0, buf, sizeof(buf)));
     ASSIGN_OR_ABORT(auto stats2, rf->get_numeric_statistics());
-    // The cache/IO counters, then the remote read scheduler's queue wait, fill wait and fill joins.
-    EXPECT_EQ((*stats2).size(), 14);
+    // The cache/IO counters, the remote read scheduler's queue wait, fill wait and fill joins, then the blocks the
+    // read-ahead submitted and the ones it had refused.
+    EXPECT_EQ((*stats2).size(), 16);
     EXPECT_EQ("hello world!", std::string_view(buf, nr));
     // Exercise the lightweight `get_io_stats_snapshot()` path used by the publish
     // trace. After the read above the snapshot must reflect non-zero byte/op
@@ -597,6 +598,8 @@ public:
         get_mutable_io_stats().remote_queue_wait_ns = 51;
         get_mutable_io_stats().remote_fill_wait_ns = 52;
         get_mutable_io_stats().remote_fill_joins = 53;
+        get_mutable_io_stats().prefetch_blocks_submitted = 61;
+        get_mutable_io_stats().prefetch_blocks_rejected = 62;
     }
 
     absl::StatusOr<size_t> seek(int64_t /*offset*/, Anchor /*anchor*/) override { return 0; }
@@ -691,6 +694,8 @@ TEST_F(NewFsStarletTest, test_starlet_input_stream_get_io_stats_snapshot) {
     EXPECT_EQ(51, by_name[kRemoteQueueWaitNs]);
     EXPECT_EQ(52, by_name[kRemoteFillWaitNs]);
     EXPECT_EQ(53, by_name[kRemoteFillJoins]);
+    EXPECT_EQ(61, by_name[kPrefetchBlocksSubmitted]);
+    EXPECT_EQ(62, by_name[kPrefetchBlocksRejected]);
 }
 
 // Covers the `stream_st not ok` early-return branch in StarletInputStream::
