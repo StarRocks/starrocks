@@ -43,6 +43,48 @@ void init_tls_thread_status_offset() {
               << " module_type_offset=" << CurrentThread::module_type_offset();
 }
 
+<<<<<<< HEAD
+=======
+namespace {
+
+bool default_is_env_initialized() {
+    return false;
+}
+
+MemTracker* default_process_mem_tracker() {
+    return nullptr;
+}
+
+std::atomic<CurrentThread::IsEnvInitializedFn> s_is_env_initialized{default_is_env_initialized};
+std::atomic<CurrentThread::ProcessMemTrackerFn> s_process_mem_tracker{default_process_mem_tracker};
+
+} // namespace
+
+void CurrentThread::set_mem_tracker_source(IsEnvInitializedFn is_env_initialized,
+                                           ProcessMemTrackerFn process_mem_tracker) {
+    s_is_env_initialized.store(is_env_initialized == nullptr ? default_is_env_initialized : is_env_initialized,
+                               std::memory_order_release);
+    s_process_mem_tracker.store(process_mem_tracker == nullptr ? default_process_mem_tracker : process_mem_tracker,
+                                std::memory_order_release);
+}
+
+#ifdef BE_TEST
+void CurrentThread::get_mem_tracker_source_for_test(IsEnvInitializedFn& is_env_initialized,
+                                                    ProcessMemTrackerFn& process_mem_tracker) {
+    is_env_initialized = s_is_env_initialized.load(std::memory_order_acquire);
+    process_mem_tracker = s_process_mem_tracker.load(std::memory_order_acquire);
+}
+#endif
+
+size_t CurrentThread::query_id_offset() {
+    return tls_member_offset(&CurrentThread::_query_id);
+}
+
+size_t CurrentThread::module_type_offset() {
+    return tls_member_offset(&CurrentThread::_module_type);
+}
+
+>>>>>>> a63d6d1 ([BugFix] Stabilize memory accounting for shared lake metadata (#82463))
 CurrentThread::~CurrentThread() {
     if (!GlobalEnv::is_init()) {
         tls_is_thread_status_init = false;

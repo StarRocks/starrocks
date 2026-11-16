@@ -47,6 +47,7 @@
 #include "fs/fs_starlet.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/memory/process_memory.h"
 #include "runtime/raw_container_checked.h"
 #include "storage/rowset/storage_page_decoder.h"
 #include "util/coding.h"
@@ -187,7 +188,7 @@ static Status read_page_from_file(const PageReadOptions& opts, std::unique_ptr<s
 
     Slice slice(page->data(), page_size);
 
-    {
+    const auto read_page = [&]() -> Status {
         SCOPED_RAW_TIMER(&opts.stats->io_ns);
         RETURN_IF_ERROR(opts.read_file->read_at_fully(opts.page_pointer.offset, slice.data, slice.size));
         if (opts.read_file->is_cache_hit()) {
@@ -195,7 +196,10 @@ static Status read_page_from_file(const PageReadOptions& opts, std::unique_ptr<s
         }
         opts.stats->compressed_bytes_read_request += page_size;
         ++opts.stats->io_count_request;
-    }
+        return Status::OK();
+    };
+    RETURN_IF_ERROR(opts.read_file_mem_tracker.has_value() ? with_memory_tracker(*opts.read_file_mem_tracker, read_page)
+                                                           : read_page());
 
     *page_out = std::move(page);
     return Status::OK();
@@ -348,7 +352,10 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     }
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
     if (s.is_corruption()) {
-        auto drop_status = drop_local_cache_data(opts.read_file->filename());
+        const auto drop_cache = [&] { return drop_local_cache_data(opts.read_file->filename()); };
+        auto drop_status = opts.read_file_mem_tracker.has_value()
+                                   ? with_memory_tracker(*opts.read_file_mem_tracker, drop_cache)
+                                   : drop_cache();
         if (!drop_status.ok()) {
             return s; // return first read error
         }

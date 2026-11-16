@@ -1971,7 +1971,11 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         } else {
             ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(segment_info.path));
         }
+<<<<<<< HEAD
         segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, std::move(tablet_schema), this);
+=======
+        segment = Segment::create(fs, segment_info, segment_id, tablet_schema, this);
+>>>>>>> a63d6d1 ([BugFix] Stabilize memory accounting for shared lake metadata (#82463))
         if (fill_meta_cache) {
             // NOTE: the returned segment may be not the same as the parameter passed in
             // Use the one in cache if the same key already exists
@@ -1981,6 +1985,33 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
             }
         }
     }
+<<<<<<< HEAD
+=======
+    if (tablet_schema != nullptr) {
+        const auto cached_schema = segment->tablet_schema_share_ptr();
+        if (cached_schema == nullptr || cached_schema->id() != tablet_schema->id() ||
+            cached_schema->schema_version() != tablet_schema->schema_version() ||
+            cached_schema->num_columns() != tablet_schema->num_columns()) {
+            // A physical lookup hit can still be unusable for this request's schema.
+            // Count the final cache winner, including an insert-if-absent race.
+            g_segment_cache_schema_reject_total << 1;
+            // Never mutate a Segment held by another reader. With cache filling enabled, replace
+            // only the entry we just checked so subsequent requests can reuse this schema. A racing
+            // replacement or eviction must not be overwritten; serve this request privately instead.
+            auto fs = segment_info.fs ? segment_info.fs : segment->shared_file_system();
+            auto replacement =
+                    Segment::create(fs, segment_info, segment_id, tablet_schema, fill_meta_cache ? this : nullptr);
+            if (fill_meta_cache) {
+                TEST_SYNC_POINT_CALLBACK("TabletManager::load_segment:before_cache_replace", nullptr);
+                if (!_metacache->replace_segment_if_matches(cache_key, segment.get(), replacement)) {
+                    replacement = Segment::create(fs, segment_info, segment_id, tablet_schema,
+                                                  /*tablet_manager=*/nullptr);
+                }
+            }
+            segment = std::move(replacement);
+        }
+    }
+>>>>>>> a63d6d1 ([BugFix] Stabilize memory accounting for shared lake metadata (#82463))
     // segment->open will read the footer, and it is time-consuming.
     // separate it from static Segment::open is to prevent a large number of cache misses,
     // and many temporary segment objects generation when loading the same segment concurrently.

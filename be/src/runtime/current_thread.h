@@ -331,6 +331,14 @@ public:
 
     bool check_mem_limit() { return _check; }
 
+<<<<<<< HEAD
+=======
+    static void set_mem_tracker_source(IsEnvInitializedFn is_env_initialized, ProcessMemTrackerFn process_mem_tracker);
+#ifdef BE_TEST
+    static void get_mem_tracker_source_for_test(IsEnvInitializedFn& is_env_initialized,
+                                                ProcessMemTrackerFn& process_mem_tracker);
+#endif
+>>>>>>> a63d6d1 ([BugFix] Stabilize memory accounting for shared lake metadata (#82463))
     static starrocks::MemTracker* mem_tracker();
     static starrocks::MemTracker* singleton_check_mem_tracker();
 

@@ -29,6 +29,7 @@
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
+#include "runtime/memory/process_memory.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
@@ -474,4 +475,145 @@ TEST_F(LakeMetacacheTest, test_combined_txn_log_cache) {
     ASSERT_TRUE(log4 == nullptr);
 }
 
+<<<<<<< HEAD
+=======
+// Even in UT builds with -fno-access-control, a bare path cannot be passed to
+// cache APIs: no single-argument constructor or implicit conversion exists.
+static_assert(!std::is_constructible_v<MetacacheKey, std::string_view>);
+static_assert(!std::is_invocable_v<decltype(&Metacache::lookup_tablet_metadata), Metacache*, std::string_view>);
+static_assert(!std::is_invocable_v<decltype(&Metacache::cache_txn_log), Metacache*, std::string_view, TxnLogPtr>);
+static_assert(!std::is_invocable_v<decltype(&Metacache::erase), Metacache*, std::string_view>);
+
+namespace {
+class PartitionCacheKeyLocationProvider : public LocationProvider {
+public:
+    std::string root_location(int64_t tablet_id) const override { return fmt::format("staros://{}", tablet_id); }
+    StatusOr<std::string> real_location(const std::string& path) const override {
+        if (fail_resolution) {
+            return Status::IOError("injected resolution failure");
+        }
+        return "bucket/partition" + path.substr(path.find('/', std::string("staros://").size()));
+    }
+    bool fail_resolution = false;
+};
+} // namespace
+
+TEST(MetacacheKeyTest, partition_objects_share_keys_and_tablet_objects_keep_virtual_keys) {
+    PartitionCacheKeyLocationProvider provider;
+    ASSIGN_OR_ABORT(auto first, MetacacheKey::combined_txn_log(provider, provider.combined_txn_log_location(100, 10)));
+    ASSIGN_OR_ABORT(auto second, MetacacheKey::combined_txn_log(provider, provider.combined_txn_log_location(101, 10)));
+    EXPECT_EQ(first, second);
+    EXPECT_EQ("bucket/partition/log/000000000000000A.logs", first.view());
+    Metacache cache(1 << 20, 1 << 20);
+    auto log = std::make_shared<CombinedTxnLogPB>();
+    cache.cache_combined_txn_log(first, log);
+    EXPECT_EQ(log, cache.lookup_combined_txn_log(second));
+    cache.erase(second);
+    EXPECT_EQ(nullptr, cache.lookup_combined_txn_log(first));
+
+    EXPECT_EQ(MetacacheKey::shared_initial_metadata(provider, provider.tablet_initial_metadata_location(100)),
+              MetacacheKey::shared_initial_metadata(provider, provider.tablet_initial_metadata_location(101)));
+    ASSIGN_OR_ABORT(auto marker_a,
+                    MetacacheKey::bundled_metadata_marker(provider, provider.metadata_root_location(100)));
+    ASSIGN_OR_ABORT(auto marker_b,
+                    MetacacheKey::bundled_metadata_marker(provider, provider.metadata_root_location(101)));
+    EXPECT_EQ(marker_a, marker_b);
+    cache.cache_bundled_metadata_marker(marker_a);
+    EXPECT_TRUE(cache.lookup_bundled_metadata_marker(marker_b));
+    cache.erase(marker_b);
+    EXPECT_FALSE(cache.lookup_bundled_metadata_marker(marker_a));
+
+    auto metadata_a = MetacacheKey::tablet_metadata(provider.tablet_metadata_location(100, 2));
+    auto metadata_b = MetacacheKey::tablet_metadata(provider.tablet_metadata_location(101, 2));
+    EXPECT_NE(metadata_a.view(), metadata_b.view());
+    EXPECT_TRUE(metadata_a.view().starts_with("staros://100/"));
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    cache.cache_tablet_metadata(metadata_a, metadata);
+    EXPECT_EQ(nullptr, cache.lookup_tablet_metadata(metadata_b));
+    EXPECT_EQ(metadata, cache.lookup_tablet_metadata(metadata_a));
+}
+
+TEST(MetacacheKeyTest, path_lifetime_and_resolution_failure) {
+    const std::string path(256, 'p');
+    const auto borrowed = MetacacheKey::tablet_metadata(path);
+    EXPECT_EQ(path.data(), borrowed.view().data());
+    auto make_key = [&] { return MetacacheKey::txn_log(std::string(path)); };
+    auto copied = [&] {
+        auto original = make_key();
+        return MetacacheKey(original);
+    }();
+    auto moved = [&] {
+        auto original = make_key();
+        return MetacacheKey(std::move(original));
+    }();
+    EXPECT_EQ(path, copied.view());
+    EXPECT_EQ(path, moved.view());
+    EXPECT_NE(path.data(), copied.view().data());
+
+    PartitionCacheKeyLocationProvider provider;
+    provider.fail_resolution = true;
+    EXPECT_TRUE(MetacacheKey::combined_txn_log(provider, path).status().is_io_error());
+    EXPECT_TRUE(MetacacheKey::bundled_metadata_marker(provider, path).status().is_io_error());
+    // This fallback must own even a temporary path.
+    auto fallback = MetacacheKey::shared_initial_metadata(provider, std::string(path));
+    EXPECT_EQ(path, fallback.view());
+}
+
+TEST(MetacacheKeyTest, composite_keys_preserve_identity) {
+    EXPECT_EQ("TL100", MetacacheKey::latest_tablet_metadata(100).view());
+    EXPECT_EQ("TS100", MetacacheKey::tablet_schema(100).view());
+    EXPECT_EQ("GS100", MetacacheKey::global_schema(100).view());
+    FileInfo file{.path = "segment.dat"};
+    EXPECT_EQ(file.cache_key(), MetacacheKey::segment(file).view());
+    auto unbundled = MetacacheKey::segment(file);
+    file.bundle_file_offset = 128;
+    auto first_slice = MetacacheKey::segment(file);
+    EXPECT_EQ(file.cache_key(), first_slice.view());
+    file.bundle_file_offset = 256;
+    EXPECT_NE(first_slice.view(), MetacacheKey::segment(file).view());
+    EXPECT_NE(unbundled.view(), first_slice.view());
+
+    DelvecPagePB page;
+    page.set_version(2);
+    page.set_offset(128);
+    page.set_size(32);
+    page.set_crc32c(10);
+    auto key = MetacacheKey::delvec(100, page);
+    DelvecCacheKeyPB encoded;
+    ASSERT_TRUE(encoded.ParseFromString(std::string(key.view())));
+    EXPECT_EQ(100, encoded.id());
+    EXPECT_EQ(page.SerializeAsString(), encoded.delvec_page().SerializeAsString());
+    page.set_crc32c_gen_version(3);
+    EXPECT_EQ(key, MetacacheKey::delvec(100, page));
+    page.set_crc32c(11);
+    EXPECT_NE(key.view(), MetacacheKey::delvec(100, page).view());
+    EXPECT_NE(key.view(), MetacacheKey::delvec(101, encoded.delvec_page()).view());
+}
+
+TEST_F(LakeMetacacheTest, ProcessOwnedStoragePreservesExternalPayloadDeleterContext) {
+    auto* process = process_memory_tracker();
+    ASSERT_NE(process, nullptr);
+    MemTracker producer(-1, "cache producer", process);
+    MemTracker consumer(-1, "cache consumer", process);
+    MemTracker* released_under = nullptr;
+    Metacache cache(1 << 20, 1 << 20);
+    const auto key = MetacacheKey::TEST_from_string("ownership-metadata");
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&producer);
+        auto metadata = std::shared_ptr<const TabletMetadataPB>(new TabletMetadataPB(), [&](const TabletMetadataPB* p) {
+            released_under = CurrentThread::mem_tracker();
+            delete p;
+        });
+        cache.cache_tablet_metadata(key, std::move(metadata));
+        EXPECT_EQ(CurrentThread::mem_tracker(), &producer);
+    }
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&consumer);
+        cache.erase(key);
+        EXPECT_EQ(released_under, &consumer);
+        EXPECT_EQ(CurrentThread::mem_tracker(), &consumer);
+    }
+}
+
+>>>>>>> a63d6d1 ([BugFix] Stabilize memory accounting for shared lake metadata (#82463))
 } // namespace starrocks::lake

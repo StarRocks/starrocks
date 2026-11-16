@@ -114,7 +114,9 @@ bool HandleTable::_resize() {
         new_length *= 2;
     }
 
-    auto** new_list = new (std::nothrow) LRUHandle*[new_length];
+    auto** new_list = _allocator != nullptr
+                              ? static_cast<LRUHandle**>(_allocator->allocate(sizeof(LRUHandle*) * new_length))
+                              : new (std::nothrow) LRUHandle*[new_length];
 
     if (nullptr == new_list) {
         LOG(FATAL) << "failed to malloc new hash list. new_length=" << new_length;
@@ -139,18 +141,18 @@ bool HandleTable::_resize() {
     }
 
     if (_elems != count) {
-        delete[] new_list;
+        _free_buckets(new_list);
         LOG(FATAL) << "_elems not match new count. elems=" << _elems << ", count=" << count;
         return false;
     }
 
-    delete[] _list;
+    _free_buckets(_list);
     _list = new_list;
     _length = new_length;
     return true;
 }
 
-LRUCache::LRUCache() {
+LRUCache::LRUCache(const CacheStorageAllocator* allocator) : _allocator(allocator), _table(allocator) {
     // Make empty circular linked list
     _lru.next = &_lru;
     _lru.prev = &_lru;
@@ -189,7 +191,12 @@ void LRUCache::set_capacity(size_t capacity) {
     }
 
     for (auto entry : last_ref_list) {
+<<<<<<< HEAD:be/src/util/lru_cache.cpp
         entry->free();
+=======
+        evicted += entry->charge;
+        entry->free(_allocator);
+>>>>>>> a63d6d1 ([BugFix] Stabilize memory accounting for shared lake metadata (#82463)):be/src/base/container/lru_cache.cpp
     }
 }
 
@@ -276,7 +283,7 @@ void LRUCache::release(Cache::Handle* handle) {
 
     // free handle out of mutex
     if (last_ref) {
-        e->free();
+        e->free(_allocator);
     }
 }
 
@@ -324,7 +331,8 @@ void LRUCache::_evict_one_entry(LRUHandle* e) {
 LRUHandle* LRUCache::_alloc_handle(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
                                    void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
     size_t key_mem_size = sizeof(LRUHandle) - 1 + key.size();
-    auto* e = reinterpret_cast<LRUHandle*>(malloc(key_mem_size));
+    auto* e = reinterpret_cast<LRUHandle*>(_allocator != nullptr ? _allocator->allocate(key_mem_size)
+                                                                 : malloc(key_mem_size));
     e->value = value;
     e->deleter = deleter;
     e->charge = value_size + key_mem_size;
@@ -383,7 +391,7 @@ Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value,
     // we free the entries here outside of mutex for
     // performance reasons
     for (auto entry : last_ref_list) {
-        entry->free();
+        entry->free(_allocator);
     }
 
     return reinterpret_cast<Cache::Handle*>(e);
@@ -405,11 +413,11 @@ Cache::Handle* LRUCache::insert_no_evict(const CacheKey& key, uint32_t hash, voi
 
     if (!fits) {
         // Only the handle is ours to release; `value` still belongs to the caller.
-        ::free(e);
+        e->free_storage(_allocator);
         return nullptr;
     }
     for (auto entry : last_ref_list) {
-        entry->free();
+        entry->free(_allocator);
     }
 
     return reinterpret_cast<Cache::Handle*>(e);
@@ -442,15 +450,56 @@ Cache::Handle* LRUCache::insert_if_absent(const CacheKey& key, uint32_t hash, vo
     *inserted = (ret == e);
     if (!*inserted) {
         // Only the handle is ours to release; `value` still belongs to the caller.
-        ::free(e);
+        e->free_storage(_allocator);
     }
     for (auto entry : last_ref_list) {
-        entry->free();
+        entry->free(_allocator);
     }
 
     return reinterpret_cast<Cache::Handle*>(ret);
 }
 
+<<<<<<< HEAD:be/src/util/lru_cache.cpp
+=======
+bool LRUCache::replace_if(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                          void (*deleter)(const CacheKey& key, void* value),
+                          bool (*pred)(void* old_value, const void* ctx), const void* ctx, CachePriority priority) {
+    auto* replacement = _alloc_handle(key, hash, value, value_size, deleter, priority);
+    std::vector<LRUHandle*> last_ref_list;
+    bool replaced = false;
+    {
+        std::lock_guard l(_mutex);
+        auto* old = _table.lookup(key, hash);
+        if (old != nullptr && (pred == nullptr || pred(old->value, ctx))) {
+            _table.remove(key, hash);
+            old->in_cache = false;
+            if (_unref(old)) {
+                _usage -= old->charge;
+                _lru_remove(old);
+                last_ref_list.push_back(old);
+            }
+            // Reclaim the old cache reference before applying the new charge. A
+            // same-sized replacement must not evict unrelated entries to fit both.
+            // Pinned old handles retain their charge until their final release.
+            _insert_no_lock(replacement, &last_ref_list);
+            replaced = true;
+        }
+    }
+    for (auto* entry : last_ref_list) {
+        entry->free(_allocator);
+    }
+    if (replaced) {
+        // Drop the temporary caller reference created by _alloc_handle. release()
+        // also runs any resulting deleter outside the shard lock.
+        release(reinterpret_cast<Cache::Handle*>(replacement));
+    } else {
+        // The cache never adopted value; only its unused handle belongs to us.
+        replacement->free_storage(_allocator);
+    }
+    return replaced;
+}
+
+>>>>>>> a63d6d1 ([BugFix] Stabilize memory accounting for shared lake metadata (#82463)):be/src/base/container/lru_cache.cpp
 void LRUCache::_update_charge_no_lock(LRUHandle* e, size_t new_value_size, std::vector<LRUHandle*>* last_ref_list) {
     const size_t new_charge = new_value_size + sizeof(LRUHandle) - 1 + e->key_length;
     _usage = _usage - e->charge + new_charge;
@@ -482,7 +531,7 @@ bool LRUCache::update_charge_if(const CacheKey& key, uint32_t hash, size_t new_v
         }
     }
     for (auto entry : last_ref_list) {
-        entry->free();
+        entry->free(_allocator);
     }
     return updated;
 }
@@ -507,7 +556,7 @@ void LRUCache::erase(const CacheKey& key, uint32_t hash) {
     }
     // free handle out of mutex, when last_ref is true, e must not be nullptr
     if (last_ref) {
-        e->free();
+        e->free(_allocator);
     }
 }
 
@@ -528,7 +577,7 @@ int LRUCache::prune() {
         }
     }
     for (auto entry : last_ref_list) {
-        entry->free();
+        entry->free(_allocator);
     }
     return last_ref_list.size();
 }
@@ -541,12 +590,17 @@ uint32_t ShardedLRUCache::_shard(uint32_t hash) {
     return hash >> (32 - kNumShardBits);
 }
 
+<<<<<<< HEAD:be/src/util/lru_cache.cpp
 ShardedLRUCache::ShardedLRUCache(size_t capacity) : _last_id(0), _capacity(capacity) {
     const size_t per_shard = (_capacity + (kNumShards - 1)) / kNumShards;
     for (auto& _shard : _shards) {
         _shard.set_capacity(per_shard);
     }
 }
+=======
+ShardedLRUCache::ShardedLRUCache(size_t capacity, const CacheStorageAllocator* allocator)
+        : ShardedLRUCache(capacity, allocator, std::make_index_sequence<kNumShards>()) {}
+>>>>>>> a63d6d1 ([BugFix] Stabilize memory accounting for shared lake metadata (#82463)):be/src/base/container/lru_cache.cpp
 
 void ShardedLRUCache::_set_capacity(size_t capacity) {
     const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;
@@ -719,8 +773,8 @@ void ShardedLRUCache::get_cache_status(rapidjson::Document* document) {
     }
 }
 
-Cache* new_lru_cache(size_t capacity) {
-    return new ShardedLRUCache(capacity);
+Cache* new_lru_cache(size_t capacity, const CacheStorageAllocator* allocator) {
+    return new ShardedLRUCache(capacity, allocator);
 }
 
 } // namespace starrocks

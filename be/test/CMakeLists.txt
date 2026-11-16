@@ -381,10 +381,14 @@ set(EXEC_FILES
         ./runtime/user_function_cache_test.cpp
         ./runtime/sorted_chunks_merger_test.cpp
         ./runtime/merge_cascade_test.cpp
+<<<<<<< HEAD
         ./runtime/memory_scratch_sink_test_issue_8676.cpp
         ./runtime/memory_scratch_sink_test.cpp
         ./exec/mysql_result_writer_test.cpp
         ./runtime/command_executor_test.cpp
+=======
+        ./runtime/process_memory_test.cpp
+>>>>>>> a63d6d1 ([BugFix] Stabilize memory accounting for shared lake metadata (#82463))
         ./runtime/exec_env_test.cpp
         ./runtime/exec_sub_process_test.cpp
         ./runtime/load_fail_point_test.cpp
