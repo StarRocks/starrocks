@@ -1346,10 +1346,13 @@ public class GlobalStateMgr {
     }
 
     // wait until FE is ready.
-    public void waitForReady() throws InterruptedException {
+    public void waitForReady() throws InterruptedException, JournalException {
         long lastLoggingTimeMs = System.currentTimeMillis();
         long lastInfoLogTimeMs = System.currentTimeMillis();
         while (true) {
+            // BDB can fail asynchronously before a role transfer starts the replayer. Propagate
+            // the failure to the startup handler instead of waiting forever without a journal reader.
+            journal.checkEnvironment();
             if (isReady()) {
                 LOG.info("globalStateMgr is ready. FE type: {}", feType);
                 feStartTime = System.currentTimeMillis();

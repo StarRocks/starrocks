@@ -28,6 +28,10 @@ public interface Journal {
     // Open the journal environment
     void open() throws InterruptedException, JournalException;
 
+    // Detect fatal environment failures even when no reader or writer has started yet.
+    default void checkEnvironment() throws JournalException {
+    }
+
     // Roll Edit file or database
     void rollJournal(long journalId) throws JournalException;
 
