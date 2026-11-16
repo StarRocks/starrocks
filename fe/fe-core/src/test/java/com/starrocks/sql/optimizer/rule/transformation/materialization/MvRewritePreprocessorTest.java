@@ -29,6 +29,7 @@ import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -79,6 +80,7 @@ import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.planner.MaterializedViewTestBase.getRefBaseTablePartitionColumn;
@@ -1894,5 +1896,246 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     System.out.println(cacheStats2);
                     Assertions.assertFalse(Strings.isNullOrEmpty(cacheStats2));
                 });
+    }
+
+    @Test
+    public void testGetPreprocessTimeLimitMs() {
+        SessionVariable sessionVariable = new SessionVariable();
+        long optimizerTimeout = sessionVariable.getOptimizerExecuteTimeout();
+
+        // default: 0, no limit
+        Assertions.assertEquals(0, sessionVariable.getOptimizerMaterializedViewPreprocessTimeLimitMillis());
+        Assertions.assertEquals(-1, MvRewritePreprocessor.getPreprocessTimeLimitMs(sessionVariable));
+        // positive: used as is
+        sessionVariable.setOptimizerMaterializedViewPreprocessTimeLimitMillis(500);
+        Assertions.assertEquals(500, MvRewritePreprocessor.getPreprocessTimeLimitMs(sessionVariable));
+        // positive: independent of the optimizer timeout
+        sessionVariable.setOptimizerMaterializedViewPreprocessTimeLimitMillis(optimizerTimeout * 2);
+        Assertions.assertEquals(optimizerTimeout * 2, MvRewritePreprocessor.getPreprocessTimeLimitMs(sessionVariable));
+        // negative: no limit
+        sessionVariable.setOptimizerMaterializedViewPreprocessTimeLimitMillis(-1);
+        Assertions.assertEquals(-1, MvRewritePreprocessor.getPreprocessTimeLimitMs(sessionVariable));
+    }
+
+    @Test
+    public void testPreprocessDeadline() {
+        MvRewritePreprocessor.PreprocessDeadline unlimited = MvRewritePreprocessor.PreprocessDeadline.unlimited();
+        Assertions.assertTrue(unlimited.isUnlimited());
+        Assertions.assertFalse(unlimited.isExpired());
+        Assertions.assertEquals(1000, unlimited.capTimeoutMs(1000));
+        Assertions.assertFalse(unlimited.isExhausted());
+
+        MvRewritePreprocessor.PreprocessDeadline large = MvRewritePreprocessor.PreprocessDeadline.start(3_600_000);
+        Assertions.assertFalse(large.isExpired());
+        Assertions.assertEquals(1000, large.capTimeoutMs(1000));
+
+        MvRewritePreprocessor.PreprocessDeadline expired = MvRewritePreprocessor.PreprocessDeadline.start(0);
+        Assertions.assertTrue(expired.isExpired());
+        Assertions.assertEquals(0, expired.capTimeoutMs(1000));
+        Assertions.assertFalse(expired.isExhausted());
+        expired.skip("MVChooseCandidates", "mv_a");
+        expired.skip("MVChooseCandidates", "mv_a");
+        expired.skip("MVPrepareRelatedMVs", "mv_b");
+        Assertions.assertTrue(expired.isExhausted());
+        Assertions.assertEquals(1, expired.getSkippedCount("MVChooseCandidates"));
+        Assertions.assertEquals(1, expired.getSkippedCount("MVPrepareRelatedMVs"));
+        Assertions.assertEquals(0, expired.getSkippedCount("MVGenerateMvPlan"));
+        String summary = expired.summary();
+        Assertions.assertTrue(summary.contains("budget=0ms"), summary);
+        Assertions.assertTrue(summary.contains("mv_a"), summary);
+        Assertions.assertTrue(summary.contains("mv_b"), summary);
+    }
+
+    @Test
+    public void testChooseBestRelatedMVsWithExpiredDeadline() {
+        List<String> mvs = ImmutableList.of(
+                "create materialized view mv_1 distributed by random as select k1, v1, v2 from t1;",
+                "create materialized view mv_2 distributed by random as select k1, v1 from t1;"
+        );
+        starRocksAssert.withMaterializedViews(mvs, (obj) -> {
+            String query = "select k1, v1, v2 from t1";
+            Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
+            MvRewritePreprocessor preprocessor = result.first;
+            OptExpression logicalTree = result.second;
+            Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
+            List<MaterializedViewWrapper> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+            Assertions.assertEquals(2, relatedMVs.size());
+
+            // no deadline: all mvs are validated
+            List<MaterializedViewWrapper> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs,
+                    logicalTree);
+            Assertions.assertEquals(2, validMVs.size());
+
+            // expired deadline: all mvs are skipped without being validated
+            AtomicInteger getTableCalls = new AtomicInteger();
+            new MockUp<MvUtils>() {
+                @Mock
+                public Table getTableChecked(Invocation invocation, BaseTableInfo baseTableInfo) {
+                    getTableCalls.incrementAndGet();
+                    return invocation.proceed(baseTableInfo);
+                }
+            };
+            preprocessor.setPreprocessDeadline(MvRewritePreprocessor.PreprocessDeadline.start(0));
+            validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+            Assertions.assertTrue(validMVs.isEmpty());
+            Assertions.assertEquals(0, getTableCalls.get());
+            Assertions.assertEquals(2, preprocessor.getPreprocessDeadline().getSkippedCount("MVChooseCandidates"));
+        });
+    }
+
+    @Test
+    public void testValidationUsesRemainingBudgetAfterBaseTableResolution() {
+        String sql = "create materialized view mv_remaining_budget distributed by random " +
+                "as select k1, v1, v2 from t1;";
+        starRocksAssert.withMaterializedView(sql, (obj) -> {
+            MaterializedView mv = getMv(DB_NAME, (String) obj);
+            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance()
+                    .getOrLoadPlanContext(mv, connectContext.getSessionVariable().getOptimizerExecuteTimeout());
+            Assertions.assertNotNull(planContexts);
+            Assertions.assertFalse(planContexts.isEmpty());
+            Assertions.assertTrue(planContexts.stream().anyMatch(MvPlanContext::isValidMvPlan));
+
+            Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor("select k1, v1, v2 from t1");
+            MvRewritePreprocessor preprocessor = result.first;
+            Set<Table> queryTables = MvUtils.getAllTables(result.second).stream().collect(Collectors.toSet());
+            List<MaterializedViewWrapper> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+            Assertions.assertEquals(1, relatedMVs.size());
+            preprocessor.setPreprocessDeadline(MvRewritePreprocessor.PreprocessDeadline.start(1000));
+
+            AtomicLong elapsedMs = new AtomicLong();
+            AtomicLong cacheTimeoutMs = new AtomicLong(-1);
+            new MockUp<MvRewritePreprocessor.PreprocessDeadline>() {
+                @Mock
+                public long elapsedMs() {
+                    return elapsedMs.get();
+                }
+            };
+            new MockUp<MvUtils>() {
+                @Mock
+                public Table getTableChecked(Invocation invocation, BaseTableInfo baseTableInfo) {
+                    Table table = invocation.proceed(baseTableInfo);
+                    elapsedMs.set(900);
+                    return table;
+                }
+            };
+            new MockUp<CachingMvPlanContextBuilder>() {
+                @Mock
+                public List<MvPlanContext> getOrLoadPlanContext(MaterializedView materializedView, long timeoutMs) {
+                    cacheTimeoutMs.set(timeoutMs);
+                    return planContexts;
+                }
+            };
+
+            List<MaterializedViewWrapper> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs,
+                    result.second);
+            Assertions.assertEquals(1, validMVs.size());
+            Assertions.assertEquals(100, cacheTimeoutMs.get());
+        });
+    }
+
+    @Test
+    public void testExpiredDeadlineDoesNotWaitOrLoadPlans() {
+        String sql = "create materialized view mv_expired_budget distributed by random " +
+                "as select k1, v1, v2 from t1;";
+        starRocksAssert.withMaterializedView(sql, (obj) -> {
+            Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor("select k1, v1, v2 from t1");
+            MvRewritePreprocessor preprocessor = result.first;
+            Set<Table> queryTables = MvUtils.getAllTables(result.second).stream().collect(Collectors.toSet());
+            List<MaterializedViewWrapper> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+            Assertions.assertEquals(1, relatedMVs.size());
+            preprocessor.setPreprocessDeadline(MvRewritePreprocessor.PreprocessDeadline.start(1000));
+
+            AtomicLong elapsedMs = new AtomicLong();
+            AtomicInteger loadedPlanLookups = new AtomicInteger();
+            new MockUp<MvRewritePreprocessor.PreprocessDeadline>() {
+                @Mock
+                public long elapsedMs() {
+                    return elapsedMs.get();
+                }
+            };
+            new MockUp<MvUtils>() {
+                @Mock
+                public Table getTableChecked(Invocation invocation, BaseTableInfo baseTableInfo) {
+                    Table table = invocation.proceed(baseTableInfo);
+                    elapsedMs.set(1000);
+                    return table;
+                }
+            };
+            new MockUp<CachingMvPlanContextBuilder>() {
+                @Mock
+                public List<MvPlanContext> getPlanContextIfLoaded(MaterializedView mv) {
+                    loadedPlanLookups.incrementAndGet();
+                    return ImmutableList.of();
+                }
+
+                @Mock
+                public List<MvPlanContext> getOrLoadPlanContext(MaterializedView mv, long timeoutMs) {
+                    throw new AssertionError("Expired deadline must not load or wait for plans");
+                }
+
+                @Mock
+                public List<MvPlanContext> getPlanContextIfPresent(MaterializedView mv, long timeoutMs) {
+                    throw new AssertionError("Expired deadline must not trigger a cache load or wait");
+                }
+            };
+
+            List<MaterializedViewWrapper> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs,
+                    result.second);
+            Assertions.assertEquals(1, validMVs.size());
+            Assertions.assertEquals(3, loadedPlanLookups.get());
+        });
+    }
+
+    @Test
+    public void testPreprocessTimeLimitKeepsValidatedCandidates() {
+        List<String> mvs = ImmutableList.of(
+                "create materialized view mv_preprocess_timeout_1 distributed by random " +
+                        "as select k1, v1, v2 from t1;",
+                "create materialized view mv_preprocess_timeout_2 distributed by random " +
+                        "as select k1, v1, v2 from t1 where k1 > 1;"
+        );
+        starRocksAssert.withMaterializedViews(mvs, (obj) -> {
+            String sql = "select k1, v1, v2 from t1";
+            SessionVariable sessionVariable = connectContext.getSessionVariable();
+            long oldLimit = sessionVariable.getOptimizerMaterializedViewPreprocessTimeLimitMillis();
+            try {
+                // no limit: both mvs are candidates
+                sessionVariable.setOptimizerMaterializedViewPreprocessTimeLimitMillis(-1);
+                Assertions.assertEquals(2, optimizeAndGetCandidateMvCount(sql));
+
+                AtomicLong elapsedMs = new AtomicLong();
+                new MockUp<MvRewritePreprocessor.PreprocessDeadline>() {
+                    @Mock
+                    public long elapsedMs() {
+                        return elapsedMs.get();
+                    }
+                };
+                new MockUp<MvUtils>() {
+                    @Mock
+                    public Table getTableChecked(Invocation invocation, BaseTableInfo baseTableInfo) {
+                        Table table = invocation.proceed(baseTableInfo);
+                        elapsedMs.set(200);
+                        return table;
+                    }
+                };
+                sessionVariable.setOptimizerMaterializedViewPreprocessTimeLimitMillis(50);
+                Assertions.assertEquals(1, optimizeAndGetCandidateMvCount(sql));
+            } finally {
+                sessionVariable.setOptimizerMaterializedViewPreprocessTimeLimitMillis(oldLimit);
+            }
+        });
+    }
+
+    private int optimizeAndGetCandidateMvCount(String sql) throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        QueryStatement query = (QueryStatement) stmt;
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+                .transformWithSelectLimit(query.getQueryRelation());
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(connectContext, columnRefFactory));
+        OptExpression expr = optimizer.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
+                new ColumnRefSet(logicalPlan.getOutputColumn()));
+        Assertions.assertNotNull(expr);
+        return optimizer.getContext().getCandidateMvs().size();
     }
 }
