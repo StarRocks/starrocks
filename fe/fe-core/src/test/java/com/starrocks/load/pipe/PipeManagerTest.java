@@ -348,8 +348,6 @@ public class PipeManagerTest {
         };
     }
 
-<<<<<<< HEAD
-=======
     /**
      * Stubs {@link TaskManager#executeTaskAsync} for the duration of the current test.
      *
@@ -377,15 +375,6 @@ public class PipeManagerTest {
         FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.FAILED);
         submit.setFuture(future);
         future.run();
-        return submit;
-    }
-
-    /** An accepted submission whose task run has been cancelled. */
-    private static SubmitResult submittedWithCancelledRun() {
-        SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
-        FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.FAILED);
-        submit.setFuture(future);
-        future.cancel(true);
         return submit;
     }
 
@@ -428,7 +417,6 @@ public class PipeManagerTest {
         }
     }
 
->>>>>>> 1982f13 ([BugFix][RB-751] Stop a pipe only on consecutive task failures (#81873))
     private void mockPollError(int errorCount) {
         // poll error
         MockUp<HdfsUtil> mockHdfs = new MockUp<HdfsUtil>() {
