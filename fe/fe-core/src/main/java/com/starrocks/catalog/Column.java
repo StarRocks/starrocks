@@ -782,7 +782,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (isGeneratedColumn()) {
             String generatedColumnSql;
             if (idToColumn != null) {
+<<<<<<< HEAD
                 generatedColumnSql = generatedColumnExpr.convertToColumnNameExpr(idToColumn).toSql();
+=======
+                generatedColumnSql = AstToSQLBuilder.toSQL(generatedColumnExpr.convertToColumnNameExpr(idToColumn));
+>>>>>>> b107982 ([BugFix] Fix SHOW CREATE TABLE for generated columns of primary key tables (#83202))
             } else {
                 generatedColumnSql = generatedColumnExpr.toSql();
             }
