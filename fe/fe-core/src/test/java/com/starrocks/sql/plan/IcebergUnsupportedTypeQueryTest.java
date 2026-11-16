@@ -24,7 +24,7 @@ import java.io.File;
 
 /**
  * Verifies that querying Iceberg columns with unsupported V3 types
- * (e.g., geometry, timestamp_nano) fails at analysis time with a clear error,
+ * (e.g., geometry with an unsupported CRS, timestamp_nano) fails at analysis time with a clear error,
  * while querying supported columns on the same table works fine.
  */
 public class IcebergUnsupportedTypeQueryTest extends ConnectorPlanTestBase {
@@ -51,8 +51,8 @@ public class IcebergUnsupportedTypeQueryTest extends ConnectorPlanTestBase {
     public void testSelectUnsupportedColumnFails() {
         SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
                 getFragmentPlan("SELECT geo_col FROM iceberg0.unpartitioned_db.t_unknown_types"));
-        Assertions.assertTrue(ex.getMessage().contains("not supported"),
-                "Expected 'not supported' error, got: " + ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("Datatype of external table column [geo_col] is not supported"),
+                ex.getMessage());
     }
 
     @Test
