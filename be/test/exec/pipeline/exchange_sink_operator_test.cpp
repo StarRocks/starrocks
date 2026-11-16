@@ -260,11 +260,21 @@ TEST_F(SinkBufferCancelTest, cancel_aborts_inflight_rpc) {
     ASSERT_OK(stub->reset_channel());
 
     auto request = make_request(dest_id, port, stub);
+    request.attachment.append(std::string(1000, 'x'));
     ASSERT_OK(buffer->add_request(request));
 
     // Wait until the server has actually received the RPC, guaranteeing it is in-flight.
     ASSERT_TRUE(service.received.wait_for(std::chrono::seconds(10)));
     EXPECT_FALSE(buffer->is_finished());
+
+    // While the RPC is in flight, the profile already reports the size of the largest request sent.
+    {
+        RuntimeProfile profile("sink_buffer");
+        buffer->update_profile(&profile);
+        auto* peak_request_bytes = profile.get_counter("PeakRequestBytes");
+        ASSERT_NE(peak_request_bytes, nullptr);
+        EXPECT_EQ(peak_request_bytes->value(), 1000);
+    }
 
     const auto cancel_start = std::chrono::steady_clock::now();
     buffer->cancel_one_sinker(_runtime_state.get());

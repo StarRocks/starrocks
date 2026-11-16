@@ -248,6 +248,7 @@ Exchange Operator 负责在 BE 节点之间传输数据。可以有几种交换�
 | BytesUnsent | 未发送的数据大小。当存在短路逻辑时，此指标为非零；否则为零。 |
 | BytesPassThrough | 如果目标节点是当前节点，数据将不会通过网络传输，这称为 passthrough 数据。此指标指示此类 passthrough 数据的大小。Passthrough 由 `enable_exchange_pass_through` 控制。 |
 | PassThroughBufferPeakMemoryUsage | PassThrough Buffer 的内存使用峰值。 |
+| PeakRequestBytes | 通过网络发送的单个请求大小的最大值（如有压缩，为压缩后的大小）。`BytesSent / RequestSent` 即为请求的平均大小。不包含 passthrough 数据。 |
 | CompressTime | 压缩时间。 |
 | CompressedInputBytes | 实际送入压缩器的序列化数据（压缩前）的大小。被自适应压缩策略跳过的 chunk 不计入其中。`CompressedInputBytes / CompressedBytes` 即为压缩率，`SerializedBytes - CompressedInputBytes` 即为未被压缩的数据大小。 |
 | CompressedBytes | 压缩数据的大小。仅统计实际被压缩的 chunk。 |
