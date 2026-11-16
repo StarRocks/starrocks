@@ -57,17 +57,18 @@ GeoColumn::GeoColumn(GeoColumnDescriptor descriptor) : _descriptor(std::move(des
 
 GeoColumn::GeoColumn(const TypeDescriptor& type, size_t size)
         : GeoColumn(GeoColumnDescriptor{type.geo_type.value_or(GeoTypeDescriptor{})}) {
-    if (type.geo_type && type.geo_type->logical_type != GEO_LOGICAL_TYPE_UNKNOWN &&
-        ((type.type == TYPE_GEOGRAPHY) != (type.geo_type->logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY))) {
-        throw std::invalid_argument("GeoColumn primitive/descriptor mismatch");
-    }
+    // The caller passes a valid geo type (see TypeDescriptor::create_geo_type).
+    DCHECK(type.geo_type.has_value());
+    DCHECK_EQ(type.type == TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
+              type.geo_type->logical_type);
     resize(size);
 }
 
 const GeoColumn& GeoColumn::_source(const Column& src) const {
     const auto& geo = down_cast<const GeoColumn&>(src);
-    // Only the semantic type must match; kernels check each row's own WKB.
-    if (_descriptor.type != geo._descriptor.type) throw std::invalid_argument("GeoColumn descriptor mismatch");
+    // Only the semantic type must match; kernels check each row's own WKB. Columns are built from plan types
+    // and FE coerces geo types by identity, so copies never mix descriptors.
+    DCHECK(_descriptor.type == geo._descriptor.type) << "GeoColumn descriptor mismatch";
     return geo;
 }
 
