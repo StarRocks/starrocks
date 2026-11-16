@@ -21,11 +21,31 @@
 
 #include "column/binary_column.h"
 #include "fs/fs_memory.h"
+#include "io/seekable_input_stream.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "storage/rowset/indexed_column_writer.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
+
+class FaultInjectionStream : public io::SeekableInputStreamWrapper {
+public:
+    explicit FaultInjectionStream(std::shared_ptr<io::SeekableInputStream> stream)
+            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(std::move(stream)) {}
+
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        if (fail_read) {
+            fail_read = false;
+            return Status::IOError("injected read failure");
+        }
+        return _stream->read_at_fully(offset, out, count);
+    }
+
+    bool fail_read = false;
+
+private:
+    std::shared_ptr<io::SeekableInputStream> _stream;
+};
 
 class IndexedColumnTest : public testing::Test {
 protected:
@@ -117,5 +137,119 @@ TEST_F(IndexedColumnTest, SeekInEmptyValueIndex) {
     ASSERT_NO_FATAL_FAILURE(create_column({}));
     ASSERT_NO_FATAL_FAILURE(check_seek("a"));
 }
+
+TEST_F(IndexedColumnTest, SeekAcrossValueIndexPagesReadFailureRecovery) {
+    ASSERT_NO_FATAL_FAILURE(create_column({{"ab", "adh"}, {"agh", "ahh"}, {"aj", "al"}}));
+    auto fault_stream = std::make_shared<FaultInjectionStream>(_rfile->stream());
+    auto fault_file = std::make_unique<RandomAccessFile>(fault_stream, "/indexed_column");
+    IndexReadOptions read_options;
+    read_options.read_file = fault_file.get();
+    read_options.stats = &_stats;
+    read_options.use_page_cache = false;
+    std::unique_ptr<IndexedColumnIterator> iter;
+    ASSERT_OK(_reader->new_iterator(read_options, &iter));
+
+    // Warm up page 0 [ab, adh].
+    Slice key_ab("ab");
+    bool exact_match = false;
+    ASSERT_OK(iter->seek_at_or_after(&key_ab, &exact_match));
+    ASSERT_TRUE(exact_match);
+    ASSERT_EQ(0, iter->get_current_ordinal());
+
+    // Inject a failure when loading the next page [agh, ahh] across the gap at "af".
+    fault_stream->fail_read = true;
+    Slice key_af("af");
+    Status st = iter->seek_at_or_after(&key_af, &exact_match);
+    ASSERT_TRUE(st.is_io_error()) << st.to_string();
+
+    // Subsequent seek to ordinal 1 ("adh" in page 0) must not reuse a desynchronized page.
+    ASSERT_OK(iter->seek_to_ordinal(1));
+    ASSERT_EQ(1, iter->get_current_ordinal());
+
+    // Reading 3 values must yield "adh", "agh", "ahh" rather than skipping page 1 to "aj", "al".
+    auto column = BinaryColumn::create();
+    size_t count = 3;
+    ASSERT_OK(iter->next_batch(&count, column.get()));
+    ASSERT_EQ(3, count);
+    EXPECT_EQ("adh", column->get_slice(0).to_string());
+    EXPECT_EQ("agh", column->get_slice(1).to_string());
+    EXPECT_EQ("ahh", column->get_slice(2).to_string());
+}
+
+TEST_F(IndexedColumnTest, SeekEndOfIndexMissRecovery) {
+    ASSERT_NO_FATAL_FAILURE(create_column({{"ab", "adh"}, {"agh", "ahh"}}));
+    Slice key_z("z");
+    bool exact_match = false;
+    Status st = _iter->seek_at_or_after(&key_z, &exact_match);
+    ASSERT_TRUE(st.is_not_found()) << st.to_string();
+
+    // After NotFound at the end of the index, seek_to_ordinal must reposition cleanly.
+    ASSERT_OK(_iter->seek_to_ordinal(0));
+    ASSERT_EQ(0, _iter->get_current_ordinal());
+    auto column = BinaryColumn::create();
+    size_t count = 1;
+    ASSERT_OK(_iter->next_batch(&count, column.get()));
+    ASSERT_EQ(1, count);
+    EXPECT_EQ("ab", column->get_slice(0).to_string());
+}
+
+class IndexedColumnEndMissTest : public IndexedColumnTest, public testing::WithParamInterface<bool> {};
+
+TEST_P(IndexedColumnEndMissTest, RepeatedEndMissesReusePage) {
+    if (GetParam()) {
+        ASSERT_NO_FATAL_FAILURE(create_column({{"b", "d"}, {"f", "h"}}));
+    } else {
+        ASSERT_NO_FATAL_FAILURE(create_column({{"b", "d", "f", "h"}}));
+    }
+
+    Slice warm_key("f");
+    bool exact_match = false;
+    ASSERT_OK(_iter->seek_at_or_after(&warm_key, &exact_match));
+    ASSERT_TRUE(exact_match);
+    ASSERT_EQ(2, _iter->get_current_ordinal());
+    const auto reads_before = _stats.io_count_request;
+    const auto pages_before = _stats.total_pages_num;
+
+    for (int i = 0; i < 1000; ++i) {
+        std::string value = "z" + std::to_string(i);
+        Slice key(value);
+        ASSERT_TRUE(_iter->seek_at_or_after(&key, &exact_match).is_not_found());
+    }
+
+    // Even with the page cache disabled, ordinary misses reuse the parsed page.
+    EXPECT_EQ(reads_before, _stats.io_count_request);
+    EXPECT_EQ(pages_before, _stats.total_pages_num);
+
+    // Re-seeking the old offset can take ParsedPage's no-op path. Its decoder
+    // must still return the correct suffix, including a read past the last page.
+    ASSERT_OK(_iter->seek_to_ordinal(2));
+    auto column = BinaryColumn::create();
+    size_t count = 3;
+    ASSERT_OK(_iter->next_batch(&count, column.get()));
+    ASSERT_EQ(2, count);
+    ASSERT_EQ(2, column->size());
+    EXPECT_EQ("f", column->get_slice(0).to_string());
+    EXPECT_EQ("h", column->get_slice(1).to_string());
+    EXPECT_EQ(reads_before, _stats.io_count_request);
+
+    // Exercise another miss with the page exhausted, then value and ordinal
+    // seeks back into the terminal page without loading it again.
+    Slice missing_key("z");
+    ASSERT_TRUE(_iter->seek_at_or_after(&missing_key, &exact_match).is_not_found());
+    ASSERT_NO_FATAL_FAILURE(check_seek("h"));
+    ASSERT_OK(_iter->seek_to_ordinal(2));
+    column->reset_column();
+    count = 1;
+    ASSERT_OK(_iter->next_batch(&count, column.get()));
+    ASSERT_EQ(1, count);
+    EXPECT_EQ("f", column->get_slice(0).to_string());
+    EXPECT_EQ(reads_before, _stats.io_count_request);
+    EXPECT_EQ(pages_before, _stats.total_pages_num);
+
+    // Backward seeking and subsequent cross-page reads remain correct.
+    ASSERT_NO_FATAL_FAILURE(check_seek("b"));
+}
+
+INSTANTIATE_TEST_SUITE_P(PageLayouts, IndexedColumnEndMissTest, testing::Bool());
 
 } // namespace starrocks
