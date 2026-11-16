@@ -81,10 +81,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -130,7 +132,7 @@ public class CoordinatorTest extends PlanTestBase {
     }
 
     @Test
-    public void testLoadInformationReportRetainsDeploymentLock() throws Exception {
+    public void testPreparedLoadUpdatesRetainDeploymentLock() throws Exception {
         assertReportDuringDeployment(true, false, true, false);
     }
 
@@ -149,6 +151,9 @@ public class CoordinatorTest extends PlanTestBase {
         ExecutionDAG dag = mock(ExecutionDAG.class);
         FragmentInstanceExecState execState = mock(FragmentInstanceExecState.class);
         QueryRuntimeProfile profile = mock(QueryRuntimeProfile.class);
+        Runnable loadUpdate = mock(Runnable.class);
+        AtomicBoolean loadUpdateHeldLock = new AtomicBoolean();
+        ReentrantLock deploymentLock = Deencapsulation.getField(coordinator, "lock");
         Deencapsulation.setField(coordinator, "executionDAG", dag);
         Deencapsulation.setField(coordinator, "queryProfile", profile);
         CountDownLatch reporting = new CountDownLatch(1);
@@ -170,13 +175,17 @@ public class CoordinatorTest extends PlanTestBase {
             }
         }
         if (loadInformation) {
-            params.setLoad_counters(Collections.singletonMap("dpp.norm.ALL", "1"));
-            if (failLoadUpdate) {
-                doThrow(new IllegalStateException("load information update failed"))
-                        .when(profile).updateLoadInformation(execState, params);
-            }
+            // The coordinator must honor work prepared by the profile without knowing its fields.
+            when(profile.buildLoadInformationUpdates(execState, params))
+                    .thenReturn(Collections.singletonList(loadUpdate));
+            doAnswer(call -> {
+                loadUpdateHeldLock.set(deploymentLock.isHeldByCurrentThread());
+                if (failLoadUpdate) {
+                    throw new IllegalStateException("load information update failed");
+                }
+                return null;
+            }).when(loadUpdate).run();
         }
-        ReentrantLock deploymentLock = Deencapsulation.getField(coordinator, "lock");
         ExecutorService worker = Executors.newSingleThreadExecutor();
         deploymentLock.lock();
         try {
@@ -186,7 +195,7 @@ public class CoordinatorTest extends PlanTestBase {
                 Awaitility.await().alias("load report waiting for the deployment lock")
                         .atMost(5, TimeUnit.SECONDS).until(deploymentLock::hasQueuedThreads);
                 verify(profile, never()).updateLoadChannelProfile(any());
-                verify(profile, never()).updateLoadInformation(any(), any());
+                verify(loadUpdate, never()).run();
                 deploymentLock.unlock();
             }
             report.get(5, TimeUnit.SECONDS);
@@ -196,13 +205,15 @@ public class CoordinatorTest extends PlanTestBase {
             verify(profile).updateProfile(execState, params);
             verify(execState).updateRunningProfile(params);
             if (done) {
+                verify(profile).buildLoadInformationUpdates(execState, params);
                 verify(profile).finishInstance(params.getFragment_instance_id());
             }
             if (loadChannel) {
                 verify(profile).updateLoadChannelProfile(params);
             }
             if (loadInformation) {
-                verify(profile).updateLoadInformation(execState, params);
+                verify(loadUpdate).run();
+                Assertions.assertTrue(loadUpdateHeldLock.get(), "prepared load updates must execute under the lock");
             }
         } finally {
             if (deploymentLock.isHeldByCurrentThread()) {

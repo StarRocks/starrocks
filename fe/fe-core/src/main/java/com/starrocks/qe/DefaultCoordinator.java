@@ -1503,28 +1503,24 @@ public class DefaultCoordinator extends Coordinator {
             throw new RuntimeException(String.format("updateFinishInstance called after fragment is finished:%s, query_id:%s",
                     instanceId, DebugUtil.printId(params.getQuery_id())));
         }
-        if (hasLoadInformation(params)) {
-            try {
+        try {
+            List<Runnable> loadUpdates = queryProfile.buildLoadInformationUpdates(execState, params);
+            if (!loadUpdates.isEmpty()) {
                 lock();
-                queryProfile.updateLoadInformation(execState, params);
-            } catch (Throwable e) {
-                LOG.warn("update load information failed {}", instanceId, e);
-            } finally {
-                unlock();
+                try {
+                    for (Runnable update : loadUpdates) {
+                        update.run();
+                    }
+                } finally {
+                    unlock();
+                }
             }
+        } catch (Throwable e) {
+            LOG.warn("update load information failed {}", instanceId, e);
         }
 
         // NOTE: it's critical for query execution, and must be put after the profile update
         queryProfile.finishInstance(params.getFragment_instance_id());
-    }
-
-    private static boolean hasLoadInformation(TReportExecStatusParams params) {
-        // Keep all fields consumed by QueryRuntimeProfile.updateLoadInformation under the coordinator lock,
-        // including export and CACHE SELECT reports, which need not be LOAD queries.
-        return params.isSetDelta_urls() || params.isSetLoad_counters() || params.isSetTracking_url()
-                || params.isSetExport_files() || params.isSetCommitInfos() || params.isSetFailInfos()
-                || params.isSetRejected_record_path() || params.isSetSink_commit_infos()
-                || params.isSetLoad_datacache_metrics();
     }
 
     @Override
