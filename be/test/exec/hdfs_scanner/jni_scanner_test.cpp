@@ -16,20 +16,12 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD:be/test/exec/hdfs_scanner/jni_scanner_test.cpp
-#include "runtime/descriptor_helper.h"
-=======
 #include <cstdlib>
 #include <string>
 
-#include "common/config_exec_fwd.h"
-#include "common/util/thrift_util.h"
 #include "runtime/descriptor_helper.h"
-#include "runtime/descriptors_ext.h"
-#include "runtime/java/jni_env.h"
-#include "runtime/java/jvm_helper.h"
->>>>>>> 1fb059b ([BugFix][RB-929] Clear the pending JNI exception after JniScanner close and hold scanner refs as global refs (#83366)):be/test/connector/hive/scanner/jni_scanner_test.cpp
 #include "runtime/runtime_state.h"
+#include "udf/java/java_udf.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {

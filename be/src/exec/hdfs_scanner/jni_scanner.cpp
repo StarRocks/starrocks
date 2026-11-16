@@ -72,13 +72,8 @@ void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
         _jni_scanner_obj = nullptr;
     }
     if (_jni_scanner_cls != nullptr) {
-<<<<<<< HEAD:be/src/exec/hdfs_scanner/jni_scanner.cpp
         JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
-        env->DeleteLocalRef(_jni_scanner_cls);
-=======
-        JNIEnv* env = JVMHelper::getInstance().getEnv();
         env->DeleteGlobalRef(_jni_scanner_cls);
->>>>>>> 1fb059b ([BugFix][RB-929] Clear the pending JNI exception after JniScanner close and hold scanner refs as global refs (#83366)):be/src/connector/hive/scanner/jni_scanner.cpp
         _jni_scanner_cls = nullptr;
     }
 }
