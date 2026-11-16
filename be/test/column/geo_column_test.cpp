@@ -36,7 +36,6 @@ GeoColumnDescriptor descriptor(GeoLogicalTypePB kind = GEO_LOGICAL_TYPE_GEOGRAPH
     desc.type.edge_algorithm =
             kind == GEO_LOGICAL_TYPE_GEOGRAPHY ? GEO_EDGE_ALGORITHM_SPHERICAL : GEO_EDGE_ALGORITHM_PLANAR;
     desc.type.crs = "OGC:CRS84";
-    desc.storage.encoding = GEO_ENCODING_WKB;
     return desc;
 }
 std::string point() {
@@ -60,7 +59,6 @@ TEST(GeoColumnTest, RawBytesAndDistinctSemantics) {
         ASSERT_TRUE(info.ok());
         EXPECT_EQ(1, info->geometry_type);
         EXPECT_FALSE(info->empty);
-        EXPECT_EQ(GEO_VALIDATION_STATE_UNKNOWN, column->descriptor().storage.validation_state);
     }
 }
 
@@ -218,28 +216,14 @@ TEST(GeoColumnTest, CopyRejectsDescriptorChangesWithoutSqlCoercion) {
     other->append_wkb(Slice(point()));
     EXPECT_THROW(column->append(*other), std::invalid_argument);
     EXPECT_EQ(0, column->size());
-    auto different = descriptor();
-    different.storage.dimension = GEO_DIMENSION_XYZ;
-    other = GeoColumn::create(different);
-    other->append_wkb(Slice(point()));
-    EXPECT_THROW(column->append(*other), std::invalid_argument);
-    EXPECT_EQ(0, column->size());
-    different.storage.encoding = GEO_ENCODING_UNKNOWN;
-    EXPECT_THROW(GeoColumn::create(different), std::invalid_argument);
 }
 
-TEST(GeoColumnTest, MaterializationBindsOnlyStorageOfTypedPlaceholders) {
+TEST(GeoColumnTest, CopiesCheckSemanticType) {
     auto desc = descriptor(GEO_LOGICAL_TYPE_GEOMETRY);
-    desc.storage = {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED};
     const auto type = TypeDescriptor::create_geo_type(TYPE_GEOMETRY, desc.type);
     auto source = GeoColumn::create(desc);
     source->append_wkb(Slice(point()));
-    auto empty = GeoColumn::create(type, 0);
-    const auto unbound = empty->descriptor();
-    empty->append(*source, 0, 0);
-    empty->append_selective(*source, nullptr, 0, 0);
-    empty->append_value_multiple_times(*source, 0, 0);
-    EXPECT_EQ(unbound, empty->descriptor());
+    const auto unbound = GeoColumn::create(type, 0)->descriptor();
     for (int operation = 0; operation < 4; ++operation) {
         SCOPED_TRACE(operation);
         auto destination = GeoColumn::create(type, 0);
@@ -258,11 +242,12 @@ TEST(GeoColumnTest, MaterializationBindsOnlyStorageOfTypedPlaceholders) {
         default:
             destination->update_rows(*source, &index);
         }
-        EXPECT_EQ(desc, destination->descriptor());
+        // Copies move WKB bytes only; the destination keeps its own descriptor.
+        EXPECT_EQ(unbound, destination->descriptor());
         EXPECT_EQ(point(), destination->get_wkb(destination->size() - 1).to_string());
     }
 
-    // An untyped placeholder must never acquire semantic identity from its input.
+    // An untyped column must never acquire semantic identity from its input.
     auto untyped = GeoColumn::create();
     EXPECT_THROW(untyped->append(*source), std::invalid_argument);
     auto other_crs = type;
@@ -270,25 +255,74 @@ TEST(GeoColumnTest, MaterializationBindsOnlyStorageOfTypedPlaceholders) {
     auto incompatible = GeoColumn::create(other_crs, 0);
     EXPECT_THROW(incompatible->append(*source), std::invalid_argument);
 
-    // Already populated UNKNOWN storage is not evidence of XY data.
+    // Populated destinations of the same type accept further copies.
     auto raw = GeoColumn::create(type, 0);
     raw->append_wkb(Slice(point()));
-    EXPECT_THROW(raw->append(*source), std::invalid_argument);
-    EXPECT_EQ(GEO_DIMENSION_UNKNOWN, raw->descriptor().storage.dimension);
-    EXPECT_EQ(1, raw->size());
-
-    // Explicit physical descriptors retain strict copy checks, even when empty.
-    auto explicit_desc = desc;
-    explicit_desc.storage.dimension = GEO_DIMENSION_XYZ;
-    auto explicit_column = GeoColumn::create(explicit_desc);
-    EXPECT_THROW(explicit_column->append(*source), std::invalid_argument);
-    EXPECT_EQ(explicit_desc, explicit_column->descriptor());
+    raw->append(*source);
+    EXPECT_EQ(unbound, raw->descriptor());
+    EXPECT_EQ(2, raw->size());
 }
 
-TEST(GeoColumnTest, InspectionDoesNotTrustProducerFlag) {
-    auto desc = descriptor();
-    desc.storage.validation_state = GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED;
-    auto column = GeoColumn::create(desc);
+TEST(GeoColumnTest, ZeroCountCopiesCheckTypeOnly) {
+    for (auto kind : {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_LOGICAL_TYPE_GEOMETRY}) {
+        auto desc = descriptor(kind);
+        const auto primitive = kind == GEO_LOGICAL_TYPE_GEOGRAPHY ? TYPE_GEOGRAPHY : TYPE_GEOMETRY;
+        const auto type = TypeDescriptor::create_geo_type(primitive, desc.type);
+        for (int operation = 0; operation < 3; ++operation) {
+            SCOPED_TRACE(::testing::Message() << kind << ":" << operation);
+            auto copy = [&](GeoColumn& destination, const Column& source) {
+                if (operation == 0)
+                    destination.append(source, 0, 0);
+                else if (operation == 1)
+                    destination.append_selective(source, nullptr, 0, 0);
+                else
+                    destination.append_value_multiple_times(source, 0, 0);
+            };
+            for (bool populated : {false, true}) {
+                SCOPED_TRACE(populated);
+                auto source = GeoColumn::create(desc);
+                if (populated) source->append_wkb(Slice(point()));
+                auto destination = GeoColumn::create(type, 0);
+                const auto unbound = destination->descriptor();
+                destination->append_default(2); // Materialized NULL placeholders own no WKB bytes.
+                copy(*destination, *source);
+                EXPECT_EQ(unbound, destination->descriptor());
+                ASSERT_EQ(2, destination->size());
+                EXPECT_TRUE(destination->get_wkb(0).empty());
+                EXPECT_TRUE(destination->get_wkb(1).empty());
+                EXPECT_EQ(desc, source->descriptor());
+                EXPECT_EQ(populated ? 1 : 0, source->size());
+                copy(*source, *source);
+                EXPECT_EQ(desc, source->descriptor());
+                EXPECT_EQ(populated ? 1 : 0, source->size());
+                if (populated) {
+                    EXPECT_EQ(point(), source->get_wkb(0).to_string());
+                }
+
+                auto placeholder = GeoColumn::create(type, 0);
+                copy(*destination, *placeholder);
+                EXPECT_EQ(unbound, destination->descriptor());
+                for (int mismatch = 0; mismatch < 3; ++mismatch) {
+                    auto incompatible = desc;
+                    if (mismatch == 0)
+                        incompatible = descriptor(kind == GEO_LOGICAL_TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOMETRY
+                                                                                     : GEO_LOGICAL_TYPE_GEOGRAPHY);
+                    else if (mismatch == 1)
+                        incompatible.type.crs = "custom:other";
+                    else
+                        incompatible.type = {};
+                    auto target = GeoColumn::create(incompatible);
+                    EXPECT_THROW(copy(*target, *source), std::invalid_argument) << mismatch;
+                    EXPECT_EQ(incompatible, target->descriptor());
+                    EXPECT_EQ(0, target->size());
+                }
+            }
+        }
+    }
+}
+
+TEST(GeoColumnTest, InspectionChecksRowBytes) {
+    auto column = GeoColumn::create(descriptor());
     column->append_wkb(Slice("invalid"));
     EXPECT_FALSE(column->inspect_wkb(0).ok());
     EXPECT_FALSE(column->inspect_wkb(1).ok());
@@ -367,10 +401,10 @@ TEST(GeoColumnTest, GenericCreationPreservesTypedPayload) {
         auto source = GeoColumn::create(desc);
         source->append_wkb(Slice(point()));
         auto destination = ColumnHelper::create_column(TypeDescriptor::create_geo_type(primitive, desc.type), false);
-        // The factory already fixes the semantic type; an empty destination can acquire storage metadata.
+        // The factory already fixes the semantic type.
         ASSERT_NO_THROW(destination->append(*source, 0, 1));
         ASSERT_EQ(1, destination->size());
-        EXPECT_EQ(desc, down_cast<const GeoColumn*>(destination.get())->descriptor());
+        EXPECT_EQ(desc.type, down_cast<const GeoColumn*>(destination.get())->descriptor().type);
         EXPECT_EQ(point(), down_cast<const GeoColumn*>(destination.get())->get_wkb(0).to_string());
         EXPECT_EQ(desc, source->descriptor());
         auto copied = source->clone();

@@ -135,9 +135,19 @@ private:
 
 class StructColumnReader final : public ColumnReader {
 public:
+    // default_columns: one-row columns with the initial-default of subfields the file lacks (absent = NULL).
+    // level_source_reader: when no used subfield is in the file, a reader of an unused stored subfield of type
+    // level_source_type (which the reader points to), read only for the struct's levels.
     explicit StructColumnReader(const ParquetField* parquet_field,
-                                std::map<std::string, std::unique_ptr<ColumnReader>>&& child_readers)
-            : ColumnReader(parquet_field), _child_readers(std::move(child_readers)) {}
+                                std::map<std::string, std::unique_ptr<ColumnReader>>&& child_readers,
+                                std::map<std::string, ColumnPtr>&& default_columns = {},
+                                ColumnReaderPtr level_source_reader = nullptr,
+                                std::unique_ptr<TypeDescriptor> level_source_type = nullptr)
+            : ColumnReader(parquet_field),
+              _child_readers(std::move(child_readers)),
+              _default_columns(std::move(default_columns)),
+              _level_source_type(std::move(level_source_type)),
+              _level_source_reader(std::move(level_source_reader)) {}
     ~StructColumnReader() override = default;
 
     Status prepare() override {
@@ -149,6 +159,9 @@ public:
             if (child.second != nullptr) {
                 RETURN_IF_ERROR(child.second->prepare());
             }
+        }
+        if (_level_source_reader != nullptr) {
+            RETURN_IF_ERROR(_level_source_reader->prepare());
         }
 
         // Pick the level source once. Any present child carries the struct's def levels; prefer the one with the
@@ -168,6 +181,9 @@ public:
                 _def_rep_level_child_reader = &(pair.second);
                 source_rep_level = rep_level;
             }
+        }
+        if (_def_rep_level_child_reader == nullptr && _level_source_reader != nullptr) {
+            _def_rep_level_child_reader = &_level_source_reader;
         }
         if (_def_rep_level_child_reader != nullptr) {
             return Status::OK();
@@ -201,6 +217,9 @@ public:
                 pair.second->set_need_parse_levels(need_parse_levels);
             }
         }
+        if (_level_source_reader != nullptr) {
+            _level_source_reader->set_need_parse_levels(need_parse_levels);
+        }
     }
 
     bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
@@ -227,6 +246,9 @@ public:
                 pair.second->collect_column_io_range(ranges, end_offset, types, active);
             }
         }
+        if (_level_source_reader != nullptr) {
+            _level_source_reader->collect_column_io_range(ranges, end_offset, types, active);
+        }
     }
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {
@@ -234,6 +256,9 @@ public:
             if (pair.second != nullptr) {
                 pair.second->select_offset_index(range, rg_first_row);
             }
+        }
+        if (_level_source_reader != nullptr) {
+            _level_source_reader->select_offset_index(range, rg_first_row);
         }
     }
 
@@ -265,6 +290,10 @@ private:
 
     // _children_readers order is the same as TypeDescriptor children order.
     std::map<std::string, ColumnReaderPtr> _child_readers;
+    std::map<std::string, ColumnPtr> _default_columns;
+    // _level_source_reader keeps a pointer to _level_source_type, so the type is declared first.
+    std::unique_ptr<TypeDescriptor> _level_source_type;
+    ColumnReaderPtr _level_source_reader;
     // Child ColumnReader whose levels give this struct's def & rep levels, picked in prepare().
     const std::unique_ptr<ColumnReader>* _def_rep_level_child_reader = nullptr;
 };
@@ -285,6 +314,21 @@ private:
 //   so pointers remain valid after moves. However, the _shredded_fields vector must NOT
 //   be resized after any reader is constructed. Fill the vector fully before calling
 //   any reader construction that captures these addresses.
+// Tells which rows hold an object `typed_value` group, even when every field below it is NULL (an empty object).
+// A group has no column of its own, so its presence is read from the definition levels of one scalar leaf below it:
+// a level at or above the group's own level means the group is present.
+struct ObjectPresenceSource {
+    // Reads the leaf, only for its levels.
+    ColumnReaderPtr reader;
+    // Heap-owned: the reader keeps a pointer to it.
+    std::unique_ptr<TypeDescriptor> read_type;
+    int16_t group_def_level = 0;
+    // batch-local, one flag per row, reset each read_range call. Empty when presence was not read.
+    std::vector<uint8_t> present;
+
+    bool is_present(size_t row) const { return row < present.size() && present[row] != 0; }
+};
+
 struct ShreddedFieldNode {
     enum class Kind : uint8_t { NONE = 0, SCALAR = 1, ARRAY = 2 };
 
@@ -301,6 +345,11 @@ struct ShreddedFieldNode {
     // In this mode, we read element.value as an additional per-element fallback source.
     bool scalar_array_layout = false;
     std::unique_ptr<ColumnReader> array_element_value_reader;
+    // Set for object nodes (typed_value is a group) outside arrays, when a leaf below it can give the levels.
+    std::unique_ptr<ObjectPresenceSource> presence;
+    // Non-empty when the typed_value type is not allowed in shredded variants. It fails the read of this node, not the
+    // creation of the reader: nodes exist for every field of the schema, whether the query uses it or not.
+    std::string unsupported_reason;
 
     // batch-local columns filled during read_range, reset each call.
     ColumnPtr value_column;
@@ -357,6 +406,10 @@ private:
         ColumnReaderPtr root_typed_value_reader;
         std::unique_ptr<TypeDescriptor> root_typed_value_type;
         ColumnPtr root_typed_value_column;
+        // Presence of the root typed_value group when it is an object; set by the factory.
+        std::unique_ptr<ObjectPresenceSource> root_presence;
+        // Like ShreddedFieldNode::unsupported_reason, for a scalar root typed_value.
+        std::string root_unsupported_reason;
     };
 
 public:
@@ -401,6 +454,11 @@ public:
     }
 
     ~VariantColumnReader() override = default;
+
+    void set_root_presence(std::unique_ptr<ObjectPresenceSource> presence) {
+        _top_level.root_presence = std::move(presence);
+    }
+    void set_root_unsupported_reason(std::string reason) { _top_level.root_unsupported_reason = std::move(reason); }
 
     Status prepare() override;
 

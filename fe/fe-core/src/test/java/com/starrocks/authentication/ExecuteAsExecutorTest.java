@@ -23,6 +23,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.MysqlProto;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -47,6 +49,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.HashMap;
 import java.util.List;
@@ -134,7 +138,9 @@ public class ExecuteAsExecutorTest {
         // login as impersonate_user
 
         ConnectContext context = new ConnectContext();
-        AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                        AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
         Assertions.assertEquals("impersonate_user", context.getAccessControlContext().getQualifiedUser());
         Assertions.assertEquals(Set.of(), context.getGroups());
@@ -201,7 +207,9 @@ public class ExecuteAsExecutorTest {
                     List.of(), Map.of(), NodePosition.ZERO));
 
             ConnectContext context = new ConnectContext();
-            AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
             ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
 
@@ -247,7 +255,9 @@ public class ExecuteAsExecutorTest {
                             NodePosition.ZERO));
 
             ConnectContext context = new ConnectContext();
-            AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
             ExecuteAsExecutor.execute(
                     new ExecuteAsStmt(new UserRef("u1", "%", false, true, NodePosition.ZERO), false), context);
@@ -293,7 +303,9 @@ public class ExecuteAsExecutorTest {
                     new CreateUserStmt(new UserRef("u1", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
 
             ConnectContext context = new ConnectContext();
-            AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
             ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
 
@@ -301,6 +313,103 @@ public class ExecuteAsExecutorTest {
             Assertions.assertFalse(context.getGroups().contains(TARGET_MEMBEROF_GROUP));
         } finally {
             Config.authentication_ldap_simple_group_source = savedGroupSource;
+        }
+    }
+
+    /**
+     * The legacy `AS '<dn>'` form does not support memberOf, so as an `EXECUTE AS` target it resolves
+     * exactly as its own login does: through the group providers, even when the FE configuration says
+     * `memberof`, and without reading memberOf.
+     */
+    @Test
+    public void testExecuteAsToALegacyPerUserDnUserKeepsTheGroupProviders() throws Exception {
+        stubDirectoryForAnyUser();
+        String savedGroupSource = Config.authentication_ldap_simple_group_source;
+        String savedRootDn = Config.authentication_ldap_simple_bind_root_dn;
+        String savedRootPwd = Config.authentication_ldap_simple_bind_root_pwd;
+        try {
+            Config.authentication_ldap_simple_group_source = "memberof";
+            Config.authentication_ldap_simple_bind_root_dn = "cn=svc,dc=starrocks,dc=com";
+            Config.authentication_ldap_simple_bind_root_pwd = "secret";
+
+            authenticationMgr.createUser(
+                    new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, List.of(), Map.of(),
+                            NodePosition.ZERO));
+            authenticationMgr.createUser(new CreateUserStmt(
+                    new UserRef("u1", "%", false, NodePosition.ZERO), true,
+                    new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE", "uid=u1,ou=People,dc=starrocks,dc=com",
+                            false, NodePosition.ZERO),
+                    List.of(), Map.of(), NodePosition.ZERO));
+
+            ConnectContext context = new ConnectContext();
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
+
+            ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
+
+            Assertions.assertEquals(Set.of("group1"), context.getGroups());
+        } finally {
+            Config.authentication_ldap_simple_group_source = savedGroupSource;
+            Config.authentication_ldap_simple_bind_root_dn = savedRootDn;
+            Config.authentication_ldap_simple_bind_root_pwd = savedRootPwd;
+        }
+    }
+
+    /**
+     * A group provider without `ldap_user_search_attr` keys its cache by DN. The legacy `AS '<dn>'`
+     * form carries that DN in the user itself, and its own login hands it to the group providers;
+     * as an `EXECUTE AS` target it must hand over the same DN, not the login name, whatever the
+     * configured group source - which the legacy form ignores.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"group_provider", "both", "memberof"})
+    public void testExecuteAsToALegacyPerUserDnUserAsksADnKeyedGroupProviderWithItsDn(String groupSource)
+            throws Exception {
+        stubDirectoryForAnyUser();
+        String savedGroupSource = Config.authentication_ldap_simple_group_source;
+        String savedRootDn = Config.authentication_ldap_simple_bind_root_dn;
+        String savedRootPwd = Config.authentication_ldap_simple_bind_root_pwd;
+        String[] savedGroupProvider = Config.group_provider;
+        try {
+            Config.authentication_ldap_simple_group_source = groupSource;
+            Config.authentication_ldap_simple_bind_root_dn = "cn=svc,dc=starrocks,dc=com";
+            Config.authentication_ldap_simple_bind_root_pwd = "secret";
+
+            // No ldap_user_search_attr -> the cache is keyed by the (lower-cased) DN.
+            Map<String, String> properties = new HashMap<>();
+            properties.put(GroupProvider.GROUP_PROVIDER_PROPERTY_TYPE_KEY, "ldap");
+            authenticationMgr.replayCreateGroupProvider("dn_keyed_provider", properties);
+            LDAPGroupProvider dnKeyed =
+                    (LDAPGroupProvider) authenticationMgr.getGroupProvider("dn_keyed_provider");
+            Map<String, Set<String>> cache = new HashMap<>();
+            cache.put("uid=u1,ou=people,dc=starrocks,dc=com", Set.of("Platform Ops"));
+            dnKeyed.setUserToGroupCache(cache);
+            Config.group_provider = new String[] {"dn_keyed_provider"};
+
+            authenticationMgr.createUser(
+                    new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, List.of(), Map.of(),
+                            NodePosition.ZERO));
+            authenticationMgr.createUser(new CreateUserStmt(
+                    new UserRef("u1", "%", false, NodePosition.ZERO), true,
+                    new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE", "uid=u1,ou=People,dc=starrocks,dc=com",
+                            false, NodePosition.ZERO),
+                    List.of(), Map.of(), NodePosition.ZERO));
+
+            ConnectContext context = new ConnectContext();
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
+
+            ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
+
+            // No memberOf group either: the legacy form never reads it.
+            Assertions.assertEquals(Set.of("Platform Ops"), context.getGroups());
+        } finally {
+            Config.authentication_ldap_simple_group_source = savedGroupSource;
+            Config.authentication_ldap_simple_bind_root_dn = savedRootDn;
+            Config.authentication_ldap_simple_bind_root_pwd = savedRootPwd;
+            Config.group_provider = savedGroupProvider;
         }
     }
 
@@ -342,7 +451,9 @@ public class ExecuteAsExecutorTest {
                     List.of(), Map.of(), NodePosition.ZERO));
 
             ConnectContext context = new ConnectContext();
-            AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
             ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
 
@@ -370,11 +481,13 @@ public class ExecuteAsExecutorTest {
                 new CreateUserStmt(new UserRef("u1", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
 
         ConnectContext context = new ConnectContext();
-        AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
         // Stand in for a login that resolved groups from the original user's own entry.
         String originalOnly = "Original Only Group";
-        context.getAccessControlContext().setMemberOfGroups(Set.of(originalOnly));
+        context.getAccessControlContext().setAuthenticatorGroups(Set.of(originalOnly));
         context.setGroups(Set.of(originalOnly));
 
         ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
@@ -382,7 +495,7 @@ public class ExecuteAsExecutorTest {
         // u1 gets its own groups from the group provider, and nothing of the original user's.
         Assertions.assertEquals(Set.of("group1"), context.getGroups());
         Assertions.assertFalse(context.getGroups().contains(originalOnly));
-        Assertions.assertTrue(context.getAccessControlContext().getMemberOfGroups().isEmpty(),
+        Assertions.assertTrue(context.getAccessControlContext().getAuthenticatorGroups().isEmpty(),
                 "the memberOf groups of the original user must not survive the identity switch");
     }
 
@@ -411,7 +524,9 @@ public class ExecuteAsExecutorTest {
         // login as impersonate_user
 
         ConnectContext context = new ConnectContext();
-        AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                        AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
         Assertions.assertEquals("impersonate_user", context.getAccessControlContext().getQualifiedUser());
         Assertions.assertEquals(Set.of(), context.getGroups());
@@ -470,7 +585,9 @@ public class ExecuteAsExecutorTest {
 
         // Test 1: User with impersonate permission through role-group can execute as target user
         ConnectContext context = new ConnectContext();
-        AuthenticationHandler.authenticate(context, "group_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("group_user", MysqlPassword.EMPTY_PASSWORD,
+                        AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
         // Verify user has the role through group membership
         long roleId = authorizationMgr.getRoleIdByNameAllowNull("impersonate_role");
@@ -498,7 +615,9 @@ public class ExecuteAsExecutorTest {
         authorizationMgr.revoke(revokeStmt);
 
         // Re-authenticate to refresh context
-        AuthenticationHandler.authenticate(context, "group_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("group_user", MysqlPassword.EMPTY_PASSWORD,
+                        AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
         // Verify user still has the role through group membership
         Assertions.assertEquals(Set.of("test_group"), context.getGroups());
@@ -518,7 +637,9 @@ public class ExecuteAsExecutorTest {
         authorizationMgr.grant(grantStmt);
 
         // Re-authenticate to refresh context
-        AuthenticationHandler.authenticate(context, "group_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("group_user", MysqlPassword.EMPTY_PASSWORD,
+                        AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
         // Verify impersonate permission check passes again
         try {
@@ -539,7 +660,9 @@ public class ExecuteAsExecutorTest {
         authorizationMgr.revokeRole(revokeRoleStmt);
 
         // Re-authenticate to refresh context
-        AuthenticationHandler.authenticate(context, "group_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("group_user", MysqlPassword.EMPTY_PASSWORD,
+                        AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
         // Verify user no longer has the role
         Assertions.assertEquals(Set.of("test_group"), context.getGroups());

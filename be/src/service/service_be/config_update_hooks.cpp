@@ -22,6 +22,7 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
+#include "base/container/lru_cache.h"
 #include "base/statusor.h"
 #include "base/string/parse_util.h"
 #include "cache/datacache.h"
@@ -53,6 +54,7 @@
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/util/bthreads/executor.h"
 #include "compute_env/ai/ai_executor.h"
+#include "compute_env/arrow_io_thread_pool.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "compute_env/workgroup/scan_executor.h"
@@ -67,6 +69,7 @@
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/memtable_flush_executor.h"
@@ -331,13 +334,34 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         return StorageEngine::instance()->update_manager()->get_pindex_load_executor()->refresh_max_thread_num();
     });
     registry->register_callback("update_memory_limit_percent", [=]() -> Status {
-        Status st = StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
-                config::update_memory_limit_percent);
-#if defined(USE_STAROS) && !defined(BE_TEST)
-        st = StorageEnv::GetInstance()->lake_primary_key_manager()->update_primary_index_memory_limit(
-                config::update_memory_limit_percent);
-#endif
-        return st;
+        runtime_env_ptr->refresh_update_mem_limit();
+        StorageEngine::instance()->update_manager()->refresh_mem_limits();
+        auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+        if (primary_key_mgr != nullptr) {
+            primary_key_mgr->refresh_mem_limits();
+        }
+        LOG(INFO) << "Set update_memory_limit_percent: " << config::update_memory_limit_percent
+                  << ", update mem limit: " << runtime_env_ptr->update_mem_tracker()->limit();
+        return Status::OK();
+    });
+    registry->register_callback("lake_pk_preload_memory_limit_percent", [=]() -> Status {
+        auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+        if (primary_key_mgr != nullptr) {
+            primary_key_mgr->refresh_preload_mem_limit();
+            LOG(INFO) << "Set lake_pk_preload_memory_limit_percent: " << config::lake_pk_preload_memory_limit_percent
+                      << ", preload mem limit: " << primary_key_mgr->update_state_mem_tracker()->limit();
+        }
+        return Status::OK();
+    });
+    registry->register_callback("lake_pk_index_block_cache_limit_percent", [=]() -> Status {
+        auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+        if (primary_key_mgr != nullptr) {
+            primary_key_mgr->refresh_block_cache_mem_limit();
+            LOG(INFO) << "Set lake_pk_index_block_cache_limit_percent: "
+                      << config::lake_pk_index_block_cache_limit_percent
+                      << ", block cache capacity: " << primary_key_mgr->block_cache()->cache()->get_capacity();
+        }
+        return Status::OK();
     });
     registry->register_callback("dictionary_cache_refresh_threadpool_size", [=]() -> Status {
         auto* thread_pool = runtime_env_ptr->dictionary_cache_pool();
@@ -378,6 +402,13 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         auto* thread_pool = runtime_env_ptr->lake_metadata_fetch_thread_pool();
         if (thread_pool != nullptr) {
             return thread_pool->update_max_threads(std::max(1, config::lake_metadata_fetch_thread_count));
+        }
+        return Status::OK();
+    });
+    registry->register_callback("put_combined_txn_log_thread_pool_num_max", [=]() -> Status {
+        auto* thread_pool = runtime_env_ptr->put_combined_txn_log_thread_pool();
+        if (thread_pool != nullptr) {
+            return thread_pool->update_max_threads(std::max(1, config::put_combined_txn_log_thread_pool_num_max));
         }
         return Status::OK();
     });
@@ -425,9 +456,28 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
                                                             std::max(1, config::update_tablet_meta_info_worker_count));
         return Status::OK();
     });
-    registry->register_callback("lake_metadata_cache_limit", [=]() -> Status {
+    registry->register_callback("lake_tablet_metadata_cache_limit_percent", [=]() -> Status {
         auto tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
-        if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
+        if (tablet_mgr != nullptr) {
+            auto* metacache = tablet_mgr->metacache();
+            metacache->update_tablet_metadata_capacity(lake::metacache_capacity(
+                    runtime_env_ptr->process_mem_limit(), config::lake_tablet_metadata_cache_limit_percent));
+            LOG(INFO) << "Set lake_tablet_metadata_cache_limit_percent: "
+                      << config::lake_tablet_metadata_cache_limit_percent
+                      << ", tablet metadata cache capacity: " << metacache->tablet_metadata_capacity();
+        }
+        return Status::OK();
+    });
+    registry->register_callback("lake_segment_metadata_cache_limit_percent", [=]() -> Status {
+        auto tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
+        if (tablet_mgr != nullptr) {
+            auto* metacache = tablet_mgr->metacache();
+            metacache->update_segment_metadata_capacity(lake::metacache_capacity(
+                    runtime_env_ptr->process_mem_limit(), config::lake_segment_metadata_cache_limit_percent));
+            LOG(INFO) << "Set lake_segment_metadata_cache_limit_percent: "
+                      << config::lake_segment_metadata_cache_limit_percent
+                      << ", segment metadata cache capacity: " << metacache->segment_metadata_capacity();
+        }
         return Status::OK();
     });
     registry->register_callback("pk_index_parallel_execution_threadpool_max_threads", [=]() -> Status {
@@ -526,6 +576,9 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
                     config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
         }
         return Status::OK();
+    });
+    registry->register_callback("arrow_io_thread_pool_size", [=]() -> Status {
+        return apply_arrow_io_thread_pool_size(config::arrow_io_thread_pool_size);
     });
     registry->register_callback("enable_resource_group_cpu_borrowing", [=]() -> Status {
         LOG(INFO) << "set enable_resource_group_cpu_borrowing:" << config::enable_resource_group_cpu_borrowing;

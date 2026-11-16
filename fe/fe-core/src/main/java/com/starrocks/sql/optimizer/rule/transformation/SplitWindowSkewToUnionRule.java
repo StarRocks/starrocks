@@ -43,7 +43,6 @@ import com.starrocks.sql.optimizer.skew.DataSkew;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -400,21 +399,26 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             }
 
             ColumnStatistic colStat = statistics.getColumnStatistic(col);
-            var skewInfo = DataSkew.getColumnSkewInfo(statistics, colStat, DataSkew.Thresholds.withMcvLimit(1));
-            if (skewInfo.isSkewed()) {
-
-                if (skewInfo.type() == DataSkew.SkewType.SKEWED_NULL) {
-                    return List.of(new SkewedInfo(col, ConstantOperator.createNull(col.getType())));
-                }
-
-                return skewInfo.maybeMcvs().stream() //
-                        .flatMap(Collection::stream) //
-                        .map(mcv -> ConstantOperator.createVarchar(mcv.first).castTo(col.getType())) //
-                        .filter(Optional::isPresent) //
-                        .map(value -> new SkewedInfo(col, value.get())) //
-                        .toList();
-            }
+            // Window split can only peel off one value (see size-guard in transform) so we pick a single dominant skew
+            DataSkew.SkewCandidates candidates = 
+                    DataSkew.getSkewCandidates(statistics, colStat, DataSkew.Thresholds.withMcvLimit(1), 0.0);
+            return pickDominantSkew(col, candidates)
+                    .map(value -> List.of(new SkewedInfo(col, value)))
+                    .orElse(Collections.emptyList());       
         }
         return Collections.emptyList();
+    }
+
+    private Optional<ConstantOperator> pickDominantSkew(ColumnRefOperator col, DataSkew.SkewCandidates candidates) {
+        if (!candidates.isSkewed()) {
+            return Optional.empty();
+        }
+        double nullFraction = candidates.nullSkewFactor().orElse(0.0);
+        double mcvFraction = candidates.maxMcvRatio().orElse(0.0);
+        if (nullFraction >= mcvFraction) {
+            return Optional.of(ConstantOperator.createNull(col.getType()));
+        }
+        String topValue = candidates.mcvs().get(0).first;
+        return ConstantOperator.createVarchar(topValue).castTo(col.getType());
     }
 }

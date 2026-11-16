@@ -262,6 +262,16 @@ StatusOr<ColumnPtr> evaluate_iceberg_timestamptz_transform(FunctionContext* cont
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+// A conversion near the DATETIME bounds can leave the 0000..9999 range, e.g.
+// convert_tz('9999-12-31 23:00:00', '-05:00', 'UTC'); return NULL instead of an invalid DATETIME.
+void append_valid_or_null(ColumnBuilder<TYPE_DATETIME>& result, const TimestampValue& ts) {
+    if (ts.is_valid()) {
+        result.append(ts);
+    } else {
+        result.append_null();
+    }
+}
+
 } // namespace
 
 StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, const Columns& columns) {
@@ -293,7 +303,7 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, 
         if (TimezoneUtils::timezone_offsets(from_format, to_format, &offset)) {
             TimestampValue ts = TimestampValue::create(year, month, day, hour, minute, second, usec);
             ts.from_unix_second(ts.to_unix_second() + offset, usec);
-            result.append(ts);
+            append_valid_or_null(result, ts);
             continue;
         }
 
@@ -312,7 +322,7 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, 
         TimestampValue ts;
         ts.from_timestamp(ts_value2.year(), ts_value2.month(), ts_value2.day(), ts_value2.hour(), ts_value2.minute(),
                           ts_value2.second(), ts_value2.microsecond());
-        result.append(ts);
+        append_valid_or_null(result, ts);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
@@ -355,7 +365,7 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_const(FunctionContext* context, co
 
         TimestampValue ts;
         ts.from_unix_second(unix_sec + offset, usec);
-        result.append(ts);
+        append_valid_or_null(result, ts);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
@@ -1602,6 +1612,14 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_32(FunctionContext* context, 
 /*
  * definition for from_unix operators
  */
+TzOffsetCache& TimeFunctions::_thread_offset_cache(FunctionContext* context, const cctz::time_zone& tz) {
+    TzOffsetCache& cache = context->get_or_create_thread_state<ConvertTzThreadState>(
+                                          [] { return std::make_unique<ConvertTzThreadState>(); })
+                                   ->cache;
+    cache.bind(tz);
+    return cache;
+}
+
 template <LogicalType TIMESTAMP_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
@@ -1611,6 +1629,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+    TzOffsetCache& offset_cache = _thread_offset_cache(context, context->state()->timezone_obj());
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
             result.append_null();
@@ -1624,10 +1643,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
-            result.append_null();
-            continue;
-        }
+        dtv.from_unixtime_with_offset(date, 0, offset_cache.offset_in_bound_zone(date));
         char buf[64];
         dtv.to_string(buf);
         result.append(Slice(buf));
@@ -1646,6 +1662,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime_ms(FunctionContext* 
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+    TzOffsetCache& offset_cache = _thread_offset_cache(context, context->state()->timezone_obj());
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
             result.append_null();
@@ -1659,10 +1676,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime_ms(FunctionContext* 
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
-            result.append_null();
-            continue;
-        }
+        dtv.from_unixtime_with_offset(date, 0, offset_cache.offset_in_bound_zone(date));
         char buf[64];
         dtv.to_string(buf);
         result.append(Slice(buf));
@@ -1706,10 +1720,7 @@ StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, 
     DCHECK_EQ(columns.size(), 1);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    static const auto epoch =
-            std::chrono::time_point_cast<cctz::sys_seconds>(std::chrono::system_clock::from_time_t(0));
-
-    auto ctz = context->state()->timezone_obj();
+    TzOffsetCache& offset_cache = _thread_offset_cache(context, context->state()->timezone_obj());
     auto size = columns[0]->size();
     ColumnViewer<TYPE_BIGINT> data_column(columns[0]);
     ColumnBuilder<TYPE_TINYINT> result(size);
@@ -1725,9 +1736,7 @@ StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, 
             continue;
         }
 
-        cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(date);
-        int offset = ctz.lookup(t).offset;
-        int hour = impl_hour_from_unixtime(date + offset);
+        int hour = impl_hour_from_unixtime(date + offset_cache.offset_in_bound_zone(date));
         result.append(hour);
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -1843,6 +1852,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_general(FunctionCont
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+    TzOffsetCache& offset_cache = _thread_offset_cache(context, context->state()->timezone_obj());
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row) || format_column.is_null(row)) {
             result.append_null();
@@ -1857,10 +1867,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_general(FunctionCont
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
-            result.append_null();
-            continue;
-        }
+        dtv.from_unixtime_with_offset(date, 0, offset_cache.offset_in_bound_zone(date));
         // use lambda to avoid adding method for TimeFunctions.
         if (format.size > DEFAULT_DATE_FORMAT_LIMIT) {
             result.append_null();
@@ -1891,6 +1898,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_const(std::string& f
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+    TzOffsetCache& offset_cache = _thread_offset_cache(context, context->state()->timezone_obj());
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row) || format_content.empty()) {
             result.append_null();
@@ -1904,10 +1912,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_const(std::string& f
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
-            result.append_null();
-            continue;
-        }
+        dtv.from_unixtime_with_offset(date, 0, offset_cache.offset_in_bound_zone(date));
 
         char buf[128];
         if (!dtv.to_format_string((const char*)format_content.c_str(), format_content.size(), buf)) {
@@ -1986,6 +1991,9 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_timezone_const(const
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+    cctz::time_zone timezone_obj;
+    TimezoneUtils::find_cctz_time_zone(timezone_content, timezone_obj);
+    TzOffsetCache& offset_cache = _thread_offset_cache(context, timezone_obj);
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row) || format_content.empty() || timezone_content.empty()) {
             result.append_null();
@@ -1998,14 +2006,8 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_timezone_const(const
             continue;
         }
 
-        cctz::time_zone timezone_obj;
-        TimezoneUtils::find_cctz_time_zone(timezone_content, timezone_obj);
-
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, timezone_obj)) {
-            result.append_null();
-            continue;
-        }
+        dtv.from_unixtime_with_offset(date, 0, offset_cache.offset_in_bound_zone(date));
 
         char buf[128];
         if (!dtv.to_format_string((const char*)format_content.c_str(), format_content.size(), buf)) {
@@ -2227,6 +2229,8 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
 
     ColumnViewer<TIMESTAMP_TYPE> timestamp_viewer(columns[0]);
     ColumnBuilder<TYPE_DATETIME> result(size);
+    TzOffsetCache* offset_cache =
+            conv_ctx->timezone_aware ? &_thread_offset_cache(context, conv_ctx->session_timezone) : nullptr;
 
     if (conv_ctx->scale_is_const) {
         auto conversion_func = conv_ctx->active_conversion_func;
@@ -2241,7 +2245,8 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
 
             TimestampValue result_timestamp;
             if (conv_ctx->timezone_aware) {
-                result_timestamp.from_unixtime(seconds, microseconds, conv_ctx->session_timezone);
+                result_timestamp.from_unixtime_with_offset(seconds, microseconds,
+                                                           offset_cache->offset_in_bound_zone(seconds));
             } else {
                 result_timestamp.from_unix_second(seconds, microseconds);
             }
@@ -2284,7 +2289,8 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
 
             TimestampValue result_timestamp;
             if (conv_ctx->timezone_aware) {
-                result_timestamp.from_unixtime(seconds, microseconds, conv_ctx->session_timezone);
+                result_timestamp.from_unixtime_with_offset(seconds, microseconds,
+                                                           offset_cache->offset_in_bound_zone(seconds));
             } else {
                 result_timestamp.from_unix_second(seconds, microseconds);
             }

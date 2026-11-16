@@ -3,6 +3,7 @@ sidebar_position: 10
 displayed_sidebar: docs
 description: "FE 設定パラメーター：ログ、サーバー設定、メタデータ管理に関連する設定項目。"
 sidebar_label: "ログ、サーバー、およびメタデータ"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 設定 - ログ、サーバー、およびメタデータ
@@ -318,7 +319,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：プロファイルロギングを有効にするかどうか。この機能が有効になっている場合、FE はクエリごとのプロファイルログ (ProfileManager によって生成されたシリアル化された `queryDetail` JSON) をプロファイルログシンクに書き込みます。このロギングは `enable_collect_query_detail_info` も有効になっている場合にのみ実行されます。`enable_profile_log_compress` が有効になっている場合、JSON はロギング前に gzipped されることがあります。プロファイルログファイルは `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` によって管理され、`profile_log_delete_age` ( `7d`、`10h`、`60m`、`120s` などの形式をサポート) に従ってローテーション/削除されます。この機能を無効にすると、プロファイルログの書き込みが停止します (ディスク I/O、圧縮 CPU、ストレージ使用量の削減)。
+- 説明：プロファイルロギングを有効にするかどうか。この機能が有効になっている場合、FE はクエリごとのプロファイルログ (ProfileManager によって生成されたシリアル化された `queryDetail` JSON) をプロファイルログシンクに書き込みます。このロギングは `enable_collect_query_detail_info` も有効になっている場合にのみ実行されます。プロファイルログファイルは `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` によって管理され、`profile_log_delete_age` ( `7d`、`10h`、`60m`、`120s` などの形式をサポート) に従ってローテーション/削除されます。この機能を無効にすると、プロファイルログの書き込みが停止します (ディスク I/O、圧縮 CPU、ストレージ使用量の削減)。
 - 導入時期：v3.2.5
 
 ### `enable_qe_slow_log`
@@ -428,6 +429,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：No
 - 説明：内部アペンダー (`fe.internal.log`) に対して保持するローテーションされた内部 FE ログファイルの最大数。この値は Log4j DefaultRolloverStrategy の `max` 属性として使用されます。ロールオーバーが発生すると、StarRocks は最大で `internal_log_roll_num` 個のアーカイブファイルを保持し、古いファイルを削除します (`internal_log_delete_age` によって管理されます)。値を小さくするとディスク使用量が減りますが、ログ履歴が短くなります。値を大きくすると、より多くの履歴内部ログが保持されます。この項目は、`internal_log_dir`、`internal_log_roll_interval`、および `internal_roll_maxsize` (ソースにタイプミス、おそらく `log_roll_size_mb`) と連携して機能します。
 - 導入時期：v3.2.4
+
+### `lock_blocking_call_validation_mode`
+
+- デフォルト：warn
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：FE がメタデータロックを保持したまま、Hive Metastore、JDBC データソース、Iceberg REST catalog、thrift のピアといった外部システムに接続したときの動作。この場合ロックの保持時間はその外部システムのラウンドトリップ時間となり、同じロックを待つすべての処理がその代償を払います。チェックは FE 自身のコードがネットワークリクエストを発行する直前の層に置かれているため、キャッシュヒットはここに到達せず、報告される違反はすべて実際に送信されたリクエストです。有効な値：`off`（チェックしない）、`warn`（違反した呼び出し元のスタックトレース付きでログに記録し、呼び出しはそのまま続行する）、`error`（その呼び出しを拒否する）。認識できない値は `warn` として扱われます。`lock_target_validation_mode` と異なり、このチェックは正常に動作しているクラスターでも違反を報告します。対象となる呼び出し箇所の移行が進行中であるためです。したがって `warn` はそれらをトランスポートごとに集計できるログに変えるためのものであり、`error` はそのログがクリーンになってから初めて適切になります。`warn` モードでは各違反が `LOCK_INVARIANT_VIOLATION` タグと `kind=blocking_call_under_lock` を付けた 1 行として出力されます。ログ量は `lock_invariant_violation_log_interval_ms` で制御します。
+- 導入時期：v26.2
+
+### `lock_invariant_violation_log_interval_ms`
+
+- デフォルト：10000
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：同一の呼び出し箇所から出力されるロック不変条件違反のログ行の最小間隔。スロットリングはグローバルではなく呼び出し箇所ごとに行われるため、違反頻度の高い箇所が他の箇所をログから締め出すことはありません。調査時には `0` に設定すると、すべての違反がログに出力されます。`lock_target_validation_mode`、`lock_blocking_call_validation_mode`、または `lock_snapshot_copy_validation_mode` が `warn` の場合にのみ有効です。
+- 導入時期：v26.2
+
+### `lock_snapshot_copy_validation_mode`
+
+- デフォルト：warn
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：スレッドがテーブルの読み取りロックまたは書き込みロックも、そのデータベースの読み取りロックまたは書き込みロックも保持せずに、クエリプランニング用にネイティブテーブルまたはマテリアライズドビューをコピーしたときの FE の動作。コピーはテーブルの現在のパーティションおよびインデックスのメタデータを読み取りますが、DDL、INSERT OVERWRITE、メタデータのリプレイは書き込みロックの下でこれらをその場で変更します。そのため、ロックなしのコピーは `ConcurrentModificationException` でステートメントを失敗させたり、一度も全体として公開されていないメタデータに基づいてプランを作成したりする可能性があります。有効な値：`off`（チェックしない）、`warn`（コピーした呼び出し元のスタックトレース付きで違反をログに記録し、コピーはそのまま続行する）、`error`（そのコピーを拒否する）。認識できない値は `warn` として扱われます。`warn` モードでは各違反が `LOCK_INVARIANT_VIOLATION` タグと `kind=snapshot_copy_without_lock` を付けた 1 行として出力されます。ログ量は `lock_invariant_violation_log_interval_ms` で制御します。
+- 導入時期：v26.2
+
+### `lock_target_validation_mode`
+
+- デフォルト：warn
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：internal catalog が所有していないオブジェクト（external catalog のデータベースや、プレースホルダーのテーブル ID など）に対してメタデータロックが要求されたときの FE の動作。そのような識別子はロックマネージャーが保護できる対象を何も指しておらず、他のロックと決して競合しないか、同種のすべてのロックと競合するかのいずれかになります。有効な値：`off`（チェックしない）、`warn`（スタックトレース付きで違反をログに記録し、処理はそのまま続行する）、`error`（その処理を拒否する）。認識できない値は `warn` として扱われます。この項目は変更可能なため、クラスターはまず `warn` で運用してログがクリーンであることを確認し、再起動なしで `error` に引き締めることができます。`warn` モードでは各違反が `LOCK_INVARIANT_VIOLATION` というタグを付けた 1 行として出力され、違反した呼び出し元のスタックトレースが付きます。ログ量は `lock_invariant_violation_log_interval_ms` で制御します。
+- 導入時期：v26.2
 
 ### `log_cleaner_audit_log_min_retention_days`
 
@@ -572,7 +609,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：Milliseconds
 - 変更可能：Yes
 - 説明：`fe.profile.log` に書き込むクエリの最小レイテンシ（ミリ秒）。実行時間がこの値以上の場合にのみ profile を記録します。0 に設定するとすべての profile を記録します（しきい値なし）。正の値に設定すると、遅いクエリのみを記録してログ量を削減できます。
-- 導入時期：-
+- 導入時期：v4.2.0
 
 ### `profile_log_roll_file_index`
 
@@ -607,7 +644,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：MB
 - 変更可能：No
-- 説明：FE プロファイルログファイルのサイズベースのロールオーバーをトリガーするサイズしきい値 (メガバイト単位) を設定します。この値は、`ProfileFile` アペンダーの Log4j RollingFile SizeBasedTriggeringPolicy によって使用されます。プロファイルログが `profile_log_roll_size_mb` を超えると、ローテーションされます。ローテーションは、`profile_log_roll_interval` に達したときに時間によっても発生する可能性があります。いずれかの条件がロールオーバーをトリガーします。`profile_log_roll_num` と `profile_log_delete_age` と組み合わせることで、この項目は保持される履歴プロファイルファイルの数と古いファイルの削除時期を制御します。ローテーションされたファイルの圧縮は `enable_profile_log_compress` によって制御されます。
+- 説明：FE プロファイルログファイルのサイズベースのロールオーバーをトリガーするサイズしきい値 (メガバイト単位) を設定します。この値は、`ProfileFile` アペンダーの Log4j RollingFile SizeBasedTriggeringPolicy によって使用されます。プロファイルログが `profile_log_roll_size_mb` を超えると、ローテーションされます。ローテーションは、`profile_log_roll_interval` に達したときに時間によっても発生する可能性があります。いずれかの条件がロールオーバーをトリガーします。`profile_log_roll_num` と `profile_log_delete_age` と組み合わせることで、この項目は保持される履歴プロファイルファイルの数と古いファイルの削除時期を制御します。
 - 導入時期：v3.2.5
 
 ### `qe_slow_log_ms`
@@ -743,7 +780,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：No
-- 説明：システムログエントリが分類される重大度レベル。有効な値: `INFO`、`WARN`、`ERROR`、および `FATAL`。
+- 説明：システムログエントリが分類される重大度レベル。有効な値: `DEBUG`、`INFO`、`WARN`、`ERROR`、および `FATAL`。
 - 導入時期：-
 
 ### `sys_log_roll_file_index`
@@ -790,7 +827,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String[]
 - 単位：-
 - 変更可能：No
-- 説明：StarRocks がシステムログを生成するモジュール。このパラメーターが `org.apache.starrocks.catalog` に設定されている場合、StarRocks はカタログモジュールのみのシステムログを生成します。モジュール名をコンマ (,) とスペースで区切ります。
+- 説明：`sys_log_level` で指定されたレベルのログに加えて、StarRocks が DEBUG レベルのシステムログを生成するモジュール。このパラメーターが `com.starrocks.catalog` に設定されている場合、StarRocks はカタログモジュールについても DEBUG レベルのシステムログを生成します。モジュール名をコンマ (,) とスペースで区切ります。
 - 導入時期：-
 
 ### `sys_log_warn_modules`
@@ -805,6 +842,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ## サーバー
 
 <EditionSpecificFEItem />
+
+### `arrow_flight_max_header_size`
+
+- デフォルト：32768
+- タイプ：Int
+- 単位：Bytes
+- 変更可能：No
+- 説明：Arrow Flight SQL サーバーが受け付けるリクエストヘッダーの合計サイズの上限（バイト）。1 つの gRPC リクエストのすべてのヘッダーを合計して数えます。Arrow Flight SQL セッションの最初のリクエストはクライアントの認証情報をヘッダーで運び、ユーザーの所属グループを列挙した JWT はグループ数に応じて大きくなります。Microsoft Entra ID が 1 つのトークンに入れるグループ ID は最大 200 個で、約 10 KB になります。gRPC のデフォルトの 8 KB では認証が始まる前にこのようなリクエストが拒否されるため、デフォルト値は `http_max_header_size` に合わせています。クライアントがより大きなトークンを送る場合は値を大きくしてください。変更後は FE の再起動が必要です。
+- 導入時期：v4.2
 
 ### `brpc_idle_wait_max_time`
 
@@ -956,7 +1002,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：No
-- 導入時期：v4.2.0
+- 導入時期：v4.1.3
 - 説明：true の場合、ほとんどの外部 FE HTTP エンドポイントで HTTP Basic 認証が必要になります。資格情報は `AuthenticationHandler.authenticate()` を介してユーザーストアと照合されるため、LDAP / security integration による認証も MySQL プロトコルと同様に HTTP 経路で機能します。次のエンドポイントは常に除外されます：
   - 公開プローブ / 可観測性：`/api/bootstrap`、`/api/oauth2`。
   - ハンドラ内で IP ホワイトリストまたはトークンで認証する FE 間 / コントロールプレーン経路：`/image`、`/check`、`/journal_id`、`/info`、`/role`、`/static`、`/api/get_small_file`。
@@ -966,6 +1012,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   `/api/_meta_replay_state` も除外されません：この設定にかかわらず、`root` ユーザー、`root` ロールを持つユーザー、または `db_admin` ロールと `user_admin` ロールの両方を持つユーザーによる HTTP Basic 認証が必要です。`NODE` 権限だけではアクセスできません。
 
   この設定で制御されるその他の特権エンドポイント（`/dump`、`/dump_starmgr`、`/service_id`、`/api/_meta_replay_state` は対象外）では追加でセッション内に**有効化された** SYSTEM レベル RBAC 権限（`OPERATE` / `NODE`）が必要です。付与済みでデフォルトに設定されていないロールを使う場合は `SET DEFAULT ROLE <roles> TO <user>;` を実行するか、グローバル変数 `activate_all_roles_on_login=true` を設定してログイン時に有効化してください。LDAP / security integration のグループ → ロールマッピングは自動的に有効化されます。
+
+### `enable_rest_bearer_authentication`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：MySQL 以外のチャネル（HTTP、Arrow Flight、BE 直結の Stream Load）における Bearer トークン認証のマスタースイッチ。`false` に設定すると、これらのチャネルは `Authorization: Bearer ...` を含むリクエストをすべて HTTP 401 で拒否し、「トークン認証は MySQL プロトコルのみ」という以前の動作に戻ります。Basic 認証と既存の Arrow Flight UUID セッショントークンは影響を受けません。MySQL プロトコルの認証がこのスイッチで制限されることはありません。
+- 導入時期：v4.2
 
 ### `http_web_page_display_hardware`
 
@@ -993,6 +1048,69 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：No
 - 説明：FE ノードの HTTPS サーバーがリッスンするポート。
 - 導入時期：v4.0
+
+### `ssl_keystore_type`
+
+- デフォルト：`""`
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：FE SSL および HTTPS で使用するキーストアタイプ。この値が空の場合、StarRocks は JVM デフォルトのキーストアタイプ、JKS、PKCS12 を自動的に試行します。BCFKS などの他のキーストア形式を使用する場合は、この値を明示的に設定します。
+- 導入時期：-
+
+### `ssl_keystore_provider`
+
+- デフォルト：`""`
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：SSL キーストアのロードに使用するセキュリティ provider。空のままにすると、JVM が選択した provider を使用します。設定したキーストアタイプを `BCFIPS` などの特定 provider でロードする必要がある場合に設定します。
+- 導入時期：-
+
+### `ssl_truststore_type`
+
+- デフォルト：`""`
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：MySQL SSL で使用するトラストストアタイプ。この値が空の場合、StarRocks は JVM デフォルトのキーストアタイプ、JKS、PKCS12 を自動的に試行します。BCFKS などの他のトラストストア形式を使用する場合は、この値を明示的に設定します。
+- 導入時期：-
+
+### `ssl_truststore_provider`
+
+- デフォルト：`""`
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：MySQL SSL トラストストアのロードに使用するセキュリティ provider。空のままにすると、JVM が選択した provider を使用します。設定したトラストストアタイプを `BCFIPS` などの特定 provider でロードする必要がある場合に設定します。
+- 導入時期：-
+
+### `ssl_security_provider_class`
+
+- デフォルト：`""`
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：StarRocks が SSL キーストアまたはトラストストアをロードする前に登録するセキュリティ provider クラス。必要な provider が JVM によってすでに登録されている場合は空のままにします。
+- 導入時期：-
+
+### `ssl_security_provider_name`
+
+- デフォルト：`""`
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：期待されるセキュリティ provider 名。この値が設定され、同じ名前の provider がすでに存在する場合、StarRocks はそれを再利用します。StarRocks が `ssl_security_provider_class` を登録する場合、登録された provider 名はこの値と一致する必要があります。
+- 導入時期：-
+
+### `ssl_security_provider_path`
+
+- デフォルト：`""`
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：セキュリティ provider JAR のパス。複数のパスはシステムのパス区切り文字で区切ることができます。provider クラスがすでに FE classpath で利用可能な場合は空のままにします。
+- 導入時期：-
 
 ### `max_mysql_service_task_threads_num`
 
@@ -1058,6 +1176,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   1. `select version();`
   2. ハンドシェイクパケットバージョン
   3. グローバル変数 `version` の値 (`show variables like 'version';`)
+- 導入時期：-
+
+### `mysql_service_compression_enabled`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：FE が接続ハンドシェイクで MySQL 圧縮プロトコル (zlib および zstd) を提供するかどうか。圧縮を要求したクライアントのみが圧縮された通信を使用します (例: `mysql --compression-algorithms=zstd` や JDBC `useCompression=true`)。その他のクライアントには影響しません。`false` に設定すると、FE は圧縮を提供しなくなります。変更は新しい接続にのみ適用されます。
 - 導入時期：-
 
 ### `mysql_service_io_threads_num`
@@ -1459,7 +1586,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes
-- 説明：メタデータログエントリの最大数。この数に達すると、これらのログエントリ用のログファイルが作成されます。このパラメーターは、ログファイルのサイズを制御するために使用されます。新しいログファイルは BDBJE データベースに書き込まれます。
+- 説明：メタデータログエントリの最大数。この数に達すると、これらのログエントリ用のログファイルが作成されます。このパラメーターは、ログファイルのサイズを制御するために使用されます。新しいログファイルは BDBJE データベースに書き込まれます。チェックポイントはロール済みのログファイル内のログエントリのみを対象とするため、このパラメーターはメタデータイメージ（チェックポイント）を作成する頻度も決定します。
 - 導入時期：-
 
 ### `edit_log_type`
@@ -1721,7 +1848,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：Milliseconds
 - 変更可能：Yes
 - 説明：フォロワー FE およびオブザーバー FE が、自身のメタデータが読み取りを提供できるだけ新しいかどうかを再評価する間隔です。判定基準は `meta_delay_toleration_second` です。[10, 5000] の範囲外の値はこの範囲に丸められます。このチェックはメタデータ再生スレッドではなく専用スレッドで実行されます。そのため、1 件のジャーナルの適用に長時間かかっている場合（たとえば再生処理がデータベースロックを待っている場合）でも、ノードは古いメタデータの提供を止めることができます。
-- 導入時期：v4.2
+- 導入時期：v4.1.6, v4.2
 
 ### `metadata_replay_stuck_warn_threshold_second`
 
@@ -1730,7 +1857,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：Seconds
 - 変更可能：Yes
 - 説明：メタデータジャーナルの適用がこの時間を超えた場合、再生が滞っているものとして再生スレッドのスタックとともに **fe.log** に記録します。これによりメタデータ再生を妨げている処理を特定できます。`0` を設定するとこのログを無効にします。
-- 導入時期：v4.2
+- 導入時期：v4.1.6, v4.2
 
 ### `meta_dir`
 

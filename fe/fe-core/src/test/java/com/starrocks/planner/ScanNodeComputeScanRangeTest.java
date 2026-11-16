@@ -55,7 +55,9 @@ public class ScanNodeComputeScanRangeTest {
     @BeforeAll
     public static void setUp() throws Exception {
         FeConstants.runningUnitTest = true;
-        UtFrameUtils.createMinStarRocksCluster(true, RunMode.SHARED_DATA);
+        // No BDB: the scan range checks do not need a real journal, and binding the BDB port on a shared CI host
+        // can fail with "Address already in use", which leaves the FE unready.
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         // There are two available backends, (10001, 10002)
         UtFrameUtils.addMockBackend(10002);
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();

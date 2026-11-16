@@ -37,7 +37,7 @@ class AsyncCompactCB {
 public:
     AsyncCompactCB(std::unique_ptr<ThreadPoolToken> token,
                    std::function<Status(const std::vector<PersistentIndexSstablePB>&)> callback);
-    virtual ~AsyncCompactCB() = default;
+    virtual ~AsyncCompactCB();
 
     void add_result(const std::vector<PersistentIndexSstablePB>& ssts);
 
@@ -148,6 +148,7 @@ public:
 
     // For UT
     void TEST_set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
+    TabletManager* TEST_tablet_mgr() const { return _tablet_mgr; }
 
 private:
     // generate compaction tasks using candidate filesets.

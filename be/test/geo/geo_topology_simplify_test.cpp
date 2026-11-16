@@ -44,7 +44,7 @@ StatusOr<std::string> encoded(std::string_view wkt) {
 StatusOr<std::unique_ptr<PreparedGeoTopologySimplify>> prepared(std::string_view wkt,
                                                                 size_t work = kGeoTopologySimplifyMaxWork) {
     ASSIGN_OR_RETURN(auto wkb, encoded(wkt));
-    return PreparedGeoTopologySimplify::prepare(Slice(wkb), {}, work);
+    return PreparedGeoTopologySimplify::prepare(Slice(wkb), work);
 }
 StatusOr<WkbGeometry> simplified(std::string_view wkt, double tolerance) {
     ASSIGN_OR_RETURN(auto input, prepared(wkt));
@@ -381,6 +381,26 @@ TEST(GeoTopologySimplifyTest, CoordinateComponentAndWorkLimitsAreControlled) {
     EXPECT_FALSE(limited.value()->simplify(0.01).ok());
 }
 
+TEST(GeoTopologySimplifyTest, IncrementalWorkLimitsRetainShortLineSuccess) {
+    const struct {
+        const char* input;
+        size_t work;
+        const char* expected;
+    } cases[] = {{"LINESTRING (0 0,1 0,2 0)", 81, "LINESTRING (0 0,2 0)"},
+                 {"LINESTRING (0 0,1 0,2 0,3 0)", 118, "LINESTRING (0 0,3 0)"},
+                 {"LINESTRING (0 0,1 0,2 0,3 0,4 0)", 160, "LINESTRING (0 0,4 0)"}};
+    for (const auto& item : cases) {
+        SCOPED_TRACE(item.input);
+        auto input = prepared(item.input, item.work);
+        ASSERT_TRUE(input.ok()) << input.status();
+        auto result = input.value()->simplify(0.01);
+        ASSERT_TRUE(result.ok()) << result.status();
+        auto expected = encoded(item.expected);
+        ASSERT_TRUE(expected.ok()) << expected.status();
+        EXPECT_EQ(*expected, *result);
+    }
+}
+
 TEST(GeoTopologySimplifyTest, LowerReaderLimitKeepsDefaultBehaviorAndBoundsDeclaredChildren) {
     auto source = encoded(kSquare);
     ASSERT_TRUE(source.ok());
@@ -392,23 +412,6 @@ TEST(GeoTopologySimplifyTest, LowerReaderLimitKeepsDefaultBehaviorAndBoundsDecla
     ASSERT_TRUE(malicious.ok());
     (*malicious)[5] = static_cast<char>(0xff);
     EXPECT_FALSE(WkbCodec::parse_wkb_bounded(Slice(*malicious), &output, 10, kCartesian).ok());
-}
-
-TEST(GeoTopologySimplifyTest, CheckpointPreservesCancellationAndMemoryErrors) {
-    auto source = encoded(kSquare);
-    ASSERT_TRUE(source.ok());
-    auto cancelled =
-            PreparedGeoTopologySimplify::prepare(Slice(*source), [] { return Status::Cancelled("cancel probe"); });
-    EXPECT_FALSE(cancelled.ok());
-    EXPECT_TRUE(cancelled.status().is_cancelled());
-    auto model = prepared(kSquare);
-    ASSERT_TRUE(model.ok());
-    auto memory = model.value()->simplify(1, [] { return Status::MemoryLimitExceeded("memory probe"); });
-    EXPECT_TRUE(memory.status().is_mem_limit_exceeded());
-    int checks = 0;
-    auto interrupted = model.value()->simplify(
-            1, [&] { return ++checks == 3 ? Status::Cancelled("middle probe") : Status::OK(); });
-    EXPECT_TRUE(interrupted.status().is_cancelled());
 }
 
 TEST(GeoTopologySimplifyTest, ImmutablePreparedInputSupportsConcurrentVaryingCalls) {
@@ -430,6 +433,59 @@ TEST(GeoTopologySimplifyTest, ImmutablePreparedInputSupportsConcurrentVaryingCal
     for (auto& worker : workers) worker.join();
     EXPECT_EQ(8, passed.load());
     EXPECT_EQ(*source, *model.value()->simplify(0));
+}
+
+TEST(GeoTopologySimplifyTest, IncrementalZeroEdgesAndClosedWrapMatchOriginalBytes) {
+    // Golden vertices from the unchanged rebuild implementation; duplicates are intentionally retained on input.
+    const std::vector<std::pair<const char*, const char*>> cases = {
+            {"LINESTRING (0 0,0 0,1 0,1 0,2 0,2 0)", "LINESTRING (0 0,2 0)"},
+            {"LINESTRING (0 0,1 0,1 0,2 0,3 0,3 0,4 0)", "LINESTRING (0 0,4 0)"},
+            {"POLYGON ((0 0,0 0,1 0,2 0,2 0,2 1,2 2,1 2,0 2,0 1,0 0,0 0))", "POLYGON ((0 0,2 0,2 2,0 2,0 0))"},
+            {"LINESTRING (0 0,0 0,1 0,2 0,2 1,2 2,1 2,0 2,0 1,0 0,0 0)", "LINESTRING (0 0,2 0,2 2,0 2,0 0)"},
+            {"MULTILINESTRING ((0 0,0 0,1 0,2 0,2 0),(0 10,1 10,1 10,2 10))",
+             "MULTILINESTRING ((0 0,2 0),(0 10,2 10))"},
+            {"GEOMETRYCOLLECTION (LINESTRING (0 0,0 0,1 0,2 0),MULTIPOINT ((10 10),(10 10)),POINT EMPTY)",
+             "GEOMETRYCOLLECTION (LINESTRING (0 0,2 0),MULTIPOINT ((10 10),(10 10)),POINT EMPTY)"}};
+    for (const auto& [input, expected] : cases) {
+        SCOPED_TRACE(input);
+        auto model = prepared(input);
+        auto golden = encoded(expected);
+        ASSERT_TRUE(model.ok()) << model.status();
+        ASSERT_TRUE(golden.ok()) << golden.status();
+        for (int repeat = 0; repeat < 2; ++repeat) {
+            auto result = model.value()->simplify(0.01);
+            ASSERT_TRUE(result.ok()) << result.status();
+            EXPECT_EQ(*golden, *result);
+        }
+        auto original = encoded(input);
+        ASSERT_TRUE(original.ok());
+        EXPECT_EQ(*original, *model.value()->simplify(0));
+    }
+}
+
+TEST(GeoTopologySimplifyTest, IncrementalDeletesStopAtClosedPathFloor) {
+    auto model = prepared("POLYGON ((0 0,1 0,2 0,2 1,2 2,1 2,0 2,0 1,0 0))");
+    ASSERT_TRUE(model.ok());
+    auto first = model.value()->simplify(100);
+    ASSERT_TRUE(first.ok()) << first.status();
+    WkbGeometry geometry;
+    ASSERT_TRUE(WkbCodec::parse_wkb(Slice(*first), &geometry, kCartesian).ok());
+    ASSERT_EQ(1, geometry.rings.size());
+    EXPECT_EQ(4, geometry.rings[0].size());
+    auto second = PreparedGeoTopologySimplify::prepare(Slice(*first));
+    ASSERT_TRUE(second.ok());
+    EXPECT_EQ(*first, *second.value()->simplify(100));
+}
+
+TEST(GeoTopologySimplifyTest, IncrementalPointEdgesAndPinnedContactsRemainInIndex) {
+    auto result = simplified("GEOMETRYCOLLECTION (LINESTRING (0 0,1 0,2 0,3 0),POINT (1 0))", 100);
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(2, result->children.size());
+    EXPECT_TRUE(has(result->children[0].coordinates, {1, 0}));
+    EXPECT_EQ((WkbCoordinate{1, 0}), result->children[1].coordinates[0]);
+    auto bad = prepared("MULTIPOLYGON (((0 0,2 0,2 2,0 2,0 0)),((2 0,4 0,4 2,2 2,2 0)))");
+    ASSERT_FALSE(bad.ok());
+    EXPECT_EQ("ST_SimplifyPreserveTopology polygon boundaries cross or overlap", bad.status().message());
 }
 
 } // namespace starrocks

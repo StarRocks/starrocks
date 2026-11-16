@@ -1,0 +1,98 @@
+-- name: testIcebergV3InitialDefaultRead
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_v3_initial_default_read/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+create external catalog `ice_def_read${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_v3_initial_default_read/${uuid0}"
+);
+-- result:
+-- !result
+create database ice_def_read${uuid0}.ice_def_db${uuid0};
+-- result:
+-- !result
+create table ice_def_read${uuid0}.ice_def_db${uuid0}.t (
+    id int
+) properties (
+    "format-version" = "3"
+);
+-- result:
+-- !result
+insert into ice_def_read${uuid0}.ice_def_db${uuid0}.t values (1), (2), (3), (4), (5);
+-- result:
+-- !result
+alter table ice_def_read${uuid0}.ice_def_db${uuid0}.t add column c int default "7";
+-- result:
+-- !result
+alter table ice_def_read${uuid0}.ice_def_db${uuid0}.t add column dt datetime default "2024-06-15 10:30:00";
+-- result:
+-- !result
+alter table ice_def_read${uuid0}.ice_def_db${uuid0}.t add column e string default "";
+-- result:
+-- !result
+insert into ice_def_read${uuid0}.ice_def_db${uuid0}.t values (6, 8, '2024-07-01 12:00:00', 'z');
+-- result:
+-- !result
+select id, c, dt, e from ice_def_read${uuid0}.ice_def_db${uuid0}.t order by id;
+-- result:
+1	7	2024-06-15 10:30:00	
+2	7	2024-06-15 10:30:00	
+3	7	2024-06-15 10:30:00	
+4	7	2024-06-15 10:30:00	
+5	7	2024-06-15 10:30:00	
+6	8	2024-07-01 12:00:00	z
+-- !result
+select id from ice_def_read${uuid0}.ice_def_db${uuid0}.t where c = 7 order by id;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+select id from ice_def_read${uuid0}.ice_def_db${uuid0}.t where dt = '2024-06-15 10:30:00' order by id;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+select id from ice_def_read${uuid0}.ice_def_db${uuid0}.t where e = '' order by id;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+set chunk_size = 2;
+-- result:
+-- !result
+select id from ice_def_read${uuid0}.ice_def_db${uuid0}.t where c = 7 order by id;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+select count(*), min(c), max(c) from ice_def_read${uuid0}.ice_def_db${uuid0}.t where c >= 7;
+-- result:
+6	7	8
+-- !result
+set chunk_size = 4096;
+-- result:
+-- !result
+drop catalog ice_def_read${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_initial_default_read/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

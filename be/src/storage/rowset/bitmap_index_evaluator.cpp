@@ -411,13 +411,29 @@ struct BitmapIndexPredicateEraser {
             return;
         }
 
+        // BitmapIndexRetriver skips compound nodes that are not marked as used, so the bitmap of such a node is
+        // never applied to the scan range. Erasing any predicate below it would therefore drop a filter that
+        // nothing else enforces, even if a descendant was marked in `nodes_to_erase`. Keep the whole subtree intact.
+        const auto it = parent->_ctx.compound_node_to_context.find(&node);
+        if (it == parent->_ctx.compound_node_to_context.end() || !it->second.used) {
+            parent_node.add_child(node);
+            return;
+        }
+
         PredicateCompoundNode<Type> new_node;
         for (const auto& child : node.children()) {
             child.visit(*this, new_node);
         }
 
         if (!new_node.empty()) {
-            parent_node.add_child(new_node);
+            // Erase an OR all or nothing. If only some children were erased, the remaining ones would reject
+            // the erased children's rows. E.g. in (a = 1 AND (b = 2 OR b = 3)) OR c = 4, if the inner OR can't
+            // use the bitmap index, only (b = 2 OR b = 3) would remain and rows matching c = 4 would be lost.
+            if constexpr (Type == CompoundNodeType::OR) {
+                parent_node.add_child(node);
+            } else {
+                parent_node.add_child(new_node);
+            }
         }
     }
 

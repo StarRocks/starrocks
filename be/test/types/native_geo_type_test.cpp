@@ -29,9 +29,6 @@ GeoColumnDescriptor descriptor(LogicalType primitive) {
     result.type.edge_algorithm = geography ? GEO_EDGE_ALGORITHM_SPHERICAL : GEO_EDGE_ALGORITHM_PLANAR;
     result.type.crs = "OGC:CRS84";
     result.type.srid = 4326;
-    result.storage.encoding = GEO_ENCODING_WKB;
-    result.storage.dimension = GEO_DIMENSION_XY;
-    result.storage.validation_state = GEO_VALIDATION_STATE_UNVALIDATED;
     return result;
 }
 
@@ -101,11 +98,8 @@ TEST(NativeGeoTypeTest, SemanticMetadataHasValueSemantics) {
 TEST(NativeGeoTypeTest, ColumnRepresentationIsSeparateFromType) {
     auto column = descriptor(TYPE_GEOGRAPHY);
     auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, column.type);
-    // A column reuses the semantic value, and transports its representation separately.
+    // A column reuses the semantic value and transports nothing else.
     column.type = *type.geo_type;
-    column.storage.dimension = GEO_DIMENSION_XYZ;
-    column.storage.validation_state = GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED;
-    EXPECT_EQ(column, GeoColumnDescriptor::from_thrift(column.to_thrift()));
     EXPECT_EQ(column, GeoColumnDescriptor::from_protobuf(column.to_protobuf()));
     auto thrift = type.to_thrift();
     thrift.types[0].scalar_type.__set_geo(column.type.to_thrift());

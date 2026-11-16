@@ -30,20 +30,6 @@ static_assert(static_cast<int>(TGeoEdgeAlgorithm::THOMAS) == GEO_EDGE_ALGORITHM_
 static_assert(static_cast<int>(TGeoEdgeAlgorithm::ANDOYER) == GEO_EDGE_ALGORITHM_ANDOYER);
 static_assert(static_cast<int>(TGeoEdgeAlgorithm::KARNEY) == GEO_EDGE_ALGORITHM_KARNEY);
 static_assert(static_cast<int>(TGeoEdgeAlgorithm::PLANAR) == GEO_EDGE_ALGORITHM_PLANAR);
-static_assert(static_cast<int>(TGeoEncoding::UNKNOWN) == GEO_ENCODING_UNKNOWN);
-static_assert(static_cast<int>(TGeoEncoding::WKB) == GEO_ENCODING_WKB);
-static_assert(static_cast<int>(TGeoDimension::UNKNOWN) == GEO_DIMENSION_UNKNOWN);
-static_assert(static_cast<int>(TGeoDimension::XY) == GEO_DIMENSION_XY);
-static_assert(static_cast<int>(TGeoDimension::XYZ) == GEO_DIMENSION_XYZ);
-static_assert(static_cast<int>(TGeoDimension::XYM) == GEO_DIMENSION_XYM);
-static_assert(static_cast<int>(TGeoDimension::XYZM) == GEO_DIMENSION_XYZM);
-static_assert(static_cast<int>(TGeoDimension::MIXED) == GEO_DIMENSION_MIXED);
-static_assert(static_cast<int>(TGeoValidationState::UNKNOWN) == GEO_VALIDATION_STATE_UNKNOWN);
-static_assert(static_cast<int>(TGeoValidationState::UNVALIDATED) == GEO_VALIDATION_STATE_UNVALIDATED);
-static_assert(static_cast<int>(TGeoValidationState::STRUCTURALLY_VALIDATED) ==
-              GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED);
-static_assert(static_cast<int>(TGeoValidationState::SEMANTICALLY_VALIDATED) ==
-              GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED);
 
 } // namespace
 
@@ -95,64 +81,13 @@ GeoTypeDescPB GeoTypeDescriptor::to_protobuf() const {
     return result;
 }
 
-GeoStorageDescriptor GeoStorageDescriptor::from_thrift(const TGeoStorageDesc& thrift) {
-    GeoStorageDescriptor result;
-    result.encoding = thrift.__isset.encoding && GeoEncodingPB_IsValid(thrift.encoding)
-                              ? static_cast<GeoEncodingPB>(thrift.encoding)
-                              : GEO_ENCODING_UNKNOWN;
-    result.dimension = thrift.__isset.dimension && GeoDimensionPB_IsValid(thrift.dimension)
-                               ? static_cast<GeoDimensionPB>(thrift.dimension)
-                               : GEO_DIMENSION_UNKNOWN;
-    result.validation_state = thrift.__isset.validation_state && GeoValidationStatePB_IsValid(thrift.validation_state)
-                                      ? static_cast<GeoValidationStatePB>(thrift.validation_state)
-                                      : GEO_VALIDATION_STATE_UNKNOWN;
-    return result;
-}
-
-GeoStorageDescriptor GeoStorageDescriptor::from_protobuf(const GeoStorageDescPB& protobuf) {
-    GeoStorageDescriptor result;
-    result.encoding = protobuf.encoding();
-    result.dimension = protobuf.dimension();
-    result.validation_state = protobuf.validation_state();
-    return result;
-}
-
-TGeoStorageDesc GeoStorageDescriptor::to_thrift() const {
-    TGeoStorageDesc result;
-    result.__set_encoding(static_cast<TGeoEncoding::type>(encoding));
-    result.__set_dimension(static_cast<TGeoDimension::type>(dimension));
-    result.__set_validation_state(static_cast<TGeoValidationState::type>(validation_state));
-    return result;
-}
-
-GeoStorageDescPB GeoStorageDescriptor::to_protobuf() const {
-    GeoStorageDescPB result;
-    result.set_encoding(encoding);
-    result.set_dimension(dimension);
-    result.set_validation_state(validation_state);
-    return result;
-}
-
-GeoColumnDescriptor GeoColumnDescriptor::from_thrift(const TGeoColumnDesc& thrift) {
-    return {thrift.__isset.type ? GeoTypeDescriptor::from_thrift(thrift.type) : GeoTypeDescriptor{},
-            thrift.__isset.storage ? GeoStorageDescriptor::from_thrift(thrift.storage) : GeoStorageDescriptor{}};
-}
-
 GeoColumnDescriptor GeoColumnDescriptor::from_protobuf(const GeoColumnDescPB& protobuf) {
-    return {GeoTypeDescriptor::from_protobuf(protobuf.type()), GeoStorageDescriptor::from_protobuf(protobuf.storage())};
-}
-
-TGeoColumnDesc GeoColumnDescriptor::to_thrift() const {
-    TGeoColumnDesc result;
-    result.__set_type(type.to_thrift());
-    result.__set_storage(storage.to_thrift());
-    return result;
+    return {GeoTypeDescriptor::from_protobuf(protobuf.type())};
 }
 
 GeoColumnDescPB GeoColumnDescriptor::to_protobuf() const {
     GeoColumnDescPB result;
     *result.mutable_type() = type.to_protobuf();
-    *result.mutable_storage() = storage.to_protobuf();
     return result;
 }
 

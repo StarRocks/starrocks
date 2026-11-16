@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.catalog.mv.MVTimelinessListPartitionArbiter;
 import com.starrocks.catalog.mv.MVTimelinessNonPartitionArbiter;
@@ -22,18 +23,24 @@ import com.starrocks.catalog.mv.MVTimelinessRangePartitionArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.connector.ConnectorPartitionTraits;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
@@ -134,8 +141,17 @@ public class MvRefreshArbiter {
                 return Optional.of(false);
             }
 
-            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable,
-                    queryRewriteParams.isQueryRewrite());
+            Set<String> baseUpdatedPartitionNames;
+            try {
+                baseUpdatedPartitionNames = MvUtils.readBaseTableUnderLock(mv, olapBaseTable,
+                        queryRewriteParams.readsBaseTablesUnlocked(),
+                        () -> mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable, queryRewriteParams.isQueryRewrite()));
+            } catch (LockTimeoutException e) {
+                // Fail this refresh, as a lock timeout on a ref base table does: an empty result would read as
+                // "changed" and refresh every partition of the mv.
+                throw new DmlException("Failed to check updated partitions of base table %s of mv %s: %s", e,
+                        olapBaseTable.getName(), mv.getName(), e.getMessage());
+            }
             if (!baseUpdatedPartitionNames.isEmpty()) {
                 return Optional.of(true);
             }
@@ -177,12 +193,24 @@ public class MvRefreshArbiter {
             return baseTableUpdateInfo;
         } else if (baseTable.isNativeTableOrMaterializedView()) {
             OlapTable olapBaseTable = (OlapTable) baseTable;
-            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable,
-                    queryRewriteParams.isQueryRewrite());
-            if (baseUpdatedPartitionNames == null) {
+            MvUtils.BaseTableRead<PCellSortedSet, RuntimeException> readUpdatedPartitions = () -> {
+                Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable,
+                        queryRewriteParams.isQueryRewrite());
+                return baseUpdatedPartitionNames == null ? null
+                        : PCellUtils.ofOlapTable(olapBaseTable, baseUpdatedPartitionNames);
+            };
+            PCellSortedSet updatedPCellSet;
+            try {
+                updatedPCellSet = MvUtils.readBaseTableUnderLock(mv, olapBaseTable,
+                        queryRewriteParams.readsBaseTablesUnlocked(), readUpdatedPartitions);
+            } catch (LockTimeoutException e) {
+                logMVPrepare(mv, "Failed to get updated partitions of base table {}: {}",
+                        olapBaseTable.getName(), e.getMessage());
                 return null;
             }
-            PCellSortedSet updatedPCellSet = PCellUtils.ofOlapTable(olapBaseTable, baseUpdatedPartitionNames);
+            if (updatedPCellSet == null) {
+                return null;
+            }
             // recursive check its children
             if (withMv && baseTable.isMaterializedView()) {
                 MvUpdateInfo mvUpdateInfo = getMVTimelinessUpdateInfo((MaterializedView) baseTable, queryRewriteParams);
@@ -207,56 +235,88 @@ public class MvRefreshArbiter {
         return baseTableUpdateInfo;
     }
 
+    public static boolean hasDeletedPartitions(MaterializedView mv, Table table, TvrVersionRange pinnedVersionRange) {
+        return !getDroppedTrackedPartitions(mv, table, pinnedVersionRange).isEmpty();
+    }
+
     /**
-     * Check if any partitions have been deleted from the base table.
-     * For MVs with external tables, if partitions that were previously refreshed no longer exist
-     * in the base table, the MV needs a full refresh.
+     * The base table partitions the mv still tracks a refreshed version for, but which no longer exist in the base
+     * table.
      *
-     * @param mv the materialized view
-     * @param baseTableInfo the base table info
-     * @param table the base table
-     * @return true if partitions have been deleted from the base table, false otherwise
+     * @param pinnedVersionRange the frozen snapshot to answer from, null to answer from the live table
      */
-    public static boolean hasDeletedPartitions(MaterializedView mv, BaseTableInfo baseTableInfo, Table table) {
-        // Only check for external tables (Iceberg, Hive, etc.)
-        if (table.isNativeTableOrMaterializedView()) {
-            return false;
+    public static Set<String> getDroppedTrackedPartitions(MaterializedView mv, Table table,
+                                                          TvrVersionRange pinnedVersionRange) {
+        Map<String, MaterializedView.BasePartitionInfo> versionMap = getTrackedPartitionVersions(mv, table);
+        if (MapUtils.isEmpty(versionMap)) {
+            return Sets.newHashSet();
         }
 
+        Set<String> dropped;
         try {
-            // Get current partitions from the base table
-            ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(mv, table);
-            Map<String, com.starrocks.connector.PartitionInfo> latestPartitionInfo =
-                    traits.getPartitionNameWithPartitionInfo();
-
-            // Get the partitions that were previously refreshed
-            Map<String, MaterializedView.BasePartitionInfo> versionMap =
-                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableRefreshInfo(baseTableInfo);
-
-            if (MapUtils.isEmpty(versionMap)) {
-                return false;
-            }
-
-            // Check if any previously refreshed partitions no longer exist
-            Set<String> currentPartitions = latestPartitionInfo.keySet();
-            for (String refreshedPartition : versionMap.keySet()) {
-                if (!currentPartitions.contains(refreshedPartition)) {
-                    logMVPrepare(mv, String.format(
-                            "Base table partition %s has been deleted, need refresh totally.", refreshedPartition));
-                    return true;
-                }
+            if (table instanceof OlapTable olapTable) {
+                dropped = versionMap.keySet().stream()
+                        .filter(name -> olapTable.getPartition(name) == null)
+                        .collect(Collectors.toSet());
+            } else {
+                ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(mv, table, pinnedVersionRange);
+                Set<String> livePartitions = traits.getPartitionNameWithPartitionInfo().keySet();
+                dropped = Sets.difference(versionMap.keySet(), livePartitions).immutableCopy();
             }
         } catch (Exception e) {
-            // If we can't determine partition info (e.g., connector doesn't support partition metadata APIs),
-            // skip the deleted partition check rather than forcing a refresh. This avoids regressing MV rewrite
-            // for connectors that don't implement full partition metadata support.
-            LOG.debug("Cannot check for deleted partitions for table {}.{}.{}, skipping check: {}",
-                    baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName(),
-                    e.getMessage());
-            return false;
+            // A connector that cannot enumerate partitions would otherwise report every tracked partition as dropped
+            // and pin the mv to a permanent full refresh.
+            LOG.debug("Cannot check for deleted partitions for table {}, skipping check: {}",
+                    table.getName(), e.getMessage());
+            return Sets.newHashSet();
         }
 
-        return false;
+        if (!dropped.isEmpty()) {
+            logMVPrepare(mv, String.format("Base table %s partitions %s have been dropped", table.getName(), dropped));
+        }
+        return dropped;
+    }
+
+    /**
+     * The live mv partitions that may still hold rows from {@code droppedBaseNames}.
+     * <p>
+     * A partition's association entry is the set of base partitions it absorbed at its last refresh, so one that is
+     * mapped and disjoint from the dropped names provably holds none of their rows. An entry only appears once the
+     * partition has been refreshed, so an unmapped partition cannot be ruled out and is included; an mv carried over
+     * from a version that did not maintain the mapping therefore degrades to a full refresh.
+     * <p>
+     * Empty for the 1:1 and finer-grained shapes, where the mv partition fed by the dropped base partition was itself
+     * dropped as an orphan by partition sync, taking the stale rows with it.
+     */
+    public static Set<String> getMvPartitionsAffectedByDrops(MaterializedView mv, Table table,
+                                                             Set<String> droppedBaseNames) {
+        if (droppedBaseNames.isEmpty()) {
+            return Sets.newHashSet();
+        }
+        Map<String, Set<String>> mvToBasePartitions =
+                mv.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap();
+        // The mapping records partition names without the table they came from and each ref base table overwrites the
+        // previous one, so an entry may hold another table's names. Keep only the names this table tracks, the same
+        // attribution filter dropRefBaseTableFromVersionMap applies; an entry left with nothing was another table's
+        // and rules nothing out. Ref base tables sharing a partition namespace still cannot be told apart, which
+        // leaves those mvs where they were before drops were detected at all rather than making them worse.
+        Set<String> trackedByThisTable = getTrackedPartitionVersions(mv, table).keySet();
+        Set<String> affected = mv.getVisiblePartitionNames().stream()
+                .filter(p -> {
+                    Set<String> absorbed = mvToBasePartitions.get(p);
+                    if (absorbed == null) {
+                        return true;
+                    }
+                    Set<String> absorbedFromThisTable = Sets.intersection(absorbed, trackedByThisTable);
+                    return absorbedFromThisTable.isEmpty()
+                            || !Collections.disjoint(absorbedFromThisTable, droppedBaseNames);
+                })
+                .collect(Collectors.toSet());
+        if (!affected.isEmpty()) {
+            logMVPrepare(mv, String.format("Base table %s dropped partitions %s, refreshing mv partitions %s",
+                    table.getName(), droppedBaseNames, affected));
+        }
+        return affected;
     }
 
     /** Whether the mv holds a refreshed partition version for any partition of {@code table}. */
@@ -278,5 +338,72 @@ public class MvRefreshArbiter {
                 .findFirst()
                 .map(context::getBaseTableRefreshInfo)
                 .orElseGet(Maps::newHashMap);
+    }
+
+    /**
+     * The mv partitions holding rows that no tracked partition of {@code refBaseTable} accounts for.
+     * <p>
+     * OlapPartitionTraits#getUpdatedPartitionNames reads an untracked base partition at its initial version as new and
+     * empty, which holds only while the version map is complete: after a reset, an emptied partition reads the same.
+     *
+     * @param mvToBasePartitions the partitions of each ref base table intersecting each mv partition
+     */
+    public static Set<String> getMvPartitionsWithUntrackedRows(
+            MaterializedView mv, Table refBaseTable, Map<String, Map<Table, PCellSortedSet>> mvToBasePartitions) {
+        if (mvToBasePartitions == null || !canLeaveUntrackedRows(mv, refBaseTable)) {
+            return Sets.newHashSet();
+        }
+        try (Timer ignored = Tracers.watchScope("MVPartitionsWithUntrackedRows")) {
+            Set<String> tracked = getTrackedPartitionVersions(mv, refBaseTable).keySet();
+            Set<String> untracked = mv.getPartitions().stream()
+                    .filter(MvRefreshArbiter::holdsRows)
+                    .map(Partition::getName)
+                    .filter(name -> {
+                        Map<Table, PCellSortedSet> intersected = mvToBasePartitions.get(name);
+                        PCellSortedSet basePartitions = intersected == null ? null : intersected.get(refBaseTable);
+                        return basePartitions != null && !basePartitions.isEmpty()
+                                && Collections.disjoint(basePartitions.getPartitionNames(), tracked);
+                    })
+                    .collect(Collectors.toSet());
+            if (!untracked.isEmpty()) {
+                logMVPrepare(mv, String.format("No tracked partition of base table %s accounts for the rows of mv " +
+                        "partitions %s, refreshing them", refBaseTable.getName(), untracked));
+            }
+            return untracked;
+        }
+    }
+
+    /** {@link #getMvPartitionsWithUntrackedRows} for a non-partitioned mv, which every base partition feeds. */
+    public static boolean hasUntrackedRows(MaterializedView mv, Table baseTable) {
+        if (!canLeaveUntrackedRows(mv, baseTable) || mv.getPartitions().stream().noneMatch(MvRefreshArbiter::holdsRows)) {
+            return false;
+        }
+        Set<String> livePartitions = ((OlapTable) baseTable).getVisiblePartitionNames();
+        boolean untracked = !livePartitions.isEmpty()
+                && Collections.disjoint(livePartitions, getTrackedPartitionVersions(mv, baseTable).keySet());
+        if (untracked) {
+            logMVPrepare(mv, String.format("No tracked partition of base table %s accounts for the rows of the mv, " +
+                    "refreshing it", baseTable.getName()));
+        }
+        return untracked;
+    }
+
+    // Only a native table's untracked partitions are read as new and empty, and a table excluded from refresh never
+    // makes the mv recompute anyway.
+    private static boolean canLeaveUntrackedRows(MaterializedView mv, Table table) {
+        if (!table.isNativeTableOrMaterializedView()) {
+            return false;
+        }
+        return mv.getBaseTableInfos().stream()
+                .filter(info -> info.matchTable(table))
+                .findFirst()
+                .map(info -> mv.shouldRefreshTable(info.getDbName(), table.getName()))
+                .orElse(false);
+    }
+
+    // The initial version, not Partition#hasData, which reports data for every partition in unit tests.
+    private static boolean holdsRows(Partition mvPartition) {
+        return mvPartition.getSubPartitions().stream()
+                .anyMatch(physical -> physical.getVisibleVersion() != Partition.PARTITION_INIT_VERSION);
     }
 }

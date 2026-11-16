@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "How to create and manage bitmap indexes in StarRocks to accelerate equality and range queries on low-cardinality columns."
 keywords: ['suoyin']
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Bitmap 索引
@@ -60,7 +61,7 @@ StarRocks 判断是否使用 Bitmap 索引的逻辑：因为一般情况下查�
 
 ### 支持优化的查询
 
-Bitmap 索引适用于优化等值 `=` 查询、`[NOT] IN` 范围查询、`>`，`>=`，`<`，`<=` 查询、 `IS NULL` 查询。不适用于优化 `!=`，`[NOT] LIKE` 查询。
+Bitmap 索引适用于优化等值 `=` 查询、`IN` 范围查询、`>`，`>=`，`<`，`<=` 查询、 `IS NULL` 查询。不适用于优化 `!=`，`NOT IN`，`[NOT] LIKE` 查询。
 
 ### 支持的列和列的数据类型
 

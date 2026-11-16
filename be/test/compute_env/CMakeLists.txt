@@ -51,6 +51,7 @@ set(COMPUTE_ENV_SPILL_TEST_FILES
     spill/spill_block_manager_test.cpp
     spill/spill_metrics_test.cpp
     spill/spill_test.cpp
+    spill/nested_geo_serde_test.cpp
 )
 
 set(COMPUTE_ENV_STAROS_TEST_FILES
@@ -68,12 +69,14 @@ endif()
 
 add_executable(compute_env_test
         ai_executor_test.cpp
+        arrow_io_thread_pool_test.cpp
         buffer_control_block_test.cpp
         compute_env_test.cpp
         compute_env_test_main.cpp
         data_stream_mgr_test.cpp
         fragment_dict_state_test.cpp
         load/load_stream_mgr_test.cpp
+        load/stream_context_mgr_test.cpp
         load/stream_load_context_test.cpp
         load/stream_load_metrics_test.cpp
         load/stream_load_pipe_test.cpp

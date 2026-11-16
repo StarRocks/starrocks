@@ -26,7 +26,6 @@
 #include <string_view>
 #include <utility>
 
-#include "column/arrow/type_to_arrow_converter.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/config_paimon_fwd.h"
@@ -209,6 +208,14 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
                 fmt::format("failed to create Paimon split reader: {}", reader_result.status().ToString()));
     }
     _reader = std::move(reader_result).value();
+    _arrow_record_batch_start_idx = 0;
+    _scanner_eof = false;
+    return Status::OK();
+}
+
+Status PaimonScanner::_init_read_chunk() {
+    SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
+    const auto& materialized_columns = _scanner_ctx->format_scan_context.materialized_columns;
     _read_chunk_template = std::make_shared<Chunk>();
     for (size_t i = 0; i < materialized_columns.size(); ++i) {
         SlotDescriptor* slot_desc = materialized_columns[i].slot_desc;
@@ -223,26 +230,17 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
             continue;
         }
 
-        std::shared_ptr<arrow::DataType> arrow_type;
-        if (slot_desc->type().type == TYPE_DATE) {
-            arrow_type = arrow::date32();
-        } else if (slot_desc->type().type == TYPE_DATETIME) {
-            arrow_type = arrow::timestamp(arrow::TimeUnit::MICRO);
-        } else if (slot_desc->type().type == TYPE_VARIANT) {
-            // paimon-cpp reads an unshredded variant as struct<value: binary, metadata: binary>,
-            // see VariantTypeUtils::UnshreddedStructType in paimon-cpp.
-            arrow_type = arrow::struct_({arrow::field("value", arrow::binary(), /*nullable=*/false),
-                                         arrow::field("metadata", arrow::binary(), /*nullable=*/false)});
-        } else {
-            RETURN_IF_ERROR(convert_to_arrow_type(slot_desc->type(), &arrow_type));
+        // Use the reader's physical schema: the slot type may contain UNKNOWN map
+        // children or pruned struct fields, which describe the destination only.
+        const auto field = _arrow_record_batch->schema()->GetFieldByName(std::string(materialized_columns[i].name()));
+        if (field == nullptr) {
+            return Status::InternalError(fmt::format("Paimon Arrow batch is missing column {}", slot_desc->col_name()));
         }
         MutableColumnPtr column;
-        RETURN_IF_ERROR(create_arrow_column(arrow_type.get(), slot_desc, &column, _convert_functions[i].get(),
+        RETURN_IF_ERROR(create_arrow_column(field->type().get(), slot_desc, &column, _convert_functions[i].get(),
                                             &_cast_exprs[i], _pool, true));
         _read_chunk_template->append_column(std::move(column), slot_desc->id());
     }
-    _arrow_record_batch_start_idx = 0;
-    _scanner_eof = false;
     return Status::OK();
 }
 
@@ -253,6 +251,9 @@ Status PaimonScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) 
     if (_arrow_record_batch_is_exhausted()) {
         // Nothing is buffered yet, so an EndOfFile here propagates to the caller as-is.
         RETURN_IF_ERROR(_next_arrow_record_batch());
+    }
+    if (_read_chunk_template == nullptr) {
+        RETURN_IF_ERROR(_init_read_chunk());
     }
     // Downstream operators keep returned chunks and their columns alive across calls, so
     // every call materializes into a freshly cloned chunk; _read_chunk_template never holds data.

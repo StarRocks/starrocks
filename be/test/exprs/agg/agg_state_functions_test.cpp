@@ -23,12 +23,14 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/base_aggregate_test.h"
 #include "exprs/agg/combinator/agg_state_combine.h"
+#include "exprs/agg/combinator/agg_state_if.h"
 #include "exprs/agg/combinator/agg_state_merge.h"
 #include "exprs/agg/combinator/agg_state_union.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
 #include "exprs/agg/combinator/state_function.h"
 #include "exprs/agg/combinator/state_merge_function.h"
 #include "exprs/agg/combinator/state_union_function.h"
+#include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -837,8 +839,8 @@ TEST_F(AggStateFunctionsTest, test_state_function_avg) {
 // states, e.g. INSERT ... VALUES (..., avg_state(38)) that avg_merge later reads
 // back as garbage (or crashes the BE).
 TEST_F(AggStateFunctionsTest, test_state_function_const_column) {
-    TypeDescriptor return_type_desc = TypeDescriptor(TYPE_DOUBLE);
-    TypeDescriptor arg_type_desc = TypeDescriptor(TYPE_BIGINT);
+    TypeDescriptor return_type_desc = TYPE_DOUBLE_DESC;
+    TypeDescriptor arg_type_desc = TYPE_BIGINT_DESC;
     TypeDescriptor intermediate_type_desc = TypeDescriptor(TYPE_VARBINARY);
     std::vector<TypeDescriptor> arg_type_descs = {arg_type_desc};
     auto utils = std::make_unique<FunctionUtils>(nullptr, return_type_desc, arg_type_descs);
@@ -852,8 +854,7 @@ TEST_F(AggStateFunctionsTest, test_state_function_const_column) {
 
     // avg_state(38) evaluated over a 5-row chunk: the argument is a ConstColumn.
     const size_t chunk_size = 5;
-    auto data_column = Int64Column::create();
-    data_column->append(38);
+    auto data_column = ColumnTestHelper::build_column<int64_t>({38});
     ColumnPtr const_column = ConstColumn::create(std::move(data_column), chunk_size);
 
     Columns input_columns = {const_column};
@@ -876,8 +877,8 @@ TEST_F(AggStateFunctionsTest, test_state_function_const_column) {
 // Same for a const-NULL data argument (e.g. avg_state(NULL)): it must be expanded
 // into a nullable column instead of reaching the aggregate as a ConstColumn.
 TEST_F(AggStateFunctionsTest, test_state_function_const_null_column) {
-    TypeDescriptor return_type_desc = TypeDescriptor(TYPE_DOUBLE);
-    TypeDescriptor arg_type_desc = TypeDescriptor(TYPE_BIGINT);
+    TypeDescriptor return_type_desc = TYPE_DOUBLE_DESC;
+    TypeDescriptor arg_type_desc = TYPE_BIGINT_DESC;
     TypeDescriptor intermediate_type_desc = TypeDescriptor(TYPE_VARBINARY);
     std::vector<TypeDescriptor> arg_type_descs = {arg_type_desc};
     auto utils = std::make_unique<FunctionUtils>(nullptr, return_type_desc, arg_type_descs);
@@ -1821,6 +1822,58 @@ TEST_F(AggStateFunctionsTest, test_agg_state_combine_error_cases) {
     auto ctx = utils->get_fn_ctx();
 
     test_agg_state_combine_error_cases<int32_t>(ctx, "sum", arg_type_descs, return_type_desc);
+}
+
+// A state that is not trivially destructible and counts how many of it are alive.
+struct LiveCountedState {
+    static inline int64_t live = 0;
+    LiveCountedState() { ++live; }
+    ~LiveCountedState() { --live; }
+};
+
+class LiveCountedFunction final : public AggregateFunctionBatchHelper<LiveCountedState, LiveCountedFunction> {
+public:
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {}
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+    }
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {}
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {}
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     MutableColumnPtr& dst) const override {}
+    std::string get_name() const override { return "live_counted"; }
+};
+
+// Sorted streaming aggregation creates and destroys states in batches. The combinators must hand the batch destroy
+// to the wrapped function, whose state is the one that owns memory.
+template <typename Combinator>
+void test_combinator_batch_destroy_with_selection() {
+    LiveCountedFunction inner;
+    AggStateDesc agg_state_desc("live_counted", TYPE_BIGINT_DESC, {TYPE_BIGINT_DESC}, false, 1);
+    Combinator combinator(agg_state_desc, &inner);
+    ASSERT_FALSE(combinator.is_pod_state());
+
+    constexpr size_t chunk_size = 4;
+    std::vector<uint8_t> buffer(chunk_size * combinator.size());
+    Buffer<AggDataPtr> states(chunk_size);
+    for (size_t i = 0; i < chunk_size; ++i) {
+        states[i] = buffer.data() + i * combinator.size();
+    }
+    // selection == 0 means the row starts a new group and owns a state
+    Filter selection = {0, 1, 0, 0};
+
+    LiveCountedState::live = 0;
+    combinator.batch_create_with_selection(nullptr, chunk_size, states, 0, selection);
+    ASSERT_EQ(3, LiveCountedState::live);
+    combinator.batch_destroy_with_selection(nullptr, chunk_size, states, 0, selection);
+    ASSERT_EQ(0, LiveCountedState::live);
+}
+
+TEST_F(AggStateFunctionsTest, test_combinator_batch_destroy_with_selection) {
+    test_combinator_batch_destroy_with_selection<AggStateMerge>();
+    test_combinator_batch_destroy_with_selection<AggStateUnion>();
+    test_combinator_batch_destroy_with_selection<AggStateCombine>();
+    test_combinator_batch_destroy_with_selection<AggStateIf>();
 }
 
 } // namespace starrocks

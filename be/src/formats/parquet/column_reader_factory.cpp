@@ -14,13 +14,21 @@
 
 #include "formats/parquet/column_reader_factory.h"
 
+#include <optional>
+
 #include "base/failpoint/fail_point.h"
+#include "column/column_helper.h"
+#include "column/datum_convert.h"
 #include "column/variant_path_parser.h"
 #include "formats/parquet/complex_column_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/utils.h"
+#include "formats/scan_context.h"
 #include "formats/utils.h"
+#include "runtime/mem_pool.h"
+#include "runtime/type_info_allocator_adapter.h"
+#include "types/type_info.h"
 
 namespace starrocks::parquet {
 
@@ -73,7 +81,78 @@ struct VariantNodeFields {
 };
 
 Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, const ParquetField* typed_group,
-                                       VariantPath* current_path, std::vector<ShreddedFieldNode>* output);
+                                       VariantPath* current_path, std::vector<ShreddedFieldNode>* output,
+                                       bool within_array = false);
+
+// The leaf to read an object group's definition levels from: a `value` leaf if there is one (always a binary), else
+// any scalar leaf. Only structs are crossed: a leaf under a list or map has one level per element, not per row.
+static const ParquetField* find_object_presence_leaf(const ParquetField& group, bool value_only) {
+    for (const auto& child : group.children) {
+        if (child.type == ColumnType::SCALAR) {
+            if (!value_only || child.name == "value") {
+                return &child;
+            }
+        } else if (child.type == ColumnType::STRUCT) {
+            if (const ParquetField* leaf = find_object_presence_leaf(child, value_only); leaf != nullptr) {
+                return leaf;
+            }
+        }
+    }
+    return nullptr;
+}
+
+// nullptr when the group cannot tell its presence: it is required (so it is present whenever its parent is), no leaf
+// below it carries its levels, or it sits below a repeated ancestor (a VARIANT in a LIST or MAP column): the levels of
+// its leaves then have one entry per element, not per row, and are not aligned with the rows of the read.
+static StatusOr<std::unique_ptr<ObjectPresenceSource>> make_object_presence_source(const ColumnReaderOptions& opts,
+                                                                                   const ParquetField* group) {
+    if (!group->is_nullable || group->max_rep_level() > 0) {
+        return std::unique_ptr<ObjectPresenceSource>();
+    }
+    const ParquetField* leaf = find_object_presence_leaf(*group, true);
+    if (leaf == nullptr) {
+        leaf = find_object_presence_leaf(*group, false);
+    }
+    if (leaf == nullptr || leaf->max_rep_level() > 0) {
+        return std::unique_ptr<ObjectPresenceSource>();
+    }
+    auto source = std::make_unique<ObjectPresenceSource>();
+    source->group_def_level = group->max_def_level();
+    source->read_type = std::make_unique<TypeDescriptor>(variant_typed_desc_from_parquet_field(leaf));
+    auto reader_or = ColumnReaderFactory::create(opts, leaf, *source->read_type);
+    if (!reader_or.ok()) {
+        return reader_or.status().clone_and_prepend(
+                strings::Substitute("build variant object presence reader failed, leaf=$0", leaf->name));
+    }
+    source->reader = std::move(reader_or).value();
+    return source;
+}
+
+// Why a scalar typed_value of this file type is not allowed in a shredded variant, or an empty string. The spec lists
+// the types; unsigned integers and fixed-length byte arrays that are neither decimals nor UUIDs are not among them.
+static std::string shredded_typed_value_unsupported_reason(const ParquetField& field) {
+    if (field.physical_type == tparquet::Type::INT32 || field.physical_type == tparquet::Type::INT64) {
+        if (is_unsigned_integer(field.schema_element)) {
+            const int bit_width =
+                    field.schema_element.__isset.logicalType && field.schema_element.logicalType.__isset.INTEGER
+                            ? field.schema_element.logicalType.INTEGER.bitWidth
+                            : (field.physical_type == tparquet::Type::INT32 ? 32 : 64);
+            return strings::Substitute("Unsupported shredded value type: INTEGER($0,false)", bit_width);
+        }
+    }
+    if (field.physical_type == tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
+        const auto& element = field.schema_element;
+        const bool is_decimal =
+                (element.__isset.logicalType && element.logicalType.__isset.DECIMAL) ||
+                (element.__isset.converted_type && element.converted_type == tparquet::ConvertedType::DECIMAL);
+        const bool is_uuid = element.__isset.logicalType && element.logicalType.__isset.UUID;
+        if (!is_decimal && !is_uuid) {
+            return strings::Substitute("Unsupported shredded value type: fixed_len_byte_array($0) typed_value",
+                                       field.type_length);
+        }
+    }
+    return "";
+}
 
 static VariantNodeFields find_variant_node_fields(const ParquetField* struct_field) {
     VariantNodeFields fields;
@@ -190,7 +269,8 @@ static Status collect_array_element_shredded_children(const ColumnReaderOptions&
     const ParquetField* element_typed_value = element_fields.typed_value;
     if (element_typed_value != nullptr && element_typed_value->type == ColumnType::STRUCT) {
         VariantPath element_path;
-        RETURN_IF_ERROR(collect_variant_shredded_fields(opts, element_typed_value, &element_path, &node->children));
+        RETURN_IF_ERROR(
+                collect_variant_shredded_fields(opts, element_typed_value, &element_path, &node->children, true));
     }
     return Status::OK();
 }
@@ -266,6 +346,7 @@ static Status build_scalar_reader_for_variant_node(const ColumnReaderOptions& op
 
     TypeDescriptor file_type = variant_typed_desc_from_parquet_field(typed_field);
     node->kind = ShreddedFieldNode::Kind::SCALAR;
+    node->unsupported_reason = shredded_typed_value_unsupported_reason(*typed_field);
 
     // Keep the read type on heap before creating reader. ScalarColumnReader stores
     // a raw pointer to TypeDescriptor, so a stack-local cannot be referenced.
@@ -281,7 +362,8 @@ static Status build_scalar_reader_for_variant_node(const ColumnReaderOptions& op
 }
 
 Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, const ParquetField* typed_group,
-                                       VariantPath* current_path, std::vector<ShreddedFieldNode>* output) {
+                                       VariantPath* current_path, std::vector<ShreddedFieldNode>* output,
+                                       bool within_array) {
     if (typed_group == nullptr || current_path == nullptr || output == nullptr) {
         return Status::InvalidArgument("typed_group/current_path/output should not be null");
     }
@@ -344,7 +426,11 @@ Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, const Pa
         if (typed_field->type == ColumnType::SCALAR) {
             RETURN_IF_ERROR(build_scalar_reader_for_variant_node(opts, typed_field, node.full_path, &node));
         } else if (typed_field->type == ColumnType::STRUCT) {
-            RETURN_IF_ERROR(collect_variant_shredded_fields(opts, typed_field, current_path, &node.children));
+            RETURN_IF_ERROR(
+                    collect_variant_shredded_fields(opts, typed_field, current_path, &node.children, within_array));
+            if (!within_array) {
+                ASSIGN_OR_RETURN(node.presence, make_object_presence_source(opts, typed_field));
+            }
         } else if (typed_field->type == ColumnType::ARRAY) {
             node.kind = ShreddedFieldNode::Kind::ARRAY;
             RETURN_IF_ERROR(
@@ -363,6 +449,111 @@ bool any_reader_not_null(const std::map<std::string, std::unique_ptr<ColumnReade
 }
 
 } // anonymous namespace
+
+static bool is_readable_level_source(const ParquetField& field) {
+    return field.type == ColumnType::SCALAR && variant_typed_desc_from_parquet_field(&field).type != TYPE_VARIANT;
+}
+
+// The first readable scalar leaf under `field` reached through structs only, depth first. A leaf under a list or
+// map has one value per element, not per row, so it cannot give the row count.
+static const ParquetField* find_readable_struct_leaf(const ParquetField& field) {
+    if (is_readable_level_source(field)) {
+        return &field;
+    }
+    if (field.type != ColumnType::STRUCT) {
+        return nullptr;
+    }
+    for (const auto& child : field.children) {
+        if (const ParquetField* leaf = find_readable_struct_leaf(child); leaf != nullptr) {
+            return leaf;
+        }
+    }
+    return nullptr;
+}
+
+// The type a level source is read as: a scalar as itself; a list, map or struct down to a single readable leaf, so
+// that only that leaf's column is read. nullopt when no leaf under `field` is readable.
+static std::optional<TypeDescriptor> level_source_read_type(const ParquetField& field) {
+    if (is_readable_level_source(field)) {
+        return variant_typed_desc_from_parquet_field(&field);
+    }
+    switch (field.type) {
+    case ColumnType::ARRAY:
+        if (!field.children.empty()) {
+            if (auto element = level_source_read_type(field.children[0]); element.has_value()) {
+                return TypeDescriptor::create_array_type(*element);
+            }
+        }
+        return std::nullopt;
+    case ColumnType::MAP:
+        // An unknown key or value type is not read (see ColumnReaderFactory::create).
+        if (field.children.size() >= 2) {
+            if (auto key = level_source_read_type(field.children[0]); key.has_value()) {
+                return TypeDescriptor::create_map_type(*key, TYPE_UNKNOWN_DESC);
+            }
+            if (auto value = level_source_read_type(field.children[1]); value.has_value()) {
+                return TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, *value);
+            }
+        }
+        return std::nullopt;
+    case ColumnType::STRUCT:
+        for (const auto& child : field.children) {
+            if (auto child_type = level_source_read_type(child); child_type.has_value()) {
+                return TypeDescriptor::create_struct_type({child.name}, {*child_type});
+            }
+        }
+        return std::nullopt;
+    default:
+        return std::nullopt;
+    }
+}
+
+const ParquetField* ColumnReaderFactory::find_struct_level_source(const ParquetField& field) {
+    // Its values are read and dropped, so prefer a fixed-width one over a byte array.
+    const ParquetField* byte_array = nullptr;
+    for (const auto& child : field.children) {
+        if (!is_readable_level_source(child)) {
+            continue;
+        }
+        if (child.physical_type != tparquet::Type::BYTE_ARRAY &&
+            child.physical_type != tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
+            return &child;
+        }
+        if (byte_array == nullptr) {
+            byte_array = &child;
+        }
+    }
+    if (byte_array != nullptr) {
+        return byte_array;
+    }
+    // No direct scalar subfield: a leaf under a struct subfield also has one value per row and carries this
+    // struct's def levels.
+    for (const auto& child : field.children) {
+        if (child.type != ColumnType::STRUCT) {
+            continue;
+        }
+        if (const ParquetField* leaf = find_readable_struct_leaf(child); leaf != nullptr) {
+            return leaf;
+        }
+    }
+    // Only lists or maps are stored: one of them, read through its own list or map reader down to one leaf, still
+    // gives one entry per row, and its levels carry this struct's def levels (the extra repetition levels are
+    // skipped by the struct and by any enclosing list). Without it, a struct in a list would make the whole list
+    // NULL.
+    for (const auto& child : field.children) {
+        if ((child.type == ColumnType::ARRAY || child.type == ColumnType::MAP) &&
+            level_source_read_type(child).has_value()) {
+            return &child;
+        }
+    }
+    // No direct list or map: a struct subfield holding one is read the same way through its struct reader.
+    for (const auto& child : field.children) {
+        if (child.type == ColumnType::STRUCT && level_source_read_type(child).has_value()) {
+            return &child;
+        }
+    }
+    return nullptr;
+}
 
 Status VariantShreddedReadHints::add_path(std::string path) {
     ASSIGN_OR_RETURN(auto parsed_path, VariantPathParser::parse_shredded_path(std::string_view(path)));
@@ -448,11 +639,25 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
                                                                  lake_schema_field, parquet_has_field_id);
 
         std::map<std::string, ColumnReaderPtr> children_readers;
+        std::map<std::string, ColumnPtr> default_columns;
         for (size_t i = 0; i < col_type.children.size(); i++) {
             const ParquetField* parquet_child = mapping.parquet_children[i];
             if (parquet_child == nullptr) {
                 // subfield not existed in the file; we need to emplace nullptr
                 children_readers.emplace(col_type.field_names[i], nullptr);
+                const TIcebergSchemaField* lake_child = mapping.lake_children[i];
+                if (lake_child != nullptr && lake_child->__isset.initial_default &&
+                    !col_type.children[i].is_complex_type()) {
+                    // A type the default parser does not support keeps reading NULL, as before
+                    // defaults were filled; any other failure still fails the scan.
+                    auto default_column = FormatScanContext::create_initial_default_column(col_type.children[i], true,
+                                                                                           lake_child->initial_default);
+                    if (default_column.ok()) {
+                        default_columns.emplace(col_type.field_names[i], std::move(default_column).value());
+                    } else if (!default_column.status().is_not_supported()) {
+                        return default_column.status();
+                    }
+                }
                 continue;
             }
             ASSIGN_OR_RETURN(
@@ -463,10 +668,19 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
 
         // maybe struct subfield ColumnReader is null
         if (any_reader_not_null(children_readers)) {
-            return std::make_unique<StructColumnReader>(field, std::move(children_readers));
-        } else {
-            return nullptr;
+            return std::make_unique<StructColumnReader>(field, std::move(children_readers), std::move(default_columns));
         }
+        const ParquetField* level_source_field =
+                lake_schema_field != nullptr ? find_struct_level_source(*field) : nullptr;
+        if (level_source_field != nullptr) {
+            // Iceberg subfields added after the file was written: keep the struct's nulls and fill the defaults.
+            // Readers keep a pointer to their type, so it lives in the struct reader.
+            auto level_source_type = std::make_unique<TypeDescriptor>(*level_source_read_type(*level_source_field));
+            ASSIGN_OR_RETURN(ColumnReaderPtr level_source, create(opts, level_source_field, *level_source_type));
+            return std::make_unique<StructColumnReader>(field, std::move(children_readers), std::move(default_columns),
+                                                        std::move(level_source), std::move(level_source_type));
+        }
+        return nullptr;
     } else {
         if (col_type.type == TYPE_GEOGRAPHY) {
             if (lake_schema_field == nullptr) {
@@ -477,6 +691,34 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
         return std::make_unique<ScalarColumnReader>(field, &opts.row_group_meta->columns[field->physical_column_index],
                                                     &col_type, opts);
     }
+}
+
+StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_array_offsets_only(const ColumnReaderOptions& opts,
+                                                                         const ParquetField* field,
+                                                                         const TypeDescriptor& col_type) {
+    if (field->type != ColumnType::ARRAY || col_type.type != TYPE_ARRAY || col_type.children.size() != 1 ||
+        col_type.children[0].type != TYPE_STRUCT || !field->has_same_complex_type(col_type)) {
+        return nullptr;
+    }
+    const ParquetField* element = &field->children[0];
+    if (!element->has_struct_layout()) {
+        return nullptr;
+    }
+    const ParquetField* level_source_field = find_struct_level_source(*element);
+    if (level_source_field == nullptr) {
+        return nullptr;
+    }
+    // The list reader takes its offsets from the element's levels, which a leaf of the element carries in full.
+    std::map<std::string, ColumnReaderPtr> children_readers;
+    for (const auto& name : col_type.children[0].field_names) {
+        children_readers.emplace(name, nullptr);
+    }
+    auto level_source_type = std::make_unique<TypeDescriptor>(*level_source_read_type(*level_source_field));
+    ASSIGN_OR_RETURN(ColumnReaderPtr level_source, create(opts, level_source_field, *level_source_type));
+    auto element_reader = std::make_unique<StructColumnReader>(element, std::move(children_readers),
+                                                               std::map<std::string, ColumnPtr>{},
+                                                               std::move(level_source), std::move(level_source_type));
+    return std::make_unique<ListColumnReader>(field, std::move(element_reader));
 }
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(const ColumnReaderOptions& opts,
@@ -501,11 +743,14 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
     std::vector<ShreddedFieldNode> shredded_fields;
     ColumnReaderPtr root_typed_value_reader = nullptr;
     std::unique_ptr<TypeDescriptor> root_typed_value_type = nullptr;
+    std::unique_ptr<ObjectPresenceSource> root_presence;
+    std::string root_unsupported_reason;
     if (top_fields.typed_value != nullptr) {
         const ParquetField* typed_value_field = top_fields.typed_value;
         if (typed_value_field->type == ColumnType::STRUCT) {
             VariantPath root_path;
             RETURN_IF_ERROR(collect_variant_shredded_fields(opts, typed_value_field, &root_path, &shredded_fields));
+            ASSIGN_OR_RETURN(root_presence, make_object_presence_source(opts, typed_value_field));
         } else {
             TypeDescriptor file_type = variant_typed_desc_from_parquet_field(typed_value_field);
             root_typed_value_type = std::make_unique<TypeDescriptor>(file_type);
@@ -516,11 +761,16 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
                                             file_type.debug_string(), root_reader_or.status().to_string()));
             }
             root_typed_value_reader = std::move(root_reader_or).value();
+            root_unsupported_reason = shredded_typed_value_unsupported_reason(*typed_value_field);
         }
     }
-    return std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
-                                                 std::move(shredded_fields), std::move(hints.parsed_shredded_paths),
-                                                 std::move(root_typed_value_reader), std::move(root_typed_value_type));
+    auto reader =
+            std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
+                                                  std::move(shredded_fields), std::move(hints.parsed_shredded_paths),
+                                                  std::move(root_typed_value_reader), std::move(root_typed_value_type));
+    reader->set_root_presence(std::move(root_presence));
+    reader->set_root_unsupported_reason(std::move(root_unsupported_reason));
+    return ColumnReaderPtr(std::move(reader));
 }
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr raw_reader, const GlobalDictMap* dict,
@@ -604,10 +854,9 @@ StructSubfieldMapping ColumnReaderFactory::resolve_struct_subfields(const Parque
             }
             const ParquetField* parquet_child =
                     parquet_has_field_id ? find_by_id(lake_it->second->field_id) : find_by_name(parquet_name(i));
-            if (parquet_child != nullptr) {
-                mapping.parquet_children[i] = parquet_child;
-                mapping.lake_children[i] = lake_it->second;
-            }
+            // Keep the lake child even when the file lacks the subfield: its initial-default fills the subfield.
+            mapping.parquet_children[i] = parquet_child;
+            mapping.lake_children[i] = lake_it->second;
         }
         return mapping;
     }

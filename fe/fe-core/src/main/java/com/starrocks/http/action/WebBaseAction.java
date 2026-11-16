@@ -53,7 +53,6 @@ import com.starrocks.http.rest.RestBaseResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.cookie.DefaultCookie;
@@ -174,10 +173,17 @@ public class WebBaseAction extends BaseAction {
         }
 
         // cookie is invalid.
-        ActionAuthorizationInfo authInfo;
         try {
-            authInfo = getAuthorizationInfo(request);
-            UserIdentity currentUser = checkPassword(authInfo);
+            // Only the authenticated UserIdentity is used below: the session keeps just that
+            // identity, and the NODE check runs on a context holding the user's own roles. A NODE
+            // privilege that comes only from a role an LDAP or security-integration group maps
+            // to is therefore not honored for the Web UI.
+            ConnectContext ctx = new ConnectContext(null);
+            ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+            ctx.setRemoteIP(request.getHostString());
+            checkCredential(ctx, parseAuthCredentials(request));
+            UserIdentity currentUser = ctx.getCurrentUserIdentity();
+
             if (needAdmin()) {
                 try {
                     ConnectContext context = new ConnectContext();
@@ -194,14 +200,7 @@ public class WebBaseAction extends BaseAction {
             value.currentUser = currentUser;
             addSession(request, response, value);
 
-            ConnectContext ctx = new ConnectContext(null);
-            ctx.setQualifiedUser(authInfo.fullUserName);
             ctx.setQueryId(UUIDUtil.genUUID());
-            ctx.setRemoteIP(authInfo.remoteIp);
-            ctx.setCurrentUserIdentity(currentUser);
-            ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            ctx.setCurrentRoleIds(currentUser);
-
             ctx.setThreadLocalInfo();
 
             return true;
@@ -269,7 +268,7 @@ public class WebBaseAction extends BaseAction {
     }
 
     protected void writeAuthResponse(BaseRequest request, BaseResponse response) {
-        response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
+        addAuthChallenges(response);
         writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
     }
 

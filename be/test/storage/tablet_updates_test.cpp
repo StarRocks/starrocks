@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <random>
+#include <set>
 #include <tuple>
 
 #include "base/failpoint/fail_point.h"
@@ -3946,6 +3947,7 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
     const int64_t old_level_num = config::size_tiered_level_num;
     const int64_t old_min_level_size = config::size_tiered_min_level_size;
     const int64_t old_size_threshold = config::update_compaction_size_threshold;
+    const int64_t old_empty_rowset_batch_size = config::max_update_compaction_num_level_minus_one_rowsets;
     const int32_t old_min_interval = config::update_compaction_per_tablet_min_interval_seconds;
     DeferOp restore_config([&]() {
         config::enable_pk_size_tiered_compaction_strategy = old_pk_size_tiered;
@@ -3953,6 +3955,7 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
         config::size_tiered_level_num = old_level_num;
         config::size_tiered_min_level_size = old_min_level_size;
         config::update_compaction_size_threshold = old_size_threshold;
+        config::max_update_compaction_num_level_minus_one_rowsets = old_empty_rowset_batch_size;
         config::update_compaction_per_tablet_min_interval_seconds = old_min_interval;
     });
 
@@ -3961,6 +3964,7 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
     config::size_tiered_level_num = 7;
     config::size_tiered_min_level_size = 64;
     config::update_compaction_size_threshold = 64 * 1024 * 1024;
+    config::max_update_compaction_num_level_minus_one_rowsets = 4;
     config::update_compaction_per_tablet_min_interval_seconds = 86400;
     _tablet = create_tablet(rand(), rand());
     _tablet->updates()->stop_compaction(true);
@@ -3984,9 +3988,9 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
     }
     ASSERT_EQ(10, read_tablet(_tablet, version - 1));
 
-    // empty rowsets level -1
+    // empty rowsets level -1: leave one beyond the batch limit
     rowsets.clear();
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 5; i++) {
         rowsets.emplace_back(create_rowset(_tablet, keys, nullptr, true, false));
     }
     // delete history rowsets data
@@ -4021,14 +4025,29 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
 
     rowsets.clear();
     ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(version - 1, &rowsets).ok());
-    ASSERT_EQ(15, rowsets.size());
+    ASSERT_EQ(18, rowsets.size());
+    std::set<uint32_t> original_empty_rowset_ids;
+    for (const auto& rowset : rowsets) {
+        if (rowset->num_rows() == 0) {
+            original_empty_rowset_ids.insert(rowset->rowset_meta()->get_rowset_seg_id());
+        }
+    }
+    ASSERT_EQ(5, original_empty_rowset_ids.size());
 
     _tablet->updates()->stop_compaction(false);
     ASSERT_TRUE(_tablet->updates()->compaction_for_size_tiered(_compaction_mem_tracker.get()).ok());
 
     rowsets.clear();
     ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(version - 1, &rowsets).ok());
-    ASSERT_EQ(3, rowsets.size());
+    ASSERT_EQ(5, rowsets.size());
+    size_t remaining_original_empty_rowsets = 0;
+    for (const auto& rowset : rowsets) {
+        remaining_original_empty_rowsets += original_empty_rowset_ids.count(rowset->rowset_meta()->get_rowset_seg_id());
+    }
+    // The overwritten key-9 rowset is also level -1 (all its rows are deleted),
+    // so the batch includes it and three of the five physically empty rowsets.
+    ASSERT_EQ(2, remaining_original_empty_rowsets);
+    ASSERT_EQ(10 + N * 2, read_tablet(_tablet, version - 1));
 }
 
 TEST_F(TabletUpdatesTest, test_compaction_rowset_source_limit) {
@@ -4073,6 +4092,60 @@ TEST_F(TabletUpdatesTest, test_compaction_rowset_source_limit) {
         ASSERT_EQ(keys.size(), read_tablet(_tablet, 4));
         ASSERT_EQ(4, _tablet->updates()->max_version());
         SyncPoint::GetInstance()->DisableProcessing();
+    }
+}
+
+TEST_F(TabletUpdatesTest, test_size_tiered_empty_rowset_batches) {
+    const int64_t old_batch_size = config::max_update_compaction_num_level_minus_one_rowsets;
+    const int32_t old_min_interval = config::update_compaction_per_tablet_min_interval_seconds;
+    config::update_compaction_per_tablet_min_interval_seconds = 86400;
+    DeferOp restore([&]() {
+        config::max_update_compaction_num_level_minus_one_rowsets = old_batch_size;
+        config::update_compaction_per_tablet_min_interval_seconds = old_min_interval;
+    });
+
+    for (int64_t batch_size : {int64_t{1}, int64_t{4}}) {
+        config::max_update_compaction_num_level_minus_one_rowsets = batch_size;
+        const size_t effective_batch_size = std::max<int64_t>(2, batch_size);
+        _tablet = create_tablet(rand(), rand());
+        _tablet->updates()->stop_compaction(true);
+        const std::vector<int64_t> first_keys = {1, 2, 3};
+        const std::vector<int64_t> second_keys = {4, 5, 6};
+        ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, first_keys)).ok());
+        ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, second_keys)).ok());
+        for (int64_t version = 4; version <= 12; ++version) {
+            auto rowset = create_rowset(_tablet, first_keys, nullptr, true);
+            ASSERT_EQ(0, rowset->num_segments());
+            ASSERT_TRUE(_tablet->rowset_commit(version, rowset).ok());
+        }
+        ASSERT_EQ(6, read_tablet(_tablet, 12));
+        std::vector<RowsetSharedPtr> rowsets;
+        ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(12, &rowsets).ok());
+        size_t previous_empty_count = 0;
+        for (const auto& rowset : rowsets) {
+            previous_empty_count += rowset->num_rows() == 0;
+        }
+        ASSERT_EQ(9, previous_empty_count);
+        for (int batch = 0; batch < 10 && previous_empty_count >= effective_batch_size; ++batch) {
+            const size_t previous_count = rowsets.size();
+            _tablet->updates()->stop_compaction(false);
+            auto st = _tablet->updates()->compaction_for_size_tiered(_compaction_mem_tracker.get());
+            ASSERT_TRUE(st.ok()) << st;
+            rowsets.clear();
+            ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(12, &rowsets).ok());
+            ASSERT_GT(previous_count, rowsets.size());
+            ASSERT_LE(previous_count - rowsets.size(), effective_batch_size + effective_batch_size - 1);
+            size_t empty_count = 0;
+            for (const auto& rowset : rowsets) {
+                empty_count += rowset->num_rows() == 0;
+            }
+            ASSERT_LT(empty_count, previous_empty_count);
+            ASSERT_LE(previous_empty_count - empty_count, effective_batch_size);
+            previous_empty_count = empty_count;
+            ASSERT_EQ(6, read_tablet(_tablet, 12));
+            ASSERT_EQ(12, _tablet->updates()->max_version());
+        }
+        ASSERT_LT(previous_empty_count, effective_batch_size);
     }
 }
 
@@ -4322,6 +4395,118 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
         trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
         fp->setMode(trigger_mode);
     }
+}
+
+// Skip the apply of a txn that put the tablet in error state.
+void TabletUpdatesTest::test_skip_apply(bool enable_persistent_index) {
+    const auto old_retry_timeout = config::retry_apply_timeout_second;
+    DeferOp restore_config([&]() { config::retry_apply_timeout_second = old_retry_timeout; });
+    // A failed apply puts the tablet in error state instead of retrying.
+    config::retry_apply_timeout_second = 0;
+
+    _tablet = create_tablet(rand(), rand());
+    _tablet->updates()->stop_compaction(true);
+    _tablet->set_enable_persistent_index(enable_persistent_index);
+    auto* updates = _tablet->updates();
+    const int N = 10;
+    std::vector<int64_t> keys(N);
+    std::vector<int64_t> new_keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+        new_keys[i] = N + i;
+    }
+    ASSERT_OK(_tablet->rowset_commit(2, create_rowset(_tablet, keys)));
+    ASSERT_EQ(N, read_tablet(_tablet, 2));
+    // Only a tablet in error state can skip.
+    int64_t skipped_txn_id = -1;
+    EditVersion skipped_version;
+    ASSERT_TRUE(updates->skip_apply(&skipped_txn_id, &skipped_version).is_not_supported());
+
+    // Version 3 upserts new keys and deletes half of the old keys, but its apply fails.
+    auto fp = failpoint::FailPointRegistry::GetInstance()->get("tablet_apply_normal_rowset_commit_internal_error");
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp->setMode(trigger_mode);
+    Int64Column deletes;
+    deletes.append_numbers(keys.data(), sizeof(int64_t) * N / 2);
+    auto rs3 = create_rowset(_tablet, new_keys, &deletes);
+    ASSERT_OK(_tablet->rowset_commit(3, rs3));
+    updates->wait_apply_done();
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+    ASSERT_TRUE(updates->is_error());
+
+    // The skip reports the txn and the version it dropped.
+    std::string output;
+    ASSERT_OK(execute_script(fmt::format("System.print(StorageEngine.skip_apply({}))", _tablet->tablet_id()), output));
+    ASSERT_NE(std::string::npos, output.find(fmt::format("txn:{} version:3 status:OK", rs3->txn_id()))) << output;
+    ASSERT_FALSE(updates->is_error());
+    // A repeated request must not skip the next version, which never failed.
+    ASSERT_TRUE(updates->skip_apply(&skipped_txn_id, &skipped_version).is_not_supported());
+    // Version 3 applies as an empty load: neither its upserts nor its deletes are visible.
+    ASSERT_EQ(N, read_tablet_and_compare(_tablet, 3, keys));
+    EditVersion applied_version;
+    ASSERT_OK(updates->get_latest_applied_version(&applied_version));
+    ASSERT_EQ(3, applied_version.major_number());
+    size_t total_rows = 0;
+    size_t total_dels = 0;
+    ASSERT_OK(updates->get_rowsets_total_stats({rs3->rowset_meta()->get_rowset_seg_id()}, &total_rows, &total_dels));
+    ASSERT_EQ(0, total_rows);
+    ASSERT_EQ(0, total_dels);
+
+    // The primary index has no trace of version 3: upserting the old keys must replace the rows of
+    // version 2, and upserting the new keys must add new rows.
+    ASSERT_OK(_tablet->rowset_commit(4, create_rowset(_tablet, keys)));
+    ASSERT_EQ(N, read_tablet_and_compare(_tablet, 4, keys));
+    ASSERT_OK(_tablet->rowset_commit(5, create_rowset(_tablet, new_keys)));
+    ASSERT_EQ(2 * N, read_tablet(_tablet, 5));
+    ASSERT_FALSE(updates->is_error());
+
+    // The emptied rowset is persisted.
+    StorageEngine::instance()->update_manager()->clear_cached_del_vec_by_tablet_id(_tablet->tablet_id());
+    auto tablet1 = load_same_tablet_from_store(_tablet);
+    ASSERT_EQ(N, read_tablet_and_compare(tablet1, 3, keys));
+    ASSERT_EQ(2 * N, read_tablet(tablet1, 5));
+}
+
+TEST_F(TabletUpdatesTest, test_skip_apply) {
+    test_skip_apply(false);
+}
+
+TEST_F(TabletUpdatesTest, test_skip_apply_with_persistent_index) {
+    test_skip_apply(true);
+}
+
+// An apply that failed after writing its meta has deleted rows of older rowsets already, so it
+// cannot be skipped.
+TEST_F(TabletUpdatesTest, test_skip_apply_rejects_persisted_apply) {
+    _tablet = create_tablet(rand(), rand());
+    _tablet->updates()->stop_compaction(true);
+    auto* updates = _tablet->updates();
+    const int N = 10;
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    ASSERT_OK(_tablet->rowset_commit(2, create_rowset(_tablet, keys)));
+    ASSERT_EQ(N, read_tablet(_tablet, 2));
+
+    // The apply of version 3 fails after its meta is written.
+    auto fp = failpoint::FailPointRegistry::GetInstance()->get("tablet_apply_cache_del_vec_failed");
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp->setMode(trigger_mode);
+    auto rs3 = create_rowset(_tablet, keys);
+    ASSERT_OK(_tablet->rowset_commit(3, rs3));
+    updates->wait_apply_done();
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+    ASSERT_TRUE(updates->is_error());
+
+    int64_t skipped_txn_id = -1;
+    EditVersion skipped_version;
+    ASSERT_TRUE(updates->skip_apply(&skipped_txn_id, &skipped_version).is_already_exist());
+    ASSERT_TRUE(updates->is_error());
 }
 
 TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {

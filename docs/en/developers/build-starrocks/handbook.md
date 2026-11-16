@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "In general, you can build StarRocks by just executing"
+products: [oss]
 ---
 
 # How to build StarRocks

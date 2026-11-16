@@ -146,6 +146,7 @@ public class Locker {
      * Acquire the database lock and return whether the database still exists after the lock is held.
      */
     public boolean lockDatabaseAndCheckExist(Database database, LockType lockType) {
+        LockTargetValidator.validateDatabase(database);
         lockDatabase(database.getId(), lockType);
         return checkExistenceInLock(database, lockType);
     }
@@ -154,6 +155,7 @@ public class Locker {
      * Lock table with intensive db lock and check db's existence.
      */
     public boolean lockTableAndCheckDbExist(Database database, long tableId, LockType lockType) {
+        LockTargetValidator.validateDatabase(database);
         lockTableWithIntensiveDbLock(database.getId(), tableId, lockType);
         return checkExistenceInLock(database, tableId, lockType);
     }
@@ -214,6 +216,8 @@ public class Locker {
      */
     public void lockTablesWithIntensiveDbLock(Long dbId, List<Long> tableList, LockType lockType) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
+        // Validate before anything is acquired, so a refusal cannot strand a lock.
+        LockTargetValidator.validateTableIds(tableList);
         List<Long> tableListClone = new ArrayList<>(tableList);
         LockType intentionType = (lockType == LockType.WRITE)
                 ? LockType.INTENTION_EXCLUSIVE
@@ -276,6 +280,7 @@ public class Locker {
     public boolean tryLockTablesWithIntensiveDbLock(Long dbId, List<Long> tableList, LockType lockType,
                                                     long timeout, TimeUnit unit) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
+        LockTargetValidator.validateTableIds(tableList);
         List<Long> tableListClone = new ArrayList<>(tableList);
         LockType intentionType = (lockType == LockType.WRITE)
                 ? LockType.INTENTION_EXCLUSIVE
@@ -342,6 +347,7 @@ public class Locker {
      */
     public void lockTableWithIntensiveDbLock(Long dbId, Long tableId, LockType lockType) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
+        LockTargetValidator.validateTableId(tableId);
         LockType intentionType = (lockType == LockType.WRITE)
                 ? LockType.INTENTION_EXCLUSIVE
                 : LockType.INTENTION_SHARED;

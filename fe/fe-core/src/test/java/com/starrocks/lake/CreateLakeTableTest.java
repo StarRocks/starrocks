@@ -59,6 +59,7 @@ import com.starrocks.thrift.TTabletRange;
 import com.starrocks.utframe.UtFrameUtils;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.internal.SnapshotImpl;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.reflect.FieldUtils;
@@ -75,6 +76,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 public class CreateLakeTableTest {
     private static ConnectContext connectContext;
@@ -512,6 +514,66 @@ public class CreateLakeTableTest {
             Config.create_table_max_serial_replicas = savedMaxSerialReplicas;
             Config.tablet_create_timeout_second = savedTabletCreateTimeout;
             Config.max_create_table_timeout_second = savedMaxCreateTableTimeout;
+        }
+    }
+
+    /**
+     * Only `file_bundling` makes a partition share one version-1 tablet metadata object. The retired
+     * lake_enable_tablet_creation_optimization is set here to show it no longer turns that on for any other
+     * table, which gets one per tablet, or none at all with light_weight_tablet_creation.
+     */
+    @Test
+    public void testTabletCreationOptimizationFollowsFileBundlingOnly() throws Exception {
+        boolean savedOptimization = Config.lake_enable_tablet_creation_optimization;
+        List<CreateReplicaTask> built = Collections.synchronizedList(new ArrayList<>());
+        new MockUp<CreateReplicaTask.Builder>() {
+            @Mock
+            public CreateReplicaTask build(Invocation inv) {
+                CreateReplicaTask task = inv.proceed();
+                built.add(task);
+                return task;
+            }
+        };
+        try {
+            Config.lake_enable_tablet_creation_optimization = true;
+
+            createTable("create table lake_test.tco_no_bundling (c0 int, c1 int) duplicate key(c0)\n" +
+                    "distributed by hash(c0) buckets 3\n" +
+                    "properties('file_bundling' = 'false', 'light_weight_tablet_creation' = 'false')");
+            LakeTable noBundling = getLakeTable("lake_test", "tco_no_bundling");
+            Assertions.assertFalse(noBundling.isFileBundling());
+            Assertions.assertFalse(noBundling.isRangeDistribution());
+            List<CreateReplicaTask> noBundlingTasks = createTasksOf(built, noBundling);
+            Assertions.assertEquals(3, noBundlingTasks.size(), "every tablet must get its own create task");
+            for (CreateReplicaTask task : noBundlingTasks) {
+                Assertions.assertFalse(task.toThrift().isEnable_tablet_creation_optimization());
+            }
+
+            createTable("create table lake_test.tco_bundling (c0 int, c1 int) duplicate key(c0)\n" +
+                    "distributed by hash(c0) buckets 3\n" +
+                    "properties('file_bundling' = 'true', 'light_weight_tablet_creation' = 'false')");
+            LakeTable bundling = getLakeTable("lake_test", "tco_bundling");
+            Assertions.assertTrue(bundling.isFileBundling());
+            Assertions.assertFalse(bundling.isRangeDistribution());
+            List<CreateReplicaTask> bundlingTasks = createTasksOf(built, bundling);
+            Assertions.assertEquals(1, bundlingTasks.size(), "one task writes the partition-shared object");
+            Assertions.assertTrue(bundlingTasks.get(0).toThrift().isEnable_tablet_creation_optimization());
+
+            createTable("create table lake_test.tco_no_bundling_lw (c0 int, c1 int) duplicate key(c0)\n" +
+                    "distributed by hash(c0) buckets 3\n" +
+                    "properties('file_bundling' = 'false', 'light_weight_tablet_creation' = 'true')");
+            LakeTable noBundlingLightWeight = getLakeTable("lake_test", "tco_no_bundling_lw");
+            Assertions.assertTrue(noBundlingLightWeight.isLightWeightTabletCreation());
+            Assertions.assertTrue(createTasksOf(built, noBundlingLightWeight).isEmpty(),
+                    "light-weight tablet creation writes no version-1 metadata");
+        } finally {
+            Config.lake_enable_tablet_creation_optimization = savedOptimization;
+        }
+    }
+
+    private static List<CreateReplicaTask> createTasksOf(List<CreateReplicaTask> tasks, Table table) {
+        synchronized (tasks) {
+            return tasks.stream().filter(task -> task.getTableId() == table.getId()).collect(Collectors.toList());
         }
     }
 

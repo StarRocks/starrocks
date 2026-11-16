@@ -151,10 +151,6 @@ struct AIHttpClientOptions {
 // before constructing request state without copying a weaker parser.
 Status validate_ai_http_url(const std::string& url);
 
-// Applies the same complete URL policy while requiring HTTPS. Credential-bearing
-// callers use this boundary so secrets can never be attached to cleartext HTTP.
-Status validate_ai_https_url(const std::string& url);
-
 class AIHttpClient {
 public:
     virtual ~AIHttpClient() = default;

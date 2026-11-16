@@ -14,6 +14,7 @@
 
 package com.starrocks.http;
 
+import com.starrocks.authentication.AuthCredentials;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -61,12 +63,16 @@ public class MetaServiceDumpAuthTest extends StarRocksHttpTestCase {
         };
 
         // Authenticate the non-admin user with valid credentials; every other login goes through the real path.
+        // WebBaseAction authenticates through BaseAction#checkCredential, which calls authenticate().
         new MockUp<AuthenticationHandler>() {
             @Mock
-            public UserIdentity authenticateWithClearPassword(Invocation inv, ConnectContext context, String user,
-                                                              String remoteHost, String password) {
-                if (NON_ADMIN_USER.equals(user) && NON_ADMIN_PASSWORD.equals(password)) {
-                    return UserIdentity.createAnalyzedUserIdentWithIp(NON_ADMIN_USER, "%");
+            public UserIdentity authenticate(Invocation inv, ConnectContext context, AuthCredentials cred) {
+                if (NON_ADMIN_USER.equals(cred.userDeclared()) && NON_ADMIN_PASSWORD.equals(cred.tokenString())) {
+                    UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp(NON_ADMIN_USER, "%");
+                    context.setCurrentUserIdentity(user);
+                    context.setQualifiedUser(NON_ADMIN_USER);
+                    context.setCurrentRoleIds(Set.of());
+                    return user;
                 }
                 return inv.proceed();
             }

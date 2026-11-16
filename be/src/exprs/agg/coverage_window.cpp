@@ -15,26 +15,15 @@
 #include "exprs/agg/coverage_window.h"
 
 #include <cmath>
-#include <exception>
 #include <limits>
 
-#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/geo_column.h"
 #include "exprs/function_context.h"
-#include "runtime/memory/memory_allocator.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks {
 namespace {
-Status checkpoint(void* pointer) {
-    auto* state = static_cast<RuntimeState*>(pointer);
-    RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(state->check_query_state("ST_CoverageSimplify"));
-    return state->check_mem_limit("ST_CoverageSimplify");
-}
-
 const Column* unwrap(const Column* column, size_t& position, bool& null) {
     null = column->only_null();
     if (column->is_constant()) {
@@ -99,7 +88,6 @@ Status CoverageWindowFunction::initialize(FunctionContext* ctx, CoverageWindowSt
     };
     if (!planar(args[0]) || !planar(result) || !is_geo_semantically_compatible(*args[0].geo_type, *result.geo_type))
         return Status::InvalidArgument("ST_CoverageSimplify requires compatible planar GEOMETRY CRS descriptors");
-    if (!ctx->state()) return Status::InvalidArgument("ST_CoverageSimplify requires a runtime state");
     ASSIGN_OR_RETURN(state.tolerance, tolerance(ctx));
     ASSIGN_OR_RETURN(state.boundary, boundary(ctx));
     if (state.tolerance && state.boundary &&
@@ -107,7 +95,6 @@ Status CoverageWindowFunction::initialize(FunctionContext* ctx, CoverageWindowSt
          !std::isfinite(*state.tolerance * *state.tolerance)))
         return Status::InvalidArgument(
                 "ST_CoverageSimplify requires finite nonnegative tolerance and representable tolerance squared");
-    RETURN_IF_ERROR(checkpoint(ctx->state()));
     state.initialized = true;
     return Status::OK();
 }
@@ -122,21 +109,15 @@ Status CoverageWindowFunction::prepare_partition(FunctionContext* ctx, CoverageW
                                                  int64_t start, int64_t end) const {
     if (!input || start < 0 || end < start || (!input->is_constant() && uint64_t(end) > input->size()))
         return Status::InvalidArgument("ST_CoverageSimplify invalid input partition");
-    ASSIGN_OR_RETURN(state.core,
-                     GeoCoverageSimplify::create(memory::get_default_allocator(), {}, {ctx->state(), checkpoint}));
+    ASSIGN_OR_RETURN(state.core, GeoCoverageSimplify::create());
     const bool skip = !state.tolerance || !state.boundary;
     for (int64_t row = start; row < end; ++row) {
-        if ((row - start) % 128 == 0) RETURN_IF_ERROR(checkpoint(ctx->state()));
         size_t position = row;
         bool null;
         const auto* physical = unwrap(input, position, null);
         const auto* geo = dynamic_cast<const GeoColumn*>(physical);
         if ((!geo && !input->only_null()) ||
-            (geo && (!is_geo_semantically_compatible(geo->descriptor().type, *ctx->get_return_type().geo_type) ||
-                     geo->descriptor().storage.encoding != GEO_ENCODING_WKB ||
-                     (geo->descriptor().storage.dimension != GEO_DIMENSION_XY &&
-                      geo->descriptor().storage.dimension != GEO_DIMENSION_UNKNOWN &&
-                      geo->descriptor().storage.dimension != GEO_DIMENSION_MIXED))))
+            (geo && !is_geo_semantically_compatible(geo->descriptor().type, *ctx->get_return_type().geo_type)))
             return Status::InvalidArgument("ST_CoverageSimplify requires compatible native planar XY GEOMETRY input");
         std::optional<Slice> bytes;
         if (!skip && !null) bytes = geo->get_wkb(position);
@@ -168,15 +149,8 @@ void CoverageWindowFunction::update_batch_single_state_with_frame(FunctionContex
 void CoverageWindowFunction::get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start,
                                         size_t end) const {
     DCHECK_GT(end, start);
-    // Variable-width window results append end-start rows. Preserve that
-    // invariant on errors too, before the caller can append dst to its chunk.
-    const size_t expected_size = dst->size() + (end - start);
-    auto pad = DeferOp([&] {
-        // Allocation exceptions are handled by the caller's allocation scope.
-        // Never inspect a partly appended nullable column or allocate on unwind.
-        if (std::uncaught_exceptions() != 0) return;
-        if (dst->size() < expected_size) dst->append_default(expected_size - dst->size());
-    });
+    // On error dst may be left short; the Analytor checks for errors before using any result column.
+    // A failed update has already released the kernel, so stop before touching it.
     if (ctx->has_error()) return;
     auto& current = data(const_cast<AggDataPtr>(state));
     auto* nullable = dynamic_cast<NullableColumn*>(dst);
@@ -186,15 +160,6 @@ void CoverageWindowFunction::get_values(FunctionContext* ctx, ConstAggDataPtr st
         !is_geo_semantically_compatible(geo->descriptor().type, *ctx->get_return_type().geo_type)) {
         ctx->set_error("ST_CoverageSimplify positional window mapping mismatch");
         return;
-    }
-    if (geo->size() == 0) {
-        // The generic result allocator has no storage metadata. Only this
-        // adapter can certify the kernel's validated XY output. Keep the
-        // destination object so Analytor's ordinary column ownership applies.
-        auto validated = GeoColumn::create(
-                GeoColumnDescriptor{geo->descriptor().type,
-                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}});
-        geo->swap_column(*validated);
     }
     // start/end are chunk-local destination positions. emitted is the ordinal
     // in this partition, independent of chunk boundaries and buffer contraction.

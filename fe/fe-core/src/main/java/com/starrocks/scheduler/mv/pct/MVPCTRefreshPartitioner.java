@@ -71,8 +71,12 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+import static com.starrocks.catalog.MvRefreshArbiter.getDroppedTrackedPartitions;
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
+import static com.starrocks.catalog.MvRefreshArbiter.getMvPartitionsAffectedByDrops;
+import static com.starrocks.catalog.MvRefreshArbiter.getMvPartitionsWithUntrackedRows;
 import static com.starrocks.catalog.MvRefreshArbiter.hasDeletedPartitions;
+import static com.starrocks.catalog.MvRefreshArbiter.hasUntrackedRows;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
 import static com.starrocks.catalog.MvRefreshArbiter.tracksPartitionVersions;
 import static com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector.getExpiredPartitionsByRetentionCondition;
@@ -472,6 +476,9 @@ public abstract class MVPCTRefreshPartitioner {
     protected PCellSortedSet getMvPartitionNamesToRefresh(PCellSortedSet toRefreshPartitions) {
         PCellSortedSet result = PCellSortedSet.of();
         Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        PCTPartitionTopology partitionTopology = mvContext.getPartitionTopology();
+        Map<String, Map<Table, PCellSortedSet>> mvToBasePartitions =
+                partitionTopology == null ? null : partitionTopology.getMvRefBaseTableIntersectedPartitions();
         for (Table baseTable : refBaseTablePartitionColumns.keySet()) {
             // refresh all mv partitions when the ref base table is not supported partition refresh
             if (!isPartitionRefreshSupported(baseTable)) {
@@ -486,6 +493,21 @@ public abstract class MVPCTRefreshPartitioner {
             if (mvBaseTableUpdateInfo == null) {
                 throw new DmlException(String.format("Find the updated partition info of ref base table %s of mv " +
                         "%s failed, current mv partitions:%s", baseTable.getName(), mv.getName(), toRefreshPartitions));
+            }
+
+            // Partition sync only drops an mv partition that lost every base partition it covered; a coarser one
+            // survives still holding the dropped partition's rows.
+            PCellSortedSet affectedByDrops = PCellSortedSet.of(toRefreshPartitions);
+            affectedByDrops.retainAllNames(getMvPartitionsAffectedByDrops(mv, baseTable,
+                    getDroppedTrackedPartitions(mv, baseTable, pinnedRangeFor(baseTable))));
+            result.addAll(affectedByDrops);
+
+            PCellSortedSet withUntrackedRows = PCellSortedSet.of(toRefreshPartitions);
+            withUntrackedRows.retainAllNames(getMvPartitionsWithUntrackedRows(mv, baseTable, mvToBasePartitions));
+            if (!withUntrackedRows.isEmpty()) {
+                logger.info("No tracked partition of base table {} accounts for the rows of mv partitions {}",
+                        baseTable.getName(), withUntrackedRows);
+                result.addAll(withUntrackedRows);
             }
 
             PCellSortedSet refBaseTablePartitionNames = mvBaseTableUpdateInfo.getToRefreshPCells();
@@ -535,6 +557,10 @@ public abstract class MVPCTRefreshPartitioner {
             if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
                 return true;
             }
+            // A non-ref base table is not partition-aligned with the mv, so losing a partition invalidates all of it.
+            if (hasDeletedPartitions(mv, snapshotTable, pinnedRangeFor(snapshotTable))) {
+                return true;
+            }
         }
         return false;
     }
@@ -556,8 +582,10 @@ public abstract class MVPCTRefreshPartitioner {
             if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
                 return true;
             }
-            // Check if any partitions have been deleted from external tables
-            if (hasDeletedPartitions(mv, snapshotInfo.getBaseTableInfo(), snapshotTable)) {
+            if (hasDeletedPartitions(mv, snapshotTable, /* pinnedVersionRange */ null)) {
+                return true;
+            }
+            if (hasUntrackedRows(mv, snapshotTable)) {
                 return true;
             }
         }

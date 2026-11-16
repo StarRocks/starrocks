@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical q - r"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Metrics q through r
@@ -97,6 +98,12 @@ description: "Alphabetical q - r"
 - Labels: `storage_type`
 - Description: Cumulative wall-clock time spent in read-side spill IO (block reads during restore), broken down by storage backend. Useful for tracking read-side spill performance.
 
+## `ranger_audit_init_failed`
+
+- Unit: -
+- Type: Gauge
+- Description: Whether this FE failed to initialize Ranger audit. `1` means authorization still works but this FE writes no Ranger audit event until it is restarted with a fixed audit configuration; the FE log names the destination that failed. `0` otherwise. A common cause is an audit destination that the FE does not ship: only the `file` and `solr` Ranger audit destinations are available.
+
 ## `readable_blocks_total (Deprecated)`
 
 ## `recycle_bin_database_num`
@@ -147,12 +154,12 @@ description: "Alphabetical q - r"
 ## `resource_group_driver_queue_level_schedule_count`
 
 - Unit: Count
-- Description: Cumulative number of drivers taken from each level of the pipeline driver queue of each resource group.
+- Description: Cumulative number of drivers taken from each level of the pipeline driver queue of each resource group. This counter includes draining resource-group versions and retains their final totals after removal. Updating, deleting, or recreating a group with the same name preserves the total within the BE/CN process.
 
 ## `resource_group_driver_queue_level_wait_time_ns`
 
 - Unit: ns
-- Description: Cumulative time that the drivers taken from each level of the pipeline driver queue of each resource group waited in the ready queue. Divide its increase by the increase of `resource_group_driver_queue_level_schedule_count` to get the average wait of the level.
+- Description: Cumulative time that the drivers taken from each level of the pipeline driver queue of each resource group waited in the ready queue. Like the schedule-count counter, it includes draining versions and preserves totals across group updates, deletion, and recreation with the same name within the BE/CN process. Divide its increase by the increase of `resource_group_driver_queue_level_schedule_count` to get the average wait of the level.
 
 ## `resource_group_inuse_cpu_cores`
 

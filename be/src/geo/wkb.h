@@ -21,6 +21,7 @@
 
 #include "base/string/slice.h"
 #include "common/status.h"
+#include "geo/geo_common.h"
 
 namespace starrocks {
 

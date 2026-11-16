@@ -13,8 +13,8 @@
 
     <properties>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <fluss.version>0.9.1-incubating</fluss.version>
-        <paimon.version>1.3.1</paimon.version>
+        <fluss.version>1.0.0</fluss.version>
+        <paimon.version>2.0.0</paimon.version>
     </properties>
 
     <dependencies>
@@ -81,6 +81,19 @@
         <dependency>
             <groupId>org.apache.fluss</groupId>
             <artifactId>fluss-flink-common</artifactId>
+            <version>${fluss.version}</version>
+        </dependency>
+
+        <!-- The Fluss client reads log segments that Fluss has moved to remote storage itself. -->
+        <dependency>
+            <groupId>org.apache.fluss</groupId>
+            <artifactId>fluss-fs-s3</artifactId>
+            <version>${fluss.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.fluss</groupId>
+            <artifactId>fluss-fs-oss</artifactId>
             <version>${fluss.version}</version>
         </dependency>
 

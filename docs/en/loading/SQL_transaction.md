@@ -2,6 +2,7 @@
 sidebar_position: 80
 displayed_sidebar: docs
 description: "How to use SQL transactions in StarRocks to commit multiple DML statements (INSERT, UPDATE, DELETE) atomically with ACID guarantees across multiple tables."
+products: [oss, enterprise, anywhere]
 ---
 
 import Beta from '../_assets/commonMarkdown/_beta.mdx'

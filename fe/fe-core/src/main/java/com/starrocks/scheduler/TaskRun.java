@@ -24,6 +24,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.OptimizeTask;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.catalog.Database;
@@ -42,6 +43,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
@@ -55,6 +57,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -80,6 +83,15 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String PINNED_REFRESH_JOB_ID = "PINNED_REFRESH_JOB_ID";
     // Carries the batch's first-run start time so LAST_FRESHNESS_CONFIRMED_AT reflects the snapshot pinned at batch start.
     public static final String MV_FRESHNESS_BASELINE_TIME = "MV_FRESHNESS_BASELINE_TIME";
+    // The MV's version map reset epoch as the job's first run read it, propagated across batch runs so that a reset
+    // since the job started fences every later batch too, see MVVersionManager#publishRefreshScheme.
+    public static final String MV_VERSION_MAP_RESET_EPOCH = "MV_VERSION_MAP_RESET_EPOCH";
+    // Fingerprints of the non-ref olap base tables as the job's first run read them, propagated across batch runs so
+    // that the last run records their versions only if no batch read a different state, see MVVersionManager.
+    public static final String MV_NON_REF_TABLE_FINGERPRINT = "MV_NON_REF_TABLE_FINGERPRINT";
+    // First task run's processStartTime, propagated across batch runs so the terminal run can record
+    // refresh-job duration without looking up task-run history. Written only when processStartTime > 0.
+    public static final String MV_REFRESH_JOB_PROCESS_START_TIME = "MV_REFRESH_JOB_PROCESS_START_TIME";
     public static final String SUBMIT_USER_SYSTEM = "system";
     // Only used in FE's UT
     public static final String IS_TEST = "__IS_TEST__";
@@ -98,8 +110,13 @@ public class TaskRun implements Comparable<TaskRun> {
     // - `PROPERTIES_WAREHOUSE`/`START_TASK_RUN_ID` is no need to check equality of task runs because they will not affect
     //  the task run's result.
     // - `PINNED_REFRESH_JOB_ID` scopes merge isolation to pinned batches; pure PCT is unaffected.
+    // - `MV_VERSION_MAP_RESET_EPOCH` keeps a run started after a version map reset from merging into a batch of a job
+    //   started before it, whose versions the reset fences.
+    // - `MV_NON_REF_TABLE_FINGERPRINT` keeps a batch from merging into one of a job whose batches read another state of
+    //   the non-ref tables, whose fingerprint would then be lost.
     public static final Set<String> MV_COMPARABLE_PROPERTIES = ImmutableSet.of(
-            MV_ID, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE, PINNED_REFRESH_JOB_ID);
+            MV_ID, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE, PINNED_REFRESH_JOB_ID,
+            MV_VERSION_MAP_RESET_EPOCH, MV_NON_REF_TABLE_FINGERPRINT);
     // Properties that can be set in TaskRun which are used to distinguish other noisy properties from users' defined properties.
     // and will ignore other properties in the task run history.
     // This should be only used in the task run history table and should not used for checking task run's real properties
@@ -155,6 +172,31 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public void setProperties(Map<String, String> properties) {
         this.properties = properties;
+    }
+
+    /** Seeds {@link #MV_VERSION_MAP_RESET_EPOCH} on the first run's spawn; later runs carry it via the property copy. */
+    public static void seedVersionMapResetEpoch(Map<String, String> newProperties, long versionMapResetEpoch) {
+        if (newProperties == null || versionMapResetEpoch < 0
+                || newProperties.containsKey(MV_VERSION_MAP_RESET_EPOCH)) {
+            return;
+        }
+        newProperties.put(MV_VERSION_MAP_RESET_EPOCH, String.valueOf(versionMapResetEpoch));
+    }
+
+    /**
+     * Seed the batch's first-run process start on the leader's spawn; later runs already carry it
+     * via the property copy. Only writes a real timestamp: the key is absent when processStartTime
+     * is unknown (0), so readers do not have to treat 0 as a sentinel.
+     */
+    public static void seedRefreshJobProcessStartTime(Map<String, String> newProperties, TaskRunStatus status) {
+        if (newProperties == null || status == null
+                || newProperties.containsKey(MV_REFRESH_JOB_PROCESS_START_TIME)) {
+            return;
+        }
+        long processStartTime = status.getProcessStartTime();
+        if (processStartTime > 0) {
+            newProperties.put(MV_REFRESH_JOB_PROCESS_START_TIME, String.valueOf(processStartTime));
+        }
     }
 
     public CompletableFuture<Constants.TaskRunState> getFuture() {
@@ -356,6 +398,25 @@ public class TaskRun implements Comparable<TaskRun> {
                 // Fallback to previous behavior if fetching roles fails
                 context.setCurrentRoleIds(context.getCurrentUserIdentity());
             }
+            Set<String> groups = resolveCreatorGroups(context);
+            context.setGroups(groups);
+            if (!groups.isEmpty()) {
+                AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+                Set<Long> roleIds = new HashSet<>(context.getCurrentRoleIds());
+                groups.forEach(group -> roleIds.addAll(authorizationMgr.getRoleIdListByGroup(group)));
+                context.setCurrentRoleIds(roleIds);
+            }
+        }
+    }
+
+    private Set<String> resolveCreatorGroups(ConnectContext context) {
+        try {
+            return ExecuteAsExecutor.resolveGroups(context, context.getCurrentUserIdentity());
+        } catch (Exception e) {
+            // Unlike a login, a failed lookup does not fail the task: it runs without groups, as EXECUTE AS does.
+            LOG.warn("TaskRun {} failed to resolve the groups of {}, running without them",
+                    taskRunId, context.getCurrentUserIdentity(), e);
+            return Set.of();
         }
     }
 
@@ -450,11 +511,10 @@ public class TaskRun implements Comparable<TaskRun> {
             if (Constants.TaskSource.MV.equals(task.getSource())
                     && MaterializedViewExceptions.isIncrementalBreakingFailure(e)) {
                 MaterializedView mv = TaskBuilder.getMvFromTask(task);
-                // Permanent incremental breakage: inactivate the MV and rethrow. Don't kill/suspend the running
-                // refresh here -- that would eat the actionable error; the consecutive-failure path suspends the task.
+                // Permanent breakage: inactivate for its own reason, not through the consecutive-failure path.
                 if (mv != null && mv.isActive()) {
-                    AlterMVJobExecutor.inactiveMvAndLog(mv,
-                            MaterializedViewExceptions.inactiveReasonForIncrementalBreaking(mv.getName()));
+                    AlterMVJobExecutor.inactiveMvAndSuspendTask(mv,
+                            MaterializedViewExceptions.inactiveReasonForBreakingFailure(e, mv.getName()));
                     throw e;
                 }
             }

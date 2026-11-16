@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "UNION"
 description: "Combines the result of multiple queries."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # UNION

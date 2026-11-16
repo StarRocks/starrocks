@@ -113,6 +113,12 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
                 continue;
             }
         }
+        // A key may repeat in stored JSON. Flattening it twice would add two values to one row of a column.
+        if (UNLIKELY(child->second->last_row == _row_stamp)) {
+            _duplicate = true;
+            return false;
+        }
+        child->second->last_row = _row_stamp;
 
         if (child->second->children.empty()) {
             // leaf node
@@ -130,6 +136,9 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
             if constexpr (REMAIN) {
                 builder->addUnchecked(k.data(), k.size(), vpack::Value(vpack::ValueType::Object));
                 _flatten_json<REMAIN>(v, child->second.get(), builder, hit_count);
+                if (_duplicate) {
+                    return false;
+                }
                 builder->close();
             } else {
                 if (!_flatten_json<REMAIN>(v, child->second.get(), builder, hit_count)) {
@@ -178,17 +187,34 @@ void JsonFlattener::_flatten(const Column* json_column, const JsonColumn* json_d
         }
         // to count how many columns hit in json, for append default value
         uint32_t hit_count = 0;
+        _row_stamp++;
+        _duplicate = false;
         if constexpr (HAS_REMAIN) {
             vpack::Builder builder;
             builder.add(vpack::Value(vpack::ValueType::Object));
             _flatten_json<HAS_REMAIN>(vslice, _dst_root.get(), &builder, &hit_count);
-            builder.close();
-            _remain->append(JsonValue(builder.slice()));
+            if (LIKELY(!_duplicate)) {
+                builder.close();
+                _remain->append(JsonValue(builder.slice()));
+            }
         } else {
             _flatten_json<HAS_REMAIN>(vslice, _dst_root.get(), nullptr, &hit_count);
         }
 
-        if (UNLIKELY(hit_count < _dst_paths.size())) {
+        if (UNLIKELY(_duplicate)) {
+            // Drop what the row added so far and fill it again by looking each path up the way a read of the
+            // whole JSON does. The remain keeps the whole row, so rebuilding the JSON gives back every key, except
+            // that a copy of a repeated object lacking a key the looked-up copy has gains that key's value.
+            for (size_t k = 0; k < _dst_paths.size(); k++) {
+                if (_flat_columns[k]->size() > row) {
+                    _flat_columns[k]->resize(row);
+                }
+            }
+            _flatten_duplicate_row(vslice, _dst_root.get());
+            if constexpr (HAS_REMAIN) {
+                _remain->append(obj);
+            }
+        } else if (UNLIKELY(hit_count < _dst_paths.size())) {
             for (auto& col : _flat_columns) {
                 if (col->size() != row + 1) {
                     DCHECK_EQ(col->size(), row);
@@ -202,6 +228,22 @@ void JsonFlattener::_flatten(const Column* json_column, const JsonColumn* json_d
         }
         if constexpr (HAS_REMAIN) {
             DCHECK_EQ(row + 1, _remain->size());
+        }
+    }
+}
+
+void JsonFlattener::_flatten_duplicate_row(const vpack::Slice& value, const JsonFlatPath* root) {
+    for (auto& [name, child] : root->children) {
+        auto v = value.isObject() ? value.get(vpack::StringRef(name.data(), name.size())) : vpack::Slice::noneSlice();
+        if (child->children.empty()) {
+            auto* c = down_cast<NullableColumn*>(_flat_columns[child->index].get());
+            if (v.isNone()) {
+                c->append_nulls(1);
+            } else {
+                flat_json::JSON_EXTRACT_FUNC.at(child->type)(&v, c);
+            }
+        } else {
+            _flatten_duplicate_row(v, child.get());
         }
     }
 }

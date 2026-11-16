@@ -198,6 +198,11 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             if (mvRefreshParams.isCompleteRefresh()) {
                 // if non-partition table changed, should refresh all partitions of materialized view
                 return mvListPartitionNames;
+            } else if (isAutoRefresh) {
+                // A batch after the first one of an automatic refresh carries partition values, so it is not a
+                // complete refresh, but it still has to refresh its partitions for the non-ref change: their ref
+                // table partitions did not change. See the same branch in MVPCTRefreshRangePartitioner.
+                return mvListPartitionNames;
             } else {
                 // If the user specifies the start and end ranges, and the non-partitioned table still changes,
                 // it should be refreshed according to the user-specified range, not all partitions.

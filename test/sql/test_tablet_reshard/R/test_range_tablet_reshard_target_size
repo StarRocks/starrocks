@@ -1,0 +1,74 @@
+-- name: test_range_tablet_reshard_target_size @cloud
+create database test_range_tablet_reshard_target_size_${uuid0};
+-- result:
+-- !result
+use test_range_tablet_reshard_target_size_${uuid0};
+-- result:
+-- !result
+SET enable_range_distribution = true;
+-- result:
+-- !result
+CREATE TABLE t_ddl (k BIGINT, v BIGINT) DUPLICATE KEY(k)
+PROPERTIES ('replication_num' = '1', 'tablet_reshard_target_size' = '1073741824');
+-- result:
+-- !result
+SHOW CREATE TABLE t_ddl;
+-- result:
+[REGEX](?s)^(?!.*DISTRIBUTED BY).*DUPLICATE KEY\(`k`\).*"tablet_reshard_target_size" = "1073741824".*
+-- !result
+ALTER TABLE t_ddl SET ('tablet_reshard_target_size' = '2147483648');
+-- result:
+-- !result
+SHOW CREATE TABLE t_ddl;
+-- result:
+[REGEX](?s)^(?!.*DISTRIBUTED BY).*DUPLICATE KEY\(`k`\).*"tablet_reshard_target_size" = "2147483648".*
+-- !result
+ALTER TABLE t_ddl SET ('tablet_reshard_target_size' = '');
+-- result:
+-- !result
+SHOW CREATE TABLE t_ddl;
+-- result:
+[REGEX](?s)^(?!.*tablet_reshard_target_size)(?!.*DISTRIBUTED BY).*DUPLICATE KEY\(`k`\).*
+-- !result
+ALTER TABLE t_ddl SET ('tablet_reshard_target_size' = '0');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: tablet_reshard_target_size of a table must be a positive integer, or "" to fall back to the FE configuration tablet_reshard_target_size.')
+-- !result
+ALTER TABLE t_ddl SET ('tablet_reshard_target_size' = '-1');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: tablet_reshard_target_size of a table must be a positive integer, or "" to fall back to the FE configuration tablet_reshard_target_size.')
+-- !result
+CREATE TABLE t_zero (k BIGINT) DUPLICATE KEY(k) PROPERTIES ('replication_num' = '1', 'tablet_reshard_target_size' = '0');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: tablet_reshard_target_size of a table must be a positive integer.')
+-- !result
+CREATE TABLE t_hash (k BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'tablet_reshard_target_size' = '1073741824');
+-- result:
+E: (1064, 'tablet_reshard_target_size is only supported for range-distributed tables')
+-- !result
+CREATE TABLE t_random (k BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY RANDOM
+PROPERTIES ('replication_num' = '1', 'tablet_reshard_target_size' = '1073741824');
+-- result:
+E: (1064, 'tablet_reshard_target_size is only supported for range-distributed tables')
+-- !result
+CREATE TABLE t_split (k BIGINT, p1 VARCHAR(64), p2 VARCHAR(64)) DUPLICATE KEY(k)
+PROPERTIES ('replication_num' = '1', 'tablet_reshard_target_size' = '1048576');
+-- result:
+-- !result
+INSERT INTO t_split
+SELECT generate_series, md5(cast(generate_series AS STRING)), md5(cast(generate_series * 7 AS STRING))
+FROM TABLE(generate_series(1, 200000));
+-- result:
+-- !result
+function: wait_reshard_job_finish("t_split", "SPLIT_TABLET", 1, 120)
+-- result:
+None
+-- !result
+SELECT count(*) FROM t_split;
+-- result:
+200000
+-- !result
+drop database test_range_tablet_reshard_target_size_${uuid0};
+-- result:
+-- !result

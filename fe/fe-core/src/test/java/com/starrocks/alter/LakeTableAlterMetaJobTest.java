@@ -36,6 +36,7 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.mv.MVRepairHandler;
@@ -61,6 +62,7 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -78,6 +80,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 
 public class LakeTableAlterMetaJobTest {
     private static final String DB_NAME = "test";
@@ -129,6 +133,188 @@ public class LakeTableAlterMetaJobTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
         return (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), createTableStmt.getTableName());
+    }
+
+    @Test
+    public void testPublishRetrySetsIsRetryPublish() throws Exception {
+        job.runPendingJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        // The first attempt fails; the second one is a retry. Both publish paths are intercepted, whichever the
+        // table's file_bundling selects.
+        List<Boolean> flags = new ArrayList<>();
+        java.util.concurrent.atomic.AtomicBoolean fail = new java.util.concurrent.atomic.AtomicBoolean(true);
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                       boolean useAggregatePublish, boolean isRetryPublish) {
+                flags.add(isRetryPublish);
+                if (fail.getAndSet(false)) {
+                    throw new RuntimeException("injected publish failure");
+                }
+            }
+
+            @Mock
+            public void aggregatePublishVersion(List<Tablet> tablets, List<TxnInfoPB> txnInfos, long baseVersion,
+                                                long newVersion, Map<Long, Double> compactionScores,
+                                                Map<Long, com.starrocks.catalog.TabletRange> tabletRanges,
+                                                Map<com.starrocks.system.ComputeNode, List<Long>> nodeToTablets,
+                                                com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                                Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+                                                List<com.starrocks.proto.VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                                boolean preferSharedInitialMetadata, boolean isRetryPublish) {
+                publishVersion(tablets, txnInfos.get(0), baseVersion, newVersion, computeResource, true,
+                        isRetryPublish);
+            }
+        };
+        Assertions.assertFalse(job.lakePublishVersion());
+        Assertions.assertTrue(job.lakePublishVersion());
+        Assertions.assertEquals(List.of(false, true), flags);
+    }
+
+    @Test
+    public void testPublishAfterPartialForceNoOpPublishIsNotRetry() throws Exception {
+        job.runPendingJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        // A normal publish is sent and fails, then a FORCE cancel's no-op publish fails too, leaving the job in
+        // FINISHED_REWRITING. The no-op publish may have written the commit version with the job's gtid, so the
+        // normal publish that resumes must not be a retry: it would take that version for the alter's own.
+        List<Boolean> normalFlags = new ArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                       boolean useAggregatePublish, boolean isRetryPublish) {
+                if (Boolean.TRUE.equals(txnInfo.noOpPublish)) {
+                    throw new RuntimeException("injected no-op publish failure");
+                }
+                normalFlags.add(isRetryPublish);
+                if (normalFlags.size() == 1) {
+                    throw new RuntimeException("injected publish failure");
+                }
+            }
+
+            @Mock
+            public void aggregatePublishVersion(List<Tablet> tablets, List<TxnInfoPB> txnInfos, long baseVersion,
+                                                long newVersion, Map<Long, Double> compactionScores,
+                                                Map<Long, com.starrocks.catalog.TabletRange> tabletRanges,
+                                                Map<com.starrocks.system.ComputeNode, List<Long>> nodeToTablets,
+                                                com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                                Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+                                                List<com.starrocks.proto.VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                                boolean preferSharedInitialMetadata, boolean isRetryPublish) {
+                publishVersion(tablets, txnInfos.get(0), baseVersion, newVersion, computeResource, true,
+                        isRetryPublish);
+            }
+        };
+        Assertions.assertFalse(job.lakePublishVersion());
+        Assertions.assertFalse(job.cancel("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertTrue(job.lakePublishVersion());
+        Assertions.assertEquals(List.of(false, false), normalFlags);
+    }
+
+    // Intercepts both publish paths: the no-op publish fails until noOpFails is cleared, and a normal publish
+    // succeeds, as it does on BE when it finds the version the no-op publish wrote in the metacache.
+    private static void mockPublishWithFailingNoOp(java.util.concurrent.atomic.AtomicBoolean noOpFails,
+                                                   java.util.concurrent.atomic.AtomicInteger normalPublishes,
+                                                   java.util.concurrent.CountDownLatch normalPublishGate) {
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                       boolean useAggregatePublish, boolean isRetryPublish) throws Exception {
+                if (Boolean.TRUE.equals(txnInfo.noOpPublish)) {
+                    if (noOpFails.get()) {
+                        throw new RuntimeException("injected no-op publish failure");
+                    }
+                    return;
+                }
+                normalPublishes.incrementAndGet();
+                normalPublishGate.await();
+            }
+
+            @Mock
+            public void aggregatePublishVersion(List<Tablet> tablets, List<TxnInfoPB> txnInfos, long baseVersion,
+                                                long newVersion, Map<Long, Double> compactionScores,
+                                                Map<Long, com.starrocks.catalog.TabletRange> tabletRanges,
+                                                Map<com.starrocks.system.ComputeNode, List<Long>> nodeToTablets,
+                                                com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                                Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+                                                List<com.starrocks.proto.VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                                boolean preferSharedInitialMetadata, boolean isRetryPublish)
+                    throws Exception {
+                publishVersion(tablets, txnInfos.get(0), baseVersion, newVersion, computeResource, true,
+                        isRetryPublish);
+            }
+        };
+    }
+
+    // Runs the FINISHED_REWRITING step until its publish, if it sends one, has finished and been consumed.
+    private void runFinishedRewritingJobToCompletion() throws Exception {
+        for (int i = 0; i < 3 && job.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING; i++) {
+            job.runFinishedRewritingJob();
+            if (job.publishVersionFuture != null) {
+                job.publishVersionFuture.get();
+            }
+        }
+    }
+
+    @Test
+    public void testNoNormalPublishAfterPartialForceNoOpPublish() throws Exception {
+        job.runPendingJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        java.util.concurrent.atomic.AtomicBoolean noOpFails = new java.util.concurrent.atomic.AtomicBoolean(true);
+        java.util.concurrent.atomic.AtomicInteger normalPublishes = new java.util.concurrent.atomic.AtomicInteger();
+        mockPublishWithFailingNoOp(noOpFails, normalPublishes, new java.util.concurrent.CountDownLatch(0));
+
+        // The no-op publish fails part way, so the job stays in FINISHED_REWRITING. A normal publish would succeed on
+        // the versions the no-op publish wrote and finish the job without the alter, so none may be sent.
+        Assertions.assertFalse(job.cancel("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        runFinishedRewritingJobToCompletion();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertEquals(0, normalPublishes.get());
+
+        // Only a FORCE cancel retry finishes the job.
+        noOpFails.set(false);
+        Assertions.assertTrue(job.cancel("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertTrue(job.isForceSkippedAtCommitted());
+        Assertions.assertEquals(0, normalPublishes.get());
+    }
+
+    @Test
+    public void testInFlightNormalPublishDroppedAfterPartialForceNoOpPublish() throws Exception {
+        job.runPendingJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        java.util.concurrent.atomic.AtomicBoolean noOpFails = new java.util.concurrent.atomic.AtomicBoolean(true);
+        java.util.concurrent.atomic.AtomicInteger normalPublishes = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.CountDownLatch gate = new java.util.concurrent.CountDownLatch(1);
+        mockPublishWithFailingNoOp(noOpFails, normalPublishes, gate);
+
+        // A normal publish is running when the FORCE cancel's no-op publish fails part way. The normal publish then
+        // succeeds, possibly on a version the no-op publish wrote, so its result must not finish the job.
+        job.runFinishedRewritingJob();
+        Assertions.assertNotNull(job.publishVersionFuture);
+        Assertions.assertFalse(job.cancel("force cancel", /*force=*/ true));
+        gate.countDown();
+        Assertions.assertTrue(job.publishVersionFuture.get());
+        runFinishedRewritingJobToCompletion();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertEquals(1, normalPublishes.get());
+
+        noOpFails.set(false);
+        Assertions.assertTrue(job.cancel("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
     }
 
     @Test
@@ -269,7 +455,7 @@ public class LakeTableAlterMetaJobTest {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                        long newVersion, com.starrocks.warehouse.cngroup.ComputeResource computeResource,
-                                       boolean useAggregatePublish) {
+                                       boolean useAggregatePublish, boolean isRetryPublish) {
             }
         };
         job.runPendingJob();
@@ -298,7 +484,7 @@ public class LakeTableAlterMetaJobTest {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                        long newVersion, com.starrocks.warehouse.cngroup.ComputeResource computeResource,
-                                       boolean useAggregatePublish) {
+                                       boolean useAggregatePublish, boolean isRetryPublish) {
                 publishCalls.incrementAndGet();
                 lastNoOp.set(txnInfo.noOpPublish);
                 lastAggregate.set(useAggregatePublish);
@@ -545,6 +731,67 @@ public class LakeTableAlterMetaJobTest {
         }
     }
 
+    /**
+     * A load that commits while the job updates the tablet metadata takes a version below the one the job
+     * commits, so the gtid that labels the job's version must be drawn after the load's: when the job reserves
+     * the version, and journaled with the reservation so that a job resumed from that entry publishes the same
+     * gtid.
+     */
+    @Test
+    public void testCommitVersionGtid() throws Exception {
+        LakeTable gtidTable = createTable(connectContext,
+                "CREATE TABLE t_gtid(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 2 "
+                        + "PROPERTIES('enable_persistent_index'='true', 'file_bundling'='false')");
+        LakeTableAlterMetaJob gtidJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), gtidTable.getId(), gtidTable.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX,
+                true, "CLOUD_NATIVE");
+        List<TxnInfoPB> publishedTxns = new CopyOnWriteArrayList<>();
+        List<Long> publishedVersions = new CopyOnWriteArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                       boolean useAggregatePublish, boolean isRetryPublish) {
+                publishedTxns.add(txnInfo);
+                publishedVersions.add(newVersion);
+            }
+        };
+        ConcurrentLoad.holdPublishDaemon();
+
+        gtidJob.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, gtidJob.getJobState());
+        TransactionState load = ConcurrentLoad.commit(db, gtidTable);
+        gtidJob.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, gtidJob.getJobState());
+        ConcurrentLoad.makeVisible(db, load);
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (gtidJob.getJobState() != AlterJobV2.JobState.FINISHED) {
+            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + gtidJob.getJobState());
+            gtidJob.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+
+        long loadVersion = ConcurrentLoad.versionIn(load, gtidTable,
+                gtidTable.getAllPhysicalPartitions().iterator().next().getId());
+        Assertions.assertFalse(publishedTxns.isEmpty());
+        Assertions.assertEquals(Set.of(loadVersion + 1), Set.copyOf(publishedVersions));
+        Set<Long> publishedGtids = publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet());
+        Assertions.assertEquals(1, publishedGtids.size(), publishedGtids.toString());
+        long commitGtid = publishedGtids.iterator().next();
+        Assertions.assertTrue(load.getGlobalTransactionId() > 0);
+        Assertions.assertTrue(commitGtid > load.getGlobalTransactionId(),
+                "commit version gtid " + commitGtid + " is not after the gtid " + load.getGlobalTransactionId()
+                        + " of the load committed below it");
+
+        LakeTableAlterMetaJob finishedRewritingEntry = readJournaledEntries(gtidJob.getJobId()).stream()
+                .filter(entry -> entry.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING)
+                .findFirst().orElseThrow();
+        publishedTxns.clear();
+        Assertions.assertTrue(finishedRewritingEntry.lakePublishVersion());
+        Assertions.assertEquals(Set.of(commitGtid),
+                publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet()));
+    }
+
     @Test
     public void testUpdateTabletMetaInfoTaskToThrift() throws AlterCancelException {
         long backend = 1L;
@@ -659,7 +906,7 @@ public class LakeTableAlterMetaJobTest {
                                 .build());
                 }
             };
-            Assertions.assertFalse(table2.checkLakeRollupAllowFileBundling());
+            Assertions.assertFalse(LakeTableHelper.checkLakeRollupAllowFileBundling(table2));
             new MockUp<StarOSAgent>() {
                 @Mock
                 public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId)
@@ -668,10 +915,10 @@ public class LakeTableAlterMetaJobTest {
                 }
             };
 
-            Assertions.assertTrue(table2.checkLakeRollupAllowFileBundling());
+            Assertions.assertTrue(LakeTableHelper.checkLakeRollupAllowFileBundling(table2));
             ShardInfo shardInfo1 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10002/")).build();
             shardInfos.add(shardInfo1);
-            Assertions.assertFalse(table2.checkLakeRollupAllowFileBundling());
+            Assertions.assertFalse(LakeTableHelper.checkLakeRollupAllowFileBundling(table2));
             shardInfos.clear();
 
             ShardInfo shardInfo2 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10003")).build();

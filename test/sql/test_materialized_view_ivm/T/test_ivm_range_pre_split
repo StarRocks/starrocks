@@ -1,7 +1,7 @@
 -- name: test_ivm_range_pre_split @cloud
 -- A range-distributed incremental MV is keyed by its hidden auto-increment row-id column, so a
 -- refresh has no user data to sample: its pre-split boundaries are derived from the row-id space
--- instead, which is knowable in advance only while the counter is still pristine.
+-- instead, starting at the table's current auto-increment counter.
 --
 -- This drives that path end to end at a scale where it deliberately declines to split: a tablet's
 -- share of 1000 rows cannot clear the gaps that per-node id caching leaves behind, so the planner

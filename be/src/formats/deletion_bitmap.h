@@ -39,6 +39,8 @@ public:
     void add_value(uint64_t val);
     // OR all positions of `other` into this bitmap. Does not take ownership of `other`.
     void merge(const roaring64_bitmap_t* other);
+
+    void add_values(const uint64_t* vals, size_t n);
     uint64_t get_cardinality() const;
     void to_array(std::vector<uint64_t>& array) const;
 

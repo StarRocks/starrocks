@@ -547,6 +547,19 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
                     f"key column '{col_list[last_key_col_index].name}'."
                 )
 
+    def _refresh_clause_for_server(self, refresh: str, object_name: str) -> str:
+        rendered = utils.render_refresh_for_server(refresh, self.dialect.server_version_info or ())
+        if rendered != refresh and utils.is_untimed_async_refresh(refresh):
+            import warnings
+
+            warnings.warn(
+                f"REFRESH ASYNC without EVERY is rejected from StarRocks 26.2 on; it was sent as "
+                f"REFRESH ON_CHANGE for '{object_name}'. Declare ON_CHANGE in the metadata instead.",
+                DeprecationWarning,
+                stacklevel=4,
+            )
+        return rendered
+
     def post_create_table(self, table: sa_schema.Table, **kw: Any) -> str:
         """
         Appends StarRocks-specific clauses to a CREATE TABLE or CREATE MATERIALIZED VIEW statement.
@@ -633,7 +646,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
 
         # Handle MV-specific REFRESH clause
         if refresh := opts.get(TableInfoKey.REFRESH):
-            table_opts.append(f"REFRESH {str(refresh)}")
+            table_opts.append(f"REFRESH {self._refresh_clause_for_server(str(refresh), table.name)}")
 
         # Properties
         properties = opts.get(TableInfoKey.PROPERTIES)
@@ -1073,7 +1086,8 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
 
         # ALTER REFRESH
         if alter.refresh is not None:
-            statements.append(f"ALTER MATERIALIZED VIEW {mv_name} REFRESH {alter.refresh}")
+            refresh = self._refresh_clause_for_server(str(alter.refresh), alter.mv_name)
+            statements.append(f"ALTER MATERIALIZED VIEW {mv_name} REFRESH {refresh}")
 
         # ALTER PROPERTIES
         if alter.properties is not None:
@@ -1373,12 +1387,20 @@ class StarRocksDialect(MySQLDialect_pymysql):
         Args:
             connection: The SQLAlchemy connection object.
 
+        Prefers the read-only ``@@run_mode`` global variable, which needs no
+        privilege (StarRocks PR #69247). Falls back to ``ADMIN SHOW FRONTEND
+        CONFIG`` (needs OPERATE) for servers without that variable.
+
         Returns:
             The run_mode as a string ('shared_data' or 'shared_nothing').
-
-        Raises:
-            exc.DBAPIError: If the query fails.
         """
+        try:
+            value = connection.execute(text("SELECT @@run_mode")).scalar()
+            if value:
+                return value.lower()
+        except exc.DBAPIError as e:
+            logger.debug(f"@@run_mode unavailable, falling back to ADMIN SHOW FRONTEND CONFIG: {e}")
+
         try:
             result = connection.execute(text("ADMIN SHOW FRONTEND CONFIG LIKE 'run_mode'"))
             rows = result.fetchall()

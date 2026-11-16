@@ -3,6 +3,7 @@ sidebar_position: 120
 displayed_sidebar: docs
 keywords: ['compaction']
 description: "How to manage and monitor compaction for shared-data clusters in StarRocks."
+products: [oss, enterprise, anywhere]
 ---
 
 # Compaction for Shared-data Clusters
@@ -235,16 +236,16 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
 - Introduced in: v3.1.0
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_tables" = "11111;22222");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "11111;22222");
 ```
 
-##### lake_compaction_disable_tables
+##### lake_compaction_disable_ids
 
 - Default：""
 - Type：String
 - Unit：-
 - Is mutable：Yes
-- Description：Disable compaction for certain tables. This will not affect compaction that has started. The value of this item is table ID. Multiple values are separated by ';'.
+- Description：Disable compaction for certain tables or partitions. This will not affect compaction that has started. The value of this item is table ID or partition ID. Multiple values are separated by ';'. In versions earlier than v3.4.5 and v3.5.0, this item is named `lake_compaction_disable_tables` and supports only table IDs. The old name is still accepted as an alias.
 - Introduced in：v3.2.7
 
 #### CN parameters
@@ -294,6 +295,15 @@ WHERE name = "compact_threads";
 > **NOTE**
 >
 > In production, it is recommended to set `max_cumulative_compaction_num_singleton_deltas` to `100` to accelerate the Compaction tasks and reduce their resource consumption.
+
+##### lake_pk_compaction_max_rowsets_per_level
+
+- Default: 20
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of rowsets that still need compaction at which a size level of a Primary Key table in a shared-data cluster is merged even if it does not have the highest score. The Size-tiered Compaction policy merges only the level with the highest score in each round. While loads keep arriving, the level of the newest and smallest rowsets has the highest score in every round, so a level of larger rowsets (outputs of earlier compactions and medium-sized loads) keeps growing. This increases the number of segments that queries read, and shows up as a spike in the compaction score right after a compaction finishes. When a level that is not picked holds this many rowsets that still need compaction, and these rowsets fit in the same compaction task as the picked ones, the level is merged in that compaction task. Set it to `0` to disable this behavior.
+- Introduced in: -
 
 ### Manually trigger compaction tasks
 

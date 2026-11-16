@@ -546,25 +546,32 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_get_data_from_storage(
                 break;
             }
 
-            // Accumulate data from multiple chunks, excluding row_id columns
+            // Accumulate data from multiple chunks. Keep the row_id column and tag every row with its
+            // scan range: process() orders the rows by (scan_range_id, row_id) to pair them with the
+            // requests, because neither the file order nor the scan range iteration order follows it.
+            auto scan_range_id_col = Int32Column::create(chunk->num_rows(), scan_range_id);
             if (result_chunk == nullptr) {
                 result_chunk = std::make_shared<Chunk>();
                 for (const auto& [slot_id, idx] : chunk->get_slot_id_to_index_map()) {
-                    if (slot_id == _ctx->lookup_ref_slot_ids[0] || slot_id == _ctx->lookup_ref_slot_ids[1]) {
+                    if (slot_id == _ctx->lookup_ref_slot_ids[0]) {
                         continue;
                     }
                     auto src_col = chunk->get_column_by_index(idx);
                     result_chunk->append_column(std::move(src_col), slot_id);
                 }
+                result_chunk->append_column(std::move(scan_range_id_col), _ctx->lookup_ref_slot_ids[0]);
             } else {
                 for (const auto& [slot_id, idx] : chunk->get_slot_id_to_index_map()) {
-                    if (slot_id == _ctx->lookup_ref_slot_ids[0] || slot_id == _ctx->lookup_ref_slot_ids[1]) {
+                    if (slot_id == _ctx->lookup_ref_slot_ids[0]) {
                         continue;
                     }
                     auto src_col = chunk->get_column_by_index(idx);
                     auto dst_col = result_chunk->get_column_by_slot_id(slot_id)->as_mutable_raw_ptr();
                     dst_col->append(*src_col, 0, chunk->num_rows());
                 }
+                result_chunk->get_column_by_slot_id(_ctx->lookup_ref_slot_ids[0])
+                        ->as_mutable_raw_ptr()
+                        ->append(*scan_range_id_col, 0, chunk->num_rows());
             }
         } while (true);
         data_source->close(state);
@@ -586,6 +593,20 @@ Status IcebergV3LookUpTask::process(RuntimeState* state, const ChunkPtr& request
     ASSIGN_OR_RETURN(auto sorted_chunk,
                      _calculate_row_id_range(state, request_chunk, &row_id_ranges, &replicated_offsets));
     ASSIGN_OR_RETURN(auto result_chunk, _get_data_from_storage(state, {}, row_id_ranges));
+
+    // sorted_chunk is ordered by (scan_range_id, row_id) with duplicates collapsed, while storage returns
+    // each file's rows in file order and the scan ranges in hash-map order. A file's row ids need not
+    // ascend with the row position (an UPDATE or a sorted rewrite keeps each row's original _row_id), so
+    // order the fetched rows by the same key before pairing them with the requests by position.
+    const size_t expected_rows = replicated_offsets.empty() ? sorted_chunk->num_rows() : replicated_offsets.size() - 1;
+    if (result_chunk == nullptr || result_chunk->num_rows() != expected_rows) {
+        return Status::InternalError(fmt::format("Iceberg lookup fetched {} rows for {} requested row ids",
+                                                 result_chunk == nullptr ? 0 : result_chunk->num_rows(),
+                                                 expected_rows));
+    }
+    ASSIGN_OR_RETURN(result_chunk, _sort_chunk(state, result_chunk,
+                                               {result_chunk->get_column_by_slot_id(_ctx->lookup_ref_slot_ids[0]),
+                                                result_chunk->get_column_by_slot_id(_ctx->lookup_ref_slot_ids[1])}));
 
     {
         auto unordered_position_column = sorted_chunk->get_column_by_slot_id(Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);

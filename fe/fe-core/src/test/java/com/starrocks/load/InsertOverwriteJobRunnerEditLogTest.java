@@ -339,6 +339,45 @@ public class InsertOverwriteJobRunnerEditLogTest {
         Assertions.assertFalse(table.existTempPartitions());
     }
 
+    /**
+     * A swapped-in temp partition keeps its id, so a job that fails after the swap still lists it among its temp
+     * partitions. gc() and its replay must leave that live partition and its tablets alone and drop only the
+     * partitions that are still temp.
+     */
+    @Test
+    public void testGcAndReplayGCKeepSwappedInPartition() throws Exception {
+        // The swap the commit applies: the temp partition replaces the source one and keeps its id.
+        table.replacePartition(dbId, TABLE_NAME, TABLE_NAME + "_tmp");
+        long remainingTempPartitionId = GlobalStateMgr.getCurrentState().getNextId();
+        long remainingTempPhysicalPartitionId = GlobalStateMgr.getCurrentState().getNextId();
+        long remainingTempTabletId = GlobalStateMgr.getCurrentState().getNextId();
+        addTempPartition(dbId, table, tempPartitionId, remainingTempPartitionId, remainingTempPhysicalPartitionId,
+                remainingTempTabletId, TABLE_NAME + "_tmp2");
+        InsertOverwriteJob job = new InsertOverwriteJob(2011L, db.getId(), table.getId(),
+                Lists.newArrayList(sourcePartitionId), false);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_FAILED);
+        job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId, remainingTempPartitionId));
+
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+        runner.gc();
+
+        Assertions.assertEquals(tempPartitionId, table.getPartition(TABLE_NAME).getId());
+        Assertions.assertFalse(table.existTempPartitions());
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        Assertions.assertFalse(invertedIndex.tabletForceDelete(tempTabletId, BACKEND_ID));
+        Assertions.assertTrue(invertedIndex.tabletForceDelete(remainingTempTabletId, BACKEND_ID));
+
+        addTempPartition(dbId, table, tempPartitionId, remainingTempPartitionId, remainingTempPhysicalPartitionId,
+                remainingTempTabletId, TABLE_NAME + "_tmp2");
+        InsertOverwriteStateChangeInfo info = (InsertOverwriteStateChangeInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE);
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, info.getToState());
+        runner.replayStateChange(info);
+
+        Assertions.assertEquals(tempPartitionId, table.getPartition(TABLE_NAME).getId());
+        Assertions.assertFalse(table.existTempPartitions());
+    }
+
     @Test
     public void testDoCommitMarksSourceTabletsForceDelete() {
         InsertOverwriteJob job = new InsertOverwriteJob(2007L, db.getId(), table.getId(),

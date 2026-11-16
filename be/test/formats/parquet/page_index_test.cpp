@@ -93,15 +93,11 @@ HdfsScannerContext* PageIndexTest::_create_file_random_read_context(const std::s
     auto ctx = _create_scan_context();
 
     TypeDescriptor type_array(LogicalType::TYPE_ARRAY);
-    type_array.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    type_array.children.emplace_back(TYPE_INT_DESC);
 
     // tuple desc
     Utils::SlotDesc slot_descs[] = {
-            {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-            {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-            {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-            {"c3", type_array},
-            {""},
+            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_VARCHAR_DESC}, {"c3", type_array}, {""},
     };
 
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
@@ -117,7 +113,7 @@ HdfsScannerContext* PageIndexTest::_create_file_only_c0_context(const std::strin
 
     // tuple desc
     Utils::SlotDesc slot_descs[] = {
-            {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"c0", TYPE_INT_DESC},
             {""},
     };
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
@@ -133,9 +129,9 @@ HdfsScannerContext* PageIndexTest::_create_file_c0_c1_c2_context(const std::stri
 
     // tuple desc
     Utils::SlotDesc slot_descs[] = {
-            {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-            {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-            {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+            {"c0", TYPE_INT_DESC},
+            {"c1", TYPE_INT_DESC},
+            {"c2", TYPE_VARCHAR_DESC},
             {""},
     };
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
@@ -162,16 +158,12 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
     std::mt19937 rng(rd());
 
     TypeDescriptor type_array(LogicalType::TYPE_ARRAY);
-    type_array.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    type_array.children.emplace_back(TYPE_INT_DESC);
 
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
-                         chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
-                         chunk->num_columns());
-    chunk->append_column(
-            ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR), true),
-            chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(type_array, true), chunk->num_columns());
 
     // c0 = np.arange(1, 20001)
@@ -254,7 +246,7 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
 
                 if (single_flag) {
                     Utils::SlotDesc min_max_slots[] = {
-                            {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 0},
+                            {"c0", TYPE_INT_DESC, 0},
                             {""},
                     };
                     ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
@@ -272,8 +264,8 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
                 } else {
                     ctx->format_scan_context.conjunct_ctxs_by_slot[1].clear();
                     Utils::SlotDesc min_max_slots[] = {
-                            {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 0},
-                            {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 1},
+                            {"c0", TYPE_INT_DESC, 0},
+                            {"c1", TYPE_INT_DESC, 1},
                             {""},
                     };
                     ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
@@ -362,14 +354,12 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
 TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
     auto test = [&]() {
         auto chunk = std::make_shared<Chunk>();
-        chunk->append_column(
-                ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
-                chunk->num_columns());
+        chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
 
         const std::string small_page_file = "./be/test/formats/parquet/test_data/page_index_small_page.parquet";
 
         Utils::SlotDesc min_max_slots[] = {
-                {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 0},
+                {"c0", TYPE_INT_DESC, 0},
                 {""},
         };
 
@@ -390,7 +380,7 @@ TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
 
         // tuple desc
         Utils::SlotDesc slot_descs[] = {
-                {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                {"c0", TYPE_INT_DESC},
                 {""},
         };
         TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
@@ -448,21 +438,15 @@ TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
 TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
     auto test = [&]() {
         auto chunk = std::make_shared<Chunk>();
-        chunk->append_column(
-                ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
-                chunk->num_columns());
-        chunk->append_column(
-                ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
-                chunk->num_columns());
-        chunk->append_column(
-                ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR), true),
-                chunk->num_columns());
+        chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+        chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+        chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
 
         const std::string small_page_file = "./be/test/formats/parquet/test_data/page_index_small_page.parquet";
 
         Utils::SlotDesc min_max_slots[] = {
-                {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 0},
-                {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 1},
+                {"c0", TYPE_INT_DESC, 0},
+                {"c1", TYPE_INT_DESC, 1},
                 {""},
         };
 
@@ -492,9 +476,9 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
 
         // tuple desc
         Utils::SlotDesc slot_descs[] = {
-                {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                {"c0", TYPE_INT_DESC},
+                {"c1", TYPE_INT_DESC},
+                {"c2", TYPE_VARCHAR_DESC},
                 {""},
         };
         TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
@@ -560,19 +544,15 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
 
 TEST_F(PageIndexTest, TestPageIndexNoPageFiltered) {
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
-                         chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
-                         chunk->num_columns());
-    chunk->append_column(
-            ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR), true),
-            chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
 
     const std::string small_page_file = "./be/test/formats/parquet/test_data/page_index_small_page.parquet";
 
     Utils::SlotDesc min_max_slots[] = {
-            {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 0},
-            {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 1},
+            {"c0", TYPE_INT_DESC, 0},
+            {"c1", TYPE_INT_DESC, 1},
             {""},
     };
 
@@ -657,23 +637,19 @@ TEST_F(PageIndexTest, TestEmptyNullCountsInColumnIndex) {
     const std::string file_path = "./be/test/formats/parquet/test_data/empty_null_counts_test.parquet";
 
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true),
-                         chunk->num_columns());
-    chunk->append_column(
-            ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR), true),
-            chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true),
-                         chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_BIGINT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_BIGINT_DESC, true), chunk->num_columns());
 
     Utils::SlotDesc slot_descs[] = {
-            {"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
-            {"name", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-            {"value", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+            {"id", TYPE_BIGINT_DESC},
+            {"name", TYPE_VARCHAR_DESC},
+            {"value", TYPE_BIGINT_DESC},
             {""},
     };
 
     Utils::SlotDesc min_max_slots[] = {
-            {"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), 0},
+            {"id", TYPE_BIGINT_DESC, 0},
             {""},
     };
 

@@ -34,7 +34,7 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.iceberg.util.ThreadPools;
+import org.apache.iceberg.SystemConfigs;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -44,7 +44,7 @@ import java.util.concurrent.ExecutorService;
 
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
-import static org.apache.iceberg.util.ThreadPools.newWorkerPool;
+import static org.apache.iceberg.util.ThreadPools.newExitingWorkerPool;
 
 public class IcebergConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(IcebergConnector.class);
@@ -96,7 +96,7 @@ public class IcebergConnector implements Connector {
         if (Config.enable_iceberg_custom_worker_thread) {
             LOG.info("Default iceberg worker thread number changed " + Config.iceberg_worker_num_threads);
             Properties props = System.getProperties();
-            props.setProperty(ThreadPools.WORKER_THREAD_POOL_SIZE_PROP,
+            props.setProperty(SystemConfigs.WORKER_THREAD_POOL_SIZE.propertyKey(),
                     String.valueOf(Config.iceberg_worker_num_threads));
         }
 
@@ -148,7 +148,7 @@ public class IcebergConnector implements Connector {
 
     private ExecutorService buildIcebergJobPlanningExecutor() {
         if (icebergJobPlanningExecutor == null) {
-            icebergJobPlanningExecutor = newWorkerPool(catalogName + "-sr-iceberg-worker-pool",
+            icebergJobPlanningExecutor = newExitingWorkerPool(catalogName + "-sr-iceberg-worker-pool",
                     icebergCatalogProperties.getIcebergJobPlanningThreadNum());
         }
 
@@ -156,7 +156,7 @@ public class IcebergConnector implements Connector {
     }
 
     private ExecutorService buildBackgroundJobPlanningExecutor() {
-        backgroundJobPlanningExecutor = newWorkerPool(catalogName + "-background-iceberg-worker-pool",
+        backgroundJobPlanningExecutor = newExitingWorkerPool(catalogName + "-background-iceberg-worker-pool",
                 icebergCatalogProperties.getBackgroundIcebergJobPlanningThreadNum());
         return backgroundJobPlanningExecutor;
     }

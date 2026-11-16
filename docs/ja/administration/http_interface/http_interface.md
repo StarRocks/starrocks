@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks クラスターの保守を容易にするための HTTP インターフェースと操作・クエリインターフェースの使用方法。"
+products: [oss, enterprise, anywhere]
 ---
 
 # HTTP インターフェース

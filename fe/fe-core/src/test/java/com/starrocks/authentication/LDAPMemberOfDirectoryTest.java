@@ -15,6 +15,8 @@
 package com.starrocks.authentication;
 
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.mysql.MysqlProto;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.unboundid.ldap.listener.InMemoryDirectoryServer;
 import com.unboundid.ldap.listener.InMemoryDirectoryServerConfig;
 import com.unboundid.ldap.listener.InMemoryListenerConfig;
@@ -220,7 +222,7 @@ class LDAPMemberOfDirectoryTest {
      * @param bindDnPattern non-null to use direct bind, null for search-and-bind
      * @param perUserDN     non-null for the legacy `CREATE USER ... AS '<dn>'` form
      */
-    private LDAPAuthProvider provider(String bindDnPattern, String perUserDN, LdapGroupSource groupSource,
+    private LDAPAuthProvider provider(String bindDnPattern, String perUserDN, GroupSource groupSource,
                                       String memberOfAttr, boolean withServiceAccount) {
         return new LDAPAuthProvider("localhost", directory.getListenPort(), false, null, null,
                 withServiceAccount ? SERVICE_DN : "", withServiceAccount ? SERVICE_PWD : "",
@@ -229,8 +231,11 @@ class LDAPMemberOfDirectoryTest {
 
     private AccessControlContext authenticate(LDAPAuthProvider provider, String user) throws Exception {
         AccessControlContext context = new AccessControlContext();
+        // The MySQL clear-password frame, read the way the entry point reads it: PLAIN_PASSWORD with
+        // the frame's trailing NUL stripped. The provider refuses a raw scramble.
         provider.authenticate(context, UserIdentity.createEphemeralUserIdent(user, "%"),
-                (USER_PWD + "\0").getBytes(StandardCharsets.UTF_8));
+                MysqlProto.handshakeCredentials(user, (USER_PWD + "\0").getBytes(StandardCharsets.UTF_8),
+                        AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), "%"));
         return context;
     }
 
@@ -243,9 +248,9 @@ class LDAPMemberOfDirectoryTest {
     @Test
     void testSearchAndBindCarriesMemberOfInTheSearchItAlreadyMakes() throws Exception {
         AccessControlContext context =
-                authenticate(provider(null, null, LdapGroupSource.MEMBEROF, "memberOf", true), "alice");
+                authenticate(provider(null, null, GroupSource.AUTHENTICATOR, "memberOf", true), "alice");
 
-        Assertions.assertEquals(Set.of("SR Analysts", "Data Platform"), context.getMemberOfGroups());
+        Assertions.assertEquals(Set.of("SR Analysts", "Data Platform"), context.getAuthenticatorGroups());
         Assertions.assertEquals(ALICE_DN, context.getDistinguishedName());
         // The directory was asked for exactly the one attribute we need, on the search that resolves
         // the DN anyway.
@@ -261,9 +266,9 @@ class LDAPMemberOfDirectoryTest {
     @Test
     void testDisabledGroupSourceAsksTheDirectoryForNoAttribute() throws Exception {
         AccessControlContext context =
-                authenticate(provider(null, null, LdapGroupSource.GROUP_PROVIDER, "memberOf", true), "alice");
+                authenticate(provider(null, null, GroupSource.GROUP_PROVIDER, "memberOf", true), "alice");
 
-        Assertions.assertTrue(context.getMemberOfGroups().isEmpty());
+        Assertions.assertTrue(context.getAuthenticatorGroups().isEmpty());
         Assertions.assertEquals(ALICE_DN, context.getDistinguishedName());
         // `1.1` is the "no attributes" OID. An empty list here would mean "return everything", which
         // is what the code did before and what this assertion exists to prevent from coming back.
@@ -279,9 +284,9 @@ class LDAPMemberOfDirectoryTest {
         String pattern = "uid=${USER}," + PEOPLE_DN;
 
         AccessControlContext context =
-                authenticate(provider(pattern, null, LdapGroupSource.MEMBEROF, "memberOf", true), "alice");
+                authenticate(provider(pattern, null, GroupSource.AUTHENTICATOR, "memberOf", true), "alice");
 
-        Assertions.assertEquals(Set.of("SR Analysts", "Data Platform"), context.getMemberOfGroups());
+        Assertions.assertEquals(Set.of("SR Analysts", "Data Platform"), context.getAuthenticatorGroups());
         Assertions.assertEquals(List.of("memberOf"), onlySearchAttributes());
         // One bind, as the user itself, and only one connection: the attribute was read on the
         // connection the bind had already opened.
@@ -291,8 +296,8 @@ class LDAPMemberOfDirectoryTest {
         // Same login with the feature off: the one bind stays, the read request disappears.
         recorder.reset();
         AccessControlContext off =
-                authenticate(provider(pattern, null, LdapGroupSource.GROUP_PROVIDER, "memberOf", true), "alice");
-        Assertions.assertTrue(off.getMemberOfGroups().isEmpty());
+                authenticate(provider(pattern, null, GroupSource.GROUP_PROVIDER, "memberOf", true), "alice");
+        Assertions.assertTrue(off.getAuthenticatorGroups().isEmpty());
         Assertions.assertEquals(List.of(ALICE_DN), recorder.bindDNs);
         Assertions.assertTrue(recorder.searchRequestedAttributes.isEmpty(),
                 "the disabled feature must not read anything, got " + recorder.searchRequestedAttributes);
@@ -307,9 +312,9 @@ class LDAPMemberOfDirectoryTest {
         recorder.hiddenAttribute = "memberOf";
 
         AccessControlContext context = authenticate(
-                provider("uid=${USER}," + PEOPLE_DN, null, LdapGroupSource.MEMBEROF, "memberOf", true), "alice");
+                provider("uid=${USER}," + PEOPLE_DN, null, GroupSource.AUTHENTICATOR, "memberOf", true), "alice");
 
-        Assertions.assertEquals(Set.of("SR Analysts", "Data Platform"), context.getMemberOfGroups());
+        Assertions.assertEquals(Set.of("SR Analysts", "Data Platform"), context.getAuthenticatorGroups());
         Assertions.assertEquals(1, recorder.bindsAs(SERVICE_DN), "the fallback probe must have bound as the service account");
         Assertions.assertEquals(1, recorder.bindsAs(ALICE_DN));
     }
@@ -321,9 +326,9 @@ class LDAPMemberOfDirectoryTest {
     @Test
     void testNoProbeWhenTheUserCouldReadItsOwnGroups() throws Exception {
         AccessControlContext context = authenticate(
-                provider("uid=${USER}," + PEOPLE_DN, null, LdapGroupSource.MEMBEROF, "memberOf", true), "alice");
+                provider("uid=${USER}," + PEOPLE_DN, null, GroupSource.AUTHENTICATOR, "memberOf", true), "alice");
 
-        Assertions.assertEquals(Set.of("SR Analysts", "Data Platform"), context.getMemberOfGroups());
+        Assertions.assertEquals(Set.of("SR Analysts", "Data Platform"), context.getAuthenticatorGroups());
         Assertions.assertEquals(0, recorder.bindsAs(SERVICE_DN),
                 "a login that already resolved its groups must not open a service account connection");
         Assertions.assertEquals(1, recorder.connectionIds.size());
@@ -334,9 +339,9 @@ class LDAPMemberOfDirectoryTest {
         recorder.hiddenAttribute = "memberOf";
 
         AccessControlContext context = authenticate(
-                provider("uid=${USER}," + PEOPLE_DN, null, LdapGroupSource.MEMBEROF, "memberOf", false), "alice");
+                provider("uid=${USER}," + PEOPLE_DN, null, GroupSource.AUTHENTICATOR, "memberOf", false), "alice");
 
-        Assertions.assertTrue(context.getMemberOfGroups().isEmpty());
+        Assertions.assertTrue(context.getAuthenticatorGroups().isEmpty());
         Assertions.assertEquals(List.of(ALICE_DN), recorder.bindDNs);
         Assertions.assertEquals("uid=alice," + PEOPLE_DN, context.getDistinguishedName());
     }
@@ -344,9 +349,9 @@ class LDAPMemberOfDirectoryTest {
     @Test
     void testUserWithoutAnyGroupLogsInWithAnEmptyGroupSet() throws Exception {
         AccessControlContext context =
-                authenticate(provider(null, null, LdapGroupSource.MEMBEROF, "memberOf", true), "bob");
+                authenticate(provider(null, null, GroupSource.AUTHENTICATOR, "memberOf", true), "bob");
 
-        Assertions.assertTrue(context.getMemberOfGroups().isEmpty());
+        Assertions.assertTrue(context.getAuthenticatorGroups().isEmpty());
         Assertions.assertEquals("uid=bob," + PEOPLE_DN, context.getDistinguishedName());
         // Nothing to fall back to on this path: the reader already was the service account.
         Assertions.assertEquals(1, recorder.bindsAs(SERVICE_DN));
@@ -355,9 +360,9 @@ class LDAPMemberOfDirectoryTest {
     @Test
     void testCustomAttributeName() throws Exception {
         AccessControlContext context =
-                authenticate(provider(null, null, LdapGroupSource.MEMBEROF, "isMemberOf", true), "carol");
+                authenticate(provider(null, null, GroupSource.AUTHENTICATOR, "isMemberOf", true), "carol");
 
-        Assertions.assertEquals(Set.of("SR Analysts"), context.getMemberOfGroups());
+        Assertions.assertEquals(Set.of("SR Analysts"), context.getAuthenticatorGroups());
         Assertions.assertEquals(List.of("isMemberOf"), onlySearchAttributes());
     }
 
@@ -369,9 +374,9 @@ class LDAPMemberOfDirectoryTest {
     @Test
     void testConfiguredAttributeNameCaseDoesNotMatter() throws Exception {
         AccessControlContext context =
-                authenticate(provider(null, null, LdapGroupSource.MEMBEROF, "memberof", true), "alice");
+                authenticate(provider(null, null, GroupSource.AUTHENTICATOR, "memberof", true), "alice");
 
-        Assertions.assertEquals(Set.of("SR Analysts", "Data Platform"), context.getMemberOfGroups());
+        Assertions.assertEquals(Set.of("SR Analysts", "Data Platform"), context.getAuthenticatorGroups());
         Assertions.assertEquals(List.of("memberof"), onlySearchAttributes());
     }
 
@@ -382,9 +387,9 @@ class LDAPMemberOfDirectoryTest {
     @Test
     void testLegacyPerUserDnFormTouchesNoAttribute() throws Exception {
         AccessControlContext context =
-                authenticate(provider(null, ALICE_DN, LdapGroupSource.MEMBEROF, "memberOf", true), "alice");
+                authenticate(provider(null, ALICE_DN, GroupSource.AUTHENTICATOR, "memberOf", true), "alice");
 
-        Assertions.assertTrue(context.getMemberOfGroups().isEmpty());
+        Assertions.assertTrue(context.getAuthenticatorGroups().isEmpty());
         Assertions.assertTrue(recorder.searchRequestedAttributes.isEmpty());
         Assertions.assertEquals(List.of(ALICE_DN), recorder.bindDNs);
         Assertions.assertEquals(ALICE_DN, context.getDistinguishedName());
@@ -397,10 +402,10 @@ class LDAPMemberOfDirectoryTest {
     @Test
     void testGroupNamesKeepTheDirectoryCase() throws Exception {
         AccessControlContext context =
-                authenticate(provider(null, null, LdapGroupSource.BOTH, "memberOf", true), "alice");
+                authenticate(provider(null, null, GroupSource.BOTH, "memberOf", true), "alice");
 
-        Assertions.assertTrue(context.getMemberOfGroups().contains("SR Analysts"));
-        Assertions.assertFalse(context.getMemberOfGroups().contains("sr analysts"));
+        Assertions.assertTrue(context.getAuthenticatorGroups().contains("SR Analysts"));
+        Assertions.assertFalse(context.getAuthenticatorGroups().contains("sr analysts"));
     }
 
     /**
@@ -409,10 +414,10 @@ class LDAPMemberOfDirectoryTest {
      */
     @Test
     void testRepeatedLoginsOpenExactlyTwoConnectionsEach() throws Exception {
-        LDAPAuthProvider provider = provider(null, null, LdapGroupSource.MEMBEROF, "memberOf", true);
+        LDAPAuthProvider provider = provider(null, null, GroupSource.AUTHENTICATOR, "memberOf", true);
         for (int i = 0; i < 10; i++) {
             Assertions.assertEquals(Set.of("SR Analysts", "Data Platform"),
-                    authenticate(provider, "alice").getMemberOfGroups());
+                    authenticate(provider, "alice").getAuthenticatorGroups());
         }
         // Two per login on this path: the service account search and the user bind. Counted twice
         // over, once through the operation interceptor and once through the server's access log.

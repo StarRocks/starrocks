@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Refreshes all active connections to apply global variables that have been changed by SET GLOBAL."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # REFRESH CONNECTIONS

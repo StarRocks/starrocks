@@ -16,7 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <iostream>
+#include <thread>
 #include <vector>
 
 #include "base/logging.h"
@@ -222,6 +224,31 @@ TEST(DynamicCacheTest, get_all_entries) {
         ASSERT_EQ(i, e->key());
         cache.release(e);
     }
+}
+
+// capacity() is read without the cache lock (e.g. by background eviction) while set_capacity() may run
+// concurrently when the capacity is resized at runtime. Run under TSAN to catch a data race here.
+TEST(DynamicCacheTest, capacity_concurrent_with_set_capacity) {
+    DynamicCache<int32_t, int64_t> cache(100);
+    for (int i = 0; i < 100; i++) {
+        auto e = cache.get_or_create(i);
+        cache.update_object_size(e, 1);
+        cache.release(e);
+    }
+    std::atomic<bool> stop{false};
+    std::thread reader([&]() {
+        while (!stop.load()) {
+            const size_t capacity = cache.capacity();
+            ASSERT_TRUE(capacity == 100 || capacity == 50);
+        }
+    });
+    for (int i = 0; i < 1000; i++) {
+        cache.set_capacity(i % 2 == 0 ? 50 : 100);
+    }
+    stop.store(true);
+    reader.join();
+    ASSERT_EQ(100, cache.capacity());
+    ASSERT_LE(cache.size(), 100);
 }
 
 } // namespace starrocks

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Logging, Server, and Metadata"
 description: "BE configuration parameters for logging, server settings, and metadata management."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -110,7 +111,7 @@ This topic introduces the following types of BE configurations:
 - Type: String
 - Unit: -
 - Is mutable: Yes (from v3.3.0, v3.2.7, and v3.1.12)
-- Description: The severity levels into which system log entries are classified. Valid values: INFO, WARNING, ERROR, and FATAL. At startup, if the value in the configuration file is none of these, it is reported in the log and INFO is used, so an invalid value cannot leave the BE without working logging. At runtime, an invalid value is instead rejected with an error and the level in effect is left unchanged. This item was changed to a dynamic configuration from v3.3.0, v3.2.7, and v3.1.12 onwards.
+- Description: The severity levels into which system log entries are classified. Valid values: INFO, WARNING, ERROR, and FATAL. At startup, if the value in the configuration file is none of these, it is reported in the log and INFO is used, so an invalid value cannot leave the BE without working logging. At runtime, an invalid value is instead rejected with an error and the level in effect is left unchanged. This item was changed to a dynamic configuration from v3.3.0, v3.2.7, and v3.1.12 onwards. However, a runtime modification changes the log level in effect only in v3.1.12 to v3.1.13, v3.2.7 to v3.2.8, v3.3.0, and from v4.0.16 and v4.1.6 onwards. In other versions, the item can be modified at runtime, but the log level in effect does not change.
 - Introduced in: -
 
 ### sys_log_roll_mode
@@ -258,6 +259,15 @@ This topic introduces the following types of BE configurations:
   The choice affects per-socket buffering behavior and can influence `Socket.Write` failures (EOVERCROWDED) when unwritten bytes exceed socket limits.
 - Introduced in: v3.2.5
 
+### brpc_failed_channel_reset_interval_s
+
+- Default: 10
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval at which the BE checks its cached bRPC stubs and resets the stubs whose connection has failed. bRPC health-checks a failed connection every few seconds until the connection is released, and logs `Fail to wait EPOLLOUT` on every check against an unreachable address, such as the old IP address of a restarted BE pod in Kubernetes. Resetting a stub releases the failed connection, and the stub opens a new connection for its next RPC. A value less than or equal to `0` disables the check.
+- Introduced in: -
+
 ### brpc_max_body_size
 
 - Default: 2147483648
@@ -375,13 +385,22 @@ This topic introduces the following types of BE configurations:
 - Description: When this item is set to `true`, the BE starts a background thread (jemalloc_tracker_daemon) that polls jemalloc statistics (once per second) and updates the RuntimeEnv jemalloc metadata MemTracker with the jemalloc "stats.metadata" value. This ensures jemalloc metadata consumption is included in StarRocks process memory accounting and prevents under‑reporting of memory used by jemalloc internals. The tracker is only compiled/started on non‑macOS builds (#ifndef __APPLE__) and runs as a daemon thread named "jemalloc_tracker_daemon". Because this setting affects startup behaviour and threads that maintain MemTracker state, changing it requires a restart. Disable only if jemalloc is not used or when jemalloc tracking is intentionally managed differently; otherwise keep enabled to maintain accurate memory accounting and allocation safeguards.
 - Introduced in: v3.2.12
 
+### enable_jvm_memory_tracker
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to count the memory used by the JVM toward the BE memory limit (`mem_limit`). The JVM maps its heap and non-heap memory (such as Metaspace and the code cache) itself, outside the BE memory allocator, so this memory is otherwise not counted. When this item is `true`, each time the JVM metrics are collected (every 15 seconds when `enable_metric_calculator` is `true`), BE sets the `jvm` memory tracker, under the `process` tracker, to the committed heap plus non-heap memory of the JVM. The `jvm` tracker is shown on the `/mem_tracker` page. When this item is changed to `false`, the next collection resets the `jvm` tracker to 0. This item takes effect only when `enable_jvm_metrics` is `true`. Before a JVM is created in the BE process, the `jvm` tracker is 0.
+- Introduced in: -
+
 ### enable_jvm_metrics
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Controls whether the system initializes and registers JVM-specific metrics at startup. When enabled the metrics subsystem will create JVM-related collectors (for example, heap, GC and thread metrics) for export, and when disabled, those collectors are not initialized. This parameter is intended for forward compatibility and may be removed in a future release. Use `enable_system_metrics` to control system-level metric collection.
+- Description: Whether to collect JVM memory metrics on the BE. The metrics are `jvm_heap_size_bytes` and `jvm_non_heap_size_bytes` for heap and non-heap memory, and `jvm_young_size_bytes`, `jvm_survivor_size_bytes`, `jvm_old_size_bytes`, and `jvm_perm_size_bytes` (Metaspace) for memory pools. The `type` label of each metric is `used`, `committed`, `max`, `peak_used`, or `peak_max`. Enabling this item does not start a JVM. The BE starts collecting the metrics only after a JVM is created in the BE process by a feature that uses Java, such as HDFS access, JNI-based readers, or Java UDFs. Until then, the metrics are 0. The metrics are refreshed every 15 seconds when `enable_metric_calculator` is `true`. When `enable_jvm_memory_tracker` is `true`, each refresh also counts the memory of the JVM toward the BE memory limit. See `enable_jvm_memory_tracker`. If `JAVA_HOME` is not set, the metrics are not registered. A `max` or `peak_max` value of -1 means that the memory pool has no defined maximum. With the default G1 garbage collector, this applies to `jvm_young_size_bytes` and `jvm_survivor_size_bytes` (the Eden and Survivor spaces), and to `jvm_perm_size_bytes` (Metaspace) unless `MaxMetaspaceSize` is set. The memory pool metrics are populated only for the Serial, Parallel, and G1 garbage collectors. Use `enable_system_metrics` to control system-level metric collection.
 - Introduced in: v4.0.0
 
 ### get_pindex_worker_count
@@ -416,9 +435,9 @@ This topic introduces the following types of BE configurations:
 - Default: `percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false`
 - Type: string
 - Unit: -
-- Is mutable: Yes (only some options)
+- Is mutable: Yes (only some options; from v4.0.16 and v4.1.6 onwards. Not mutable in v4.1.3 and v4.1.4)
 - Description: The jemalloc runtime options that `bin/start_backend.sh` exports as the `JEMALLOC_CONF` environment variable when the BE is started in the normal mode. This item is ignored if `JEMALLOC_CONF` is already set in the environment, and if the BE is started with `--jemalloc_debug` or `--check_mem_leak`, because those modes force their own option string. jemalloc reads `JEMALLOC_CONF` before the BE parses its configuration, so modifying this item at runtime only re-applies the options that jemalloc itself allows to be changed after initialization: `dirty_decay_ms`, `muzzy_decay_ms`, and `prof_active`. Adding, removing, or changing any other option is rejected with an error and the configuration value is rolled back, which means those options require restarting the BE. `prof_active` can only be changed if the BE was started with `prof:true`. Setting `dirty_decay_ms` or `muzzy_decay_ms` to `0` purges all unused pages synchronously and can therefore make the modification take a while, and setting it to `-1` disables purging.
-- Introduced in: v4.0.15, v4.1.3
+- Introduced in: v4.0.16, v4.1.3
 
 ### large_memory_alloc_report_threshold
 
@@ -453,7 +472,7 @@ This topic introduces the following types of BE configurations:
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100G"). The default hard limit is 90% of the server's memory size, and the soft limit is 80%. You need to configure this parameter if you want to deploy StarRocks with other memory-intensive services on a same server.
+- Description: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100G"). The default value is 90% of the server's memory size. The BE uses 90% of `mem_limit` as the memory limit of the process memory tracker, which is 81% of the server's memory size by default. You need to configure this parameter if you want to deploy StarRocks with other memory-intensive services on a same server.
 - Introduced in: -
 
 ### memory_max_alignment
@@ -471,7 +490,7 @@ This topic introduces the following types of BE configurations:
 - Type: long
 - Unit: Percentage (0-100)
 - Is mutable: Yes
-- Description: The emergency memory water‑level expressed as a percentage of the process memory limit. When process memory consumption exceeds `(limit * memory_urgent_level / 100)`, BE triggers immediate memory reclamation, which forces data cache shrinkage, evicts update caches, and causes persistent/lake MemTables to be treated as "full" so they will be flushed/compacted soon. The code validates that this setting must be greater than `memory_high_level`, and `memory_high_level` must be greater or equal to `1`, and less thant or equal to `100`). A lower value causes more aggressive, earlier reclamation, that is, more frequent cache evictions and flushes. A higher value delays reclamation and risks OOM if too close to 100. Tune this item together with `memory_high_level` and Data Cache-related auto‑adjust settings.
+- Description: The emergency memory water‑level expressed as a percentage of the process memory limit. When process memory consumption exceeds `(limit * memory_urgent_level / 100)`, BE triggers immediate memory reclamation, which forces data cache and shared-data metadata cache shrinkage, evicts update caches, and causes persistent/lake MemTables to be treated as "full" so they will be flushed/compacted soon. The code validates that this setting must be greater than `memory_high_level`, and `memory_high_level` must be greater or equal to `1`, and less thant or equal to `100`). A lower value causes more aggressive, earlier reclamation, that is, more frequent cache evictions and flushes. A higher value delays reclamation and risks OOM if too close to 100. Tune this item together with `memory_high_level` and Data Cache-related auto‑adjust settings.
 - Introduced in: v3.2.0
 
 ### net_use_ipv6_when_priority_networks_empty
@@ -489,7 +508,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Cores
 - Is mutable: No
-- Description: Controls the number of CPU cores the system will use for CPU-aware decisions (for example, thread-pool sizing and runtime scheduling). A value of 0 enables auto-detection: the system reads `/proc/cpuinfo` and uses all available cores. If set to a positive integer, that value overrides the detected core count and becomes the effective core count. When running inside containers, cgroup cpuset or cpu quota settings can further restrict usable cores; `CpuInfo` also respects those cgroup limits.
+- Description: Controls the number of CPU cores the system will use for CPU-aware decisions (for example, thread-pool sizing and runtime scheduling). A value of 0 enables auto-detection: the system reads `/proc/cpuinfo` and uses all available cores. If set to a positive integer, that value overrides the detected core count and becomes the effective core count. When running inside a Docker container (that is, when the file `/.dockerenv` exists), the auto-detected core count is further restricted by the cgroup cpuset or cpu quota settings. Outside of such containers, cgroup limits are not read.
 - Introduced in: v3.2.0
 
 ### plugin_path

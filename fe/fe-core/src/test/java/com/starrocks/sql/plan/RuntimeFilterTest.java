@@ -81,7 +81,7 @@ public class RuntimeFilterTest extends PlanTestBase {
     // A probe runtime filter parked on a node is only useful if that node's operator either
     // evaluates the global bloom filter (Operator::eval_runtime_bloom_filters) ...
     private static final Set<String> BLOOM_FILTER_EVALUATING_NODES = ImmutableSet.of(
-            "EXCHANGE", "MERGING-EXCHANGE", "AGGREGATE", "ANALYTIC");
+            "EXCHANGE", "MERGING-EXCHANGE", "AGGREGATE", "ANALYTIC", "HASH");
 
     // ... or consumes a local runtime in-filter (Operator::eval_conjuncts_and_in_filters). The
     // placement seeds localRfWaitingSet, which is what tells the operator whose in-filter to wait
@@ -129,6 +129,49 @@ public class RuntimeFilterTest extends PlanTestBase {
         assertNoUselessRuntimeFilterPlacement(plan);
         assertTrue(plan.contains("probe_expr = (CAST("),
                 "expected a widening-CAST probe expr to be pushed down, plan was:\n" + plan);
+    }
+
+    /**
+     * A partitioned global filter needs every partition-by column to route a row to its partition.
+     * Here the shuffle join partitions by (v1, v8): v1 comes from t0 but v8 only appears once t2 is
+     * joined in. The filter on v1 must therefore stay on the join with t2, not descend to t0 x t1,
+     * whose output has no v8 and where the BE would skip it.
+     */
+    @Test
+    public void testPartitionedRuntimeFilterStaysWherePartitionExprsAreBound() throws Exception {
+        String sql = "select count(*) from t0 join [broadcast] t1 on v1 = v4"
+                + " join [broadcast] t2 on v2 = v7"
+                + " join [shuffle] t3 on v1 = v10 and v8 = v11";
+        boolean prev = connectContext.getSessionVariable().isDisableJoinReorder();
+        try {
+            connectContext.getSessionVariable().disableJoinReorder();
+            String plan = getVerboseExplain(sql);
+            String joinT2 = probeFiltersOfNode(plan, "[7: v7, BIGINT, true]");
+            assertTrue(joinT2.contains("probe_expr = (1: v1), partition_exprs = (1: v1,8: v8)"), plan);
+            assertTrue(joinT2.contains("probe_expr = (8: v8), partition_exprs = (1: v1,8: v8)"), plan);
+            String joinT1 = probeFiltersOfNode(plan, "[4: v4, BIGINT, true]");
+            assertTrue(!joinT1.contains("partition_exprs = (1: v1,8: v8)"), plan);
+        } finally {
+            if (!prev) {
+                connectContext.getSessionVariable().enableJoinReorder();
+            }
+        }
+    }
+
+    // Returns the lines of the plan node whose equal join conjunct mentions `joinKey`.
+    private static String probeFiltersOfNode(String verbosePlan, String joinKey) {
+        StringBuilder node = new StringBuilder();
+        for (String line : verbosePlan.split("\n")) {
+            if (NODE_HEADER.matcher(line).find()) {
+                if (node.indexOf("equal join conjunct:") >= 0 && node.indexOf(joinKey) >= 0) {
+                    return node.toString();
+                }
+                node.setLength(0);
+            }
+            node.append(line).append('\n');
+        }
+        fail("no join on " + joinKey + " in plan:\n" + verbosePlan);
+        return "";
     }
 
     @Test

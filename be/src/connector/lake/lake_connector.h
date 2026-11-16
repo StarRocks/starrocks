@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <optional>
 #include <unordered_map>
 
 #include "compute_env/query/scan_conjuncts_manager.h"
@@ -135,6 +136,9 @@ private:
 private:
     const LakeDataSourceProvider* _provider;
     const TInternalScanRange _scan_range;
+    const std::optional<TGroupedRangeTask> _wire_grouped_range_task;
+    bool _range_clip_task_counted = false;
+    Status _scan_range_status = Status::OK();
 
     Status _status = Status::OK();
     // The conjuncts couldn't push down to storage engine
@@ -188,6 +192,9 @@ private:
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
     RuntimeProfile::Counter* _expr_filter_counter = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
+    // Segment-level zone map prune. Runs during iterator creation, so it is a child of
+    // CreateSegmentIter, not of SegmentInit.
+    RuntimeProfile::Counter* _segment_zone_map_filter_timer = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;
     RuntimeProfile::Counter* _decompress_timer = nullptr;
@@ -205,6 +212,17 @@ private:
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
     RuntimeProfile::Counter* _column_iterator_init_timer = nullptr;
     RuntimeProfile::Counter* _bitmap_index_iterator_init_timer = nullptr;
+    // Remaining SegmentInit phases. Reported unconditionally, like every other SegmentInit child: a
+    // display threshold would drop a phase below it, and the point of these counters is that
+    // SegmentInit minus the sum of its children is a residual you can compute rather than guess at.
+    RuntimeProfile::Counter* _segment_init_prepare_timer = nullptr;
+    RuntimeProfile::Counter* _rowid_range_filter_timer = nullptr;
+    RuntimeProfile::Counter* _precomputed_range_filter_timer = nullptr;
+    RuntimeProfile::Counter* _tablet_range_filter_timer = nullptr;
+    RuntimeProfile::Counter* _del_vector_apply_timer = nullptr;
+    RuntimeProfile::Counter* _segment_init_finalize_timer = nullptr;
+    RuntimeProfile::Counter* _rewrite_predicates_timer = nullptr;
+    RuntimeProfile::Counter* _init_context_timer = nullptr;
     RuntimeProfile::Counter* _zone_map_filter_timer = nullptr;
     RuntimeProfile::Counter* _rows_key_range_filter_timer = nullptr;
     RuntimeProfile::Counter* _rows_key_range_counter = nullptr;
@@ -350,6 +368,7 @@ public:
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
     bool always_shared_scan() const override { return false; }
+    bool is_grouped_scan() const { return _is_grouped_scan; }
 
     StatusOr<pipeline::MorselQueueBuilderPtr> convert_scan_range_to_morsel_queue_builder(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
@@ -387,15 +406,21 @@ public:
 
     bool could_split_physically() const { return _could_split_physically; }
 
-    bool enable_lake_prepared_physical_split_scan() const { return _enable_lake_prepared_physical_split_scan; }
+    bool enable_lake_prepared_physical_split_scan() const {
+        return !_is_grouped_scan && _enable_lake_prepared_physical_split_scan;
+    }
 
-    bool enable_prepared_split_chunk_source_reuse() const override { return _enable_lake_prepared_physical_split_scan; }
+    bool enable_prepared_split_chunk_source_reuse() const override {
+        return enable_lake_prepared_physical_split_scan();
+    }
 
     int64_t get_splitted_scan_rows() const { return splitted_scan_rows; }
 
 protected:
     const int32_t _plan_node_id;
     const TLakeScanNode _t_lake_scan_node;
+    const bool _is_grouped_scan;
+    const bool _has_lake_scan_node;
 
     // for ut
     lake::TabletManager* _tablet_manager = nullptr;
@@ -406,10 +431,13 @@ protected:
     int64_t splitted_scan_rows = 0;
 
 private:
+    Status validate_grouped_scan() const;
+    Status validate_scan_range(const TScanRange& range) const;
     StatusOr<bool> _could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
                                                    int32_t pipeline_dop, size_t num_total_scan_ranges,
                                                    TTabletInternalParallelMode::type tablet_internal_parallel_mode,
                                                    int64_t* scan_dop, int64_t* splitted_scan_rows) const;
+    StatusOr<int64_t> _compute_splitted_scan_rows() const;
     StatusOr<bool> _could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const;
 
     // Partition conjuncts used for BE-side dynamic partition pruning. Distinct from the

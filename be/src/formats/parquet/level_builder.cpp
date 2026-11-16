@@ -16,6 +16,7 @@
 
 #include <fmt/core.h>
 
+#include <algorithm>
 #include <limits>
 #include <string>
 #include <utility>
@@ -27,6 +28,7 @@
 #endif
 
 #include "base/simd/rle_simd.h"
+#include "base/time/tz_offset_cache.h"
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/column.h"
@@ -444,11 +446,35 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
     auto values = new cpp_type[col->size()];
     DeferOp defer([&] { delete[] values; });
 
-    for (size_t i = 0; i < col->size(); i++) {
-        auto offset = timestamp::get_timezone_offset_by_timestamp(data_col[i]._timestamp, _ctz);
+    // INT96 stores UTC: a value is shifted by the offset in force at 00:00 of its day read as UTC. The INT64
+    // encoding stores the wall clock and needs no offset.
+    int64_t fixed_offset = 0;
+    std::vector<int64_t> offsets;
+    if constexpr (use_int96_timestamp_encoding) {
+        std::vector<int64_t> day_seconds(col->size());
+        int64_t lo = std::numeric_limits<int64_t>::max();
+        int64_t hi = std::numeric_limits<int64_t>::min();
+        for (size_t i = 0; i < col->size(); i++) {
+            if (null_col == nullptr || !null_col[i]) {
+                day_seconds[i] =
+                        (static_cast<int64_t>(timestamp::to_julian(data_col[i]._timestamp)) - date::UNIX_EPOCH_JULIAN) *
+                        SECS_PER_DAY;
+                lo = std::min(lo, day_seconds[i]);
+                hi = std::max(hi, day_seconds[i]);
+            }
+        }
+        TzOffsetCache offset_cache;
+        if (lo <= hi && !offset_cache.uniform_offset_for_unix(lo, hi, _ctz, &fixed_offset)) {
+            offsets.resize(col->size());
+            offset_cache.offsets_for_unix(day_seconds.data(), null_col, col->size(), _ctz, offsets.data());
+        }
+    }
 
-        auto timestamp = use_int96_timestamp_encoding ? timestamp::sub<TimeUnit::SECOND>(data_col[i]._timestamp, offset)
-                                                      : data_col[i]._timestamp;
+    for (size_t i = 0; i < col->size(); i++) {
+        Timestamp timestamp = data_col[i]._timestamp;
+        if constexpr (use_int96_timestamp_encoding) {
+            timestamp = timestamp::sub<TimeUnit::SECOND>(timestamp, offsets.empty() ? fixed_offset : offsets[i]);
+        }
 
         if constexpr (use_int96_timestamp_encoding) {
             auto date = reinterpret_cast<int32_t*>(&values[i].value[2]);

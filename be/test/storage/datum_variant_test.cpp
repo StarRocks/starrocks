@@ -25,8 +25,7 @@ namespace starrocks {
 
 TEST(DatumVariantTest, FromProtoNullValueAndTypeInfo) {
     VariantPB variant_pb;
-    TypeDescriptor type_desc(TYPE_INT);
-    variant_pb.mutable_type()->CopyFrom(type_desc.to_protobuf());
+    variant_pb.mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     variant_pb.set_variant_type(VariantTypePB::NULL_VALUE);
 
     Datum datum;
@@ -64,8 +63,7 @@ TEST(DatumVariantTest, FromProtoUnsupportedType) {
 
 TEST(DatumVariantTest, FromProtoInvalidVariantValue) {
     VariantPB variant_pb;
-    TypeDescriptor type_desc(TYPE_INT);
-    variant_pb.mutable_type()->CopyFrom(type_desc.to_protobuf());
+    variant_pb.mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     variant_pb.set_variant_type(VariantTypePB::NORMAL_VALUE);
 
     Datum datum;

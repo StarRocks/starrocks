@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW GRANTS displays all the privileges that have been granted to a user or role."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW GRANTS

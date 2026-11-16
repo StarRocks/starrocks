@@ -57,6 +57,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     private Set<Long> dirtyPhysicalPartitionSet;
     private Set<ColumnId> invalidDictCacheColumns;
     private Map<ColumnId, Long> validDictCacheColumns;
+    private Map<ColumnId, Long> dictContentIdentities;
 
     public OlapTableTxnStateListener(DatabaseTransactionMgr dbTxnMgr, OlapTable table) {
         this.dbTxnMgr = dbTxnMgr;
@@ -81,6 +82,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         dirtyPhysicalPartitionSet = Sets.newHashSet();
         invalidDictCacheColumns = Sets.newHashSet();
         validDictCacheColumns = Maps.newHashMap();
+        dictContentIdentities = Maps.newHashMap();
 
         TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
         Map<Long, Set<Long>> tabletToBackends = new HashMap<>();
@@ -100,6 +102,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         List<Long> tabletIds =
                 tabletCommitInfos.stream().map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
         List<TabletMeta> tabletMetaList = tabletInvertedIndex.getTabletMetaList(tabletIds);
+        Map<Long, Set<Long>> ignoredTabletsByPartition = new HashMap<>();
         for (int i = 0; i < tabletMetaList.size(); i++) {
             TabletMeta tabletMeta = tabletMetaList.get(i);
             if (tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
@@ -114,7 +117,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             if (table.getPhysicalPartition(physicalPartitionId) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping)
                 // or partition really not exist.
-                LOG.warn("partition {} not exist, ignore tablet {}", physicalPartitionId, tabletId);
+                // Rows written into those tablets are dropped while this transaction still succeeds, so
+                // record them: this is the only trace left when a partition is replaced or dropped under
+                // a running load. Aggregated per partition below to keep one line per partition, and kept in
+                // a set since every replica of a tablet brings its own commit info.
+                ignoredTabletsByPartition.computeIfAbsent(physicalPartitionId, id -> Sets.newLinkedHashSet()).add(tabletId);
                 continue;
             }
             dirtyPhysicalPartitionSet.add(physicalPartitionId);
@@ -124,6 +131,8 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
             // Invalid column set should union
             invalidDictCacheColumns.addAll(tabletCommitInfos.get(i).getInvalidDictCacheColumns());
+            tabletCommitInfos.get(i).mergeDictContentIdentities(
+                    dictContentIdentities, invalidDictCacheColumns);
 
             // Valid column set should intersect and remove all invalid columns
             // Only need to add valid column set once
@@ -141,11 +150,9 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                     this.validDictCacheColumns.put(validDictCacheColumns.get(j), version);
                 }
             }
-
-            if (i == tabletMetaList.size() - 1) {
-                validDictCacheColumns.entrySet().removeIf(entry -> invalidDictCacheColumns.contains(entry.getKey()));
-            }
         }
+
+        validDictCacheColumns.keySet().removeAll(invalidDictCacheColumns);
 
         // update write failed backend/replica
         // use for selection of primary replica for replicated storage
@@ -246,6 +253,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                 }
             }
         }
+
+        // Reported only once the transaction is committed (DatabaseTransactionMgr#commitPreparedTransaction), so
+        // that a commit rejected later, or a prepared transaction that is aborted, is not recorded as having
+        // dropped rows.
+        txnState.setIgnoredTablets(table.getId(), ignoredTabletsByPartition);
     }
 
     @Override
@@ -260,10 +272,14 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
                 List<ColumnId> validDictCacheColumnNames = Lists.newArrayList();
                 List<Long> validDictCacheColumnVersions = Lists.newArrayList();
+                List<Long> validDictContentIdentities = Lists.newArrayList();
 
                 validDictCacheColumns.forEach((name, dictVersion) -> {
                     validDictCacheColumnNames.add(name);
                     validDictCacheColumnVersions.add(dictVersion);
+                    if (!dictContentIdentities.isEmpty()) {
+                        validDictContentIdentities.add(dictContentIdentities.get(name));
+                    }
                 });
                 partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId,
                         -1,
@@ -271,6 +287,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                         Lists.newArrayList(invalidDictCacheColumns),
                         validDictCacheColumnNames,
                         validDictCacheColumnVersions);
+                partitionCommitInfo.setDictContentIdentities(validDictContentIdentities);
             } else {
                 partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId,
                         -1,

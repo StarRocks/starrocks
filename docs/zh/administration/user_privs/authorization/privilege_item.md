@@ -3,12 +3,11 @@ displayed_sidebar: docs
 description: "Privileges granted to users or roles determine which operations can be performed on specific objects in StarRocks."
 sidebar_position: 20
 sidebar_label: "权限项"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 权限项
 
-import PrivCreateWarehouse from '../../../_assets/commonMarkdown/priv_create_warehouse.mdx'
-import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 
 本文详细描述了 StarRocks 中可以用于赋权的权限项及其含义。您可以通过 [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
@@ -20,16 +19,30 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 
 ### 系统级权限 (SYSTEM)
 
-<PrivCreateWarehouse />
+| 权限                    | 用途                                                         |
+| ----------------------- | ------------------------------------------------------------ |
+| NODE                    | 用于操作节点，比如添加，删除，下线节点。为确保集群安全，此权限不可直接授予给用户和角色。`cluster_admin` 角色拥有此权限。 |
+| GRANT                   | 创建用户/角色，更改用户/角色，将权限授予给用户/角色。此权限不可直接授予给用户和角色。`user_admin` 角色拥有此权限。 |
+| CREATE RESOURCE GROUP   | 创建资源组。                                                 |
+| CREATE RESOURCE         | 创建资源给 Spark Load 和外表使用。                           |
+| CREATE EXTERNAL CATALOG | 创建 External Catalog。                                      |
+| PLUGIN                  | 安装、卸载一个插件。                                         |
+| REPOSITORY              | 创建、删除、查看仓库。                                       |
+| BLACKLIST               | 创建、删除、查看 SQL 黑名单和 BE 黑名单。                      |
+| FILE                    | 创建、删除、查看文件。                                       |
+| OPERATE                 | 管理副本、配置项、变量、transaction等。                      |
+| CREATE GLOBAL FUNCTION  | 创建一个全局 UDF。                                           |
+| CREATE STORAGE VOLUME   | 为远程存储系统创建存储卷 (Storage Volume)。                     |
+| SECURITY                | 创建或管理安全集成以及 Group Provider。                      |
 
-### AI FUNCTION / AI PROVIDER
+### AI FUNCTION / AI PROVIDER {/* #ai-function-privileges */}
 
-| 权限 | 说明 |
-| --- | --- |
-| USAGE | 使用指定的公开 AI 函数族或 Provider。`ON ALL AI FUNCTIONS` 和 `ON ALL AI PROVIDERS` 分别授予对应类型全部对象的使用权限，包括未来的对象。函数和 Provider 权限相互独立。 |
+| 对象 | 权限 | 用途 |
+| --- | --- | --- |
+| AI FUNCTION | USAGE | 使用指定的 AI 函数。 |
+| AI PROVIDER | USAGE | 使用指定的 AI Provider。 |
 
-SYSTEM 函数保留原配置路由，不要求 Provider 授权。Provider 的 CREATE、ALTER、DROP、SET DEFAULT、SHOW 和 DESC 仍要求 SYSTEM OPERATE，USAGE 不授予这些管理操作权限。
-
+> 说明：调用 AI 函数需要同时具备函数和所选 Provider 的 USAGE 权限，包括默认 Provider。管理 Provider 需要 SYSTEM OPERATE 权限。
 
 ### 资源组权限 (RESOURCE GROUP)
 
@@ -137,8 +150,6 @@ SYSTEM 函数保留原配置路由，不要求 Provider 授权。Provider 的 CR
 | DROP  | 删除指定存储卷。                 |
 | USAGE | 查看指定存储卷的信息。   |
 | ALL   | 拥有对该存储卷的上述所有权限。 |
-
-<PrivWarehouse />
 
 ## 升级注意事项
 

@@ -287,6 +287,11 @@ public final class RangeColocateScanDispatch {
      * every ColocateRange has at least one covering tablet (the colocate group
      * is fully aligned).
      *
+     * <p>The ColocateRanges are expanded with the sort key of
+     * {@code selectedIndex} itself: every index routes its rows by its own sort
+     * key, which starts with the colocate columns but can be shorter or longer
+     * than the base index's.
+     *
      * <p>Returns {@code null} when the colocate group is in a transient
      * unaligned state — a spanning tablet, or a missing range. The caller
      * falls back to position-based bucketSeq; {@link #requireAligned} is the
@@ -302,7 +307,7 @@ public final class RangeColocateScanDispatch {
         List<ColocateRange> colocateRanges = colocateTableIndex.getColocateRanges(colocateGroupId);
         Preconditions.checkState(!colocateRanges.isEmpty(),
                 "range colocate group %s has no colocate ranges", colocateGroupId);
-        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable);
+        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable, selectedIndex.getMetaId());
 
         // Pre-expand each ColocateRange once.
         List<Range<Tuple>> expandedRanges = new ArrayList<>(colocateRanges.size());

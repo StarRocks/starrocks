@@ -21,6 +21,7 @@
 #include <chrono>
 #include <future>
 #include <iomanip>
+#include <numeric>
 #include <set>
 #include <thread>
 #include <utility>
@@ -42,6 +43,7 @@
 #include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/rowset.h"
@@ -1534,6 +1536,155 @@ TEST_F(LakeTabletReaderSpit, test_prepared_physical_split_seed) {
                 << "seed task must carry the shared prepared tablet read state";
     }
     reader->close();
+}
+
+// A cancelled query stops opening the tablet: a scan over many segments returns Status::Cancelled
+// right after the segment being loaded when the cancel arrives, on every open path a query takes.
+class LakeTabletReaderCancelTest : public TestBase {
+public:
+    LakeTabletReaderCancelTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    }
+
+protected:
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        // Rowset 1 holds two segments, rowset 2 one; 22 rows each.
+        std::vector<int> keys(22);
+        std::iota(keys.begin(), keys.end(), 1);
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+        c1->append_numbers(keys.data(), keys.size() * sizeof(int));
+        Chunk chunk({std::move(c0), std::move(c1)}, _schema);
+        VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+        for (int rowset_index = 0; rowset_index < 2; ++rowset_index) {
+            const int num_segments = 2 - rowset_index;
+            ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+            ASSERT_OK(writer->open());
+            for (int segment_index = 0; segment_index < num_segments; ++segment_index) {
+                ASSERT_OK(writer->write(chunk));
+                ASSERT_OK(writer->finish());
+            }
+            auto* rowset = _tablet_metadata->add_rowsets();
+            rowset->set_overlapped(num_segments > 1);
+            rowset->set_id(rowset_index + 1);
+            rowset->set_num_rows(num_segments * chunk.num_rows());
+            for (const auto& file : writer->segments()) {
+                auto* segment_meta = rowset->add_segment_metas();
+                segment_meta->set_filename(file.path);
+                segment_meta->set_size(file.size.value());
+            }
+            writer->close();
+        }
+        _tablet_metadata->set_version(2);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        _internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+        _internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+        _scan_range.__set_internal_scan_range(_internal_scan_range);
+        SyncPoint::GetInstance()->EnableProcessing();
+    }
+
+    void TearDown() override {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+        remove_test_dir_ignore_error();
+    }
+
+    // Cancels |_state| once the |n|-th segment has been loaded serially.
+    void cancel_after_serial_loads(int n) {
+        SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::serial_loaded", [this, n](void*) {
+            if (++_loaded == n) {
+                _state.set_is_cancelled(true);
+            }
+        });
+    }
+
+    Status open(bool need_split, bool prepared_split) {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema, need_split,
+                                                     /*could_split_physically=*/need_split);
+        TabletReaderParams params;
+        params.splitted_scan_rows = 4;
+        params.scan_dop = 4;
+        params.plan_node_id = 1;
+        params.scan_range = &_scan_range;
+        params.runtime_state = &_state;
+        params.enable_prepared_physical_split_scan = prepared_split;
+        RETURN_IF_ERROR(reader->prepare());
+        auto st = reader->open(params);
+        reader->close();
+        return st;
+    }
+
+    constexpr static const char* const kTestDirectory = "test_lake_tablet_reader_cancel";
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+    TInternalScanRange _internal_scan_range;
+    TScanRange _scan_range;
+    RuntimeState _state;
+    int _loaded = 0;
+};
+
+TEST_F(LakeTabletReaderCancelTest, test_open_not_cancelled) {
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    ASSERT_OK(open(false, false));
+    ASSERT_OK(open(true, false));
+    ASSERT_OK(open(true, true));
+}
+
+TEST_F(LakeTabletReaderCancelTest, test_open_already_cancelled) {
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    cancel_after_serial_loads(-1);
+    _state.set_is_cancelled(true);
+    for (auto [need_split, prepared] : {std::pair{false, false}, {true, false}, {true, true}}) {
+        auto st = open(need_split, prepared);
+        ASSERT_TRUE(st.is_cancelled()) << st;
+    }
+    ASSERT_EQ(0, _loaded);
+}
+
+TEST_F(LakeTabletReaderCancelTest, test_open_cancelled_while_loading_segments) {
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    cancel_after_serial_loads(1);
+    auto st = open(false, false);
+    ASSERT_TRUE(st.is_cancelled()) << st;
+    // Rowset 1 has two segments: the second one is not loaded, nor is rowset 2.
+    ASSERT_EQ(1, _loaded);
+}
+
+TEST_F(LakeTabletReaderCancelTest, test_prepared_split_cancelled_while_loading_segments) {
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    cancel_after_serial_loads(1);
+    auto st = open(true, true);
+    ASSERT_TRUE(st.is_cancelled()) << st;
+    ASSERT_EQ(1, _loaded);
+}
+
+TEST_F(LakeTabletReaderCancelTest, test_physical_split_cancelled_while_loading_segments) {
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    cancel_after_serial_loads(1);
+    auto st = open(true, false);
+    ASSERT_TRUE(st.is_cancelled()) << st;
+    // The morsel queue loads a whole rowset per split, so the split loop stops before rowset 2.
+    ASSERT_EQ(2, _loaded);
+}
+
+TEST_F(LakeTabletReaderCancelTest, test_parallel_open_cancelled_while_loading_segments) {
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, true);
+    std::atomic<int> started{0};
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::parallel_load", [&](void*) {
+        started.fetch_add(1);
+        _state.set_is_cancelled(true);
+    });
+    auto st = open(false, false);
+    ASSERT_TRUE(st.is_cancelled()) << st;
+    ASSERT_GE(started.load(), 1);
+    ASSERT_LE(started.load(), 3);
 }
 
 // subtract_sparse_ranges is the core range math behind the REFINED coverage set

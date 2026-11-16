@@ -52,6 +52,7 @@
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
+#include "storage_primitive/flat_json_config.h"
 #include "storage_primitive/tablet_info.h"
 
 namespace starrocks {
@@ -148,6 +149,10 @@ private:
                     writer_global_dicts->find(item.first) != writer_global_dicts->end()) {
                     info->add_valid_dict_cache_columns(item.first);
                     info->add_valid_dict_collected_version(writer_global_dicts->at(item.first).version);
+                    const auto& identity = writer_global_dicts->at(item.first).content_identity;
+                    if (identity.has_value()) {
+                        info->add_valid_dict_content_identities(*identity);
+                    }
                 } else {
                     info->add_invalid_dict_cache_columns(item.first);
                 }
@@ -869,13 +874,13 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                         RuntimeMetrics::instance()->lake_txn_log_collect_orphan_partition_total.increment(orphan_count);
                     }
                     context->add_txn_logs(my_logs);
-                    if (config::lake_enable_tablet_location_handoff) {
+                    if (config::lake_shard_info_cache_ttl_sec > 0) {
                         context->add_shard_infos(_tablet_manager, my_logs);
                     }
                 } else {
                     // Legacy path: sender 0 takes every log.
                     context->add_txn_logs(all_logs);
-                    if (config::lake_enable_tablet_location_handoff) {
+                    if (config::lake_shard_info_cache_ttl_sec > 0) {
                         context->add_shard_infos(_tablet_manager, all_logs);
                     }
                 }
@@ -988,6 +993,9 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                 GlobalDictsWithVersion<GlobalDictMap> dict;
                 dict.dict = std::move(global_dict);
                 dict.version = slot.has_global_dict_version() ? slot.global_dict_version() : 0;
+                if (slot.has_global_dict_content_identity()) {
+                    dict.content_identity = slot.global_dict_content_identity();
+                }
                 _global_dicts.emplace(std::string(slot.col_name()), std::move(dict));
             }
         }
@@ -997,6 +1005,14 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     tablet_ids.reserve(params.tablets_size());
     bool multi_stmt = _is_multi_statements_txn(params);
     bool multi_node_write = _is_multi_node_write(params);
+    // The table's flat_json.* properties travel with the load (see TOlapTableSink.flat_json_config), so
+    // the writer does not depend on this node's tablet metadata cache, which holds nothing for a tablet
+    // that has never published (light_weight_tablet_creation). Absent when the table sets none.
+    std::shared_ptr<FlatJsonConfig> flat_json_config;
+    if (params.has_lake_tablet_params() && params.lake_tablet_params().has_flat_json_config()) {
+        flat_json_config = std::make_shared<FlatJsonConfig>();
+        flat_json_config->update(params.lake_tablet_params().flat_json_config());
+    }
     if (multi_node_write) {
         // Under multi-node write several CNs write the same tablet in one transaction, so each of them
         // produces a PARTIAL txn log. Two FE-side preconditions make that safe, and both are cheap to
@@ -1050,6 +1066,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_global_dicts(&_global_dicts)
                                               .set_is_multi_statements_txn(multi_stmt)
                                               .set_multi_node_write(multi_node_write)
+                                              .set_flat_json_config(flat_json_config)
                                               .build());
         mutable_delta_writers()->emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());

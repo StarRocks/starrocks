@@ -2,9 +2,16 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical s"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 指标 s
+
+## `scheduled_tablet_num`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：Leader FE 的 Tablet 调度器正在调度的 Tablet 数量，即处于 Pending 和 Running 状态的 Tablet 总数，包括 BALANCE 和 REPAIR 类型。非 Leader FE 上该指标为 `0`。
 
 ## `schema_change_mem_bytes`
 
@@ -122,6 +129,18 @@ description: "Alphabetical s"
 - 单位: -
 - 描述: `/proc/net/snmp` 返回的指标。
 
+## `staros_shard_info_fallback_cache_entries`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：仅存算分离模式。该 BE 向 StarMgr 查询后保留下来的、不归自己持有的 tablet 的存储位置数量（参见 BE 配置项 `lake_shard_info_cache_ttl_sec`）。这些条目与 `lake_tablet_location_handoff_entries` 统计的条目共用一个 16 MiB 的 LRU 缓存：条目在 TTL 到期前可用，缓存空间不足时会被淘汰，因此该值反映的是缓存占用，而不是仍可用的条目数。
+
+## `staros_shard_info_fallback_cache_hits_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：仅存算分离模式。对于不归自己持有的 tablet，该 BE 直接使用此前向 StarMgr 查询后保留的存储位置（参见 BE 配置项 `lake_shard_info_cache_ttl_sec`），而没有再次查询的次数。每加一表示省掉一次 StarMgr GetShard RPC。结合 `starrocks_be_staros_shard_info_fallback_total`，缓存的命中率为 `hits / (hits + fallback)`。
+
 ## `starrocks_be_build_info`
 
 - 单位：-
@@ -208,6 +227,18 @@ description: "Alphabetical s"
 - 类型: 累积值
 - 描述: 扫描时对 flat JSON 子列值进行类型转换的累计耗时。
 
+## `starrocks_be_flat_json_compaction_mixed_inputs_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: Compaction 读取一个 JSON 列时，输入 segment 中一部分为 Flat JSON、一部分为完整 JSON，因而按 Flat JSON segment 的布局读取（所有子列为 JSON 类型）的次数。参见 `enable_compaction_flat_json_mixed_inputs`。
+
+## `starrocks_be_flat_json_compaction_plain_fallback_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: flat JSON compaction 中，已缓存的输入超过 `compaction_memory_limit_per_worker` 的八分之一（由一起写入的各 JSON 列平分）、但没有统一的扁平布局可用，因而将输出以完整 JSON 写出的次数。
+
 ## `starrocks_be_flat_json_compaction_schema_change_total`
 
 - 单位: 计数
@@ -218,7 +249,7 @@ description: "Alphabetical s"
 
 - 单位: 计数
 - 类型: 累积值
-- 描述: 在 `starrocks_be_flat_json_compaction_total` 计入的 flat JSON compaction 中，边读边写、不再缓存整个输出 segment 的次数。当已缓存的输入超过 `compaction_memory_limit_per_worker` 的八分之一且全部具有相同的扁平布局时触发。
+- 描述: 在 `starrocks_be_flat_json_compaction_total` 计入的 flat JSON compaction 中，边读边写、不再缓存整个输出 segment 的次数。当已缓存的输入超过 `compaction_memory_limit_per_worker` 的八分之一（由一起写入的各 JSON 列平分）且全部具有相同的扁平布局时触发。
 
 ## `starrocks_be_flat_json_compaction_total`
 
@@ -379,7 +410,7 @@ description: "Alphabetical s"
 
 - 单位：计数
 - 类型：累积
-- 描述：仅存算分离模式。BE 的 StarOSWorker 因本地缓存中没有所需的 shard 信息（即 FE 在查询 / 合并 / lake 操作引用该 shard 之前尚未将其推送到该 BE）而实际向 starmgr 发起的 RPC（`g_starlet->get_shard_info()`）总次数。仅在 starlet 就绪检查通过且 RPC 实际发出后才计入；starlet 尚未就绪的超时不包含在内。正常情况下该值应接近零。持续或上升的速率是一个强烈信号，表明 FE 端的任务或节点选择正把任务调度到尚未拥有该 shard 的 BE，或者 FE 端的 shard 推送存在滞后。建议告警：单个 BE 在 5 分钟窗口内的速率过高。在负责向开启了 `file_bundling` 的表导入数据的协调节点上，这类 RPC 大多会被 tablet 存储位置交接省掉，省掉的次数计入 `lake_tablet_location_handoff_hits_total`；交接的命中率为 `hits / (hits + fallback)`。
+- 描述：仅存算分离模式。BE 的 StarOSWorker 因本地缓存中没有所需的 shard 信息（即 FE 在查询 / 合并 / lake 操作引用该 shard 之前尚未将其推送到该 BE）而实际向 starmgr 发起的 RPC（`g_starlet->get_shard_info()`）总次数。仅在 starlet 就绪检查通过且 RPC 实际发出后才计入；starlet 尚未就绪的超时不包含在内。正常情况下该值应接近零。持续或上升的速率是一个强烈信号，表明 FE 端的任务或节点选择正把任务调度到尚未拥有该 shard 的 BE，或者 FE 端的 shard 推送存在滞后。建议告警：单个 BE 在 5 分钟窗口内的速率过高。在负责向开启了 `file_bundling` 的表导入数据的协调节点上，这类 RPC 大多会被 tablet 存储位置交接省掉，省掉的次数计入 `lake_tablet_location_handoff_hits_total`；交接的命中率为 `hits / (hits + fallback)`。在任何节点上，`lake_shard_info_cache_ttl_sec` 时间内对同一个 tablet 的重复查询，都会直接使用第一次 RPC 后保留的存储位置，这些查询计入 `staros_shard_info_fallback_cache_hits_total`。
 
 ## `starrocks_be_staros_shard_info_fallback_failed_total`
 
@@ -699,11 +730,10 @@ description: "Alphabetical s"
 
 | `reason` | 含义 |
 | --- | --- |
-| `materialized_view_target` | 推导层不支持该物化视图，例如它不是增量物化视图，或排序键不是隐藏的 row-id 列。 |
-| `row_id_span_too_small` | 预估输出太小，无法均匀切分 row-id 范围。 |
-| `row_id_space_not_pristine` | 自增计数器已经发放过 id，无法安全地推导切分点。 |
+| `materialized_view_target` | 目标是增量物化视图，但推导层无法为其确定键：它有多个可见索引，排序键并非仅由隐藏的 row-id 列构成，或者 row id 是按键值顺序编码的，而不是指纹。如果写入物化视图的不是该视图自身的刷新任务，也会记录该值。 |
+| `row_id_span_too_small` | 预估输出太小，无法均匀切分 row-id 范围；或者平摊到刷新覆盖写的每个分区后，不足两个大小为 `tablet_reshard_min_split_size` 的 tablet。刷新覆盖写多个分区时，如果预估输出所需的 tablet 数不超过分区数，也会记录该值。 |
 | `estimate_unavailable` | 没有可用的输出大小估计，无法确定 tablet 数量。从没有表统计信息的 External Catalog 表执行 INSERT 时也会记录该值。 |
-| `multiple_temporary_partitions` | 刷新会写入多个替换分区，切分后大多数 tablet 会是空的。开启该功能也不会改变这一点。 |
+| `multiple_temporary_partitions` | 对于 Row ID 由存储引擎生成的视图，刷新会写入多个替换分区。每个分区的 Row ID 只落在取值范围的一小段内，切分后大多数 tablet 会是空的。开启该功能也不会改变这一点。 |
 | `derivation_failed` | 推导切分点失败，或推导出的切分点未通过校验。 |
 | `stale_catalog_state` | 推导出切分点之后、构建作业之前，物化视图的可见 index 发生了变化。 |
 | `submit_failed` | 推导出的切分点未能生成被接纳的 reshard 作业。 |
@@ -744,7 +774,7 @@ description: "Alphabetical s"
 
 - 单位：计数
 - 类型：累计
-- 描述：多分区路径计数器。grouper 因单次导入的预测分区数超过 `tablet_pre_split_max_partitions_per_load` 而丢弃的分区数。grouper 保留数据量最大的分区（若 data tier 只采样了部分文件且分区值取自文件路径，按字节数判断，否则按样本数判断），丢弃数据量最小的尾部；被丢弃的分区回退到 BE 运行时自动建分区且不做预分裂。持续非零意味着上限正在生效 —— 可考虑调高 `tablet_pre_split_max_partitions_per_load` 或降低载入的分区基数。
+- 描述：多分区路径计数器。因单次导入的分区数超过 `tablet_pre_split_max_partitions_per_load` 而未做预分裂的分区数。对采样导入，grouper 保留数据量最大的预测分区（若 data tier 只采样了部分文件且分区值取自文件路径，按字节数判断，否则按样本数判断），丢弃数据量最小的尾部；被丢弃的分区回退到 BE 运行时自动建分区且不做预分裂。若增量物化视图的 Row ID 是刷新查询计算出的指纹，其刷新中符合条件的分区按分区名排序后超出上限的部分计入其中，这些分区已经建好，保持单个 tablet。持续非零意味着上限正在生效 —— 可考虑调高 `tablet_pre_split_max_partitions_per_load` 或降低载入的分区基数。
 
 ## `starrocks_fe_tablet_pre_split_pre_create`
 
@@ -816,7 +846,7 @@ description: "Alphabetical s"
 
 - 单位：计数
 - 类型：瞬时
-- 描述：表示每个 BE 节点上的最高 Compaction Score。
+- 描述：表示每个 BE 节点上的最高 Compaction Score，即 `tablet_base_max_compaction_score` 和 `tablet_cumulative_max_compaction_score` 中的较大值。不包含主键表的 Compaction Score（`tablet_update_max_compaction_score`）。
 
 ## `starrocks_fe_tablet_num`
 

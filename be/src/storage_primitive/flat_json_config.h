@@ -18,7 +18,7 @@
 
 #include <sstream>
 
-#include "gen_cpp/AgentService_types.h"
+#include "gen_cpp/Descriptors_types.h"
 
 namespace starrocks {
 class FlatJsonConfig {

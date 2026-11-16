@@ -136,8 +136,8 @@ private:
 
     // Best-effort remove every .idx file whose path we recorded in
     // `_written_paths`. Called from `run()` when the overall build fails so
-    // we don't leak objects on S3 when the ADD INDEX fast path aborts and
-    // the caller falls back to the legacy rewrite path. Errors here are
+    // we don't leak objects on S3 when the ADD INDEX fast path aborts; the
+    // caller returns the error and FE cancels the alter. Errors here are
     // swallowed (logged): the cleanup is a courtesy, vacuum still reclaims
     // these files later as orphans.
     void cleanup_written_idx_files();

@@ -33,6 +33,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeMultiColumnDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
@@ -57,6 +58,7 @@ import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.MultiColumnStatsMeta;
@@ -72,6 +74,7 @@ import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import com.starrocks.statistic.columns.PredicateColumnsStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -591,6 +594,140 @@ public class AnalyzeStmtTest {
         Assertions.assertEquals(2, res9.size());
         Assertions.assertEquals("upper_tbl", res9.get(0).get(1)); // Table
         Assertions.assertEquals("tbl", res9.get(1).get(1)); // Table
+    }
+
+    @Test
+    public void testShowStatsMetaSkipsCostlyColumnsForFilteredRows() {
+        Database db = getConnectContext().getGlobalStateMgr().getLocalMetastore().getDb("db");
+        Table tbl = db.getTable("tbl");
+        Table tb2 = db.getTable("tb2");
+        AnalyzeMgr analyzeMgr = getConnectContext().getGlobalStateMgr().getAnalyzeMgr();
+        analyzeMgr.dropBasicStatsMetaAndData(getConnectContext(), List.of(tbl.getId(), tb2.getId()));
+        analyzeMgr.addBasicStatsMeta(new BasicStatsMeta(db.getId(), tbl.getId(), null,
+                StatsConstants.AnalyzeType.FULL, LocalDateTime.of(2022, 1, 1, 10, 0), Maps.newHashMap(), 1000));
+        analyzeMgr.addBasicStatsMeta(new BasicStatsMeta(db.getId(), tb2.getId(), null,
+                StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.of(2022, 3, 15, 14, 30), Maps.newHashMap(), 5000));
+        // the catalog does not exist, so building its row fails
+        analyzeMgr.replayAddExternalBasicStatsMeta(new ExternalBasicStatsMeta("no_such_catalog", "db1", "t1", null,
+                StatsConstants.AnalyzeType.FULL, LocalDateTime.of(2022, 1, 1, 10, 0), Maps.newHashMap()));
+
+        List<String> healthTables = new ArrayList<>();
+        List<String> remoteDbs = new ArrayList<>();
+        new MockUp<BasicStatsMeta>() {
+            @Mock
+            public BasicStatsMeta.TableHealthyMetrics getTableHealthyMetrics(Invocation inv, Table table) {
+                healthTables.add(table.getName());
+                return inv.proceed();
+            }
+        };
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(Invocation inv, ConnectContext context, String catalogName, String dbName) {
+                remoteDbs.add(catalogName);
+                return inv.proceed();
+            }
+        };
+        try {
+            // WHERE on a cheap column: health and remote tables are only loaded for the matching row
+            List<List<String>> res = ShowExecutor.execute(
+                    (ShowBasicStatsMetaStmt) analyzeSuccess("show stats meta where `Table` = 'tb2'"),
+                    getConnectContext()).getResultRows();
+            Assertions.assertEquals(1, res.size());
+            Assertions.assertEquals("tb2", res.get(0).get(1));
+            Assertions.assertFalse(res.get(0).get(6).isEmpty());
+            Assertions.assertFalse(res.get(0).get(9).isEmpty());
+            Assertions.assertFalse(res.get(0).get(10).isEmpty());
+            Assertions.assertEquals(List.of("tb2"), healthTables);
+            Assertions.assertTrue(remoteDbs.isEmpty(), remoteDbs.toString());
+
+            // WHERE on a costly column: every row is built, and filtered afterwards
+            healthTables.clear();
+            res = ShowExecutor.execute(
+                    (ShowBasicStatsMetaStmt) analyzeSuccess(
+                            "show stats meta where `Healthy` like '%' and `Database` = 'db'"),
+                    getConnectContext()).getResultRows();
+            Assertions.assertTrue(res.stream().anyMatch(r -> r.get(1).equals("tbl")), res.toString());
+            Assertions.assertTrue(res.stream().anyMatch(r -> r.get(1).equals("tb2")), res.toString());
+            Assertions.assertTrue(healthTables.containsAll(List.of("tbl", "tb2")), healthTables.toString());
+            Assertions.assertTrue(remoteDbs.contains("no_such_catalog"), remoteDbs.toString());
+
+            // LIMIT without WHERE / ORDER BY stops once enough rows are built
+            healthTables.clear();
+            res = ShowExecutor.execute((ShowBasicStatsMetaStmt) analyzeSuccess("show stats meta limit 1"),
+                    getConnectContext()).getResultRows();
+            Assertions.assertEquals(1, res.size());
+            Assertions.assertEquals(1, healthTables.size(), healthTables.toString());
+
+            // the row of an unreachable catalog is skipped without failing the statement
+            res = ShowExecutor.execute((ShowBasicStatsMetaStmt) analyzeSuccess("show stats meta"),
+                    getConnectContext()).getResultRows();
+            Assertions.assertTrue(res.stream().noneMatch(r -> r.get(0).startsWith("no_such_catalog")), res.toString());
+        } finally {
+            analyzeMgr.getExternalBasicStatsMetaMap().values().removeIf(m -> m.getCatalogName().equals("no_such_catalog"));
+            analyzeMgr.dropBasicStatsMetaAndData(getConnectContext(), List.of(tbl.getId(), tb2.getId()));
+        }
+    }
+
+    @Test
+    public void testShowAnalyzeStatusLoadsTablesOnlyForFilteredRows() {
+        Database db = getConnectContext().getGlobalStateMgr().getLocalMetastore().getDb("db");
+        Table tbl = db.getTable("tbl");
+        AnalyzeMgr analyzeMgr = getConnectContext().getGlobalStateMgr().getAnalyzeMgr();
+        // the smallest ids, so these two come first in the id order of SHOW ANALYZE STATUS
+        long nativeId = Long.MIN_VALUE + 1;
+        long externalId = Long.MIN_VALUE + 2;
+        AnalyzeStatus nativeStatus = new NativeAnalyzeStatus(nativeId, db.getId(), tbl.getId(),
+                Lists.newArrayList(), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE,
+                Maps.newHashMap(), LocalDateTime.of(2022, 1, 1, 10, 0));
+        nativeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        analyzeMgr.replayAddAnalyzeStatus(nativeStatus);
+        // the catalog does not exist, so loading its table fails
+        AnalyzeStatus externalStatus = new ExternalAnalyzeStatus(externalId, "no_such_catalog", "db1", "t1",
+                "t1:uuid", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE,
+                Maps.newHashMap(), LocalDateTime.of(2022, 1, 1, 10, 0));
+        externalStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        analyzeMgr.replayAddAnalyzeStatus(externalStatus);
+
+        List<String> loadedCatalogs = new ArrayList<>();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Table getTable(Invocation inv, ConnectContext context, String catalogName, String dbName,
+                                  String tblName) {
+                loadedCatalogs.add(catalogName);
+                return inv.proceed();
+            }
+        };
+        try {
+            // WHERE on a column known before the table is loaded: other rows never load their table
+            List<List<String>> res = ShowExecutor.execute(
+                    (ShowAnalyzeStatusStmt) analyzeSuccess("show analyze status where `Id` = '" + nativeId + "'"),
+                    getConnectContext()).getResultRows();
+            Assertions.assertEquals(1, res.size(), res.toString());
+            Assertions.assertEquals("tbl", res.get(0).get(2));
+            Assertions.assertTrue(loadedCatalogs.contains("default_catalog"), loadedCatalogs.toString());
+            Assertions.assertFalse(loadedCatalogs.contains("no_such_catalog"), loadedCatalogs.toString());
+
+            // WHERE on Columns, which needs the table: every row loads it, and is filtered afterwards
+            loadedCatalogs.clear();
+            res = ShowExecutor.execute(
+                    (ShowAnalyzeStatusStmt) analyzeSuccess(
+                            "show analyze status where `Columns` like '%' and `Table` = 'tbl'"),
+                    getConnectContext()).getResultRows();
+            Assertions.assertTrue(res.stream().anyMatch(r -> r.get(0).equals(String.valueOf(nativeId))),
+                    res.toString());
+            Assertions.assertTrue(loadedCatalogs.contains("no_such_catalog"), loadedCatalogs.toString());
+
+            // LIMIT without WHERE / ORDER BY stops once enough rows are built
+            loadedCatalogs.clear();
+            res = ShowExecutor.execute((ShowAnalyzeStatusStmt) analyzeSuccess("show analyze status limit 1"),
+                    getConnectContext()).getResultRows();
+            Assertions.assertEquals(1, res.size());
+            Assertions.assertEquals(String.valueOf(nativeId), res.get(0).get(0));
+            Assertions.assertEquals(List.of("default_catalog"), loadedCatalogs);
+        } finally {
+            analyzeMgr.getAnalyzeStatusMap().remove(nativeId);
+            analyzeMgr.getAnalyzeStatusMap().remove(externalId);
+        }
     }
 
     @Test

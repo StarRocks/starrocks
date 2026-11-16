@@ -17,7 +17,14 @@
 
 #define private public
 
+#include <limits>
+#include <random>
+#include <string>
+#include <vector>
+
+#include "base/time/timezone_utils.h"
 #include "types/date_value.h"
+#include "types/datetime_value.h"
 #include "types/time_types.h"
 #include "types/timestamp_value.h"
 
@@ -162,6 +169,69 @@ TEST(TimestampValueTest, from_date_format_str_rejects_zero_day_or_month) {
     const char* dt_fmt = "%Y-%m-%d %H:%i:%s";
     ASSERT_FALSE(ts2.from_datetime_format_str("0000-01-00 00:00:00", 19, dt_fmt));
     ASSERT_TRUE(ts2.from_datetime_format_str("2020-01-01 00:00:00", 19, dt_fmt));
+}
+
+// from_unixtime_with_offset, given the zone's offset at the instant, builds exactly what from_unixtime builds with a
+// cctz conversion, for TimestampValue and DateTimeValue: random instants over years 1..9999 and beyond, the edges of
+// that range, negative and carried microseconds, and DST and fixed zones.
+TEST(TimestampValueTest, from_unixtime_with_offset_matches_cctz) {
+    std::mt19937_64 rng(5);
+    std::vector<int64_t> seconds = {0,
+                                    -1,
+                                    1,
+                                    timestamp::MIN_CIVIL_UNIX_SECOND,
+                                    timestamp::MIN_CIVIL_UNIX_SECOND + 2 * SECS_PER_DAY,
+                                    timestamp::MIN_CIVIL_UNIX_SECOND + 2 * SECS_PER_DAY - 1,
+                                    timestamp::MAX_CIVIL_UNIX_SECOND,
+                                    timestamp::MAX_CIVIL_UNIX_SECOND - 2 * SECS_PER_DAY,
+                                    timestamp::MAX_CIVIL_UNIX_SECOND - 2 * SECS_PER_DAY + 1,
+                                    timestamp::MIN_CIVIL_UNIX_SECOND - 86400 * 400,
+                                    timestamp::MAX_CIVIL_UNIX_SECOND + 86400 * 400,
+                                    std::numeric_limits<int64_t>::min() / 1000000,
+                                    std::numeric_limits<int64_t>::max() / 1000000};
+    for (int i = 0; i < 20000; i++) {
+        seconds.push_back(timestamp::MIN_CIVIL_UNIX_SECOND +
+                          static_cast<int64_t>(rng() % static_cast<uint64_t>(timestamp::MAX_CIVIL_UNIX_SECOND -
+                                                                             timestamp::MIN_CIVIL_UNIX_SECOND)));
+        seconds.push_back(static_cast<int64_t>(rng() % 4000000000ULL) - 1000000000LL);
+    }
+    for (const std::string name : {"America/Los_Angeles", "Europe/London", "Asia/Kolkata", "UTC", "-03:30"}) {
+        cctz::time_zone tz;
+        ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(name, tz)) << name;
+        for (size_t i = 0; i < seconds.size(); i++) {
+            const int64_t second = seconds[i];
+            const int64_t microsecond = static_cast<int64_t>(i % 5) * 250000 - 500000;
+            // The offset a TzOffsetCache gives: cctz's at the instant.
+            const cctz::time_point<cctz::seconds> tp =
+                    std::chrono::time_point_cast<cctz::seconds>(std::chrono::system_clock::from_time_t(0)) +
+                    cctz::seconds(second);
+            const int64_t exact_offset = tz.lookup_offset(tp).offset;
+
+            TimestampValue want;
+            want.from_unixtime(second, microsecond, tz);
+            TimestampValue got;
+            got.from_unixtime_with_offset(second, microsecond, exact_offset);
+            ASSERT_EQ(want.timestamp(), got.timestamp()) << name << " second=" << second << " us=" << microsecond;
+
+            DateTimeValue want_dtv;
+            ASSERT_TRUE(want_dtv.from_unixtime(second, microsecond, tz));
+            DateTimeValue got_dtv;
+            got_dtv.from_unixtime_with_offset(second, microsecond, exact_offset);
+            ASSERT_EQ(want_dtv.year(), got_dtv.year()) << name << " second=" << second;
+            ASSERT_EQ(want_dtv.month(), got_dtv.month()) << name << " second=" << second;
+            ASSERT_EQ(want_dtv.day(), got_dtv.day()) << name << " second=" << second;
+            ASSERT_EQ(want_dtv.hour(), got_dtv.hour()) << name << " second=" << second;
+            ASSERT_EQ(want_dtv.minute(), got_dtv.minute()) << name << " second=" << second;
+            ASSERT_EQ(want_dtv.second(), got_dtv.second()) << name << " second=" << second;
+            ASSERT_EQ(want_dtv.microsecond(), got_dtv.microsecond()) << name << " second=" << second;
+            ASSERT_EQ(want_dtv.type(), got_dtv.type()) << name << " second=" << second;
+            char want_buf[64];
+            char got_buf[64];
+            want_dtv.to_string(want_buf);
+            got_dtv.to_string(got_buf);
+            ASSERT_STREQ(want_buf, got_buf) << name << " second=" << second;
+        }
+    }
 }
 
 } // namespace starrocks

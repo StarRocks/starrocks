@@ -40,6 +40,11 @@ public class MysqlChangeUserPacket extends MysqlPacket {
         return userName;
     }
 
+    /** The auth plugin the client says these bytes are framed for; may be null on old clients. */
+    public String getPluginName() {
+        return pluginName;
+    }
+
     public byte[] getAuthResponse() {
         return authResponse;
     }

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical q - r"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 指标 q 到 r
@@ -97,6 +98,12 @@ description: "Alphabetical q - r"
 - 标签：`storage_type`
 - 描述：按存储后端细分的、恢复阶段读侧溢出 IO（block 读取）累计耗时。用于跟踪读盘性能。
 
+## `ranger_audit_init_failed`
+
+- 单位：-
+- 类型：Gauge
+- 描述：本 FE 初始化 Ranger 审计是否失败。`1` 表示鉴权仍正常工作，但在修正审计配置并重启之前，本 FE 不会写出任何 Ranger 审计事件，FE 日志中会写明失败的审计目的地；否则为 `0`。常见原因是配置了 FE 未打包的审计目的地：FE 只提供 `file` 和 `solr` 两种 Ranger 审计目的地。
+
 ## `readable_blocks_total (Deprecated)`
 
 ## `recycle_bin_database_num`
@@ -147,12 +154,12 @@ description: "Alphabetical q - r"
 ## `resource_group_driver_queue_level_schedule_count`
 
 - 单位：计数
-- 描述：每个资源组的 Pipeline 执行队列中，从各层级取出的 Driver 累计数量。
+- 描述：每个资源组的 Pipeline 执行队列中，从各层级取出的 Driver 累计数量。该 Counter 包含仍在执行的旧版本资源组，并在其清理后保留最终累计值。在同一 BE/CN 进程内，更新、删除或以同名重建资源组时，累计值保持连续。
 
 ## `resource_group_driver_queue_level_wait_time_ns`
 
 - 单位：纳秒
-- 描述：每个资源组的 Pipeline 执行队列中，从各层级取出的 Driver 在就绪队列中累计等待的时间。用它的增量除以 `resource_group_driver_queue_level_schedule_count` 的增量，即为该层级的平均等待时间。
+- 描述：每个资源组的 Pipeline 执行队列中，从各层级取出的 Driver 在就绪队列中累计等待的时间。与调度次数 Counter 一样，该指标包含仍在执行的旧版本资源组，并在同一 BE/CN 进程内更新、删除或以同名重建资源组时保留累计值。用它的增量除以 `resource_group_driver_queue_level_schedule_count` 的增量，即为该层级的平均等待时间。
 
 ## `resource_group_inuse_cpu_cores`
 

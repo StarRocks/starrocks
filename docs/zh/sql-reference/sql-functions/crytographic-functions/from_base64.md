@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将 Base64 编码过的字符串进行解码。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # from_base64

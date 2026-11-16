@@ -73,11 +73,16 @@ public class AccessControlContext {
     // exactly as the directory returned them, because Ranger matches group names case-sensitively.
     private Set<String> groups = new HashSet<>();
 
-    // One input to `groups` above, not a second group set: the groups read from the `memberOf`
-    // attribute of the user's own LDAP entry. The LDAP provider writes it on every authentication -
-    // empty when the group source does not read memberOf - so it always states what *this* login
-    // resolved. Nothing caches it. Never null.
-    private Set<String> memberOfGroups = new HashSet<>();
+    // One input to `groups` above, not a second group set: the groups the authenticator resolved by
+    // itself while authenticating - the `memberOf` attribute of the user's own LDAP entry, or a claim
+    // of the verified JWT. The provider writes it on every authentication - empty when the group
+    // source does not read them - so it always states what *this* login resolved. Nothing caches it.
+    // Never null.
+    //
+    // One field is enough for both: the chain stops at the first integration that authenticates
+    // (AuthenticationHandler's loop breaks as soon as it has a result), so a login has exactly one
+    // authenticator and the two mechanisms can never both contribute.
+    private Set<String> authenticatorGroups = new HashSet<>();
 
     // currentRoleIds is the role that has taken effect in the current session.
     private Set<Long> currentRoleIds = new HashSet<>();
@@ -182,12 +187,29 @@ public class AccessControlContext {
         return groups;
     }
 
-    public Set<String> getMemberOfGroups() {
-        return memberOfGroups;
+    public Set<String> getAuthenticatorGroups() {
+        return authenticatorGroups;
     }
 
+    public void setAuthenticatorGroups(Set<String> authenticatorGroups) {
+        this.authenticatorGroups = authenticatorGroups == null ? new HashSet<>() : authenticatorGroups;
+    }
+
+    /**
+     * @deprecated renamed to {@link #getAuthenticatorGroups()} once a JWT claim became a second
+     * source of the same thing. Kept because this class is public SPI.
+     */
+    @Deprecated
+    public Set<String> getMemberOfGroups() {
+        return getAuthenticatorGroups();
+    }
+
+    /**
+     * @deprecated renamed to {@link #setAuthenticatorGroups(Set)}.
+     */
+    @Deprecated
     public void setMemberOfGroups(Set<String> memberOfGroups) {
-        this.memberOfGroups = memberOfGroups == null ? new HashSet<>() : memberOfGroups;
+        setAuthenticatorGroups(memberOfGroups);
     }
 
     public void setGroups(Set<String> groups) {

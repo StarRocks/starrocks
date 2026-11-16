@@ -49,6 +49,12 @@ TEST(StarOSWorkerMetricsTest, InstallRegistersFallbackMetrics) {
 
     metrics.lake_tablet_location_handoff_entries.set_value(8);
     assert_metric_value(&registry, "lake_tablet_location_handoff_entries", "8");
+
+    metrics.staros_shard_info_fallback_cache_hits_total.increment(9);
+    assert_metric_value(&registry, "staros_shard_info_fallback_cache_hits_total", "9");
+
+    metrics.staros_shard_info_fallback_cache_entries.set_value(10);
+    assert_metric_value(&registry, "staros_shard_info_fallback_cache_entries", "10");
 }
 
 } // namespace starrocks

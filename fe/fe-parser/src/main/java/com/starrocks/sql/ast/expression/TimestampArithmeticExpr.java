@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.expression.ArithmeticExpr.Operator;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.ParsingException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -73,7 +74,12 @@ public class TimestampArithmeticExpr extends Expr {
     public TimestampArithmeticExpr(ArithmeticExpr.Operator op, Expr e1, Expr e2,
                                    String timeUnitIdent, boolean intervalFirst, NodePosition pos) {
         super(pos);
-        Preconditions.checkState(op == Operator.ADD || op == Operator.SUBTRACT);
+        try {
+            Preconditions.checkState(op == Operator.ADD || op == Operator.SUBTRACT);
+        } catch (IllegalStateException e) {
+            throw new ParsingException(String.format(
+                    "Interval arithmetic only supports + and -, but got '%s'", op), pos);
+        }
         this.funcName = null;
         this.op = op;
         this.timeUnitIdent = timeUnitIdent;

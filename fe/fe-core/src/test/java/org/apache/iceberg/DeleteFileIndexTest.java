@@ -14,16 +14,19 @@
 
 package org.apache.iceberg;
 
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.connector.iceberg.DeleteFileWrapper;
 import org.apache.iceberg.exceptions.ValidationException;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -63,5 +66,24 @@ public class DeleteFileIndexTest {
         when(file.contentSizeInBytes()).thenReturn(40L);
         when(file.dataSequenceNumber()).thenReturn(3L);
         return DeleteFileWrapper.wrap(file);
+    }
+
+    @Test
+    public void emptyIndexBuildsWithoutSpecsOrSchemas() {
+        // StarRocksIcebergTableScan.refreshDataFileCache() builds this sentinel with neither specsById nor
+        // schemasById. build() resolves equality-delete field IDs against the table schemas up front, so
+        // it must tolerate both maps being absent rather than dereference specsById.
+        DeleteFileIndex index = DeleteFileIndex.builderFor(new ArrayList<>()).build();
+        assertTrue(index.isEmpty());
+    }
+
+    @Test
+    public void emptyIndexBuildsWithSpecsButNoSchemas() {
+        // The path most internal callers take: specsById set, schemasById not. Schemas then come from the specs.
+        PartitionSpec spec = PartitionSpec.unpartitioned();
+        DeleteFileIndex index = DeleteFileIndex.builderFor(new ArrayList<>())
+                .specsById(ImmutableMap.of(spec.specId(), spec))
+                .build();
+        assertTrue(index.isEmpty());
     }
 }

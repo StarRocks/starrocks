@@ -1,0 +1,96 @@
+-- name: test_iceberg_v4_read_write
+-- Format-version 4 tables. Iceberg 1.12 writes their manifests as Parquet (the manifest list stays Avro) and otherwise
+-- commits them like v3 tables. Every path that reads manifests
+-- must handle Parquet ones: FE planning (local and on BE), statistics, the metadata tables read on BE, compaction and
+-- snapshot expiry. A v3 table upgraded to v4 keeps its Avro manifests next to the new Parquet ones.
+
+create external catalog iceberg_v4_rw_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create database iceberg_v4_rw_${uuid0}.db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/v4_rw_${uuid0}/db_${uuid0}"
+);
+set catalog iceberg_v4_rw_${uuid0};
+use db_${uuid0};
+
+create table t(
+    id int,
+    v string,
+    p int
+) partition by(p) properties ("format-version" = "4");
+
+-- The forced sink shuffle and one sink driver write one data file per partition per statement, so the file
+-- counts below do not depend on the cluster size.
+set connector_sink_shuffle_mode = 'force';
+set pipeline_sink_dop = 1;
+
+-- four data files: (a, p=0), (a, p=1), (b, p=0), (b, p=1)
+insert into t select x, concat('a', x), x % 2 from table(generate_series(1, 20)) s(x);
+insert into t select x, concat('b', x), x % 2 from table(generate_series(21, 40)) s(x);
+
+-- expected: no Avro manifest, and Parquet ones
+select sum(if(path like '%.avro', 1, 0)), sum(if(path like '%.parquet', 1, 0)) > 0 from t$manifests;
+
+-- planning, partition and bound pruning, and the metadata-answered aggregates read the Parquet manifests
+-- expected: 40 820 1 40
+select count(*), sum(id), min(id), max(id) from t;
+-- expected: 20
+select count(*) from t where p = 1;
+-- expected: 10
+select count(*) from t where id > 30;
+-- expected: (0, 20), (1, 20)
+select p, count(*) from t group by p order by p;
+
+-- metadata tables, read on BE. expected: (20, 2, 0, 0) twice, then (0, 4)
+select record_count, file_count, position_delete_record_count, position_delete_file_count
+    from t$partitions order by record_count, position_delete_record_count;
+select data_file.content, count(*) from t$entries where status != 2 group by data_file.content order by 1;
+
+-- distributed planning reads the manifests on BE. expected: 40 820, then 1 to 9
+set plan_mode = 'distributed';
+select count(*), sum(id) from t;
+select id from t where id < 10 order by id;
+set plan_mode = 'local';
+
+-- compaction. expected: 40 820; one data file of 20 rows per partition
+[UC]alter table t execute rewrite_data_files("rewrite_all" = "true");
+select count(*), sum(id) from t;
+select content, record_count from t$files order by content, record_count;
+
+-- a far-future bound: Iceberg never expires the current snapshot. expected: 1, then 40 820
+alter table t execute expire_snapshots(older_than = '2099-01-01 00:00:00');
+select count(*) from t$snapshots;
+select count(*), sum(id) from t;
+
+-- INSERT OVERWRITE replaces the partitions it writes: p=0 now holds one row, p=1 is kept.
+-- expected: (0, 1, 1000), (1, 20, 400)
+insert overwrite t select 1000, 'z', 0;
+select p, count(*), sum(id) from t group by p order by p;
+
+-- a v3 table upgraded to v4
+create table u(id int) properties ("format-version" = "3");
+insert into u values (1), (2), (3);
+alter table u set ("format-version" = "4");
+insert into u values (4);
+-- expected: Avro and Parquet manifests side by side
+select sum(if(path like '%.avro', 1, 0)) > 0, sum(if(path like '%.parquet', 1, 0)) > 0 from u$manifests;
+-- expected: 1 2 3 4 for both plan modes
+select id from u order by id;
+set plan_mode = 'distributed';
+select id from u order by id;
+set plan_mode = 'local';
+
+set pipeline_sink_dop = 0;
+set connector_sink_shuffle_mode = 'auto';
+drop table t force;
+drop table u force;
+drop database db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_v4_rw_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/v4_rw_${uuid0} >/dev/null || echo "exit 0" >/dev/null

@@ -23,6 +23,8 @@ import com.starrocks.load.loadv2.IVMInsertLoadTxnCallback;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -46,9 +48,17 @@ public abstract class MVIVMTestBase extends MVTestBase {
         MvId mvId = mv.getMvId();
         IVMInsertLoadTxnCallback callback =
                 new IVMInsertLoadTxnCallback(mvId.getDbId(), mv.getId());
-        callback.beforeCommitted(null);
-        callback.afterCommitted(null);
+        TransactionState txnState = insertTxnState();
+        callback.beforeCommitted(txnState);
+        callback.afterCommitted(txnState);
         return execPlan;
+    }
+
+    /** Shaped like the transaction a real INSERT commits with: the callback records its window on the attachment. */
+    protected static TransactionState insertTxnState() {
+        TransactionState txnState = new TransactionState();
+        txnState.setTxnCommitAttachment(new InsertTxnCommitAttachment(0));
+        return txnState;
     }
 
     public abstract void advanceTableVersionTo(long toVersion);

@@ -35,6 +35,7 @@
 #include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/primary_key_manager.h"
+#include "storage/lake/replication_schema_utils.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
@@ -454,6 +455,10 @@ public:
             // then we can retry again.
             // 1. unload index first
             _index_entry->value().unload();
+            // The entry outlives this publish when another holder still references it, so it must not stay
+            // charged for the memory the unload just freed.
+            _tablet.primary_key_mgr()->index_cache().update_object_size(_index_entry,
+                                                                        _index_entry->value().memory_usage());
             // 2. and then release guard
             _guard.reset(nullptr);
             // 3. remove index from cache to save resource
@@ -485,6 +490,9 @@ public:
     }
 
     Status apply(const TxnLogPB& log) override {
+        if (log.has_op_replication()) {
+            RETURN_IF_ERROR(validate_normalized_replication_schema(log.op_replication(), *_metadata));
+        }
         // Tablet id check for cross publish
         if (log.tablet_id() != _metadata->id()) {
             return Status::InternalError("Tablet id in txn log and metadata are not the same");
@@ -572,26 +580,24 @@ public:
         _tablet.primary_key_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.primary_key_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        RETURN_IF_ERROR(prepare_primary_index());
-
-        // Collect all write operations data
-        for (const auto& log : txn_logs) {
-            if (log->has_op_write()) {
-                const auto& op_write = log->op_write();
-                RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata, _tablet.tablet_mgr()));
-                if (is_column_mode_partial_update(op_write)) {
-                    RETURN_IF_ERROR(_tablet.primary_key_mgr()->publish_column_mode_partial_update(
-                            op_write, log->txn_id(), _metadata, &_tablet, _index_entry, &_builder, _base_version));
-                } else {
-                    RETURN_IF_ERROR(_tablet.primary_key_mgr()->publish_primary_key_tablet(
-                            op_write, log->txn_id(), _metadata, &_tablet, _index_entry, &_builder, _base_version,
-                            true));
-                }
-            }
+        // The batch's rowset reaches _metadata only in set_final_rowset, after every log is applied, so recover
+        // cannot see any part of the batch whichever flag the failure raised. Roll back to the state before the
+        // batch, recover from it, and apply the whole batch again. The rollback needs a snapshot because a
+        // failed attempt also writes to _metadata directly: del stats, schema, and column-mode partial updates.
+        std::unique_ptr<TabletMetadata> before_batch;
+        if (config::enable_primary_key_recover) {
+            before_batch = std::make_unique<TabletMetadata>(*_metadata);
         }
-        RETURN_IF_ERROR(_builder.set_final_rowset());
-
-        return Status::OK();
+        auto ret = batch_apply_write_logs(txn_logs);
+        if (before_batch != nullptr && need_recover(ret)) {
+            LOG(WARNING) << "Batch apply needs recover, tablet_id: " << _tablet.id() << " status: " << ret;
+            _metadata->CopyFrom(*before_batch);
+            _builder.reset_pending_rowset_for_recover();
+            RETURN_IF_ERROR(recover());
+            _builder.set_recover_flag(RecoverFlag::OK);
+            ret = batch_apply_write_logs(txn_logs);
+        }
+        return ret;
     }
 
     Status finish() override {
@@ -645,22 +651,26 @@ private:
         return mode == PartialUpdateMode::COLUMN_UPDATE_MODE || mode == PartialUpdateMode::COLUMN_UPSERT_MODE;
     }
 
+    // Rebuild the delvecs and the primary index from the rowsets in _metadata.
+    Status recover() {
+        TRACE_COUNTER_SCOPE_LATENCY_US("primary_key_recover");
+        LOG(INFO) << "Primary Key recover begin, tablet_id: " << _tablet.id() << " base_ver: " << _base_version;
+        // Unload the index before letting go of it, as a failed publish does: this publish may already
+        // have written to it, and recovery cannot remove it from the cache while another holder still
+        // references it. The retry must then reload the index from the metadata instead of working on
+        // top of this attempt's writes.
+        handle_failure();
+        // rebuild delvec and pk index
+        LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
+        RETURN_IF_ERROR(recover.recover());
+        LOG(INFO) << "Primary Key recover finish, tablet_id: " << _tablet.id() << " base_ver: " << _base_version;
+        return Status::OK();
+    }
+
     Status check_and_recover(const std::function<Status()>& publish_func) {
         auto ret = publish_func();
         if (config::enable_primary_key_recover && need_recover(ret)) {
-            {
-                TRACE_COUNTER_SCOPE_LATENCY_US("primary_key_recover");
-                LOG(INFO) << "Primary Key recover begin, tablet_id: " << _tablet.id() << " base_ver: " << _base_version;
-                // release and remove index entry's reference
-                _tablet.primary_key_mgr()->release_primary_index_cache(_index_entry);
-                _guard.reset(nullptr);
-                _index_entry = nullptr;
-                // rebuild delvec and pk index
-                LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
-                RETURN_IF_ERROR(recover.recover());
-                LOG(INFO) << "Primary Key recover finish, tablet_id: " << _tablet.id()
-                          << " base_ver: " << _base_version;
-            }
+            RETURN_IF_ERROR(recover());
             if (need_re_publish(ret)) {
                 _builder.set_recover_flag(RecoverFlag::OK);
                 // duplicate primary key happen when prepare index, so we need to re-publish it.
@@ -699,6 +709,28 @@ private:
         RETURN_IF_ERROR(_tablet.put_metadata(_metadata));
         _has_finalized = true;
         return Status::OK();
+    }
+
+    // Apply the op_writes of a multi-statement transaction as one rowset. The caller holds the pk index shard lock.
+    Status batch_apply_write_logs(const TxnLogVector& txn_logs) {
+        RETURN_IF_ERROR(prepare_primary_index());
+
+        // Collect all write operations data
+        for (const auto& log : txn_logs) {
+            if (log->has_op_write()) {
+                const auto& op_write = log->op_write();
+                RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata, _tablet.tablet_mgr()));
+                if (is_column_mode_partial_update(op_write)) {
+                    RETURN_IF_ERROR(_tablet.primary_key_mgr()->publish_column_mode_partial_update(
+                            op_write, log->txn_id(), _metadata, &_tablet, _index_entry, &_builder, _base_version));
+                } else {
+                    RETURN_IF_ERROR(_tablet.primary_key_mgr()->publish_primary_key_tablet(
+                            op_write, log->txn_id(), _metadata, &_tablet, _index_entry, &_builder, _base_version,
+                            true));
+                }
+            }
+        }
+        return _builder.set_final_rowset();
     }
 
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
@@ -927,6 +959,10 @@ private:
                 _is_lake_replication = true;
 
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
+                if (op_replication.normalize_rowset_schema()) {
+                    *_metadata->mutable_rowset_to_schema() = copied_tablet_meta.rowset_to_schema();
+                    *_metadata->mutable_historical_schemas() = copied_tablet_meta.historical_schemas();
+                }
                 _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
                 _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
                 _metadata->mutable_sstable_meta()->CopyFrom(copied_tablet_meta.sstable_meta());
@@ -944,7 +980,7 @@ private:
                 }
                 collect_rowset_referenced_files(_metadata->rowsets(), &new_referenced_rowset_files);
                 for (auto&& old_rowset : old_rowsets) {
-                    if (new_rowset_ids.contains(old_rowset.id())) {
+                    if (!op_replication.normalize_rowset_schema() && new_rowset_ids.contains(old_rowset.id())) {
                         continue;
                     }
                     add_unreferenced_rowset_files_to_compaction_inputs(
@@ -1073,6 +1109,9 @@ public:
     }
 
     Status apply(const TxnLogPB& log) override {
+        if (log.has_op_replication()) {
+            RETURN_IF_ERROR(validate_normalized_replication_schema(log.op_replication(), *_metadata));
+        }
         // Tablet id check for cross publish
         if (log.tablet_id() != _metadata->id()) {
             return Status::InternalError("Tablet id in txn log and metadata are not the same");
@@ -1218,7 +1257,7 @@ public:
         merged_rowset->set_num_rows(total_num_rows);
         merged_rowset->set_data_size(total_data_size);
         merged_rowset->set_overlapped(all_segment_metas.size() > 1);
-        // MERGE dedup identity: adopt the first log's uid. All logs of one txn share a producer
+        // Logical rowset identity: adopt the first log's uid. All logs of one txn share a producer
         // version and uids are CopyFrom-preserved across cross-publish, so this is stable across
         // cross-published split children.
         tablet_reshard_helper::inherit_or_set_uid(merged_rowset, txn_logs.front()->op_write().rowset());
@@ -1532,6 +1571,10 @@ private:
             if (op_replication.has_tablet_metadata()) {
                 // Lake replication (replication from shared-data cluster) with tablet metadata provided.
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
+                if (op_replication.normalize_rowset_schema()) {
+                    *_metadata->mutable_rowset_to_schema() = copied_tablet_meta.rowset_to_schema();
+                    *_metadata->mutable_historical_schemas() = copied_tablet_meta.historical_schemas();
+                }
                 _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
                 _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
                 if (copied_tablet_meta.has_idg_meta()) {
@@ -1547,7 +1590,7 @@ private:
                 }
                 collect_rowset_referenced_files(_metadata->rowsets(), &new_referenced_rowset_files);
                 for (auto&& old_rowset : old_rowsets) {
-                    if (new_rowset_ids.contains(old_rowset.id())) {
+                    if (!op_replication.normalize_rowset_schema() && new_rowset_ids.contains(old_rowset.id())) {
                         continue;
                     }
                     add_unreferenced_rowset_files_to_compaction_inputs(

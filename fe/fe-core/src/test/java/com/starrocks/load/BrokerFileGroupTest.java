@@ -21,12 +21,16 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -34,14 +38,14 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.BitmapType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -53,12 +57,6 @@ import java.util.List;
 import java.util.Map;
 
 public class BrokerFileGroupTest {
-    @Mocked
-    private Database db;
-    @Mocked
-    private OlapTable olapTable;
-    @Mocked
-    private HiveTable hiveTable;
     private static StarRocksAssert starRocksAssert;
 
 
@@ -144,25 +142,32 @@ public class BrokerFileGroupTest {
         Column k3 = new Column("k3", IntegerType.INT);
         Column k4 = new Column("k4", IntegerType.INT);
 
-        new Expectations() {
-            {
-                db.getTable("olapTable");
-                result = olapTable;
-                db.getTable("hiveTable");
-                result = hiveTable;
-                olapTable.getBaseSchema();
-                result = Lists.newArrayList(k3, k1);
-                hiveTable.getBaseSchema();
-                result = Lists.newArrayList(k1, k2, k4);
-                hiveTable.getId();
-                result = 10;
-            }
-        };
+        // Do not use @Mocked Database/OlapTable/HiveTable here: @Mocked applies to every instance, including the
+        // mini cluster's ones used by FE daemons. Their calls on those types can be recorded into the Expectations
+        // or make JMockit cascade and redefine classes on other threads, so getTable("hiveTable") may return a
+        // cascaded Table instead of the HiveTable.
+        Database db = new Database(1, "testDb");
+        OlapTable olapTable = new OlapTable(2, "olapTable", Lists.newArrayList(k3, k1), KeysType.AGG_KEYS,
+                new SinglePartitionInfo(), new RandomDistributionInfo(1));
+        olapTable.setIndexMeta(2, "olapTable", olapTable.getFullSchema(), 0, 0, (short) 1, TStorageType.COLUMN,
+                KeysType.AGG_KEYS);
+        olapTable.setBaseIndexMetaId(2);
+        HiveTable hiveTable = HiveTable.builder()
+                .setId(10)
+                .setTableName("hiveTable")
+                .setFullSchema(Lists.newArrayList(k1, k2, k4))
+                .build();
 
         new MockUp<LocalMetastore>() {
             @Mock
-            public Database getDb(String dbName) {
-                return db;
+            public Table getTable(Invocation invocation, String dbName, String tblName) {
+                if ("olapTable".equals(tblName)) {
+                    return olapTable;
+                }
+                if ("hiveTable".equals(tblName)) {
+                    return hiveTable;
+                }
+                return invocation.proceed(dbName, tblName);
             }
         };
 

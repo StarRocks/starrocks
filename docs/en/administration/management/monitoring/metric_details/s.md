@@ -2,9 +2,16 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical s"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Metrics s
+
+## `scheduled_tablet_num`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tablets that are being scheduled by the tablet scheduler of the Leader FE, that is, the total of the tablets in Pending and Running states, including both BALANCE and REPAIR types. Non-Leader FEs report `0`.
 
 ## `schema_change_mem_bytes`
 
@@ -102,6 +109,18 @@ description: "Alphabetical s"
 - Unit: -
 - Description: Metrics returned by `/proc/net/snmp`.
 
+## `staros_shard_info_fallback_cache_entries`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Shared-data only. Number of storage locations this BE keeps for tablets it does not own after requesting them from StarMgr (see the BE configuration item `lake_shard_info_cache_ttl_sec`). They share a 16 MiB LRU cache with the locations counted in `lake_tablet_location_handoff_entries`: an entry is used until its TTL expires and is evicted when the cache needs room, so the value reflects cache occupancy rather than how many entries are still usable.
+
+## `staros_shard_info_fallback_cache_hits_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Number of times this BE resolved the storage location of a tablet it does not own from a location it had requested from StarMgr earlier and kept (see the BE configuration item `lake_shard_info_cache_ttl_sec`), instead of requesting it again. Each increment is one StarMgr GetShard RPC avoided. Together with `starrocks_be_staros_shard_info_fallback_total`, the share answered by the cache is `hits / (hits + fallback)`.
+
 ## `starrocks_be_build_info`
 
 - Unit: -
@@ -188,6 +207,18 @@ description: "Alphabetical s"
 - Type: Cumulative
 - Description: Total time spent casting flat JSON sub-column values during scan.
 
+## `starrocks_be_flat_json_compaction_mixed_inputs_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of times a compaction read a JSON column whose input segments are partly Flat JSON and partly whole JSON with the Flat JSON layout of the flat segments, every sub-column typed JSON. See `enable_compaction_flat_json_mixed_inputs`.
+
+## `starrocks_be_flat_json_compaction_plain_fallback_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of flat JSON compaction outputs written as whole JSON because the buffered input exceeded one eighth of `compaction_memory_limit_per_worker`, divided among the JSON columns written together, without one flat layout to write it with.
+
 ## `starrocks_be_flat_json_compaction_schema_change_total`
 
 - Unit: Count
@@ -198,7 +229,7 @@ description: "Alphabetical s"
 
 - Unit: Count
 - Type: Cumulative
-- Description: Number of flat JSON compactions, counted in `starrocks_be_flat_json_compaction_total`, that wrote their output as it arrived instead of buffering the whole output segment. It happens when the buffered input exceeds one eighth of `compaction_memory_limit_per_worker` and all of it shares one flat layout.
+- Description: Number of flat JSON compactions, counted in `starrocks_be_flat_json_compaction_total`, that wrote their output as it arrived instead of buffering the whole output segment. It happens when the buffered input exceeds one eighth of `compaction_memory_limit_per_worker`, divided among the JSON columns written together, and all of it shares one flat layout.
 
 ## `starrocks_be_flat_json_compaction_total`
 
@@ -359,7 +390,7 @@ description: "Alphabetical s"
 
 - Unit: Count
 - Type: Cumulative
-- Description: Shared-data only. Total number of actual starmgr RPCs (`g_starlet->get_shard_info()`) that the BE's StarOSWorker had to issue because the requested shard info was not in the local cache (i.e. the FE had not pushed the shard to this BE before a query/compaction/lake operation referenced it). Only counted when the starlet readiness check passes and the RPC is actually dispatched; starlet-not-ready timeouts are not included. Should normally be near zero. A sustained or rising rate is a strong signal that FE-side task or node selection is scheduling work on a BE that does not yet have the shard, or that shard push propagation from FE is lagging. Recommended alert: high per-BE rate over a 5-minute window. On the nodes that coordinate loads into tables with `file_bundling` enabled, most of these RPCs are avoided by the tablet location handoff, counted in `lake_tablet_location_handoff_hits_total`; the share answered by the handoff is `hits / (hits + fallback)`.
+- Description: Shared-data only. Total number of actual starmgr RPCs (`g_starlet->get_shard_info()`) that the BE's StarOSWorker had to issue because the requested shard info was not in the local cache (i.e. the FE had not pushed the shard to this BE before a query/compaction/lake operation referenced it). Only counted when the starlet readiness check passes and the RPC is actually dispatched; starlet-not-ready timeouts are not included. Should normally be near zero. A sustained or rising rate is a strong signal that FE-side task or node selection is scheduling work on a BE that does not yet have the shard, or that shard push propagation from FE is lagging. Recommended alert: high per-BE rate over a 5-minute window. On the nodes that coordinate loads into tables with `file_bundling` enabled, most of these RPCs are avoided by the tablet location handoff, counted in `lake_tablet_location_handoff_hits_total`; the share answered by the handoff is `hits / (hits + fallback)`. On any node, a repeated lookup of the same tablet within `lake_shard_info_cache_ttl_sec` is answered from the location kept after the first RPC instead, counted in `staros_shard_info_fallback_cache_hits_total`.
 
 ## `starrocks_be_staros_shard_info_fallback_failed_total`
 
@@ -677,11 +708,10 @@ Values recorded by the derived tier, which refreshes a range-distributed increme
 
 | `reason` | Recorded when |
 | --- | --- |
-| `materialized_view_target` | The derived tier does not support this materialized view, for example because it is not incremental or its sort key is not the hidden row-id column. |
-| `row_id_span_too_small` | The estimated output is too small to split the row-id range evenly. |
-| `row_id_space_not_pristine` | The auto-increment counter has already handed out ids, so the split points cannot be derived safely. |
+| `materialized_view_target` | The view is incremental and the derived tier cannot key it: it has more than one visible index, its sort key is not the hidden row-id column alone, or its row id is encoded from the key values in order rather than as a fingerprint. Also recorded when a load into a materialized view is not that view's own refresh. |
+| `row_id_span_too_small` | The estimated output is too small to split the row-id range evenly, or too small to fill two tablets of `tablet_reshard_min_split_size` in each partition the refresh overwrites. Also recorded for a refresh that overwrites several partitions when the estimate calls for no more tablets than there are partitions. |
 | `estimate_unavailable` | No output-size estimate is available, so the tablet count cannot be chosen. An INSERT from an external-catalog table without table statistics also records it. |
-| `multiple_temporary_partitions` | The refresh writes more than one replacement partition, so most tablets would stay empty. Enabling the feature does not change this. |
+| `multiple_temporary_partitions` | The refresh writes more than one replacement partition of a view whose row ids are generated by the storage engine. Each partition's ids fall in a narrow part of the id range, so most tablets would stay empty. Enabling the feature does not change this. |
 | `derivation_failed` | Deriving the split points failed, or the derived split points are invalid. |
 | `stale_catalog_state` | The materialized view's visible indexes changed between deriving the split points and building the job. |
 | `submit_failed` | The derived split points could not be turned into an accepted reshard job. |
@@ -722,7 +752,7 @@ Values recorded by the derived tier, which refreshes a range-distributed increme
 
 - Unit: Count
 - Type: Cumulative
-- Description: Multi-partition counter. Number of predicted target partitions the grouper dropped because the per-load count exceeded `tablet_pre_split_max_partitions_per_load`. The grouper keeps the heaviest partitions (by input bytes when the data tier sampled a subset of files whose partition values come from the file paths, otherwise by sample count) and drops the lightest; dropped partitions fall back to BE runtime auto-create with no pre-split. Sustained non-zero values mean the cap is biting — consider raising `tablet_pre_split_max_partitions_per_load` or reducing partition cardinality on the load.
+- Description: Multi-partition counter. Number of partitions left without pre-split because the per-load count exceeded `tablet_pre_split_max_partitions_per_load`. On a sampled load, the grouper keeps the heaviest predicted partitions (by input bytes when the data tier sampled a subset of files whose partition values come from the file paths, otherwise by sample count) and drops the lightest; dropped partitions fall back to BE runtime auto-create with no pre-split. On a refresh of an incremental materialized view whose row ids are fingerprints computed by the refresh query, it counts the eligible partitions past the cap in name order; they are already created and keep their single tablet. Sustained non-zero values mean the cap is biting — consider raising `tablet_pre_split_max_partitions_per_load` or reducing partition cardinality on the load.
 
 ## `starrocks_fe_tablet_pre_split_pre_create`
 
@@ -794,7 +824,7 @@ Values recorded by the derived tier, which refreshes a range-distributed increme
 
 - Unit: Count
 - Type: Instantaneous
-- Description: Indicates the highest Compaction Score on each BE node.
+- Description: Indicates the highest Compaction Score on each BE node, that is, the larger of `tablet_base_max_compaction_score` and `tablet_cumulative_max_compaction_score`. The compaction score of Primary Key tables (`tablet_update_max_compaction_score`) is not included.
 
 ## `starrocks_fe_tablet_num`
 

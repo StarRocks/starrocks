@@ -146,6 +146,19 @@ public class SetStmtAnalyzer {
             }
         }
 
+        if (variable.equalsIgnoreCase(SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR)) {
+            String value = resolvedExpression.getStringValue();
+            double multiplier;
+            try {
+                multiplier = Double.parseDouble(value);
+            } catch (NumberFormatException e) {
+                throw new SemanticException(String.format("%s must be a finite number in [1.0, %s], got %s",
+                        SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR,
+                        SessionVariable.MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR, value));
+            }
+            SessionVariable.checkBroadcastMemExceededPenaltyFactor(multiplier);
+        }
+
         // Check variable chunk_size value if valid
         if (variable.equalsIgnoreCase(SessionVariable.CHUNK_SIZE)) {
             checkRangeLongVariable(resolvedExpression, SessionVariable.CHUNK_SIZE, 1L, 65535L);
@@ -158,6 +171,10 @@ public class SetStmtAnalyzer {
 
         if (variable.equalsIgnoreCase(SessionVariable.QUERY_MEM_LIMIT)) {
             checkRangeLongVariable(resolvedExpression, SessionVariable.QUERY_MEM_LIMIT, 0L, null);
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.BROADCAST_MEM_THRESHOLD)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.BROADCAST_MEM_THRESHOLD, 0L, null);
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT)) {

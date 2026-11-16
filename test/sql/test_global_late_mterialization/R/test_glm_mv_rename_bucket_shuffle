@@ -1,0 +1,71 @@
+-- name: test_glm_mv_rename_bucket_shuffle
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t1 (
+  c1 int not null,
+  c2 varchar(50) null,
+  c3 tinyint null
+) duplicate key(c1) distributed by hash(c1) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+create materialized view mv1 distributed by hash(c1) buckets 3 refresh manual properties("replication_num" = "1")
+as select c1, c2, c3 from t1;
+-- result:
+-- !result
+insert into t1 values (1, 'a', 1), (2, 'b', 2), (3, 'c', 3), (4, 'd', 3), (5, 'e', null), (6, 'f', 2);
+-- result:
+-- !result
+refresh materialized view mv1 with sync mode;
+set enable_global_late_materialization_cost_based = false;
+-- result:
+-- !result
+function: assert_explain_contains('select c3 = (select max(c1) from t1 x2), c3 in (select c3 from t1 x3), c1 not in (select c1 from t1 x4), exists (select c1 from t1 x5) from t1', 'mv1')
+-- result:
+None
+-- !result
+select c3 = (select max(c1) from t1 x2), c3 in (select c3 from t1 x3), c1 not in (select c1 from t1 x4), exists (select c1 from t1 x5) from t1 order by 1, 2, 3, 4;
+-- result:
+None	None	0	1
+0	1	0	1
+0	1	0	1
+0	1	0	1
+0	1	0	1
+0	1	0	1
+-- !result
+select c3 = (select max(c1) from t1 x2), c3 in (select c3 from t1 x3), c1 in (select c1 from t1 x4), exists (select c1 from t1 x5) from t1 order by 1, 2, 3, 4;
+-- result:
+None	None	1	1
+0	1	1	1
+0	1	1	1
+0	1	1	1
+0	1	1	1
+0	1	1	1
+-- !result
+set enable_global_late_materialization_cost_based = true;
+-- result:
+-- !result
+select c3 = (select max(c1) from t1 x2), c3 in (select c3 from t1 x3), c1 not in (select c1 from t1 x4), exists (select c1 from t1 x5) from t1 order by 1, 2, 3, 4;
+-- result:
+None	None	0	1
+0	1	0	1
+0	1	0	1
+0	1	0	1
+0	1	0	1
+0	1	0	1
+-- !result
+select c3 = (select max(c1) from t1 x2), c3 in (select c3 from t1 x3), c1 in (select c1 from t1 x4), exists (select c1 from t1 x5) from t1 order by 1, 2, 3, 4;
+-- result:
+None	None	1	1
+0	1	1	1
+0	1	1	1
+0	1	1	1
+0	1	1	1
+0	1	1	1
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

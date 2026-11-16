@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 description: "从本地文件系统使用 Stream Load 同步导入或 Broker Load 异步导入数据到 StarRocks，支持多种文件格式。"
 keywords: ['Stream Load']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 从本地文件系统导入数据
@@ -27,6 +28,11 @@ StarRocks 提供了两种从本地文件系统导入数据的方法：
 Stream Load 和 Broker Load 都支持在数据导入时进行数据转换，并支持在数据导入时通过 UPSERT 和 DELETE 操作进行数据更改。有关更多信息，请参见 [在导入时转换数据](./Etl_in_loading.md) 和 [通过导入更改数据](./Load_to_Primary_Key_tables.md)。
 
 ## 开始之前
+
+:::tip
+如果配置了 JWT 或 OAuth 2.0 [安全集成](../administration/user_privs/authentication/security_integration.md)，Stream Load 除用户名密码外也接受 Bearer token：把 `-u <username>:<password>` 换成 `-H "Authorization: Bearer <token>"`。导入 commit 时 token 必须仍然有效，因此长时间导入请使用有效期足够长的 token。参见[各认证方式在哪些入口可用](../administration/user_privs/authentication/authentication.mdx#各认证方式在哪些入口可用)。
+:::
+
 
 ### 检查权限
 

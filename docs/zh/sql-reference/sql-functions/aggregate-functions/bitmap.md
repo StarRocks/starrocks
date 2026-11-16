@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "bitmap 聚合函数用于 Bitmap 数据类型，需要建立聚合表并使用 bitmap_union 聚合函数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap

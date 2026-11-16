@@ -824,7 +824,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      *
      * 1. evaluates the global bloom filter -- `Operator::eval_runtime_bloom_filters()` is the only
      *    consumer of a RuntimeFilterProbeCollector, and only scan, exchange source, aggregate
-     *    source and analytic source operators call it;
+     *    source, analytic source and hash join probe operators call it;
      * 2. consumes a LOCAL runtime in-filter -- `Operator::eval_conjuncts_and_in_filters()`. This
      *    one matters even when the global filter itself is thrown away: fillLocalRfWaitingSet()
      *    derives localRfWaitingSet from probeRuntimeFilters, and that set is what tells the

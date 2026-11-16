@@ -184,8 +184,7 @@ public class SetConfigActionTest extends StarRocksHttpTestCase {
 
             assertTrue(messages.stream().anyMatch(m -> m.startsWith("request: url:[/api/_set_config?")
                     && m.contains(entry.getValue())), messages.toString());
-            assertTrue(messages.stream().anyMatch(m -> m.startsWith("parse auth info failed, url /api/_set_config?")
-                    && m.contains(entry.getValue())), messages.toString());
+            // BaseAction#checkCredential rejects a request without auth information without logging its uri.
             assertTrue(messages.stream().anyMatch(m -> m.startsWith("failed to process url: /api/_set_config?")
                     && m.contains(entry.getValue())), messages.toString());
             assertNoCredential(messages.toString());

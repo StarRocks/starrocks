@@ -30,6 +30,7 @@ java {
             java {
                 srcDir("src/main/java")
                 srcDir("build/generated-sources/proto")
+                srcDir("build/generated-sources/protobuf/java")
                 srcDir("build/generated-sources/thrift")
                 srcDir("build/generated-sources/genscript")
             }
@@ -37,6 +38,7 @@ java {
         test {
             java {
                 srcDir("src/test/java")
+                srcDir("build/generated-test-sources/protobuf/java")
             }
             resources {
                 srcDir("src/test/resources")
@@ -93,6 +95,7 @@ dependencies {
     implementation("com.github.oshi:oshi-core")
     implementation("com.github.seancfoley:ipaddress")
     implementation("com.google.cloud.bigdataoss:gcs-connector")
+    implementation("com.google.code.findbugs:jsr305")
     implementation("com.google.code.gson:gson")
     implementation("com.google.guava:guava")
     implementation("com.google.protobuf:protobuf-java")
@@ -243,6 +246,10 @@ dependencies {
         // uses the Apache HttpClient path, not the Jetty HTTP/2 client, so this is runtime-safe.
         exclude(group = "org.eclipse.jetty", module = "*")
     }
+    // ZooKeeper classes that solr-solrj needs on every Solr audit send; see fe/pom.xml.
+    implementation("org.apache.zookeeper:zookeeper") {
+        isTransitive = false
+    }
     implementation("org.apache.ranger:ranger-plugins-common") {
         exclude(group = "org.elasticsearch", module = "*")
         exclude(group = "org.elasticsearch.client", module = "*")
@@ -286,6 +293,8 @@ dependencies {
     implementation("org.jdom:jdom2")
     implementation("org.json:json")
     testImplementation("org.junit.jupiter:junit-jupiter")
+    // for HangingTestWatchdog, a TestExecutionListener
+    testImplementation("org.junit.platform:junit-platform-launcher")
     implementation("org.mariadb.jdbc:mariadb-java-client")
     testImplementation("org.mockito:mockito-inline:4.11.0")
     // Force ByteBuddy 1.14.9+ for Java 21 class file format support
@@ -317,6 +326,7 @@ dependencies {
     implementation("tools.profiler:async-profiler")
     implementation("com.github.vertical-blank:sql-formatter:2.0.4")
     implementation("at.yawk.lz4:lz4-java")
+    implementation("com.github.luben:zstd-jni")
     // dependency sync end
 
     // extra dependencies pom.xml does not have
@@ -429,6 +439,73 @@ tasks.register<Task>("generateThriftSources") {
     }
 }
 
+// protoc -> Java for the FE-owned .proto files, the counterpart of the protobuf-maven-plugin execution in
+// pom.xml: src/main/proto/<domain>/ goes to build/generated-sources/protobuf/java and src/test/proto/<domain>/
+// to build/generated-test-sources/protobuf/java, with imports resolved against those roots. protoc is the
+// Maven artifact pinned to the protobuf-java runtime version, so the generated code is never newer than the
+// runtime.
+val protocArtifact = configurations.create("protocArtifact")
+dependencies {
+    protocArtifact("com.google.protobuf:protoc:${project.ext["protobuf-java.version"]}:${protocClassifier()}@exe")
+}
+
+// The artifact classifier of the protoc binary for this machine, as os-maven-plugin derives
+// ${os.detected.classifier} for the Maven build.
+fun protocClassifier(): String {
+    val osName = System.getProperty("os.name").lowercase()
+    val os = when {
+        osName.startsWith("linux") -> "linux"
+        osName.startsWith("mac") -> "osx"
+        osName.startsWith("windows") -> "windows"
+        else -> throw GradleException("no protoc binary is published for OS '$osName'")
+    }
+    val archName = System.getProperty("os.arch").lowercase()
+    val arch = when (archName) {
+        "amd64", "x86_64" -> "x86_64"
+        "aarch64", "arm64" -> "aarch_64"
+        "ppc64le" -> "ppcle_64"
+        "s390x" -> "s390_64"
+        else -> throw GradleException("no protoc binary is published for CPU architecture '$archName'")
+    }
+    return "$os-$arch"
+}
+
+fun registerProtocTask(name: String, protoRoot: File, includeRoots: List<File>, outputDir: File) =
+    tasks.register<Task>(name) {
+        description = "Generates Java source files from the .proto files under ${protoRoot.name}"
+        group = "build"
+
+        val protoFiles = fileTree(protoRoot) { include("**/*.proto") }
+        inputs.files(protoFiles)
+        inputs.files(protocArtifact)
+        outputs.dir(outputDir)
+
+        doFirst {
+            // Regenerate from scratch so that a deleted .proto leaves no stale Java behind.
+            delete(outputDir)
+            mkdir(outputDir)
+            if (protoFiles.isEmpty) {
+                return@doFirst
+            }
+            val protoc = protocArtifact.singleFile
+            protoc.setExecutable(true)
+            val args = mutableListOf(protoc.absolutePath, "--java_out=${outputDir.absolutePath}")
+            includeRoots.forEach { args += listOf("-I", it.absolutePath) }
+            protoFiles.files.sorted().forEach { args += it.absolutePath }
+            project.exec {
+                commandLine(args)
+            }
+        }
+    }
+
+registerProtocTask(
+    "generateProtobufSources", file("src/main/proto"), listOf(file("src/main/proto")),
+    layout.buildDirectory.get().dir("generated-sources/protobuf/java").asFile
+)
+registerProtocTask(
+    "generateTestProtobufSources", file("src/test/proto"), listOf(file("src/test/proto"), file("src/main/proto")),
+    layout.buildDirectory.get().dir("generated-test-sources/protobuf/java").asFile
+)
 
 tasks.register<Task>("generateByScripts") {
     description = "Generates java code by scripts"
@@ -498,7 +575,26 @@ tasks.test {
         showCauses = false // Show underlying causes for exceptions
     }
 
+    // HangingTestWatchdog prints the thread stacks of a hung test JVM to stderr. The test output streams are not
+    // shown above, and the report is written only when a test class finishes, which a hung one never does, so
+    // forward the watchdog's lines (each starts with this prefix) to the build log as they come.
+    addTestOutputListener(object : TestOutputListener {
+        override fun onOutput(testDescriptor: TestDescriptor, outputEvent: TestOutputEvent) {
+            if (outputEvent.destination == TestOutputEvent.Destination.StdErr &&
+                    outputEvent.message.contains("[HangingTestWatchdog]")) {
+                logger.lifecycle(outputEvent.message.trimEnd())
+            }
+        }
+    })
+
     systemProperty("starrocks.home", project.ext["starrocks.home"] as String)
+
+    // Unlike Maven surefire, Gradle does not pass the build's system properties to the test JVM, so forward the
+    // HangingTestWatchdog threshold, e.g. -Dstarrocks.ut.hang.dump.seconds=0 to disable it (-P works as well).
+    providers.systemProperty("starrocks.ut.hang.dump.seconds")
+        .orElse(providers.gradleProperty("starrocks.ut.hang.dump.seconds"))
+        .orNull
+        ?.let { systemProperty("starrocks.ut.hang.dump.seconds", it) }
 
     // Add JMockit Java agent to JVM arguments
     val jmockitPath = configurations.testCompileClasspath.get().find { it.name.contains("jmockit") }?.absolutePath
@@ -511,6 +607,8 @@ tasks.test {
         "-XX:CICompilerCount=1",
         "-XX:-BackgroundCompilation",
         "-XX:+UseSerialGC",
+        // TieredStopAtLevel=1 lowers the default code cache to 48m, which a planner-heavy test class can fill.
+        "-XX:ReservedCodeCacheSize=128m",
         // Java 21 module access for JMockit/Mockito ByteBuddy
         // (Maven surefire 3.2.5 auto-injects these on Java 17+)
         "--add-opens", "java.base/java.lang=ALL-UNNAMED",
@@ -553,6 +651,7 @@ tasks.withType<Checkstyle>().configureEach {
     // Don't check generated source files
     setSource(source.filter {
         !it.path.contains("/generated-sources/") &&
+                !it.path.contains("/generated-test-sources/") &&
                 !it.path.contains("/sql/parser/gen/")
     })
 
@@ -574,13 +673,14 @@ tasks.register("checkstyle") {
 // Bind checkstyle to run before compilation
 tasks.compileJava {
     dependsOn("checkstyleMain")
-    dependsOn("generateThriftSources", "generateProtoSources", "generateByScripts")
+    dependsOn("generateThriftSources", "generateProtoSources", "generateProtobufSources", "generateByScripts")
     // Add explicit dependency on hive-udf shadowJar task
     dependsOn(":plugin:hive-udf:shadowJar")
 }
 
 tasks.named<JavaCompile>("compileTestJava") {
     dependsOn("checkstyleTest")
+    dependsOn("generateTestProtobufSources")
 }
 
 // Configure JAR task

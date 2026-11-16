@@ -24,12 +24,14 @@ import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.Version;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
@@ -58,6 +60,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -775,5 +778,24 @@ public class IcebergRESTCatalogTest {
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Failed to load table metadata using REST Catalog",
                 () -> icebergRESTCatalog.loadNamespaceMetadata(connectContext, Namespace.of("db")));
+    }
+
+    @Test
+    public void testCreateOnCheckpointThread(@Mocked RESTSessionCatalog restCatalog) throws Exception {
+        // The checkpoint thread replays the journal into its own GlobalStateMgr, whose NodeMgr has no self node.
+        Field checkpointThreadId = GlobalStateMgr.class.getDeclaredField("checkpointThreadId");
+        checkpointThreadId.setAccessible(true);
+        long previous = checkpointThreadId.getLong(null);
+        checkpointThreadId.setLong(null, Thread.currentThread().getId());
+        try {
+            Assertions.assertTrue(GlobalStateMgr.isCheckpointThread());
+            IcebergRESTCatalog catalog = new IcebergRESTCatalog("rest_native_catalog", new Configuration(), new HashMap<>());
+            Map<String, String> properties = Deencapsulation.getField(catalog, "restCatalogProperties");
+            assertEquals("StarRocks-Iceberg-Connector/" + Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH,
+                    properties.get(IcebergRESTCatalog.USER_AGENT));
+        } finally {
+            checkpointThreadId.setLong(null, previous);
+            GlobalStateMgr.destroyCheckpoint();
+        }
     }
 }

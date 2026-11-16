@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE DATABASE is used to create databases."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE DATABASE

@@ -29,7 +29,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -85,6 +84,15 @@ class LDAPAuthProviderTest {
     public static void teardown() throws Exception {
     }
 
+    /**
+     * The credential an LDAP user's password arrives as. A MySQL clear-password frame has its
+     * trailing NUL stripped at the entry point now (AuthenticationHandler#fromMysqlHandshake), so
+     * by the time a provider sees it there is nothing MySQL-specific left about it.
+     */
+    private static AuthCredentials clearPassword(UserIdentity user) {
+        return AuthCredentials.ofPassword(user.getUser(), "password", AuthChannel.MYSQL, user.getHost());
+    }
+
     @Test
     void testAuthenticateSetsDNWhenLdapUserDNProvided() throws Exception {
 
@@ -98,9 +106,8 @@ class LDAPAuthProviderTest {
 
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("ldap_user", "%");
-        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
-        provider.authenticate(authCtx, user, authResponse);
+        provider.authenticate(authCtx, user, clearPassword(user));
         Assertions.assertEquals(providedDN, authCtx.getDistinguishedName());
     }
 
@@ -117,9 +124,8 @@ class LDAPAuthProviderTest {
 
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("ldap_user", "%");
-        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
-        provider.authenticate(authCtx, user, authResponse);
+        provider.authenticate(authCtx, user, clearPassword(user));
         Assertions.assertEquals(discoveredDN, authCtx.getDistinguishedName());
     }
 
@@ -228,9 +234,8 @@ class LDAPAuthProviderTest {
 
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
-        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
-        provider.authenticate(authCtx, user, authResponse);
+        provider.authenticate(authCtx, user, clearPassword(user));
         Assertions.assertEquals("uid=alice,ou=People,dc=test,dc=com", authCtx.getDistinguishedName());
     }
 
@@ -247,10 +252,9 @@ class LDAPAuthProviderTest {
 
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
-        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
         AuthenticationException ex = Assertions.assertThrows(AuthenticationException.class, () -> {
-            provider.authenticate(authCtx, user, authResponse);
+            provider.authenticate(authCtx, user, clearPassword(user));
         });
         Assertions.assertTrue(ex.getMessage().contains("not a valid DN format"));
     }
@@ -268,9 +272,8 @@ class LDAPAuthProviderTest {
 
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
-        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
-        provider.authenticate(authCtx, user, authResponse);
+        provider.authenticate(authCtx, user, clearPassword(user));
         Assertions.assertEquals("uid=alice@abc.com,ou=People,dc=test,dc=com", authCtx.getDistinguishedName());
     }
 
@@ -286,9 +289,8 @@ class LDAPAuthProviderTest {
 
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("bob", "%");
-        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
-        provider.authenticate(authCtx, user, authResponse);
+        provider.authenticate(authCtx, user, clearPassword(user));
         Assertions.assertEquals(perUserDN, authCtx.getDistinguishedName());
     }
 
@@ -303,9 +305,8 @@ class LDAPAuthProviderTest {
 
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("charlie", "%");
-        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
-        provider.authenticate(authCtx, user, authResponse);
+        provider.authenticate(authCtx, user, clearPassword(user));
         Assertions.assertEquals("cn=charlie,dc=pattern,dc=com", authCtx.getDistinguishedName());
     }
 
@@ -321,9 +322,8 @@ class LDAPAuthProviderTest {
         // DN special characters: , + " < > ; \ should be escaped (RFC 4514)
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice,+\"<>;\\bob", "%");
-        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
-        provider.authenticate(authCtx, user, authResponse);
+        provider.authenticate(authCtx, user, clearPassword(user));
         Assertions.assertEquals("uid=alice\\,\\+\\\"\\<\\>\\;\\\\bob,dc=test,dc=com",
                 authCtx.getDistinguishedName());
     }
@@ -340,14 +340,13 @@ class LDAPAuthProviderTest {
         // Leading space
         AccessControlContext authCtx1 = new AccessControlContext();
         UserIdentity user1 = UserIdentity.createEphemeralUserIdent(" alice", "%");
-        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
-        provider.authenticate(authCtx1, user1, authResponse);
+        provider.authenticate(authCtx1, user1, clearPassword(user1));
         Assertions.assertEquals("uid=\\ alice,dc=test,dc=com", authCtx1.getDistinguishedName());
 
         // Leading #
         AccessControlContext authCtx2 = new AccessControlContext();
         UserIdentity user2 = UserIdentity.createEphemeralUserIdent("#alice", "%");
-        provider.authenticate(authCtx2, user2, authResponse);
+        provider.authenticate(authCtx2, user2, clearPassword(user2));
         Assertions.assertEquals("uid=\\#alice,dc=test,dc=com", authCtx2.getDistinguishedName());
     }
 
@@ -363,9 +362,8 @@ class LDAPAuthProviderTest {
         // Filter special characters * ( ) | are NOT special in DN values
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice*()|", "%");
-        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
-        provider.authenticate(authCtx, user, authResponse);
+        provider.authenticate(authCtx, user, clearPassword(user));
         Assertions.assertEquals("uid=alice*()|,dc=test,dc=com", authCtx.getDistinguishedName());
     }
 
@@ -380,9 +378,8 @@ class LDAPAuthProviderTest {
 
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("ldap_user", "%");
-        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
-        provider.authenticate(authCtx, user, authResponse);
+        provider.authenticate(authCtx, user, clearPassword(user));
         Assertions.assertEquals("uid=test,ou=People,dc=starrocks,dc=com", authCtx.getDistinguishedName());
     }
 
@@ -406,9 +403,8 @@ class LDAPAuthProviderTest {
 
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
-        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
-        provider.authenticate(authCtx, user, authResponse);
+        provider.authenticate(authCtx, user, clearPassword(user));
         Assertions.assertEquals("uid=alice,ou=B,dc=test,dc=com", authCtx.getDistinguishedName());
 
         // Restore global mock
@@ -442,10 +438,9 @@ class LDAPAuthProviderTest {
 
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
-        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
         Assertions.assertThrows(AuthenticationException.class, () -> {
-            provider.authenticate(authCtx, user, authResponse);
+            provider.authenticate(authCtx, user, clearPassword(user));
         });
 
         // Restore global mock
@@ -472,10 +467,9 @@ class LDAPAuthProviderTest {
 
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
-        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
         AuthenticationException ex = Assertions.assertThrows(AuthenticationException.class, () -> {
-            provider.authenticate(authCtx, user, authResponse);
+            provider.authenticate(authCtx, user, clearPassword(user));
         });
         Assertions.assertTrue(ex.getMessage().contains("does not contain ${USER} placeholder"));
     }
@@ -491,10 +485,9 @@ class LDAPAuthProviderTest {
 
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
-        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
         AuthenticationException ex = Assertions.assertThrows(AuthenticationException.class, () -> {
-            provider.authenticate(authCtx, user, authResponse);
+            provider.authenticate(authCtx, user, clearPassword(user));
         });
         Assertions.assertTrue(ex.getMessage().contains("does not contain ${USER} placeholder"));
     }
@@ -552,7 +545,7 @@ class LDAPAuthProviderTest {
 
             AccessControlContext authCtx = new AccessControlContext();
             UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
-            provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
+            provider.authenticate(authCtx, user, clearPassword(user));
 
             Assertions.assertEquals("uid=alice,ou=People,dc=test,dc=com", authCtx.getDistinguishedName());
             Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
@@ -587,7 +580,7 @@ class LDAPAuthProviderTest {
 
             AccessControlContext authCtx = new AccessControlContext();
             UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
-            provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
+            provider.authenticate(authCtx, user, clearPassword(user));
 
             Assertions.assertEquals("uid=alice@abc.com,ou=People,dc=test,dc=com",
                     authCtx.getDistinguishedName());
@@ -620,7 +613,7 @@ class LDAPAuthProviderTest {
 
             AccessControlContext authCtx = new AccessControlContext();
             UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
-            provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
+            provider.authenticate(authCtx, user, clearPassword(user));
 
             Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_attr_simple"));
@@ -655,7 +648,7 @@ class LDAPAuthProviderTest {
 
             AccessControlContext authCtx = new AccessControlContext();
             UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
-            provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
+            provider.authenticate(authCtx, user, clearPassword(user));
 
             // Lookup key "alice" vs cache key "alice@abc.com" → mismatch → empty
             Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
@@ -689,7 +682,7 @@ class LDAPAuthProviderTest {
 
             AccessControlContext authCtx = new AccessControlContext();
             UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
-            provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
+            provider.authenticate(authCtx, user, clearPassword(user));
 
             Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_regex_correct"));

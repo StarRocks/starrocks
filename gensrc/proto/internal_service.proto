@@ -159,6 +159,7 @@ message PTabletInfo {
     repeated string valid_dict_cache_columns = 4;
     optional int64 node_id = 5;
     repeated int64 valid_dict_collected_version = 6;
+    repeated int64 valid_dict_content_identities = 7;
 }
 
 message PLoadChannelProfileConfig {
@@ -197,6 +198,10 @@ message PTabletWriterOpenRequest {
         // `txn_log_location(tablet_id, txn_id)`: publish looks that key up first and would
         // short-circuit on the partial log, silently dropping the other nodes' data.
         optional bool multi_node_write = 5;
+        // The destination table's flat_json.* properties; absent when the table sets none. Decides
+        // the physical shape of JSON columns the delta writer produces, replacing the lookup in the
+        // tablet metadata cache (empty before a tablet's first publish under light_weight_tablet_creation).
+        optional FlatJsonConfigPB flat_json_config = 6;
     };
 
     required PUniqueId id = 1;

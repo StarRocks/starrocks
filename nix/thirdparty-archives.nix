@@ -64,10 +64,10 @@ let
       md5 = "c2274f0c7af8470ad514637c35bcee7d";
       sha256 = "0ipyyv6sjsns62czjpq9774kiy2l6cmg96jjh78ndfh50hfxis7r";
     };
-    "brpc-1.9.0.tar.gz" = {
-      url = "https://github.com/apache/brpc/archive/refs/tags/1.9.0.tar.gz";
-      md5 = "a2b626d96a5b017f2a6701ffa594530c";
-      sha256 = "0x7azbn9064xbjzb67a2zyvhf078z5lny49ld0ly2wv746h6v1c5";
+    "brpc-1.18.0.tar.gz" = {
+      url = "https://github.com/apache/brpc/archive/refs/tags/1.18.0.tar.gz";
+      md5 = "7ccfa535f97a5216a422ca1333802e7d";
+      sha256 = "1z6a533ni4jgzfjricz3l0cmmgryb1aqpzh545j57qq96fqradvn";
     };
     "bzip2-1.0.8.tar.gz" = {
       url = "https://fossies.org/linux/misc/bzip2-1.0.8.tar.gz";
@@ -369,10 +369,10 @@ let
       md5 = "75c0d34cf7011924ba19978076c76dc1";
       sha256 = "1khd94aipz09blfxvnp53g9r4frsbx68v4yn146c2ma9jlv05php";
     };
-    "xxHash-0.8.3.tar.gz" = {
-      url = "https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.3.tar.gz";
-      md5 = "599804eb9555e51c05f1b821f9212a07";
-      sha256 = "104syb3m147ksf1lad4jqci0gww2xwc7g989v42zsg91x3ghirma";
+    "xxHash-0.8.4.tar.gz" = {
+      url = "https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.4.tar.gz";
+      md5 = "918fa44277d81b1ac1d02ac075df4ec1";
+      sha256 = "0cnd998anlmd8gg6fpx2jmwcwri5d74zgbdkg65d7hz76l4jff2p";
     };
     "zlib-ng-2.3.3.tar.gz" = {
       url = "https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.3.3.tar.gz";
@@ -494,7 +494,7 @@ let
       "re2-2022-12-01.tar.gz"
       "boost_1_80_0.tar.gz"
       "leveldb-1.20.tar.gz"
-      "brpc-1.9.0.tar.gz"
+      "brpc-1.18.0.tar.gz"
       "rocksdb-6.22.1.zip"
       "krb5-1.21.3.tar.gz"
       "cyrus-sasl-2.1.28.tar.gz"
@@ -542,7 +542,7 @@ let
       "azure-storage-files-shares_12.12.0.tar.gz"
       "libdivide-v5.2.0.tar.gz"
       "FlameGraph-20251015.tar.gz"
-      "xxHash-0.8.3.tar.gz"
+      "xxHash-0.8.4.tar.gz"
       "BLAKE3-1.8.5.tar.gz"
       "benchgen-26.03.11.tar.gz"
       "libnl-3.12.0.tar.gz"
@@ -569,7 +569,7 @@ let
       "re2-2022-12-01.tar.gz"
       "boost_1_80_0.tar.gz"
       "leveldb-1.20.tar.gz"
-      "brpc-1.9.0.tar.gz"
+      "brpc-1.18.0.tar.gz"
       "rocksdb-6.22.1.zip"
       "krb5-1.21.3.tar.gz"
       "cyrus-sasl-2.1.28.tar.gz"
@@ -616,7 +616,7 @@ let
       "azure-storage-files-shares_12.12.0.tar.gz"
       "libdivide-v5.2.0.tar.gz"
       "FlameGraph-20251015.tar.gz"
-      "xxHash-0.8.3.tar.gz"
+      "xxHash-0.8.4.tar.gz"
       "BLAKE3-1.8.5.tar.gz"
       "benchgen-26.03.11.tar.gz"
       "libnl-3.12.0.tar.gz"
@@ -643,7 +643,7 @@ let
       "re2-2022-12-01.tar.gz"
       "boost_1_86_0.tar.gz"
       "leveldb-1.20.tar.gz"
-      "brpc-1.9.0.tar.gz"
+      "brpc-1.18.0.tar.gz"
       "rocksdb-6.22.1.zip"
       "krb5-1.21.3.tar.gz"
       "cyrus-sasl-2.1.28.tar.gz"
@@ -690,7 +690,7 @@ let
       "azure-storage-files-shares_12.12.0.tar.gz"
       "libdivide-v5.2.0.tar.gz"
       "FlameGraph-20251015.tar.gz"
-      "xxHash-0.8.3.tar.gz"
+      "xxHash-0.8.4.tar.gz"
       "BLAKE3-1.8.5.tar.gz"
       "benchgen-26.03.11.tar.gz"
     ];

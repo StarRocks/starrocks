@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将给定元素重复指定次数返回一个数组。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_repeat

@@ -147,6 +147,16 @@ public class IcebergExprVisitorTest {
         Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
                 "Generated equal expression should be correct");
 
+        // timestamps outside 1677..2262 overflow when counted in nanoseconds
+        for (LocalDateTime t : List.of(LocalDateTime.of(1500, 1, 1, 0, 0, 0, 123000),
+                LocalDateTime.of(2300, 1, 1, 0, 0), LocalDateTime.of(9999, 12, 31, 23, 59, 59))) {
+            convertedExpr = converter.convert(Lists.newArrayList(new BinaryPredicateOperator(BinaryType.LT, K4,
+                    ConstantOperator.createDatetime(t))), context);
+            long micros = Math.addExact(Math.multiplyExact(t.toEpochSecond(ZoneOffset.UTC), 1_000_000L),
+                    t.getNano() / 1000);
+            Assertions.assertEquals(Expressions.lessThan("k4", micros).toString(), convertedExpr.toString());
+        }
+
         // notEqual
         value = ConstantOperator.createBoolean(true);
         convertedExpr = converter.convert(Lists.newArrayList(
@@ -578,5 +588,56 @@ public class IcebergExprVisitorTest {
                         new BinaryPredicateOperator(BinaryType.EQ, syntheticVariantColumn, ConstantOperator.createInt(10))),
                 context);
         Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+    }
+
+    // _pos is not a column of the table schema: predicates on it are left to the BE instead of failing planning
+    @Test
+    public void testMetadataColumnPredicateNotPushedDown() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+        ColumnRefOperator pos = new ColumnRefOperator(100, IntegerType.BIGINT, "_pos", true, false);
+        List<ScalarOperator> predicates = List.of(
+                new BinaryPredicateOperator(BinaryType.EQ, pos, ConstantOperator.createBigint(0)),
+                new InPredicateOperator(false, pos, ConstantOperator.createBigint(1), ConstantOperator.createBigint(2)),
+                new IsNullPredicateOperator(false, pos));
+        for (ScalarOperator predicate : predicates) {
+            Assertions.assertNull(converter.convertStrict(Lists.newArrayList(predicate), context));
+            Assertions.assertEquals(Expressions.alwaysTrue().toString(),
+                    converter.convert(Lists.newArrayList(predicate), context).toString());
+        }
+    }
+
+    @Test
+    public void testLikePrefixPushdownRejectsWildcardsAndEscapes() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        // a plain prefix is still pushed down
+        Assertions.assertEquals(Expressions.startsWith("k6", "abc").toString(),
+                convertLike(converter, context, K6, "abc%").toString());
+
+        // 'a_c%' also matches abc1 and axc2, so pushing startsWith("a_c") prunes the data files whose bounds
+        // only hold those two and the rows in them go missing
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K6, "a_c%").op(),
+                "A single-character wildcard has no prefix form");
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K15, "a_c%").op(),
+                "The same holds for a nested column");
+
+        // '\' escapes the character behind it, so the prefix as written is not what the pattern matches
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K6, "a\\_c%").op(),
+                "An escaped underscore is a literal underscore, not the two characters as written");
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K6, "abc\\%").op(),
+                "An escaped trailing percent sign is a literal, not a wildcard");
+
+        // unchanged: a wildcard anywhere but the end was never a prefix match
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K6, "%abc%").op());
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K6, "abc").op());
+    }
+
+    private static Expression convertLike(ScalarOperatorToIcebergExpr converter,
+                                          ScalarOperatorToIcebergExpr.IcebergContext context,
+                                          ScalarOperator column, String pattern) {
+        return converter.convert(Lists.newArrayList(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE, column, ConstantOperator.createVarchar(pattern))), context);
     }
 }

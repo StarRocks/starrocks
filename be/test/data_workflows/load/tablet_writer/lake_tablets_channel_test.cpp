@@ -77,8 +77,8 @@ public:
         _root_profile = std::make_unique<RuntimeProfile>("LoadChannel");
         _location_provider = std::make_unique<lake::FixedLocationProvider>(_test_directory);
         _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager =
-                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
+        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(),
+                                                                1024 * 1024, 1024 * 1024);
 
         _load_channel_mgr =
                 std::make_unique<LoadChannelMgr>(_tablet_manager.get(), RuntimeEnv::GetInstance()->diagnose_daemon(),
@@ -1512,8 +1512,8 @@ TEST_F(LakeTabletsChannelShardInfoHandoffTest, test_eos_hands_over_one_shard_inf
     EXPECT_EQ((std::set<int64_t>{10, 11}), partitions);
 }
 
-TEST_F(LakeTabletsChannelShardInfoHandoffTest, test_no_shard_info_when_handoff_disabled) {
-    SCOPED_UPDATE(bool, config::lake_enable_tablet_location_handoff, false);
+TEST_F(LakeTabletsChannelShardInfoHandoffTest, test_no_shard_info_when_shard_info_cache_disabled) {
+    SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 0);
     auto response = write_and_finish();
     ASSERT_EQ(TStatusCode::OK, response.status().status_code());
     ASSERT_EQ(4, response.lake_tablet_data().txn_logs_size());
@@ -1613,7 +1613,7 @@ TEST_P(LakeTabletsChannelMultiSenderTest, test_dont_write_txn_log) {
             auto metacache = _tablet_manager->metacache();
             for (auto tablet_id : {10086, 10087, 10088, 10089}) {
                 auto txn_log_path = _tablet_manager->txn_log_location(tablet_id, kTxnId);
-                ASSERT_TRUE(metacache->lookup_txn_log(txn_log_path));
+                ASSERT_TRUE(metacache->lookup_txn_log(starrocks::lake::MetacacheKey::txn_log(txn_log_path)));
                 ASSERT_TRUE(FileSystem::Default()->path_exists(txn_log_path).is_not_found());
             }
         } else if (sender_id == 0) {

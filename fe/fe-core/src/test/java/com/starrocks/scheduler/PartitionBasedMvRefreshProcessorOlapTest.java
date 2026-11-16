@@ -87,8 +87,10 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -2779,7 +2781,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                             "GetChangedPartitionDiff",
                             "CollectMVToBaseTablePartitionNames",
                             "GenerateBaseRefMap",
-                            "GenerateMvRefMap"
+                            "GenerateMvRefMap",
+                            "MVPartitionsWithUntrackedRows"
                     );
                     for (Map.Entry<String, String> e : result.entrySet()) {
                         logSysInfo(e.getKey() + ": " + e.getValue());
@@ -3037,6 +3040,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     Assertions.assertFalse(versionMapBefore.isEmpty(),
                             "Version map should not be empty before refresh");
 
+                    String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
+                    TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+                    // Any status recorded so far is not the force refresh's, which must produce a new one.
+                    TaskRunStatus initialStatus = getLatestMVRefreshStatus(tm, mvTaskName);
+                    String initialQueryId = initialStatus == null ? null : initialStatus.getQueryId();
+
                     // Insert new data to trigger refresh need
                     executeInsertSql(connectContext, "insert into tt_complete_refresh partition(p0) " +
                             "values('2021-12-15',3,20);");
@@ -3044,34 +3053,22 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     // Perform force refresh with complete refresh
                     starRocksAssert.refreshMV(String.format("REFRESH MATERIALIZED VIEW %s FORCE", "test_mv_complete_refresh"));
 
-                    // Wait for refresh to complete
-                    String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
-                    TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
-                    long taskId = tm.getTask(mvTaskName).getId();
+                    // Wait for the force refresh to finish. getRunnableTaskRun() returns null while the scheduler moves a
+                    // task run from the pending queue to the running map, so it cannot tell that the refresh has finished.
+                    TaskRunStatus status = getLatestMVRefreshStatus(tm, mvTaskName);
                     int waitCount = 0;
-                    while (waitCount++ < 120 && (tm.getTaskRunScheduler().getRunnableTaskRun(taskId) != null
-                            || tm.listMVRefreshedTaskRunStatus(DB_NAME, Set.of(mvTaskName)).isEmpty())) {
+                    while (waitCount++ < 120 && (status == null || Objects.equals(initialQueryId, status.getQueryId())
+                            || !status.getState().isFinishState())) {
                         Thread.sleep(1000);
+                        status = getLatestMVRefreshStatus(tm, mvTaskName);
                     }
-
-                    // After waiting, ensure we have at least one TaskRunStatus entry
-                    Map<String, List<TaskRunStatus>> statusMap =
-                            tm.listMVRefreshedTaskRunStatus(DB_NAME, Set.of(mvTaskName));
-                    Assertions.assertNotNull(statusMap, "Status map should not be null");
-                    Assertions.assertFalse(statusMap.isEmpty(),
-                            "Timed out waiting for MV refresh to produce a TaskRunStatus entry");
-                    List<TaskRunStatus> statuses = statusMap.get(mvTaskName);
-                    Assertions.assertNotNull(statuses,
-                            "No task run status entry for materialized view: " + mvTaskName);
-                    Assertions.assertFalse(statuses.isEmpty(),
-                            "No task run status records for materialized view: " + mvTaskName);
-
-                    // Ensure the refresh task finished within the timeout
-                    Assertions.assertNull(tm.getTaskRunScheduler().getRunnableTaskRun(taskId),
-                            "Refresh task did not complete within the timeout");
+                    Assertions.assertNotNull(status, "No task run status for materialized view: " + mvTaskName);
+                    Assertions.assertNotEquals(initialQueryId, status.getQueryId(),
+                            "Force refresh did not produce a new task run status");
+                    Assertions.assertTrue(status.getState().isFinishState(),
+                            "Refresh task did not complete within the timeout: " + status);
 
                     // Verify refresh succeeded
-                    TaskRunStatus status = statuses.get(0);
                     Assertions.assertEquals(Constants.TaskRunState.SUCCESS, status.getState(),
                             "Force refresh with complete refresh should succeed");
 
@@ -3085,6 +3082,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     Assertions.assertEquals(partitionIdsBefore, partitionIdsAfter,
                             "Partitions should not be dropped/recreated during force+complete refresh");
                 });
+    }
+
+    // Returns the status of the latest running, pending or finished refresh of the materialized view, or null if none.
+    private static TaskRunStatus getLatestMVRefreshStatus(TaskManager tm, String mvTaskName) {
+        List<TaskRunStatus> statuses = tm.listMVRefreshedTaskRunStatus(DB_NAME, Set.of(mvTaskName)).get(mvTaskName);
+        return statuses == null || statuses.isEmpty() ? null : statuses.get(0);
     }
 
     @Test
@@ -3212,5 +3215,558 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     Assertions.assertEquals(Constants.TaskRunState.SUCCESS, status.getState(),
                             "Force refresh for non-partitioned MV should succeed");
                 });
+    }
+
+    private static void createDailyPartitionedBaseTable() throws Exception {
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test.tbl_daily (\n" +
+                "  k1 date,\n" +
+                "  v1 int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1) (\n" +
+                "  PARTITION p20220301 VALUES [('2022-03-01'),('2022-03-02')),\n" +
+                "  PARTITION p20220302 VALUES [('2022-03-02'),('2022-03-03')),\n" +
+                "  PARTITION p20220401 VALUES [('2022-04-01'),('2022-04-02'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        executeInsertSql(connectContext, "insert into test.tbl_daily values('2022-03-01', 1);");
+        executeInsertSql(connectContext, "insert into test.tbl_daily values('2022-03-02', 2);");
+        executeInsertSql(connectContext, "insert into test.tbl_daily values('2022-04-01', 3);");
+    }
+
+    private static void dropDailyBasePartitionOf(String table, String partitionName) throws Exception {
+        String sql = "ALTER TABLE " + table + " DROP PARTITION " + partitionName;
+        new StmtExecutor(connectContext,
+                SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode())).execute();
+    }
+
+    private static void dropDailyBasePartition(String partitionName) throws Exception {
+        dropDailyBasePartitionOf("test.tbl_daily", partitionName);
+    }
+
+    /**
+     * A month-grained mv over a day-grained base table keeps the month partition alive when one of its days is
+     * dropped, so the dropped day's rows stay in the mv unless that partition is recomputed.
+     */
+    @Test
+    public void testRollupMvRefreshesPartitionCoveringDroppedBasePartition() throws Exception {
+        createDailyPartitionedBaseTable();
+        starRocksAssert.withMaterializedView("create materialized view test.mv_rollup_month\n" +
+                "partition by date_trunc('month', k1)\n" +
+                "distributed by hash(k1) buckets 3\n" +
+                "refresh deferred manual\n" +
+                "properties('replication_num' = '1')\n" +
+                "as select k1, sum(v1) as v1 from test.tbl_daily group by k1;");
+        try {
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "mv_rollup_month");
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+            initAndExecuteTaskRun(taskRun);
+            Set<String> mvPartitionsBeforeDrop = mv.getVisiblePartitionNames();
+            Assertions.assertEquals(2, mvPartitionsBeforeDrop.size());
+
+            // Nothing changed, so the second run has nothing to refresh.
+            initAndExecuteTaskRun(taskRun);
+            Assertions.assertNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
+
+            dropDailyBasePartition("p20220301");
+            initAndExecuteTaskRun(taskRun);
+            MvTaskRunContext mvContext = getPartitionBasedRefreshProcessor(taskRun).getMvContext();
+
+            // 2022-03-02 survives, so the March mv partition survives with it and still holds the 2022-03-01 row.
+            Assertions.assertEquals(mvPartitionsBeforeDrop, mv.getVisiblePartitionNames());
+            Assertions.assertNotNull(mvContext.getExecPlan());
+            String marchMvPartition = mvPartitionsBeforeDrop.stream()
+                    .filter(name -> name.contains("202203")).findFirst().orElseThrow();
+            Assertions.assertEquals(Sets.newHashSet(marchMvPartition),
+                    mvContext.getRefreshScope().getMvPartitionsToRefresh().getPartitionNames());
+
+            initAndExecuteTaskRun(taskRun);
+            Assertions.assertNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_rollup_month");
+            starRocksAssert.dropTable("test.tbl_daily");
+        }
+    }
+
+    /**
+     * The 1:1 counterpart of {@link #testRollupMvRefreshesPartitionCoveringDroppedBasePartition}: the mv partition is
+     * dropped along with the base partition, so there is nothing left to recompute.
+     */
+    @Test
+    public void testDayGrainedMvDropsPartitionOfDroppedBasePartition() throws Exception {
+        createDailyPartitionedBaseTable();
+        starRocksAssert.withMaterializedView("create materialized view test.mv_same_day\n" +
+                "partition by date_trunc('day', k1)\n" +
+                "distributed by hash(k1) buckets 3\n" +
+                "refresh deferred manual\n" +
+                "properties('replication_num' = '1')\n" +
+                "as select k1, sum(v1) as v1 from test.tbl_daily group by k1;");
+        try {
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "mv_same_day");
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+            initAndExecuteTaskRun(taskRun);
+            Assertions.assertEquals(3, mv.getVisiblePartitionNames().size());
+
+            dropDailyBasePartition("p20220301");
+            initAndExecuteTaskRun(taskRun);
+
+            Assertions.assertEquals(2, mv.getVisiblePartitionNames().size());
+            Assertions.assertNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_same_day");
+            starRocksAssert.dropTable("test.tbl_daily");
+        }
+    }
+
+    /** A year-grained mv covers both months, so one mv partition outlives the dropped day. */
+    @Test
+    public void testYearGrainedMvRefreshesPartitionCoveringDroppedBasePartition() throws Exception {
+        createDailyPartitionedBaseTable();
+        starRocksAssert.withMaterializedView("create materialized view test.mv_rollup_year\n" +
+                "partition by date_trunc('year', k1)\n" +
+                "distributed by hash(k1) buckets 3\n" +
+                "refresh deferred manual\n" +
+                "properties('replication_num' = '1')\n" +
+                "as select k1, sum(v1) as v1 from test.tbl_daily group by k1;");
+        try {
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "mv_rollup_year");
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+            initAndExecuteTaskRun(taskRun);
+            Set<String> mvPartitions = mv.getVisiblePartitionNames();
+            Assertions.assertEquals(1, mvPartitions.size());
+            initAndExecuteTaskRun(taskRun);
+            Assertions.assertNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
+
+            dropDailyBasePartition("p20220301");
+            initAndExecuteTaskRun(taskRun);
+            MvTaskRunContext mvContext = getPartitionBasedRefreshProcessor(taskRun).getMvContext();
+
+            Assertions.assertEquals(mvPartitions, mv.getVisiblePartitionNames());
+            Assertions.assertNotNull(mvContext.getExecPlan());
+            Assertions.assertEquals(mvPartitions,
+                    mvContext.getRefreshScope().getMvPartitionsToRefresh().getPartitionNames());
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_rollup_year");
+            starRocksAssert.dropTable("test.tbl_daily");
+        }
+    }
+
+    /**
+     * Retention drops one base partition at a time, so each round must recompute only the mv partition covering it.
+     * Recomputing the whole mv is the cost that made dropped partitions be ignored in the first place.
+     */
+    @Test
+    public void testRepeatedDropsRefreshOnlyTheCoveringMvPartition() throws Exception {
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test.tbl_quarters (\n" +
+                "  k1 date,\n" +
+                "  v1 int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1) (\n" +
+                "  PARTITION p20220110 VALUES [('2022-01-10'),('2022-01-11')),\n" +
+                "  PARTITION p20220111 VALUES [('2022-01-11'),('2022-01-12')),\n" +
+                "  PARTITION p20220210 VALUES [('2022-02-10'),('2022-02-11')),\n" +
+                "  PARTITION p20220211 VALUES [('2022-02-11'),('2022-02-12')),\n" +
+                "  PARTITION p20220310 VALUES [('2022-03-10'),('2022-03-11')),\n" +
+                "  PARTITION p20220311 VALUES [('2022-03-11'),('2022-03-12'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        for (String day : List.of("2022-01-10", "2022-01-11", "2022-02-10", "2022-02-11", "2022-03-10", "2022-03-11")) {
+            executeInsertSql(connectContext, String.format("insert into test.tbl_quarters values('%s', 1);", day));
+        }
+        starRocksAssert.withMaterializedView("create materialized view test.mv_quarters\n" +
+                "partition by date_trunc('month', k1)\n" +
+                "distributed by hash(k1) buckets 3\n" +
+                "refresh deferred manual\n" +
+                "properties('replication_num' = '1')\n" +
+                "as select k1, sum(v1) as v1 from test.tbl_quarters group by k1;");
+        try {
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "mv_quarters");
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+            initAndExecuteTaskRun(taskRun);
+            Set<String> allMvPartitions = mv.getVisiblePartitionNames();
+            Assertions.assertEquals(3, allMvPartitions.size());
+
+            // Each round drops a day from a different month; the other two months must be left alone.
+            Map<String, String> droppedDayToMonth = new LinkedHashMap<>();
+            droppedDayToMonth.put("p20220110", "202201");
+            droppedDayToMonth.put("p20220210", "202202");
+            for (Map.Entry<String, String> round : droppedDayToMonth.entrySet()) {
+                String sql = "ALTER TABLE test.tbl_quarters DROP PARTITION " + round.getKey();
+                new StmtExecutor(connectContext, SqlParser.parseSingleStatement(
+                        sql, connectContext.getSessionVariable().getSqlMode())).execute();
+                initAndExecuteTaskRun(taskRun);
+                MvTaskRunContext mvContext = getPartitionBasedRefreshProcessor(taskRun).getMvContext();
+
+                // A range partition is named after both bounds, so match the lower bound rather than any occurrence.
+                String covering = allMvPartitions.stream()
+                        .filter(name -> name.startsWith("p" + round.getValue() + "_")).findFirst().orElseThrow();
+                Assertions.assertEquals(Sets.newHashSet(covering),
+                        mvContext.getRefreshScope().getMvPartitionsToRefresh().getPartitionNames(),
+                        "dropping " + round.getKey() + " must recompute only " + covering);
+                Assertions.assertEquals(allMvPartitions, mv.getVisiblePartitionNames());
+            }
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_quarters");
+            starRocksAssert.dropTable("test.tbl_quarters");
+        }
+    }
+
+    /**
+     * A refresh restricted to an unrelated range updates the version map too, and must not erase the evidence that the
+     * mv partition outside its range is stale.
+     */
+    @Test
+    public void testPartialRefreshOfUnrelatedRangeKeepsDropEvidence() throws Exception {
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test.tbl_partial (\n" +
+                "  k1 date,\n" +
+                "  v1 int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1) (\n" +
+                "  PARTITION p20220110 VALUES [('2022-01-10'),('2022-01-11')),\n" +
+                "  PARTITION p20220111 VALUES [('2022-01-11'),('2022-01-12')),\n" +
+                "  PARTITION p20220210 VALUES [('2022-02-10'),('2022-02-11'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        for (String day : List.of("2022-01-10", "2022-01-11", "2022-02-10")) {
+            executeInsertSql(connectContext, String.format("insert into test.tbl_partial values('%s', 1);", day));
+        }
+        starRocksAssert.withMaterializedView("create materialized view test.mv_partial_range\n" +
+                "partition by date_trunc('month', k1)\n" +
+                "distributed by hash(k1) buckets 3\n" +
+                "refresh deferred manual\n" +
+                "properties('replication_num' = '1')\n" +
+                "as select k1, sum(v1) as v1 from test.tbl_partial group by k1;");
+        try {
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "mv_partial_range");
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            initAndExecuteTaskRun(TaskRunBuilder.newBuilder(task).build());
+
+            String januaryMv = mv.getVisiblePartitionNames().stream()
+                    .filter(n -> n.startsWith("p202201_")).findFirst().orElseThrow();
+            long januaryVersionBefore =
+                    mv.getPartition(januaryMv).getDefaultPhysicalPartition().getVisibleVersion();
+
+            dropDailyBasePartitionOf("test.tbl_partial", "p20220110");
+            // Name the partition: the UT DML mock bumps every target partition, which would refresh January anyway.
+            executeInsertSql(connectContext, "insert into test.tbl_partial partition(p20220210) values('2022-02-10', 2);");
+
+            // Refresh February only: it must not be able to erase January's evidence.
+            Map<String, String> februaryOnly = Maps.newHashMap();
+            februaryOnly.put(TaskRun.PARTITION_START, "2022-02-01");
+            februaryOnly.put(TaskRun.PARTITION_END, "2022-03-01");
+            TaskRun februaryRun = TaskRunBuilder.newBuilder(task).properties(februaryOnly).build();
+            initAndExecuteTaskRun(februaryRun);
+            Assertions.assertNotNull(getPartitionBasedRefreshProcessor(februaryRun).getMvContext().getExecPlan());
+            Assertions.assertTrue(getPartitionNamesToRefreshForMv(mv).contains(januaryMv));
+
+            initAndExecuteTaskRun(TaskRunBuilder.newBuilder(task).build());
+            long januaryVersionAfter =
+                    mv.getPartition(januaryMv).getDefaultPhysicalPartition().getVisibleVersion();
+            Assertions.assertTrue(januaryVersionAfter > januaryVersionBefore,
+                    januaryMv + " was never recomputed: a February-only refresh consumed the drop evidence");
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_partial_range");
+            starRocksAssert.dropTable("test.tbl_partial");
+        }
+    }
+
+    /**
+     * With batching, each run updates the version map, so a drop whose mv partition falls in a later batch must keep
+     * its evidence until that batch recomputes it.
+     */
+    @Test
+    public void testBatchedRefreshDoesNotLoseDropEvidenceForLaterBatches() throws Exception {
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test.tbl_batched (\n" +
+                "  k1 date,\n" +
+                "  v1 int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1) (\n" +
+                "  PARTITION p20220110 VALUES [('2022-01-10'),('2022-01-11')),\n" +
+                "  PARTITION p20220111 VALUES [('2022-01-11'),('2022-01-12')),\n" +
+                "  PARTITION p20220210 VALUES [('2022-02-10'),('2022-02-11')),\n" +
+                "  PARTITION p20220211 VALUES [('2022-02-11'),('2022-02-12'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        for (String day : List.of("2022-01-10", "2022-01-11", "2022-02-10", "2022-02-11")) {
+            executeInsertSql(connectContext, String.format("insert into test.tbl_batched values('%s', 1);", day));
+        }
+        starRocksAssert.withMaterializedView("create materialized view test.mv_batched\n" +
+                "partition by date_trunc('month', k1)\n" +
+                "distributed by hash(k1) buckets 3\n" +
+                "refresh deferred manual\n" +
+                "properties('replication_num' = '1', 'partition_refresh_number' = '1',\n" +
+                "'partition_refresh_strategy' = 'strict')\n" +
+                "as select k1, sum(v1) as v1 from test.tbl_batched group by k1;");
+        try {
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "mv_batched");
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            task.getProperties().put(TaskRun.IS_TEST, "true");
+            executeAllBatches(TaskRunBuilder.newBuilder(task).build());
+
+            Map<String, Long> versionsBeforeDrop = Maps.newHashMap();
+            for (String mvPartition : mv.getVisiblePartitionNames()) {
+                versionsBeforeDrop.put(mvPartition,
+                        mv.getPartition(mvPartition).getDefaultPhysicalPartition().getVisibleVersion());
+            }
+
+            // One drop per month, so the two dropped partitions land in different mv partitions and cannot both be
+            // covered by a single batch.
+            for (String dropped : List.of("p20220110", "p20220210")) {
+                String sql = "ALTER TABLE test.tbl_batched DROP PARTITION " + dropped;
+                new StmtExecutor(connectContext, SqlParser.parseSingleStatement(
+                        sql, connectContext.getSessionVariable().getSqlMode())).execute();
+            }
+            TaskRun firstBatch = TaskRunBuilder.newBuilder(task).build();
+            initAndExecuteTaskRun(firstBatch);
+            TaskRun secondBatch = getPartitionBasedRefreshProcessor(firstBatch).getNextTaskRun();
+            Assertions.assertNotNull(secondBatch);
+            Assertions.assertEquals(1, getPartitionNamesToRefreshForMv(mv).size());
+            executeAllBatches(secondBatch);
+
+            // Both months lost a day, so both mv partitions must have been rewritten, not just the first batch's.
+            for (String month : List.of("202201", "202202")) {
+                String mvPartition = mv.getVisiblePartitionNames().stream()
+                        .filter(n -> n.startsWith("p" + month + "_")).findFirst().orElseThrow();
+                long after = mv.getPartition(mvPartition).getDefaultPhysicalPartition().getVisibleVersion();
+                Assertions.assertTrue(after > versionsBeforeDrop.get(mvPartition),
+                        mvPartition + " was not recomputed after its base partition was dropped: version stayed at "
+                                + after);
+            }
+            Assertions.assertTrue(getPartitionNamesToRefreshForMv(mv).isEmpty());
+
+            TaskRun steadyRun = TaskRunBuilder.newBuilder(task).build();
+            initAndExecuteTaskRun(steadyRun);
+            Assertions.assertNull(getPartitionBasedRefreshProcessor(steadyRun).getMvContext().getExecPlan());
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_batched");
+            starRocksAssert.dropTable("test.tbl_batched");
+        }
+    }
+
+    /**
+     * The association mapping does not record which ref base table a partition name came from, so with several ref
+     * base tables a recomputed mv partition can keep looking affected by another table's drop. A batched refresh of
+     * such an mv must still settle, whether the tables share partition names or not.
+     */
+    @Test
+    public void testBatchedRefreshSettlesWithRefTablesSharingPartitionNames() throws Exception {
+        assertBatchedRefreshSettlesAfterDropsFromEachRefTable("p", "p");
+    }
+
+    @Test
+    public void testBatchedRefreshSettlesWithRefTablesOfDisjointPartitionNames() throws Exception {
+        assertBatchedRefreshSettlesAfterDropsFromEachRefTable("pa", "pb");
+    }
+
+    private void assertBatchedRefreshSettlesAfterDropsFromEachRefTable(String prefixA, String prefixB)
+            throws Exception {
+        Map<String, String> tableToPrefix = new LinkedHashMap<>();
+        tableToPrefix.put("tbl_ref_a", prefixA);
+        tableToPrefix.put("tbl_ref_b", prefixB);
+        for (Map.Entry<String, String> table : tableToPrefix.entrySet()) {
+            String p = table.getValue();
+            starRocksAssert.useDatabase("test").withTable("CREATE TABLE test." + table.getKey() + " (\n" +
+                    "  k1 date,\n" +
+                    "  v1 int\n" +
+                    ")\n" +
+                    "PARTITION BY RANGE(k1) (\n" +
+                    "  PARTITION " + p + "20220110 VALUES [('2022-01-10'),('2022-01-11')),\n" +
+                    "  PARTITION " + p + "20220111 VALUES [('2022-01-11'),('2022-01-12')),\n" +
+                    "  PARTITION " + p + "20220210 VALUES [('2022-02-10'),('2022-02-11')),\n" +
+                    "  PARTITION " + p + "20220211 VALUES [('2022-02-11'),('2022-02-12'))\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                    "PROPERTIES('replication_num' = '1');");
+            for (String day : List.of("2022-01-10", "2022-01-11", "2022-02-10", "2022-02-11")) {
+                executeInsertSql(connectContext,
+                        String.format("insert into test.%s values('%s', 1);", table.getKey(), day));
+            }
+        }
+        starRocksAssert.withMaterializedView("create materialized view test.mv_two_ref_tables\n" +
+                "partition by date_trunc('month', k1)\n" +
+                "distributed by hash(k1) buckets 3\n" +
+                "refresh deferred manual\n" +
+                "properties('replication_num' = '1', 'partition_refresh_number' = '1',\n" +
+                "'partition_refresh_strategy' = 'strict')\n" +
+                "as select k1, v1 from test.tbl_ref_a union all select k1, v1 from test.tbl_ref_b;");
+        try {
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "mv_two_ref_tables");
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            task.getProperties().put(TaskRun.IS_TEST, "true");
+            executeAllBatches(TaskRunBuilder.newBuilder(task).build());
+
+            // Only one table's names survive in the mapping, so drop from each in turn: whichever table loses its
+            // entries, the mapping shows the other table's partitions.
+            Map<String, List<String>> roundsOfDrops = new LinkedHashMap<>();
+            roundsOfDrops.put("test.tbl_ref_a", List.of(prefixA + "20220110", prefixA + "20220210"));
+            roundsOfDrops.put("test.tbl_ref_b", List.of(prefixB + "20220111", prefixB + "20220211"));
+            for (Map.Entry<String, List<String>> round : roundsOfDrops.entrySet()) {
+                for (String partition : round.getValue()) {
+                    dropDailyBasePartitionOf(round.getKey(), partition);
+                }
+                TaskRun firstBatch = TaskRunBuilder.newBuilder(task).build();
+                initAndExecuteTaskRun(firstBatch);
+                Assertions.assertNotNull(getPartitionBasedRefreshProcessor(firstBatch).getNextTaskRun());
+                executeAllBatches(getPartitionBasedRefreshProcessor(firstBatch).getNextTaskRun());
+
+                TaskRun steadyRun = TaskRunBuilder.newBuilder(task).build();
+                initAndExecuteTaskRun(steadyRun);
+                Assertions.assertNull(getPartitionBasedRefreshProcessor(steadyRun).getMvContext().getExecPlan(),
+                        "dropping from " + round.getKey() + " never settles");
+            }
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_two_ref_tables");
+            starRocksAssert.dropTable("test.tbl_ref_a");
+            starRocksAssert.dropTable("test.tbl_ref_b");
+        }
+    }
+
+    /**
+     * The association mapping only gains an entry when a partition is refreshed, so an mv carried over from a version
+     * that did not maintain it can be mapped for some partitions and not others. An unmapped partition cannot be ruled
+     * out, while a mapped one disjoint from the dropped names can, so only the unmapped partition is recomputed.
+     */
+    @Test
+    public void testRollupMvWithPartialAssociationMapRefreshesUnmappedPartition() throws Exception {
+        createDailyPartitionedBaseTable();
+        starRocksAssert.withMaterializedView("create materialized view test.mv_partial_map\n" +
+                "partition by date_trunc('month', k1)\n" +
+                "distributed by hash(k1) buckets 3\n" +
+                "refresh deferred manual\n" +
+                "properties('replication_num' = '1')\n" +
+                "as select k1, sum(v1) as v1 from test.tbl_daily group by k1;");
+        try {
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "mv_partial_map");
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+            initAndExecuteTaskRun(taskRun);
+            Map<String, Set<String>> associations =
+                    mv.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap();
+            String marchMvPartition = mv.getVisiblePartitionNames().stream()
+                    .filter(name -> name.contains("202203")).findFirst().orElseThrow();
+            // The April partition stays mapped and disjoint from the drop, so it must not be recomputed with March.
+            associations.remove(marchMvPartition);
+            Assertions.assertFalse(associations.isEmpty());
+
+            dropDailyBasePartition("p20220301");
+            initAndExecuteTaskRun(taskRun);
+            MvTaskRunContext mvContext = getPartitionBasedRefreshProcessor(taskRun).getMvContext();
+
+            Assertions.assertNotNull(mvContext.getExecPlan());
+            Assertions.assertEquals(Sets.newHashSet(marchMvPartition),
+                    mvContext.getRefreshScope().getMvPartitionsToRefresh().getPartitionNames());
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_partial_map");
+            starRocksAssert.dropTable("test.tbl_daily");
+        }
+    }
+
+    /** A non-partitioned mv has nothing to drop as an orphan, so it keeps the rows unless refreshed as a whole. */
+    @Test
+    public void testNonPartitionedMvRefreshesWhenBasePartitionDropped() throws Exception {
+        createDailyPartitionedBaseTable();
+        starRocksAssert.withMaterializedView("create materialized view test.mv_unpartitioned_daily\n" +
+                "distributed by hash(k1) buckets 3\n" +
+                "refresh deferred manual\n" +
+                "properties('replication_num' = '1')\n" +
+                "as select k1, sum(v1) as v1 from test.tbl_daily group by k1;");
+        try {
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "mv_unpartitioned_daily");
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+            initAndExecuteTaskRun(taskRun);
+            initAndExecuteTaskRun(taskRun);
+            Assertions.assertNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
+
+            dropDailyBasePartition("p20220301");
+            initAndExecuteTaskRun(taskRun);
+
+            Assertions.assertNotNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
+            initAndExecuteTaskRun(taskRun);
+            Assertions.assertNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_unpartitioned_daily");
+            starRocksAssert.dropTable("test.tbl_daily");
+        }
+    }
+
+    /**
+     * The mv is partition-aligned 1:1 with the fact table, but a dimension table it joins is not, so losing one of the
+     * dimension's partitions invalidates the whole mv rather than a subset of it.
+     */
+    @Test
+    public void testMvRefreshesWhenNonRefBaseTablePartitionDropped() throws Exception {
+        createDailyPartitionedBaseTable();
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test.dim_daily (\n" +
+                "  d1 date,\n" +
+                "  label int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(d1) (\n" +
+                "  PARTITION p20220301 VALUES [('2022-03-01'),('2022-03-02')),\n" +
+                "  PARTITION p20220302 VALUES [('2022-03-02'),('2022-03-03'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(d1) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        executeInsertSql(connectContext, "insert into test.dim_daily values('2022-03-01', 7);");
+        executeInsertSql(connectContext, "insert into test.dim_daily values('2022-03-02', 8);");
+        starRocksAssert.withMaterializedView("create materialized view test.mv_fact_dim\n" +
+                "partition by date_trunc('day', k1)\n" +
+                "distributed by hash(k1) buckets 3\n" +
+                "refresh deferred manual\n" +
+                "properties('replication_num' = '1')\n" +
+                "as select f.k1, f.v1, d.label from test.tbl_daily f left join test.dim_daily d on f.k1 = d.d1;");
+        try {
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "mv_fact_dim");
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+            initAndExecuteTaskRun(taskRun);
+            initAndExecuteTaskRun(taskRun);
+            Assertions.assertNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
+
+            String sql = "ALTER TABLE test.dim_daily DROP PARTITION p20220301";
+            new StmtExecutor(connectContext,
+                    SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode())).execute();
+            initAndExecuteTaskRun(taskRun);
+
+            Assertions.assertNotNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_fact_dim");
+            starRocksAssert.dropTable("test.dim_daily");
+            starRocksAssert.dropTable("test.tbl_daily");
+        }
     }
 }

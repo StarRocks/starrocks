@@ -3,6 +3,7 @@ sidebar_position: 120
 displayed_sidebar: docs
 toc_max_heading_level: 5
 description: "A unified catalog in StarRocks handles tables from Hive, Iceberg, Hudi, Delta Lake, and Kudu in a single catalog."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
@@ -455,7 +456,7 @@ However, if the frequency of data updates in Hive, Hudi, or Delta Lake is high, 
 | metastore_cache_refresh_interval_sec   | No       | The time interval at which StarRocks asynchronously updates the metadata of Hive, Hudi, or Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `7200`, which is 2 hours. |
 | remote_file_cache_refresh_interval_sec | No       | The time interval at which StarRocks asynchronously updates the metadata of the underlying data files of Hive, Hudi, or Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `60`. |
 | metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Hive, Hudi, or Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
-| remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hive, Hudi, or Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
+| remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hive, Hudi, or Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours, from v3.5.7 and v4.0.0 onwards. In earlier versions, the default value is `129600`, which is 36 hours. |
 
 #### PaimonCatalogParams
 

@@ -2,9 +2,16 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical s"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # メトリクス s
+
+## `scheduled_tablet_num`
+
+- 単位: カウント
+- タイプ: 瞬間
+- 説明: リーダー FE の tablet スケジューラーがスケジュール中の tablet の数。つまり、Pending 状態と Running 状態の tablet の合計で、BALANCE タイプと REPAIR タイプの両方を含みます。リーダー以外の FE では `0` になります。
 
 ## `schema_change_mem_bytes`
 
@@ -96,6 +103,18 @@ description: "Alphabetical s"
 - 単位: -
 - 説明: `/proc/net/snmp`によって返されるメトリクス。
 
+## `staros_shard_info_fallback_cache_entries`
+
+- 単位: カウント
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE が StarMgr に問い合わせた後に保持している、自身の所有していない tablet のストレージロケーションの数 (BE 設定項目 `lake_shard_info_cache_ttl_sec` を参照)。これらのエントリは `lake_tablet_location_handoff_entries` で数えられるエントリと 16 MiB の LRU キャッシュを共有します。エントリは TTL が切れるまで使用され、キャッシュに空きが必要なときに追い出されるため、この値はまだ使用できるエントリ数ではなく、キャッシュの使用状況を表します。
+
+## `staros_shard_info_fallback_cache_hits_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: 共有データモード専用。この BE が、自身の所有していない tablet のストレージロケーションを、以前に StarMgr に問い合わせて保持していたロケーション (BE 設定項目 `lake_shard_info_cache_ttl_sec` を参照) で解決し、再度問い合わせなかった回数。1 回の増加は StarMgr への GetShard RPC を 1 回省いたことを意味します。`starrocks_be_staros_shard_info_fallback_total` と合わせると、キャッシュのヒット率は `hits / (hits + fallback)` です。
+
 ## `starrocks_be_build_info`
 
 - 単位: -
@@ -182,6 +201,18 @@ description: "Alphabetical s"
 - タイプ: 累積値
 - 説明: スキャン時に flat JSON サブカラム値の型変換に費やした累積時間。
 
+## `starrocks_be_flat_json_compaction_mixed_inputs_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: 入力セグメントの一部がフラット JSON、残りが完全な JSON である JSON 列を、コンパクションがフラット JSON セグメントのレイアウト（すべてのサブカラムを JSON 型）で読み取った回数。`enable_compaction_flat_json_mixed_inputs` を参照してください。
+
+## `starrocks_be_flat_json_compaction_plain_fallback_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: バッファ済みの入力が `compaction_memory_limit_per_worker` の 8 分の 1（同時に書き込まれる JSON 列で等分）を超えたが、書き出しに使える単一のフラットレイアウトがなかったため、出力を完全な JSON として書き出したフラット JSON コンパクションの回数。
+
 ## `starrocks_be_flat_json_compaction_schema_change_total`
 
 - 単位: カウント
@@ -192,7 +223,7 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 累積値
-- 説明: `starrocks_be_flat_json_compaction_total` に計上されるフラット JSON コンパクションのうち、出力セグメント全体をバッファせず入力を受け取り次第書き出した回数。バッファ済みの入力が `compaction_memory_limit_per_worker` の 8 分の 1 を超え、そのすべてが同じフラットレイアウトを持つ場合に発生します。
+- 説明: `starrocks_be_flat_json_compaction_total` に計上されるフラット JSON コンパクションのうち、出力セグメント全体をバッファせず入力を受け取り次第書き出した回数。バッファ済みの入力が `compaction_memory_limit_per_worker` の 8 分の 1（同時に書き込まれる JSON 列で等分）を超え、そのすべてが同じフラットレイアウトを持つ場合に発生します。
 
 ## `starrocks_be_flat_json_compaction_total`
 
@@ -353,7 +384,7 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 累積
-- 説明: 共有データモード専用。BE の StarOSWorker が、ローカルキャッシュに必要な shard 情報が存在しない（クエリ／コンパクション／lake 操作がその shard を参照する前に、FE から当該 BE へ shard がプッシュされていない）ために、starmgr に対して実際に発行した RPC（`g_starlet->get_shard_info()`）の総数。starlet の ready チェックが通過し、RPC が実際にディスパッチされた場合のみカウントされます。starlet が未 ready のタイムアウトは含まれません。正常時はほぼゼロに近い値となることが期待されます。継続的または増加傾向のレートは、FE 側のタスク／ノード選択がまだ shard を保持していない BE に処理をスケジュールしている、あるいは FE 側からの shard プッシュの伝搬が遅延していることを示す強いシグナルです。推奨アラート: BE ごとの 5 分間ウィンドウでのレートが高い場合。`file_bundling` が有効なテーブルへのロードを調整するノードでは、これらの RPC の大半が tablet ストレージロケーションの引き渡しによって省かれ、その回数は `lake_tablet_location_handoff_hits_total` に計上されます。引き渡しのヒット率は `hits / (hits + fallback)` です。
+- 説明: 共有データモード専用。BE の StarOSWorker が、ローカルキャッシュに必要な shard 情報が存在しない（クエリ／コンパクション／lake 操作がその shard を参照する前に、FE から当該 BE へ shard がプッシュされていない）ために、starmgr に対して実際に発行した RPC（`g_starlet->get_shard_info()`）の総数。starlet の ready チェックが通過し、RPC が実際にディスパッチされた場合のみカウントされます。starlet が未 ready のタイムアウトは含まれません。正常時はほぼゼロに近い値となることが期待されます。継続的または増加傾向のレートは、FE 側のタスク／ノード選択がまだ shard を保持していない BE に処理をスケジュールしている、あるいは FE 側からの shard プッシュの伝搬が遅延していることを示す強いシグナルです。推奨アラート: BE ごとの 5 分間ウィンドウでのレートが高い場合。`file_bundling` が有効なテーブルへのロードを調整するノードでは、これらの RPC の大半が tablet ストレージロケーションの引き渡しによって省かれ、その回数は `lake_tablet_location_handoff_hits_total` に計上されます。引き渡しのヒット率は `hits / (hits + fallback)` です。どのノードでも、`lake_shard_info_cache_ttl_sec` 以内に同じ tablet を再び参照した場合は、最初の RPC の後に保持したロケーションで応答し、その回数は `staros_shard_info_fallback_cache_hits_total` に計上されます。
 
 ## `starrocks_be_staros_shard_info_fallback_failed_total`
 
@@ -673,11 +704,10 @@ description: "Alphabetical s"
 
 | `reason` | 記録される条件 |
 | --- | --- |
-| `materialized_view_target` | 導出ティアがこのマテリアライズドビューに対応していない（増分マテリアライズドビューでない、ソートキーが隠し row-id 列でないなど）。 |
-| `row_id_span_too_small` | 推定出力が小さすぎて、row-id の範囲を均等に分割できない。 |
-| `row_id_space_not_pristine` | 自動インクリメントカウンタが既に id を払い出しているため、分割点を安全に導出できない。 |
+| `materialized_view_target` | ビューが増分マテリアライズドビューで、導出ティアがそのキーを決められない（可視インデックスが複数ある、ソートキーが隠し row-id 列だけではない、row id がフィンガープリントではなくキー値を順に符号化したものである）。マテリアライズドビューへの取り込みが、そのビュー自身のリフレッシュでない場合にも記録される。 |
+| `row_id_span_too_small` | 推定出力が小さすぎて、row-id の範囲を均等に分割できない。または、リフレッシュが上書きする各パーティションで、`tablet_reshard_min_split_size` のサイズのタブレット 2 つ分に満たない。複数のパーティションを上書きするリフレッシュで、推定出力に必要なタブレット数がパーティション数以下の場合にも記録される。 |
 | `estimate_unavailable` | 利用できる出力サイズの見積もりがなく、タブレット数を決められない。テーブル統計のない External Catalog のテーブルからの INSERT でも記録される。 |
-| `multiple_temporary_partitions` | リフレッシュが複数の置き換えパーティションに書き込むため、分割するとほとんどのタブレットが空になる。機能を有効にしてもこれは変わらない。 |
+| `multiple_temporary_partitions` | Row ID がストレージエンジンによって生成されるビューに対して、リフレッシュが複数の置き換えパーティションに書き込む。各パーティションの Row ID は値の範囲のごく一部に収まるため、分割するとほとんどのタブレットが空になる。機能を有効にしてもこれは変わらない。 |
 | `derivation_failed` | 分割点の導出に失敗した、または導出した分割点が検証に通らなかった。 |
 | `stale_catalog_state` | 分割点を導出してからジョブを構築するまでの間に、マテリアライズドビューの可視 index が変化した。 |
 | `submit_failed` | 導出した分割点から、受理される reshard ジョブを作れなかった。 |
@@ -718,7 +748,7 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 累積
-- 説明: マルチパーティション経路のカウンタ。1 回の取り込みあたりの予測パーティション数が `tablet_pre_split_max_partitions_per_load` を超えたために grouper が破棄したパーティション数。grouper はデータ量の多いパーティション（data tier が一部のファイルだけをサンプリングし、かつパーティション値がファイルパスから取られる場合はバイト数、それ以外はサンプル数で判断）を残し、少ないものを切り捨てます。破棄されたパーティションは BE ランタイムの自動パーティション作成にフォールバックし、事前分割は行われません。継続的に非ゼロの場合は上限が効いているサインなので、`tablet_pre_split_max_partitions_per_load` を引き上げるか、取り込みのパーティション基数を下げることを検討してください。
+- 説明: マルチパーティション経路のカウンタ。1 回の取り込みあたりのパーティション数が `tablet_pre_split_max_partitions_per_load` を超えたために事前分割されなかったパーティション数。サンプリングによる取り込みでは、grouper はデータ量の多い予測パーティション（data tier が一部のファイルだけをサンプリングし、かつパーティション値がファイルパスから取られる場合はバイト数、それ以外はサンプル数で判断）を残し、少ないものを切り捨てます。破棄されたパーティションは BE ランタイムの自動パーティション作成にフォールバックし、事前分割は行われません。Row ID がリフレッシュクエリで計算されるフィンガープリントである増分マテリアライズドビューのリフレッシュでは、条件を満たすパーティションのうちパーティション名の順で上限を超えたものがカウントされます。これらは作成済みで、1 つのタブレットのままです。継続的に非ゼロの場合は上限が効いているサインなので、`tablet_pre_split_max_partitions_per_load` を引き上げるか、取り込みのパーティション基数を下げることを検討してください。
 
 ## `starrocks_fe_tablet_pre_split_pre_create`
 
@@ -790,7 +820,7 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 瞬間
-- 説明: 各BEノードにおける最高のコンパクションスコアを示します。
+- 説明: 各BEノードにおける最高のコンパクションスコアを示します。これは `tablet_base_max_compaction_score` と `tablet_cumulative_max_compaction_score` のうち大きい方の値です。主キーテーブルのコンパクションスコア (`tablet_update_max_compaction_score`) は含まれません。
 
 ## `starrocks_fe_tablet_num`
 

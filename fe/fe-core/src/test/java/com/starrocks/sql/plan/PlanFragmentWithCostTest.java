@@ -2380,7 +2380,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         sql = "SELECT t1.L_PARTKEY from lineitem t1 join nation t2 on t1.L_PARTKEY = t2.N_NATIONKEY " +
                 "and t1.L_SUPPKEY = t2.N_NATIONKEY;";
         plan = getCostExplain(sql);
-        assertContains(plan, "cardinality: 6250000");
+        assertContains(plan, "cardinality: 30000000");
 
         sql = "SELECT t1.L_PARTKEY from lineitem t1 left join nation t2 on t1.L_PARTKEY = t2.N_NATIONKEY " +
                 "and t1.L_SUPPKEY = t2.N_NATIONKEY;";

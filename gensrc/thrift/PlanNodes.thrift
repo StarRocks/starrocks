@@ -99,7 +99,8 @@ enum TPlanNodeType {
   BENCHMARK_SCAN_NODE = 42,
   LAKE_CACHE_STATS_SCAN_NODE = 43,
   ENFORCE_UNIQUE_ROW_LOCATOR_NODE = 44,
-  AI_PROJECT_NODE = 45
+  AI_PROJECT_NODE = 45,
+  LAKE_GROUPED_SCAN_NODE = 46
 }
 
 // phases of an execution node
@@ -401,11 +402,14 @@ struct TIcebergDeleteFile {
     // encrypted table is itself encrypted and carries its OWN per-file key, so it cannot reuse
     // the data file's key in THdfsScanRange.parquet_encryption_info (field 46).
     5: optional TParquetEncryptionInfo parquet_encryption_info
+    // Set for a position delete file whose every row references the data file of this scan
+    // range, so the BE reads only its pos column.
+    6: optional bool references_only_data_file
     // Blob range for Iceberg v3 deletion vectors (file_format = PUFFIN, file_content = POSITION_DELETES).
-    // Byte offset of the deletion-vector-v1 blob within its container.
-    6: optional i64 content_offset
     // Byte length of the deletion-vector-v1 blob, including its length prefix and checksum.
     7: optional i64 content_size_in_bytes
+    // Byte offset of the deletion-vector-v1 blob within its container.
+    8: optional i64 content_offset
 }
 
 struct TPaimonDeletionFile {
@@ -589,6 +593,13 @@ struct TBenchmarkScanRange {
 struct TScanRangeExt {
 }
 
+// Query-local clip; never persisted in tablet metadata.
+struct TGroupedRangeTask {
+  1: optional i32 group_id
+  2: optional Types.TTabletRange key_range
+  3: optional list<i32> sort_key_unique_ids
+}
+
 // Specification of an individual data range which is held in its entirety
 // by a storage server
 struct TScanRange {
@@ -605,6 +616,8 @@ struct TScanRange {
 
   40: optional TBenchmarkScanRange benchmark_scan_range
   41: optional TScanRangeExt ext
+
+  52: optional TGroupedRangeTask grouped_range_task
 }
 
 struct TMySQLScanNode {
@@ -1659,26 +1672,30 @@ struct TLookUpNode {
   1: optional map<Types.TTupleId, Descriptors.TRowPositionDescriptor> row_pos_descs;
 }
 
-struct TAIEndpointConfig {
-  1: optional string endpoint
-  2: optional string model
-  3: optional string provider
-  4: optional string api_key
-  5: optional i64 timeout_ms
-  6: optional i32 dimensions
+enum TAIProviderType {
+  EMBEDDING = 0,
+  CHAT = 1,
+  RERANK = 2
 }
 
-struct TAIModelConfiguration {
-  1: optional TAIEndpointConfig chat
-  2: optional TAIEndpointConfig embedding
-  // Missing source is accepted only for legacy SYSTEM configurations.
-  3: optional Types.TAIModelSource source
+enum TAIProviderProtocol {
+  OPENAI = 0,
+  ANTHROPIC = 1,
+  COHERE = 2
+}
+
+struct TAIProvider {
+  1: optional string id
+  2: optional string name
+  3: optional TAIProviderType type
+  4: optional TAIProviderProtocol protocol
+  5: optional map<string, string> params
 }
 
 struct TAIProjectNode {
   1: optional map<Types.TSlotId, Exprs.TExpr> slot_map
   2: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
-  3: optional map<string, TAIModelConfiguration> ai_model_configs
+  3: optional map<string, TAIProvider> ai_provider_mapping
 }
 
 // Extension point for TPlanNode. DO NOT MODIFY: do not add fields here, and do
@@ -1766,7 +1783,7 @@ struct TPlanNode {
   71: optional TStreamJoinNode stream_join_node;
   72: optional TStreamAggregationNode stream_agg_node;
 
-  81: optional TSelectNode select_node; 
+  81: optional TSelectNode select_node;
   82: optional TFetchNode fetch_node;
   83: optional TLookUpNode look_up_node;
   // Scan node for benchmark

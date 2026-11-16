@@ -51,6 +51,13 @@ public class ArrowFlightSqlTokenInfo {
 
     private final UserIdentity currentUser;
     private final String token;
+    /**
+     * When the session stops being valid regardless of cache activity, in epoch milliseconds. A
+     * session opened with a Basic credential has no deadline of its own ({@link Long#MAX_VALUE});
+     * one opened with a JWT inherits the JWT's {@code exp}, so no cache setting can keep a session
+     * alive past the token that opened it.
+     */
+    private final long expireAtMillis;
 
     /**
      * Creates an instance of {@code ArrowFlightSqlTokenInfo} with null values.
@@ -69,8 +76,21 @@ public class ArrowFlightSqlTokenInfo {
      * @param token       the unique token string used to identify the session
      */
     public ArrowFlightSqlTokenInfo(UserIdentity currentUser, String token) {
+        this(currentUser, token, Long.MAX_VALUE);
+    }
+
+    /**
+     * @param expireAtMillis epoch millis after which the session must be refused even if the cache
+     *                       still holds it
+     */
+    public ArrowFlightSqlTokenInfo(UserIdentity currentUser, String token, long expireAtMillis) {
         this.currentUser = currentUser;
         this.token = token;
+        this.expireAtMillis = expireAtMillis;
+    }
+
+    public boolean isExpiredAt(long nowMillis) {
+        return nowMillis >= expireAtMillis;
     }
 
     /**

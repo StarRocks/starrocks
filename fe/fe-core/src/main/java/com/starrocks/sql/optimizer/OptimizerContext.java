@@ -77,7 +77,6 @@ public class OptimizerContext {
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
 
-    private boolean isObtainedFromInternalStatistics = false;
     private boolean inMemoPhase = false;
 
     // Is not null predicate can be derived from inner join or semi join,
@@ -89,6 +88,8 @@ public class OptimizerContext {
 
     // source tables count in the query
     private int sourceTablesCount = 0;
+    // see JoinKeyContainmentBound: column id -> upper bound on its distinct values, for join keys unknown on both sides
+    private Map<Integer, Double> joinKeyNdvBounds = Map.of();
 
     OptimizerContext(ConnectContext context) {
         this.connectContext = context;
@@ -235,14 +236,6 @@ public class OptimizerContext {
         this.enableJoinIsNullPredicateDerive = enableJoinIsNullPredicateDerive;
     }
 
-    public boolean isObtainedFromInternalStatistics() {
-        return isObtainedFromInternalStatistics;
-    }
-
-    public void setObtainedFromInternalStatistics(boolean obtainedFromInternalStatistics) {
-        isObtainedFromInternalStatistics = obtainedFromInternalStatistics;
-    }
-
     public void setInMemoPhase(boolean inMemoPhase) {
         this.inMemoPhase = inMemoPhase;
     }
@@ -332,5 +325,13 @@ public class OptimizerContext {
                     "3. enlarge new_planner_optimize_timeout session variable",
                     ErrorType.INTERNAL_ERROR);
         }
+    }
+
+    public Map<Integer, Double> getJoinKeyNdvBounds() {
+        return joinKeyNdvBounds;
+    }
+
+    public void setJoinKeyNdvBounds(Map<Integer, Double> joinKeyNdvBounds) {
+        this.joinKeyNdvBounds = joinKeyNdvBounds;
     }
 }

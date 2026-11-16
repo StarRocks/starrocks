@@ -15,6 +15,7 @@ package com.starrocks.http;
 
 import com.starrocks.http.action.StaticResourceAction;
 import com.starrocks.http.rest.RestBaseAction;
+import com.starrocks.service.ExecuteEnv;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.apache.logging.log4j.Level;
@@ -38,6 +39,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // The request uri logged by the HTTP layer keeps the value of a sanitized parameter (token) out of the log, also
 // when the request is rejected or the uri cannot be parsed or decoded.
 public class HttpUriLogMaskingTest extends StarRocksHttpTestCase {
+
+    // HttpServerHandler.channelInactive unregisters the connection from the ConnectScheduler. Without it, closing a
+    // connection throws a NullPointerException, which a test that asserts nothing is thrown may capture.
+    @Override
+    protected void doSetUp() {
+        ExecuteEnv.setup();
+    }
 
     // Collects the messages logged to the loggers it is added to, and the exceptions logged with them.
     private static class MessageCollector extends AbstractAppender {
@@ -114,11 +122,8 @@ public class HttpUriLogMaskingTest extends StarRocksHttpTestCase {
             }
         });
 
-        // HttpServerHandler logs every request at DEBUG, BaseAction the missing auth information at INFO, and
-        // RestBaseAction the rejected request at WARN.
+        // HttpServerHandler logs every request at DEBUG, and RestBaseAction the rejected request at WARN.
         assertTrue(messages.stream().anyMatch(m -> m.startsWith("request: url:[/api/show_proc?")
-                && m.contains("token=*")), messages.toString());
-        assertTrue(messages.stream().anyMatch(m -> m.startsWith("parse auth info failed, url /api/show_proc?")
                 && m.contains("token=*")), messages.toString());
         assertTrue(messages.stream().anyMatch(m -> m.startsWith("failed to process url: /api/show_proc?")
                 && m.contains("token=*")), messages.toString());

@@ -196,6 +196,28 @@ private:
             }
         }
 
+        void transfer_to(MemTracker* tracker, int64_t size) {
+            commit(false);
+            if (auto* current = CurrentThread::mem_tracker(); current != nullptr) {
+                current->transfer_to(tracker, size);
+            } else {
+                tracker->consume(size);
+            }
+            _deallocated_cache_size += size;
+            _total_consumed_bytes -= size;
+        }
+
+        void transfer_from(MemTracker* tracker, int64_t size) {
+            commit(false);
+            if (auto* current = CurrentThread::mem_tracker(); current != nullptr) {
+                tracker->transfer_to(current, size);
+            } else {
+                tracker->release(size);
+            }
+            _allocated_cache_size += size;
+            _total_consumed_bytes += size;
+        }
+
         void commit(bool is_ctx_shift) {
             MemTracker* cur_tracker = CurrentThread::mem_tracker();
             if (cur_tracker != nullptr) {
@@ -363,6 +385,25 @@ public:
             _mem_cache_manager.release_to_reserved(size);
         } else {
             _mem_cache_manager.release(size);
+        }
+    }
+
+    // Transfer already-accounted bytes (e.g. a get_consumed_bytes() delta) to another tracker.
+    // This is not a free: do not recycle the charge into the thread's reservation. Flush
+    // pending allocations, then leave all common ancestors unchanged during the transfer.
+    void mem_transfer_to(MemTracker* tracker, int64_t size) {
+        DCHECK_GE(size, 0);
+        if (size != 0) {
+            _mem_cache_manager.transfer_to(tracker, size);
+        }
+    }
+
+    // Receive already-accounted memory. This is not an allocation and must not consume a
+    // reservation; the eventual free will release this transferred charge normally.
+    void mem_transfer_from(MemTracker* tracker, int64_t size) {
+        DCHECK_GE(size, 0);
+        if (size != 0) {
+            _mem_cache_manager.transfer_from(tracker, size);
         }
     }
 

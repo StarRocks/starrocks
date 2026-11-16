@@ -19,6 +19,7 @@ import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
+import com.google.gson.JsonParseException;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
@@ -35,6 +36,7 @@ import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -280,6 +282,9 @@ public final class PListCell extends PCell {
     private static class PListCellBatchRecord {
         @SerializedName("data")
         private final Set<PListCell> pListCells;
+        // Set only when `data` keeps a prefix of `total` cells for display.
+        @SerializedName("total")
+        private Integer total;
 
         public PListCellBatchRecord(Set<PListCell> pListCells) {
             this.pListCells = pListCells;
@@ -315,6 +320,36 @@ public final class PListCell extends PCell {
             return null;
         }
         PListCellBatchRecord batch = PListCellBatchRecord.fromJson(partitionValues);
+        if (batch.total != null) {
+            throw new IllegalStateException(String.format(
+                    "Partition values keep only %d of %d cells for display and cannot be used to refresh",
+                    CollectionUtils.size(batch.pListCells), batch.total));
+        }
         return batch.getPListCells();
+    }
+
+    /**
+     * Keep at most {@code maxLen} cells for display and record the original count in {@code total}; return the input
+     * unchanged when it already fits or cannot be parsed.
+     */
+    public static String shrinkBatchForDisplay(String partitionValues, int maxLen) {
+        if (StringUtils.isEmpty(partitionValues)) {
+            return partitionValues;
+        }
+        PListCellBatchRecord batch;
+        try {
+            batch = PListCellBatchRecord.fromJson(partitionValues);
+        } catch (JsonParseException e) {
+            return partitionValues;
+        }
+        int keep = Math.max(1, maxLen);
+        if (batch == null || batch.total != null || batch.pListCells == null || batch.pListCells.size() <= keep) {
+            return partitionValues;
+        }
+        PListCellBatchRecord shrunk = new PListCellBatchRecord(batch.pListCells.stream()
+                .limit(keep)
+                .collect(Collectors.toCollection(LinkedHashSet::new)));
+        shrunk.total = batch.pListCells.size();
+        return GsonUtils.GSON.toJson(shrunk);
     }
 }

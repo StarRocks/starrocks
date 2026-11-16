@@ -173,12 +173,24 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     private final AtomicLong minRetainVersion = new AtomicLong(0);
 
-    private final AtomicLong lastSuccVacuumVersion = new AtomicLong(0);
+    // The version this partition's incremental vacuum has advanced to -- everything below it is reclaimed.
+    // Equals the visible version once vacuum has caught up, and trails it while a reclaim backlog remains.
+    // Persisted so SHOW PARTITIONS / partitions_meta's VacuumVersion (and the vacuum scheduler) survive an
+    // FE restart / failover instead of resetting to 0.
+    @SerializedName(value = "lastSuccVacuumVersion")
+    private AtomicLong lastSuccVacuumVersion = new AtomicLong(0);
 
     // Purpose: the previous autovacuum round's computeMinActiveTxnId(), used to debounce a
     //   transiently-too-high value (begin-vs-vacuum race) before allowing txn-log deletion.
     // Persistence: in-memory only, NOT persisted (no @SerializedName); resets to 0 on restart/failover.
     private volatile long lastMinActiveTxnId = 0;
+
+    // Incremental (bounded, resumable) vacuum protocol state, grouped into one object (see
+    // VacuumState). Persisted in the image via @SerializedName, and between snapshots via the
+    // OP_MODIFY_PARTITION_VACUUM_STATE edit log the autovacuum coordinator writes each round, so an
+    // in-flight pass survives an FE restart / failover.
+    @SerializedName(value = "vacuumState")
+    private volatile VacuumState vacuumState = new VacuumState();
 
     @SerializedName(value = "bucketNum")
     private int bucketNum = 0;
@@ -303,6 +315,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.minRetainVersion.set(minRetainVersion);
     }
 
+    /**
+     * Clears the pin if it is still {@code version}, so a pin that another holder has since set to a different
+     * version stays. Returns whether the pin was cleared.
+     */
+    public boolean releaseMinRetainVersion(long version) {
+        return minRetainVersion.compareAndSet(version, 0);
+    }
+
     public long getLastSuccVacuumVersion() {
         return lastSuccVacuumVersion.get();
     }
@@ -317,6 +337,18 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public void setLastMinActiveTxnId(long lastMinActiveTxnId) {
         this.lastMinActiveTxnId = lastMinActiveTxnId;
+    }
+
+    public VacuumState getVacuumState() {
+        return vacuumState;
+    }
+
+    // Replace the whole state object. Used on edit-log / image replay; the value is null-guarded so an
+    // old image entry without the field cannot null it out.
+    public void setVacuumState(VacuumState vacuumState) {
+        if (vacuumState != null) {
+            this.vacuumState = vacuumState;
+        }
     }
 
     public long getExtraFileSize() {
@@ -937,6 +969,18 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         }
         if (versionTxnType == null) {
             versionTxnType = TransactionType.TXN_NORMAL;
+        }
+
+        // lastSuccVacuumVersion is now serialized (@SerializedName), but an image written by an older FE that
+        // predates that field restores it as 0, so every already-drained partition would be needlessly
+        // vacuumed again after such an upgrade. The completed-pass floor is durable in
+        // vacuumState.minRetainedVersion (also serialized), so re-derive the watermark from it here --
+        // mirroring the edit-log replay path. For an image that already carries the field this is a no-op.
+        if (vacuumState != null) {
+            long vacuumFloor = vacuumState.getMinRetainedVersion();
+            if (vacuumFloor > lastSuccVacuumVersion.get()) {
+                lastSuccVacuumVersion.set(vacuumFloor);
+            }
         }
 
         if (baseIndexMetaId == -1L) {

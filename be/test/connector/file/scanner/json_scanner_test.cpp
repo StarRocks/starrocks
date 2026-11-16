@@ -17,6 +17,8 @@
 #include <gtest/gtest.h>
 #include <zlib.h>
 
+#include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <random>
 #include <sstream>
@@ -28,17 +30,21 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_load_pipe.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "rapidjson/document.h"
 #include "runtime/byte_buffer.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks {
 
@@ -107,7 +113,7 @@ protected:
                                  const std::vector<std::string>& jsonpaths) {
         std::vector<TypeDescriptor> types;
         for (int i = 0; i < columns; i++) {
-            types.emplace_back(TypeDescriptor::create_varchar_type(1024));
+            types.emplace_back(TYPE_VARCHAR_DESC);
         }
 
         std::vector<TBrokerRangeDesc> ranges;
@@ -332,9 +338,9 @@ TEST_F(JsonScannerTest, test_array_json) {
 
 TEST_F(JsonScannerTest, test_json_without_path) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_DOUBLE);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -374,7 +380,7 @@ TEST_F(JsonScannerTest, test_debezium_json_load) {
 
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_TINYINT); // for __op
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -411,7 +417,7 @@ TEST_F(JsonScannerTest, test_debezium_json_load_with_jsonpath_shorter_than_slots
 
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_TINYINT); // for __op
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -444,7 +450,7 @@ TEST_F(JsonScannerTest, test_debezium_json_load_with_missing_op_jsonpath) {
 
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_TINYINT); // for __op
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -472,8 +478,8 @@ TEST_F(JsonScannerTest, test_debezium_json_load_with_missing_op_jsonpath) {
 TEST_F(JsonScannerTest, test_json_path_with_asterisk_basic) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -503,8 +509,8 @@ TEST_F(JsonScannerTest, test_json_path_with_asterisk_basic) {
 TEST_F(JsonScannerTest, test_json_path_with_asterisk_null) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -534,8 +540,8 @@ TEST_F(JsonScannerTest, test_json_path_with_asterisk_null) {
 TEST_F(JsonScannerTest, test_json_path_with_asterisk_record) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -565,8 +571,8 @@ TEST_F(JsonScannerTest, test_json_path_with_asterisk_record) {
 TEST_F(JsonScannerTest, test_json_path_with_asterisk_array) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -595,9 +601,9 @@ TEST_F(JsonScannerTest, test_json_path_with_asterisk_array) {
 
 TEST_F(JsonScannerTest, test_json_with_path) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -628,9 +634,9 @@ TEST_F(JsonScannerTest, test_json_with_path) {
 
 TEST_F(JsonScannerTest, test_invalid_json_path) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -654,13 +660,9 @@ TEST_F(JsonScannerTest, test_invalid_json_path) {
 
 TEST_F(JsonScannerTest, test_one_level_array) {
     std::vector<TypeDescriptor> types;
-    TypeDescriptor t1(TYPE_ARRAY);
-    t1.children.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(t1);
+    types.emplace_back(TYPE_ARRAY_VARCHAR_DESC);
 
-    TypeDescriptor t2(TYPE_ARRAY);
-    t2.children.emplace_back(TYPE_INT);
-    types.emplace_back(t2);
+    types.emplace_back(TYPE_ARRAY_INT_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -785,9 +787,7 @@ TEST_F(JsonScannerTest, test_invalid_nested_level1) {
 TEST_F(JsonScannerTest, test_invalid_nested_level2) {
     // the nested level in schema is less than json
     std::vector<TypeDescriptor> types;
-    TypeDescriptor t1(TYPE_ARRAY);
-    t1.children.emplace_back(TYPE_LARGEINT);
-    types.emplace_back(t1);
+    types.emplace_back(TYPE_ARRAY_LARGEINT_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -812,8 +812,8 @@ TEST_F(JsonScannerTest, test_invalid_nested_level2) {
 
 TEST_F(JsonScannerTest, test_json_with_long_string) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(100));
-    types.emplace_back(TypeDescriptor::create_varchar_type(100));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -841,9 +841,9 @@ TEST_F(JsonScannerTest, test_json_with_long_string) {
 
 TEST_F(JsonScannerTest, test_ndjson) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -876,9 +876,9 @@ TEST_F(JsonScannerTest, test_ndjson) {
 
 TEST_F(JsonScannerTest, test_ndjson_with_jsonpath) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -912,9 +912,9 @@ TEST_F(JsonScannerTest, test_ndjson_with_jsonpath) {
 
 TEST_F(JsonScannerTest, test_json_new_parser) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -955,9 +955,9 @@ TEST_F(JsonScannerTest, test_json_new_parser) {
 
 TEST_F(JsonScannerTest, test_adaptive_nullable_column) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -992,9 +992,9 @@ TEST_F(JsonScannerTest, test_adaptive_nullable_column) {
 
 TEST_F(JsonScannerTest, test_adaptive_nullable_column_2) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1052,18 +1052,16 @@ TEST_F(JsonScannerTest, test_multi_type) {
     types.emplace_back(TYPE_FLOAT);
     types.emplace_back(TYPE_DOUBLE);
 
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_DATE);
     types.emplace_back(TYPE_DATETIME);
-    types.emplace_back(TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT)));
+    types.emplace_back(TYPE_ARRAY_INT_DESC);
 
     types.emplace_back(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 27, 9));
     types.emplace_back(TypeDescriptor::create_char_type(20));
     types.emplace_back(TYPE_TIME);
-    types.emplace_back(TypeDescriptor::create_struct_type(
-            {"f_int", "f_string"}, {TypeDescriptor(TYPE_INT), TypeDescriptor::create_varchar_type(20)}));
-    types.emplace_back(
-            TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(20), TypeDescriptor(TYPE_DOUBLE)));
+    types.emplace_back(TypeDescriptor::create_struct_type({"f_int", "f_string"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC}));
+    types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_DOUBLE_DESC));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1099,9 +1097,9 @@ TEST_F(JsonScannerTest, test_multi_type) {
 
 TEST_F(JsonScannerTest, test_cast_type) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_DOUBLE);
     types.emplace_back(TYPE_INT);
 
@@ -1326,8 +1324,8 @@ TEST_F(JsonScannerTest, test_native_json_single_column) {
 
 TEST_F(JsonScannerTest, test_expanded_with_json_root) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TypeDescriptor::create_json_type());
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1364,8 +1362,8 @@ TEST_F(JsonScannerTest, test_expanded_with_json_root) {
 
 TEST_F(JsonScannerTest, test_ndjson_expanded_with_json_root) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TypeDescriptor::create_json_type());
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1403,13 +1401,13 @@ TEST_F(JsonScannerTest, test_ndjson_expanded_with_json_root) {
 // this test covers json_scanner.cpp:_construct_row_in_object_order.
 TEST_F(JsonScannerTest, test_construct_row_in_object_order) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_DOUBLE);
     types.emplace_back(TYPE_DOUBLE);
     types.emplace_back(TYPE_INT);
@@ -1443,8 +1441,8 @@ TEST_F(JsonScannerTest, test_construct_row_in_object_order) {
 
 TEST_F(JsonScannerTest, test_jsonroot_with_jsonpath) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1480,8 +1478,8 @@ TEST_F(JsonScannerTest, test_jsonroot_with_jsonpath) {
 
 TEST_F(JsonScannerTest, test_expanded_with_jsonroot_and_extracted_by_jsonpath) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1517,8 +1515,8 @@ TEST_F(JsonScannerTest, test_expanded_with_jsonroot_and_extracted_by_jsonpath) {
 
 TEST_F(JsonScannerTest, test_ndjson_expaned_with_jsonroot_and_extracted_by_jsonpath) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1554,9 +1552,9 @@ TEST_F(JsonScannerTest, test_ndjson_expaned_with_jsonroot_and_extracted_by_jsonp
 
 TEST_F(JsonScannerTest, test_illegal_input) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_DOUBLE);
     types.emplace_back(TYPE_INT);
 
@@ -1582,9 +1580,9 @@ TEST_F(JsonScannerTest, test_illegal_input) {
 
 TEST_F(JsonScannerTest, test_illegal_input_with_jsonpath) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_DOUBLE);
     types.emplace_back(TYPE_INT);
 
@@ -1610,13 +1608,13 @@ TEST_F(JsonScannerTest, test_illegal_input_with_jsonpath) {
 // See more: https://github.com/StarRocks/starrocks/issues/11054
 TEST_F(JsonScannerTest, test_column_2x_than_columns_with_json_root) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TypeDescriptor::create_json_type());
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1658,9 +1656,9 @@ TEST_F(JsonScannerTest, test_column_2x_than_columns_with_json_root) {
 
 TEST_F(JsonScannerTest, test_null_with_jsonpath) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1840,9 +1838,9 @@ TEST_F(JsonScannerTest, test_duplicate_key) {
 
 TEST_F(JsonScannerTest, test_gzip_compressed_json_with_compression_type) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_DOUBLE);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1868,9 +1866,9 @@ TEST_F(JsonScannerTest, test_gzip_compressed_json_with_compression_type) {
 
 TEST_F(JsonScannerTest, test_gzip_compressed_json_with_suffix_inference) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
     types.emplace_back(TYPE_DOUBLE);
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1912,14 +1910,14 @@ TEST_F(JsonScannerTest, test_large_compressed_json_large) {
     EXPECT_GE(file_size, 1 * 1024 * 1024);
 
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(100)); // id
-    types.emplace_back(TypeDescriptor::create_varchar_type(100)); // name
-    types.emplace_back(TYPE_DOUBLE);                              // value
-    types.emplace_back(TYPE_BIGINT);                              // timestamp
-    types.emplace_back(TypeDescriptor::create_varchar_type(50));  // category
-    types.emplace_back(TYPE_DOUBLE);                              // score
-    types.emplace_back(TYPE_BOOLEAN);                             // active
-    types.emplace_back(TypeDescriptor::create_json_type());       // tags
+    types.emplace_back(TYPE_VARCHAR_DESC);                  // id
+    types.emplace_back(TYPE_VARCHAR_DESC);                  // name
+    types.emplace_back(TYPE_DOUBLE);                        // value
+    types.emplace_back(TYPE_BIGINT);                        // timestamp
+    types.emplace_back(TYPE_VARCHAR_DESC);                  // category
+    types.emplace_back(TYPE_DOUBLE);                        // score
+    types.emplace_back(TYPE_BOOLEAN);                       // active
+    types.emplace_back(TypeDescriptor::create_json_type()); // tags
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -2007,14 +2005,13 @@ TEST_F(JsonScannerTest, test_source_metadata_fill) {
     // by-name path (no jsonpath): metadata slots follow the two payload columns, filled from meta.
     {
         std::vector<TypeDescriptor> types;
-        types.emplace_back(TYPE_BIGINT);                             // id (payload)
-        types.emplace_back(TypeDescriptor::create_varchar_type(20)); // payload
-        types.emplace_back(TypeDescriptor::create_varchar_type(64)); // topic (meta, slot 2)
-        types.emplace_back(TYPE_INT);                                // partition (meta, slot 3)
-        types.emplace_back(TYPE_BIGINT);                             // offset (meta, slot 4)
-        types.emplace_back(
-                TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(64),
-                                                TypeDescriptor::create_varchar_type(64))); // headers (slot 5)
+        types.emplace_back(TYPE_BIGINT);       // id (payload)
+        types.emplace_back(TYPE_VARCHAR_DESC); // payload
+        types.emplace_back(TYPE_VARCHAR_DESC); // topic (meta, slot 2)
+        types.emplace_back(TYPE_INT);          // partition (meta, slot 3)
+        types.emplace_back(TYPE_BIGINT);       // offset (meta, slot 4)
+        types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC,
+                                                           TYPE_VARCHAR_DESC)); // headers (slot 5)
 
         std::vector<TRoutineLoadMetaColumn> meta_cols = {
                 json_meta_desc(2, TStreamSourceMetaKind::TOPIC), json_meta_desc(3, TStreamSourceMetaKind::PARTITION),
@@ -2047,9 +2044,9 @@ TEST_F(JsonScannerTest, test_source_metadata_fill) {
     // slot->jsonpath mapping must skip it (meta_count shift) for the payload columns to stay aligned.
     {
         std::vector<TypeDescriptor> types;
-        types.emplace_back(TYPE_BIGINT);                             // id (payload, jsonpath[0])
-        types.emplace_back(TypeDescriptor::create_varchar_type(64)); // topic (meta, slot 1)
-        types.emplace_back(TypeDescriptor::create_varchar_type(20)); // payload (payload, jsonpath[1])
+        types.emplace_back(TYPE_BIGINT);       // id (payload, jsonpath[0])
+        types.emplace_back(TYPE_VARCHAR_DESC); // topic (meta, slot 1)
+        types.emplace_back(TYPE_VARCHAR_DESC); // payload (payload, jsonpath[1])
 
         std::vector<TRoutineLoadMetaColumn> meta_cols = {json_meta_desc(1, TStreamSourceMetaKind::TOPIC)};
 
@@ -2077,8 +2074,8 @@ TEST_F(JsonScannerTest, test_source_metadata_fill) {
     // must win and the payload field must not overwrite it (object-order skip path).
     {
         std::vector<TypeDescriptor> types;
-        types.emplace_back(TYPE_BIGINT);                             // id (payload)
-        types.emplace_back(TypeDescriptor::create_varchar_type(64)); // payload (meta TOPIC, slot 1)
+        types.emplace_back(TYPE_BIGINT);       // id (payload)
+        types.emplace_back(TYPE_VARCHAR_DESC); // payload (meta TOPIC, slot 1)
 
         std::vector<TRoutineLoadMetaColumn> meta_cols = {json_meta_desc(1, TStreamSourceMetaKind::TOPIC)};
 
@@ -2099,6 +2096,416 @@ TEST_F(JsonScannerTest, test_source_metadata_fill) {
         EXPECT_EQ(42, chunk->get(0)[0].get_int64());
         EXPECT_EQ("orders", chunk->get(0)[1].get_slice()); // metadata wins over the "payload" json field
     }
+}
+
+namespace {
+
+// Routine load appends every Kafka message as its own buffer, see KafkaConsumerPipe::append_json.
+Status append_json_buffer(StreamLoadPipe* pipe, const std::string& data, const StreamMessageMeta* meta) {
+    ByteBufferMetaType meta_type = meta != nullptr ? meta->type() : ByteBufferMetaType::NONE;
+    ASSIGN_OR_RETURN(auto buf, ByteBuffer::allocate_with_tracker(data.size(), simdjson::SIMDJSON_PADDING, meta_type));
+    buf->put_bytes(data.data(), data.size());
+    buf->flip_to_read();
+    if (meta != nullptr) {
+        RETURN_IF_ERROR(buf->meta()->copy_from(const_cast<StreamMessageMeta*>(meta)));
+    }
+    return pipe->append(std::move(buf));
+}
+
+const std::vector<std::string> kK13Names{"k1", "k2", "k3",  "k4",  "k5",  "k6", "k7",
+                                         "k8", "k9", "k10", "k11", "k12", "k13"};
+// The closing '}' is missing.
+const std::string kTruncatedDocument =
+        R"({"k1":"2020-06-28","k2":"2020-06-25 00:00:09","k3":"beijing","k4":"haidian","k5":0,"k6":-118,)"
+        R"("k7":-32758,"k8":-2147483638,"k9":-9223372036854775798,"k10":"-18446744073709551608","k11":-2.1,)"
+        R"("k12":-3.04,"k13":-3.122)";
+// The value of k13 is missing, but the document is complete.
+const std::string kMissingValueDocument =
+        R"({"k1":"2020-06-28","k2":"2020-06-25 00:00:09","k3":"beijing","k4":"haidian","k5":0,"k6":-118,)"
+        R"("k7":-32758,"k8":-2147483638,"k9":-9223372036854775798,"k10":"-18446744073709551608","k11":-2.1,)"
+        R"("k12":-3.04,"k13":})";
+
+// Writes the rejected records of a load to one file.
+class TestLoadPathMgr : public BaseLoadPathMgr {
+public:
+    explicit TestLoadPathMgr(std::string rejected_record_path)
+            : _rejected_record_path(std::move(rejected_record_path)) {}
+    Status init() override { return Status::OK(); }
+    Status allocate_dir(const std::string&, const std::string&, std::string*) override {
+        return Status::NotSupported("");
+    }
+    void get_load_data_path(std::vector<std::string>*) override {}
+    Status get_load_error_file_name(const TUniqueId&, std::string*) override { return Status::NotSupported(""); }
+    std::string get_load_error_absolute_path(const std::string& file_path) override { return file_path; }
+    std::string get_load_rejected_record_absolute_path(const std::string&, const std::string&, const std::string&,
+                                                       const int64_t, const TUniqueId&) override {
+        return _rejected_record_path;
+    }
+
+private:
+    std::string _rejected_record_path;
+};
+
+} // namespace
+
+// A json document stream (ndjson) can end with an incomplete document: a truncated Kafka message, or the cut-off
+// last line of a stream load body. simdjson iterate_many stops before it with a plain EOF, so it has to be reported
+// as an error row by the reader, and the scan goes on with the next buffer.
+class JsonScannerTruncatedDocTest : public JsonScannerTest {
+protected:
+    void SetUp() override {
+        JsonScannerTest::SetUp();
+        _old_batch_size = config::json_parse_many_batch_size;
+        _old_dynamic_batch_size = config::enable_dynamic_batch_size_for_json_parse_many;
+        config::json_parse_many_batch_size = 1000000;
+        config::enable_dynamic_batch_size_for_json_parse_many = true;
+        // Only a load writes the error log.
+        _state->_query_options.query_type = TQueryType::LOAD;
+        _error_log.open(_error_log_path, std::ofstream::out);
+        _state->_error_log_file = &_error_log;
+    }
+
+    void TearDown() override {
+        _state->_error_log_file = nullptr;
+        _error_log.close();
+        std::remove(_error_log_path.c_str());
+        config::json_parse_many_batch_size = _old_batch_size;
+        config::enable_dynamic_batch_size_for_json_parse_many = _old_dynamic_batch_size;
+        JsonScannerTest::TearDown();
+    }
+
+    struct ScanResult {
+        size_t rows = 0;
+        int64_t filtered = 0;
+        // The status that ends the scan, EOF if all buffers are read.
+        Status status;
+    };
+
+    // Scans a stream load pipe filled with `buffers`, each one appended as a buffer of its own.
+    ScanResult scan(TBrokerRangeDesc range, const std::vector<std::string>& names,
+                    const std::vector<std::string>& buffers, const StreamMessageMeta* meta = nullptr) {
+        auto load_id = UniqueId::gen_uid();
+        auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
+        DeferOp remove_pipe([&]() { _load_stream_mgr.remove(load_id); });
+        EXPECT_OK(_load_stream_mgr.put(load_id, pipe));
+        for (const auto& buffer : buffers) {
+            EXPECT_OK(append_json_buffer(pipe.get(), buffer, meta));
+        }
+        EXPECT_OK(pipe->finish());
+
+        range.format_type = TFileFormatType::FORMAT_JSON;
+        range.file_type = TFileType::FILE_STREAM;
+        range.__set_load_id(load_id.to_thrift());
+        return scan(range, names);
+    }
+
+    ScanResult scan(const TBrokerRangeDesc& range, const std::vector<std::string>& names) {
+        std::vector<TypeDescriptor> types(names.size(), TypeDescriptor::create_varchar_type(1024));
+        auto scanner = create_json_scanner(types, {range}, names);
+        _counter->num_rows_filtered = 0;
+
+        ScanResult result;
+        result.status = scanner->open();
+        while (result.status.ok()) {
+            auto chunk = scanner->get_next();
+            result.status = chunk.status();
+            if (chunk.ok()) {
+                result.rows += chunk.value()->num_rows();
+            }
+        }
+        result.filtered = _counter->num_rows_filtered;
+        return result;
+    }
+
+    ScanResult scan(const std::vector<std::string>& buffers) { return scan(TBrokerRangeDesc(), {"k1", "k2"}, buffers); }
+
+    std::string error_log() {
+        _error_log.flush();
+        std::ifstream in(_error_log_path);
+        return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+    }
+
+private:
+    const std::string _error_log_path = "./json_scanner_truncated_doc_test_error_log";
+    std::ofstream _error_log;
+    int32_t _old_batch_size = 0;
+    bool _old_dynamic_batch_size = true;
+};
+
+// Routine load: the only message of the batch is a truncated document.
+TEST_F(JsonScannerTruncatedDocTest, kafka_message_with_only_truncated_document) {
+    StreamMessageMeta meta(ByteBufferMetaType::KAFKA);
+    meta.set_partition(3);
+    meta.set_offset(42);
+    auto result = scan(TBrokerRangeDesc(), kK13Names, {kTruncatedDocument}, &meta);
+    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+    EXPECT_EQ(0, result.rows);
+    EXPECT_EQ(1, result.filtered);
+
+    // The error row carries the size, the beginning of the dropped text within the error log length limit, and
+    // the message meta.
+    std::string log = error_log();
+    EXPECT_NE(std::string::npos,
+              log.find("parse error. Incomplete or malformed json document at the end of the input (" +
+                       std::to_string(kTruncatedDocument.size()) + " bytes)"))
+            << log;
+    EXPECT_NE(std::string::npos,
+              log.find("Row: " + kTruncatedDocument.substr(0, 64) + " [meta: kafka partition: 3, offset: 42]"))
+            << log;
+}
+
+// Routine load: a document followed by a truncated one in the same message. The message has a loaded row, so the
+// truncated document was lost even when empty batches were not committed.
+TEST_F(JsonScannerTruncatedDocTest, kafka_message_with_trailing_truncated_document) {
+    auto result = scan({"{\"k1\":\"a\",\"k2\":1}\n{\"k1\":\"b\",\"k2\":"});
+    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+    EXPECT_EQ(1, result.rows);
+    EXPECT_EQ(1, result.filtered);
+    EXPECT_NE(std::string::npos, error_log().find(R"(Row: {"k1":"b","k2":)"));
+}
+
+// Routine load: the scan goes on with the messages after a truncated one.
+TEST_F(JsonScannerTruncatedDocTest, kafka_truncated_messages_between_good_messages) {
+    auto result = scan({R"({"k1":"a","k2":)", R"({"k1":"b","k2":2})", R"({"k1":"c")", R"({"k1":"d","k2":4})"});
+    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+    EXPECT_EQ(2, result.rows);
+    EXPECT_EQ(2, result.filtered);
+}
+
+// Every truncated message is an error row, while the error log keeps its limit.
+TEST_F(JsonScannerTruncatedDocTest, many_truncated_messages) {
+    std::vector<std::string> messages(MAX_ERROR_LINES_IN_FILE + 10, R"({"k1":"a","k2":)");
+    messages.emplace_back(R"({"k1":"b","k2":2})");
+    auto result = scan(messages);
+    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+    EXPECT_EQ(1, result.rows);
+    EXPECT_EQ(MAX_ERROR_LINES_IN_FILE + 10, result.filtered);
+
+    std::stringstream log(error_log());
+    int64_t logged = 0;
+    for (std::string line; std::getline(log, line);) {
+        logged += line.find("Incomplete or malformed json document") != std::string::npos;
+    }
+    EXPECT_EQ(MAX_ERROR_LINES_IN_FILE, logged);
+}
+
+// A dropped document is an error row of the chunk being read, like a malformed one, so a run of truncated messages
+// does not keep a single read going through all of them.
+TEST_F(JsonScannerTruncatedDocTest, truncated_messages_count_toward_the_chunk) {
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { _load_stream_mgr.remove(load_id); });
+    ASSERT_OK(_load_stream_mgr.put(load_id, pipe));
+    for (int i = 0; i < 10; i++) {
+        ASSERT_OK(append_json_buffer(pipe.get(), R"({"k1":"a","k2":)", nullptr));
+    }
+    ASSERT_OK(append_json_buffer(pipe.get(), R"({"k1":"b","k2":2})", nullptr));
+    ASSERT_OK(pipe->finish());
+
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_STREAM;
+    range.__set_load_id(load_id.to_thrift());
+    _state->set_chunk_size(4);
+    std::vector<TypeDescriptor> types(2, TypeDescriptor::create_varchar_type(1024));
+    auto scanner = create_json_scanner(types, {range}, {"k1", "k2"});
+    ASSERT_OK(scanner->open());
+
+    auto chunk = scanner->get_next();
+    ASSERT_OK(chunk.status());
+    EXPECT_EQ(0, chunk.value()->num_rows());
+    EXPECT_EQ(4, _counter->num_rows_filtered);
+
+    size_t rows = 0;
+    while (chunk.ok()) {
+        rows += chunk.value()->num_rows();
+        chunk = scanner->get_next();
+    }
+    EXPECT_TRUE(chunk.status().is_end_of_file()) << chunk.status();
+    EXPECT_EQ(1, rows);
+    EXPECT_EQ(10, _counter->num_rows_filtered);
+}
+
+// Stream load: the whole body is one buffer, and its last line is cut off.
+TEST_F(JsonScannerTruncatedDocTest, stream_load_body_with_trailing_truncated_document) {
+    auto result = scan({"{\"k1\":\"a\",\"k2\":1}\n{\"k1\":\"b\",\"k2\":2}\n{\"k1\":\"c\",\"k2\":3"});
+    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+    EXPECT_EQ(2, result.rows);
+    EXPECT_EQ(1, result.filtered);
+}
+
+// simdjson tells an incomplete document by the balance of its brackets, so it drops a last document with an extra '}'
+// the same way.
+TEST_F(JsonScannerTruncatedDocTest, trailing_document_with_extra_closing_brace) {
+    auto result = scan({"{\"k1\":\"a\",\"k2\":1}\n{\"k1\":\"b\",\"k2\":2}}"});
+    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+    EXPECT_EQ(1, result.rows);
+    EXPECT_EQ(1, result.filtered);
+}
+
+// A complete but malformed document is one error row as well.
+TEST_F(JsonScannerTruncatedDocTest, kafka_message_with_missing_value) {
+    auto result = scan(TBrokerRangeDesc(), kK13Names, {kMissingValueDocument});
+    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+    EXPECT_EQ(0, result.rows);
+    EXPECT_EQ(1, result.filtered);
+}
+
+// Neither trailing whitespace nor a whitespace-only message is an incomplete document.
+TEST_F(JsonScannerTruncatedDocTest, trailing_whitespace) {
+    auto result = scan({"{\"k1\":\"a\",\"k2\":1}\n \t\r\n", " \n", R"({"k1":"b","k2":2})"});
+    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+    EXPECT_EQ(2, result.rows);
+    EXPECT_EQ(0, result.filtered);
+    EXPECT_EQ("", error_log());
+}
+
+// A body larger than json_parse_many_batch_size is parsed in several batches, and only the last one tells whether
+// the input ends with an incomplete document.
+TEST_F(JsonScannerTruncatedDocTest, multi_batch) {
+    // Read when the parser is created, and only honoured above simdjson::dom::MINIMAL_BATCH_SIZE.
+    config::json_parse_many_batch_size = 64;
+    std::string body;
+    for (int i = 0; i < 200; i++) {
+        body += "{\"k1\":\"" + std::to_string(i) + "\",\"k2\":" + std::to_string(i) + "}\n";
+    }
+    for (const auto& [tail, filtered] :
+         std::vector<std::pair<std::string, int64_t>>{{"", 0},
+                                                      {"\n \n", 0},
+                                                      {R"({"k1":"200","k2":)", 1},
+                                                      // Longer than the batch.
+                                                      {R"({"k1":"200","k2":")" + std::string(200, 'x'), 1}}) {
+        auto result = scan({body + tail});
+        EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+        EXPECT_EQ(200, result.rows);
+        EXPECT_EQ(filtered, result.filtered) << tail;
+    }
+}
+
+// A document larger than the batch makes the parser iterate the rest of the input again, from the last parsed
+// document and with a larger batch size.
+TEST_F(JsonScannerTruncatedDocTest, multi_batch_with_document_larger_than_batch) {
+    config::json_parse_many_batch_size = 64;
+    std::string body;
+    for (int i = 0; i < 100; i++) {
+        std::string doc = "{\"k1\":\"" + (i == 60 ? std::string(200, 'x') : std::to_string(i)) +
+                          "\",\"k2\":" + std::to_string(i) + "}";
+        // Documents at multiples of 32 bytes.
+        doc.resize((doc.size() + 32) / 32 * 32 - 1, ' ');
+        body += doc + "\n";
+    }
+    for (const auto& [tail, filtered] :
+         std::vector<std::pair<std::string, int64_t>>{{"", 0}, {R"({"k1":"100","k2":)", 1}}) {
+        auto result = scan({body + tail});
+        EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+        EXPECT_EQ(100, result.rows) << tail;
+        EXPECT_EQ(filtered, result.filtered) << tail;
+    }
+}
+
+TEST_F(JsonScannerTruncatedDocTest, json_root) {
+    TBrokerRangeDesc range;
+    range.__set_json_root("$.data");
+    auto result = scan(range, {"k1", "k2"},
+                       {R"({"data":{"k1":"a","k2":)", R"({"data":{"k1":"b","k2":2}})",
+                        R"({"data":{"k1":"c","k2":3}} {"data":{"k1")"});
+    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+    EXPECT_EQ(2, result.rows);
+    EXPECT_EQ(2, result.filtered);
+}
+
+// The expanded parser reads the first document while parsing the buffer, so a buffer without any complete document
+// must not end the scan.
+TEST_F(JsonScannerTruncatedDocTest, json_root_with_strip_outer_array) {
+    TBrokerRangeDesc range;
+    range.__set_json_root("$.data");
+    range.__set_strip_outer_array(true);
+    auto result = scan(range, {"k1", "k2"},
+                       {R"({"data":[{"k1":"a","k2":1},{"k1":"b")", R"({"data":[{"k1":"c","k2":3},{"k1":"d","k2":4}]})",
+                        R"({"data":[{"k1":"e","k2":5}]} {"data":[{"k1":"f")", R"({"data":[{"k1":"g","k2":)",
+                        R"({"data":[{"k1":"h","k2":8}]})"});
+    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+    EXPECT_EQ(4, result.rows);
+    EXPECT_EQ(3, result.filtered);
+}
+
+// A file is read as a single buffer, so a file without any complete document ends the scan with one error row.
+TEST_F(JsonScannerTruncatedDocTest, file_without_complete_document) {
+    std::string filename = "./be/test/exec/test_data/json_scanner/truncated_doc_test.json";
+    write_json_to_file(filename, R"({"data":[{"k1":"a","k2":1},{"k1":"b")");
+    DeferOp defer([&] { std::remove(filename.c_str()); });
+
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
+    range.__set_json_root("$.data");
+    range.__set_strip_outer_array(true);
+    range.__set_path(filename);
+    auto result = scan(range, {"k1", "k2"});
+    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+    EXPECT_EQ(0, result.rows);
+    EXPECT_EQ(1, result.filtered);
+    // One error row, one line in the error log: the EOF that ends the file is not another error.
+    std::string log = error_log();
+    EXPECT_EQ(1, std::count(log.begin(), log.end(), '\n')) << log;
+    EXPECT_NE(std::string::npos, log.find("Incomplete or malformed json document")) << log;
+}
+
+TEST_F(JsonScannerTruncatedDocTest, debezium) {
+    TBrokerRangeDesc range;
+    range.__set_envelope(TEnvelopeType::DEBEZIUM);
+    auto result = scan(range, {"k1", "k2"},
+                       {R"({"payload":{"before":null,"after":{"k1":"a","k2":1},"op":"c"}})",
+                        R"({"payload":{"before":null,"after":{"k1":"b","k2":2},"op":"c"}} {"payload":{"after")"});
+    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+    EXPECT_EQ(2, result.rows);
+    EXPECT_EQ(1, result.filtered);
+}
+
+// With strip_outer_array the buffer is parsed as one array, which does not drop anything silently: a malformed
+// element closed by ']' is an error row, and a truncated array fails the scan.
+TEST_F(JsonScannerTruncatedDocTest, strip_outer_array) {
+    TBrokerRangeDesc range;
+    range.__set_strip_outer_array(true);
+    auto result = scan(range, kK13Names, {"[" + kTruncatedDocument + "]"});
+    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+    EXPECT_EQ(0, result.rows);
+    EXPECT_EQ(1, result.filtered);
+
+    result = scan(range, {"k1", "k2"}, {R"([{"k1":"a","k2":1},{"k1":"b","k2":2)"});
+    EXPECT_TRUE(result.status.is_data_quality_error()) << result.status;
+    EXPECT_NE(std::string::npos, result.status.message().find("parse error"));
+}
+
+// With log_rejected_record_num set, the whole dropped text also goes to the rejected record log.
+TEST_F(JsonScannerTruncatedDocTest, rejected_record) {
+    const std::string dir = "./json_scanner_truncated_doc_test_rejected_record";
+    TestLoadPathMgr load_path_mgr(dir + "/records");
+    _runtime_services.load_path_mgr = &load_path_mgr;
+    DeferOp defer([&] {
+        _runtime_services.load_path_mgr = nullptr;
+        std::filesystem::remove_all(dir);
+    });
+    _state->_query_options.log_rejected_record_num = -1;
+
+    auto result = scan({R"({"k1":"a","k2":1} {"k1":"b")", kTruncatedDocument});
+    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+    EXPECT_EQ(1, result.rows);
+    EXPECT_EQ(2, result.filtered);
+    EXPECT_EQ(2, _state->_num_log_rejected_rows.load());
+
+    std::vector<std::string> raw_records;
+    std::ifstream in(dir + "/records.jsonl");
+    for (std::string line; std::getline(in, line);) {
+        rapidjson::Document record;
+        record.Parse(line.data(), line.size());
+        ASSERT_FALSE(record.HasParseError()) << line;
+        raw_records.emplace_back(record["raw_record"]["_raw"].GetString());
+        EXPECT_NE(std::string::npos, std::string(record["error_message"].GetString())
+                                             .find("Incomplete or malformed json document at the end of the input"))
+                << line;
+    }
+    EXPECT_EQ((std::vector<std::string>{R"({"k1":"b")", kTruncatedDocument}), raw_records);
 }
 
 } // namespace starrocks

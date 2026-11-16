@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Version;
 import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -30,7 +31,6 @@ import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -127,7 +127,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         }
         restCatalogProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
         restCatalogProperties.put(USER_AGENT, "StarRocks-Iceberg-Connector/" +
-                GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
+                Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
 
         nestedNamespaceEnabled = PropertyUtil.propertyAsBoolean(restCatalogProperties, KEY_NESTED_NAMESPACE_ENABLED, false);
         viewEndpointsEnabled = PropertyUtil.propertyAsBoolean(restCatalogProperties, KEY_VIEW_ENDPOINTS_ENABLED, true);
@@ -255,10 +255,15 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     @Override
     public void createDB(ConnectContext context, String dbName, Map<String, String> properties) {
         properties = properties == null ? new HashMap<>() : properties;
+        // The door sits inside the location branch and before the try: a property map with nothing but
+        // an unrecognized key waits on nothing and must not be reported, and in error mode the catch
+        // below would rewrite the refusal into "Invalid location URI". Everything else about this loop is
+        // as it was -- which value wins and which exception a mixed map raises must not change here.
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
             if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
+                BlockingCallValidator.validateNotUnderLock("remote-storage");
                 try {
                     URI uri = new Path(value).toUri();
                     FileSystem fileSystem = FileSystem.get(uri, conf);
@@ -463,6 +468,9 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             return;
         }
 
+        // Storage, not the REST service: deleting the files a failed commit left behind. Outside the try,
+        // whose catch only logs -- an error-mode refusal swallowed there would be invisible.
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         URI uri = new Path(fileLocations.get(0)).toUri();
         try {
             FileSystem fileSystem = FileSystem.get(uri, conf);

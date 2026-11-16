@@ -1,0 +1,272 @@
+-- name: test_iceberg_delete_edge_cases
+-- Delete scenarios with no other coverage: overlapping equality-field groups, schema evolution of an equality key,
+-- time travel and branch reads across deletes, and deletes combined with compaction.
+-- Equality delete files are written by hive tables and registered with add_equality_delete_files. Each query is
+-- preceded by the answer Iceberg semantics give.
+
+create external catalog iceberg_del_edge_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create external catalog hive_del_edge_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+create database iceberg_del_edge_${uuid0}.db_${uuid0};
+create database hive_del_edge_${uuid0}.hdb_${uuid0};
+set catalog iceberg_del_edge_${uuid0};
+use db_${uuid0};
+
+-- 1. overlapping equality-field groups {id} and {id, k} on one table: each group applies by its own fields only
+create table groups_t(
+    id int,
+    k int,
+    v string
+) properties ("format-version" = "2");
+
+insert into groups_t values (1, 10, 'r1'), (1, 20, 'r2'), (2, 10, 'r3'), (2, 20, 'r4'), (3, 10, 'r5');
+
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id(
+    id int
+) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/groups_t_by_id");
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id values (3);
+
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id_k(
+    id int,
+    k int
+) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/groups_t_by_id_k");
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id_k values (1, 10), (2, 20);
+
+alter table groups_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/groups_t_by_id", file_format="parquet", equality_columns="id");
+alter table groups_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/groups_t_by_id_k", file_format="parquet", equality_columns="id,k");
+
+-- expected: r2 r3
+select * from groups_t order by v;
+-- expected: r2
+select * from groups_t where id = 1 order by v;
+-- expected: r3
+select * from groups_t where k = 10 order by v;
+
+-- rows written after the deletes are not deleted by them
+insert into groups_t values (3, 10, 'r6'), (1, 10, 'r7');
+-- expected: r2 r3 r6 r7
+select * from groups_t order by v;
+
+-- a later {id, k} delete hits only the later row r7 (r1 is already gone)
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id_k2(
+    id int,
+    k int
+) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/groups_t_by_id_k2");
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id_k2 values (1, 10);
+alter table groups_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/groups_t_by_id_k2", file_format="parquet", equality_columns="id,k");
+-- expected: r2 r3 r6
+select * from groups_t order by v;
+select count(*) from groups_t;
+
+-- 2. the two groups in different partitions: {id} deletes in p=a only, {id, k} in p=b only
+create table groups_part_t(
+    id int,
+    k int,
+    v string,
+    p string
+) partition by(p) properties ("format-version" = "2");
+
+insert into groups_part_t values (1, 10, 'a1', 'a'), (2, 20, 'a2', 'a'), (1, 10, 'b1', 'b'), (2, 20, 'b2', 'b');
+
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_part_t_by_id(
+    id int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/groups_part_t_by_id");
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.groups_part_t_by_id values (1, 'a');
+
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_part_t_by_id_k(
+    id int,
+    k int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/groups_part_t_by_id_k");
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.groups_part_t_by_id_k values (2, 20, 'b');
+
+alter table groups_part_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/groups_part_t_by_id", file_format="parquet", equality_columns="id");
+alter table groups_part_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/groups_part_t_by_id_k", file_format="parquet", equality_columns="id,k");
+
+-- expected: a2 b1
+select * from groups_part_t order by v;
+-- expected: b1
+select * from groups_part_t where id = 1 order by v;
+-- expected: a2
+select * from groups_part_t where p = 'a' order by v;
+
+-- 3. renaming an equality key column: deletes match by field id, so a delete written before the rename still
+-- applies after it, and a new delete can name the column by its new name. The first delete file is written by the
+-- Iceberg Java writer (parquet field ids, deleting id = 1); a hive-written file has no field ids and is matched by
+-- column name, so it cannot be used across a rename.
+create table rename_t(
+    id int,
+    v string
+) properties ("format-version" = "2");
+
+insert into rename_t values (1, 'a'), (2, 'b'), (3, 'c');
+
+shell: ossutil64 cp ./sql/test_iceberg/data/add_equality_delete_files/eq_delete_id_1.parquet oss://${oss_bucket}/del_edge_${uuid0}/rename_t_deletes/eq_delete_id_1.parquet > /dev/null
+alter table rename_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/rename_t_deletes", file_format="parquet", equality_columns="id");
+
+alter table rename_t rename column id to id2;
+
+-- expected: (2, b) (3, c)
+select * from rename_t order by id2;
+-- expected: empty
+select * from rename_t where id2 = 1;
+
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.rename_t_deletes2(
+    id2 int
+) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/rename_t_deletes2");
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.rename_t_deletes2 values (2);
+alter table rename_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/rename_t_deletes2", file_format="parquet", equality_columns="id2");
+
+-- expected: (3, c)
+select * from rename_t order by id2;
+
+-- 4. promoting an equality key from int to bigint: the old data and the old delete stay int32 in parquet, the new
+-- delete is int64, and the join runs on bigint
+create table promote_t(
+    id int,
+    v string
+) properties ("format-version" = "2");
+
+insert into promote_t values (1, 'a'), (2, 'b'), (3, 'c');
+
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.promote_t_deletes(
+    id int
+) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/promote_t_deletes");
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.promote_t_deletes values (1);
+alter table promote_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/promote_t_deletes", file_format="parquet", equality_columns="id");
+
+alter table promote_t modify column id bigint;
+
+-- expected: (2, b) (3, c)
+select * from promote_t order by id;
+
+insert into promote_t values (1, 'new1'), (4294967296, 'big');
+
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.promote_t_deletes2(
+    id bigint
+) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/promote_t_deletes2");
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.promote_t_deletes2 values (2), (4294967296);
+alter table promote_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/promote_t_deletes2", file_format="parquet", equality_columns="id");
+
+-- the int64 delete hits the old int32 row 2 and the new bigint row. expected: (1, new1) (3, c)
+select * from promote_t order by id;
+-- expected: (1, new1)
+select * from promote_t where id = 1;
+
+-- 5. time travel and branch reads on a v2 table: each snapshot sees only the deletes committed by then
+create table travel_v2_t(
+    id int,
+    v string
+) properties ("format-version" = "2");
+
+insert into travel_v2_t values (1, 'v1'), (2, 'v2'), (3, 'v3'), (4, 'v4');
+alter table travel_v2_t create tag tag_insert;
+
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.travel_v2_t_deletes(
+    id int
+) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/travel_v2_t_deletes");
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.travel_v2_t_deletes values (1);
+alter table travel_v2_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/travel_v2_t_deletes", file_format="parquet", equality_columns="id");
+alter table travel_v2_t create tag tag_eq_delete;
+alter table travel_v2_t create branch branch_eq_delete;
+
+delete from travel_v2_t where v = 'v2';
+alter table travel_v2_t create tag tag_pos_delete;
+
+insert into travel_v2_t values (5, 'v5');
+
+-- expected: 1 2 3 4
+select * from travel_v2_t version as of "tag_insert" order by id;
+-- expected: 2 3 4
+select * from travel_v2_t version as of "tag_eq_delete" order by id;
+-- expected: 3 4
+select * from travel_v2_t version as of "tag_pos_delete" order by id;
+-- expected: 3 4 5
+select * from travel_v2_t order by id;
+-- expected: 2 3 4
+select * from travel_v2_t version as of "branch_eq_delete" order by id;
+-- expected: empty, 1
+select * from travel_v2_t version as of "tag_eq_delete" where id = 1;
+select count(*) from travel_v2_t version as of "tag_insert" where id = 1;
+
+-- 6. a v2 table: equality and position deletes, then compaction of one partition. The compaction keeps the
+-- equality delete (it may still cover files it did not rewrite); the rewritten files get a newer sequence
+-- number, so it no longer applies to them, while a later delete with the same key does
+create table compact_v2_t(
+    id int,
+    v string,
+    p string
+) partition by(p) properties ("format-version" = "2");
+
+insert into compact_v2_t values (1, 'a1', 'a'), (2, 'a2', 'a'), (3, 'a3', 'a'), (1, 'b1', 'b'), (2, 'b2', 'b'), (3, 'b3', 'b');
+
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.compact_v2_t_deletes(
+    id int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/compact_v2_t_deletes");
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.compact_v2_t_deletes values (1, 'a'), (1, 'b');
+alter table compact_v2_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/compact_v2_t_deletes", file_format="parquet", equality_columns="id");
+
+delete from compact_v2_t where v in ('a2', 'b2');
+-- expected: a3 b3
+select * from compact_v2_t order by v;
+-- expected: (1, 2) position deletes for p=a and p=b, (2, 2) equality deletes for p=a and p=b
+select content, count(*) from compact_v2_t$files where content != 0 group by content order by content;
+
+[UC]alter table compact_v2_t execute rewrite_data_files("rewrite_all" = "true") where p = 'a';
+-- expected: a3 b3
+select * from compact_v2_t order by v;
+-- the p=a position delete goes with its rewritten file; both equality deletes stay. expected: (1, 1), (2, 2)
+select content, count(*) from compact_v2_t$files where content != 0 group by content order by content;
+
+-- rows with the deleted key come back as new data and stay
+insert into compact_v2_t values (1, 'a1new', 'a'), (1, 'b1new', 'b');
+-- expected: a1new a3 b1new b3
+select * from compact_v2_t order by v;
+
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.compact_v2_t_deletes2(
+    id int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/compact_v2_t_deletes2");
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.compact_v2_t_deletes2 values (3, 'a'), (1, 'b');
+alter table compact_v2_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/compact_v2_t_deletes2", file_format="parquet", equality_columns="id");
+-- expected: a1new b3
+select * from compact_v2_t order by v;
+
+set catalog default_catalog;
+drop table iceberg_del_edge_${uuid0}.db_${uuid0}.groups_t force;
+drop table iceberg_del_edge_${uuid0}.db_${uuid0}.groups_part_t force;
+drop table iceberg_del_edge_${uuid0}.db_${uuid0}.rename_t force;
+drop table iceberg_del_edge_${uuid0}.db_${uuid0}.promote_t force;
+drop table iceberg_del_edge_${uuid0}.db_${uuid0}.travel_v2_t force;
+drop table iceberg_del_edge_${uuid0}.db_${uuid0}.compact_v2_t force;
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id force;
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id_k force;
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id_k2 force;
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_part_t_by_id force;
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_part_t_by_id_k force;
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.rename_t_deletes2 force;
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.promote_t_deletes force;
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.promote_t_deletes2 force;
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.travel_v2_t_deletes force;
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.compact_v2_t_deletes force;
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.compact_v2_t_deletes2 force;
+drop database iceberg_del_edge_${uuid0}.db_${uuid0};
+drop database hive_del_edge_${uuid0}.hdb_${uuid0};
+drop catalog iceberg_del_edge_${uuid0};
+drop catalog hive_del_edge_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/del_edge_${uuid0} >/dev/null || echo "exit 0" >/dev/null

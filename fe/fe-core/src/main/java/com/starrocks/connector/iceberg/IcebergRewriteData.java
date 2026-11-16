@@ -54,18 +54,18 @@ public class IcebergRewriteData {
         this.maxScanRangeLength = maxScanRangeLength;
     }
 
-    public void buildNewScanNodeRange(long fileSizeThreshold, boolean allFiles) {
+    public void buildNewScanNodeRange(IcebergRewriteFileSelector selector) {
         partitionedTasks = new HashMap<>();
         for (IcebergConnectorScanRangeSource source : sources) {
-            collectFromSource(source, fileSizeThreshold, allFiles);
+            collectFromSource(source, selector);
         }
         this.outer = partitionedTasks.values().iterator();
     }
 
-    private void collectFromSource(IcebergConnectorScanRangeSource source, long fileSizeThreshold, boolean allFiles) {
+    private void collectFromSource(IcebergConnectorScanRangeSource source, IcebergRewriteFileSelector selector) {
         List<FileScanTask> tasks;
         do {
-            tasks = source.getSourceFileScanOutputs(maxScanRangeLength, fileSizeThreshold, allFiles);
+            tasks = source.getSourceFileScanOutputs(maxScanRangeLength, selector);
             for (FileScanTask task : tasks) {
                 PartitionSpec spec = task.spec();
                 StructLikeWrapper partitionWrapper = StructLikeWrapper.forType(spec.partitionType());

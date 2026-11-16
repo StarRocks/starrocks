@@ -115,10 +115,12 @@ public class AlterMVReplayActivateTest extends MVTestBase {
         }
     }
 
-    // The mv-plan-cache executor also runs unrelated plan builds; park only the replayed activation's rebuild.
+    // The mv-plan-cache executor also runs unrelated plan builds; park only an asynchronous activation: the
+    // rebuild of a replayed one, or the check that follows a reload.
     private static boolean isReplayRebuild() {
         for (StackTraceElement frame : Thread.currentThread().getStackTrace()) {
-            if (frame.getMethodName().contains("activateOnReplay")) {
+            if (frame.getMethodName().contains("activateOnReplay")
+                    || frame.getMethodName().contains("checkAndSetActive")) {
                 return true;
             }
         }
@@ -303,6 +305,39 @@ public class AlterMVReplayActivateTest extends MVTestBase {
     }
 
     /**
+     * After an image is loaded every active mv is reloaded and checked asynchronously. A follower replays the
+     * leader's INACTIVE while that check is in flight; the check's verdict, computed for the status before,
+     * must not set the mv back to active.
+     */
+    @Test
+    public void testAStaleReloadVerdictDoesNotOverrideAReplayedInactive() throws Exception {
+        String mvName = "mv_reload_activate_stale";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" + HIVE_MV_DEFINITION);
+        try {
+            MaterializedView mv = getMv(DB_NAME, mvName);
+            Assertions.assertTrue(mv.isActive());
+
+            installProbe();
+            probe.gate = new CountDownLatch(1);
+            // as after loading an image: not reloaded yet, and reloaded asynchronously
+            mv.changeReloadState(-1);
+            mv.onReload(true);
+            Assertions.assertTrue(probe.gateEntered.await(30, TimeUnit.SECONDS),
+                    "the activation check never reached the connector, so nothing was in flight");
+
+            mv.setInactiveAndReason("test: a later replayed INACTIVE");
+            probe.gate.countDown();
+            // the asynchronous check marks the reload done when it finishes
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).until(mv::hasReloaded);
+
+            Assertions.assertFalse(mv.isActive(), "the stale verdict re-activated the MV");
+            Assertions.assertEquals("test: a later replayed INACTIVE", mv.getInactiveReason());
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+    }
+
+    /**
      * The rebuild runs outside the lock, so a DROP can be replayed while it is in flight. DROP cleans up the
      * base-table links, constraints and rewrite cache; whatever the rebuild publishes afterwards must not
      * resurrect them for an mv that no longer exists.
@@ -338,6 +373,49 @@ public class AlterMVReplayActivateTest extends MVTestBase {
             Assertions.assertFalse(base.getRelatedMaterializedViews().contains(mv.getMvId()),
                     "the rebuild re-linked a base table to a dropped MV");
             Assertions.assertFalse(mv.isActive(), "the rebuild re-activated a dropped MV");
+        } finally {
+            starRocksAssert.ddl("DROP MATERIALIZED VIEW IF EXISTS " + mvName);
+            starRocksAssert.dropTable(mixedBase);
+        }
+    }
+
+    /**
+     * The same for the startup activation: its check also runs outside any lock, after the coordinator has seen the
+     * mv still in the catalog, so a DROP replayed while the check is in flight must not be undone by it.
+     */
+    @Test
+    public void testADropDuringTheStartupActivationLeavesNoLinkBehind() throws Exception {
+        String mvName = "mv_startup_activate_dropped";
+        String mixedBase = "t_startup_activate_mixed_base";
+        starRocksAssert.withTable("CREATE TABLE " + mixedBase + " (l_orderkey int, v int) "
+                + "DISTRIBUTED BY HASH(l_orderkey) PROPERTIES('replication_num'='1')");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n"
+                + "DISTRIBUTED BY RANDOM\n"
+                + "REFRESH DEFERRED MANUAL\n"
+                + "AS SELECT a.l_orderkey, b.v FROM hive0.partitioned_db.lineitem_par a "
+                + "JOIN " + mixedBase + " b ON a.l_orderkey = b.l_orderkey;");
+        try {
+            MaterializedView mv = getMv(DB_NAME, mvName);
+            Table base = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(DB_NAME, mixedBase);
+            Assertions.assertTrue(mv.isActive());
+
+            installProbe();
+            probe.gate = new CountDownLatch(1);
+            // as after loading an image: handed over, then activated by its layer
+            mv.changeReloadState(-1);
+            mv.prepareForStartupActivation();
+            CompletableFuture<?> activation = mv.activateOnStartup();
+            Assertions.assertTrue(probe.gateEntered.await(30, TimeUnit.SECONDS),
+                    "the activation check never reached the connector, so nothing was in flight");
+
+            starRocksAssert.dropMaterializedView(mvName);
+            Assertions.assertFalse(base.getRelatedMaterializedViews().contains(mv.getMvId()));
+            probe.gate.countDown();
+            activation.get(30, TimeUnit.SECONDS);
+
+            Assertions.assertFalse(base.getRelatedMaterializedViews().contains(mv.getMvId()),
+                    "the startup activation re-linked a base table to a dropped MV");
+            Assertions.assertFalse(mv.isActive(), "the startup activation re-activated a dropped MV");
         } finally {
             starRocksAssert.ddl("DROP MATERIALIZED VIEW IF EXISTS " + mvName);
             starRocksAssert.dropTable(mixedBase);

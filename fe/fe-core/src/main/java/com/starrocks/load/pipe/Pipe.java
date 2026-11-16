@@ -42,6 +42,7 @@ import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PipeAnalyzer;
@@ -399,10 +400,15 @@ public class Pipe implements GsonPostProcessable {
      */
     private void finalizeTasks() {
         List<Long> removeTaskId = new ArrayList<>();
+        List<String> endedTaskNames = new ArrayList<>();
         Runnable changeStateAction = null;
         LoadStatus changedLoadStatus = loadStatus.cloneForUpdate();
         try (CloseableLock l = takeWriteLock()) {
             for (PipeTaskDesc task : runningTasks.values()) {
+                if (task.isFinished() || task.isError()) {
+                    // The attempt is over either way, and a retry runs as a new task: drop this one below.
+                    endedTaskNames.add(task.getUniqueTaskName());
+                }
                 if (task.isFinished() || task.tooManyErrors()) {
                     removeTaskId.add(task.getId());
                     pipeSource.finishPiece(task);
@@ -443,6 +449,32 @@ public class Pipe implements GsonPostProcessable {
                         alterPipeLog, wal -> this.loadStatus = changedLoadStatus);
             }
             LOG.info("pipe {} remove finalized tasks {}", this, removeTaskId);
+        }
+
+        dropEndedTasks(endedTaskNames);
+    }
+
+    /**
+     * Drop the tasks of ended attempts from TaskManager. Pipe tasks carry no expire time, so nothing else removes them:
+     * without this, every batch and every retry of one would stay registered for good. The task run history is kept
+     * apart from the task and is not affected.
+     */
+    private void dropEndedTasks(List<String> taskNames) {
+        if (taskNames.isEmpty()) {
+            return;
+        }
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        List<Long> taskIds = new ArrayList<>();
+        for (String taskName : taskNames) {
+            // There is no task if creating it failed. The source check leaves alone a task of another kind that
+            // happens to have the same name.
+            Task task = taskManager.getTask(taskName);
+            if (task != null && task.getSource() == Constants.TaskSource.PIPE) {
+                taskIds.add(task.getId());
+            }
+        }
+        if (!taskIds.isEmpty()) {
+            taskManager.dropTasks(taskIds);
         }
     }
 
@@ -527,7 +559,7 @@ public class Pipe implements GsonPostProcessable {
         if (taskDesc.getFuture().isCancelled()) {
             recordTaskError(taskDesc, "task got cancelled");
             return;
-        } else if (!taskDesc.getFuture().isDone()) {
+        } else if (!taskDesc.getFuture().isDone() || isTaskRunArchivePending(taskDesc)) {
             return;
         }
         try {
@@ -549,6 +581,35 @@ public class Pipe implements GsonPostProcessable {
                 return;
             }
             recordTaskError(taskDesc, e.getMessage());
+        }
+    }
+
+    /**
+     * Whether the attempt's task run is still registered as running although its future is done. The task run
+     * scheduler moves a done run into the task run history on its next dispatch round, so wait for that before treating
+     * the attempt as ended:
+     * - a failed attempt reads its error from the history, which does not have the run before then;
+     * - {@link #dropEndedTasks} must journal the drop after the run's archive record. Dropping a task kills its
+     *   registered run: the leader then archives the run from the kill path, but a follower replaying the drop discards
+     *   the run first and the archive record that follows finds nothing, so the run is missing from its history.
+     * The scheduler archives a run under the task run lock, removing it from the running map before adding it to the
+     * history, so check under that lock: a run gone from the map is then in the history too. While the lock is busy,
+     * check again next round.
+     */
+    private static boolean isTaskRunArchivePending(PipeTaskDesc taskDesc) {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(taskDesc.getUniqueTaskName());
+        if (task == null) {
+            return false;
+        }
+        TaskRunManager taskRunManager = taskManager.getTaskRunManager();
+        if (!taskRunManager.tryTaskRunLock()) {
+            return true;
+        }
+        try {
+            return taskRunManager.getTaskRunScheduler().getRunningTaskRun(task.getId()) != null;
+        } finally {
+            taskRunManager.taskRunUnlock();
         }
     }
 

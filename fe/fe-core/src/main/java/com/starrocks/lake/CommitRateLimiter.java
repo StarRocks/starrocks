@@ -102,7 +102,7 @@ public class CommitRateLimiter {
     /**
      * Checks the commit rate for the given partition IDs and throws a CommitRateExceededException if necessary.
      *
-     * @param partitionIds the set of partition IDs to check. Must not be null.
+     * @param partitionIds the set of physical partition IDs to check. Must not be null.
      * @throws CommitFailedException       if the allow commit time exceeds the transaction timeout
      * @throws CommitRateExceededException if the commit rate exceeds the threshold
      */
@@ -161,22 +161,41 @@ public class CommitRateLimiter {
 
     private void setAllowCommitTimeOnce(@NotNull Set<Long> partitionIds) {
         if (transactionState.getAllowCommitTimeMs() < 0) {
+            long maxScorePartitionId = -1;
             double maxCompactionScore = 0;
             for (Long partitionId : partitionIds) {
-                maxCompactionScore = Math.max(maxCompactionScore, getPartitionCompactionScore(partitionId));
+                double compactionScore = getPartitionCompactionScore(partitionId);
+                if (compactionScore > maxCompactionScore) {
+                    maxScorePartitionId = partitionId;
+                    maxCompactionScore = compactionScore;
+                }
             }
             long allowCommitTime = getAllowCommitTime(transactionState, maxCompactionScore);
             transactionState.setAllowCommitTimeMs(allowCommitTime);
+            if (allowCommitTime > transactionState.getWriteEndTimeMs()) {
+                LOG.info("txn {} commit is delayed {}ms after write end, because compaction score {} of partition {}"
+                                + " in table {} exceeds the slowdown threshold {}, write took {}ms",
+                        transactionState.getTransactionId(), allowCommitTime - transactionState.getWriteEndTimeMs(),
+                        maxCompactionScore, maxScorePartitionId, tableId, slowdownThreshold(),
+                        transactionState.getWriteDurationMs());
+            }
         }
     }
 
+    // partitionId is a physical partition id, the key under which compaction statistics are recorded
     private double getPartitionCompactionScore(@NotNull Long partitionId) {
         long dbId = transactionState.getDbId();
-        // TODO: Should be able to fetch statistics by partition id
         PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, tableId, partitionId);
         PartitionStatistics statistics = compactionMgr.getStatistics(partitionIdentifier);
         Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
-        return compactionScore != null ? compactionScore.getMax() : 0;
+        if (compactionScore == null) {
+            // Expected only before the partition's first load becomes visible. Anything else means the lookup key
+            // does not match the one the statistics were recorded under, and the partition escapes throttling.
+            LOG.info("txn {} found no compaction score for partition {} in table {}, its commit is not throttled"
+                            + " by this partition", transactionState.getTransactionId(), partitionId, tableId);
+            return 0;
+        }
+        return compactionScore.getMax();
     }
 
     // Returns the first partition id and its compaction score that exceeds the upper bound

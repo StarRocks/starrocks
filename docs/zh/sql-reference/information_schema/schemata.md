@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "schemata 提供数据库的信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # schemata

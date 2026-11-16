@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Since v3.1, StarRocks supports generated columns."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Generated columns

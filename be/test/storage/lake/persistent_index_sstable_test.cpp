@@ -723,7 +723,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_open_read_error) {
 TEST_F(PersistentIndexSstableTest, test_sst_open_retry_after_clear_corrupted_cache) {
     auto location_provider = std::make_shared<FixedLocationProvider>(kTestDir);
     auto metadata = std::make_shared<TabletMetadata>();
-    TabletManager tablet_mgr(location_provider, 1024);
+    TabletManager tablet_mgr(location_provider, 1024, 1024);
     metadata->set_id(10001);
     ASSERT_OK(fs::create_directories(lake::join_path(kTestDir, lake::kSegmentDirectoryName)));
 
@@ -1390,6 +1390,99 @@ TEST_F(PersistentIndexSstableTest, test_sample_data_keys_scoped_to_range) {
     const std::string beyond_key = fmt::format("test_key_{:016X}", N + 1000);
     ASSERT_OK(sst->sample_data_keys(&beyond_samples, Slice(beyond_key), Slice(), kMaxSamples));
     EXPECT_TRUE(beyond_samples.empty());
+}
+
+// multi_get decodes every found value into one reused IndexValuesWithVerPB. Interleave keys whose values hold two
+// versions, one version and a tombstone, so anything carried over from the previous key's value would show up as a
+// wrong rss_rowid, a wrong version match or a tombstone read back as live.
+TEST_F(PersistentIndexSstableTest, test_multi_get_reuses_value_message_across_keys) {
+    const int N = 30;
+    const std::string filename = "test_multi_get_reuses_value_message.sst";
+    ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+    sstable::Options options;
+    sstable::TableBuilder builder(options, file.get());
+    std::vector<std::string> key_str(N);
+    for (int i = 0; i < N; i++) {
+        key_str[i] = fmt::format("reuse_{:016X}", i);
+        IndexValuesWithVerPB value_pb;
+        auto add_value = [&](int64_t version, uint32_t rssid, uint32_t rowid) {
+            auto* value = value_pb.add_values();
+            value->set_version(version);
+            value->set_rssid(rssid);
+            value->set_rowid(rowid);
+        };
+        if (i % 3 == 0) {
+            // Two versions, newest first.
+            add_value(200, 2, i);
+            add_value(100, 1, i);
+        } else if (i % 3 == 1) {
+            add_value(100, 1, i);
+        } else {
+            add_value(100, UINT32_MAX, UINT32_MAX);
+        }
+        ASSERT_OK(builder.Add(Slice(key_str[i]), Slice(value_pb.SerializeAsString())));
+    }
+    ASSERT_OK(builder.Finish());
+    PersistentIndexSstableRangePB range_pb;
+    auto [start_key, end_key] = builder.KeyRange();
+    range_pb.set_start_key(start_key.to_string());
+    range_pb.set_end_key(end_key.to_string());
+    const uint64_t filesize = builder.FileSize();
+    ASSERT_OK(file->close());
+
+    auto sst = std::make_unique<PersistentIndexSstable>();
+    ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
+    std::unique_ptr<Cache> cache_ptr;
+    cache_ptr.reset(new_lru_cache(1024));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(filesize);
+    sstable_pb.mutable_range()->CopyFrom(range_pb);
+    sstable_pb.mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
+    ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get()));
+
+    std::vector<Slice> keys(N);
+    KeyIndexSet key_indexes;
+    for (int i = 0; i < N; i++) {
+        keys[i] = Slice(key_str[i]);
+        key_indexes.insert(i);
+    }
+    auto rss_rowid = [](uint32_t rssid, uint32_t rowid) { return (static_cast<uint64_t>(rssid) << 32) | rowid; };
+
+    // The newest value of every key.
+    {
+        std::vector<IndexValue> values(N, IndexValue(NullIndexValue));
+        KeyIndexSet found;
+        ASSERT_OK(sst->multi_get(keys.data(), key_indexes, -1, values.data(), &found));
+        ASSERT_EQ(key_indexes, found);
+        for (int i = 0; i < N; i++) {
+            const uint64_t expected = i % 3 == 0 ? rss_rowid(2, i) : (i % 3 == 1 ? rss_rowid(1, i) : NullIndexValue);
+            ASSERT_EQ(expected, values[i].get_value()) << "key " << i;
+        }
+    }
+    // Only the two-version keys hold a version-200 entry.
+    {
+        std::vector<IndexValue> values(N, IndexValue(NullIndexValue));
+        KeyIndexSet found;
+        ASSERT_OK(sst->multi_get(keys.data(), key_indexes, 200, values.data(), &found));
+        for (int i = 0; i < N; i++) {
+            ASSERT_EQ(i % 3 == 0, found.count(i) > 0) << "key " << i;
+            if (i % 3 == 0) {
+                ASSERT_EQ(rss_rowid(2, i), values[i].get_value()) << "key " << i;
+            }
+        }
+    }
+    // Every key holds a version-100 entry: the older one of the two-version keys, the only one elsewhere.
+    {
+        std::vector<IndexValue> values(N, IndexValue(NullIndexValue));
+        KeyIndexSet found;
+        ASSERT_OK(sst->multi_get(keys.data(), key_indexes, 100, values.data(), &found));
+        ASSERT_EQ(key_indexes, found);
+        for (int i = 0; i < N; i++) {
+            const uint64_t expected = i % 3 == 2 ? NullIndexValue : rss_rowid(1, i);
+            ASSERT_EQ(expected, values[i].get_value()) << "key " << i;
+        }
+    }
 }
 
 } // namespace starrocks::lake

@@ -207,8 +207,11 @@ public class MergeIntoPlanner {
         IcebergRowDeltaSink dataSink = new IcebergRowDeltaSink(
                 icebergTable, rowDeltaTuple, session.getSessionVariable(), TIcebergWriteMode.ROW_DELTA_MIXED);
         dataSink.init();
+        dataSink.setTargetBranch(mergeIntoStmt.getTargetBranch());
 
         IcebergMetadata.IcebergSinkExtra icebergSinkExtra = new IcebergMetadata.IcebergSinkExtra();
+        // The BE partitions the output by the spec of the table descriptor built now.
+        icebergSinkExtra.setWriteSpecId(icebergTable.getReadSpec().specId());
         icebergSinkExtra.setOperationType(IcebergMetadata.IcebergSinkExtra.OperationType.MERGE);
         // For MERGE, the plan has source LEFT JOIN target — there may be multiple
         // IcebergScanNodes (e.g., self-merge or USING another Iceberg table).

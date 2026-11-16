@@ -53,6 +53,11 @@ uint32_t CacheKey::hash(const char* data, size_t n, uint32_t seed) const {
 
 Cache::~Cache() = default;
 
+bool Cache::replace_if(const CacheKey&, void*, size_t, void (*)(const CacheKey&, void*), bool (*)(void*, const void*),
+                       const void*, CachePriority) {
+    return false;
+}
+
 // LRU cache implementation
 LRUHandle* HandleTable::lookup(const CacheKey& key, uint32_t hash) {
     return *_find_pointer(key, hash);
@@ -174,7 +179,7 @@ void LRUCache::_lru_append(LRUHandle* list, LRUHandle* e) {
     e->next->prev = e;
 }
 
-void LRUCache::set_capacity(size_t capacity) {
+size_t LRUCache::set_capacity(size_t capacity) {
     std::vector<LRUHandle*> last_ref_list;
     {
         std::lock_guard l(_mutex);
@@ -182,9 +187,12 @@ void LRUCache::set_capacity(size_t capacity) {
         _evict_from_lru(0, &last_ref_list);
     }
 
+    size_t evicted = 0;
     for (auto entry : last_ref_list) {
+        evicted += entry->charge;
         entry->free();
     }
+    return evicted;
 }
 
 uint64_t LRUCache::get_lookup_count() const {
@@ -383,6 +391,32 @@ Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value,
     return reinterpret_cast<Cache::Handle*>(e);
 }
 
+Cache::Handle* LRUCache::insert_no_evict(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                                         void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
+    LRUHandle* e = _alloc_handle(key, hash, value, value_size, deleter, priority);
+    bool fits = false;
+    std::vector<LRUHandle*> last_ref_list;
+    {
+        std::lock_guard l(_mutex);
+        // Checked under the same lock as the insert, so _insert_no_lock() below has nothing to evict.
+        fits = _usage + e->charge <= _capacity;
+        if (fits) {
+            _insert_no_lock(e, &last_ref_list);
+        }
+    }
+
+    if (!fits) {
+        // Only the handle is ours to release; `value` still belongs to the caller.
+        ::free(e);
+        return nullptr;
+    }
+    for (auto entry : last_ref_list) {
+        entry->free();
+    }
+
+    return reinterpret_cast<Cache::Handle*>(e);
+}
+
 Cache::Handle* LRUCache::insert_if_absent(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
                                           void (*deleter)(const CacheKey& key, void* value), bool* inserted,
                                           CachePriority priority) {
@@ -417,6 +451,44 @@ Cache::Handle* LRUCache::insert_if_absent(const CacheKey& key, uint32_t hash, vo
     }
 
     return reinterpret_cast<Cache::Handle*>(ret);
+}
+
+bool LRUCache::replace_if(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                          void (*deleter)(const CacheKey& key, void* value),
+                          bool (*pred)(void* old_value, const void* ctx), const void* ctx, CachePriority priority) {
+    auto* replacement = _alloc_handle(key, hash, value, value_size, deleter, priority);
+    std::vector<LRUHandle*> last_ref_list;
+    bool replaced = false;
+    {
+        std::lock_guard l(_mutex);
+        auto* old = _table.lookup(key, hash);
+        if (old != nullptr && (pred == nullptr || pred(old->value, ctx))) {
+            _table.remove(key, hash);
+            old->in_cache = false;
+            if (_unref(old)) {
+                _usage -= old->charge;
+                _lru_remove(old);
+                last_ref_list.push_back(old);
+            }
+            // Reclaim the old cache reference before applying the new charge. A
+            // same-sized replacement must not evict unrelated entries to fit both.
+            // Pinned old handles retain their charge until their final release.
+            _insert_no_lock(replacement, &last_ref_list);
+            replaced = true;
+        }
+    }
+    for (auto* entry : last_ref_list) {
+        entry->free();
+    }
+    if (replaced) {
+        // Drop the temporary caller reference created by _alloc_handle. release()
+        // also runs any resulting deleter outside the shard lock.
+        release(reinterpret_cast<Cache::Handle*>(replacement));
+    } else {
+        // The cache never adopted value; only its unused handle belongs to us.
+        ::free(replacement);
+    }
+    return replaced;
 }
 
 void LRUCache::_update_charge_no_lock(LRUHandle* e, size_t new_value_size, std::vector<LRUHandle*>* last_ref_list) {
@@ -516,18 +588,20 @@ ShardedLRUCache::ShardedLRUCache(size_t capacity) : _capacity(capacity) {
     }
 }
 
-void ShardedLRUCache::_set_capacity(size_t capacity) {
+size_t ShardedLRUCache::_set_capacity(size_t capacity) {
     const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;
+    size_t evicted = 0;
     for (auto& _shard : _shards) {
-        _shard.set_capacity(per_shard);
+        evicted += _shard.set_capacity(per_shard);
     }
     _capacity = capacity;
+    return evicted;
 }
 
-void ShardedLRUCache::set_capacity(size_t capacity) {
+size_t ShardedLRUCache::set_capacity(size_t capacity) {
     // Maybe multi client try to set capactity, we protect it using mutex.
     std::lock_guard l(_mutex);
-    _set_capacity(capacity);
+    return _set_capacity(capacity);
 }
 
 bool ShardedLRUCache::adjust_capacity(int64_t delta, size_t min_capacity) {
@@ -546,11 +620,26 @@ Cache::Handle* ShardedLRUCache::insert(const CacheKey& key, void* value, size_t 
     return _shards[_shard(hash)].insert(key, hash, value, value_size, deleter, priority);
 }
 
+Cache::Handle* ShardedLRUCache::insert_no_evict(const CacheKey& key, void* value, size_t value_size,
+                                                void (*deleter)(const CacheKey& key, void* value),
+                                                CachePriority priority) {
+    const uint32_t hash = _hash_slice(key);
+    return _shards[_shard(hash)].insert_no_evict(key, hash, value, value_size, deleter, priority);
+}
+
 Cache::Handle* ShardedLRUCache::insert_if_absent(const CacheKey& key, void* value, size_t value_size,
                                                  void (*deleter)(const CacheKey& key, void* value), bool* inserted,
                                                  CachePriority priority) {
     const uint32_t hash = _hash_slice(key);
     return _shards[_shard(hash)].insert_if_absent(key, hash, value, value_size, deleter, inserted, priority);
+}
+
+bool ShardedLRUCache::replace_if(const CacheKey& key, void* value, size_t value_size,
+                                 void (*deleter)(const CacheKey& key, void* value),
+                                 bool (*pred)(void* old_value, const void* ctx), const void* ctx,
+                                 CachePriority priority) {
+    const uint32_t hash = _hash_slice(key);
+    return _shards[_shard(hash)].replace_if(key, hash, value, value_size, deleter, pred, ctx, priority);
 }
 
 bool ShardedLRUCache::update_charge_if(const CacheKey& key, size_t new_value_size,
@@ -612,6 +701,15 @@ void ShardedLRUCache::prune() {
         num_prune += _shard.prune();
     }
     VLOG(7) << "Successfully prune cache, clean " << num_prune << " entries.";
+}
+
+std::vector<size_t> ShardedLRUCache::get_shard_memory_usages() const {
+    std::vector<size_t> usages;
+    usages.reserve(kNumShards);
+    for (const auto& shard : _shards) {
+        usages.push_back(static_cast<size_t>(shard.get_usage()));
+    }
+    return usages;
 }
 
 size_t ShardedLRUCache::get_memory_usage() const {

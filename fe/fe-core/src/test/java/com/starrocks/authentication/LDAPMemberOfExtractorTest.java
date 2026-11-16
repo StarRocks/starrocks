@@ -159,38 +159,60 @@ class LDAPMemberOfExtractorTest {
                 LDAPMemberOfExtractor.extractGroupNames(attributes, "memberOf", "alice"));
     }
 
+    private static final String LDAP_PROP =
+            SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_GROUP_SOURCE;
+    private static final String TOKEN_PROP = JWTBaseSecurityIntegration.GROUP_SOURCE;
+
     @Test
     void testGroupSourceLegalValues() {
-        Assertions.assertEquals(LdapGroupSource.GROUP_PROVIDER, LdapGroupSource.parseOrThrow("group_provider"));
-        Assertions.assertEquals(LdapGroupSource.MEMBEROF, LdapGroupSource.parseOrThrow("memberof"));
-        Assertions.assertEquals(LdapGroupSource.BOTH, LdapGroupSource.parseOrThrow("both"));
+        Assertions.assertEquals(GroupSource.GROUP_PROVIDER, GroupSource.parseOrThrow("group_provider", LDAP_PROP));
+        Assertions.assertEquals(GroupSource.BOTH, GroupSource.parseOrThrow("both", LDAP_PROP));
+        // The third value is spelled after the mechanism of the property: `memberof` on the LDAP
+        // property, `claim` on the token integrations' `group_source`. The neutral internal name
+        // `authenticator` is accepted on both; the other type's spelling is not.
+        Assertions.assertEquals(GroupSource.AUTHENTICATOR, GroupSource.parseOrThrow("memberof", LDAP_PROP));
+        Assertions.assertEquals(GroupSource.AUTHENTICATOR, GroupSource.parseOrThrow("authenticator", LDAP_PROP));
+        Assertions.assertEquals(GroupSource.AUTHENTICATOR, GroupSource.parseOrThrow("claim", TOKEN_PROP));
+        Assertions.assertEquals(GroupSource.AUTHENTICATOR, GroupSource.parseOrThrow("authenticator", TOKEN_PROP));
+        Assertions.assertThrows(SemanticException.class, () -> GroupSource.parseOrThrow("claim", LDAP_PROP));
+        Assertions.assertThrows(SemanticException.class, () -> GroupSource.parseOrThrow("memberof", TOKEN_PROP));
+        Assertions.assertEquals("memberof", GroupSource.AUTHENTICATOR.spelledFor(LDAP_PROP));
+        Assertions.assertEquals("claim", GroupSource.AUTHENTICATOR.spelledFor(TOKEN_PROP));
+        Assertions.assertEquals("both", GroupSource.BOTH.spelledFor(LDAP_PROP));
         // Case and surrounding blanks are tolerated.
-        Assertions.assertEquals(LdapGroupSource.MEMBEROF, LdapGroupSource.parseOrThrow(" MemberOf "));
+        Assertions.assertEquals(GroupSource.AUTHENTICATOR, GroupSource.parseOrThrow(" MemberOf ", LDAP_PROP));
+        Assertions.assertEquals(GroupSource.AUTHENTICATOR, GroupSource.parseOrThrow(" Claim ", TOKEN_PROP));
 
-        Assertions.assertTrue(LdapGroupSource.GROUP_PROVIDER.usesGroupProvider());
-        Assertions.assertFalse(LdapGroupSource.GROUP_PROVIDER.readsMemberOf());
-        Assertions.assertFalse(LdapGroupSource.MEMBEROF.usesGroupProvider());
-        Assertions.assertTrue(LdapGroupSource.MEMBEROF.readsMemberOf());
-        Assertions.assertTrue(LdapGroupSource.BOTH.usesGroupProvider());
-        Assertions.assertTrue(LdapGroupSource.BOTH.readsMemberOf());
+        Assertions.assertTrue(GroupSource.GROUP_PROVIDER.usesGroupProvider());
+        Assertions.assertFalse(GroupSource.GROUP_PROVIDER.usesAuthenticatorGroups());
+        Assertions.assertFalse(GroupSource.AUTHENTICATOR.usesGroupProvider());
+        Assertions.assertTrue(GroupSource.AUTHENTICATOR.usesAuthenticatorGroups());
+        Assertions.assertTrue(GroupSource.BOTH.usesGroupProvider());
+        Assertions.assertTrue(GroupSource.BOTH.usesAuthenticatorGroups());
     }
 
     @Test
     void testGroupSourceIllegalValueIsRejectedOnTheDdlPath() {
         SemanticException e = Assertions.assertThrows(SemanticException.class,
-                () -> LdapGroupSource.parseOrThrow("memberof_only"));
+                () -> GroupSource.parseOrThrow("memberof_only", LDAP_PROP));
         Assertions.assertTrue(e.getMessage().contains("memberof_only"));
+        // The message names the property the user typed and lists the values legal *on it*.
         Assertions.assertTrue(e.getMessage().contains("authentication_ldap_simple_group_source"));
-        Assertions.assertThrows(SemanticException.class, () -> LdapGroupSource.parseOrThrow(""));
+        Assertions.assertTrue(e.getMessage().contains("group_provider, memberof, both"), e.getMessage());
+        String tokenMessage = Assertions.assertThrows(SemanticException.class,
+                () -> GroupSource.parseOrThrow("memberof", TOKEN_PROP)).getMessage();
+        Assertions.assertTrue(tokenMessage.contains("group_source"), tokenMessage);
+        Assertions.assertTrue(tokenMessage.contains("group_provider, claim, both"), tokenMessage);
+        Assertions.assertThrows(SemanticException.class, () -> GroupSource.parseOrThrow("", LDAP_PROP));
     }
 
     @Test
     void testGroupSourceIllegalValueFallsBackAtRuntime() {
         // The same value coming from fe.conf must not fail every LDAP login.
-        Assertions.assertEquals(LdapGroupSource.GROUP_PROVIDER, LdapGroupSource.parseOrDefault("memberof_only"));
-        Assertions.assertEquals(LdapGroupSource.GROUP_PROVIDER, LdapGroupSource.parseOrDefault(null));
-        Assertions.assertEquals(LdapGroupSource.GROUP_PROVIDER, LdapGroupSource.parseOrDefault(""));
-        Assertions.assertEquals(LdapGroupSource.BOTH, LdapGroupSource.parseOrDefault("both"));
+        Assertions.assertEquals(GroupSource.GROUP_PROVIDER, GroupSource.parseOrDefault("memberof_only", LDAP_PROP));
+        Assertions.assertEquals(GroupSource.GROUP_PROVIDER, GroupSource.parseOrDefault(null, LDAP_PROP));
+        Assertions.assertEquals(GroupSource.GROUP_PROVIDER, GroupSource.parseOrDefault("", LDAP_PROP));
+        Assertions.assertEquals(GroupSource.BOTH, GroupSource.parseOrDefault("both", LDAP_PROP));
     }
 
     @Test

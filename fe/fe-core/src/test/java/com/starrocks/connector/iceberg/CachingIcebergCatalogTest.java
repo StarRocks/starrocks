@@ -14,8 +14,10 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
@@ -33,6 +35,8 @@ import mockit.Expectations;
 import mockit.Mocked;
 import mockit.Verifications;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.MetadataTableUtils;
@@ -55,6 +59,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
@@ -316,6 +322,32 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+    public void testTableLoadedAtMs(@Mocked IcebergCatalog icebergCatalog) {
+        Table nativeTable = createBaseTableWithManifests(1, 1);
+        new Expectations() {
+            {
+                icebergCatalog.getTable(connectContext, "test", "table");
+                result = nativeTable;
+                minTimes = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        long before = System.currentTimeMillis();
+        Table cached = cachingIcebergCatalog.getTable(connectContext, "test", "table");
+        long now = System.currentTimeMillis();
+        OptionalLong loadedAt = cachingIcebergCatalog.tableLoadedAtMs(connectContext, "test", "table", cached, now);
+        Assertions.assertTrue(loadedAt.isPresent());
+        Assertions.assertTrue(loadedAt.getAsLong() >= before - 1000 && loadedAt.getAsLong() <= now,
+                before + " <= " + loadedAt + " <= " + now);
+
+        // A table object the cache did not load: its age is unknown.
+        Assertions.assertFalse(cachingIcebergCatalog.tableLoadedAtMs(connectContext, "test", "table",
+                createBaseTableWithManifests(1, 1), now).isPresent());
+        cachingIcebergCatalog.invalidateCache("test", "table");
+    }
+
+    @Test
     public void testGetTableIOError(@Mocked IcebergCatalog icebergCatalog) {
         new Expectations() {
             {
@@ -372,6 +404,35 @@ public class CachingIcebergCatalogTest {
         Mockito.when(currentSnapshot.allManifests(Mockito.any())).thenReturn(manifests);
 
         return new BaseTable(ops, "db.tbl");
+    }
+
+    @Test
+    public void testFindCachedDataFilesOnlyFromCompleteEntries(@Mocked IcebergCatalog icebergCatalog) {
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        Cache<String, Set<DataFile>> dataFileCache = Deencapsulation.getField(cachingIcebergCatalog, "dataFileCache");
+        DataFile fileA = DataFiles.builder(PartitionSpec.unpartitioned())
+                .withPath("/data/a.parquet").withFileSizeInBytes(10).withRecordCount(1).build();
+        DataFile fileB = DataFiles.builder(PartitionSpec.unpartitioned())
+                .withPath("/data/b.parquet").withFileSizeInBytes(10).withRecordCount(1).build();
+        Set<String> wanted = Set.of("/data/a.parquet");
+
+        ManifestFile manifest = Mockito.mock(ManifestFile.class);
+        Mockito.when(manifest.path()).thenReturn("/metadata/m1.avro");
+        Mockito.when(manifest.partitionSpecId()).thenReturn(0);
+        Mockito.when(manifest.addedFilesCount()).thenReturn(1);
+        Mockito.when(manifest.existingFilesCount()).thenReturn(1);
+        Assertions.assertNull(cachingIcebergCatalog.findCachedDataFiles(manifest, wanted));
+
+        dataFileCache.put("/metadata/m1.avro", Sets.newHashSet(fileA));
+        Assertions.assertNull(cachingIcebergCatalog.findCachedDataFiles(manifest, wanted));
+
+        dataFileCache.put("/metadata/m1.avro", Sets.newHashSet(fileA, fileB));
+        Assertions.assertEquals(Map.of("/data/a.parquet", fileA),
+                cachingIcebergCatalog.findCachedDataFiles(manifest, wanted));
+
+        Mockito.when(manifest.existingFilesCount()).thenReturn(null);
+        Assertions.assertNull(cachingIcebergCatalog.findCachedDataFiles(manifest, wanted));
     }
 
     @Test

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical q - r"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # メトリクス q から r
@@ -55,6 +56,12 @@ description: "Alphabetical q - r"
 - 単位: カウント
 - 説明: スキャンされた行の総数。
 
+## `ranger_audit_init_failed`
+
+- 単位: -
+- タイプ: Gauge
+- 説明: この FE が Ranger 監査の初期化に失敗したかどうか。`1` の場合、認可は引き続き動作しますが、監査設定を修正して再起動するまで、この FE は Ranger 監査イベントを一切出力しません。失敗した監査先は FE ログに記録されます。それ以外は `0` です。よくある原因は、FE に同梱されていない監査先を設定していることです。FE で利用できる Ranger 監査先は `file` と `solr` のみです。
+
 ## `readable_blocks_total (Deprecated)`
 
 ## `recycle_bin_database_num`
@@ -105,12 +112,12 @@ description: "Alphabetical q - r"
 ## `resource_group_driver_queue_level_schedule_count`
 
 - 単位: カウント
-- 説明: 各リソースグループのパイプライン実行キューで、各レベルから取り出された Driver の累積数。
+- 説明: 各リソースグループのパイプライン実行キューで、各レベルから取り出された Driver の累積数。実行が残っている旧バージョンのリソースグループも含み、その削除後も最終的な累積値を保持します。同じ BE/CN プロセス内でリソースグループを更新、削除、または同じ名前で再作成しても、累積値は維持されます。
 
 ## `resource_group_driver_queue_level_wait_time_ns`
 
 - 単位: ナノ秒
-- 説明: 各リソースグループのパイプライン実行キューで、各レベルから取り出された Driver がレディキューで待機した累積時間。この値の増分を `resource_group_driver_queue_level_schedule_count` の増分で割ると、そのレベルの平均待機時間になります。
+- 説明: 各リソースグループのパイプライン実行キューで、各レベルから取り出された Driver がレディキューで待機した累積時間。スケジュール回数のカウンターと同様に、実行が残っている旧バージョンも含み、同じ BE/CN プロセス内での更新、削除、同じ名前での再作成後も累積値を保持します。この値の増分を `resource_group_driver_queue_level_schedule_count` の増分で割ると、そのレベルの平均待機時間になります。
 
 ## `resource_group_inuse_cpu_cores`
 

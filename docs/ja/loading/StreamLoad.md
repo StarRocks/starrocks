@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 description: "curl コマンドを使用してローカルファイルシステムから CSV、JSON、Parquet、ORC 形式でデータをロードする Stream Load の方法。"
 keywords: ['Stream Load']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ローカルファイルシステムからデータをロードする
@@ -27,6 +28,11 @@ CSV データについては、以下の点に注意してください。
 Stream Load と Broker Load はどちらもデータロード時にデータ変換をサポートし、データロード時に UPSERT および DELETE 操作によるデータ変更をサポートします。詳細については、[Transform data at loading](./Etl_in_loading.md) および [Change data through loading](./Load_to_Primary_Key_tables.md) を参照してください。
 
 ## 始める前に
+
+:::tip
+JWT または OAuth 2.0 の[セキュリティインテグレーション](../administration/user_privs/authentication/security_integration.md)を設定している場合、Stream Load はユーザー名とパスワードのほかに Bearer トークンも受け付けます: `-u <username>:<password>` の代わりに `-H "Authorization: Bearer <token>"` を送ります。ロードの commit 時点でもトークンが有効である必要があるため、長時間のロードには十分な有効期間のトークンを使ってください。[各認証方式が使えるエントリポイント](../administration/user_privs/authentication/authentication.mdx#各認証方式が使えるエントリポイント) を参照してください。
+:::
+
 
 ### 権限の確認
 

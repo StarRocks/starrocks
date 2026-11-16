@@ -26,7 +26,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Re-derives the IVM maintenance query (the rewritten SELECT producing hidden __ROW_ID__ /
@@ -53,22 +52,27 @@ public final class IvmRefreshDefinition {
         Analyzer.analyze(qs, ctx);
 
         IVMAnalyzer analyzer = new IVMAnalyzer(ctx, null, qs);
-        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
-                analyzer.rewriteForRefresh(mv.getCurrentRefreshMode(), mv.getEncodeRowIdVersion());
-        if (result.isEmpty()) {
-            throw new SemanticException("MV %s definition is not an IVM query at refresh", mv.getName());
+        IVMAnalyzer.IVMAnalyzeResult result;
+        try {
+            // Strict even for AUTO: a view that already has the IVM schema cannot degrade to PCT here, and AUTO's
+            // lenient rewrite would drop the reason the definition was rejected.
+            result = analyzer.rewriteForRefresh(MaterializedView.RefreshMode.INCREMENTAL, mv.getEncodeRowIdVersion())
+                    .orElseThrow();
+        } catch (SemanticException e) {
+            throw new SemanticException(String.format("MV %s definition is not an IVM query at refresh: %s",
+                    mv.getName(), e.getDetailMsg()), e);
         }
 
-        QueryStatement rewritten = result.get().queryStatement();
+        QueryStatement rewritten = result.queryStatement();
         // The rewrite prepends __ROW_ID__ / appends __AGG_STATE columns whose output names lag until
         // re-analysis; buildSimple and getRelationFields below both read those names.
         Analyzer.analyze(rewritten, ctx);
 
-        if (result.get().rowIdStrategy() != mv.getRowIdStrategy()) {
+        if (result.rowIdStrategy() != mv.getRowIdStrategy()) {
             throw new SemanticException(
                     "IVM MV %s: re-derived row-id strategy %s does not match stored %s; "
                             + "drop and recreate the MV",
-                    mv.getName(), result.get().rowIdStrategy(), mv.getRowIdStrategy());
+                    mv.getName(), result.rowIdStrategy(), mv.getRowIdStrategy());
         }
         return rewritten;
     }

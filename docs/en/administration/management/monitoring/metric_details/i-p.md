@@ -2,9 +2,9 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical i - p"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
-import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 # Metrics i through p
 
@@ -15,11 +15,40 @@ Metrics for materialized views and shared-data clusters are detailed in the corr
 - [Metrics for asynchronous materialized view metrics](../metrics-materialized_view.md)
 - [Metrics for Shared-data Dashboard metrics, and Starlet Dashboard metrics](../metrics-shared-data.md)
 
-For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../monitoring.md).
+For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../prometheus_grafana.md).
 
 :::
 
-<MetricsIP />
+## `iceberg_delete_bytes`
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `delete_type` (`position` or `metadata`)
+- Description: Total deleted bytes from Iceberg `DELETE` tasks. For `metadata` delete, this represents the size of deleted data files. For `position` delete, this represents the size of position delete files created.
+
+## `iceberg_delete_duration_ms_total`
+
+- Unit: Millisecond
+- Type: Cumulative
+- Labels: `delete_type` (`position` or `metadata`)
+- Description: Total execution time of Iceberg `DELETE` tasks in milliseconds. The duration of each task is added after it ends. `delete_type` distinguishes between two delete methods.
+
+## `iceberg_delete_rows`
+
+- Unit: Rows
+- Type: Cumulative
+- Labels: `delete_type` (`position` or `metadata`)
+- Description: Total deleted rows from Iceberg `DELETE` tasks. For `metadata` delete, this represents the number of rows in deleted data files. For `position` delete, this represents the number of position deletes created.
+
+## `iceberg_delete_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels:
+  - `status` (`success` or `failed`)
+  - `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`)
+  - `delete_type` (`position` or `metadata`)
+- Description: Total number of `DELETE` tasks that target Iceberg tables. The metric is incremented by 1 after each task ends, regardless of success or failure. `delete_type` distinguishes between two delete methods: `position` (generates position delete files) and `metadata` (metadata-level delete).
 
 ## `iceberg_compaction_duration_ms_total`
 
@@ -204,6 +233,20 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by the INT8 column pool.
 
+## `jwks_fetch_latency_ms`
+
+- Unit: ms
+- Type: Histogram
+- Description: Latency of each JWKS (JSON Web Key Set) fetch from the identity provider, whatever triggered it: the first load of a `jwks_url`, a background refresh ahead of the cache TTL, a refresh forced by a token with an unknown `kid`, or a retry. Failed fetches are timed as well. A JWT verification itself is a stable CPU cost; when Bearer authentication gets slow, this fetch is where the time goes.
+- Introduced in: v4.2
+
+## `jwks_refresh_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of JWKS fetches from the identity provider, labeled by `result` (`success` or `failure`). One increment per HTTP fetch, counted at the fetch itself, so a background refresh counts once and a fetch that failed but was answered from cached keys (see `jwks_cache_outage_ttl_seconds`) counts as a failure. A rising `failure` rate means the identity provider's JWKS endpoint is unhealthy; authentication keeps working from the cached keys until the outage window runs out.
+- Introduced in: v4.2
+
 ## `jemalloc_active_bytes`
 
 - Unit: Bytes
@@ -253,6 +296,55 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Bytes
 - Description: Memory used by jit compiled function cache.
+
+## `jvm_heap_size_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Labels: `type` (`used`, `committed`, or `max`)
+- Description: Heap memory of the JVM embedded in the BE process. `used` is the memory occupied by objects, `committed` is the memory the JVM has reserved from the operating system, and `max` is the maximum heap size. FE nodes export metrics with the same name for their own JVM; this entry describes the BE metric.
+  - The BE JVM metrics (all `jvm_*_size_bytes` metrics in this section) are exported only when the BE configuration item `enable_jvm_metrics` is `true` (default) and the environment variable `JAVA_HOME` is set when BE starts.
+  - The BE does not start a JVM to collect these metrics. All values stay `0` until a JVM is created in the BE process, for example by HDFS access, a JNI-based scanner, or a Java UDF.
+  - The values are refreshed every 15 seconds when the BE configuration item `enable_metric_calculator` is `true` (default), and when the metrics are scraped otherwise.
+  - The committed heap and non-heap memory is also counted in the `jvm` memory tracker of the BE when `enable_jvm_memory_tracker` is `true` (default).
+
+## `jvm_non_heap_size_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Labels: `type` (`used` or `committed`)
+- Description: Non-heap memory of the JVM embedded in the BE process, such as Metaspace and the code cache. No `max` value is exported. See [`jvm_heap_size_bytes`](#jvm_heap_size_bytes) for when the BE JVM metrics are exported.
+
+## `jvm_old_size_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Labels: `type` (`used`, `committed`, `max`, `peak_used`, or `peak_max`)
+- Description: Old generation memory pool of the JVM embedded in the BE process. See [`jvm_young_size_bytes`](#jvm_young_size_bytes) for the meaning of each `type` and the supported garbage collectors.
+
+## `jvm_perm_size_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Labels: `type` (`used`, `committed`, `max`, `peak_used`, or `peak_max`)
+- Description: Metaspace (permanent generation on Java 7 and earlier) of the JVM embedded in the BE process. Metaspace has no defined maximum unless the JVM option `-XX:MaxMetaspaceSize` is set, so `max` and `peak_max` are usually `-1`. See [`jvm_young_size_bytes`](#jvm_young_size_bytes) for the meaning of each `type`.
+
+## `jvm_survivor_size_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Labels: `type` (`used`, `committed`, `max`, `peak_used`, or `peak_max`)
+- Description: Survivor space memory pool of the JVM embedded in the BE process. With the default G1 collector, `max` and `peak_max` are `-1`. See [`jvm_young_size_bytes`](#jvm_young_size_bytes) for the meaning of each `type` and the supported garbage collectors.
+
+## `jvm_young_size_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Labels: `type` (`used`, `committed`, `max`, `peak_used`, or `peak_max`)
+- Description: Young generation (Eden space) memory pool of the JVM embedded in the BE process. With the default G1 collector, `max` and `peak_max` are `-1`. See [`jvm_heap_size_bytes`](#jvm_heap_size_bytes) for when the BE JVM metrics are exported.
+  - `used`, `committed`, and `max` are the current usage of the pool. `peak_used` and `peak_max` come from the peak usage that the JVM records for the pool (`MemoryPoolMXBean.getPeakUsage()`): `peak_used` is the highest `used` value, and `peak_max` is the `max` field of that peak usage record. `peak_max` is not a separately tracked high-water mark of `max`, so use `max`, not `peak_max`, to monitor the capacity of the pool. The peak usage is recorded since the JVM started or since it was last reset. The BE never resets it, so it is reset only when the BE restarts.
+  - A `max` or `peak_max` of `-1` means that the pool has no defined maximum size. It does not indicate an error.
+  - `jvm_young_size_bytes`, `jvm_survivor_size_bytes`, and `jvm_old_size_bytes` are populated only when the JVM uses the Serial, Parallel, CMS, or G1 garbage collector, because they are matched by the memory pool names of these collectors. Under ZGC or Shenandoah, they stay `0`. `jvm_heap_size_bytes` and `jvm_non_heap_size_bytes` are not affected.
 
 ## `lake_compaction_held_segment_bytes`
 
@@ -333,11 +425,53 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Cumulative
 - Description: Shared-data only. Number of times a publish on a Primary Key table had to load the whole Primary Key index of a tablet because the index was not in the Primary Key index cache, either because it had not been loaded since the BE started or because it had been evicted. A load opens all Primary Key index SST files of the tablet and replays the rowsets those files do not cover yet. Failed loads are also counted. If this value keeps rising while the set of tablets being loaded into does not change, indexes are being evicted and loaded again.
 
+## `lake_publish_batch_retry_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of batch publishes in shared-data clusters that retry an attempt that did not finish, that is, whose first transaction was already sent by an earlier attempt. When `lake_enable_batch_publish_retry_freeze` is `true`, such a retry contains only the transactions of the earlier attempt. Only the Leader FE increments this counter.
+
+## `lake_publish_partial_meta_written`
+
+- Unit: Count
+- Type: Gauge
+- Description: Cumulative number of times since this BE/CN started that it wrote a tablet's publish result to its local data cache. Counted only when the BE configuration item `lake_enable_publish_partial_meta` is `true`, and only for tables with file bundling. A result is written when the tablet's publish finished more than the publish RPC timeout plus 3 seconds after the request arrived, or when the publish is a retry; a retry answered from the kept result writes it again. A later retry on the same node reads it back instead of applying again, see `lake_publish_skipped_by_partial_meta`. Shared-data clusters only. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+
+## `lake_publish_skipped_by_partial_meta`
+
+- Unit: Count
+- Type: Gauge
+- Description: Cumulative number of tablet publishes since this BE/CN started that a retried publish answered from the tablet's publish result kept in this node's local data cache (see `lake_publish_partial_meta_written`), instead of applying the transactions again. Counted only when the BE configuration item `lake_enable_publish_partial_meta` is `true`, and only for tables with file bundling. Shared-data clusters only. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+
+## `lake_publish_version_skipped_durable`
+
+- Unit: Count
+- Type: Gauge
+- Description: Cumulative number of tablet publishes since this BE/CN started that a retried publish answered from the new version's tablet metadata already written in storage, instead of applying the transactions again. Only a retry (a publish of a partition whose earlier request was sent and did not finish) whose new version is not in the metadata cache is counted; tablets answered from the metadata cache and first attempts are not. Shared-data clusters only. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+
+## `lake_segment_cache_hit_minute`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of segment metadata cache lookup hits in the last 60 seconds on shared-data clusters. A hit returns a cached candidate, which can subsequently be rejected if its schema is incompatible with the request. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+
+## `lake_segment_cache_miss_minute`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of segment metadata cache lookups that find no cache entry in the last 60 seconds on shared-data clusters. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+
+## `lake_segment_cache_schema_reject_total`
+
+- Unit: Count
+- Type: Gauge
+- Description: Cumulative number of cached segment candidates rejected since this BE/CN started because their schema is missing or incompatible with the requested schema. When cache filling is enabled, a rejected entry is atomically replaced only if it still refers to the same segment; existing readers keep their segment. Otherwise, the request opens a private segment. Includes incompatible candidates returned by concurrent cache insertion after a lookup miss, so this value cannot be subtracted directly from lookup hits. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+
 ## `lake_tablet_location_handoff_entries`
 
 - Unit: Count
 - Type: Instantaneous
-- Description: Shared-data only. Number of tablet storage locations this BE holds for tablets it does not own, as handed over by their owners for writing combined transaction logs (see the BE configuration item `lake_enable_tablet_location_handoff`). They are kept in an LRU cache of 16 MiB: an entry is used for five minutes after its last refresh and is evicted when the cache needs room, so the value reflects cache occupancy rather than whether the handoff is in use.
+- Description: Shared-data only. Number of tablet storage locations this BE holds for tablets it does not own, as handed over by their owners for writing combined transaction logs (see the BE configuration item `lake_shard_info_cache_ttl_sec`). They are kept in an LRU cache of 16 MiB, shared with the locations counted in `staros_shard_info_fallback_cache_entries`: an entry is used for `lake_shard_info_cache_ttl_sec` after its last refresh and is evicted when the cache needs room, so the value reflects cache occupancy rather than whether the handoff is in use.
 
 ## `lake_tablet_location_handoff_hits_total`
 
@@ -741,6 +875,8 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 
 - Unit: Bytes
 - Description: Memory used by this process.
+
+This metric includes local pass-through buffers tracked by `passthrough_mem_bytes`. The pass-through metric is a component of the process total, not additional memory; do not add the two metrics when calculating total usage. This accounting metric is not container RSS.
 
 ## `process_thread_num`
 

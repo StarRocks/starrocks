@@ -45,6 +45,7 @@
 #include "base/string/faststring.h"
 #include "base/utility/scoped_cleanup.h"
 #include "cache/mem_cache/page_cache.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/column.h"
 #include "common/config_compression_fwd.h"
 #include "common/config_starlet_fwd.h"
@@ -204,8 +205,23 @@ static Status read_page_from_file(const PageReadOptions& opts, std::unique_ptr<s
 
     {
         SCOPED_RAW_TIMER(&opts.stats->io_ns);
+        // Attribute this page from what this read actually did, not from a per-file flag: a starlet
+        // file's is_cache_hit() is fixed at open time and fslib never sets it, so it is always false.
+        // The cache stream adds exactly the requested bytes to bytes_read_local_disk for every block
+        // that hits, on the calling thread. So the page counts as local disk only when the local
+        // delta covers the whole page. A page that spans a hit block and a missed block counts as
+        // remote, because it had to wait for a remote fetch. bytes_read_remote is not consulted:
+        // an async prefetch on another thread can bump it in the middle of a read that fully hit.
+        // Streams without IO stats (posix, memory) report no local bytes, so their pages stay remote
+        // as before. A coalescing stream fills a whole merged range on the first page read in it, so
+        // its delta also covers other pages and says nothing about this page's own bytes; its pages
+        // stay remote as before too.
+        const int64_t local_bytes_before = opts.read_file->get_io_stats_snapshot().bytes_read_local_disk;
         RETURN_IF_ERROR(opts.read_file->read_at_fully(opts.page_pointer.offset, slice.data, slice.size));
-        if (opts.read_file->is_cache_hit()) {
+        const int64_t local_bytes_read =
+                opts.read_file->get_io_stats_snapshot().bytes_read_local_disk - local_bytes_before;
+        if (local_bytes_read >= static_cast<int64_t>(page_size) &&
+            dynamic_cast<SharedBufferedInputStream*>(opts.read_file) == nullptr) {
             ++opts.stats->pages_from_local_disk;
         }
         opts.stats->compressed_bytes_read_request += page_size;

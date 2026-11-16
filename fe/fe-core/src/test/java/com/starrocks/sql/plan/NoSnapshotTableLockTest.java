@@ -20,15 +20,18 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FileTable;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.iceberg.PartitionSpec;
@@ -41,7 +44,9 @@ import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.IntegerType.INT;
 
 /**
@@ -141,6 +146,60 @@ public class NoSnapshotTableLockTest extends PlanTestBase {
             // What a query does to its table stays on the copy.
             ((IcebergTable) planned).clearMetadata();
             Assertions.assertSame(nativeTable, published.getNativeTable());
+        } finally {
+            db.unRegisterTableUnlocked(published);
+        }
+    }
+
+    /**
+     * A schema refresh of a resource-mapping Hive table replaces its fullSchema, column index and data column
+     * names one by one, and the analyzer reads the full schema and then the base schema, exposing only the
+     * columns found in both. A refresh that changed c1's type between the two reads left c1 out of both
+     * generations' intersection, and {@code SELECT *} returned c2 alone. The query plans on a copy taken in one
+     * step, so the refresh -- run here between the two reads -- does not reach it.
+     */
+    @Test
+    public void testResourceMappingHiveTableSchemaIsOneGeneration() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        HiveTable published = new HiveTable(GlobalStateMgr.getCurrentState().getNextId(), "hive_rm",
+                Lists.newArrayList(new Column("c1", INT), new Column("c2", INT)), "hive_rm_resource", null,
+                "remote_db", "remote_tbl", "hdfs://127.0.0.1:10000/remote_tbl", "", 0, Lists.newArrayList(),
+                Lists.newArrayList("c1", "c2"), Maps.newHashMap(), Maps.newHashMap(), HiveStorageFormat.PARQUET,
+                HiveTable.HiveTableType.EXTERNAL_TABLE);
+        Assertions.assertFalse(published.isMetaLockTarget());
+        List<Column> refreshedSchema = Lists.newArrayList(new Column("c1", BIGINT), new Column("c2", INT));
+
+        Thread analyzer = Thread.currentThread();
+        AtomicBoolean refreshed = new AtomicBoolean(false);
+        new MockUp<Table>() {
+            @Mock
+            public List<Column> getBaseSchema(Invocation invocation) throws InterruptedException {
+                Table self = invocation.getInvokedInstance();
+                if (Thread.currentThread() == analyzer && "hive_rm".equals(self.getName())
+                        && refreshed.compareAndSet(false, true)) {
+                    Thread refresher = new Thread(() -> published.replayModifyTableSchema(refreshedSchema));
+                    refresher.start();
+                    refresher.join(60_000);
+                    Assertions.assertFalse(refresher.isAlive(), "the schema refresh did not finish");
+                }
+                return invocation.proceed();
+            }
+        };
+
+        db.registerTableUnlocked(published);
+        try {
+            QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
+                    "select * from test.hive_rm", connectContext);
+            Assertions.assertTrue(refreshed.get(), "the refresh never ran between the two schema reads");
+            Assertions.assertEquals(List.of("c1", "c2"), stmt.getQueryRelation().getColumnOutputNames());
+            Table planned = ((TableRelation) ((SelectRelation) stmt.getQueryRelation()).getRelation()).getTable();
+            Assertions.assertNotSame(published, planned);
+            Assertions.assertEquals(published.getId(), planned.getId());
+            Assertions.assertEquals(published.getCatalogName(), planned.getCatalogName());
+            // The query keeps the generation it started on, down to the column index and the data columns.
+            Assertions.assertEquals(INT, planned.getColumn("c1").getType());
+            Assertions.assertEquals(List.of("c1", "c2"), planned.getDataColumnNames());
+            Assertions.assertEquals(BIGINT, published.getColumn("c1").getType());
         } finally {
             db.unRegisterTableUnlocked(published);
         }

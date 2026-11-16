@@ -14,9 +14,9 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.common.Config;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
+import com.starrocks.utframe.AIProviderTestUtil;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -30,12 +30,12 @@ public class AISyncMaterializedViewPrivilegeTest extends PlanTestNoneDBBase {
 
     @BeforeAll
     public static void setUpTable() throws Exception {
-        previousEndpoint = Config.ai_default_chat_endpoint;
-        previousModel = Config.ai_default_chat_model;
-        previousProvider = Config.ai_default_chat_provider;
-        Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
-        Config.ai_default_chat_model = "sync-mv-test-model";
-        Config.ai_default_chat_provider = "openai_compatible";
+        previousEndpoint = AIProviderTestUtil.chatProperty("endpoint");
+        previousModel = AIProviderTestUtil.chatProperty("model");
+        previousProvider = AIProviderTestUtil.chatProperty("protocol");
+        AIProviderTestUtil.setChatProperty("endpoint", "https://models.example.test/v1/chat/completions");
+        AIProviderTestUtil.setChatProperty("model", "sync-mv-test-model");
+        AIProviderTestUtil.setChatProperty("protocol", "openai");
         starRocksAssert.withDatabase(DATABASE).useDatabase(DATABASE);
         starRocksAssert.withTable("CREATE TABLE prompts (id BIGINT, prompt VARCHAR(100)) "
                 + "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1')");
@@ -43,9 +43,9 @@ public class AISyncMaterializedViewPrivilegeTest extends PlanTestNoneDBBase {
 
     @AfterAll
     public static void restoreAIConfiguration() {
-        Config.ai_default_chat_endpoint = previousEndpoint;
-        Config.ai_default_chat_model = previousModel;
-        Config.ai_default_chat_provider = previousProvider;
+        AIProviderTestUtil.setChatProperty("endpoint", previousEndpoint);
+        AIProviderTestUtil.setChatProperty("model", previousModel);
+        AIProviderTestUtil.setChatProperty("protocol", previousProvider);
     }
 
     @Test

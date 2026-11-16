@@ -196,10 +196,10 @@ LEVELDB_SOURCE=leveldb-1.20
 LEVELDB_MD5SUM="298b5bddf12c675d6345784261302252"
 
 # brpc
-BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.9.0.tar.gz"
-BRPC_NAME=brpc-1.9.0.tar.gz
-BRPC_SOURCE=brpc-1.9.0
-BRPC_MD5SUM="a2b626d96a5b017f2a6701ffa594530c"
+BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.18.0.tar.gz"
+BRPC_NAME=brpc-1.18.0.tar.gz
+BRPC_SOURCE=brpc-1.18.0
+BRPC_MD5SUM="7ccfa535f97a5216a422ca1333802e7d"
 
 # rocksdb
 ROCKSDB_DOWNLOAD="https://github.com/facebook/rocksdb/archive/refs/tags/v6.22.1.zip"
@@ -496,10 +496,10 @@ BLAKE3_SOURCE="BLAKE3-1.8.5"
 BLAKE3_MD5SUM="3731247eb9086571ba7128a794c1d2d3"
 
 # xxhash
-XXHASH_DOWNLOAD="https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.3.tar.gz"
-XXHASH_NAME=xxHash-0.8.3.tar.gz
-XXHASH_SOURCE=xxHash-0.8.3
-XXHASH_MD5SUM="599804eb9555e51c05f1b821f9212a07"
+XXHASH_DOWNLOAD="https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.4.tar.gz"
+XXHASH_NAME=xxHash-0.8.4.tar.gz
+XXHASH_SOURCE=xxHash-0.8.4
+XXHASH_MD5SUM="918fa44277d81b1ac1d02ac075df4ec1"
 
 # benchgen
 BENCHGEN_DOWNLOAD="https://github.com/StarRocks/benchgen/archive/refs/tags/v26.03.11.tar.gz"

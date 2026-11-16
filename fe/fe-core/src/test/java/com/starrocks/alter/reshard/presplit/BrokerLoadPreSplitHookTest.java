@@ -343,8 +343,12 @@ public class BrokerLoadPreSplitHookTest {
     private static void invokeHook(
             ConnectContext context, OlapTable target,
             List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses) {
+        // Keep database and table resources distinct when the hook takes a real intensive READ lock.
+        Database database = mock(Database.class);
+        when(database.getId()).thenReturn(70_001L);
+        when(target.getId()).thenReturn(70_002L);
         BrokerLoadPreSplitHook.maybeRunPreSplit(
-                context, mock(Database.class), target, mock(BrokerDesc.class),
+                context, database, target, mock(BrokerDesc.class),
                 fileGroups, fileStatuses, mock(ComputeResource.class), () -> false);
     }
 
@@ -356,8 +360,12 @@ public class BrokerLoadPreSplitHookTest {
             ConnectContext context, OlapTable target,
             List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
             Boolean sessionPreSplitEnabled) {
+        // Keep database and table resources distinct when the hook takes a real intensive READ lock.
+        Database database = mock(Database.class);
+        when(database.getId()).thenReturn(70_001L);
+        when(target.getId()).thenReturn(70_002L);
         BrokerLoadPreSplitHook.maybeRunPreSplit(
-                context, mock(Database.class), target, mock(BrokerDesc.class),
+                context, database, target, mock(BrokerDesc.class),
                 fileGroups, fileStatuses, mock(ComputeResource.class), () -> false,
                 /*profile*/ null, sessionPreSplitEnabled);
     }
