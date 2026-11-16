@@ -215,7 +215,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                 && context.getSessionVariable().isEnableConnectorIncrementalScanRanges();
     }
 
-    private CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> buildFileScanTaskIterator(
+    CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> buildFileScanTaskIterator(
             Table table, ScalarOperator operator, boolean enableCollectColumnStats) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         Metadata metadata = deltaLakeTable.getDeltaMetadata();

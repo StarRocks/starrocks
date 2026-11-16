@@ -263,7 +263,7 @@ public class DeltaLakePlanningBench {
             t = System.nanoTime();
             rows = 0;
             try (CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> it = newMetadata()
-                    .buildFileScanTaskIterator(env.table, DeltaScanContext.of(env.table), null, false)) {
+                    .buildFileScanTaskIterator(env.table, null, false)) {
                 while (it.hasNext()) {
                     FileScanTask task = it.next().first;
                     rows++;
@@ -285,7 +285,7 @@ public class DeltaLakePlanningBench {
             java.util.Set<String> part = java.util.Set.of("dt");
             t = System.nanoTime();
             try (CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> it = newMetadata()
-                    .buildFileScanTaskIterator(env.table, DeltaScanContext.of(env.table), null, false)) {
+                    .buildFileScanTaskIterator(env.table, null, false)) {
                 while (it.hasNext()) {
                     Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> p = it.next();
                     if (variant == 1) {
