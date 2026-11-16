@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <optional>
 #include <string_view>
+#include <unordered_set>
 
 #include "base/container/raw_container.h"
 #include "base/simd/simd.h"
@@ -1405,6 +1406,142 @@ static StatusOr<VariantRowValue> _encode_typed_scalar(ShreddedRawEncoding encodi
     return VariantRowValue::create(std::string_view(kEmptyDictionary, sizeof(kEmptyDictionary)), value);
 }
 
+// Object fields that a shredded field owns. When a key is both in the `value` residual and a shredded field, the
+// shredded field wins whether or not it has a value in the row (the Iceberg reader removes the key when the shredded
+// field is missing). The fields are removed from the object bytes without touching the metadata dictionary, so the
+// field ids of the others, and the fallback values of the same row, stay valid.
+using ShreddedNameSet = std::unordered_set<std::string_view>;
+
+static void _collect_shredded_names(const std::vector<ShreddedFieldNode>& nodes, ShreddedNameSet* names) {
+    for (const auto& node : nodes) {
+        names->insert(node.name);
+    }
+}
+
+// The names to look up, either as a prebuilt set (reused for a whole batch) or straight from the shredded children,
+// which allocates nothing and is meant for the few children of a nested object.
+class ShreddedNames {
+public:
+    ShreddedNames(const ShreddedNameSet& set) : _set(&set) {}
+    ShreddedNames(const std::vector<ShreddedFieldNode>& nodes) : _nodes(&nodes) {}
+
+    bool empty() const { return _set != nullptr ? _set->empty() : _nodes->empty(); }
+
+    bool contains(std::string_view name) const {
+        if (_set != nullptr) {
+            return _set->count(name) > 0;
+        }
+        return std::any_of(_nodes->begin(), _nodes->end(),
+                           [&](const ShreddedFieldNode& node) { return node.name == name; });
+    }
+
+private:
+    const ShreddedNameSet* _set = nullptr;
+    const std::vector<ShreddedFieldNode>* _nodes = nullptr;
+};
+
+static void _write_little_endian(std::string* out, uint64_t value, size_t size) {
+    for (size_t i = 0; i < size; ++i) {
+        out->push_back(static_cast<char>((value >> (8 * i)) & 0xff));
+    }
+}
+
+// True when the object `value_raw` has a field named in `names`. Reads only: no allocation and no copy, and it stops at the
+// first such field.
+static StatusOr<bool> _has_object_field_named(std::string_view metadata_raw, std::string_view value_raw,
+                                              const ShreddedNames& names) {
+    if (names.empty() || value_raw.empty() || (static_cast<uint8_t>(value_raw[0]) & 0x03) != 2) {
+        return false;
+    }
+    const VariantRowRef row(metadata_raw, value_raw);
+    ASSIGN_OR_RETURN(const VariantObjectInfo info, row.get_value().get_object_info());
+    for (uint32_t i = 0; i < info.num_elements; ++i) {
+        const uint32_t id = VariantUtil::read_little_endian_unsigned32(
+                value_raw.data() + info.id_start_offset + static_cast<size_t>(i) * info.id_size, info.id_size);
+        ASSIGN_OR_RETURN(const std::string_view key, row.get_metadata().get_key(id));
+        if (names.contains(key)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Copies `value_raw` without the fields named in `names` into `out`. Returns false, and leaves `out` alone, when it
+// is not an object or has none of them.
+static StatusOr<bool> _remove_object_fields(std::string_view metadata_raw, std::string_view value_raw,
+                                            const ShreddedNames& names, std::string* out) {
+    if (names.empty() || value_raw.empty() || (static_cast<uint8_t>(value_raw[0]) & 0x03) != 2) {
+        return false;
+    }
+    const VariantRowRef row(metadata_raw, value_raw);
+    ASSIGN_OR_RETURN(const VariantObjectInfo info, row.get_value().get_object_info());
+    // The drop list is allocated only once a field is dropped.
+    std::vector<bool> drop;
+    size_t dropped = 0;
+    for (uint32_t i = 0; i < info.num_elements; ++i) {
+        const uint32_t id = VariantUtil::read_little_endian_unsigned32(
+                value_raw.data() + info.id_start_offset + static_cast<size_t>(i) * info.id_size, info.id_size);
+        ASSIGN_OR_RETURN(const std::string_view key, row.get_metadata().get_key(id));
+        if (names.contains(key)) {
+            if (drop.empty()) {
+                drop.assign(info.num_elements, false);
+            }
+            drop[i] = true;
+            ++dropped;
+        }
+    }
+    if (dropped == 0) {
+        return false;
+    }
+
+    // The value of a field spans from its offset to the next offset above it: the offsets follow the order of the
+    // names, which is not always the order of the values. The offsets are 32-bit values of an untrusted file, so every
+    // position is computed and compared as a size_t, never as a sum of 32-bit values that can wrap.
+    if (info.data_start_offset > value_raw.size()) {
+        return Status::Corruption("variant object data starts after its end");
+    }
+    const size_t data_size = value_raw.size() - info.data_start_offset;
+    std::vector<uint32_t> offsets(static_cast<size_t>(info.num_elements) + 1);
+    for (size_t i = 0; i < offsets.size(); ++i) {
+        offsets[i] = VariantUtil::read_little_endian_unsigned32(
+                value_raw.data() + info.offset_start_offset + i * info.offset_size, info.offset_size);
+    }
+    std::vector<uint32_t> ascending(offsets);
+    std::sort(ascending.begin(), ascending.end());
+
+    std::string ids;
+    std::string new_offsets;
+    std::string data;
+    uint32_t kept = 0;
+    for (uint32_t i = 0; i < info.num_elements; ++i) {
+        if (drop[i]) {
+            continue;
+        }
+        const size_t begin = offsets[i];
+        if (begin >= data_size) {
+            return Status::Corruption("variant object field offset is out of bounds");
+        }
+        const auto next = std::upper_bound(ascending.begin(), ascending.end(), offsets[i]);
+        if (next == ascending.end() || static_cast<size_t>(*next) > data_size) {
+            return Status::Corruption("variant object field offsets are out of bounds");
+        }
+        _write_little_endian(&new_offsets, data.size(), info.offset_size);
+        ids.append(value_raw.data() + info.id_start_offset + static_cast<size_t>(i) * info.id_size, info.id_size);
+        data.append(value_raw.data() + info.data_start_offset + begin, static_cast<size_t>(*next) - begin);
+        ++kept;
+    }
+    _write_little_endian(&new_offsets, data.size(), info.offset_size);
+
+    // The header byte keeps the sizes of the ids and offsets and the width of the field count.
+    out->clear();
+    out->push_back(value_raw[0]);
+    _write_little_endian(out, kept, info.id_start_offset - 1);
+    out->append(ids);
+    out->append(new_offsets);
+    out->append(data);
+    return true;
+}
+
 // Rebuild one ARRAY value for `row` by merging:
 // 1) typed array elements (and their child overlays), and
 // 2) fallback base array binary from remain column when present.
@@ -2063,6 +2200,17 @@ StatusOr<std::optional<VariantRowValue>> VariantColumnReader::build_variant_bind
         return std::optional<VariantRowValue>();
     }
 
+    // A shredded child owns its key: a residual field of the same name is dropped, even when the child has no value.
+    std::string pruned_residual;
+    if (base.has_value()) {
+        const std::string_view residual = base->get_value().raw();
+        ASSIGN_OR_RETURN(const bool changed,
+                         _remove_object_fields(metadata_raw, residual, node.children, &pruned_residual));
+        if (changed) {
+            base.emplace(metadata_raw, std::string_view(pruned_residual));
+        }
+    }
+
     std::vector<VariantBuilder::Overlay> overlays;
     overlays.reserve(node.children.size() * 2);
     const size_t prefix_segments = node.parsed_full_path.segments.size();
@@ -2506,6 +2654,38 @@ public:
         mark_variant_null_rows();
     }
 
+    // The shredded field owns its key: a row whose residual `value` holds the name of a shredded field of the top-level
+    // object has to drop that key. A read-only probe flags the rows, so that a column without such a key is not rewritten;
+    // the residual is rebuilt only for a flagged row, when the row is materialized. Call it once after the constructor.
+    Status mark_rows_with_shadowed_keys() {
+        if (shredded_fields->empty()) {
+            return Status::OK();
+        }
+        _collect_shredded_names(*shredded_fields, &shredded_names);
+        const size_t num_rows = has_typed_value_bitmap.size();
+        for (size_t i = 0; i < num_rows; ++i) {
+            if (metadata_nulls[i] || value_nulls[i]) {
+                continue;
+            }
+            const Slice metadata = metadata_column->get_slice(i);
+            const Slice value = value_column->get_slice(i);
+            if (metadata.size == 0 || value.size == 0) {
+                continue;
+            }
+            ASSIGN_OR_RETURN(const bool shadowed,
+                             _has_object_field_named(std::string_view(metadata.data, metadata.size),
+                                                     std::string_view(value.data, value.size), shredded_names));
+            if (shadowed) {
+                if (shadow_row.empty()) {
+                    shadow_row.assign(num_rows, 0);
+                }
+                shadow_row[i] = 1;
+                any_shadowed = true;
+            }
+        }
+        return Status::OK();
+    }
+
     // The variant group is present (its metadata is set) but holds neither a value nor a typed value: the variant is
     // a variant null, not a SQL NULL. A null metadata is what makes the whole variant SQL NULL.
     void mark_variant_null_rows() {
@@ -2578,11 +2758,16 @@ public:
     // Rows whose remain payload must be rebuilt to carry empty objects; empty unless the file has object presence.
     std::vector<uint8_t> synthesize_row;
     bool any_synthesized = false;
+    // Names of the top-level shredded fields, and the rows whose residual `value` holds one of them.
+    ShreddedNameSet shredded_names;
+    std::vector<uint8_t> shadow_row;
+    bool any_shadowed = false;
+
     // Parallel to materialized_bindings: the batch ARRAY<VARIANT> column of each ARRAY binding, nullptr otherwise.
     std::vector<ColumnPtr> array_binding_columns;
 
     bool can_bulk_append_base_payload(bool has_outer_null_channel) const {
-        if (root_typed_value_column != nullptr || any_variant_null || any_synthesized) {
+        if (root_typed_value_column != nullptr || any_variant_null || any_synthesized || any_shadowed) {
             return false;
         }
         if (has_outer_null_channel) {
@@ -2654,6 +2839,7 @@ public:
         _row_metadata = _raw_metadata;
         _row_value = _raw_value;
 
+        RETURN_IF_ERROR(_drop_shadowed_residual_keys());
         ASSIGN_OR_RETURN(bool use_root_typed_row, _try_use_root_typed_row());
         if (use_root_typed_row) {
             return true;
@@ -2739,6 +2925,20 @@ private:
                                        std::string_view(kValue, sizeof(kValue)));
     }
 
+    // Drops the residual fields that a shredded field owns. The metadata stays the one of the file.
+    Status _drop_shadowed_residual_keys() {
+        if (!_batch_ctx.any_shadowed || !_batch_ctx.shadow_row[_row]) {
+            return Status::OK();
+        }
+        ASSIGN_OR_RETURN(const bool changed, _remove_object_fields(_raw_metadata, _raw_value, _batch_ctx.shredded_names,
+                                                                   &_shadow_value_buf));
+        if (changed) {
+            _raw_value = std::string_view(_shadow_value_buf);
+            _row_value = _raw_value;
+        }
+        return Status::OK();
+    }
+
     StatusOr<bool> _try_use_root_typed_row() {
         if (_batch_ctx.root_typed_value_column == nullptr) {
             return false;
@@ -2775,6 +2975,7 @@ private:
     std::string_view _row_value;
     std::string _root_typed_metadata_buf;
     std::string _root_typed_value_buf;
+    std::string _shadow_value_buf;
 };
 
 Status VariantColumnReader::prepare() {
@@ -3115,6 +3316,8 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
             _top_level.root_typed_value_type.get(), metadata_column, value_column, metadata_nulls, value_nulls,
             _top_level.root_presence.get(), _top_level.root_raw_encoding);
     batch_ctx.array_binding_columns.resize(materialized_bindings.size());
+    // A residual that is corrupt where a shadowed key is looked up fails the read, as the rebuild of the row would.
+    RETURN_IF_ERROR(batch_ctx.mark_rows_with_shadowed_keys());
     if (has_array_binding) {
         // Array elements are decoded with the metadata of the row they belong to.
         std::vector<Slice> row_metadata(num_rows);

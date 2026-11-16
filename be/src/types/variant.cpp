@@ -169,6 +169,10 @@ StatusOr<std::string_view> VariantMetadata::get_key(uint32_t index) const {
                                     " >= " + std::to_string(dict_sz));
     }
 
+    // The offset table has dict_sz + 1 entries after the dictionary size field; a truncated metadata must not be read past.
+    if (kHeaderSizeBytes + static_cast<size_t>(offset_sz) * (static_cast<size_t>(dict_sz) + 2) > _metadata.size()) {
+        return Status::VariantError("Variant metadata is shorter than its offset table");
+    }
     size_t offset_start_pos = kHeaderSizeBytes + offset_sz + (index * offset_sz);
     uint32_t value_offset = inline_read_little_endian_unsigned32(_metadata.data() + offset_start_pos, offset_sz);
     uint32_t value_next_offset =
