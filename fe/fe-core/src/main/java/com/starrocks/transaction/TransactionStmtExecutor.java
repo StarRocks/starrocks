@@ -29,6 +29,7 @@ import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.load.EtlJobType;
@@ -622,8 +623,8 @@ public class TransactionStmtExecutor {
                     if (Config.log_plan_cancelled_by_crash_be && context.getQueryDetail() == null) {
                         LOG.warn("Query cancelled by crash of backends [QueryId={}] [SQL={}] [Plan={}]",
                                 DebugUtil.printId(context.getExecutionId()),
-                                originStmt == null ? "" : originStmt.originStmt,
-                                execPlan.getExplainString(TExplainLevel.COSTS));
+                                LogUtil.desensitizeSql(originStmt == null ? "" : originStmt.originStmt, dmlStmt),
+                                execPlan.getExplainStringForLog(TExplainLevel.COSTS));
                     }
 
                     coord.cancel(ErrorCode.ERR_QUERY_CANCELLED_BY_CRASH.formatErrorMsg());
