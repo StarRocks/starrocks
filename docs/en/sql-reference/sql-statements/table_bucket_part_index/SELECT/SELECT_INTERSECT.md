@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "INTERSECT"
 description: "Calculates the intersection of the results of multiple queries, that is, the results that appear in all the result sets."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # INTERSECT

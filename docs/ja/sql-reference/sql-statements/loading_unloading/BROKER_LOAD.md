@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Spark を使用したデータ前処理により大規模データのインポート性能を向上させます。"
 toc_max_heading_level: 5
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # BROKER LOAD

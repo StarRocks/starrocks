@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "日付または日時式のDATETIME値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # timestamp

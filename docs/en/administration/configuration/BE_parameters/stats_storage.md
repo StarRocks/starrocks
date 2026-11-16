@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Statistics and Storage"
 description: "BE configuration parameters for statistics collection and storage engine settings."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -1081,7 +1082,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads for the release snapshot tasks on a BE node.
+- Description: The maximum number of threads for the release snapshot tasks on a BE node. In a shared-data cluster, this thread pool also runs vacuum, full vacuum, and transaction log deletion tasks.
 - Introduced in: -
 
 ### repair_compaction_interval_seconds

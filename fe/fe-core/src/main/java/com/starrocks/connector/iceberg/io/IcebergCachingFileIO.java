@@ -216,12 +216,22 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
     @Override
     public InputFile newInputFile(String path) {
+        return newInputFile(path, -1);
+    }
+
+    // Iceberg opens manifests (and data/delete files) through this overload with the length it already
+    // knows from the manifest list. Keep it, so neither the cache decision nor the cache fill has to stat
+    // the object first.
+    @Override
+    public InputFile newInputFile(String path, long length) {
         try {
             String normalizedPath = AzurePathNormalizingFileIO.normalizeAzurePath(path);
             setWrappedConf(buildConfFromProperties(properties, normalizedPath));
+            InputFile wrappedInputFile = length >= 0 ? wrappedIO.newInputFile(normalizedPath, length)
+                    : wrappedIO.newInputFile(normalizedPath);
             // Keep the caller's path as location(): the content cache and the parsed-manifest caches
             // (seeded under ManifestFile.path()) are keyed by it. Only the storage access is normalized.
-            return new CachingInputFile(fileContentCache, wrappedIO.newInputFile(normalizedPath), path);
+            return new CachingInputFile(fileContentCache, wrappedInputFile, path, length);
         } catch (StarRocksException e) {
             String errorMessage = String.format("Failed to new input file for path: %s, properties: %s", path, properties);
             LOG.error(errorMessage, e);
@@ -760,15 +770,22 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         private final ContentCache contentCache;
         private final InputFile wrappedInputFile;
         private final String location;
+        // Length supplied by the caller or learned by the first stat, -1 if unknown. Kept so one open does
+        // not stat the object twice (once to decide to cache it, once more to fill the entry).
+        private volatile long knownLength;
 
-        private CachingInputFile(ContentCache cache, InputFile inFile, String location) {
+        private CachingInputFile(ContentCache cache, InputFile inFile, String location, long knownLength) {
             this.contentCache = cache;
             this.wrappedInputFile = inFile;
             this.location = location;
+            this.knownLength = knownLength;
         }
 
         @Override
         public long getLength() {
+            if (knownLength >= 0) {
+                return knownLength;
+            }
             long len = contentCache.getLength(location());
             if (len != -1) {
                 return len;
@@ -777,7 +794,18 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             // planning goes through -- manifest lists, manifests, metadata.json -- and it is reached
             // through the FileIO the catalogs install, not through MetadataMgr.
             BlockingCallValidator.validateNotUnderLock("remote-storage");
-            return wrappedInputFile.getLength();
+            IcebergPlanningIoStats stats = IcebergPlanningIoStats.current();
+            long start = System.nanoTime();
+            try {
+                len = wrappedInputFile.getLength();
+            } finally {
+                // A HEAD that fails (a timeout after retries, a denial) is the one a slow planning must show.
+                if (stats != null) {
+                    stats.recordHead(System.nanoTime() - start, location());
+                }
+            }
+            knownLength = len;
+            return len;
         }
 
         @Override
@@ -786,15 +814,19 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 // read-through cache if file length is less than or equal to maximum length allowed to cache.
                 // do not cache metadata json files because the name could be same, like "v1.metadata.json"
                 // when re-create table with same name.
+                // The length is asked last: without a known length it is a stat against storage, which is
+                // wasted when the file could not be cached anyway -- in particular when the cache is off
+                // (iceberg_metadata_cache_max_entry_size = 0, the default).
                 Path path = new Path(wrappedInputFile.location());
-                if (getLength() <= contentCache.maxContentLength() &&
-                        !HADOOP_CATALOG_METADATA_JSON_PATTERN.matcher(path.getName()).matches()) {
+                if (contentCache.maxContentLength() > 0 &&
+                        !HADOOP_CATALOG_METADATA_JSON_PATTERN.matcher(path.getName()).matches() &&
+                        getLength() <= contentCache.maxContentLength()) {
                     return cachedStream();
                 }
 
                 // fallback to non-caching input stream.
                 BlockingCallValidator.validateNotUnderLock("remote-storage");
-                return wrappedInputFile.newStream();
+                return openRemoteStream();
             } catch (FileNotFoundException e) {
                 throw new NotFoundException(e, "Failed to open input stream for file: %s", wrappedInputFile.location());
             } catch (IOException e) {
@@ -814,7 +846,15 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 return true;
             }
             BlockingCallValidator.validateNotUnderLock("remote-storage");
-            return wrappedInputFile.exists();
+            IcebergPlanningIoStats stats = IcebergPlanningIoStats.current();
+            long start = System.nanoTime();
+            try {
+                return wrappedInputFile.exists();
+            } finally {
+                if (stats != null) {
+                    stats.recordHead(System.nanoTime() - start, location());
+                }
+            }
         }
 
         private CacheEntry newCacheEntry() {
@@ -828,14 +868,14 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                     if (stream == null) {
                         LOG.debug(location() + " load from remote");
                         BlockingCallValidator.validateNotUnderLock("remote-storage");
-                        stream = wrappedInputFile.newStream();
+                        stream = openRemoteStream();
                     }
                 } else {
                     LOG.debug(location() + " load from remote");
                     // The content cache's loader, so a hit never reaches here; the disk-cache branch above
                     // is local until its stream comes back null.
                     BlockingCallValidator.validateNotUnderLock("remote-storage");
-                    stream = wrappedInputFile.newStream();
+                    stream = openRemoteStream();
                 }
                 List<ByteBuffer> buffers = Lists.newArrayList();
 
@@ -863,6 +903,13 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                     IOUtil.closeInputStreamIgnoreException(stream);
                 }
                 throw new UncheckedIOException(ex);
+            } catch (RuntimeException ex) {
+                // Storage clients fail unchecked too (the AWS SDK does): close the stream all the same, so it does
+                // not leak and the planning I/O of the failed read is counted.
+                if (stream != null) {
+                    IOUtil.closeInputStreamIgnoreException(stream);
+                }
+                throw ex;
             }
         }
 
@@ -881,6 +928,24 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 LockInvariantViolationException.rethrowIfRefusal(ex);
                 throw new IOException("Caught an error while reading through cache", ex);
             }
+        }
+
+        // A stream from storage. When a planning is being measured, the stream is timed for that planning: one
+        // GET, whose time is spent inside the stream's calls.
+        private SeekableInputStream openRemoteStream() {
+            IcebergPlanningIoStats stats = IcebergPlanningIoStats.current();
+            if (stats == null) {
+                return wrappedInputFile.newStream();
+            }
+            long start = System.nanoTime();
+            SeekableInputStream stream;
+            try {
+                stream = wrappedInputFile.newStream();
+            } catch (RuntimeException e) {
+                stats.recordGet(System.nanoTime() - start, location());
+                throw e;
+            }
+            return PlanningIoTimedInputStream.wrap(stream, stats, location(), System.nanoTime() - start);
         }
 
         @Override

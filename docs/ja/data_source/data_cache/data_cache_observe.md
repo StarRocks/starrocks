@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "Data Cache のパフォーマンス、使用状況、健全性を監視するための StarRocks 組み込みメトリクス。"
+products: [oss, enterprise, anywhere]
 ---
 
 # Data Cache の可観測性
@@ -52,7 +53,7 @@ ClusterDecommissioned: false
            MemUsedPct: 0.00 %
            CpuUsedPct: 0.0 %
      -- highlight-start
-     DataCacheMetrics: Status: Normal, DiskUsage: 0.00GB/2.00GB, MemUsage: 0.00GB/30.46GB
+     DataCacheMetrics: Status: Normal, DiskUsage: 0B/2GB, MemUsage: 0B/30.4GB
      -- highlight-end
 1 row in set (1.90 sec)
 ```

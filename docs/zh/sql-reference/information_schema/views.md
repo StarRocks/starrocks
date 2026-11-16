@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "views 提供所有用户定义视图的信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # views

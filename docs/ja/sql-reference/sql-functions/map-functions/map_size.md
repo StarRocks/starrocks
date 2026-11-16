@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "MAP値の要素数を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # map_size

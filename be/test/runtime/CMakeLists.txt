@@ -26,6 +26,7 @@ set(RUNTIME_TEST_FILES
     diagnose_daemon_test.cpp
     exception_stack_test.cpp
     runtime_chunk_helper_test.cpp
+    process_memory_test.cpp
     mem_tracker_test.cpp
     mem_pool_test.cpp
     message_body_sink_test.cpp

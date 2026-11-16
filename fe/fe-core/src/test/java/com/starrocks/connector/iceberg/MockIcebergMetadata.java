@@ -278,7 +278,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         Schema schema = new Schema(
                 required(3, "id", Types.IntegerType.get()),
                 required(4, "data", Types.StringType.get()),
-                required(5, "geo_col", Types.GeometryType.crs84()),
+                required(5, "geo_col", Types.GeometryType.of("IGNF:ATI")),
                 required(7, "geography_col", Types.GeographyType.crs84()),
                 required(6, "ts_nano_col", Types.StringType.get()));
         PartitionSpec spec = PartitionSpec.builderFor(schema).build();
@@ -841,6 +841,23 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
                     "SELECT 1 as id, 'data' as data, CAST('2024-01-01' as DATE) as date", MOCKED_ICEBERG_CATALOG_NAME, dbName,
                     "view_location", Maps.newHashMap());
+        }
+        // A view defined by Spark/Trino whose body refers to one relation alias with different cases.
+        if (dbName.equalsIgnoreCase("view_db") && viewName.equalsIgnoreCase("mixed_case_alias_view")) {
+            List<Column> schema = Lists.newArrayList(
+                    new Column("id", IntegerType.INT),
+                    new Column("data", StringType.STRING));
+            String def = "SELECT t.id, T.data FROM " + MOCKED_ICEBERG_CATALOG_NAME + "."
+                    + MOCKED_UNPARTITIONED_DB_NAME + "." + MOCKED_UNPARTITIONED_TABLE_NAME0 + " T";
+            return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
+                    def, MOCKED_ICEBERG_CATALOG_NAME, dbName, "view_location", Maps.newHashMap());
+        }
+        // A view that reads a StarRocks native view, see IcebergViewCaseInsensitiveAliasTest.
+        if (dbName.equalsIgnoreCase("view_db") && viewName.equalsIgnoreCase("native_view_reader")) {
+            List<Column> schema = Lists.newArrayList(new Column("v1", IntegerType.BIGINT));
+            return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
+                    "SELECT v1 FROM default_catalog.test.case_sensitive_alias_view",
+                    MOCKED_ICEBERG_CATALOG_NAME, dbName, "view_location", Maps.newHashMap());
         }
         // A pair of mutually-referencing views (cyc_a -> cyc_b -> cyc_a) used to verify cyclic
         // connector-view detection. Each lookup mints a *fresh* id, mirroring

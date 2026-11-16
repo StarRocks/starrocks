@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 3.2 release notes: Unified Catalog for Hive/Iceberg/Hudi/Delta Lake, Hive managed table creation, Primary Key index persistence on disk in..."
+products: [oss]
 ---
 
 # StarRocks version 3.2

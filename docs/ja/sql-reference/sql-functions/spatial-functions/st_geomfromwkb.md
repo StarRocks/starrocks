@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "明示的な CRS を指定して WKB からネイティブ GEOMETRY 値を構築します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_GeomFromWKB

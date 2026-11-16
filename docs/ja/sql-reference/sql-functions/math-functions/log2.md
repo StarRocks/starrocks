@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "数値の底 2 の対数を計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # log2

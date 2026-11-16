@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Register an external AI service of type chat, embedding, or rerank as an AI Provider in the cluster."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE AI PROVIDER

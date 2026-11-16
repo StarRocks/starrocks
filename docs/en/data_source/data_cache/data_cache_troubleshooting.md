@@ -2,6 +2,7 @@
 sidebar_position: 40
 displayed_sidebar: docs
 description: "FAQ and troubleshooting guide for common Data Cache issues in StarRocks, including cache miss and performance problems."
+products: [oss, enterprise, anywhere]
 ---
 
 # Data Cache FAQ

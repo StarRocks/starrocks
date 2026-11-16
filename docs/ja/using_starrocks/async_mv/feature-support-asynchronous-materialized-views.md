@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "非同期マテリアライズドビューの機能サポート参照: StarRocks でサポートされるジョイン型、集計関数、クエリ書き換え。"
 sidebar_position: 50
 sidebar_label: 機能サポート
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 機能サポート: 非同期マテリアライズドビュー

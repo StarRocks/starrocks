@@ -1,6 +1,7 @@
 ---
 description: データのパーティションとバケット化
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # データ分散

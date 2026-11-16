@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "如何使用内置可观测性指标监控 Data Cache 在 StarRocks 中的性能、使用情况和健康状态。"
+products: [oss, enterprise, anywhere]
 ---
 
 # Data Cache 可观测性
@@ -52,7 +53,7 @@ ClusterDecommissioned: false
            MemUsedPct: 0.00 %
            CpuUsedPct: 0.0 %
      -- highlight-start
-     DataCacheMetrics: Status: Normal, DiskUsage: 0.00GB/2.00GB, MemUsage: 0.00GB/30.46GB
+     DataCacheMetrics: Status: Normal, DiskUsage: 0B/2GB, MemUsage: 0B/30.4GB
      -- highlight-end
 1 row in set (1.90 sec)
 ```

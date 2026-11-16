@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "System view displaying dependencies between objects like asynchronous materialized views."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # object_dependencies

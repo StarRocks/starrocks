@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "ユーザー・ロールに付与できる権限とそれぞれのオブジェクト上での操作内容を説明します。"
 sidebar_position: 20
 sidebar_label: "権限項目"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # StarRocks がサポートする権限

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN SET REPLICA STATUS is used to set the status of the specified replicas."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SET REPLICA STATUS

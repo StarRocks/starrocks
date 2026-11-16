@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Apache Ranger を使用して StarRocks アクセス権限を一元管理し、きめ細かいデータアクセス制御を実行します。"
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Apache Ranger で権限を管理する

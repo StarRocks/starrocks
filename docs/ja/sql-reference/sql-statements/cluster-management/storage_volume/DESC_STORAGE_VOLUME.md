@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DESC STORAGE VOLUME は、ストレージボリュームを説明します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DESC STORAGE VOLUME

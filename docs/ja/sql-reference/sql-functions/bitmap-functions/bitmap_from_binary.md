@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "特定のフォーマットのバイナリ文字列をビットマップに変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_from_binary

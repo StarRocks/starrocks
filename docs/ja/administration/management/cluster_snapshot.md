@@ -1,6 +1,7 @@
 ---
 sidebar_position: 60
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 description: "StarRocks 共有データクラスタでクラスタースナップショットを作成・復元し、バックアップと災害復旧を実現。"
 sidebar_label: クラスタースナップショット
 keywords: ['バックアップ', '復元', '共有データ', 'スナップショット']

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN SHOW REPLICA STATUS is used to show the status of replicas for a table or a partition."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SHOW REPLICA STATUS

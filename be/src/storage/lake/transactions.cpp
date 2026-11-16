@@ -27,6 +27,7 @@
 #include "common/config_storage_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "fs/remote_read_context.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/join.h"
 #include "storage/lake/filenames.h"
@@ -514,6 +515,7 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
     // txn logs have been deleted.
     int txn_offset = base_version - ori_base_version;
     for (size_t i = txn_offset, sz = txns.size(); i < sz; i++) {
+        ScopedRemoteReadContext txn_remote_read_scope(RemoteReadContext::for_load(txns[i].txn_id()));
         VLOG(2) << "[publish_version] applying txn i=" << i << " txn_id=" << txns[i].txn_id()
                 << " force_publish=" << txns[i].force_publish() << " no_op_publish=" << txns[i].no_op_publish()
                 << " load_ids_size=" << txns[i].load_ids_size();
@@ -791,6 +793,10 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                                             int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
                                             bool skip_write_tablet_metadata, int64_t fe_built_version,
                                             InitialMetadataOrder base_version_order, bool is_retry_publish) {
+    // What a publish reads -- tablet metadata, txn logs, delete files, primary key indexes, the rows a partial update
+    // completes -- is the remote I/O of a load, one flow per transaction whatever tablets it publishes. A batch reads as
+    // its first transaction, except in the steps of one transaction (see do_publish_version).
+    ScopedRemoteReadContext remote_read_scope(RemoteReadContext::for_load(txns.empty() ? 0 : txns[0].txn_id()));
     auto res = do_publish_version(tablet_mgr, tablet_info, base_version, new_version, txns, skip_write_tablet_metadata,
                                   fe_built_version, base_version_order, is_retry_publish);
     // A primary key publish fails with MemoryLimitExceeded when it runs past the update memory limit. Its failed
@@ -811,6 +817,8 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                            const int64_t* log_versions) {
     auto files_to_delete = std::vector<std::string>{};
     for (int i = 0; i < txn_infos.size(); i++) {
+        // Like publish_version: the reads of a transaction are a load flow of their own.
+        ScopedRemoteReadContext remote_read_scope(RemoteReadContext::for_load(txn_infos[i].txn_id()));
         if (txn_infos[i].load_ids_size() > 0) {
             // Multi-statement transaction: each statement writes its own .log file at the
             // 4-segment path that encodes load_id. Read every per-load_id .log via

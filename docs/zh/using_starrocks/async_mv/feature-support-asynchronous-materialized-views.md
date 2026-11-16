@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "Reference for feature support boundaries of asynchronous materialized views in StarRocks: supported join types and aggregate functions."
 sidebar_position: 50
 sidebar_label: "能力边界"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 异步物化视图能力边界

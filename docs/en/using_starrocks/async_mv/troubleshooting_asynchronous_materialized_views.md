@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 30
 description: "Troubleshooting guide for asynchronous materialized views in StarRocks: how to diagnose and fix refresh failures, query rewrite issues, and data consistency..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Troubleshooting asynchronous materialized views

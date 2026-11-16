@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 sidebar_label: "Statistics and Storage"
 description: "FE configuration parameters for statistics collection and storage settings."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE Configuration - Statistics and Storage

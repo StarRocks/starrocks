@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 description: "BE 設定パラメーター：統計情報収集とストレージエンジンに関連する設定項目。"
 sidebar_label: "統計とストレージ"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -938,7 +939,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: BE ノードでのスナップショットリリースタスクの最大スレッド数。
+- 説明: BE ノードでのスナップショットリリースタスクの最大スレッド数。共有データクラスタでは、このスレッドプールは Vacuum、Full Vacuum、およびトランザクションログ削除タスクも実行します。
 - 導入バージョン: -
 
 ### repair_compaction_interval_seconds

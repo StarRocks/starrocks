@@ -347,6 +347,9 @@ struct ShreddedFieldNode {
     std::unique_ptr<ColumnReader> array_element_value_reader;
     // Set for object nodes (typed_value is a group) outside arrays, when a leaf below it can give the levels.
     std::unique_ptr<ObjectPresenceSource> presence;
+    // Non-empty when the typed_value type is not allowed in shredded variants. It fails the read of this node, not the
+    // creation of the reader: nodes exist for every field of the schema, whether the query uses it or not.
+    std::string unsupported_reason;
 
     // batch-local columns filled during read_range, reset each call.
     ColumnPtr value_column;
@@ -405,6 +408,8 @@ private:
         ColumnPtr root_typed_value_column;
         // Presence of the root typed_value group when it is an object; set by the factory.
         std::unique_ptr<ObjectPresenceSource> root_presence;
+        // Like ShreddedFieldNode::unsupported_reason, for a scalar root typed_value.
+        std::string root_unsupported_reason;
     };
 
 public:
@@ -453,6 +458,7 @@ public:
     void set_root_presence(std::unique_ptr<ObjectPresenceSource> presence) {
         _top_level.root_presence = std::move(presence);
     }
+    void set_root_unsupported_reason(std::string reason) { _top_level.root_unsupported_reason = std::move(reason); }
 
     Status prepare() override;
 

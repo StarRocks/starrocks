@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include <fstream>
+#include <map>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
@@ -36,6 +37,7 @@
 #include "fs/fs_posix.h"
 #include "fs/fs_registry.h"
 #include "gutil/strings/join.h"
+#include "storage_primitive/storage_stats.h"
 
 namespace starrocks {
 
@@ -205,7 +207,8 @@ TEST_P(StarletFileSystemTest, test_write_and_read) {
     ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(uri));
     ASSIGN_OR_ABORT(auto nr, rf->read_at(0, buf, sizeof(buf)));
     ASSIGN_OR_ABORT(auto stats2, rf->get_numeric_statistics());
-    EXPECT_EQ((*stats2).size(), 11);
+    // The cache/IO counters, then the remote read scheduler's queue wait, fill wait and fill joins.
+    EXPECT_EQ((*stats2).size(), 14);
     EXPECT_EQ("hello world!", std::string_view(buf, nr));
     // Exercise the lightweight `get_io_stats_snapshot()` path used by the publish
     // trace. After the read above the snapshot must reflect non-zero byte/op
@@ -591,6 +594,9 @@ public:
         get_mutable_io_stats().prefetch_hit_count = 41;
         get_mutable_io_stats().prefetch_wait_finish_ns = 42;
         get_mutable_io_stats().prefetch_pending_ns = 43;
+        get_mutable_io_stats().remote_queue_wait_ns = 51;
+        get_mutable_io_stats().remote_fill_wait_ns = 52;
+        get_mutable_io_stats().remote_fill_joins = 53;
     }
 
     absl::StatusOr<size_t> seek(int64_t /*offset*/, Anchor /*anchor*/) override { return 0; }
@@ -673,6 +679,18 @@ TEST_F(NewFsStarletTest, test_starlet_input_stream_get_io_stats_snapshot) {
     EXPECT_EQ(41, snap.prefetch_hit_count);
     EXPECT_EQ(42, snap.prefetch_wait_finish_ns);
     EXPECT_EQ(43, snap.prefetch_pending_ns);
+    EXPECT_EQ(51, snap.remote_queue_wait_ns);
+    EXPECT_EQ(52, snap.remote_fill_wait_ns);
+    EXPECT_EQ(53, snap.remote_fill_joins);
+    // The same values reach get_numeric_statistics(), which the segment iterator reads for its column files.
+    ASSIGN_OR_ABORT(auto numeric, rf->get_numeric_statistics());
+    std::map<std::string, int64_t> by_name;
+    for (int64_t i = 0; i < numeric->size(); ++i) {
+        by_name[numeric->name(i)] = numeric->value(i);
+    }
+    EXPECT_EQ(51, by_name[kRemoteQueueWaitNs]);
+    EXPECT_EQ(52, by_name[kRemoteFillWaitNs]);
+    EXPECT_EQ(53, by_name[kRemoteFillJoins]);
 }
 
 // Covers the `stream_st not ok` early-return branch in StarletInputStream::

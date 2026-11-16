@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW FRONTENDS は、クラスター内のすべての FE ノードの情報を表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW FRONTENDS

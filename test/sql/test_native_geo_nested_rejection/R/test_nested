@@ -68,6 +68,34 @@ function: assert_query_error_contains("CREATE VIEW nested_view_${uuid0} AS SELEC
 -- result:
 None
 -- !result
+function: assert_query_error_contains("SELECT cardinality(sum_map(map{1:g})) FROM (SELECT ST_GeogFromText(wkt) AS g FROM nested_fixture_${uuid0}) t", "sum_map unsupported value type:")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT to_json(map{'g':g}) FROM (SELECT ST_GeogFromText(wkt) AS g FROM nested_fixture_${uuid0}) t", "to_json does not support geo arguments:")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT to_json(named_struct('g',g)) FROM (SELECT ST_GeogFromText(wkt) AS g FROM nested_fixture_${uuid0}) t", "to_json does not support geo arguments:")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT to_json(named_struct('g',[g])) FROM (SELECT ST_GeogFromText(wkt) AS g FROM nested_fixture_${uuid0}) t", "to_json does not support geo arguments:")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT cardinality(sum_map(map{1:g})) FROM (SELECT ST_GeogFromText(CAST(NULL AS VARCHAR)) AS g FROM nested_fixture_${uuid0}) t", "sum_map unsupported value type:")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT to_json(map{'g':g}) FROM (SELECT ST_GeogFromText(CAST(NULL AS VARCHAR)) AS g FROM nested_fixture_${uuid0}) t", "to_json does not support geo arguments:")
+-- result:
+None
+-- !result
+SELECT to_json(named_struct('g',ST_AsText(g))) FROM (SELECT ST_GeogFromText(wkt) AS g FROM nested_fixture_${uuid0} WHERE id=1) t;
+-- result:
+{"g": "POINT (1 2)"}
+-- !result
 DROP TABLE nested_fixture_${uuid0};
 -- result:
 -- !result
@@ -141,6 +169,34 @@ function: assert_query_error_contains("CREATE VIEW nested_view_${uuid0} AS SELEC
 -- result:
 None
 -- !result
+function: assert_query_error_contains("SELECT cardinality(sum_map(map{1:g})) FROM (SELECT ST_GeomFromText(wkt, 'EPSG:3857') AS g FROM nested_fixture_${uuid0}) t", "sum_map unsupported value type:")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT to_json(map{'g':g}) FROM (SELECT ST_GeomFromText(wkt, 'EPSG:3857') AS g FROM nested_fixture_${uuid0}) t", "to_json does not support geo arguments:")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT to_json(named_struct('g',g)) FROM (SELECT ST_GeomFromText(wkt, 'EPSG:3857') AS g FROM nested_fixture_${uuid0}) t", "to_json does not support geo arguments:")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT to_json(named_struct('g',[g])) FROM (SELECT ST_GeomFromText(wkt, 'EPSG:3857') AS g FROM nested_fixture_${uuid0}) t", "to_json does not support geo arguments:")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT cardinality(sum_map(map{1:g})) FROM (SELECT ST_GeomFromText(CAST(NULL AS VARCHAR), 'EPSG:3857') AS g FROM nested_fixture_${uuid0}) t", "sum_map unsupported value type:")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT to_json(map{'g':g}) FROM (SELECT ST_GeomFromText(CAST(NULL AS VARCHAR), 'EPSG:3857') AS g FROM nested_fixture_${uuid0}) t", "to_json does not support geo arguments:")
+-- result:
+None
+-- !result
+SELECT to_json(named_struct('g',ST_AsText(g))) FROM (SELECT ST_GeomFromText(wkt, 'EPSG:3857') AS g FROM nested_fixture_${uuid0} WHERE id=1) t;
+-- result:
+{"g": "POINT (1 2)"}
+-- !result
 DROP TABLE nested_fixture_${uuid0};
 -- result:
 -- !result
@@ -156,4 +212,12 @@ MULTIPOLYGON EMPTY
 SELECT ST_AsText(ST_GeomFromText('POINT (1 2)'));
 -- result:
 POINT (1 2)
+-- !result
+SELECT (sum_map(map{1:id}))[1] FROM (SELECT 2 AS id UNION ALL SELECT 3) t;
+-- result:
+5
+-- !result
+SELECT to_json(map{'g':1}), to_json(named_struct('g',1));
+-- result:
+{"g": 1}	{"g": 1}
 -- !result

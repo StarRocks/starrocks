@@ -32,6 +32,7 @@
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_context_handle.h"
 #include "compute_env/pipeline/driver_limiter.h"
+#include "compute_env/query/query_remote_read.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
@@ -971,6 +972,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
         auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+        // The tablet metadata, schemas and indexes read to plan the scans are this query's remote reads.
+        ScopedRemoteReadContext remote_read_scope(query_remote_read_context(_fragment_ctx->runtime_state()));
 
         RETURN_IF_ERROR(_prepare_global_dict(request));
         RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
@@ -980,6 +983,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
         auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+        ScopedRemoteReadContext remote_read_scope(query_remote_read_context(_fragment_ctx->runtime_state()));
 
         RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
         RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));

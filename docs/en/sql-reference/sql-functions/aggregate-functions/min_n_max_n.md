@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the n smallest or largest values from an expression as an array."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # MIN_N, MAX_N

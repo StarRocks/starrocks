@@ -30,6 +30,7 @@ import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.io.OutputFile;
 import org.apache.iceberg.io.ResolvingFileIO;
+import org.apache.iceberg.io.SeekableInputStream;
 import org.apache.iceberg.util.SerializableSupplier;
 import org.apache.iceberg.util.SerializationUtil;
 import org.junit.jupiter.api.Assertions;
@@ -38,6 +39,7 @@ import org.junit.jupiter.api.Test;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -84,6 +86,299 @@ public class IcebergCachingFileIOTest {
         long cacheIOInputFileSize = cachingFileIOInputFile.getLength();
         Assertions.assertEquals(cacheIOInputFileSize, 39);
         cachingFileIO.deleteFile(path);
+    }
+
+    // An InputFile over a local file that counts the stats (getLength) issued against it.
+    private static InputFile countingInput(String localPath, AtomicInteger lengthCalls) {
+        InputFile local = Files.localInput(localPath);
+        return new InputFile() {
+            @Override
+            public long getLength() {
+                lengthCalls.incrementAndGet();
+                return local.getLength();
+            }
+
+            @Override
+            public SeekableInputStream newStream() {
+                return local.newStream();
+            }
+
+            @Override
+            public String location() {
+                return local.location();
+            }
+
+            @Override
+            public boolean exists() {
+                return local.exists();
+            }
+        };
+    }
+
+    private static String writeLocalFile(String name, String content) throws IOException {
+        java.io.File file = java.io.File.createTempFile(name, ".avro");
+        file.deleteOnExit();
+        try (BufferedWriter out = new BufferedWriter(new FileWriter(file))) {
+            out.write(content);
+        }
+        return file.getAbsolutePath();
+    }
+
+    private static String readAll(InputFile inputFile) throws IOException {
+        try (SeekableInputStream in = inputFile.newStream()) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static IcebergCachingFileIO newCachingFileIO(String localPath, AtomicInteger lengthCalls) {
+        new MockUp<ResolvingFileIO>() {
+            @Mock
+            public InputFile newInputFile(String location) {
+                return countingInput(localPath, lengthCalls);
+            }
+
+            @Mock
+            public InputFile newInputFile(String location, long length) {
+                return countingInput(localPath, lengthCalls);
+            }
+        };
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        cachingFileIO.initialize(new HashMap<>());
+        return cachingFileIO;
+    }
+
+    @Test
+    public void testCacheOffReadsWithoutStat() throws IOException {
+        String content = "manifest list bytes";
+        String localPath = writeLocalFile("snap-cache-off", content);
+        AtomicInteger lengthCalls = new AtomicInteger();
+        IcebergCachingFileIO cachingFileIO = newCachingFileIO(localPath, lengthCalls);
+
+        // the cache is off by default (iceberg_metadata_cache_max_entry_size = 0): a read without a known
+        // length, like the manifest list, must not stat the object just to decide not to cache it
+        String path = "s3://bucket/metadata/snap-cache-off-" + System.nanoTime() + ".avro";
+        Assertions.assertEquals(content, readAll(cachingFileIO.newInputFile(path)));
+        Assertions.assertEquals(0, lengthCalls.get());
+    }
+
+    @Test
+    public void testCacheOnUsesKnownLength() throws IOException {
+        new MockUp<IcebergCachingFileIO.ContentCache>() {
+            @Mock
+            public long maxContentLength() {
+                return 1024 * 1024;
+            }
+        };
+        String content = "manifest bytes";
+        String localPath = writeLocalFile("manifest-cache-on", content);
+        AtomicInteger lengthCalls = new AtomicInteger();
+        IcebergCachingFileIO cachingFileIO = newCachingFileIO(localPath, lengthCalls);
+
+        // a manifest opened with the length from the manifest list is cached without a stat
+        String path = "s3://bucket/metadata/manifest-cache-on-" + System.nanoTime() + ".avro";
+        InputFile inputFile = cachingFileIO.newInputFile(path, content.length());
+        Assertions.assertEquals(content.length(), inputFile.getLength());
+        Assertions.assertEquals(content, readAll(inputFile));
+        Assertions.assertEquals(0, lengthCalls.get());
+    }
+
+    @Test
+    public void testCacheOnWithoutLengthStatsOnce() throws IOException {
+        new MockUp<IcebergCachingFileIO.ContentCache>() {
+            @Mock
+            public long maxContentLength() {
+                return 1024 * 1024;
+            }
+        };
+        String content = "manifest list bytes";
+        String localPath = writeLocalFile("snap-cache-on", content);
+        AtomicInteger lengthCalls = new AtomicInteger();
+        IcebergCachingFileIO cachingFileIO = newCachingFileIO(localPath, lengthCalls);
+
+        // without a known length the cache needs the size: one stat decides and fills the entry, not two
+        String path = "s3://bucket/metadata/snap-cache-on-" + System.nanoTime() + ".avro";
+        Assertions.assertEquals(content, readAll(cachingFileIO.newInputFile(path)));
+        Assertions.assertEquals(1, lengthCalls.get());
+    }
+
+    @Test
+    public void testPlanningIoStatsCountsRemoteCalls() throws IOException {
+        String content = "manifest list bytes";
+        String localPath = writeLocalFile("snap-io-stats", content);
+        AtomicInteger lengthCalls = new AtomicInteger();
+        IcebergCachingFileIO cachingFileIO = newCachingFileIO(localPath, lengthCalls);
+        String path = "s3://bucket/metadata/snap-io-stats-" + System.nanoTime() + ".avro";
+
+        // outside a planning nothing is counted
+        IcebergPlanningIoStats stats = new IcebergPlanningIoStats();
+        Assertions.assertEquals(content, readAll(cachingFileIO.newInputFile(path)));
+        Assertions.assertEquals(0, stats.getRequests());
+
+        try (IcebergPlanningIoStats.Scope ignored = stats.enter()) {
+            // the cache is off: one GET, no stat
+            Assertions.assertEquals(content, readAll(cachingFileIO.newInputFile(path)));
+            // a stat and an existence check are HEADs
+            InputFile inputFile = cachingFileIO.newInputFile(path);
+            Assertions.assertEquals(content.length(), inputFile.getLength());
+            Assertions.assertTrue(inputFile.exists());
+            // a known length is not a request
+            Assertions.assertEquals(content.length(), cachingFileIO.newInputFile(path, content.length()).getLength());
+        }
+        Assertions.assertNull(IcebergPlanningIoStats.current());
+        Assertions.assertEquals(1, stats.getGetRequests());
+        Assertions.assertEquals(2, stats.getHeadRequests());
+        Assertions.assertEquals(0, stats.getRetries());
+        Assertions.assertTrue(stats.getSlowestRequest().startsWith("HEAD ") ||
+                stats.getSlowestRequest().startsWith("GET "), stats.getSlowestRequest());
+        // the location the caller asked for, not the local file behind it
+        Assertions.assertTrue(stats.getSlowestRequest().endsWith(path.substring(path.lastIndexOf('/') + 1)),
+                stats.getSlowestRequest());
+    }
+
+    @Test
+    public void testPlanningIoStatsCountsFailedHead() {
+        RuntimeException timeout = new RuntimeException("connect timed out");
+        new MockUp<ResolvingFileIO>() {
+            @Mock
+            public InputFile newInputFile(String location) {
+                return new InputFile() {
+                    @Override
+                    public long getLength() {
+                        throw timeout;
+                    }
+
+                    @Override
+                    public SeekableInputStream newStream() {
+                        throw new UnsupportedOperationException();
+                    }
+
+                    @Override
+                    public String location() {
+                        return location;
+                    }
+
+                    @Override
+                    public boolean exists() {
+                        throw timeout;
+                    }
+                };
+            }
+        };
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        cachingFileIO.initialize(new HashMap<>());
+        String path = "s3://bucket/metadata/snap-failed-head-" + System.nanoTime() + ".avro";
+
+        IcebergPlanningIoStats stats = new IcebergPlanningIoStats();
+        try (IcebergPlanningIoStats.Scope ignored = stats.enter()) {
+            InputFile inputFile = cachingFileIO.newInputFile(path);
+            // the failure surfaces unchanged, and the failed requests are still counted
+            Assertions.assertSame(timeout, Assertions.assertThrows(RuntimeException.class, inputFile::getLength));
+            Assertions.assertSame(timeout, Assertions.assertThrows(RuntimeException.class, inputFile::exists));
+        }
+        Assertions.assertEquals(2, stats.getHeadRequests());
+        Assertions.assertTrue(stats.getSlowestRequest().startsWith("HEAD snap-failed-head-"), stats.getSlowestRequest());
+    }
+
+    @Test
+    public void testPlanningIoStatsCountsFailedCacheFill() {
+        new MockUp<IcebergCachingFileIO.ContentCache>() {
+            @Mock
+            public long maxContentLength() {
+                return 1024 * 1024;
+            }
+        };
+        RuntimeException reset = new RuntimeException("connection reset");
+        AtomicInteger closes = new AtomicInteger();
+        new MockUp<ResolvingFileIO>() {
+            @Mock
+            public InputFile newInputFile(String location, long length) {
+                return new InputFile() {
+                    @Override
+                    public long getLength() {
+                        return length;
+                    }
+
+                    @Override
+                    public SeekableInputStream newStream() {
+                        return new SeekableInputStream() {
+                            @Override
+                            public long getPos() {
+                                return 0;
+                            }
+
+                            @Override
+                            public void seek(long newPos) {
+                            }
+
+                            @Override
+                            public int read() {
+                                throw reset;
+                            }
+
+                            @Override
+                            public int read(byte[] b, int off, int len) {
+                                throw reset;
+                            }
+
+                            @Override
+                            public void close() {
+                                closes.incrementAndGet();
+                            }
+                        };
+                    }
+
+                    @Override
+                    public String location() {
+                        return location;
+                    }
+
+                    @Override
+                    public boolean exists() {
+                        return true;
+                    }
+                };
+            }
+        };
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        cachingFileIO.initialize(new HashMap<>());
+        String path = "s3://bucket/metadata/manifest-failed-fill-" + System.nanoTime() + ".avro";
+
+        IcebergPlanningIoStats stats = new IcebergPlanningIoStats();
+        try (IcebergPlanningIoStats.Scope ignored = stats.enter()) {
+            InputFile inputFile = cachingFileIO.newInputFile(path, 100);
+            // an unchecked storage failure while filling the cache: the stream is closed and the GET counted
+            Assertions.assertThrows(Exception.class, () -> readAll(inputFile));
+        }
+        Assertions.assertEquals(1, closes.get());
+        Assertions.assertEquals(1, stats.getGetRequests());
+    }
+
+    @Test
+    public void testPlanningIoStatsCountsCacheFill() throws IOException {
+        new MockUp<IcebergCachingFileIO.ContentCache>() {
+            @Mock
+            public long maxContentLength() {
+                return 1024 * 1024;
+            }
+        };
+        String content = "manifest bytes";
+        String localPath = writeLocalFile("manifest-io-stats", content);
+        AtomicInteger lengthCalls = new AtomicInteger();
+        IcebergCachingFileIO cachingFileIO = newCachingFileIO(localPath, lengthCalls);
+        String path = "s3://bucket/metadata/manifest-io-stats-" + System.nanoTime() + ".avro";
+
+        IcebergPlanningIoStats stats = new IcebergPlanningIoStats();
+        try (IcebergPlanningIoStats.Scope ignored = stats.enter()) {
+            // a read through the cache fills it from storage: one GET, and no stat with a known length.
+            // The memory cache has no capacity in UT, so the second read fills it again.
+            Assertions.assertEquals(content, readAll(cachingFileIO.newInputFile(path, content.length())));
+            Assertions.assertEquals(content, readAll(cachingFileIO.newInputFile(path, content.length())));
+        }
+        Assertions.assertEquals(2, stats.getGetRequests());
+        Assertions.assertEquals(0, stats.getHeadRequests());
     }
 
     @Test

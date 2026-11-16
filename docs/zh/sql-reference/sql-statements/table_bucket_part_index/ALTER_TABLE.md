@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "修改现有表，包括重命名、修改分区、修改分桶、调整 Tablet 大小和修改列。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER TABLE

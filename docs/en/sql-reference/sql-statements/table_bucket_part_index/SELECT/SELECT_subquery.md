@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Subquery"
 description: "How to write correlated and non-correlated subqueries in StarRocks, including [NOT] IN, EXISTS, scalar, and lateral join forms."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Subquery

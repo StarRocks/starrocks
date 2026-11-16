@@ -2,9 +2,8 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "StarRocks has a simple architecture."
+products: [oss, enterprise, cloud]
 ---
-import QSOverview from '../_assets/commonMarkdown/quickstart-overview-tip.mdx'
-import EditionSpecificFeature from '../_assets/commonMarkdown/Edition_Specific_Feature.mdx'
 
 # Architecture
 
@@ -53,7 +52,7 @@ BEs are responsible for data storage and SQL execution.
 
 ### Shared-data
 
-Object storage and HDFS provide cost, reliability, and scalability benefits. In addition to the scalability of storage, CN nodes can be added and removed without the need to rebalance data since storage and compute are separate. 
+Object storage and HDFS provide cost, reliability, and scalability benefits. In addition to the scalability of storage, CN nodes can be added and removed without copying data since storage and compute are separate. When CN nodes are added or removed, tablets are reassigned among CN nodes without moving the data in the remote storage, and the Data Cache of the CN nodes that take over the tablets is initially cold. Balancing tablets onto newly added CN nodes is controlled by the FE parameter `lake_enable_balance_tablets_between_workers`, which is enabled by default from v3.5.6 and v4.0 onwards.
 
 In the shared-data architecture, BEs are replaced with "compute nodes (CNs)" which are responsible only for data compute tasks and caching hot data. Data is stored in low-cost and reliable remote storage systems such as Amazon S3, Google Cloud Storage, Azure Blob Storage, MinIO, etc. When the cache is hit, query performance is comparable to that of the shared-nothing architecture. CN nodes can be added or removed on demand within seconds. This architecture reduces storage cost, ensures better resource isolation, and high elasticity and scalability.
 
@@ -92,7 +91,7 @@ This section lists the differences of features supported in shared-nothing and s
 | Feature                                              | Shared-nothing | Shared-data     |
 | ---------------------------------------------------- | -------------- | --------------- |
 | Conditional Update                                   | v2.5+          | v3.1+           |
-| Partial Update Column mode                           | v3.1           | To be supported |
+| Partial Update Column mode                           | v3.1           | v3.3.1+         |
 | Partial Update Row mode                              | v2.3+          | v3.1+           |
 | Partial update with Conditional Update               | v3.1+          | v3.4.1+         |
 | Primary Key Index Persistence                        | v2.3+          | v3.2+           |
@@ -133,6 +132,23 @@ This section lists the differences of features supported in shared-nothing and s
 | Query Cache                                          | v2.5+          | v3.4+           |
 | Rollup and Synchronous Materialized view             | v1.x+          | v3.3+           |
 
-<EditionSpecificFeature />
+### Data Protection
 
-<QSOverview />
+| Feature                                              | Shared-nothing | Shared-data     |
+| ---------------------------------------------------- | -------------- | --------------- |
+| Backup & Restore                                     | v1.x+          | Not applicable  |
+| BE/CN Blacklist                                      | v3.3+          | v4.0+           |
+| Cross-cluster Data Migration Tool                    | v3.3+          | Not applicable  |
+| Cluster Snapshot                                     | Not applicable | v3.4.2+         |
+
+### Security and Authentication
+
+| Feature                                              | Shared-nothing | Shared-data     |
+| ---------------------------------------------------- | -------------- | --------------- |
+| Kerberos Support on HDFS                             | Not applicable | v3.2+           |
+
+---
+---
+## Learn by doing
+
+Try the [Quick Starts](../quick_start/quick_start.mdx) to get an overview of using StarRocks with realistic scenarios.

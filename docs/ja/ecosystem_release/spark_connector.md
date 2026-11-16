@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks Connector for Apache Spark のリリースノート・変更履歴。"
+products: [oss]
 ---
 
 # Releases of StarRocks Connector for Spark
