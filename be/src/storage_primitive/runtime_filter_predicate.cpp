@@ -18,17 +18,108 @@
 
 #include "base/simd/simd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/runtime_profile.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
+
+namespace {
+
+void apply_slice_minmax_selection(const RuntimeFilter* rf, const Column* column, uint8_t* selection, uint16_t from,
+                                  uint16_t to) {
+    if (rf == nullptr || rf->get_min_max_filter() != rf || from >= to) {
+        return;
+    }
+    const auto* binary_col = dynamic_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
+    if (binary_col == nullptr) {
+        return;
+    }
+    const uint8_t* null_data = (column->is_nullable() && column->has_null())
+                                       ? down_cast<const NullableColumn*>(column)->immutable_null_column_data().data()
+                                       : nullptr;
+    auto eval_mm = [&](const auto* mm_rf) {
+        ObjectPool tmp_pool;
+        const Slice min_val = mm_rf->min_value(&tmp_pool);
+        const Slice max_val = mm_rf->max_value(&tmp_pool);
+        const bool left_close = mm_rf->left_close_interval();
+        const bool right_close = mm_rf->right_close_interval();
+        const bool has_lower_bound = !(left_close && min_val == Slice::min_value());
+        const bool has_upper_bound = !(right_close && max_val == Slice::max_value());
+        if (!has_lower_bound && !has_upper_bound) {
+            return;
+        }
+        for (uint16_t i = from; i < to; ++i) {
+            if (!selection[i]) continue;
+            if (null_data != nullptr && null_data[i]) continue;
+            const Slice val = binary_col->get_slice(i);
+            const bool left_ok = !has_lower_bound || (left_close ? (val >= min_val) : (val > min_val));
+            const bool right_ok = !has_upper_bound || (right_close ? (val <= max_val) : (val < max_val));
+            selection[i] = static_cast<uint8_t>(left_ok && right_ok);
+        }
+    };
+    if (const auto* varchar_mm = dynamic_cast<const MinMaxRuntimeFilter<TYPE_VARCHAR>*>(rf)) {
+        eval_mm(varchar_mm);
+    } else if (const auto* char_mm = dynamic_cast<const MinMaxRuntimeFilter<TYPE_CHAR>*>(rf)) {
+        eval_mm(char_mm);
+    }
+}
+
+uint16_t apply_slice_minmax_branchless(const RuntimeFilter* rf, const Column* column, uint16_t* target_sel,
+                                       uint16_t sel_size) {
+    if (rf == nullptr || rf->get_min_max_filter() != rf || sel_size == 0) {
+        return sel_size;
+    }
+    const auto* binary_col = dynamic_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
+    if (binary_col == nullptr) {
+        return sel_size;
+    }
+    const uint8_t* null_data = (column->is_nullable() && column->has_null())
+                                       ? down_cast<const NullableColumn*>(column)->immutable_null_column_data().data()
+                                       : nullptr;
+    auto eval_mm = [&](const auto* mm_rf) -> uint16_t {
+        ObjectPool tmp_pool;
+        const Slice min_val = mm_rf->min_value(&tmp_pool);
+        const Slice max_val = mm_rf->max_value(&tmp_pool);
+        const bool left_close = mm_rf->left_close_interval();
+        const bool right_close = mm_rf->right_close_interval();
+        const bool has_lower_bound = !(left_close && min_val == Slice::min_value());
+        const bool has_upper_bound = !(right_close && max_val == Slice::max_value());
+        if (!has_lower_bound && !has_upper_bound) {
+            return sel_size;
+        }
+        uint16_t new_size = 0;
+        for (uint16_t i = 0; i < sel_size; ++i) {
+            uint16_t idx = target_sel[i];
+            target_sel[new_size] = idx;
+            if (null_data != nullptr && null_data[idx]) {
+                new_size += 1;
+            } else {
+                const Slice val = binary_col->get_slice(idx);
+                const bool left_ok = !has_lower_bound || (left_close ? (val >= min_val) : (val > min_val));
+                const bool right_ok = !has_upper_bound || (right_close ? (val <= max_val) : (val < max_val));
+                new_size += static_cast<uint16_t>(left_ok && right_ok);
+            }
+        }
+        return new_size;
+    };
+    if (const auto* varchar_mm = dynamic_cast<const MinMaxRuntimeFilter<TYPE_VARCHAR>*>(rf)) {
+        return eval_mm(varchar_mm);
+    } else if (const auto* char_mm = dynamic_cast<const MinMaxRuntimeFilter<TYPE_CHAR>*>(rf)) {
+        return eval_mm(char_mm);
+    }
+    return sel_size;
+}
+
+} // namespace
 
 bool RuntimeFilterPredicate::init(int32_t driver_sequence) {
     if (_rf) {
         return true;
     }
     _rf = _rf_desc->runtime_filter(driver_sequence);
-    _pass_all = _rf != nullptr && _rf->always_true() && _rf->is_pass_all();
+    _pass_all = _rf != nullptr && (_rf_desc == nullptr || !_rf_desc->is_topn_filter()) && _rf->always_true() &&
+                _rf->is_pass_all();
     return _rf != nullptr;
 }
 
@@ -56,7 +147,7 @@ bool RuntimeFilterPredicate::init(int32_t driver_sequence) {
 // shared with the OLAP scan path.
 Status RuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) {
     // A join filter that passes every row filters nothing, also no row its min/max can not hold, e.g. NaN.
-    if (_pass_all) {
+    if (_pass_all || (_rf->always_true() && _rf->is_pass_all())) {
         return Status::OK();
     }
     auto column = chunk->get_column_by_id(_column_id);
@@ -74,6 +165,7 @@ Status RuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16
     }
     if (!column->has_null()) {
         _rf->evaluate(column.get(), hash_values, selection, from, to);
+        apply_slice_minmax_selection(_rf, column.get(), selection, from, to);
         return Status::OK();
     }
     // A filter writes its has_null verdict for a NULL key without looking at selection[i], so a <=> join
@@ -83,6 +175,7 @@ Status RuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16
     for (uint16_t i = from; i < to; i++) {
         selection[i] &= _input_selection[i - from];
     }
+    apply_slice_minmax_selection(_rf, column.get(), selection, from, to);
     return Status::OK();
 }
 
@@ -91,7 +184,7 @@ StatusOr<uint16_t> RuntimeFilterPredicate::evaluate(Chunk* chunk, uint16_t* sel,
     if (sel_size == 0) {
         return sel_size;
     }
-    if (_pass_all) {
+    if (_pass_all || (_rf->always_true() && _rf->is_pass_all())) {
         if (target_sel != sel) {
             memcpy(target_sel, sel, sel_size * sizeof(uint16_t));
         }
@@ -110,40 +203,154 @@ StatusOr<uint16_t> RuntimeFilterPredicate::evaluate(Chunk* chunk, uint16_t* sel,
         }
     }
     uint16_t ret = _rf->evaluate(column.get(), hash_values, sel, sel_size, target_sel);
-    return ret;
+    return apply_slice_minmax_branchless(_rf, column.get(), target_sel, ret);
+}
+
+Status DictColumnRuntimeFilterPredicate::init() {
+    if (_rf == nullptr) {
+        return Status::OK();
+    }
+    return _recompute_selection();
+}
+
+void DictColumnRuntimeFilterPredicate::set_static_dict_mask(const Filter& mask, bool is_nullable) {
+    _static_dict_mask = mask;
+    _has_static_dict_mask = true;
+    _is_nullable = is_nullable;
+    _initialized = false;
+}
+
+Status DictColumnRuntimeFilterPredicate::refresh_if_updated(int32_t driver_sequence, int64_t* rf_eval_timer_ns) {
+    if (_rf == nullptr && _rf_desc != nullptr) {
+        RuntimeFilterPredicate::init(driver_sequence);
+    }
+    if (_rf == nullptr) {
+        return Status::OK();
+    }
+    if (!_initialized || _rf->rf_version() != _rf_version || _rf->has_null() != _rf_has_null) {
+        if (rf_eval_timer_ns != nullptr) {
+            SCOPED_RAW_TIMER(rf_eval_timer_ns);
+            return _recompute_selection();
+        }
+        return _recompute_selection();
+    }
+    return Status::OK();
+}
+
+Status DictColumnRuntimeFilterPredicate::_recompute_selection() {
+    DCHECK(_rf != nullptr);
+    if (_dict_words_col == nullptr) {
+        auto binary_column = BinaryColumn::create();
+        std::vector<Slice> data_slice;
+        data_slice.reserve(_dict_words.size());
+        for (const auto& word : _dict_words) {
+            data_slice.emplace_back(word.data(), word.size());
+        }
+        binary_column->append_strings(data_slice.data(), data_slice.size());
+        _dict_words_col = std::move(binary_column);
+    }
+
+    _rf_version = _rf->rf_version();
+    _rf_has_null = _rf->has_null();
+    _initialized = true;
+
+    const size_t size = _dict_words_col->size();
+    if (size == 0) {
+        _dict_codes_selection.clear();
+        _is_always_false = (!_is_nullable || !_rf->has_null());
+        return Status::OK();
+    }
+
+    RuntimeFilter::RunningContext ctx;
+    ctx.use_merged_selection = false;
+    ctx.compatibility = false;
+    ctx.selection.assign(size, 1);
+    if (_rf_desc != nullptr) {
+        ctx.exchange_hash_function_version = _rf_desc->exchange_hash_function_version();
+        if (_rf->num_hash_partitions() > 0) {
+            ctx.hash_values.resize(size);
+            _rf->compute_partition_index(_rf_desc->layout(), {_dict_words_col.get()}, &ctx);
+        }
+    }
+    _rf->evaluate(_dict_words_col.get(), &ctx);
+
+    if (const RuntimeFilter* mm_base = _rf->get_min_max_filter(); mm_base == _rf) {
+        auto apply_slice_minmax = [&](const auto* mm_rf) {
+            ObjectPool tmp_pool;
+            const Slice min_val = mm_rf->min_value(&tmp_pool);
+            const Slice max_val = mm_rf->max_value(&tmp_pool);
+            const bool left_close = mm_rf->left_close_interval();
+            const bool right_close = mm_rf->right_close_interval();
+            const bool has_lower_bound = !(left_close && min_val == Slice::min_value());
+            const bool has_upper_bound = !(right_close && max_val == Slice::max_value());
+            if (!has_lower_bound && !has_upper_bound) {
+                return;
+            }
+            const auto* binary_col =
+                    down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(_dict_words_col.get()));
+            for (size_t i = 0; i < size; ++i) {
+                if (!ctx.selection[i]) continue;
+                const Slice val = binary_col->get_slice(i);
+                const bool left_ok = !has_lower_bound || (left_close ? (val >= min_val) : (val > min_val));
+                const bool right_ok = !has_upper_bound || (right_close ? (val <= max_val) : (val < max_val));
+                ctx.selection[i] = static_cast<uint8_t>(left_ok && right_ok);
+            }
+        };
+        if (const auto* varchar_mm = dynamic_cast<const MinMaxRuntimeFilter<TYPE_VARCHAR>*>(mm_base)) {
+            apply_slice_minmax(varchar_mm);
+        } else if (const auto* char_mm = dynamic_cast<const MinMaxRuntimeFilter<TYPE_CHAR>*>(mm_base)) {
+            apply_slice_minmax(char_mm);
+        }
+    }
+
+    _dict_codes_selection.swap(ctx.selection);
+    if (_has_static_dict_mask && _static_dict_mask.size() == size) {
+        for (size_t i = 0; i < size; ++i) {
+            _dict_codes_selection[i] &= _static_dict_mask[i];
+        }
+    }
+
+    const size_t active = SIMD::count_nonzero(_dict_codes_selection);
+    _is_always_false = (active == 0) && (!_is_nullable || !_rf->has_null());
+    return Status::OK();
+}
+
+Status DictColumnRuntimeFilterPredicate::evaluate(Column* column, uint8_t* selection, uint16_t from,
+                                                  uint16_t to) const {
+    if (_is_always_false) {
+        memset(selection + from, 0, to - from);
+        return Status::OK();
+    }
+    if (column->is_nullable()) {
+        auto* nullable_col = down_cast<NullableColumn*>(column);
+        const auto& dict_codes = down_cast<Int32Column*>(nullable_col->data_column_raw_ptr())->get_data();
+        if (nullable_col->has_null()) {
+            const auto& null_data = nullable_col->immutable_null_column_data();
+            const uint8_t rf_has_null = static_cast<uint8_t>(_is_nullable && _rf->has_null());
+            for (uint16_t i = from; i < to; ++i) {
+                if (!selection[i]) continue;
+                selection[i] = null_data[i] ? rf_has_null : _dict_codes_selection[dict_codes[i]];
+            }
+        } else {
+            for (uint16_t i = from; i < to; ++i) {
+                if (!selection[i]) continue;
+                selection[i] = _dict_codes_selection[dict_codes[i]];
+            }
+        }
+    } else {
+        const auto& dict_codes = down_cast<Int32Column*>(column)->get_data();
+        for (uint16_t i = from; i < to; ++i) {
+            if (!selection[i]) continue;
+            selection[i] = _dict_codes_selection[dict_codes[i]];
+        }
+    }
+    return Status::OK();
 }
 
 Status DictColumnRuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) {
     RETURN_IF_ERROR(prepare());
-    auto column = chunk->get_column_by_id(_column_id).get();
-    if (column->is_nullable()) {
-        const auto* nullable_column = down_cast<const NullableColumn*>(column);
-        // dict code column must be int column
-        const auto& data = GetContainer<TYPE_INT>::get_data(nullable_column->data_column());
-        if (nullable_column->has_null()) {
-            const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
-            for (uint16_t i = from; i < to; i++) {
-                if (!selection[i]) continue;
-                if (null_data[i]) {
-                    selection[i] = _rf->has_null();
-                } else {
-                    selection[i] = _result[data[i]];
-                }
-            }
-        } else {
-            for (uint16_t i = from; i < to; i++) {
-                if (!selection[i]) continue;
-                selection[i] = _result[data[i]];
-            }
-        }
-    } else {
-        const auto& data = GetContainer<TYPE_INT>::get_data(column);
-        for (uint16_t i = from; i < to; i++) {
-            if (!selection[i]) continue;
-            selection[i] = _result[data[i]];
-        }
-    }
-    return Status::OK();
+    auto* column = chunk->get_column_raw_ptr_by_id(_column_id);
+    return evaluate(column, selection, from, to);
 }
 
 StatusOr<uint16_t> DictColumnRuntimeFilterPredicate::evaluate(Chunk* chunk, uint16_t* sel, uint16_t sel_size,
@@ -152,6 +359,9 @@ StatusOr<uint16_t> DictColumnRuntimeFilterPredicate::evaluate(Chunk* chunk, uint
         return sel_size;
     }
     RETURN_IF_ERROR(prepare());
+    if (_is_always_false) {
+        return 0;
+    }
     auto column = chunk->get_column_by_id(_column_id).get();
     uint16_t new_size = 0;
     if (column->is_nullable()) {
@@ -159,20 +369,21 @@ StatusOr<uint16_t> DictColumnRuntimeFilterPredicate::evaluate(Chunk* chunk, uint
         const auto& data = GetContainer<TYPE_INT>::get_data(nullable_column->data_column());
         if (nullable_column->has_null()) {
             const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
+            const uint8_t rf_has_null = static_cast<uint8_t>(_is_nullable && _rf->has_null());
             for (uint16_t i = 0; i < sel_size; i++) {
                 uint16_t idx = sel[i];
                 target_sel[new_size] = idx;
                 if (null_data[idx]) {
-                    new_size += _rf->has_null();
+                    new_size += rf_has_null;
                 } else {
-                    new_size += _result[data[idx]];
+                    new_size += _dict_codes_selection[data[idx]];
                 }
             }
         } else {
             for (uint16_t i = 0; i < sel_size; i++) {
                 uint16_t idx = sel[i];
                 target_sel[new_size] = idx;
-                new_size += _result[data[idx]];
+                new_size += _dict_codes_selection[data[idx]];
             }
         }
     } else {
@@ -180,53 +391,56 @@ StatusOr<uint16_t> DictColumnRuntimeFilterPredicate::evaluate(Chunk* chunk, uint
         for (uint16_t i = 0; i < sel_size; i++) {
             uint16_t idx = sel[i];
             target_sel[new_size] = idx;
-            new_size += _result[data[idx]];
+            new_size += _dict_codes_selection[data[idx]];
         }
     }
     return new_size;
 }
 
 Status DictColumnRuntimeFilterPredicate::prepare() {
-    DCHECK(_rf != nullptr);
-    if (!_result.empty()) {
-        return Status::OK();
-    }
-    auto binary_column = BinaryColumn::create();
-    std::vector<Slice> data_slice;
-    data_slice.reserve(_dict_words.size());
-    for (const auto& word : _dict_words) {
-        data_slice.emplace_back(word.data(), word.size());
-    }
-    binary_column->append_strings(data_slice.data(), data_slice.size());
-
-    RuntimeFilter::RunningContext ctx;
-    ctx.use_merged_selection = false;
-    ctx.compatibility = false;
-    ctx.selection.assign(_dict_words.size(), 1);
-    ctx.exchange_hash_function_version = _rf_desc->exchange_hash_function_version();
-
-    if (_rf->num_hash_partitions() > 0) {
-        // compute hash
-        ctx.hash_values.resize(binary_column->size());
-        _rf->compute_partition_index(_rf_desc->layout(), {binary_column.get()}, &ctx);
-    }
-    _rf->evaluate(binary_column.get(), &ctx);
-    _result.resize(_dict_words.size());
-
-    for (size_t i = 0; i < _dict_words.size(); ++i) {
-        _result[i] = ctx.selection[i];
-    }
-
-    return Status::OK();
+    return refresh_if_updated();
 }
 
 bool RuntimeFilterPredicates::any_filter_ready() const {
     for (const auto* pred : _rf_predicates) {
-        if (pred->get_rf_desc()->runtime_filter(_driver_sequence) != nullptr) {
+        if ((pred->get_rf_desc() != nullptr && pred->get_rf_desc()->runtime_filter(_driver_sequence) != nullptr) ||
+            pred->has_rf()) {
             return true;
         }
     }
     return false;
+}
+
+Status RuntimeFilterPredicates::refresh_dict_filters(int64_t* rf_eval_timer_ns) {
+    if (LIKELY(!_has_dict_filters)) {
+        return Status::OK();
+    }
+    for (auto* pred : _rf_predicates) {
+        if (pred->is_dict_filter()) {
+            RETURN_IF_ERROR(pred->refresh_if_updated(_driver_sequence, rf_eval_timer_ns));
+        }
+    }
+    return Status::OK();
+}
+
+bool RuntimeFilterPredicates::has_always_false_dict_filter() const {
+    if (LIKELY(!_has_dict_filters)) {
+        return false;
+    }
+    for (const auto* pred : _rf_predicates) {
+        if (pred->is_dict_filter() && pred->is_always_false()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void RuntimeFilterPredicates::set_static_dict_mask(ColumnId column_id, const Filter& mask, bool is_nullable) {
+    for (auto* pred : _rf_predicates) {
+        if (pred->get_column_id() == column_id) {
+            pred->set_static_dict_mask(mask, is_nullable);
+        }
+    }
 }
 
 void RuntimeFilterPredicates::_update_selectivity_map() {
@@ -243,8 +457,27 @@ void RuntimeFilterPredicates::_update_selectivity_map() {
             _selectivity_map.emplace(filter_ratio, pred);
             break;
         }
-        if (filter_ratio >= 0.5) {
+        if (filter_ratio >= 0.5 || pred->is_always_false() ||
+            (pred->get_rf_desc() != nullptr && pred->get_rf_desc()->is_topn_filter())) {
             _selectivity_map.emplace(filter_ratio, pred);
+        }
+    }
+    // Always retain mutable Top-N runtime filters and always-false dictionary runtime filters in NORMAL mode,
+    // even when a selective join runtime filter triggered the >= 0.95 shortcut or 3-filter cap above.
+    for (const auto& ctx : _sampling_ctxs) {
+        auto* pred = ctx.pred;
+        if (pred->is_always_false() || (pred->get_rf_desc() != nullptr && pred->get_rf_desc()->is_topn_filter())) {
+            bool already_present = false;
+            for (const auto& [_, existing] : _selectivity_map) {
+                if (existing == pred) {
+                    already_present = true;
+                    break;
+                }
+            }
+            if (!already_present) {
+                double filter_ratio = ctx.filter_rows * 1.0 / _sample_rows;
+                _selectivity_map.emplace(filter_ratio, pred);
+            }
         }
     }
 }

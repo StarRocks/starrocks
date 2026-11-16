@@ -108,10 +108,13 @@ public:
 
     size_t num_predicates() const;
 
+    bool enable_topn_filter_pushdown() const { return _enable_topn_filter_pushdown; }
+
 private:
     const ScanConjunctsManagerOptions& _opts;
     const std::vector<E> _exprs;
     const bool _is_root_builder;
+    const bool _enable_topn_filter_pushdown;
 
     using ChunkPredicateBuilderVar = std::variant<ChunkPredicateBuilder<BoxedExpr, CompoundNodeType::AND>,
                                                   ChunkPredicateBuilder<BoxedExpr, CompoundNodeType::OR>>;
