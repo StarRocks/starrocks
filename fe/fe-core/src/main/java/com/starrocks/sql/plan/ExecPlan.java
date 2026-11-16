@@ -16,13 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
-<<<<<<< HEAD
-=======
-import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
->>>>>>> 7161133 ([BugFix][RB-1549] Fix literal values leaking past enable_sql_desensitize_in_log (#83313))
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.ProfilingExecPlan;
@@ -39,12 +33,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.ast.expression.ExprToSql;
-import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.common.AIModelConfigs;
->>>>>>> 7161133 ([BugFix][RB-1549] Fix literal values leaking past enable_sql_desensitize_in_log (#83313))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;

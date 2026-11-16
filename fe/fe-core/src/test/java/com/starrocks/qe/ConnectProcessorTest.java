@@ -81,15 +81,12 @@ import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-<<<<<<< HEAD
 import mockit.Mocked;
-=======
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.Logger;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
->>>>>>> 7161133 ([BugFix][RB-1549] Fix literal values leaking past enable_sql_desensitize_in_log (#83313))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -1473,13 +1470,13 @@ public class ConnectProcessorTest extends DDLTestBase {
         }
     }
 
-<<<<<<< HEAD
     private ByteBuffer createQueryPacket(String sql) {
         MysqlSerializer serializer = MysqlSerializer.newInstance();
         serializer.writeInt1(3);
         serializer.writeEofString(sql);
         return serializer.toByteBuffer();
-=======
+    }
+
     // Runs one query with enable_sql_desensitize_in_log on and returns what the given classes logged,
     // including the messages of any logged throwable and its causes.
     private List<String> logsOfDesensitizedQuery(String sql, Class<?>... loggingClasses) throws Exception {
@@ -1544,6 +1541,5 @@ public class ConnectProcessorTest extends DDLTestBase {
         for (String line : lines) {
             Assertions.assertFalse(line.contains("SECRET_EXEC"), line);
         }
->>>>>>> 7161133 ([BugFix][RB-1549] Fix literal values leaking past enable_sql_desensitize_in_log (#83313))
     }
 }
