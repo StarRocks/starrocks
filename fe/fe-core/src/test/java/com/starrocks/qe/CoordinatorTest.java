@@ -66,6 +66,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.compress.utils.Lists;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -182,11 +183,8 @@ public class CoordinatorTest extends PlanTestBase {
             Future<?> report = worker.submit(() -> coordinator.updateFragmentExecStatus(params));
             Assertions.assertTrue(reporting.await(5, TimeUnit.SECONDS));
             if (loadChannel || loadInformation) {
-                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-                while (!deploymentLock.hasQueuedThreads() && System.nanoTime() < deadline) {
-                    Thread.sleep(1);
-                }
-                Assertions.assertTrue(deploymentLock.hasQueuedThreads(), "load data must retain its lock");
+                Awaitility.await().alias("load report waiting for the deployment lock")
+                        .atMost(5, TimeUnit.SECONDS).until(deploymentLock::hasQueuedThreads);
                 verify(profile, never()).updateLoadChannelProfile(any());
                 verify(profile, never()).updateLoadInformation(any(), any());
                 deploymentLock.unlock();
