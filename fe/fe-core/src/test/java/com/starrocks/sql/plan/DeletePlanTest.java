@@ -14,6 +14,16 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> bcbbb1a1454... [BugFix][RB-1622] Reject row-level DELETE on Iceberg format version 1 tables (#69944)
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
@@ -130,6 +140,65 @@ public class DeletePlanTest extends PlanTestBase {
         assertTrue(execPlan.isIcebergMetadataDelete());
     }
 
+<<<<<<< HEAD
+=======
+    // Format version 1 has no delete files: row-level deletes must fail at plan time, not at commit.
+    @Test
+    public void testRowLevelIcebergDeleteOnFormatVersion1IsRefused() {
+        mockFormatVersion1IcebergTables();
+        String[] deleteStatements = {
+                "delete from iceberg0.unpartitioned_db.t0 where id = 1",
+                "delete from iceberg0.partitioned_db.t1 where id > 100 and `date` >= '2023-01-01'",
+                "delete from iceberg0.unpartitioned_db.t0 where id in (select id from iceberg0.partitioned_db.t1)"
+        };
+        for (String sql : deleteStatements) {
+            SemanticException e = Assertions.assertThrows(SemanticException.class, () -> getDeleteExecPlan(sql), sql);
+            assertTrue(e.getMessage().contains("DELETE on Iceberg format version 1 table"), e.getMessage());
+            assertTrue(e.getMessage().contains("require format version 2 or later"), e.getMessage());
+        }
+    }
+
+    // Metadata deletes write no delete files, so they remain supported on format version 1 tables.
+    @Test
+    public void testMetadataIcebergDeleteOnFormatVersion1StillPlans() throws Exception {
+        mockFormatVersion1IcebergTables();
+        new MockUp<MockIcebergMetadata>() {
+            @Mock
+            public boolean canDeleteUsingMetadata(Table table, ScalarOperator predicate) {
+                return true;
+            }
+        };
+        ExecPlan execPlan = getDeleteExecPlan("delete from iceberg0.partitioned_db.t1 where `date` = '2023-01-01'");
+        assertTrue(execPlan.isIcebergMetadataDelete());
+    }
+
+    // Format version 2 keeps writing position deletes.
+    @Test
+    public void testRowLevelIcebergDeleteOnFormatVersion2StillPlans() throws Exception {
+        ExecPlan execPlan = getDeleteExecPlan("delete from iceberg0.unpartitioned_db.t0_v2 where id = 1");
+        assertEquals(2, execPlan.getFragments().get(0).sinkToThrift()
+                .getIceberg_table_sink().getFormat_version());
+    }
+
+    private static void mockFormatVersion1IcebergTables() {
+        new MockUp<IcebergTable>() {
+            @Mock
+            public int getFormatVersion() {
+                return 1;
+            }
+        };
+    }
+
+    private static void mockEncryptedIcebergTables() {
+        new MockUp<TestTables.TestTable>() {
+            @Mock
+            public Map<String, String> properties() {
+                return Map.of(TableProperties.ENCRYPTION_TABLE_KEY, "test-key");
+            }
+        };
+    }
+
+>>>>>>> bcbbb1a1454... [BugFix][RB-1622] Reject row-level DELETE on Iceberg format version 1 tables (#69944)
     @Test
     public void testIcebergDeleteWithSubquery() throws Exception {
         // Test DELETE with subquery (like: DELETE WHERE id IN (SELECT id FROM other_table))
