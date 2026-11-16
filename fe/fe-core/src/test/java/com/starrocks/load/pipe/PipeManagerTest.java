@@ -17,12 +17,8 @@ package com.starrocks.load.pipe;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
 import com.starrocks.analysis.BrokerDesc;
-=======
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
->>>>>>> 1982f13 ([BugFix][RB-751] Stop a pipe only on consecutive task failures (#81873))
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
@@ -97,7 +93,6 @@ import org.mockito.Mockito;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
@@ -351,8 +346,6 @@ public class PipeManagerTest {
         };
     }
 
-<<<<<<< HEAD
-=======
     /**
      * Stubs {@link TaskManager#executeTaskAsync} for the duration of the current test.
      *
@@ -383,15 +376,6 @@ public class PipeManagerTest {
         return submit;
     }
 
-    /** An accepted submission whose task run has been cancelled. */
-    private static SubmitResult submittedWithCancelledRun() {
-        SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
-        FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.FAILED);
-        submit.setFuture(future);
-        future.cancel(true);
-        return submit;
-    }
-
     /** An accepted submission whose task run has already finished as SUCCESS. */
     private static SubmitResult submittedWithSucceededRun() {
         SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
@@ -410,7 +394,7 @@ public class PipeManagerTest {
             private int seq = 0;
 
             @Mock
-            public List<FileStatus> listFileMeta(String path, Map<String, String> properties, boolean skipDir) {
+            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc, boolean skipDir) {
                 seq++;
                 return Lists.newArrayList(new FileStatus(1024, false, 1, 1024, seq, new Path("file-" + seq)));
             }
@@ -431,7 +415,6 @@ public class PipeManagerTest {
         }
     }
 
->>>>>>> 1982f13 ([BugFix][RB-751] Stop a pipe only on consecutive task failures (#81873))
     private void mockPollError(int errorCount) {
         // poll error
         MockUp<HdfsUtil> mockHdfs = new MockUp<HdfsUtil>() {
@@ -1043,25 +1026,27 @@ public class PipeManagerTest {
         failCurrentTask(pipe, Pipe.FAILED_TASK_THRESHOLD + 1);
         Assertions.assertEquals(Pipe.State.ERROR, pipe.getState());
 
-        replayAlterPipeLogs(follower);
+        replayPipeOpLogs(follower);
+        // Replaying a pipe op puts a new Pipe object in place of the old one.
+        followerPipe = follower.mayGetPipe(new PipeName(PIPE_TEST_DB, pipeName)).get();
         Assertions.assertEquals(Pipe.State.ERROR, followerPipe.getState());
 
         dropPipe(pipeName);
     }
 
-    /** Replays every queued ALTER PIPE journal entry into {@code follower}. */
-    private static void replayAlterPipeLogs(PipeManager follower) throws Exception {
+    /** Replays every queued pipe op journal entry into {@code follower}. */
+    private static void replayPipeOpLogs(PipeManager follower) throws Exception {
         while (true) {
-            AlterPipeLog log;
+            PipeOpEntry entry;
             try {
-                log = (AlterPipeLog) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_PIPE);
+                entry = (PipeOpEntry) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_PIPE);
             } catch (Exception e) {
                 if (StringUtils.contains(e.getMessage(), "queue is empty")) {
                     return;
                 }
                 throw e;
             }
-            follower.getRepo().replayAlterPipe(log);
+            follower.getRepo().replay(entry);
         }
     }
 
