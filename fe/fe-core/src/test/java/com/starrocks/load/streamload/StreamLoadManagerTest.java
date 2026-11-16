@@ -70,6 +70,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class StreamLoadManagerTest {
 
@@ -583,7 +584,8 @@ public class StreamLoadManagerTest {
 
                 @Mock
                 public boolean retryAbortIfNeeded(long currentMs) {
-                    Assertions.assertFalse(streamLoadManager.lock.isWriteLockedByCurrentThread());
+                    ReentrantReadWriteLock managerLock = Deencapsulation.getField(streamLoadManager, "lock");
+                    Assertions.assertFalse(managerLock.isWriteLockedByCurrentThread());
                     abortRetries.incrementAndGet();
                     return false;
                 }

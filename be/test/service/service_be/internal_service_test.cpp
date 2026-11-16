@@ -24,11 +24,8 @@
 #include <memory>
 #include <mutex>
 #include <string>
-<<<<<<< HEAD
-=======
 #include <tuple>
 #include <utility>
->>>>>>> eafcf6d2faa... [Enhancement][RB-787] Tune routine load Kafka consumer reuse and fetch back-off, and evict sync stream load tasks oldest first (#69436)
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"

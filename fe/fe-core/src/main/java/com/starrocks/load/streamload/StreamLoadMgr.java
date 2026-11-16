@@ -81,15 +81,11 @@ public class StreamLoadMgr implements MemoryTrackable {
 
     // Only used for sync stream load
     // txnId -> StreamLoadTask (only StreamLoadTask can be sync)
-<<<<<<< HEAD
     private Map<Long, StreamLoadTask> txnIdToSyncStreamLoadTasks;
-=======
-    protected Map<Long, StreamLoadTask> txnIdToSyncStreamLoadTasks;
     // The sync stream load tasks, such as routine load tasks, in the order they were added. When there are too many
     // tasks, the oldest finished ones go first, so a frequent routine load keeps its recent history listed and each
     // added task evicts about one instead of scanning all of them.
     protected Deque<StreamLoadTask> syncStreamLoadTaskQueue;
->>>>>>> eafcf6d2faa... [Enhancement][RB-787] Tune routine load Kafka consumer reuse and fetch back-off, and evict sync stream load tasks oldest first (#69436)
 
     private Map<Long, Map<String, AbstractStreamLoadTask>> dbToLabelToStreamLoadTask;
 
@@ -380,18 +376,12 @@ public class StreamLoadMgr implements MemoryTrackable {
                 syncStreamLoadTaskQueue.add((StreamLoadTask) task);
             }
 
-<<<<<<< HEAD
-        // register txn state listener
-        if (addTxnCallback) {
-            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(task);
-=======
             // register txn state listener
-            if (!task.isFinal() && addTxnCallback) {
+            if (addTxnCallback) {
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(task);
             }
         } finally {
             writeUnlock();
->>>>>>> eafcf6d2faa... [Enhancement][RB-787] Tune routine load Kafka consumer reuse and fetch back-off, and evict sync stream load tasks oldest first (#69436)
         }
     }
 
