@@ -612,6 +612,12 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         return ICEBERG;
     }
 
+    // The interface default, declared here so a test can MockUp it to plan a metadata delete.
+    @Override
+    public boolean canDeleteUsingMetadata(com.starrocks.catalog.Table table, ScalarOperator predicate) {
+        return false;
+    }
+
     @Override
     public Database getDb(ConnectContext context, String dbName) {
         return new Database(idGen.getAndIncrement(), dbName);
