@@ -19,6 +19,7 @@ The following fields are provided in `load_tracking_logs`:
 | LABEL         | The label of the load job.                 |
 | DATABASE_NAME | The database that the load job belongs to. |
 | TRACKING_LOG  | Errors (if any) of the load job.           |
+| TYPE          | The type of the load job, such as `BROKER`, `INSERT`, `ROUTINE_LOAD`, or `STREAM_LOAD`. |
 
 :::tip
 To query the view `load_tracking_logs` you will need to filter on either a `JOB_ID` or a `LABEL`.

@@ -433,7 +433,8 @@ The following example restores all tables from the database `sr_hub` in the snap
 RESTORE SNAPSHOT sr_all_backup
 FROM test_repo
 DATABASE sr_hub
-ON (ALL TABLES);
+ON (ALL TABLES)
+PROPERTIES ("backup_timestamp" = "2024-12-09-10-52-10-940");
 ```
 
 The following example restores one of all tables from the database `sr_hub` in the snapshot `sr_all_backup`.
@@ -663,4 +664,4 @@ You can optimize the performance of BACKUP or RESTORE jobs by modifying the foll
 - If there is an existing table that has a duplicated name with the table to be restored, StarRocks first checks whether or not the schema of the existing table matches that of the table to be restored. If the schemas match, StarRocks overwrites the existing table with the data in the snapshot. If the schema does not match, the RESTORE job fails. You can either rename the table to be restored using the keyword `AS`, or delete the existing table before restoring data.
 - If the RESTORE job overwrites an existing database, table, or partition, the overwritten data cannot be restored after the job enters the COMMIT phase. If the RESTORE job fails or is canceled at this point, the data may be corrupted and inaccessible. In this case, you can only perform the RESTORE operation again and wait for the job to complete. Therefore, we recommend that you do not restore data by overwriting unless you are sure that the current data is no longer used. The overwrite operation first checks metadata consistency between the snapshot and the existing database, table, or partition. If an inconsistency is detected, the RESTORE operation cannot be performed.
 - Currently, StarRocks does not support backing up and restoring the configuration data related to user accounts, privileges, and resource groups.
-- Currently, StarRocks does not support backing up and restoring the Colocate Join relationship among tables.
+- By default, StarRocks does not restore the Colocate Join relationship among tables. From v3.2.10 and v3.3.2 onwards, in shared-nothing clusters, you can set the FE configuration item `enable_colocate_restore` to `true` so that the restored tables keep their Colocate Join relationship. This applies only to tables that do not already exist in the target cluster.

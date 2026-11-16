@@ -57,7 +57,7 @@ SET runtime_profile_report_interval = 30;
 | enable_profile                    | セッション変数 | true/false      | false   | Query Profile を有効化                                                                     |
 | pipeline_profile_level            | セッション変数 | 1/2             | 1       | 1: メトリクスをマージ; 2: 元の構造を保持 (可視化ツールを無効化)                             |
 | runtime_profile_report_interval   | セッション変数 | 正の整数        | 10      | 実行時 Query Profile の報告間隔 (秒)                                                        |
-| big_query_profile_threshold       | セッション変数 | 文字列          | 0s      | この期間を超えるクエリに対して Query Profile を有効化 (例: '30s', '500ms', '60m')            |
+| big_query_profile_threshold       | セッション変数 | 文字列          | 30s     | この期間を超えるクエリに対して Query Profile を有効化 (例: '30s', '500ms', '60m')。デフォルト値は v3.3.12、v3.4.2、および v3.5.0 以降では `30s`、それ以前のバージョンでは `0s`（無効）です。 |
 | enable_statistics_collect_profile | FE ダイナミック | true/false      | false   | 統計収集関連のクエリに対する Query Profile を有効化                                         |
 
 ## Query Profile の取得方法

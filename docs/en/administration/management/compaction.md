@@ -236,16 +236,16 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
 - Introduced in: v3.1.0
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_tables" = "11111;22222");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "11111;22222");
 ```
 
-##### lake_compaction_disable_tables
+##### lake_compaction_disable_ids
 
 - Default：""
 - Type：String
 - Unit：-
 - Is mutable：Yes
-- Description：Disable compaction for certain tables. This will not affect compaction that has started. The value of this item is table ID. Multiple values are separated by ';'.
+- Description：Disable compaction for certain tables or partitions. This will not affect compaction that has started. The value of this item is table ID or partition ID. Multiple values are separated by ';'. In versions earlier than v3.4.5 and v3.5.0, this item is named `lake_compaction_disable_tables` and supports only table IDs. The old name is still accepted as an alias.
 - Introduced in：v3.2.7
 
 #### CN parameters

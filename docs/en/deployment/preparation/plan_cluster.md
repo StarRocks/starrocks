@@ -81,7 +81,7 @@ If the BE storage space runs out as your raw data grows, you can supplement it b
 
 - Add extra storage volumes to your BE nodes
 
-  You can also add extra storage volumes to existing BE nodes. For detailed instructions, see [Scale your StarRocks cluster - Scale BE up](../../administration/management/Scale_up_down.md).
+  You can also add extra storage volumes to existing BE nodes. To do so, add the paths of the new storage volumes to the BE configuration item [`storage_root_path`](../../administration/configuration/BE_parameters/stats_storage.md#storage_root_path).
 
   After extra storage volumes are added, StarRocks automatically re-balances the data in all tables.
 

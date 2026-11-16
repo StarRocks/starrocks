@@ -208,7 +208,8 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
             LakeTableAddIndexJob job = (LakeTableAddIndexJob) result;
             assertEquals(1, job.getNewIndexes().size());
             assertEquals(1, job.getIndexesToAdd().size());
-            verify(table).setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+            // The state is left to process(), which sets it once the job is journaled.
+            verify(table, never()).setState(any());
         }
     }
 
@@ -280,10 +281,8 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
                     Collections.<AlterClause>singletonList(clause));
             assertNull(result);
         }
-        // The state should NOT be SCHEMA_CHANGE. Since the throw happened
-        // before stateSet=true was ever flipped, no setState call should have
-        // landed. (Verifies the M1 fix branch did not over-revert.)
-        verify(table, never()).setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        // A failed build leaves the table state untouched.
+        verify(table, never()).setState(any());
     }
 
     @Test
@@ -359,7 +358,8 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
             assertEquals(1, job.getDropInfos().size());
             assertEquals(101L, job.getDropInfos().get(0).getIndex_id());
             assertEquals(TIndexType.BITMAP, job.getDropInfos().get(0).getIndex_type());
-            verify(table).setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+            // The state is left to process(), which sets it once the job is journaled.
+            verify(table, never()).setState(any());
         }
     }
 
@@ -439,7 +439,8 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
                 wireColumns.addAll(index.getColumns());
             }
             assertEquals(Set.of("c1", "c2"), wireColumns);
-            verify(table).setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+            // The state is left to process(), which sets it once the job is journaled.
+            verify(table, never()).setState(any());
         }
     }
 
@@ -472,9 +473,8 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
 
     @Test
     public void testTryBuildLakeAddBloomFilterJob_GetNextIdThrowsLeavesStateUntouched() throws Exception {
-        // Throw from getNextId() — that's BEFORE the setState(SCHEMA_CHANGE)
-        // line, so the catch block runs with stateSet=false: NO setState call
-        // should have fired (neither SCHEMA_CHANGE nor revert).
+        // Throw from getNextId(): the builder returns null without touching
+        // the table state.
         SchemaChangeHandler handler = newHandler();
         OlapTable table = stubLakeTable("c1");
         when(table.getBfFpp()).thenReturn(0.05);
@@ -510,6 +510,8 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
             // Plain BF uses index_id=-1 sentinel.
             assertEquals(-1L, info.getIndex_id());
             assertEquals(TIndexType.BLOOM_FILTER, info.getIndex_type());
+            // The state is left to process(), which sets it once the job is journaled.
+            verify(table, never()).setState(any());
         }
     }
 

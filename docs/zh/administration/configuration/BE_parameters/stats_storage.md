@@ -1073,7 +1073,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：BE 节点释放快照任务的最大线程数。
+- 描述：BE 节点释放快照任务的最大线程数。在存算分离集群中，该线程池还用于执行 Vacuum、Full Vacuum 以及事务日志删除任务。
 - 引入版本：-
 
 ### repair_compaction_interval_seconds

@@ -24,7 +24,7 @@ TRACE { TIMES | VALUES | LOGS | ALL } [ <module> ] <query_statement>
   - `BASE`: The base module.
   - `MV`: The materialized view module.
   - `OPTIMIZER`: The optimizer module.
-  - `SCHEDULE`: The schedule module.
+  - `SCHEDULER`: The schedule module.
   - `EXTERNAL`: The external table-related module.
 
   If no module is specified, `BASE` is used.

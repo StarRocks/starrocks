@@ -24,7 +24,7 @@ GRANT 操作を実行する前に、関連するユーザーまたはロール�
 :::tip
 
 - `user_admin` ロールを持つユーザーのみが、他のユーザーやロールに任意の権限を付与できます。
-- ロールがユーザーに付与された後、このロールとして操作を実行する前に [SET ROLE](SET_ROLE.md) を実行してこのロールを有効化する必要があります。すべてのデフォルトロールをログイン時に有効化したい場合は、[ALTER USER](ALTER_USER.md) または [SET DEFAULT ROLE](SET_DEFAULT_ROLE.md) を実行してください。システム内のすべての権限をすべてのユーザーにログイン時に有効化したい場合は、グローバル変数 `SET GLOBAL activate_all_roles_on_login = TRUE;` を設定してください。
+- ロールがユーザーに付与された後、このロールとして操作を実行する前に [SET ROLE](SET_ROLE.md) を実行してこのロールを有効化する必要があります。すべてのデフォルトロールをログイン時に有効化したい場合は、[ALTER USER](ALTER_USER.md) または [SET DEFAULT ROLE](SET_DEFAULT_ROLE.md) を実行してください。すべてのユーザーに対して、付与されたすべてのロールをログイン時に有効化したい場合は、グローバル変数 `SET GLOBAL activate_all_roles_on_login = TRUE;` を設定してください。
 - 一般ユーザーは、`WITH GRANT OPTION` キーワードを持つ権限のみを他のユーザーやロールに付与できます。
 :::
 

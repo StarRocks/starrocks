@@ -44,7 +44,7 @@ description: "StarRocks のバージョン命名規則。MAJOR.MINOR.PATCH 形�
 ソフトウェアパッケージの命名規則は: `StarRocks-x.y.z[-rcxx]{-os}{-arch}.tar.gz` です。（つまり、主な形式は `Product-version-os-arch`）
 1. x.y.z: 三桁のバージョン番号規則に従います。`-rcxx` はオプションのプレリリースバージョン番号で、`-rc01`、`-rc02` などです。
 2. OS には `ubuntu`、`centos` が含まれます。必須です。
-3. ARCH には `amd64` が含まれます。必須です。（`arm64` のコミュニティ版はまだありません。）
+3. ARCH には `amd64` が含まれます。必須です。（ソフトウェアパッケージは `amd64` 向けのみ提供されています。`arm64` に StarRocks をデプロイする場合は、StarRocks Docker イメージからデプロイメントファイルを準備する必要があります。[デプロイメントファイルの準備](../deployment/preparation/prepare_deployment_files.md#arm-ベースの-cpu-の場合) を参照してください。）
 
 #### ソフトウェアパッケージ名の例
 1. `StarRocks-3.4.0-rc01-ubuntu-amd64.tar.gz`: Ubuntu Linux 用にビルドされた 3.4.0 のプレリリースバージョン。

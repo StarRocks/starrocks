@@ -20,8 +20,8 @@ products: [oss, enterprise, cloud, anywhere]
 ## 语法
 
 ```SQL
-CREATE RESOURCE GROUP resource_group_name
-TO CLASSIFIER1, CLASSIFIER2, ...
+CREATE RESOURCE GROUP [IF NOT EXISTS] [OR REPLACE] resource_group_name
+[TO CLASSIFIER1, CLASSIFIER2, ...]
 WITH resource_limit
 ```
 
@@ -29,7 +29,11 @@ WITH resource_limit
 
 - `resource_group_name`：需要创建的资源组名称。
 
-- `CLASSIFIER`：用于区分需要被施加资源限制的查询的分类器，采用 `"key"="value"` 对形式。您可以为同一个资源组设置多个分类器。
+- `IF NOT EXISTS`：如果同名资源组已存在，则该语句不执行任何操作，也不报错。
+
+- `OR REPLACE`：如果同名资源组已存在，则用新创建的资源组替换该资源组。
+
+- `CLASSIFIER`：用于区分需要被施加资源限制的查询的分类器，采用 `"key"="value"` 对形式。您可以为同一个资源组设置多个分类器。`TO` 及分类器为必填项，但 `type` 为 `mv` 的资源组（自 v3.1.0 起支持）除外，该类资源组不支持分类器。
 
   - 分类器可以包含以下参数：
 

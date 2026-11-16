@@ -43,13 +43,6 @@ The time spent on the alteration operation relates to the data volume. In genera
 
 This error occurs when the metadata of Apache Hive partitions cannot be obtained. To solve this problem, copy **core-sit.xml** and **hdfs-site.xml** to the **fe.conf** file and the **be.conf** file.
 
-## This error "planner use long time 3000 remaining task num 1" occurs when I query data
-
-This error occurs usually due to a full garbage collection (full GC), which can be checked by using backend monitoring and the **fe.gc** log. To solve this problem, perform one of the following operations:
-
-- Allows SQL's client to access multiple frontends (FEs) simultaneously to spread the load.
-- Change the heap size of Java Virtual Machine (JVM) from 8 GB to 16 GB in the **fe.conf** file to increase memory and reduce the impact of full GC.
-
 ## When cardinality of column A is small, the query results of `select B from tbl order by A limit 10` vary each time
 
 SQL can only guarantee that column A is ordered, and it cannot guarantee that the order of column B is the same for each query. MySQL can guarantee the order of column A and column B because it is a standalone database.
@@ -314,7 +307,7 @@ There are three common scenarios:
 Memory analysis methods:
 
 ```Bash
-curl -XGET -s http://BE_IP:BE_HTTP_PORT/metrics | grep "^starrocks_be_.*_mem_bytes\|^starrocks_be_tcmalloc_bytes_in_use"
+curl -XGET -s http://BE_IP:BE_HTTP_PORT/metrics | grep "^starrocks_be_.*_mem_bytes\|^starrocks_be_jemalloc_allocated_bytes"
 curl -XGET -s http://BE_IP:BE_HTTP_PORT/mem_tracker
 ```
 
@@ -322,7 +315,9 @@ curl -XGET -s http://BE_IP:BE_HTTP_PORT/mem_tracker
 
 ## What to do when encountering the error `StarRocks planner use long time xxx ms in logical phase`?
 
-1. Analyze `fe.gc.log` to check for Full GC occurrences.
+1. Analyze `fe.gc.log` to check for Full GC occurrences. If Full GC occurs frequently, perform one of the following operations:
+   - Allow the SQL client to access multiple frontends (FEs) simultaneously to spread the load.
+   - Change the heap size of Java Virtual Machine (JVM) from 8 GB to 16 GB in the **fe.conf** file to increase memory and reduce the impact of Full GC.
 2. If the SQL execution plan is complex, increase `new_planner_optimize_timeout` (unit: ms):
 
    ```SQL

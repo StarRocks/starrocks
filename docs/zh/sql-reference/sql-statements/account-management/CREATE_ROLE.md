@@ -28,7 +28,7 @@ CREATE ROLE <role_name>
 
 ## 使用限制
 
-为用户分配角色时，默认每个用户最多可以拥有 64 个角色，您也可以通过 FE 动态参数 `privilege_max_total_roles_per_user` 来根据需求调整这一限制。角色的嵌套关系最多为 16 层，您也可以通过 FE 动态参数 `privilege_max_role_depth` 来进行调整。
+为用户分配角色时，默认每个用户最多可以拥有 64 个角色（包括通过已授予角色继承的角色），该限制在将角色授予用户时进行检查。您也可以通过 FE 动态参数 `privilege_max_total_roles_per_user` 来根据需求调整这一限制。角色的嵌套关系最多为 16 层，您也可以通过 FE 动态参数 `privilege_max_role_depth` 来进行调整。
 
 ## 示例
 

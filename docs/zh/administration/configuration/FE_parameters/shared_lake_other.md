@@ -521,7 +521,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: 在存算分离模式下禁用 Compaction 的表或分区列表。格式为 `tableId1;partitionId2`，以分号分隔，例如 `12345;98765`。
-- 引入版本: v3.4.4
+- 引入版本: v3.4.5, v3.5.0
 
 ### `lake_compaction_history_size`
 
@@ -564,7 +564,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: -
 - 是否可变: Yes
-- 描述: 存算分离集群中分区的 Compaction Score 上限。`0` 表示无上限。此项仅在 `lake_enable_ingest_slowdown` 设置为 `true` 时生效。当分区的 Compaction Score 达到或超过此上限时，传入的加载任务将被拒绝。从 v3.3.6 开始，默认值从 `0` 更改为 `2000`。
+- 描述: 存算分离集群中分区的 Compaction Score 上限。`0` 表示无上限。此项仅在 `lake_enable_ingest_slowdown` 设置为 `true` 时生效。当分区的 Compaction Score 超过此上限时，传入的加载任务将被拒绝。从 v3.3.6 开始，默认值从 `0` 更改为 `2000`。
 - 引入版本: v3.2.0
 
 ### `lake_compaction_interval_ms_on_success`
@@ -603,13 +603,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 触发存算分离集群中数据摄取减速的 Compaction Score 阈值。此配置仅在 `lake_enable_ingest_slowdown` 设置为 `true` 时生效。
 - 引入版本: v3.2.0
 
-### `lake_publish_version_max_threads`
+### `publish_version_max_threads`
 
 - 默认值: 512
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 存算分离集群中版本发布任务的最大线程数。
+- 描述: 存算分离集群中版本发布任务的最大线程数。自 v4.0.5 和 v4.1.0 起，该参数由 `lake_publish_version_max_threads` 更名为 `publish_version_max_threads`。旧参数名仍可作为别名使用。
 - 引入版本: v3.2.0
 
 ### `lake_publish_version_timeout_ms`
@@ -809,7 +809,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 计数
 - 是否可变: Yes
-- 描述: 设置在为 lake（云原生）表构建发布批次时，可能分组的连续事务版本的上限。该值传递给事务图批处理例程（参见 getReadyToPublishTxnListBatch），用于限定 TransactionStateBatch 的候选范围大小。较大的值可以通过批处理更多提交来提高发布吞吐量，但会增加原子发布的范围（更长的可见性延迟和更大的回滚表面），并且当版本不连续时可能会在运行时受到限制。根据工作负载和可见性/延迟要求进行调整。
+- 描述: 设置在为 lake（云原生）表构建发布批次时，可能分组的连续事务版本的上限。该值传递给事务图批处理例程（参见 getReadyToPublishTxnListBatch），用于限定 TransactionStateBatch 的候选范围大小。较大的值可以通过批处理更多提交来提高发布吞吐量，但会增加原子发布的范围（更长的可见性延迟和更大的回滚表面），并且批次可能在达到该上限之前结束。批次会在 Replication 事务或 DELETE 事务（这类事务单独发布）之前结束；当 `lake_enable_batch_publish_multi_table` 为 `false` 时，也会在写入多张表的事务之前结束。此外，当某个分区的版本不连续（例如 Schema Change 占用了一个版本）或其已导入的物化索引发生变化时，以及在表已被删除的事务之前，批次也会结束。当 `lake_enable_batch_publish_retry_freeze` 为 `true` 时，重试的批次只包含上一次尝试中的事务。根据工作负载和可见性/延迟要求进行调整。
 - 引入版本: v3.2.0
 
 ### `lake_batch_publish_min_version_num`
@@ -818,7 +818,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 已废弃，设置后不生效。保留该参数只是为了让 **fe.conf** 中已有的配置以及针对该参数的 `ADMIN SET FRONTEND CONFIG` 语句不会报错。存算分离模式下，批量发布每一轮都会从每个无需再等待其他事务的已提交事务开始组成批次，不论批次大小都会发布，每个批次最多包含 `lake_batch_publish_max_version_num` 个事务。此前，该参数指定一个批次至少包含的事务数，事务数不足的批次在当轮不发布。如果某个批次始终达不到这一数量（例如某张表最后几次导入之后再没有新的导入，或者导入排在一个同时写入多张表的事务之后），该批次每一轮都会被跳过，其中已提交的事务一直不可见，后续写入这些表的导入也只能排队等待。
+- 描述: 已废弃。自 v4.2.1 起，设置后不生效。保留该参数只是为了让 **fe.conf** 中已有的配置以及针对该参数的 `ADMIN SET FRONTEND CONFIG` 语句不会报错。存算分离模式下，批量发布每一轮都会从每个无需再等待其他事务的已提交事务开始组成批次，不论批次大小都会发布，每个批次最多包含 `lake_batch_publish_max_version_num` 个事务。此前，该参数指定一个批次至少包含的事务数，事务数不足的批次在当轮不发布。如果某个批次始终达不到这一数量（例如某张表最后几次导入之后再没有新的导入，或者导入排在一个同时写入多张表的事务之后），该批次每一轮都会被跳过，其中已提交的事务一直不可见，后续写入这些表的导入也只能排队等待。
 - 引入版本: v3.2.0
 
 ### `lake_publish_version_retry_interval_ms`
@@ -836,7 +836,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 启用后，PublishVersionDaemon 会为同一个 Lake（存算分离）表/分区批处理就绪事务，并将其版本一起发布，而不是为每个事务单独发布。在 RunMode shared-data 中，守护进程调用 getReadyPublishTransactionsBatch() 并使用 publishVersionForLakeTableBatch(...) 执行分组发布操作（减少 RPC 并提高吞吐量）。禁用时，守护进程回退到通过 publishVersionForLakeTable(...) 进行的逐事务发布。实现通过内部集合协调进行中的工作，以避免在切换开关时重复发布，并且受 `lake_publish_version_max_threads` 的线程池大小影响。
+- 描述: 启用后，PublishVersionDaemon 会为同一个 Lake（存算分离）表/分区批处理就绪事务，并将其版本一起发布，而不是为每个事务单独发布。在 RunMode shared-data 中，守护进程调用 getReadyPublishTransactionsBatch() 并使用 publishVersionForLakeTableBatch(...) 执行分组发布操作（减少 RPC 并提高吞吐量）。禁用时，守护进程回退到通过 publishVersionForLakeTable(...) 进行的逐事务发布。实现通过内部集合协调进行中的工作，以避免在切换开关时重复发布，并且受 `publish_version_max_threads` 的线程池大小影响。
 - 引入版本: v3.2.0
 
 ### `lake_enable_batch_publish_multi_table`
@@ -1252,7 +1252,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: 是否为 Colocate 表启用备份和恢复。`true` 表示为 Colocate 表启用备份和恢复，`false` 表示禁用。
-- 引入版本: v3.2.10, v3.3.3
+- 引入版本: v3.2.10, v3.3.2
 
 ### `enable_external_catalog_information_schema_tables_access_full_metadata`
 

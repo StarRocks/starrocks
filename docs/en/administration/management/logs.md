@@ -24,7 +24,7 @@ The main FE logs include the startup process, cluster state changes, DML/DQL req
 - `sys_log_delete_age`: Controls how long to keep old log files before deletion. Default is 7 day
 - `sys_log_roll_file_index`: Rollover file index strategy (`min`, `max`, or `nomax`). Default is `min`
 - `sys_log_delete_count`: Hard cap on the number of retained rolled files, enforced by the Delete action. Default is `-1` (disabled).
-- `sys_log_roll_mode`: Log rotation mode. Default is `SIZE-MB-1024`, meaning a new log file will be created when the current one reaches 1024 MB. Together with sys_log_roll_interval, this indicates that FE logs can be rotated either daily or based on file size
+- `log_roll_size_mb`: Maximum size of a single log file. Default is 1024, meaning a new log file will be created when the current one reaches 1024 MB. Together with sys_log_roll_interval, this indicates that FE logs can be rotated either daily or based on file size
 - `sys_log_enable_compress`: Controls whether log compression is enabled. Default is false, meaning compression is disabled
 
 ### `fe.warn.log`
@@ -132,7 +132,7 @@ This is StarRocks’ query audit log, which records detailed information about a
 - `audit_log_dir`: Controls the storage directory for this log
 - `audit_log_roll_num`: Number of files to retain. Default is 90
 - `audit_log_roll_interval`: Specifies the rotation frequency. Default is DAY, meaning daily rotation. When rotation conditions are met, the latest 90 files are retained, and older files are deleted
-- `audit_log_delete_age`: Controls how long old files are kept before deletion. Default is 7 days
+- `audit_log_delete_age`: Controls how long old files are kept before deletion. Default is 30 days
 - `audit_log_roll_file_index`: Rollover file index strategy (`min`, `max`, or `nomax`). Default is `min`
 - `audit_log_delete_count`: Hard cap on the number of retained rolled files, enforced by the Delete action. Default is `-1` (disabled).
 - `audit_log_json_format`: Whether to log in JSON format. Default is false
@@ -191,7 +191,7 @@ SET enable_query_dump = true;
 
 #### Configuration
 
-- `dump_log_dir`: Controls the storage directory for this log
+- `dump_log_dir`: Controls the storage directory for this log. This item is removed from v3.5.16, v4.0.9, and v4.1.0 onwards, and `fe.dump.log` is written to the directory specified by `sys_log_dir`.
 - `dump_log_roll_num`: Number of files to retain. Default is 10
 - `dump_log_modules`: Types of internal log modules. Default is query
 - `dump_log_roll_interval`: Specifies the rotation frequency. Default is DAY, meaning daily rotation. When rotation conditions are met, the latest 10 files are retained, and older files are deleted

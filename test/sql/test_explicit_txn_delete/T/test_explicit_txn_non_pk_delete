@@ -1,0 +1,51 @@
+-- name: test_explicit_txn_non_pk_delete_rejected
+-- A DELETE on a table without a primary key runs as a delete job that begins and commits a
+-- transaction of its own, so it cannot join an explicit transaction. It is rejected (5309) on every
+-- keys type but Primary Key, and ROLLBACK then leaves every row in place.
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE t_dup (k BIGINT NOT NULL, v BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+CREATE TABLE t_uniq (k BIGINT NOT NULL, v BIGINT) UNIQUE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+CREATE TABLE t_agg (k BIGINT NOT NULL, v BIGINT SUM) AGGREGATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+insert into t_dup select g, g from table(generate_series(1, 10)) t(g);
+insert into t_uniq select g, g from table(generate_series(1, 10)) t(g);
+insert into t_agg select g, g from table(generate_series(1, 10)) t(g);
+set enable_sql_transaction = true;
+begin;
+delete from t_dup where k in (1, 2);
+delete from t_uniq where k in (1, 2);
+delete from t_agg where k in (1, 2);
+rollback;
+select count(*) from t_dup where k in (1, 2);
+select count(*) from t_uniq where k in (1, 2);
+select count(*) from t_agg where k in (1, 2);
+-- Outside a transaction the same DELETE still runs.
+delete from t_dup where k in (1, 2);
+select count(*) from t_dup where k in (1, 2);
+drop database db_${uuid0};
+
+
+-- name: test_explicit_txn_pk_delete_with_rejected_non_pk_delete @cloud
+-- A Primary Key table's DELETE joins the transaction. A rejected non-Primary-Key DELETE does not end
+-- the transaction: ROLLBACK undoes the Primary Key DELETE, and COMMIT applies it while the other table
+-- keeps its rows. Tagged @cloud because DELETE in an explicit transaction is supported on shared-data only.
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE t_pk (k BIGINT NOT NULL, v BIGINT) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+CREATE TABLE t_dup (k BIGINT NOT NULL, v BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+insert into t_pk select g, g from table(generate_series(1, 10)) t(g);
+insert into t_dup select g, g from table(generate_series(1, 10)) t(g);
+set enable_sql_transaction = true;
+begin;
+delete from t_pk where k in (1, 2);
+delete from t_dup where k in (1, 2);
+rollback;
+select count(*) from t_pk where k in (1, 2);
+select count(*) from t_dup where k in (1, 2);
+begin;
+delete from t_pk where k in (1, 2);
+delete from t_dup where k in (1, 2);
+commit;
+select count(*) from t_pk where k in (1, 2);
+select count(*) from t_dup where k in (1, 2);
+drop database db_${uuid0};

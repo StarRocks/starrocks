@@ -472,7 +472,7 @@ StarRocks 默认采用[自动异步更新策略](#附录理解元数据自动异
 | metastore_cache_refresh_interval_sec   | 否       | StarRocks 异步更新缓存的 Hudi 表或分区的元数据的时间间隔。单位：秒。默认值：`7200`，即 2 小时。 |
 | remote_file_cache_refresh_interval_sec | 否       | StarRocks 异步更新缓存的 Hudi 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`60`。 |
 | metastore_cache_ttl_sec                | 否       | StarRocks 自动淘汰缓存的 Hudi 表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
-| remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hudi 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
+| remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hudi 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：自 v3.5.7 和 v4.0.0 起为 `86400`，即 24 小时；更早版本为 `129600`，即 36 小时。 |
 
 ### 示例
 
@@ -905,7 +905,7 @@ REFRESH EXTERNAL TABLE <table_name> [PARTITION ('partition_name', ...)]
 - 异步更新 `p1` 的缓存元数据的时间间隔（通过 `metastore_cache_refresh_interval_sec` 参数指定）为 2 小时。
 - 异步更新 `p1` 下数据文件的缓存元数据的时间间隔（通过 `remote_file_cache_refresh_interval_sec` 参数指定）为 60 秒。
 - 自动淘汰 `p1` 的缓存元数据的时间间隔（通过 `metastore_cache_ttl_sec` 参数指定）为 24 小时。
-- 自动淘汰 `p1` 下数据文件的缓存元数据的时间间隔（通过 `remote_file_cache_ttl_sec` 参数指定）为 36 小时。
+- 自动淘汰 `p1` 下数据文件的缓存元数据的时间间隔（通过 `remote_file_cache_ttl_sec` 参数指定）为 24 小时。
 
 如下图所示。
 
@@ -917,4 +917,4 @@ StarRocks 采用如下策略更新和淘汰缓存的元数据：
 - 如果另有查询再次命中 `p1`，并且当前时间距离上次更新的时间间隔超过 60 秒，则 StarRocks 会更新 `p1` 下数据文件的缓存元数据。
 - 如果另有查询再次命中 `p1`，并且当前时间距离上次更新的时间间隔超过 2 小时，则 StarRocks 会更新 `p1` 的缓存元数据。
 - 如果继上次更新结束后，`p1` 在 24 小时内未被访问，则 StarRocks 会淘汰 `p1` 的缓存元数据。后续有查询再次命中 `p1` 时，会重新缓存 `p1` 的元数据。
-- 如果继上次更新结束后，`p1` 在 36 小时内未被访问，则 StarRocks 会淘汰 `p1` 下数据文件的缓存元数据。后续有查询再次命中 `p1` 时，会重新缓存 `p1` 下数据文件的元数据。
+- 如果继上次更新结束后，`p1` 在 24 小时内未被访问，则 StarRocks 会淘汰 `p1` 下数据文件的缓存元数据。后续有查询再次命中 `p1` 时，会重新缓存 `p1` 下数据文件的元数据。

@@ -44,7 +44,7 @@ description: "StarRocks 版本命名约定：MAJOR.MINOR.PATCH 格式、预发�
 软件包的命名约定为：`StarRocks-x.y.z[-rcxx]{-os}{-arch}.tar.gz`。（即主要形式为 `Product-version-os-arch`）
 1. x.y.z: 遵循三位数版本编号规则。`-rcxx` 是可选的预发布版本号，例如 `-rc01`，`-rc02`。
 2. OS 包括：`ubuntu`，`centos`。必选。
-3. ARCH 包括：`amd64`。必选。（目前还没有 `arm64` 的社区版。）
+3. ARCH 包括：`amd64`。必选。（软件包仅提供 `amd64` 版本。如需在 `arm64` 上部署 StarRocks，您需要通过 StarRocks 的 Docker 镜像准备部署文件。参见 [准备部署文件](../deployment/preparation/prepare_deployment_files.md#为-arm-架构-cpu-准备部署文件)。）
 
 #### 软件包名称示例
 1. `StarRocks-3.4.0-rc01-ubuntu-amd64.tar.gz`: 为 Ubuntu Linux 构建的 3.4.0 预发布版本。

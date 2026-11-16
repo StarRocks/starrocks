@@ -19,8 +19,8 @@ This operation requires the SYSTEM-level CREATE RESOURCE GROUP privilege. You ca
 ## Syntax
 
 ```SQL
-CREATE RESOURCE GROUP resource_group_name 
-TO CLASSIFIER1, CLASSIFIER2, ...
+CREATE RESOURCE GROUP [IF NOT EXISTS] [OR REPLACE] resource_group_name 
+[TO CLASSIFIER1, CLASSIFIER2, ...]
 WITH resource_limit
 ```
 
@@ -28,7 +28,11 @@ WITH resource_limit
 
 - `resource_group_name`: The name of the resource group to be created.
 
-- `CLASSIFIER`: Classifiers used to filter the queries on which resource limits are imposed. You must specify a classifier using `"key"="value"` pairs. You can set multiple classifiers for a resource group.
+- `IF NOT EXISTS`: If a resource group with the same name already exists, the statement does nothing and does not return an error.
+
+- `OR REPLACE`: If a resource group with the same name already exists, it is replaced by the new resource group.
+
+- `CLASSIFIER`: Classifiers used to filter the queries on which resource limits are imposed. You must specify a classifier using `"key"="value"` pairs. You can set multiple classifiers for a resource group. `TO` and the classifiers are required, except for a resource group whose `type` is `mv` (supported from v3.1.0 onwards), which does not support classifiers.
 
   Parameters for classifiers are listed below:
 

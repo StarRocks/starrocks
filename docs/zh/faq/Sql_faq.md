@@ -68,17 +68,6 @@ A JOIN B ON A.col1=B.col1 JOIN C on A.col1=C.col1 where A.col1='北京'，
 
 或者升级到较新版本并开启 CBO 功能，会有此类谓词下推操作，优化查询性能。
 
-## 查询报错 planner use long time 3000 remaining task num 1
-
-**解决方案**
-
-查看`fe.gc`日志确认该问题是否是多并发引起的full gc。
-
-如果查看后台监控和日志初步判断有频繁gc，可参考两个方案：
-
-  1. 让sqlclient同时访问多个FE去做负载均衡。
-  2. 修改`fe.conf`中 `jvm8g` 为16g（更大内存，减少 full gc 影响）。修改后需重启FE。
-
 ## 当A基数很小时，select B from tbl order by A limit 10查询结果每次不一样
 
 **解决方案：**
@@ -325,7 +314,7 @@ Query Dumb 包含以下信息：
 内存分析方法：
 
 ```Bash
-curl -XGET -s http://BE_IP:BE_HTTP_PORT/metrics | grep "^starrocks_be_.*_mem_bytes\|^starrocks_be_tcmalloc_bytes_in_use"
+curl -XGET -s http://BE_IP:BE_HTTP_PORT/metrics | grep "^starrocks_be_.*_mem_bytes\|^starrocks_be_jemalloc_allocated_bytes"
 curl -XGET -s http://BE_IP:BE_HTTP_PORT/mem_tracker
 ```
 
@@ -333,7 +322,9 @@ curl -XGET -s http://BE_IP:BE_HTTP_PORT/mem_tracker
 
 ## 报错 `StarRocks planner use long time xxx ms in logical phase` 怎么办？
 
-1. 提供分析 `fe.gc.log` 检查是否出现 Full GC。
+1. 提供分析 `fe.gc.log` 检查是否出现 Full GC。如果有频繁 Full GC，可参考以下方案：
+   - 让 SQL 客户端同时访问多个 FE 去做负载均衡。
+   - 修改 `fe.conf` 中的 JVM 堆内存，从 8 GB 调整为 16 GB（更大内存，减少 Full GC 影响）。修改后需重启 FE。
 2. 如果该 SQL 执行计划较复杂，可调大 `new_planner_optimize_timeout`（单位：ms）：
 
    ```SQL

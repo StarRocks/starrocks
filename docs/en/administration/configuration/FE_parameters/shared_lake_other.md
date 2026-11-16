@@ -520,7 +520,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Unit: -
 - Is mutable: Yes
 - Description: The table or partition list of which compaction is disabled in shared-data mode. The format is `tableId1;partitionId2`, seperated by semicolon, for example, `12345;98765`.
-- Introduced in: v3.4.4
+- Introduced in: v3.4.5, v3.5.0
 
 ### `lake_compaction_history_size`
 
@@ -563,7 +563,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Type: Long
 - Unit: -
 - Is mutable: Yes
-- Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, incoming loading tasks will be rejected. From v3.3.6 onwards, the default value is changed from `0` to `2000`.
+- Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition exceeds this upper limit, incoming loading tasks will be rejected. From v3.3.6 onwards, the default value is changed from `0` to `2000`.
 - Introduced in: v3.2.0
 
 ### `lake_compaction_interval_ms_on_success`
@@ -602,13 +602,13 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Description: The Compaction Score threshold that triggers Data Ingestion Slowdown in a shared-data cluster. This configuration only takes effect when `lake_enable_ingest_slowdown` is set to `true`.
 - Introduced in: v3.2.0
 
-### `lake_publish_version_max_threads`
+### `publish_version_max_threads`
 
 - Default: 512
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads for Version Publish tasks in a shared-data cluster.
+- Description: The maximum number of threads for Version Publish tasks in a shared-data cluster. From v4.0.5 and v4.1.0 onwards, this item is renamed from `lake_publish_version_max_threads` to `publish_version_max_threads`. The old name is still accepted as an alias.
 - Introduced in: v3.2.0
 
 ### `lake_publish_version_timeout_ms`
@@ -799,7 +799,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Type: Int
 - Unit: Count
 - Is mutable: Yes
-- Description: Sets the upper bound on how many consecutive transaction versions may be grouped together when building a publish batch for lake (cloud‑native) tables. The value is passed to the transaction graph batching routine (see getReadyToPublishTxnListBatch) and caps the candidate range size for a TransactionStateBatch. Larger values can increase publish throughput by batching more commits, but increase the scope of an atomic publish (longer visibility latency and larger rollback surface) and may be limited at runtime when versions are not consecutive. Tune according to workload and visibility/latency requirements.
+- Description: Sets the upper bound on how many consecutive transaction versions may be grouped together when building a publish batch for lake (cloud‑native) tables. The value is passed to the transaction graph batching routine (see getReadyToPublishTxnListBatch) and caps the candidate range size for a TransactionStateBatch. Larger values can increase publish throughput by batching more commits, but increase the scope of an atomic publish (longer visibility latency and larger rollback surface) and a batch can end before reaching this limit. A batch ends before a replication or DELETE transaction, which is published on its own, and before a transaction that writes multiple tables when `lake_enable_batch_publish_multi_table` is `false`. It also ends where a partition's versions are not consecutive (for example, because a schema change occupied a version) or its loaded materialized indexes change, and before a transaction on a dropped table. When `lake_enable_batch_publish_retry_freeze` is `true`, a retried batch contains only the transactions of the earlier attempt. Tune according to workload and visibility/latency requirements.
 - Introduced in: v3.2.0
 
 ### `lake_batch_publish_min_version_num`
@@ -808,7 +808,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Deprecated. This parameter no longer takes effect. It is kept only so that an existing setting in **fe.conf** or an `ADMIN SET FRONTEND CONFIG` statement on it does not fail. In shared-data mode, batch publish starts a batch in each round from every committed transaction that no longer waits for another transaction, and publishes the batch whatever its size, with at most `lake_batch_publish_max_version_num` transactions in a batch. Previously, this parameter set the minimum number of transactions in a batch, and a batch below the minimum was not published in that round. A batch that could never reach the minimum, for example the last loads into a table that receives no more loads, or loads queued behind a transaction that writes multiple tables, was skipped in every round: its committed transactions never became visible, and later loads into the same tables waited behind them.
+- Description: Deprecated. From v4.2.1 onwards, this parameter no longer takes effect. It is kept only so that an existing setting in **fe.conf** or an `ADMIN SET FRONTEND CONFIG` statement on it does not fail. In shared-data mode, batch publish starts a batch in each round from every committed transaction that no longer waits for another transaction, and publishes the batch whatever its size, with at most `lake_batch_publish_max_version_num` transactions in a batch. Previously, this parameter set the minimum number of transactions in a batch, and a batch below the minimum was not published in that round. A batch that could never reach the minimum, for example the last loads into a table that receives no more loads, or loads queued behind a transaction that writes multiple tables, was skipped in every round: its committed transactions never became visible, and later loads into the same tables waited behind them.
 - Introduced in: v3.2.0
 
 ### `lake_publish_version_retry_interval_ms`
@@ -826,7 +826,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When enabled, PublishVersionDaemon batches ready transactions for the same Lake (shared-data) table/partition and publishes their versions together instead of issuing per-transaction publishes. In RunMode shared-data, the daemon calls getReadyPublishTransactionsBatch() and uses publishVersionForLakeTableBatch(...) to perform grouped publish operations (reducing RPCs and improving throughput). When disabled, the daemon falls back to per-transaction publishing via publishVersionForLakeTable(...). The implementation coordinates in-flight work using internal sets to avoid duplicate publishes when the switch is toggled and is affected by the thread pool sizing via `lake_publish_version_max_threads`.
+- Description: When enabled, PublishVersionDaemon batches ready transactions for the same Lake (shared-data) table/partition and publishes their versions together instead of issuing per-transaction publishes. In RunMode shared-data, the daemon calls getReadyPublishTransactionsBatch() and uses publishVersionForLakeTableBatch(...) to perform grouped publish operations (reducing RPCs and improving throughput). When disabled, the daemon falls back to per-transaction publishing via publishVersionForLakeTable(...). The implementation coordinates in-flight work using internal sets to avoid duplicate publishes when the switch is toggled and is affected by the thread pool sizing via `publish_version_max_threads`.
 - Introduced in: v3.2.0
 
 ### `lake_enable_batch_publish_multi_table`
@@ -1216,7 +1216,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to enable Backup and Restore for Colocate Tables. `true` indicates enabling Backup and Restore for Colocate Tables and `false` indicates disabling it.
-- Introduced in: v3.2.10, v3.3.3
+- Introduced in: v3.2.10, v3.3.2
 
 ### `enable_external_catalog_information_schema_tables_access_full_metadata`
 
