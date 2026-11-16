@@ -826,6 +826,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         }
         addWallClockArguments(node);
         List<Expr> arguments = visit(node.getArguments(), context, Expr.class);
+        // A format rounds a TIMESTAMP cast of a with_timezone value to milliseconds too
+        if (!node.getArguments().isEmpty() && node.getArguments().get(0) instanceof Cast
+                && formattedArguments.contains(node.getArguments().get(0))
+                && isWithTimezoneTimestamp(node.getArguments().get(0))) {
+            arguments.set(0, roundHalfUp(arguments.get(0), 3));
+        }
 
         Expr callExpr;
         String functionName = node.getName().toString();
@@ -1303,10 +1309,10 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     // Whether a date_format (MySQL-style) or format_datetime (Joda) format may not print what Trino prints. Only the
     // directives and Joda fields that Trino and the BE format alike are supported, and the BE formatters return NULL
-    // for output longer than 127 bytes, so a format must fit at its longest
+    // when a field would reach the 127th byte of their output, so a format must fit in 126 bytes at its longest
     private static boolean isFormatUnlikeTrino(String function, String format) {
         OptionalInt length = function.equals("date_format") ? mysqlFormatMaxBytes(format) : jodaFormatMaxBytes(format);
-        return length.isEmpty() || length.getAsInt() > 127;
+        return length.isEmpty() || length.getAsInt() > 126;
     }
 
     // The longest output of each MySQL-style directive that Trino's date_format and the BE format alike
@@ -1708,10 +1714,20 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         }
         Expr cast = new CastExpr(new TypeDef(getType(node.getType())), (Expr) visit(node.getExpression(), context));
         // A cast to TIMESTAMP(p) rounds the wall-clock time in the value's zone, even onto a time the zone skips
-        if (resultZone(node.getExpression()).isPresent() && node.getType() instanceof DateTimeDataType) {
+        if (isWithTimezoneTimestamp(node.getExpression()) && node.getType() instanceof DateTimeDataType) {
             return roundHalfUp(cast, castPrecision((DateTimeDataType) node.getType(), node));
         }
         return cast;
+    }
+
+    // A with_timezone value, or a cast of one to TIMESTAMP(p), which Trino rounds again in a cast to a lower precision
+    // and in a format
+    private static boolean isWithTimezoneTimestamp(Expression expression) {
+        if (expression instanceof Cast && ((Cast) expression).getType() instanceof DateTimeDataType
+                && isWallClockType(((Cast) expression).getType())) {
+            return isWithTimezoneTimestamp(((Cast) expression).getExpression());
+        }
+        return resultZone(expression).isPresent();
     }
 
     // A cast to TIMESTAMP(p) keeps p fractional digits, and TIMESTAMP is TIMESTAMP(3). Only the precisions that

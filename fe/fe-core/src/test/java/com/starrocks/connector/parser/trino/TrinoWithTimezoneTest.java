@@ -101,6 +101,12 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
         assertPlanContains("select cast(with_timezone(TIMESTAMP '2024-03-10 09:59:59.9996', 'UTC') " +
                 "AT TIME ZONE 'America/Los_Angeles' AS TIMESTAMP)",
                 "time_slice(microseconds_add('2024-03-10 01:59:59.999600', 500), 1, 'millisecond', 'floor')");
+        // A TIMESTAMP(6) cast of the value is rounded again in a cast to a lower precision and in a format
+        String values = " from (values TIMESTAMP '2024-08-19 14:36:41.6') t(ts)";
+        assertPlanContains("select second(CAST(CAST(with_timezone(ts, 'UTC') AS TIMESTAMP(6)) AS TIMESTAMP(0)))" +
+                values, "date_trunc('second', microseconds_add(", "500000)");
+        assertPlanContains("select date_format(CAST(with_timezone(ts, 'UTC') AS TIMESTAMP(6)), '%H:%i:%s')" + values,
+                "time_slice(microseconds_add(", "500), 1, 'millisecond', 'floor')");
         String plan = getFragmentPlan("select CAST(with_timezone(TIMESTAMP '2024-08-19 14:36:41.6', 'UTC') " +
                 "AS TIMESTAMP(6))");
         Assertions.assertFalse(plan.contains("microseconds_add"), plan);
@@ -165,6 +171,9 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                 // Output the BE formatters don't have room for
                 "select date_format(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), '" + "%Y".repeat(32) + "')",
                 "select date_format(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), '" + "%r".repeat(12) + "')",
+                // The BE rejects a field that would reach the 127th byte
+                "select date_format(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), '" + "x".repeat(123) +
+                        "%Y')",
                 // Trino drops an unpaired trailing %; the BE prints it
                 "select date_format(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), '%Y%')",
                 "select format_datetime(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), '" +
