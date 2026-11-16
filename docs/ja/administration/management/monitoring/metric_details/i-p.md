@@ -383,6 +383,33 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: 件数
 - 説明: 成功したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
 
+<<<<<<< StarRocks
+=======
+## `lake_idg_files_missing_total`
+
+- 単位: 操作回数
+- タイプ: Counter
+- 説明: 共有データモードで、Index Delta Group（IDG）の `.idx` 初期化時のファイル欠落によるフォールバックと、各ビットマップインデックスイテレータが遅延ページ読み取りで最初に検出したファイル欠落を計上します。ブルームフィルタページの遅延読み取り失敗は含みません。同じ欠落ファイルを再度開くと再計上されるため、ファイルの重複を除いた件数ではありません。値の増加はインデックスによる絞り込みの低下を示し、例えば Vacuum とクエリの競合や、ダウングレード後の再アップグレードで発生することがあります。
+
+## `lake_ingest_slowdown_delayed`
+
+- 単位: 件数
+- タイプ: Counter
+- 説明: 共有データクラスタのみ。書き込み先パーティションの Compaction スコアが `lake_ingest_slowdown_threshold` を超えたため、データ取り込みの減速によってコミットが遅延されたロードトランザクションの数。遅延中にコミットが何度リトライされても、各トランザクションは 1 回だけ数えられます。ここで数えられたトランザクションは `lake_ingest_slowdown_timeout` には数えられませんが、遅延終了後にコミットが拒否された場合は `lake_ingest_slowdown_rejected` にも数えられます。`is_leader` ラベルが付与されており、Follower FE は `is_leader="false"` で値 0 を出力するため、ダッシュボードでは `is_leader="true"` でフィルタしてください。
+
+## `lake_ingest_slowdown_rejected`
+
+- 単位: 件数
+- タイプ: Counter
+- 説明: 共有データクラスタのみ。書き込み先パーティションの Compaction スコアが `lake_compaction_score_upper_bound` を超えたため、コミットが拒否されたロードトランザクションの数。コミットはエラー "too large compaction score" で失敗します。拒否後に同じトランザクションが再度コミットされても、各トランザクションは 1 回だけ数えられます。再度のコミットは成功することがあるため、このメトリクスに数えられてもロードが失敗したとは限りません。先に遅延され、遅延終了後に拒否されたトランザクションは、このメトリクスと `lake_ingest_slowdown_delayed` の両方に数えられます。`is_leader` ラベルが付与されており、Follower FE は `is_leader="false"` で値 0 を出力するため、ダッシュボードでは `is_leader="true"` でフィルタしてください。
+
+## `lake_ingest_slowdown_timeout`
+
+- 単位: 件数
+- タイプ: Counter
+- 説明: 共有データクラスタのみ。データ取り込みの減速による遅延で、最も早いコミット可能時刻がトランザクションのタイムアウトより後になったため、失敗したロードトランザクションの数。このようなトランザクションは最初のコミット時にエラー "timed out due to ingestion slowdown" で失敗し、`lake_ingest_slowdown_delayed` には数えられません。書き込みの終了時点ですでにタイムアウトしていたトランザクションも同じエラーで失敗しますが、タイムアウトの原因は遅延ではないため、数えられません。`is_leader` ラベルが付与されており、Follower FE は `is_leader="false"` で値 0 を出力するため、ダッシュボードでは `is_leader="true"` でフィルタしてください。
+
+>>>>>>> celerdata-enterprise
 ## `lake_pk_index_cache_delvec_bytes`
 
 - 単位: バイト

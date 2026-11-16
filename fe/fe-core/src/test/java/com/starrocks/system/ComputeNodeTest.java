@@ -21,12 +21,15 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LeaderLease;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 import com.starrocks.thrift.TStatusCode;
 import mockit.Expectations;
 import org.json.JSONObject;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -182,6 +185,62 @@ public class ComputeNodeTest {
                 Assertions.assertEquals(ComputeNode.Status.SHUTDOWN, node.getStatus(), String.format("i=%d", i));
                 Assertions.assertEquals(ComputeNode.Status.SHUTDOWN, nodeInFollower.getStatus(), String.format("i=%d", i));
             }
+        }
+    }
+
+    /** The lake index fast-path flag follows the heartbeat on the leader and on a follower, and survives in the image. */
+    @Test
+    public void testLakeIndexFastPathSupportFollowsHeartbeat() {
+        ComputeNode leader = new ComputeNode();
+        ComputeNode follower = new ComputeNode();
+        BackendHbResponse response = new BackendHbResponse(leader.getId(), leader.getBePort(), leader.getHttpPort(),
+                leader.getBrpcPort(), leader.getStarletPort(), System.currentTimeMillis(), leader.getVersion(),
+                leader.getCpuCores(), 0);
+        response.setSupportLakeIndexFastPath(true);
+        Assertions.assertTrue(leader.handleHbResponse(response, false));
+        Assertions.assertTrue(follower.handleHbResponse(generateReplayResponse(response), true));
+        Assertions.assertTrue(follower.isSupportLakeIndexFastPath());
+        Assertions.assertTrue(
+                GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(leader), ComputeNode.class).isSupportLakeIndexFastPath());
+        response.setSupportLakeIndexFastPath(false);
+        Assertions.assertTrue(leader.handleHbResponse(response, false));
+        Assertions.assertFalse(leader.isSupportLakeIndexFastPath());
+    }
+
+    /**
+     * Only a live heartbeat certifies the flag, and only for the leader session that received it: a replayed entry or
+     * an image does not. A failed heartbeat withdraws it while the node still counts as alive, so a node restarted on
+     * an older binary is not trusted until its next successful heartbeat reports what it runs.
+     */
+    @Test
+    public void testLakeIndexFastPathHeartbeatCertification() {
+        ComputeNode node = new ComputeNode();
+        LeaderLease lease = new LeaderLease(10L, 1L);
+        GlobalStateMgr gsm = Mockito.mock(GlobalStateMgr.class);
+        Mockito.when(gsm.captureLeaderLease()).thenReturn(lease);
+        BackendHbResponse ok = new BackendHbResponse(node.getId(), node.getBePort(), node.getHttpPort(),
+                node.getBrpcPort(), node.getStarletPort(), System.currentTimeMillis(), node.getVersion(),
+                node.getCpuCores(), 0);
+        ok.setSupportLakeIndexFastPath(true);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            node.handleHbResponse(generateReplayResponse(ok), true);
+            Assertions.assertFalse(node.hasLakeIndexFastPathHeartbeat(lease));
+            node.handleHbResponse(ok, false);
+            Assertions.assertTrue(node.hasLakeIndexFastPathHeartbeat(lease));
+            Assertions.assertFalse(node.hasLakeIndexFastPathHeartbeat(new LeaderLease(10L, 2L)));
+            Assertions.assertFalse(GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(node), ComputeNode.class)
+                    .hasLakeIndexFastPathHeartbeat(lease));
+
+            node.handleHbResponse(new BackendHbResponse(node.getId(), TStatusCode.INTERNAL_ERROR, "refused"), false);
+            Assertions.assertTrue(node.isAlive());
+            Assertions.assertFalse(node.hasLakeIndexFastPathHeartbeat(lease));
+
+            ok.setSupportLakeIndexFastPath(false);
+            node.handleHbResponse(ok, false);
+            Assertions.assertTrue(node.hasLakeIndexFastPathHeartbeat(lease));
+            Assertions.assertFalse(node.isSupportLakeIndexFastPath());
         }
     }
 

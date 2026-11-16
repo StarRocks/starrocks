@@ -14,6 +14,9 @@
 
 #include <gtest/gtest.h>
 
+#include <map>
+#include <string>
+
 #include "exec/exec_env.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
@@ -243,6 +246,80 @@ TEST(TxnLogApplierIdgTest, pk_apply_replication_carries_idg_meta) {
         if (f.name() == "pk_stale.idx") stale_orphaned = true;
     }
     EXPECT_TRUE(stale_orphaned);
+}
+
+// Non-PK compaction retires the IDG entries of its input segments, as the PK path does: their rssids leave the
+// tablet, and an entry left behind keeps its .idx file referenced so vacuum never reclaims it. A partial compaction
+// keeps a segment file under a new rssid, so its old entry goes too. Entries are found by the sparse segment_idx,
+// and the shared flag reaches orphan_files so vacuum only delay-deletes a file a sibling tablet may still read.
+TEST(TxnLogApplierIdgTest, npk_partial_compaction_retires_sparse_input_idg_entries) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 70007);
+    auto meta = make_npk_meta(70007, /*version=*/3);
+    auto* input = meta->add_rowsets();
+    input->set_id(10);
+    input->set_num_rows(20);
+    input->set_data_size(200);
+    auto* rewritten_segment = input->add_segment_metas();
+    rewritten_segment->set_filename("rewritten.dat");
+    rewritten_segment->set_segment_idx(2);
+    auto* kept_segment = input->add_segment_metas();
+    kept_segment->set_filename("kept.dat");
+    kept_segment->set_segment_idx(5);
+    kept_segment->set_shared(true);
+
+    auto* untouched = meta->add_rowsets();
+    untouched->set_id(20);
+    untouched->set_num_rows(10);
+    untouched->set_data_size(100);
+    auto* untouched_segment = untouched->add_segment_metas();
+    untouched_segment->set_filename("untouched.dat");
+    untouched_segment->set_segment_idx(3);
+    meta->set_next_rowset_id(30);
+    for (uint32_t rssid : {12u, 15u, 23u}) {
+        auto* entry = (*meta->mutable_idg_meta()->mutable_idgs())[rssid].add_entries();
+        entry->set_index_file("idx_" + std::to_string(rssid) + ".idx");
+        entry->set_file_size(64);
+        entry->set_version(2);
+        entry->set_shared_file(rssid == 15);
+        auto* key = entry->add_keys();
+        key->set_col_unique_id(7);
+        key->set_index_type(BITMAP);
+    }
+
+    TxnLogPB log;
+    log.set_tablet_id(70007);
+    log.set_txn_id(7700);
+    auto* op = log.mutable_op_compaction();
+    op->add_input_rowsets(10);
+    auto* output = op->mutable_output_rowset();
+    output->set_num_rows(20);
+    output->set_data_size(200);
+    auto* merged_segment = output->add_segment_metas();
+    merged_segment->set_filename("merged.dat");
+    merged_segment->set_segment_idx(0);
+    output->add_segment_metas()->CopyFrom(*kept_segment);
+    output->mutable_segment_metas(1)->set_segment_idx(1);
+
+    auto applier = new_txn_log_applier(tablet, meta, /*new_version=*/4, /*rebuild_pindex=*/false,
+                                       /*skip_write_tablet_metadata=*/true, std::nullopt);
+    Status st = applier->apply(log);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    const auto& idgs = meta->idg_meta().idgs();
+    ASSERT_EQ(1u, idgs.size());
+    ASSERT_EQ(1u, idgs.count(23));
+    EXPECT_EQ("idx_23.idx", idgs.at(23).entries(0).index_file());
+    std::map<std::string, FileMetaPB> orphans;
+    for (const auto& file : meta->orphan_files()) {
+        orphans.emplace(file.name(), file);
+    }
+    ASSERT_EQ(2u, orphans.size());
+    ASSERT_EQ(1u, orphans.count("idx_12.idx"));
+    ASSERT_EQ(1u, orphans.count("idx_15.idx"));
+    EXPECT_FALSE(orphans.at("idx_12.idx").shared());
+    EXPECT_TRUE(orphans.at("idx_15.idx").shared());
+    EXPECT_EQ(64, orphans.at("idx_15.idx").size());
+    EXPECT_EQ(2, orphans.at("idx_15.idx").version());
 }
 
 } // namespace lake

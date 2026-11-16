@@ -383,6 +383,33 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Counter of successful lake compaction jobs.
 
+<<<<<<< StarRocks
+=======
+## `lake_idg_files_missing_total`
+
+- Unit: Operations
+- Type: Counter
+- Description: In shared-data mode, counts missing-file fallbacks during Index Delta Group (IDG) `.idx` initialization and the first missing lazy page read per bitmap-index iterator. Lazy bloom-filter page failures are excluded. Reopening the same missing file can increment the counter again; this is not a distinct-file count. An increase indicates reduced index pruning, for example after vacuum races with a query or after a downgrade and re-upgrade.
+
+## `lake_ingest_slowdown_delayed`
+
+- Unit: Count
+- Type: Counter
+- Description: Shared-data only. Number of load transactions whose commit was delayed by Data Ingestion Slowdown because the Compaction Score of a partition they write exceeded `lake_ingest_slowdown_threshold`. Each transaction is counted once, however many times its commit is retried during the delay. A transaction counted here is never counted in `lake_ingest_slowdown_timeout`, but is also counted in `lake_ingest_slowdown_rejected` if its commit is rejected when the delay ends. Carries an `is_leader` label; follower FEs export the metric with `is_leader="false"` and value 0, so dashboards should filter on `is_leader="true"`.
+
+## `lake_ingest_slowdown_rejected`
+
+- Unit: Count
+- Type: Counter
+- Description: Shared-data only. Number of load transactions whose commit was rejected because the Compaction Score of a partition they write exceeded `lake_compaction_score_upper_bound`. The commit fails with the error "too large compaction score". Each transaction is counted once, even if the same transaction is committed again after the rejection. Such a later commit can succeed, so a transaction counted here is not necessarily a failed load. A transaction that was delayed first and then rejected when the delay ended is counted both here and in `lake_ingest_slowdown_delayed`. Carries an `is_leader` label; follower FEs export the metric with `is_leader="false"` and value 0, so dashboards should filter on `is_leader="true"`.
+
+## `lake_ingest_slowdown_timeout`
+
+- Unit: Count
+- Type: Counter
+- Description: Shared-data only. Number of load transactions that failed because the delay set by Data Ingestion Slowdown pushed their earliest commit time past the transaction timeout. Such a transaction fails on its first commit attempt with the error "timed out due to ingestion slowdown", and is not counted in `lake_ingest_slowdown_delayed`. A transaction whose write already ran past the timeout fails with the same error, but is not counted because the delay did not cause the timeout. Carries an `is_leader` label; follower FEs export the metric with `is_leader="false"` and value 0, so dashboards should filter on `is_leader="true"`.
+
+>>>>>>> celerdata-enterprise
 ## `lake_pk_index_cache_delvec_bytes`
 
 - Unit: Bytes

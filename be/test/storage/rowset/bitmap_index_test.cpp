@@ -34,6 +34,13 @@
 
 #include <gtest/gtest.h>
 
+<<<<<<< HEAD
+=======
+#include <algorithm>
+#include <limits>
+#include <numeric>
+#include <optional>
+>>>>>>> 55bc3b1b81e... [BugFix][RB-439] Fix failover, mixed-version and downgrade issues in the lake IDG index fast path (#65414)
 #include <string>
 #include <thread>
 
@@ -41,18 +48,46 @@
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
 #include "column/column_viewer.h"
+#include "column/schema.h"
 #include "exec/exec_env.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
+#include "storage/rowset/bitmap_index_evaluator.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
+#include "storage/storage_metrics.h"
 #include "storage/types.h"
+#include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/key_coder.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 
 namespace starrocks {
+
+// Fail an actual lazy page read after BitmapIndexReader::load/new_iterator succeeded.
+// A local unlink would not model an object deleted behind an already-open cloud stream.
+class FaultingBitmapInputStream final : public io::SeekableInputStreamWrapper {
+public:
+    explicit FaultingBitmapInputStream(std::shared_ptr<io::SeekableInputStream> stream)
+            : SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(std::move(stream)) {}
+
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        if (!failure.ok() && (!failure_offset.has_value() || offset == *failure_offset)) {
+            ++failed_reads;
+            return failure;
+        }
+        return SeekableInputStreamWrapper::read_at_fully(offset, out, count);
+    }
+
+    Status failure;
+    std::optional<int64_t> failure_offset;
+    int failed_reads = 0;
+
+private:
+    std::shared_ptr<io::SeekableInputStream> _stream;
+};
 
 class BitmapIndexTest : public testing::Test {
 public:
@@ -117,7 +152,115 @@ protected:
     MemPool _pool;
     IndexReadOptions _opts;
     OlapReaderStatistics _stats;
+
+    // Fail a lazy dictionary or bitmap page read of an optional IDG bitmap file with |failure| after the reader
+    // and iterator were opened, then evaluate `indexed = 7` over two row ranges.
+    void check_optional_bitmap_late_failure(bool fail_bitmap_page, const Status& failure) {
+        constexpr int nrows = 2048;
+        std::vector<int> values(nrows);
+        std::iota(values.begin(), values.end(), 0);
+        std::string filename = kTestDir + (fail_bitmap_page ? "/optional_bitmap_late_bitmap_failure"
+                                                            : "/optional_bitmap_late_dictionary_failure");
+        ColumnIndexMetaPB meta;
+        write_index_file<TYPE_INT>(filename, values.data(), values.size(), 0, &meta);
+        ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(filename));
+        FaultingBitmapInputStream stream(rfile->stream());
+        _opts.read_file = &stream;
+        _opts.use_page_cache = false;
+        _opts.idg_bitmap_file_missing = std::make_shared<bool>(false);
+        BitmapIndexReader reader;
+        ASSIGN_OR_ABORT(auto first_load, reader.load(_opts, meta.bitmap_index()));
+        ASSERT_TRUE(first_load);
+
+        Schema schema({std::make_shared<Field>(0, "indexed", TYPE_INT, false)});
+        std::unique_ptr<ColumnPredicate> eq(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "7"));
+        PredicateAndNode root;
+        root.add_child(PredicateColumnNode{eq.get()});
+        auto tree = PredicateTree::create(std::move(root));
+        const auto original_tree = tree.root().debug_string();
+        BitmapIndexEvaluator evaluator(schema, tree);
+        ASSERT_OK(evaluator.init([&](ColumnId) -> StatusOr<BitmapIndexIterator*> {
+            BitmapIndexIterator* iter = nullptr;
+            RETURN_IF_ERROR(reader.new_iterator(_opts, &iter));
+            return iter;
+        }));
+        ASSERT_TRUE(evaluator.has_bitmap_index());
+
+        if (fail_bitmap_page) {
+            const auto& ordinal_meta = meta.bitmap_index().bitmap_column().ordinal_index_meta();
+            ASSERT_TRUE(ordinal_meta.is_root_data_page());
+            stream.failure_offset = ordinal_meta.root_page().offset();
+        }
+        stream.failure = failure;
+        const auto missing_before = StorageMetrics::instance()->lake_idg_files_missing_total.value();
+        SparseRange<> ranges;
+        ranges.add({2, 100});
+        ranges.add({200, nrows});
+        const auto original_ranges = ranges;
+        Status st = evaluator.evaluate(ranges, tree);
+        ASSERT_GT(stream.failed_reads, 0); // This must exercise lazy I/O, not an unindexed/no-op path.
+        EXPECT_EQ(original_ranges, ranges);
+        EXPECT_EQ(original_tree, tree.root().debug_string());
+        if (!failure.is_not_found()) {
+            EXPECT_EQ(failure.code(), st.code());
+            EXPECT_FALSE(*_opts.idg_bitmap_file_missing);
+            EXPECT_EQ(missing_before, StorageMetrics::instance()->lake_idg_files_missing_total.value());
+            return;
+        }
+        ASSERT_OK(st);
+        EXPECT_TRUE(*_opts.idg_bitmap_file_missing);
+        EXPECT_EQ(missing_before + 1, StorageMetrics::instance()->lake_idg_files_missing_total.value());
+        // A repeated evaluation neither reads nor counts the already-unavailable optional file again.
+        const auto failed_reads = stream.failed_reads;
+        ASSERT_OK(evaluator.evaluate(ranges, tree));
+        EXPECT_EQ(failed_reads, stream.failed_reads);
+        EXPECT_EQ(original_ranges, ranges);
+    }
 };
+
+TEST_F(BitmapIndexTest, optional_idg_missing_dictionary_page_keeps_range_and_predicates) {
+    check_optional_bitmap_late_failure(false, Status::NotFound("deleted IDG dictionary"));
+}
+
+TEST_F(BitmapIndexTest, optional_idg_missing_bitmap_page_keeps_range_and_predicates) {
+    check_optional_bitmap_late_failure(true, Status::NotFound("deleted IDG bitmap"));
+}
+
+TEST_F(BitmapIndexTest, optional_idg_non_missing_errors_still_fail) {
+    check_optional_bitmap_late_failure(false, Status::IOError("dictionary read failed"));
+    check_optional_bitmap_late_failure(true, Status::Corruption("bitmap page is corrupt"));
+}
+
+TEST_F(BitmapIndexTest, optional_idg_absent_dictionary_key_is_not_a_missing_file) {
+    int values[] = {1, 2, 3};
+    std::string filename = kTestDir + "/optional_bitmap_absent_key";
+    ColumnIndexMetaPB meta;
+    write_index_file<TYPE_INT>(filename, values, 3, 0, &meta);
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(filename));
+    _opts.read_file = rfile.get();
+    _opts.use_page_cache = false;
+    _opts.idg_bitmap_file_missing = std::make_shared<bool>(false);
+    BitmapIndexReader reader;
+    ASSIGN_OR_ABORT(auto first_load, reader.load(_opts, meta.bitmap_index()));
+    ASSERT_TRUE(first_load);
+    Schema schema({std::make_shared<Field>(0, "indexed", TYPE_INT, false)});
+    std::unique_ptr<ColumnPredicate> predicate(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "99"));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode{predicate.get()});
+    auto tree = PredicateTree::create(std::move(root));
+    BitmapIndexEvaluator evaluator(schema, tree);
+    ASSERT_OK(evaluator.init([&](ColumnId) -> StatusOr<BitmapIndexIterator*> {
+        BitmapIndexIterator* iter = nullptr;
+        RETURN_IF_ERROR(reader.new_iterator(_opts, &iter));
+        return iter;
+    }));
+    const auto missing_before = StorageMetrics::instance()->lake_idg_files_missing_total.value();
+    SparseRange<> ranges(0, 3);
+    ASSERT_OK(evaluator.evaluate(ranges, tree));
+    EXPECT_TRUE(ranges.empty());
+    EXPECT_FALSE(*_opts.idg_bitmap_file_missing);
+    EXPECT_EQ(missing_before, StorageMetrics::instance()->lake_idg_files_missing_total.value());
+}
 
 TEST_F(BitmapIndexTest, test_invert) {
     size_t num_uint8_rows = 1024 * 10;
