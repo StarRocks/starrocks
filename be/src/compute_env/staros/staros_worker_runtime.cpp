@@ -234,7 +234,15 @@ Status enable_remote_io_scheduler() {
                         "remote reads run unscheduled";
         return Status::OK();
     }
-    if (auto st = fslib::RemoteReadScheduler::init(opts); !st.ok()) {
+#ifdef BE_TEST
+    // Unit tests link every BE module as a shared library of its own, and starlet keeps RemoteReadScheduler hidden
+    // (so that a dlopen()ed plugin's copy never binds to the host's), so a module library cannot call it. A unit test
+    // never starts the process-wide scheduler anyway: it takes the path of a scheduler that failed to start.
+    const absl::Status st = absl::UnimplementedError("the remote I/O scheduler is not started in unit tests");
+#else
+    const absl::Status st = fslib::RemoteReadScheduler::init(opts);
+#endif
+    if (!st.ok()) {
         (void)update_starlet_flag("fs_enable_buffer_prefetch", std::to_string(config::starlet_fs_read_prefetch_enable));
         LOG(WARNING) << "remote I/O scheduler not enabled: " << st << "; remote reads run unscheduled";
         return Status::OK();
