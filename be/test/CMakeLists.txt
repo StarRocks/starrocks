@@ -479,9 +479,9 @@ endif()
 # --without-paimon-cpp, so no other test binary depends on libpaimon.so.
 # The paimon include path comes from the imported `paimon` target, so other
 # test sources cannot include paimon headers.
-# The production sources are compiled directly into this binary: they ship in
-# the dlopen()ed libstarrocks_paimon.so shim and are no longer part of
-# ConnectorHive, while tests link paimon the ordinary build-time way.
+# Production sources come from the UT-only object library under src/ so their
+# coverage survives CI cleanup of the test build directory. Production builds
+# ship them in the dlopen()ed libstarrocks_paimon.so shim instead.
 if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
     ADD_BE_TEST(connector/paimon/paimon_cpp_test)
     target_sources(paimon_cpp_test PRIVATE
@@ -494,14 +494,8 @@ if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
         connector/paimon/paimon_chunk_sink_test.cpp
         connector/paimon/paimon_file_system_write_test.cpp
         connector/paimon/paimon_write_column_converter_test.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_predicate_converter.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_file_system.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_scanner.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_blob_converter.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_chunk_sink.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_write_column_converter.cpp
     )
-    target_link_libraries(paimon_cpp_test paimon)
+    target_link_libraries(paimon_cpp_test paimon_cpp_test_support paimon)
 endif ()
 
 # you can simply add test case as single binary without adding `main`

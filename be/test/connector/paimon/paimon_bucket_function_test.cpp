@@ -23,6 +23,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
+#include "column/decimalv3_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "connector/hive/paimon/paimon_write_column_converter.h"
@@ -117,6 +118,50 @@ TEST_F(PaimonBucketFunctionTest, ModHiveAndConstantKeysMatchSdk) {
                                                        paimon::GetDefaultPool());
     ASSERT_TRUE(hive.ok());
     compare_sdk(configuration(R"([{"name":"id","type":"INT"}])", "hive"), keys, type, schema, std::move(hive).value());
+}
+
+TEST_F(PaimonBucketFunctionTest, PrimitiveAndDecimalHiveKeysMatchSdk) {
+    auto boolean = BooleanColumn::create();
+    boolean->append(1);
+    auto tiny = Int8Column::create();
+    tiny->append(-12);
+    auto small = Int16Column::create();
+    small->append(1234);
+    auto bigint = Int64Column::create();
+    bigint->append(-1234567890123L);
+    auto floating = FloatColumn::create();
+    floating->append(1.25F);
+    auto double_value = DoubleColumn::create();
+    double_value->append(-9.5);
+    auto binary = BinaryColumn::create();
+    binary->append(Slice("a\0b", 3));
+    auto decimal = Decimal64Column::create(18, 2);
+    decimal->append(-12345);
+    const std::vector<std::string> names = {"b", "t", "s", "l", "f", "d", "v", "n"};
+    auto type = TypeDescriptor::create_struct_type(
+            names, {TypeDescriptor(TYPE_BOOLEAN), TypeDescriptor(TYPE_TINYINT), TypeDescriptor(TYPE_SMALLINT),
+                    TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_FLOAT), TypeDescriptor(TYPE_DOUBLE),
+                    TypeDescriptor(TYPE_VARBINARY), TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 2)});
+    ColumnPtr keys =
+            StructColumn::create(Columns{boolean, tiny, small, bigint, floating, double_value, binary, decimal}, names);
+    auto schema = arrow::schema({arrow::field("b", arrow::boolean()), arrow::field("t", arrow::int8()),
+                                 arrow::field("s", arrow::int16()), arrow::field("l", arrow::int64()),
+                                 arrow::field("f", arrow::float32()), arrow::field("d", arrow::float64()),
+                                 arrow::field("v", arrow::binary()), arrow::field("n", arrow::decimal128(18, 2))});
+    auto sdk = paimon::BucketIdCalculator::CreateHive(
+            false, 17,
+            {paimon::HiveFieldInfo(paimon::FieldType::BOOLEAN), paimon::HiveFieldInfo(paimon::FieldType::TINYINT),
+             paimon::HiveFieldInfo(paimon::FieldType::SMALLINT), paimon::HiveFieldInfo(paimon::FieldType::BIGINT),
+             paimon::HiveFieldInfo(paimon::FieldType::FLOAT), paimon::HiveFieldInfo(paimon::FieldType::DOUBLE),
+             paimon::HiveFieldInfo(paimon::FieldType::BINARY),
+             paimon::HiveFieldInfo(paimon::FieldType::DECIMAL, 18, 2)},
+            paimon::GetDefaultPool());
+    ASSERT_TRUE(sdk.ok()) << sdk.status().ToString();
+    compare_sdk(configuration(R"json([{"name":"b","type":"BOOLEAN"},{"name":"t","type":"TINYINT"},
+        {"name":"s","type":"SMALLINT"},{"name":"l","type":"BIGINT"},{"name":"f","type":"FLOAT"},
+        {"name":"d","type":"DOUBLE"},{"name":"v","type":"BYTES"},{"name":"n","type":"DECIMAL(18, 2)"}])json",
+                              "hive"),
+                keys, type, schema, std::move(sdk).value());
 }
 
 TEST_F(PaimonBucketFunctionTest, FunctionLifecycleUsesLinkedCalculatorAndReturnsActualBuckets) {
