@@ -251,8 +251,6 @@ private:
 
     Status build_schema_and_writer();
 
-    Status init_position_delete();
-
     Status init_tablet_writer();
 
     Status init_memtable_sink();
@@ -443,9 +441,6 @@ bool DeltaWriterImpl::should_enable_load_spill() const {
 }
 
 Status DeltaWriterImpl::build_schema_and_writer() {
-<<<<<<< HEAD
-=======
-    RETURN_IF_ERROR(init_position_delete());
     if (_mem_table_sink != nullptr) {
         return Status::OK();
     }
@@ -460,39 +455,6 @@ Status DeltaWriterImpl::build_schema_and_writer() {
     RETURN_IF_ERROR(init_memtable_sink());
     init_memtable_schema();
     init_partial_update_buffer_limit();
-    return Status::OK();
-}
-
-Status DeltaWriterImpl::init_position_delete() {
-    if (!_position_delete.has_value()) {
-        return Status::OK();
-    }
-    // A position delete writes no data and builds no tablet writer: its memtables flush into its memtable sink,
-    // one at a time, each as a candidate set of the position delete. As a tablet writer does, the sink takes the
-    // primary key columns and their encoding from the schema of the load.
->>>>>>> b17209de356... [Refactor] Split lake delta writer initialization into focused helpers (#69903)
-    if (_mem_table_sink == nullptr) {
-        RETURN_IF_ERROR(init_tablet_schema());
-        ASSIGN_OR_RETURN(_mem_table_sink,
-                         PositionDeleteMemTableSink::create(_tablet_manager, _tablet_id, _txn_id,
-                                                            _position_delete->read_version, _tablet_schema, _slots));
-    }
-    if (_flush_token == nullptr) {
-        _flush_token = StorageEngine::instance()->lake_memtable_flush_executor()->create_flush_token(
-                ThreadPool::ExecutionMode::SERIAL);
-        if (_flush_token == nullptr) {
-            return Status::InternalError(fmt::format(
-                    "Failed to create flush token for delta writer, tablet_id={}, txn_id={}", _tablet_id, _txn_id));
-        }
-<<<<<<< HEAD
-        _write_schema_for_mem_table = MemTable::convert_schema(_write_schema, _slots);
-
-        DCHECK_LE(_write_schema->num_columns(), _tablet_schema->num_columns());
-        DCHECK_GE(_write_schema_for_mem_table.num_fields(), _write_schema->num_columns());
-        if (_write_schema->num_columns() < _tablet_schema->num_columns()) {
-            DCHECK_EQ(_write_column_ids.size(), _write_schema->num_columns());
-=======
-    }
     return Status::OK();
 }
 
@@ -521,7 +483,6 @@ Status DeltaWriterImpl::init_tablet_writer() {
             metadata != nullptr && metadata->has_flat_json_config()) {
             flat_json_config = std::make_shared<FlatJsonConfig>();
             flat_json_config->update(metadata->flat_json_config());
->>>>>>> b17209de356... [Refactor] Split lake delta writer initialization into focused helpers (#69903)
         }
     }
     if (flat_json_config != nullptr) {
@@ -594,25 +555,11 @@ Status DeltaWriterImpl::init_memtable_sink() {
 
 void DeltaWriterImpl::init_memtable_schema() {
     _write_schema_for_mem_table = MemTable::convert_schema(_write_schema, _slots);
-    if (_flexible_partial_update) {
-        // init_write_schema() appends "__cset__" as the last column of _write_schema, and "__op", when
-        // the load has it, follows it in the memtable schema.
-        const int cset_column = static_cast<int>(_write_schema->num_columns()) - 1;
-        const int last_field = static_cast<int>(_write_schema_for_mem_table.num_fields()) - 1;
-        DCHECK_EQ(LOAD_CSET_COLUMN, _write_schema_for_mem_table.field(cset_column)->name());
-        const int op_column = last_field > cset_column ? last_field : -1;
-        _flexible_row_merger =
-                std::make_unique<FlexibleRowMerger>(_txn_id, _write_schema_for_mem_table, cset_column, op_column);
-    }
 
-    // A flexible partial update appends a synthetic "__cset__" column to _write_schema that maps to
-    // no tablet column, so _write_schema may hold one column more than the tablet schema and
-    // _write_column_ids is exactly one shorter than _write_schema.
-    const size_t synthetic_columns = _flexible_partial_update ? 1 : 0;
-    DCHECK_LE(_write_schema->num_columns(), _tablet_schema->num_columns() + synthetic_columns);
+    DCHECK_LE(_write_schema->num_columns(), _tablet_schema->num_columns());
     DCHECK_GE(_write_schema_for_mem_table.num_fields(), _write_schema->num_columns());
     if (_write_schema->num_columns() < _tablet_schema->num_columns()) {
-        DCHECK_EQ(_write_column_ids.size() + synthetic_columns, _write_schema->num_columns());
+        DCHECK_EQ(_write_column_ids.size(), _write_schema->num_columns());
     }
 }
 
