@@ -14,87 +14,150 @@
 
 package com.starrocks.credential;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.common.util.CredentialMask;
+import com.starrocks.common.util.PrintableMap;
 import com.starrocks.connector.iceberg.IcebergCatalogProperties;
 import com.starrocks.connector.iceberg.rest.OAuth2SecurityConfig;
 import com.starrocks.connector.odps.OdpsProperties;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.azure.AzureStoragePath;
 import org.apache.iceberg.aws.AwsProperties;
+import org.apache.iceberg.aws.s3.S3FileIOProperties;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class CredentialUtil {
     public static final Logger LOG = LogManager.getLogger(CredentialUtil.class);
 
+    private static final String ICEBERG_PREFIX = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
 
-    public static void maskCredential(Map<String, String> properties) {
-        // Mask for aws's credential
-        doMask(properties, CloudConfigurationConstants.AWS_S3_ACCESS_KEY);
-        doMask(properties, CloudConfigurationConstants.AWS_S3_SECRET_KEY);
-        doMask(properties, CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY);
-        doMask(properties, CloudConfigurationConstants.AWS_GLUE_SECRET_KEY);
+    /**
+     * Catalog / storage properties whose values are credentials. This is the single list that
+     * SHOW CREATE CATALOG ({@link #maskCredential}), FE logs ({@link #maskedCopy}) and, through
+     * {@link com.starrocks.common.util.PrintableMap#SENSITIVE_KEY}, SHOW CREATE / AST rendering and the
+     * audit log redaction ({@link com.starrocks.common.util.SqlCredentialRedactor}) all read, so a key
+     * added here is masked on every path.
+     */
+    public static final List<String> CREDENTIAL_KEYS = ImmutableList.of(
+            // aws
+            CloudConfigurationConstants.AWS_S3_ACCESS_KEY,
+            CloudConfigurationConstants.AWS_S3_SECRET_KEY,
+            CloudConfigurationConstants.AWS_S3_SESSION_TOKEN,
+            CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY,
+            CloudConfigurationConstants.AWS_GLUE_SECRET_KEY,
+            CloudConfigurationConstants.AWS_GLUE_SESSION_TOKEN,
 
-        // Mask for azure's credential
-        doMask(properties, CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY);
-        doMask(properties, CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN);
-        doMask(properties, CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL);
-        doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY);
-        doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN);
-        doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET);
+            // azure
+            CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY,
+            CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN,
+            CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET,
+            CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL,
+            CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY,
+            CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN,
+            CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET,
 
-        // Mask for gcs's credential
-        doMask(properties, CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY);
+            // gcs
+            CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY,
 
-        // Mask for aliyun's credential
-        doMask(properties, CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY);
-        doMask(properties, CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY);
+            // aliyun
+            CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY,
+            CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY,
 
+<<<<<<< HEAD
         // Mask for tencent's credential
         doMask(properties, CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY);
         doMask(properties, CloudConfigurationConstants.TENCENT_COS_SECRET_KEY);
+=======
+            // huawei obs
+            CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY,
+            CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY,
+            CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY_DOT,
+            CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY_DOT,
 
-        // Mask for iceberg rest catalog credential
-        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
-                OAuth2SecurityConfig.OAUTH2_CREDENTIAL);
-        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
-                OAuth2SecurityConfig.OAUTH2_TOKEN);
-        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
-                AwsProperties.REST_ACCESS_KEY_ID);
-        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
-                AwsProperties.REST_SECRET_ACCESS_KEY);
+            // tencent
+            CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY,
+            CloudConfigurationConstants.TENCENT_COS_SECRET_KEY,
+>>>>>>> d3797dc ([BugFix][RB-1362] Mask catalog credentials in logs, audit and SHOW CREATE CATALOG (#83307))
 
-        // Mask for iceberg jdbc catalog credential
-        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
-                IcebergCatalogProperties.ICEBERG_JDBC_PASSWORD);
+            // hdfs. The *_KEYTAB keys hold a path rather than the credential itself, so only the inline
+            // keytab content and the password are masked. The deprecated bare "password" key needs no
+            // entry: maskCredential removes it outright as JDBCResource.PASSWORD.
+            CloudConfigurationConstants.HDFS_PASSWORD,
+            CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB_CONTENT,
+            CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED,
 
-        // Mask for odps catalog credential
-        doMask(properties, OdpsProperties.ACCESS_ID);
-        doMask(properties, OdpsProperties.ACCESS_KEY);
+            // iceberg rest catalog
+            ICEBERG_PREFIX + OAuth2SecurityConfig.OAUTH2_CREDENTIAL,
+            ICEBERG_PREFIX + OAuth2SecurityConfig.OAUTH2_TOKEN,
+            ICEBERG_PREFIX + AwsProperties.REST_ACCESS_KEY_ID,
+            ICEBERG_PREFIX + AwsProperties.REST_SECRET_ACCESS_KEY,
+
+            // iceberg S3FileIO, passed through the catalog properties
+            ICEBERG_PREFIX + S3FileIOProperties.ACCESS_KEY_ID,
+            ICEBERG_PREFIX + S3FileIOProperties.SECRET_ACCESS_KEY,
+            ICEBERG_PREFIX + S3FileIOProperties.SESSION_TOKEN,
+
+            // iceberg GCSFileIO / ADLSFileIO (GCPProperties / AzureProperties), passed through the catalog properties
+            ICEBERG_PREFIX + "gcs.oauth2.token",
+            ICEBERG_PREFIX + "gcs.client-lib-token",
+            ICEBERG_PREFIX + "gcs.encryption-key",
+            ICEBERG_PREFIX + "gcs.decryption-key",
+            ICEBERG_PREFIX + "adls.auth.shared-key.account.key",
+            ICEBERG_PREFIX + "adls.token",
+
+            // iceberg jdbc catalog
+            ICEBERG_PREFIX + IcebergCatalogProperties.ICEBERG_JDBC_PASSWORD,
+
+            // odps catalog
+            OdpsProperties.ACCESS_ID,
+            OdpsProperties.ACCESS_KEY);
+
+    /**
+     * Keys that carry a credential under a variable suffix, e.g. the per storage account ADLS SAS token
+     * {@code iceberg.catalog.adls.sas-token.<account>}.
+     */
+    public static final List<String> CREDENTIAL_KEY_PREFIXES = ImmutableList.of(
+            ICEBERG_PREFIX + "adls.sas-token.");
+
+    /**
+     * Returns a copy of {@code properties} with credentials masked, leaving the argument untouched.
+     * Use this when the properties are only being rendered, e.g. logged: {@link #maskCredential}
+     * mutates in place and would corrupt live configuration.
+     */
+    public static Map<String, String> maskedCopy(Map<String, String> properties) {
+        Map<String, String> masked = new HashMap<>(properties);
+        maskCredential(masked);
+        return masked;
     }
 
-    private static void doMask(Map<String, String> properties, String configKey) {
+    public static void maskCredential(Map<String, String> properties) {
         // This key is only auxiliary authentication for Azure and does not need to be exposed.
         properties.remove(CloudConfigurationConstants.AZURE_PATH_KEY);
 
         // Remove for jdbc catalog's password
         properties.remove(JDBCResource.PASSWORD);
 
-        // do mask
-        properties.computeIfPresent(configKey, (key, value) -> {
-            if (value.length() <= 4) {
-                return CredentialMask.LONG;
-            } else {
-                return new StringBuilder(value).
-                        replace(2, value.length() - 2, CredentialMask.LONG).
-                        toString();
-            }
-        });
+        // PrintableMap.SENSITIVE_KEY contains CREDENTIAL_KEYS, so this masks the keys listed above, the
+        // prefixed keys, and the keys only PrintableMap lists (e.g. fs.s3a.secret.key).
+        properties.replaceAll((key, value) -> value != null && PrintableMap.isSensitiveKey(key) ? mask(value) : value);
+    }
+
+    private static String mask(String value) {
+        if (value.length() <= 4) {
+            return CredentialMask.LONG;
+        } else {
+            return new StringBuilder(value).
+                    replace(2, value.length() - 2, CredentialMask.LONG).
+                    toString();
+        }
     }
 
     /**
