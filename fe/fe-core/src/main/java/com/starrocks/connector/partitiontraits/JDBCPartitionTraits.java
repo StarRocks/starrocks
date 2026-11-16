@@ -28,11 +28,6 @@ import java.util.Set;
 
 public class JDBCPartitionTraits extends DefaultTraits {
     @Override
-    public String getTableName() {
-        return table.getCatalogTableName();
-    }
-
-    @Override
     public boolean isSupportPCTRefresh() {
         return true;
     }
