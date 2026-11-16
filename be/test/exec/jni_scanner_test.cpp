@@ -16,20 +16,11 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD:be/test/exec/jni_scanner_test.cpp
-#include "runtime/descriptor_helper.h"
-=======
 #include <cstdlib>
-#include <string>
 
-#include "common/config_exec_fwd.h"
-#include "common/util/thrift_util.h"
 #include "runtime/descriptor_helper.h"
-#include "runtime/descriptors_ext.h"
-#include "runtime/java/jni_env.h"
-#include "runtime/java/jvm_helper.h"
->>>>>>> 1fb059b ([BugFix][RB-929] Clear the pending JNI exception after JniScanner close and hold scanner refs as global refs (#83366)):be/test/connector/hive/scanner/jni_scanner_test.cpp
 #include "runtime/runtime_state.h"
+#include "udf/java/java_udf.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {
@@ -416,22 +407,6 @@ TEST_F(JniScannerTest, test_create_odps_jni_scanner) {
     check_jni_scanner_params(scanner->_jni_scanner_params, expected);
 }
 
-<<<<<<< HEAD:be/test/exec/jni_scanner_test.cpp
-=======
-// Test that scanner can be safely closed even when JNI initialization fails
-TEST_F(JniScannerTest, test_close_without_jni_init) {
-    // Create a simple JniScanner without initializing JNI
-    std::map<std::string, std::string> params = {{"test_key", "test_value"}};
-    auto scanner = std::make_unique<JniScanner>("com/test/TestFactory", params);
-
-    // This should not crash even if JNI is not initialized
-    // The do_close() method should check for nullptr JNIEnv and return early
-    scanner->do_close(_runtime_state);
-
-    // If we reach here, the test passed (no crash occurred)
-    ASSERT_TRUE(true);
-}
-
 // close() of the Java scanner may throw. do_close() must clear that exception so it does not stay
 // pending on the scan thread, and must release the scanner global ref.
 TEST_F(JniScannerTest, test_close_clears_pending_java_exception) {
@@ -478,5 +453,4 @@ TEST_F(JniScannerTest, test_close_clears_pending_java_exception) {
     ASSERT_EQ(scanner->_jni_scanner_cls, nullptr);
 }
 
->>>>>>> 1fb059b ([BugFix][RB-929] Clear the pending JNI exception after JniScanner close and hold scanner refs as global refs (#83366)):be/test/connector/hive/scanner/jni_scanner_test.cpp
 } // namespace starrocks
