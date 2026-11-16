@@ -2980,14 +2980,10 @@ public class IcebergMetadata implements ConnectorMetadata {
             writeType = "insert";
         }
 
-<<<<<<< HEAD
-        BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite, isRewrite);
-
-        if (branch != null) {
-            batchWrite.toBranch(branch);
-        }
-
+        // Built once and reused by every retry of a rewrite commit: the BE wrote these files under the
+        // spec current now, which a refresh between retries could replace.
         PartitionSpec partitionSpec = nativeTbl.spec();
+        List<org.apache.iceberg.DataFile> icebergDataFiles = new ArrayList<>(dataFiles.size());
         for (TIcebergDataFile dataFile : dataFiles) {
             Metrics metrics = IcebergApiConverter.buildDataFileMetrics(dataFile, nativeTbl);
             DataFiles.Builder builder =
@@ -3011,10 +3007,9 @@ public class IcebergMetadata implements ConnectorMetadata {
                         relativePartitionLocation, nullFingerprint, partitionSpec);
                 builder.withPartition(partitionData);
             }
-            batchWrite.addFile(builder.build());
+            icebergDataFiles.add(builder.build());
         }
 
-=======
         // Validate a rewrite from the snapshot it planned against, not the one current at
         // commit time. RewriteFiles checks for row-level deletes added to the files being
         // replaced over the range (startingSnapshot, current]; passing the commit-time
@@ -3023,7 +3018,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         // deletes on paths no longer in the table, silently resurrecting deleted rows.
         // Resolved once, so a retried rewrite commit keeps validating from the same snapshot.
         Long baseSnapshotId = null;
->>>>>>> fb1951d ([BugFix][RB-871] Retry an Iceberg rewrite commit that lost every Iceberg retry to concurrent appends (#83431))
         if (isRewrite && extra != null) {
             baseSnapshotId = ((IcebergSinkExtra) extra).getBaseSnapshotId();
             if (baseSnapshotId == null) {
@@ -3037,18 +3031,6 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         try {
             commitWithCleanup(() -> {
-<<<<<<< HEAD
-                batchWrite.commit();
-                transaction.commitTransaction();
-=======
-                // Built once and reused by every retry: the BE wrote these files under the spec current
-                // now, which a refresh between retries could replace, and buildDataFile converts the
-                // thrift bounds in place, so it must not run twice on the same TIcebergDataFile.
-                PartitionSpec partitionSpec = nativeTbl.spec();
-                List<org.apache.iceberg.DataFile> icebergDataFiles = new ArrayList<>(dataFiles.size());
-                for (TIcebergDataFile dataFile : dataFiles) {
-                    icebergDataFiles.add(buildDataFile(dataFile, partitionSpec, nativeTbl));
-                }
                 Transaction txn = transaction;
                 for (int retry = 0; ; retry++) {
                     BatchWrite batchWrite = newBatchWrite(txn, isOverwrite, isRewrite, branch, extra,
@@ -3081,7 +3063,6 @@ public class IcebergMetadata implements ConnectorMetadata {
                         txn = nativeTbl.newTransaction();
                     }
                 }
->>>>>>> fb1951d ([BugFix][RB-871] Retry an Iceberg rewrite commit that lost every Iceberg retry to concurrent appends (#83431))
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
 
             // Record metrics after successful commit
