@@ -178,6 +178,51 @@ This topic introduces the following types of BE configurations:
 - Description: TCP port for the BE Arrow Flight SQL server. `-1` indicaes to disable the Arrow Flight service. On non-macOS builds, BE invokes Arrow Flight SQL Server with this port during startup; if the port is unavailable, the server startup fails and the BE process exits. The configured port is reported to the FE in the heartbeat payload.
 - Introduced in: v3.4.0, v3.5.0
 
+### arrow_flight_ssl_ca_cert_file
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Path to the PEM-encoded CA certificate bundle that the BE Arrow Flight SQL server uses to verify client certificates. Required when `arrow_flight_ssl_require_client_auth` is `true`. If `arrow_flight_ssl_require_client_auth` is `true` and this item is empty, the Arrow Flight SQL server fails to start.
+- Introduced in: v4.2.0
+
+### arrow_flight_ssl_cert_file
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Path to the PEM-encoded server certificate that the BE Arrow Flight SQL server presents to clients. Required when `arrow_flight_ssl_enable` is `true`. If `arrow_flight_ssl_enable` is `true` and this item or `arrow_flight_ssl_key_file` is empty, the Arrow Flight SQL server fails to start.
+- Introduced in: v4.2.0
+
+### arrow_flight_ssl_enable
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable TLS for the BE Arrow Flight SQL server. When enabled, the server accepts only TLS connections and requires `arrow_flight_ssl_cert_file` and `arrow_flight_ssl_key_file`. This item takes effect only when `arrow_flight_port` is set to a valid port. Restart the BE for the change to take effect.
+- Introduced in: v4.2.0
+
+### arrow_flight_ssl_key_file
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Path to the PEM-encoded private key of the BE Arrow Flight SQL server certificate. Required when `arrow_flight_ssl_enable` is `true`.
+- Introduced in: v4.2.0
+
+### arrow_flight_ssl_require_client_auth
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether the BE Arrow Flight SQL server requires clients to present a certificate (mutual TLS, mTLS). When `true`, `arrow_flight_ssl_ca_cert_file` is required to verify client certificates. This item takes effect only when `arrow_flight_ssl_enable` is `true`.
+- Introduced in: v4.2.0
+
 ### be_exit_after_disk_write_hang_second
 
 - Default: 60

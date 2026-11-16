@@ -157,6 +157,36 @@ arrow_flight_port = 9408
 arrow_flight_port = 9419
 ```
 
+#### Configure TLS on the BE (Optional)
+
+By default, the Arrow Flight SQL server on the BE accepts plaintext gRPC connections. To enable TLS, configure the following parameters in **be.conf** and restart the BE:
+
+| Parameter                              | Default | Description                                                                 |
+|----------------------------------------|---------|-----------------------------------------------------------------------------|
+| `arrow_flight_ssl_enable`              | `false` | Whether to enable TLS for the Arrow Flight SQL server on the BE.            |
+| `arrow_flight_ssl_cert_file`           | (empty) | Path to the PEM-encoded server certificate.                                 |
+| `arrow_flight_ssl_key_file`            | (empty) | Path to the PEM-encoded server private key.                                 |
+| `arrow_flight_ssl_ca_cert_file`        | (empty) | Path to the PEM-encoded CA certificate bundle used to verify client certs.  |
+| `arrow_flight_ssl_require_client_auth` | `false` | Whether to require client certificates (mTLS).                              |
+
+:::note
+
+- `arrow_flight_ssl_cert_file` and `arrow_flight_ssl_key_file` are required when `arrow_flight_ssl_enable` is `true`.
+- `arrow_flight_ssl_ca_cert_file` is required when `arrow_flight_ssl_require_client_auth` is `true`.
+- The certificate, private key, and CA certificate bundle must be PEM-encoded files.
+
+:::
+
+Example:
+
+```Properties
+// be.conf
+arrow_flight_port = 9419
+arrow_flight_ssl_enable = true
+arrow_flight_ssl_cert_file = /path/to/server.crt
+arrow_flight_ssl_key_file = /path/to/server.key
+```
+
 #### Configure Arrow Flight Proxy (Optional)
 
 If your BE nodes are not directly accessible from client applications (for example, when deployed in private networks or Kubernetes environments), you can enable the Arrow Flight proxy feature on the FE to route data from BE nodes through the FE.
