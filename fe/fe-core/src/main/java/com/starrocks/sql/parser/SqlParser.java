@@ -19,6 +19,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.parser.trino.TrinoParserUtils;
 import com.starrocks.connector.trino.TrinoParserUnsupportedException;
 import com.starrocks.qe.ConnectContext;
@@ -85,7 +86,7 @@ public class SqlParser {
                 return parseWithStarRocksDialect(sql, sessionVariable);
             }
         } catch (OutOfMemoryError e) {
-            LOG.warn("parser out of memory, sql is:" + sql);
+            LOG.warn("parser out of memory, sql is:" + LogUtil.desensitizeText(sql));
             throw e;
         }
     }
@@ -113,12 +114,14 @@ public class SqlParser {
         } catch (ParsingException e) {
             // In Trino parser AstBuilder, it could throw ParsingException for unexpected exception,
             // use StarRocks parser to parse now.
-            LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
+            LOG.warn("Trino parse sql [{}] error, cause by {}", LogUtil.desensitizeText(sql),
+                    LogUtil.desensitizeToString(e));
             return rollbackStarRocksDialect(sql, sessionVariable, e);
         } catch (io.trino.sql.parser.ParsingException e) {
             // This sql does not use Trino syntax，use StarRocks parser to parse now.
             if (sql.toLowerCase().contains("select")) {
-                LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
+                LOG.warn("Trino parse sql [{}] error, cause by {}", LogUtil.desensitizeText(sql),
+                        LogUtil.desensitizeToString(e));
             }
             return rollbackStarRocksDialect(sql, sessionVariable, e);
         } catch (TrinoParserUnsupportedException e) {
@@ -128,7 +131,8 @@ public class SqlParser {
         } catch (UnsupportedException e) {
             // For unsupported statement, it can not be parsed by trino or StarRocks parser, both parser
             // can not support it now, we just throw the exception here to give user more information
-            LOG.warn("Sql [{}] are not supported by trino parser, cause by {}", sql, e);
+            LOG.warn("Sql [{}] are not supported by trino parser, cause by {}", LogUtil.desensitizeText(sql),
+                    LogUtil.desensitizeToString(e));
             throw e;
         }
         if (statements.isEmpty() || statements.stream().anyMatch(Objects::isNull)) {
@@ -153,7 +157,8 @@ public class SqlParser {
         try {
             return parseWithStarRocksDialect(sql, sessionVariable);
         } catch (Exception starRocksException) {
-            LOG.warn("StarRocks parse sql [{}] error, cause by {}", sql, starRocksException);
+            LOG.warn("StarRocks parse sql [{}] error, cause by {}", LogUtil.desensitizeText(sql),
+                    LogUtil.desensitizeToString(starRocksException));
             if (trinoException instanceof UnsupportedException) {
                 throw unsupportedException(String.format("Trino parser parse sql error: [%s], " +
                         "and StarRocks parser also can not parse: [%s]", trinoException, starRocksException));

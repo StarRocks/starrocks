@@ -284,7 +284,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             return sqlBuilder.toString();
         }
 
-        if (relation.getColumnOutputNames() != null) {
+        if (relation.getColumnOutputNames() != null && !options.isHideCteColumnNames()) {
             sqlBuilder.append(" (")
                     .append(Joiner.on(", ").join(
                             relation.getColumnOutputNames().stream().map(c -> "`" + c + "`").collect(toList())))

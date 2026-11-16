@@ -171,29 +171,41 @@ public class ColumnStatistic {
         return this.type;
     }
 
+    /** Like {@link #toString()} without min/max and MCV, which can be literal or column values. */
+    public String toStringWithoutValues() {
+        return format(false);
+    }
+
     @Override
     public String toString() {
+        return format(true);
+    }
+
+    private String format(boolean withValues) {
         String separator = ", ";
+        String min = withValues ? String.valueOf(minValue) : "?";
+        String max = withValues ? String.valueOf(maxValue) : "?";
+        String mcv = withValues && histogram != null ? histogram.getMcvString() + " " : "";
         boolean enableLabeledColumnStatisticOutput =
                 ConnectContext.get() != null && ConnectContext.get().getSessionVariable() != null &&
                         ConnectContext.get().getSessionVariable().isEnableLabeledColumnStatisticOutput();
         if (enableLabeledColumnStatisticOutput) {
-            return "[MIN: " + minValue + separator
-                    + "MAX: " + maxValue + separator
+            return "[MIN: " + min + separator
+                    + "MAX: " + max + separator
                     + "NULLS: " + nullsFraction + separator
                     + "ROS: " + averageRowSize + separator
                     + "NDV: " + distinctValuesCount + "] "
                     + (collectionSize == DEFAULT_COLLECTION_SIZE ? "" : "COS: " + collectionSize + " ")
-                    + (histogram == null ? "" : histogram.getMcvString() + " ")
+                    + mcv
                     + type;
         } else {
-            return "[" + minValue + separator
-                    + maxValue + separator
+            return "[" + min + separator
+                    + max + separator
                     + nullsFraction + separator
                     + averageRowSize + separator
                     + distinctValuesCount + "] "
                     + (collectionSize == DEFAULT_COLLECTION_SIZE ? "" : "COS: " + collectionSize + " ")
-                    + (histogram == null ? "" : histogram.getMcvString() + " ")
+                    + mcv
                     + type;
         }
     }

@@ -93,7 +93,6 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.LargeInPredicateException;
-import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.staros.StarMgrServer;
@@ -392,7 +391,6 @@ public class ConnectProcessor {
         if (!Config.enable_audit_sql) {
             return "?";
         }
-        boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
         if (parsedStmt == null) {
             // invalid sql, record the original statement to avoid audit log can't replay
             // but redact sensitive credentials first
@@ -400,15 +398,10 @@ public class ConnectProcessor {
                 return "this is a desensitized invalid sql";
             }
             return SqlCredentialRedactor.redact(origStmt);
+        } else if (Config.enable_sql_desensitize_in_log) {
+            return AstToSQLBuilder.toDesensitizedSQL(parsedStmt);
         } else if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             return SqlCredentialRedactor.redact(origStmt);
-        } else if (Config.enable_sql_desensitize_in_log) {
-            // Some information like username, password in the stmt should not be printed.
-            return AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
-                            .setColumnSimplifyTableName(false)
-                            .setHideCredential(needEncrypt)
-                            .setEnableDigest(Config.enable_sql_desensitize_in_log))
-                    .orElse("this is a desensitized sql");
         } else {
             // Always redact credentials as defense in depth - raw SQL may contain
             // credentials that AuditEncryptionChecker does not yet recognize
@@ -507,14 +500,15 @@ public class ConnectProcessor {
                 return;
             }
         } catch (AnalysisException e) {
-            LOG.warn("Failed to parse SQL: " + SqlCredentialRedactor.redact(originStmt) + ", because.", e);
+            LOG.warn("Failed to parse SQL: " + LogUtil.redactSqlForLog(originStmt, null)
+                    + ", because.", LogUtil.desensitize(e));
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
         } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
-            LOG.warn("Process one query failed. SQL: " + SqlCredentialRedactor.redact(originStmt) +
-                    ", because unknown reason: ", e);
+            LOG.warn("Process one query failed. SQL: " + LogUtil.redactSqlForLog(originStmt, null) +
+                    ", because unknown reason: ", LogUtil.desensitize(e));
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
