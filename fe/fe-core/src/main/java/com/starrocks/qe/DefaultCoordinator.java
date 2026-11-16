@@ -1452,14 +1452,16 @@ public class DefaultCoordinator extends Coordinator {
             LOG.warn("update profile failed {}", instanceId, e);
         }
 
-        // update load profile
-        try {
-            lock();
-            queryProfile.updateLoadChannelProfile(params);
-        } catch (Throwable e) {
-            LOG.warn("update load channel profile failed {}", instanceId, e);
-        } finally {
-            unlock();
+        // A status-only report must not wait for deployment while updating absent load data.
+        if (params.isSetLoad_channel_profile()) {
+            try {
+                lock();
+                queryProfile.updateLoadChannelProfile(params);
+            } catch (Throwable e) {
+                LOG.warn("update load channel profile failed {}", instanceId, e);
+            } finally {
+                unlock();
+            }
         }
 
         // update job progress
@@ -1501,17 +1503,28 @@ public class DefaultCoordinator extends Coordinator {
             throw new RuntimeException(String.format("updateFinishInstance called after fragment is finished:%s, query_id:%s",
                     instanceId, DebugUtil.printId(params.getQuery_id())));
         }
-        try {
-            lock();
-            queryProfile.updateLoadInformation(execState, params);
-        } catch (Throwable e) {
-            LOG.warn("update load information failed {}", instanceId, e);
-        } finally {
-            unlock();
+        if (hasLoadInformation(params)) {
+            try {
+                lock();
+                queryProfile.updateLoadInformation(execState, params);
+            } catch (Throwable e) {
+                LOG.warn("update load information failed {}", instanceId, e);
+            } finally {
+                unlock();
+            }
         }
 
         // NOTE: it's critical for query execution, and must be put after the profile update
         queryProfile.finishInstance(params.getFragment_instance_id());
+    }
+
+    private static boolean hasLoadInformation(TReportExecStatusParams params) {
+        // Keep all fields consumed by QueryRuntimeProfile.updateLoadInformation under the coordinator lock,
+        // including export and CACHE SELECT reports, which need not be LOAD queries.
+        return params.isSetDelta_urls() || params.isSetLoad_counters() || params.isSetTracking_url()
+                || params.isSetExport_files() || params.isSetCommitInfos() || params.isSetFailInfos()
+                || params.isSetRejected_record_path() || params.isSetSink_commit_infos()
+                || params.isSetLoad_datacache_metrics();
     }
 
     @Override

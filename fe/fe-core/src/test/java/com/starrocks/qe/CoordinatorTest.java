@@ -36,9 +36,12 @@ import com.starrocks.planner.TupleId;
 import com.starrocks.proto.AIExecutionStatisticsPB;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.qe.scheduler.QueryRuntimeProfile;
+import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.ExecutionSchedule;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
+import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
@@ -50,7 +53,10 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TReportAuditStatisticsParams;
+import com.starrocks.thrift.TReportExecStatusParams;
+import com.starrocks.thrift.TRuntimeProfileTree;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TUniqueId;
@@ -81,6 +87,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class CoordinatorTest extends PlanTestBase {
     ConnectContext ctx;
@@ -106,6 +113,83 @@ public class CoordinatorTest extends PlanTestBase {
                 new PlanFragment(new PlanFragmentId(1), new EmptySetNode(new PlanNodeId(1), tupleIdArrayList),
                         new DataPartition(TPartitionType.RANDOM));
         return fragment;
+    }
+
+    @Test
+    public void testStatusOnlyReportsDoNotWaitForDeployment() throws Exception {
+        for (boolean done : new boolean[] {false, true}) {
+            assertReportDuringDeployment(done, false, false);
+        }
+    }
+
+    @Test
+    public void testLoadChannelReportRetainsDeploymentLock() throws Exception {
+        assertReportDuringDeployment(false, true, false);
+    }
+
+    @Test
+    public void testLoadInformationReportRetainsDeploymentLock() throws Exception {
+        assertReportDuringDeployment(true, false, true);
+    }
+
+    private void assertReportDuringDeployment(boolean done, boolean loadChannel, boolean loadInformation) throws Exception {
+        ExecutionDAG dag = mock(ExecutionDAG.class);
+        FragmentInstanceExecState execState = mock(FragmentInstanceExecState.class);
+        QueryRuntimeProfile profile = mock(QueryRuntimeProfile.class);
+        Deencapsulation.setField(coordinator, "executionDAG", dag);
+        Deencapsulation.setField(coordinator, "queryProfile", profile);
+        CountDownLatch reporting = new CountDownLatch(1);
+        when(dag.getExecution(0)).thenReturn(execState);
+        when(execState.updateExecStatus(any())).thenAnswer(call -> {
+            reporting.countDown();
+            return true;
+        });
+        when(execState.getState()).thenReturn(FragmentInstanceExecState.State.FINISHED);
+        when(execState.isFinished()).thenReturn(true);
+        TReportExecStatusParams params = new TReportExecStatusParams()
+                .setBackend_num(0).setFragment_instance_id(new TUniqueId(1, 2))
+                .setStatus(new TStatus(TStatusCode.OK)).setDone(done);
+        if (loadChannel) {
+            params.setLoad_channel_profile(new TRuntimeProfileTree());
+        }
+        if (loadInformation) {
+            params.setLoad_counters(Collections.singletonMap("dpp.norm.ALL", "1"));
+        }
+        ReentrantLock deploymentLock = Deencapsulation.getField(coordinator, "lock");
+        ExecutorService worker = Executors.newSingleThreadExecutor();
+        deploymentLock.lock();
+        try {
+            Future<?> report = worker.submit(() -> coordinator.updateFragmentExecStatus(params));
+            Assertions.assertTrue(reporting.await(5, TimeUnit.SECONDS));
+            if (loadChannel || loadInformation) {
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+                while (!deploymentLock.hasQueuedThreads() && System.nanoTime() < deadline) {
+                    Thread.sleep(1);
+                }
+                Assertions.assertTrue(deploymentLock.hasQueuedThreads(), "load data must retain its lock");
+                verify(profile, never()).updateLoadChannelProfile(any());
+                verify(profile, never()).updateLoadInformation(any(), any());
+                deploymentLock.unlock();
+            }
+            report.get(5, TimeUnit.SECONDS);
+            verify(profile).updateProfile(execState, params);
+            verify(execState).updateRunningProfile(params);
+            if (done) {
+                verify(profile).finishInstance(params.getFragment_instance_id());
+            }
+            if (loadChannel) {
+                verify(profile).updateLoadChannelProfile(params);
+            }
+            if (loadInformation) {
+                verify(profile).updateLoadInformation(execState, params);
+            }
+        } finally {
+            if (deploymentLock.isHeldByCurrentThread()) {
+                deploymentLock.unlock();
+            }
+            worker.shutdownNow();
+            Assertions.assertTrue(worker.awaitTermination(5, TimeUnit.SECONDS));
+        }
     }
 
     @Test
