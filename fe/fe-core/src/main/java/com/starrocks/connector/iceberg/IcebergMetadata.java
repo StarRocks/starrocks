@@ -30,6 +30,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -208,6 +209,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -3836,49 +3838,68 @@ public class IcebergMetadata implements ConnectorMetadata {
             writeType = "insert";
         }
 
-        BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite, isRewrite);
-
-        if (branch != null) {
-            batchWrite.toBranch(branch);
-        }
-
+        // Validate a rewrite from the snapshot it planned against, not the one current at
+        // commit time. RewriteFiles checks for row-level deletes added to the files being
+        // replaced over the range (startingSnapshot, current]; passing the commit-time
+        // snapshot makes that range empty, so a DELETE/UPDATE that landed while the rewrite
+        // was running is never seen. Replacing its data files then strands the position
+        // deletes on paths no longer in the table, silently resurrecting deleted rows.
+        // Resolved once, so a retried rewrite commit keeps validating from the same snapshot.
+        Long baseSnapshotId = null;
         if (isRewrite && extra != null) {
-            ((IcebergSinkExtra) extra).getScannedDataFiles().forEach(batchWrite::deleteFile);
-            ((IcebergSinkExtra) extra).getAppliedDeleteFiles().forEach(batchWrite::deleteFile);
-            // Validate from the snapshot the rewrite planned against, not the one current at
-            // commit time. RewriteFiles checks for row-level deletes added to the files being
-            // replaced over the range (startingSnapshot, current]; passing the commit-time
-            // snapshot makes that range empty, so a DELETE/UPDATE that landed while the rewrite
-            // was running is never seen. Replacing its data files then strands the position
-            // deletes on paths no longer in the table, silently resurrecting deleted rows.
-            Long baseSnapshotId = ((IcebergSinkExtra) extra).getBaseSnapshotId();
+            baseSnapshotId = ((IcebergSinkExtra) extra).getBaseSnapshotId();
             if (baseSnapshotId == null) {
                 Snapshot currentSnapshot = nativeTbl.currentSnapshot();
                 if (currentSnapshot != null) {
                     baseSnapshotId = currentSnapshot.snapshotId();
                 }
             }
-            if (baseSnapshotId != null) {
-                ((RewriteData) batchWrite).setSnapshotId(baseSnapshotId);
-            }
         }
-
-        // Set audit info for the commit
-        if (context != null) {
-            batchWrite.setAuditInfo("StarRocks",
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion(),
-                    context.getCurrentUserIdentity() != null ? context.getCurrentUserIdentity().getUser() : "None");
-        }
+        final Long rewriteBaseSnapshotId = baseSnapshotId;
 
         try {
             // Build the files inside commitWithCleanup so a rejected entry deletes the BE-written files.
             commitWithCleanup(() -> {
+                // Built once and reused by every retry: the BE wrote these files under the spec current
+                // now, which a refresh between retries could replace, and buildDataFile converts the
+                // thrift bounds in place, so it must not run twice on the same TIcebergDataFile.
                 PartitionSpec partitionSpec = nativeTbl.spec();
+                List<org.apache.iceberg.DataFile> icebergDataFiles = new ArrayList<>(dataFiles.size());
                 for (TIcebergDataFile dataFile : dataFiles) {
-                    batchWrite.addFile(buildDataFile(dataFile, partitionSpec, nativeTbl));
+                    icebergDataFiles.add(buildDataFile(dataFile, partitionSpec, nativeTbl));
                 }
-                batchWrite.commit();
-                transaction.commitTransaction();
+                Transaction txn = transaction;
+                for (int retry = 0; ; retry++) {
+                    BatchWrite batchWrite = newBatchWrite(txn, isOverwrite, isRewrite, branch, extra,
+                            rewriteBaseSnapshotId, context);
+                    try {
+                        icebergDataFiles.forEach(batchWrite::addFile);
+                        batchWrite.commit();
+                        txn.commitTransaction();
+                        return;
+                    } catch (CommitFailedException e) {
+                        // A rewrite's commit only fails here after Iceberg's own retries all lost the
+                        // metadata swap to other writers; a rewrite does not conflict with their appends,
+                        // so try again on the latest table. Conflicts (ValidationException) and an unknown
+                        // commit state are not CommitFailedException and are never retried.
+                        if (!isRewrite || retry >= Config.iceberg_rewrite_commit_max_retries) {
+                            throw e;
+                        }
+                        long sleepMs = Math.min(30_000L, 1000L << Math.min(retry, 5));
+                        sleepMs += ThreadLocalRandom.current().nextLong(sleepMs / 5 + 1);
+                        LOG.warn("Iceberg rewrite commit on {}.{}.{} lost to concurrent commits, retry {}/{} in {} ms",
+                                catalogName, dbName, tableName, retry + 1, Config.iceberg_rewrite_commit_max_retries,
+                                sleepMs, e);
+                        try {
+                            Thread.sleep(sleepMs);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            throw e;
+                        }
+                        nativeTbl.refresh();
+                        txn = nativeTbl.newTransaction();
+                    }
+                }
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
 
             // Record metrics after successful commit
@@ -3912,6 +3933,31 @@ public class IcebergMetadata implements ConnectorMetadata {
         LOG.info("Submit async refresh others fe iceberg metadata cache on {}.{}.{}", catalogName, dbName, tableName);
         GlobalStateMgr.getCurrentState().refreshOthersFeTableAsync(
                 new TableName(catalogName, dbName, tableName), new ArrayList<>());
+    }
+
+    private BatchWrite newBatchWrite(Transaction transaction, boolean isOverwrite, boolean isRewrite, String branch,
+                                     Object extra, Long rewriteBaseSnapshotId, ConnectContext context) {
+        BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite, isRewrite);
+
+        if (branch != null) {
+            batchWrite.toBranch(branch);
+        }
+
+        if (isRewrite && extra != null) {
+            ((IcebergSinkExtra) extra).getScannedDataFiles().forEach(batchWrite::deleteFile);
+            ((IcebergSinkExtra) extra).getAppliedDeleteFiles().forEach(batchWrite::deleteFile);
+            if (rewriteBaseSnapshotId != null) {
+                ((RewriteData) batchWrite).setSnapshotId(rewriteBaseSnapshotId);
+            }
+        }
+
+        // Set audit info for the commit
+        if (context != null) {
+            batchWrite.setAuditInfo("StarRocks",
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion(),
+                    context.getCurrentUserIdentity() != null ? context.getCurrentUserIdentity().getUser() : "None");
+        }
+        return batchWrite;
     }
 
     public BatchWrite getBatchWrite(Transaction transaction, boolean isOverwrite, boolean isRewrite) {
