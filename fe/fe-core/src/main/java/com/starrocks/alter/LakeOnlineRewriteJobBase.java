@@ -1448,6 +1448,11 @@ public abstract class LakeOnlineRewriteJobBase
             // SELECT reading the base deterministically (no-op for single-index rewrite jobs).
             sessionVariable.setEnableSyncMaterializedViewRewrite(false);
             sessionVariable.setInsertTimeoutS((int) (timeoutMs / 2000));
+            // The next scheduler tick checks a committed rewrite again, so wait for its publish at most one tick,
+            // whatever the global tx_visible_wait_timeout. StmtExecutor applies this wait to a shadow rewrite
+            // even with enable_sync_publish on.
+            sessionVariable.setTransactionVisibleWaitTimeout(
+                    Math.max(1L, Config.alter_scheduler_interval_millisecond / 1000L));
 
             // Journal the rewrite txn id BEFORE executing: peekNextTransactionId() is the id the
             // INSERT's beginTransaction will allocate, so record it as durable evidence of which txn
