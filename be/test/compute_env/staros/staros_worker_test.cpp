@@ -1379,6 +1379,19 @@ TEST(RemoteIOSchedulerConfigTest, EnableFallsBackWithoutSchedulerOrCache) {
     EXPECT_TRUE(config::io_coalesce_lake_read_enable);
 }
 
+// With the scheduler running, a dynamic update that turns io_coalesce_lake_read_enable on is rejected and rolled back.
+// The rollback restores the value recorded last, which must be the false the scheduler set, not the true of be.conf.
+TEST(RemoteIOSchedulerConfigTest, IoCoalesceStaysOffAfterRejectedUpdate) {
+    ASSERT_OK(config::set_config("io_coalesce_lake_read_enable", "true"));
+    DeferOp restore([] { (void)config::set_config("io_coalesce_lake_read_enable", "false"); });
+    EXPECT_TRUE(turn_io_coalesce_lake_read_off());
+    EXPECT_FALSE(config::io_coalesce_lake_read_enable);
+    // What ConfigUpdateRegistry::update_config does when the hook refuses the new value.
+    ASSERT_OK(config::set_config("io_coalesce_lake_read_enable", "true"));
+    ASSERT_OK(config::rollback_config("io_coalesce_lake_read_enable"));
+    EXPECT_FALSE(config::io_coalesce_lake_read_enable);
+}
+
 // An invalid config refuses startup instead of falling back.
 TEST(RemoteIOSchedulerConfigTest, EnableRejectsInvalidConfig) {
     SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, true);

@@ -60,6 +60,10 @@ void apply_starlet_upload_threshold_configs();
 // Only reads configs, so that startup can refuse an invalid value before any cache or thread exists.
 Status validate_remote_io_scheduler_config();
 
+// Turns io_coalesce_lake_read_enable off, recording false as its set value so that a rejected dynamic update rolls
+// back to false. Returns the value it had. Called when the scheduler starts; exposed for tests.
+bool turn_io_coalesce_lake_read_off();
+
 // The scheduler options the configs give. Exposed for tests.
 staros::starlet::fslib::RemoteReadSchedulerOptions remote_read_scheduler_options();
 

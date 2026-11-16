@@ -24,6 +24,7 @@
 #include <utility>
 
 #include "common/config_staros_worker_fwd.h"
+#include "common/configbase.h"
 #include "common/gflags_utils.h"
 #include "common/logging.h"
 #include "common/shutdown_hook.h"
@@ -154,6 +155,17 @@ bool update_starlet_flag(const char* name, const std::string& value) {
 
 } // namespace
 
+bool turn_io_coalesce_lake_read_off() {
+    const bool configured = config::io_coalesce_lake_read_enable;
+    // Through the config setter, not a plain assignment: the field also records the value, and a dynamic update that
+    // the config hook rejects rolls back to the recorded value. Recording false keeps the coalesced read off then too.
+    if (auto st = config::set_config("io_coalesce_lake_read_enable", "false"); !st.ok()) {
+        LOG(WARNING) << "failed to turn io_coalesce_lake_read_enable off: " << st;
+        config::io_coalesce_lake_read_enable = false;
+    }
+    return configured;
+}
+
 Status validate_remote_io_scheduler_config() {
     if (!config::remote_io_scheduler_enable || !remote_io_scheduler_has_cache()) {
         return Status::OK();
@@ -249,8 +261,7 @@ Status enable_remote_io_scheduler() {
     }
     // The scheduler also replaces the coalesced lake read. Turning the config itself off, before any lake read, keeps
     // every reader of it on one value; be.conf keeps its own, so a restart without the scheduler brings it back.
-    const bool configured_io_coalesce_lake_read = config::io_coalesce_lake_read_enable;
-    config::io_coalesce_lake_read_enable = false;
+    const bool configured_io_coalesce_lake_read = turn_io_coalesce_lake_read_off();
     g_remote_io_scheduler_enabled.store(true);
     LOG(INFO) << "remote I/O scheduler enabled: io_threads=" << opts.io_threads
               << " adaptive_limit=" << opts.adaptive_limit << " adaptive_min_inflight=" << opts.adaptive_min_inflight
