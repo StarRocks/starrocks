@@ -575,11 +575,15 @@ public class IcebergMetadata implements ConnectorMetadata {
                 .includeColumnStats()   // Must include column statistics for evaluation
                 .ignoreResiduals();
 
-        try (CloseableIterable<FileScanTask> tasks = scan.planFiles()) {
+        // Close the iterator too: closing only the iterable does not stop the planning workers of some scans
+        // (e.g. REST server-side planning) when the loop exits early.
+        try (CloseableIterable<FileScanTask> tasks = scan.planFiles();
+                CloseableIterator<FileScanTask> taskIterator = tasks.iterator()) {
             StrictMetricsEvaluator metricsEvaluator =
                     new StrictMetricsEvaluator(nativeTable.schema(), deleteExpr, caseSensitive);
 
-            for (FileScanTask task : tasks) {
+            while (taskIterator.hasNext()) {
+                FileScanTask task = taskIterator.next();
                 DataFile file = task.file();
                 PartitionSpec spec = task.spec();
 
@@ -674,8 +678,10 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             int matchedFiles = 0;
             try (CloseableIterable<FileScanTask> tasks = nativeTbl.newScan()
-                    .filter(pushableExpr).caseSensitive(false).ignoreResiduals().planFiles()) {
-                for (FileScanTask task : tasks) {
+                    .filter(pushableExpr).caseSensitive(false).ignoreResiduals().planFiles();
+                    CloseableIterator<FileScanTask> taskIterator = tasks.iterator()) {
+                while (taskIterator.hasNext()) {
+                    FileScanTask task = taskIterator.next();
                     if (PartitionCastPredicatePruner.partitionDefinitelyMatches(residual.residual,
                             icebergPartitionValues(task, icebergTable, false))) {
                         deleteFiles.deleteFile(task.file());
