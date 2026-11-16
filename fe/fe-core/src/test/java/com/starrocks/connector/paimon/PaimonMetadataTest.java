@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.Table;
@@ -30,6 +31,7 @@ import com.starrocks.common.proc.ExternalSchemaProcNode;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.CatalogConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorTableVersion;
@@ -40,10 +42,16 @@ import com.starrocks.connector.PointerType;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
-import com.starrocks.connector.index.ConnectorIndexDescriptor;
-import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
-import com.starrocks.connector.index.ConnectorIndexDescriptor.Operation;
-import com.starrocks.connector.index.ConnectorIndexMetadata;
+import com.starrocks.connector.hive.HiveMetadata;
+import com.starrocks.connector.informationschema.InformationSchemaMetadata;
+import com.starrocks.connector.paimon.index.PaimonGlobalIndexResult;
+import com.starrocks.connector.paimon.index.PaimonIndexDescriptor;
+import com.starrocks.connector.paimon.index.PaimonIndexDescriptor.IndexType;
+import com.starrocks.connector.paimon.index.PaimonIndexDescriptor.Operation;
+import com.starrocks.connector.paimon.index.PaimonIndexMetadata;
+import com.starrocks.connector.paimon.index.PaimonIndexMetadataCache;
+import com.starrocks.connector.paimon.index.PaimonIndexTable;
+import com.starrocks.connector.unified.UnifiedMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.ha.FrontendNodeType;
@@ -82,6 +90,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -96,6 +105,7 @@ import com.starrocks.type.StringType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Injectable;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
@@ -1077,6 +1087,19 @@ public class PaimonMetadataTest {
         assertEquals(6, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
                 .getPaimonSplitsInfo().getPaimonSplits().size());
 
+        // partition LIKE that cannot be pushed down ('_' is a wildcard), limit 1: no limit pruning, otherwise
+        // Paimon could return a split the BE filters out entirely while the matching ones are never scanned
+        ScalarOperator createDateLikePredicate = new LikePredicateOperator(LikePredicateOperator.LikeType.LIKE,
+                createDateColumn, ConstantOperator.createVarchar(dateFormatter.format(now).substring(0, 2) + "__%"));
+        metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateLikePredicate)
+                .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L))).build();
+        result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
+        assertEquals(1, result.size());
+        assertEquals(1, result.get(0).getFiles().size());
+        assertEquals(6, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
+                .getPaimonSplitsInfo().getPaimonSplits().size());
+
         catalog.dropTable(identifier, true);
         catalog.dropDatabase("test_db", true, true);
         Files.delete(tmpDir);
@@ -1280,9 +1303,9 @@ public class PaimonMetadataTest {
                     "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
             PaimonTable starRocksTable = (PaimonTable) fullMetadata.getTable(
                     context, identifier.getDatabaseName(), identifier.getObjectName());
-            ConnectorIndexMetadata discovered = fullMetadata.getIndexMetadata(
+            PaimonIndexMetadata discovered = fullMetadata.getIndexMetadata(
                     starRocksTable, TvrTableSnapshot.of(snapshotId));
-            ConnectorIndexDescriptor btree = discovered.findDescriptor(0, IndexType.RANGE).orElseThrow();
+            PaimonIndexDescriptor btree = discovered.findDescriptor(0, IndexType.RANGE).orElseThrow();
             assertEquals(IndexType.RANGE, btree.getType());
             assertTrue(btree.supports(Operation.EQUAL));
 
@@ -1306,11 +1329,11 @@ public class PaimonMetadataTest {
                     "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
             PaimonTable renamedTable = (PaimonTable) renamedMetadata.getTable(
                     context, identifier.getDatabaseName(), identifier.getObjectName());
-            ConnectorIndexMetadata renamedDiscovery = renamedMetadata.getIndexMetadata(
+            PaimonIndexMetadata renamedDiscovery = renamedMetadata.getIndexMetadata(
                     renamedTable, TvrTableSnapshot.of(snapshotId));
             assertEquals(0, renamedDiscovery.getCurrentFieldId("renamed_id").orElseThrow());
             assertTrue(renamedDiscovery.getCurrentFieldId("id").isEmpty());
-            ConnectorIndexDescriptor renamedDescriptor = renamedDiscovery
+            PaimonIndexDescriptor renamedDescriptor = renamedDiscovery
                     .findDescriptor(0, IndexType.RANGE).orElseThrow();
             assertEquals("renamed_id", renamedDescriptor.getColumnName());
 
@@ -1320,6 +1343,31 @@ public class PaimonMetadataTest {
             ConnectContext.remove();
             FileUtils.deleteDirectory(tmpDir.toFile());
         }
+    }
+
+    @Test
+    public void testResolveIndexMetadataThroughCatalogWrappers(@Injectable PaimonMetadata paimonMetadata,
+                                                               @Injectable HiveMetadata hiveMetadata) {
+        PaimonTable table = new PaimonTable();
+        InformationSchemaMetadata info = new InformationSchemaMetadata("test_catalog");
+        CatalogConnectorMetadata direct = new CatalogConnectorMetadata(paimonMetadata, info, null);
+        UnifiedMetadata unified = new UnifiedMetadata(Map.of(
+                Table.TableType.PAIMON, paimonMetadata, Table.TableType.HIVE, hiveMetadata));
+        CatalogConnectorMetadata wrapped = new CatalogConnectorMetadata(unified, info, null);
+
+        assertSame(paimonMetadata, PaimonMetadata.resolve(paimonMetadata, table).orElseThrow());
+        assertSame(paimonMetadata, PaimonMetadata.resolve(direct, table).orElseThrow());
+        assertSame(paimonMetadata, PaimonMetadata.resolve(wrapped, table).orElseThrow());
+        assertSame(paimonMetadata, PaimonMetadata.resolve(wrapped, new PaimonIndexTable(table)).orElseThrow());
+        assertTrue(PaimonMetadata.resolve(wrapped, new HiveTable()).isEmpty());
+    }
+
+    @Test
+    public void testNativeTableBranchSurvivesConsumedThreadLocal() {
+        assertEquals("dev", PaimonMetadata.resolveIndexBranch(
+                Map.of(CoreOptions.BRANCH.key(), "dev"), "main"));
+        assertEquals("dev", PaimonMetadata.resolveIndexBranch(Collections.emptyMap(), "dev"));
+        assertEquals("main", PaimonMetadata.resolveIndexBranch(Collections.emptyMap(), "main"));
     }
 
     @Test
@@ -1373,7 +1421,7 @@ public class PaimonMetadataTest {
                     context.getSessionVariable().setPaimonGlobalIndexScanStage(stage);
                     metadata.getTableStatistics(optimizer, table, Map.of(id, new Column("id", IntegerType.INT)),
                             null, predicate, -1, TvrTableSnapshot.of(snapshotId));
-                    GetRemoteFilesParams request = requests.get(requests.size() - 1);
+                    PaimonGetRemoteFilesParams request = (PaimonGetRemoteFilesParams) requests.get(requests.size() - 1);
                     List<Split> splits = plannedSplits.get(plannedSplits.size() - 1).getPaimonSplits();
                     assertEquals(stage != 1, request.isDisableGlobalIndex(), "statistics stage " + stage);
                     assertFalse(splits.isEmpty());
@@ -1409,11 +1457,14 @@ public class PaimonMetadataTest {
             context.getSessionVariable().setEnablePaimonColumnStatistics(false);
             metadata.getTableStatistics(optimizer, table, Map.of(stringId, new Column("id", VARCHAR)),
                     null, stringPredicate, -1, TvrTableSnapshot.of(snapshotId));
-            assertFalse(requests.get(requests.size() - 1).isDisableGlobalIndex());
+            assertFalse(((PaimonGetRemoteFilesParams) requests.get(requests.size() - 1)).isDisableGlobalIndex());
             PaimonSplitsInfo safeSplits = plannedSplits.get(plannedSplits.size() - 1);
             assertFalse(safeSplits.getPaimonSplits().isEmpty());
             assertTrue(safeSplits.getPaimonSplits().stream().noneMatch(IndexedSplit.class::isInstance));
             assertEquals(List.of("1"), readEvolvedIds(safeSplits, false));
+            catalog.dropTable(identifier, false);
+            assertFalse(metadata.tableExists(context, "test_db", "indexed_table"));
+            assertFalse(metadata.tableExists(context, "test_db", "indexed_table$global_index"));
         } finally {
             ConnectContext.remove();
             FileUtils.deleteDirectory(tmpDir.toFile());
@@ -1677,12 +1728,13 @@ public class PaimonMetadataTest {
                     org.apache.paimon.globalindex.GlobalIndexResult.create(rowIds));
             ColumnRefOperator id = new ColumnRefOperator(11, IntegerType.INT, "id", true);
             ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, id, ConstantOperator.createInt(1));
-            GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
-                    .setFieldNames(List.of("id", "payload")).setPredicate(predicate)
-                    .setTableVersionRange(TvrTableSnapshot.of(indexedSnapshot)).build();
+            PaimonGetRemoteFilesParams.Builder paramsBuilder = PaimonGetRemoteFilesParams.newBuilder();
+            paramsBuilder.setFieldNames(List.of("id", "payload")).setPredicate(predicate)
+                    .setTableVersionRange(TvrTableSnapshot.of(indexedSnapshot));
+            PaimonGetRemoteFilesParams params = paramsBuilder.build();
             PaimonSplitsInfo regular = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, params)
                     .get(0).getFiles().get(0)).getPaimonSplitsInfo();
-            params.setConnectorIndexResult(selected);
+            params.setIndexResult(selected);
             PaimonSplitsInfo selectedSplits = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, params)
                     .get(0).getFiles().get(0)).getPaimonSplitsInfo();
             assertNotSame(regular, selectedSplits);
@@ -1696,7 +1748,7 @@ public class PaimonMetadataTest {
                     com.starrocks.common.tvr.TvrTableDelta.of(indexedSnapshot - 1, indexedSnapshot)).isEmpty());
             PaimonGlobalIndexResult wrongTable = new PaimonGlobalIndexResult(
                     nativeTable.location() + "/other", "main", indexedSnapshot, selected.getResult());
-            params.setConnectorIndexResult(wrongTable);
+            params.setIndexResult(wrongTable);
             PaimonSplitsInfo rejected = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, params)
                     .get(0).getFiles().get(0)).getPaimonSplitsInfo();
             assertFalse(rejected.isDistributedIndexApplied());
@@ -1717,18 +1769,17 @@ public class PaimonMetadataTest {
             assertFalse(metadata.getIndexShards(table, indexedSnapshot, Map.of(0, IndexType.RANGE)).isEmpty());
             ScalarOperator appendedPredicate = new InPredicateOperator(false, List.of(
                     id, ConstantOperator.createInt(1), ConstantOperator.createInt(3)));
-            GetRemoteFilesParams staleResult = GetRemoteFilesParams.newBuilder()
+            GetRemoteFilesParams staleResult = PaimonGetRemoteFilesParams.newBuilder().setIndexResult(selected)
                     .setFieldNames(List.of("id", "payload")).setPredicate(appendedPredicate)
-                    .setTableVersionRange(TvrTableSnapshot.of(appendedSnapshot))
-                    .setConnectorIndexResult(selected).build();
+                    .setTableVersionRange(TvrTableSnapshot.of(appendedSnapshot)).build();
             PaimonSplitsInfo fallback = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, staleResult)
                     .get(0).getFiles().get(0)).getPaimonSplitsInfo();
             assertEquals(List.of(1, 3), readIds(nativeTable, fallback));
 
-            GetRemoteFilesParams disabled = GetRemoteFilesParams.newBuilder()
+            GetRemoteFilesParams disabled = PaimonGetRemoteFilesParams.newBuilder()
+                    .setDisableGlobalIndex(true).setIndexResult(selected)
                     .setFieldNames(List.of("id", "payload")).setPredicate(appendedPredicate)
-                    .setTableVersionRange(TvrTableSnapshot.of(appendedSnapshot)).setDisableGlobalIndex(true)
-                    .setConnectorIndexResult(selected).build();
+                    .setTableVersionRange(TvrTableSnapshot.of(appendedSnapshot)).build();
             PaimonSplitsInfo noIndex = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, disabled)
                     .get(0).getFiles().get(0)).getPaimonSplitsInfo();
             assertTrue(noIndex.getPaimonSplits().stream().noneMatch(IndexedSplit.class::isInstance));
@@ -1963,7 +2014,7 @@ public class PaimonMetadataTest {
                     return "bitmap".equals(provider) ? "lumina" : provider;
                 }
             };
-            ConnectorIndexMetadata discovered = metadata.getIndexMetadata(table, TvrTableSnapshot.of(mixed));
+            PaimonIndexMetadata discovered = metadata.getIndexMetadata(table, TvrTableSnapshot.of(mixed));
             assertEquals(1, discovered.getDescriptors().size());
             assertEquals(IndexType.RANGE, discovered.getDescriptors().get(0).getType());
             assertTrue(metadata.getIndexShards(table, mixed, Map.of(0, IndexType.RANGE)).isEmpty());
@@ -3316,6 +3367,8 @@ public class PaimonMetadataTest {
         assertEquals("test_view", view.getName());
         assertEquals("select * from table", view.getInlineViewDef());
         assertThrows(StarRocksPlannerException.class, view::getQueryStatement);
+        assertFalse(metadata.tableExists(connectContext, "db", "test_view$global_index"));
+        assertNull(metadata.getTable(connectContext, "db", "test_view$global_index"));
 
         //test drop normal
         DropTableStmt dropStmt = new DropTableStmt(true, new TableRef(QualifiedName.of(

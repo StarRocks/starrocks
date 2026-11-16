@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将 Base64 编码的字符串转换为 Bitmap。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # base64_to_bitmap

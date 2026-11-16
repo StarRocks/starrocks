@@ -791,7 +791,7 @@ public class QueryOptimizer extends Optimizer {
 
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.VECTOR_REWRITE_RULES);
         if (context.getSessionVariable().getPaimonGlobalIndexScanStage() != 0) {
-            scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.APPLY_CONNECTOR_INDEX_RULES);
+            scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.APPLY_PAIMON_INDEX_RULES);
         }
 
         scheduler.rewriteOnce(tree, rootTaskContext, SplitJoinORToUnionRule.getInstance());

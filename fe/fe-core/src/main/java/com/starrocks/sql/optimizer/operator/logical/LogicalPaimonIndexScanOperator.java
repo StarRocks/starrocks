@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer.operator.logical;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
-import com.starrocks.connector.paimon.PaimonIndexTable;
+import com.starrocks.connector.paimon.index.PaimonIndexTable;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;

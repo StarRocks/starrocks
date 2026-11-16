@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CANCEL EXPORT cancels a given data unloading job."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CANCEL EXPORT

@@ -909,6 +909,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
+    // Deprecated: an Iceberg identity partition column always takes its value from the partition metadata.
+    @Deprecated
     public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
 
     public static final String ENABLE_ICEBERG_COMPACTION_WITH_ROW_LINEAGE =
@@ -1022,6 +1024,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_IVM_REFRESH = "enable_ivm_refresh";
     public static final String TVR_TARGET_MVID = "tvr_target_mvid";
+    public static final String ENABLE_IVM_MV_SCAN_SORT_KEY_JOIN_KEYS = "enable_ivm_mv_scan_sort_key_join_keys";
 
     public static final String ENABLE_SPM_REWRITE = "enable_spm_rewrite";
     public static final String SPM_REWRITE_TIMEOUT_MS = "spm_rewrite_timeout_ms";
@@ -2277,7 +2280,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private String defaultTableCompressionAlgorithm = "lz4_frame";
 
     @VariableMgr.VarAttr(name = ENABLE_ADAPTIVE_SINK_DOP)
-    private boolean enableAdaptiveSinkDop = false;
+    private boolean enableAdaptiveSinkDop = true;
 
     @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE_V2, alias = JOIN_IMPLEMENTATION_MODE)
     private String joinImplementationMode = "auto"; // auto, merge, hash, nestloop
@@ -3251,6 +3254,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_IVM_REFRESH, flag = VariableMgr.INVISIBLE)
     private boolean enableIVMRefresh = false;
 
+    @VarAttr(name = ENABLE_IVM_MV_SCAN_SORT_KEY_JOIN_KEYS)
+    private boolean enableIvmMvScanSortKeyJoinKeys = true;
+
     @VarAttr(name = ENABLE_SPM_REWRITE)
     private boolean enableSPMRewrite = false;
 
@@ -3837,7 +3843,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboPredicateSubfieldPath;
     }
 
-    @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
+    // Deprecated and invisible, no effect: kept so that SET of it still succeeds.
+    @Deprecated
+    @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE, flag = VariableMgr.INVISIBLE)
     private boolean enableIcebergIdentityColumnOptimize = true;
 
     @VarAttr(name = ENABLE_ICEBERG_COMPACTION_WITH_ROW_LINEAGE, flag = VariableMgr.INVISIBLE)
@@ -5228,10 +5236,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setRangeScanExecutionMode(String mode) {
-        if (!"colocate".equalsIgnoreCase(mode) && !"parallel".equalsIgnoreCase(mode)) {
-            throw new IllegalArgumentException("Legal values of range_scan_execution_mode are colocate|parallel");
+        if (!"colocate".equalsIgnoreCase(mode) && !"parallel".equalsIgnoreCase(mode)
+                && !"grouped".equalsIgnoreCase(mode)) {
+            throw new IllegalArgumentException("Legal values of range_scan_execution_mode are colocate|parallel|grouped");
         }
         rangeScanExecutionMode = mode.toLowerCase(Locale.ROOT);
+    }
+
+    public boolean isGroupedRangeScan() {
+        return "grouped".equals(rangeScanExecutionMode);
+    }
+
+    public boolean isRangeScanExecutionOverride() {
+        return isParallelRangeScan() || isGroupedRangeScan();
     }
 
     public boolean isParallelRangeScan() {
@@ -6095,6 +6112,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableIVMRefresh;
     }
 
+    public void setEnableIvmMvScanSortKeyJoinKeys(boolean enableIvmMvScanSortKeyJoinKeys) {
+        this.enableIvmMvScanSortKeyJoinKeys = enableIvmMvScanSortKeyJoinKeys;
+    }
+
+    public boolean isEnableIvmMvScanSortKeyJoinKeys() {
+        return enableIvmMvScanSortKeyJoinKeys;
+    }
+
     public void setTvrTargetMvid(String tvrTargetMvid) {
         this.tvrTargetMvId = tvrTargetMvid;
     }
@@ -6508,14 +6533,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getLargeDecimalUnderlyingType() {
         return largeDecimalUnderlyingType;
-    }
-
-    public boolean getEnableIcebergIdentityColumnOptimize() {
-        return enableIcebergIdentityColumnOptimize;
-    }
-
-    public void setEnableIcebergIdentityColumnOptimize(boolean enableIcebergIdentityColumnOptimize) {
-        this.enableIcebergIdentityColumnOptimize = enableIcebergIdentityColumnOptimize;
     }
 
     public boolean getEnableIcebergCompactionWithRowLineage() {

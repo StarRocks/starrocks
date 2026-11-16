@@ -265,6 +265,13 @@ public:
     // Determines the information about the filesystem on which the pathname 'path' is located.
     virtual StatusOr<SpaceInfo> space(const std::string& path) { return Status::NotSupported("FileSystem::space()"); }
 
+    // Returns a URL that grants read access to |path| without credentials, valid for |expiration_seconds|
+    // after it is signed. The URL is computed locally without sending a request to the storage service,
+    // so neither the existence of the object nor the permission to read it is checked.
+    virtual StatusOr<std::string> presign_read(const std::string& path, int64_t expiration_seconds) {
+        return Status::NotSupported("FileSystem::presign_read()");
+    }
+
     // Given the path to a remote file, delete the file's cache on the local file system, if any.
     // On success, Status::OK is returned. If there is no cache, Status::NotFound is returned.
     virtual Status drop_local_cache(const std::string& path, int64_t offset = 0, int64_t size = -1) {

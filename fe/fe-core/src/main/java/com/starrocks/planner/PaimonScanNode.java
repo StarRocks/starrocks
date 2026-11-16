@@ -22,17 +22,18 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.index.IndexCondition;
+import com.starrocks.connector.paimon.PaimonGetRemoteFilesParams;
+import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.connector.paimon.PaimonReaderSelector;
 import com.starrocks.connector.paimon.PaimonReaderSelector.Reader;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonSplitUtils;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
+import com.starrocks.connector.paimon.index.PaimonIndexCondition;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -86,7 +87,7 @@ public class PaimonScanNode extends ScanNode {
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private CloudConfiguration cloudConfiguration = null;
-    private IndexCondition recognizedIndexCondition;
+    private PaimonIndexCondition recognizedIndexCondition;
     private String distributedIndexStatus = "not attempted";
 
     public PaimonScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
@@ -142,29 +143,28 @@ public class PaimonScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, long limit,
-                                        @Nullable IndexCondition indexCondition) {
+                                        @Nullable PaimonIndexCondition indexCondition) {
         recognizedIndexCondition = indexCondition;
         distributedIndexStatus = "not attempted";
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
         int globalIndexScanStage = ConnectContext.get().getSessionVariable().getPaimonGlobalIndexScanStage();
         boolean disableGlobalIndex = globalIndexScanStage == 0;
-        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
-                .setPredicate(predicate)
+        PaimonGetRemoteFilesParams.Builder paramsBuilder = PaimonGetRemoteFilesParams.newBuilder()
+                .setDisableGlobalIndex(disableGlobalIndex);
+        paramsBuilder.setPredicate(predicate)
                 .setFieldNames(fieldNames)
                 .setTableVersionRange(tvrVersionRange)
-                .setLimit(limit)
-                .setDisableGlobalIndex(disableGlobalIndex)
-                .build();
+                .setLimit(limit);
+        PaimonGetRemoteFilesParams params = paramsBuilder.build();
         long snapshotId = tvrVersionRange == null ? -1L : tvrVersionRange.end().orElse(-1L);
         if (globalIndexScanStage == 2 && indexCondition != null
-                && !indexCondition.getFieldIds().isEmpty() && snapshotId >= 0) {
+                && !indexCondition.columnRefToFieldId().isEmpty() && snapshotId >= 0) {
             distributedIndexStatus = "SDK fallback";
             try {
-                Optional<ConnectorMetadata> metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                        .getOptionalMetadata(paimonTable.getCatalogName());
-                metadata.flatMap(value -> value.evaluateIndex(paimonTable, indexCondition, tvrVersionRange))
-                        .ifPresent(params::setConnectorIndexResult);
+                PaimonMetadata.resolve(paimonTable)
+                        .flatMap(metadata -> metadata.evaluateIndex(paimonTable, indexCondition, tvrVersionRange))
+                        .ifPresent(params::setIndexResult);
             } catch (RuntimeException e) {
                 if (ConnectContext.get().isStatementCancelled()) {
                     throw e;
@@ -182,15 +182,15 @@ public class PaimonScanNode extends ScanNode {
         try {
             fileInfos = getRemoteFiles(params);
         } catch (RuntimeException e) {
-            if (params.getConnectorIndexResult() == null || ConnectContext.get().isStatementCancelled()) {
+            if (params.getIndexResult() == null || ConnectContext.get().isStatementCancelled()) {
                 throw e;
             }
             // Applying the row-id result is part of the optional index path too. Retry without it
             // if Paimon rejects the result or an IndexedSplit cannot be planned.
             LOG.warn("Failed to apply Paimon Global Index result at snapshot {}; "
                     + "falling back to a normal scan", snapshotId, e);
-            GetRemoteFilesParams fallbackParams = params.copy();
-            fallbackParams.setConnectorIndexResult(null);
+            PaimonGetRemoteFilesParams fallbackParams = params.copy();
+            fallbackParams.setIndexResult(null);
             distributedIndexStatus = "SDK fallback";
             fileInfos = getRemoteFiles(fallbackParams);
         }
@@ -461,7 +461,7 @@ public class PaimonScanNode extends ScanNode {
         output.append(prefix).append("TABLE: ").append(paimonTable.getName()).append("\n");
         if (recognizedIndexCondition != null) {
             output.append(prefix).append("RECOGNIZED INDEX CONDITION: ")
-                    .append(recognizedIndexCondition.getPredicate()).append("\n");
+                    .append(recognizedIndexCondition.predicate()).append("\n");
             output.append(prefix).append("DISTRIBUTED INDEX: ").append(distributedIndexStatus).append("\n");
         }
 

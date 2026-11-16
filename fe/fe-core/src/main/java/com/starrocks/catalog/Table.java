@@ -141,8 +141,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         LANCE,
         @SerializedName("FLUSS")
         FLUSS,
-        @SerializedName("INDEX")
-        INDEX;
+        @SerializedName("PAIMON_INDEX")
+        PAIMON_INDEX;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {

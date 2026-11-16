@@ -2,6 +2,7 @@
 sidebar_position: 60
 description: Kafka Routine Load 使用存算分离存储
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # 通过 Routine Load 向 StarRocks 存算分离集群导入 Kafka 数据

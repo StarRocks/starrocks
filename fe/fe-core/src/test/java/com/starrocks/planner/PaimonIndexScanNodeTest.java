@@ -16,12 +16,12 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
-import com.starrocks.connector.index.ConnectorIndexShard;
-import com.starrocks.connector.index.IndexCondition;
-import com.starrocks.connector.paimon.PaimonGlobalIndexRequest;
-import com.starrocks.connector.paimon.PaimonIndexTable;
+import com.starrocks.connector.paimon.PaimonMetadata;
+import com.starrocks.connector.paimon.index.PaimonGlobalIndexRequest;
+import com.starrocks.connector.paimon.index.PaimonIndexCondition;
+import com.starrocks.connector.paimon.index.PaimonIndexDescriptor.IndexType;
+import com.starrocks.connector.paimon.index.PaimonIndexShard;
+import com.starrocks.connector.paimon.index.PaimonIndexTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -44,6 +44,7 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 import mockit.Expectations;
+import mockit.Injectable;
 import mockit.Mocked;
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.table.FileStoreTable;
@@ -135,16 +136,16 @@ public class PaimonIndexScanNodeTest {
             @Mocked GlobalStateMgr globalStateMgr,
             @Mocked MetadataMgr metadataMgr,
             @Mocked CatalogConnector connector,
-            @Mocked ConnectorMetadata connectorMetadata,
+            @Injectable PaimonMetadata connectorMetadata,
             @Mocked PaimonTable table,
             @Mocked FileStoreTable nativeTable) {
         String catalogName = "paimon_catalog";
         long snapshotId = 42L;
         Map<Integer, IndexType> requiredIndexes = Map.of(7, IndexType.RANGE);
-        ConnectorIndexShard firstShard = new ConnectorIndexShard(0L, 99L);
+        PaimonIndexShard firstShard = new PaimonIndexShard(0L, 99L);
         long finiteUpperBound = Long.MAX_VALUE - 1;
-        List<ConnectorIndexShard> validShards = List.of(firstShard,
-                new ConnectorIndexShard(finiteUpperBound, finiteUpperBound));
+        List<PaimonIndexShard> validShards = List.of(firstShard,
+                new PaimonIndexShard(finiteUpperBound, finiteUpperBound));
         new Expectations() {
             {
                 table.getId();
@@ -176,8 +177,8 @@ public class PaimonIndexScanNodeTest {
                 result = Optional.of(connectorMetadata);
                 connectorMetadata.getIndexShards(table, snapshotId, requiredIndexes);
                 returns(validShards, validShards,
-                        List.of(firstShard, new ConnectorIndexShard(100L, Long.MAX_VALUE)),
-                        List.of(firstShard, new ConnectorIndexShard(Long.MAX_VALUE, Long.MAX_VALUE)));
+                        List.of(firstShard, new PaimonIndexShard(100L, Long.MAX_VALUE)),
+                        List.of(firstShard, new PaimonIndexShard(Long.MAX_VALUE, Long.MAX_VALUE)));
             }
         };
 
@@ -187,7 +188,7 @@ public class PaimonIndexScanNodeTest {
         PaimonIndexScanNode scanNode = new PaimonIndexScanNode(new PlanNodeId(5), descriptor, indexTable);
 
         ColumnRefOperator indexedColumn = new ColumnRefOperator(1, IntegerType.INT, "id", true);
-        IndexCondition condition = new IndexCondition(
+        PaimonIndexCondition condition = new PaimonIndexCondition(
                 new BinaryPredicateOperator(BinaryType.GE, indexedColumn, ConstantOperator.createInt(10)),
                 Map.of(1, 7));
         String transport = PaimonGlobalIndexRequest.create(

@@ -56,6 +56,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -322,10 +323,14 @@ public class AnalyzeMgr implements Writable {
 
     public void removeExternalBasicStatsMeta(String catalogName, String dbName, String tableName) {
         StatsMetaKey key = new StatsMetaKey(catalogName, dbName, tableName);
-        if (externalBasicStatsMetaMap.containsKey(key)) {
-            ExternalBasicStatsMeta basicStatsMeta = externalBasicStatsMetaMap.get(key);
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveExternalBasicStatsMeta(
-                    basicStatsMeta, wal -> externalBasicStatsMetaMap.remove(key));
+        // Serialized with updateExternalBasicStatsMeta: a commit that read the entry before this removal would
+        // otherwise journal it back afterwards.
+        synchronized (externalBasicStatsMetaCommitLock) {
+            if (externalBasicStatsMetaMap.containsKey(key)) {
+                ExternalBasicStatsMeta basicStatsMeta = externalBasicStatsMetaMap.get(key);
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveExternalBasicStatsMeta(
+                        basicStatsMeta, wal -> externalBasicStatsMetaMap.remove(key));
+            }
         }
     }
 
@@ -699,9 +704,8 @@ public class AnalyzeMgr implements Writable {
     // partitioned, has a pending or running analyze (which does its own cleanup), or its partition list cannot be
     // obtained or is empty. Never throws.
     //
-    // Only the leader's statistics cache is expired here. Nothing is journaled, so followers keep serving the
-    // cached statistics until their cache entries expire (statistic_update_interval_sec) or the table's next
-    // collection invalidates them; the rows were already at least a grace period old.
+    // The leader refreshes its own statistics cache, and re-journals the table's statistics metadata so followers
+    // drop theirs on replay (see #journalCleanedColumns), as after a collection.
     public void clearStatisticFromExternalDroppedPartition() {
         long graceSeconds = Config.connector_table_analyze_dropped_partition_stats_grace_second;
         long intervalSeconds = Config.connector_table_analyze_dropped_partition_stats_cleanup_interval_second;
@@ -825,14 +829,17 @@ public class AnalyzeMgr implements Writable {
         if (meta == null) {
             return SKIPPED;
         }
-        // Only FULL columns. A SAMPLE column's rows are scaled up by the partition count its metadata recorded
+        // Only FULL columns, and the SAMPLE columns of an incremental FULL collection whose rows cover the table
+        // the same way (ColumnStatsMeta#isFullCoverageByRows): those are scaled by the partitions their rows come
+        // from, so deleting a dropped partition's rows brings the estimate back to the live table. Any other
+        // SAMPLE column's rows are scaled up by the partition count its metadata recorded
         // (StatisticsUtils#estimateColumnStatistics), and only a collection rewrites that metadata: deleting rows
         // here would skew the estimate rather than fix it. Its own collection cleans up dropped partitions. FULL
         // also means the collection covered every partition it asked for, so no resume record can skip a
         // partition deleted here. Columns without metadata are left alone too: the optimizer ignores their rows.
         Set<String> columnSet = new TreeSet<>();
         meta.getColumnStatsMetaMap().forEach((column, columnMeta) -> {
-            if (columnMeta.getType() == StatsConstants.AnalyzeType.FULL) {
+            if (columnMeta.isFullCoverageByRows()) {
                 columnSet.add(column);
             }
         });
@@ -856,7 +863,13 @@ public class AnalyzeMgr implements Writable {
         }
         ExternalDroppedPartitionStats.DeleteResult result =
                 ExternalDroppedPartitionStats.deleteInBatches(context, executor, table, dropped, columns);
-        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+        // Refresh rather than invalidate: the old values stay served until the reload lands, as after a
+        // collection. Invalidating would make the next query plan with unknown statistics until it reloads.
+        GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .refreshConnectorTableColumnStatistics(table, columns, false);
+        if (result.failedBatches < result.batches) {
+            journalCleanedColumns(key, columns);
+        }
         if (result.failedBatches > 0) {
             LOG.warn("[ExternalStats] periodic dropped partition stats cleanup partially failed | catalog={} db={} " +
                             "table={} droppedPartitions={} batches={} failedBatches={}",
@@ -869,6 +882,24 @@ public class AnalyzeMgr implements Writable {
                     key.getCatalogName(), key.getDbName(), key.getTableName(), dropped.size(), result.batches);
         }
         return dropped.size();
+    }
+
+    // Nothing journals the deletes themselves, so re-log the table's current metadata: replaying it drops the
+    // followers' cached statistics of its column list (#replayRefreshExternalBasicStatsCache). That list is only the
+    // last collection's columns, so the cleaned ones are added to it when missing; nothing else changes, the update
+    // times included, since they drive re-analyze. Under the commit lock, so a collection committed meanwhile is not
+    // overwritten, and metadata removed meanwhile (#removeExternalBasicStatsMeta) is not brought back.
+    private void journalCleanedColumns(StatsMetaKey key, List<String> cleanedColumns) {
+        updateExternalBasicStatsMeta(key.getCatalogName(), key.getDbName(), key.getTableName(), current -> {
+            if (current == null || current.getColumns().containsAll(cleanedColumns)) {
+                return current;
+            }
+            ExternalBasicStatsMeta updated = current.clone();
+            Set<String> columns = new LinkedHashSet<>(current.getColumns());
+            columns.addAll(cleanedColumns);
+            updated.setColumns(new ArrayList<>(columns));
+            return updated;
+        });
     }
 
     public void recordDropPartition(long partitionId) {

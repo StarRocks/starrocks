@@ -20,7 +20,7 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.connector.index.IndexCondition;
+import com.starrocks.connector.paimon.index.PaimonIndexCondition;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -35,7 +35,7 @@ import java.util.Objects;
 public class LogicalPaimonScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
     private boolean hasUnknownColumn;
-    private IndexCondition indexCondition;
+    private PaimonIndexCondition indexCondition;
 
     public LogicalPaimonScanOperator(Table table,
                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -77,7 +77,7 @@ public class LogicalPaimonScanOperator extends LogicalScanOperator {
         return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
     }
 
-    public IndexCondition getIndexCondition() {
+    public PaimonIndexCondition getIndexCondition() {
         return indexCondition;
     }
 
@@ -133,7 +133,7 @@ public class LogicalPaimonScanOperator extends LogicalScanOperator {
             return this;
         }
 
-        public Builder setIndexCondition(IndexCondition indexCondition) {
+        public Builder setIndexCondition(PaimonIndexCondition indexCondition) {
             builder.indexCondition = indexCondition;
             return this;
         }

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW WARNINGS and SHOW ERRORS return the diagnostics of the previous statement in the current session, such as rows an INSERT filtered or set to NULL."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW WARNINGS

@@ -18,7 +18,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
-import com.starrocks.connector.paimon.PaimonIndexTable;
+import com.starrocks.connector.paimon.index.PaimonIndexTable;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerFactory;

@@ -16,7 +16,9 @@ package com.starrocks.connector.paimon;
 
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.Status;
-import com.starrocks.connector.index.IndexCondition;
+import com.starrocks.connector.paimon.index.PaimonGlobalIndexRequest;
+import com.starrocks.connector.paimon.index.PaimonGlobalIndexService;
+import com.starrocks.connector.paimon.index.PaimonIndexCondition;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
@@ -158,7 +160,7 @@ public class PaimonGlobalIndexCancellationTest {
         when(table.getCatalogDBName()).thenReturn("db");
         when(table.getCatalogTableName()).thenReturn("orders");
         ColumnRefOperator column = new ColumnRefOperator(1, IntegerType.INT, "id", true);
-        IndexCondition condition = new IndexCondition(new BinaryPredicateOperator(
+        PaimonIndexCondition condition = new PaimonIndexCondition(new BinaryPredicateOperator(
                 BinaryType.EQ, column, ConstantOperator.createInt(1)), Map.of(1, 0));
         return new PaimonGlobalIndexService(table,
                 PaimonGlobalIndexRequest.create("file:/tmp/orders", "main", 1L, 0L, 1000L, condition));

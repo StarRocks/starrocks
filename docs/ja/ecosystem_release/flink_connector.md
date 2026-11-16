@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks Connector for Apache Flink のリリースノート・変更履歴。"
+products: [oss]
 ---
 
 # StarRocks Connector for Flink のリリース

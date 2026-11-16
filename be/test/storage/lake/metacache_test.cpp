@@ -35,6 +35,7 @@
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
+#include "runtime/memory/process_memory.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
@@ -241,6 +242,20 @@ TEST_F(LakeMetacacheTest, test_update_capacity) {
     ASSERT_EQ(meta_cap - 1024, metacache->tablet_metadata_capacity());
     metacache->update_segment_metadata_capacity(segment_cap - 1024);
     ASSERT_EQ(segment_cap - 1024, metacache->segment_metadata_capacity());
+}
+
+TEST_F(LakeMetacacheTest, test_update_capacity_returns_the_evicted_charge) {
+    Metacache metacache(64 * 1024 * 1024, 64 * 1024 * 1024);
+    for (int i = 0; i < 256; ++i) {
+        metacache.cache_tablet_schema(MetacacheKey::TEST_from_string(fmt::format("schema_{}", i)), nullptr, 64 * 1024);
+    }
+    const size_t usage = metacache.segment_metadata_memory_usage();
+    ASSERT_GT(usage, 0u);
+    EXPECT_EQ(0u, metacache.update_segment_metadata_capacity(128 * 1024 * 1024));
+    const size_t evicted = metacache.update_segment_metadata_capacity(4 * 1024 * 1024);
+    EXPECT_GT(evicted, 0u);
+    EXPECT_EQ(usage - evicted, metacache.segment_metadata_memory_usage());
+    EXPECT_EQ(4u * 1024 * 1024, metacache.segment_metadata_capacity());
 }
 
 TEST_F(LakeMetacacheTest, test_metacache_capacity) {
@@ -789,6 +804,31 @@ TEST(MetacacheKeyTest, composite_keys_preserve_identity) {
     page.set_crc32c(11);
     EXPECT_NE(key.view(), MetacacheKey::delvec(100, page).view());
     EXPECT_NE(key.view(), MetacacheKey::delvec(101, encoded.delvec_page()).view());
+}
+
+TEST_F(LakeMetacacheTest, ProcessOwnedStoragePreservesExternalPayloadDeleterContext) {
+    auto* process = process_memory_tracker();
+    ASSERT_NE(process, nullptr);
+    MemTracker producer(-1, "cache producer", process);
+    MemTracker consumer(-1, "cache consumer", process);
+    MemTracker* released_under = nullptr;
+    Metacache cache(1 << 20, 1 << 20);
+    const auto key = MetacacheKey::TEST_from_string("ownership-metadata");
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&producer);
+        auto metadata = std::shared_ptr<const TabletMetadataPB>(new TabletMetadataPB(), [&](const TabletMetadataPB* p) {
+            released_under = CurrentThread::mem_tracker();
+            delete p;
+        });
+        cache.cache_tablet_metadata(key, std::move(metadata));
+        EXPECT_EQ(CurrentThread::mem_tracker(), &producer);
+    }
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&consumer);
+        cache.erase(key);
+        EXPECT_EQ(released_under, &consumer);
+        EXPECT_EQ(CurrentThread::mem_tracker(), &consumer);
+    }
 }
 
 } // namespace starrocks::lake

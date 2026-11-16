@@ -21,17 +21,17 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.index.ConnectorIndexResult;
-import com.starrocks.connector.index.IndexCondition;
-import com.starrocks.connector.paimon.PaimonGlobalIndexResult;
+import com.starrocks.connector.paimon.PaimonGetRemoteFilesParams;
+import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.connector.paimon.PaimonReaderSelector;
 import com.starrocks.connector.paimon.PaimonReaderSelector.Reader;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
+import com.starrocks.connector.paimon.index.PaimonGlobalIndexResult;
+import com.starrocks.connector.paimon.index.PaimonIndexCondition;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.ConnectContext;
@@ -47,6 +47,7 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import mockit.Delegate;
 import mockit.Expectations;
+import mockit.Injectable;
 import mockit.Mocked;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.BinaryRowWriter;
@@ -56,15 +57,15 @@ import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.DataInputViewStreamWrapper;
 import org.apache.paimon.io.DataOutputView;
 import org.apache.paimon.manifest.FileSource;
-import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.schema.TableSchema;
-import org.apache.paimon.types.DataTypes;
+import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.DeletionFile;
 import org.apache.paimon.table.source.RawFile;
 import org.apache.paimon.table.source.Split;
-import org.apache.paimon.utils.Range;
+import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.utils.InstantiationUtil;
+import org.apache.paimon.utils.Range;
 import org.apache.paimon.utils.RoaringNavigableMap64;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -511,13 +512,13 @@ public class PaimonScanNodeTest {
     @Test
     public void testGlobalIndexStageZeroDisablesSdkIndexPlanning(
             @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table,
-            @Mocked ConnectorMetadata connectorMetadata) {
+            @Injectable PaimonMetadata connectorMetadata) {
         ConnectContext ctx = new ConnectContext();
         ctx.setSessionVariable(new SessionVariable());
         ctx.getSessionVariable().setPaimonGlobalIndexScanStage(0);
         ctx.setThreadLocalInfo();
         try {
-            List<GetRemoteFilesParams> captured = new ArrayList<>();
+            List<PaimonGetRemoteFilesParams> captured = new ArrayList<>();
             List<RemoteFileInfo> remoteFiles = createRemoteFiles(createDataSplit());
             new Expectations() {
                 {
@@ -531,7 +532,7 @@ public class PaimonScanNodeTest {
                     result = new Delegate<List<RemoteFileInfo>>() {
                         @SuppressWarnings("unused")
                         List<RemoteFileInfo> getRemoteFiles(Table ignored, GetRemoteFilesParams params) {
-                            captured.add(params);
+                            captured.add((PaimonGetRemoteFilesParams) params);
                             return remoteFiles;
                         }
                     };
@@ -546,7 +547,7 @@ public class PaimonScanNodeTest {
 
             Assertions.assertEquals(1, captured.size());
             Assertions.assertTrue(captured.get(0).isDisableGlobalIndex());
-            Assertions.assertNull(captured.get(0).getConnectorIndexResult());
+            Assertions.assertNull(captured.get(0).getIndexResult());
             Assertions.assertFalse(scanNode.getNodeExplainString("", com.starrocks.thrift.TExplainLevel.NORMAL)
                     .contains("RECOGNIZED INDEX CONDITION:"));
         } finally {
@@ -557,7 +558,7 @@ public class PaimonScanNodeTest {
     @Test
     public void testGlobalIndexStageTwoPassesDistributedResultToSplitPlanning(
             @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table,
-            @Mocked ConnectorMetadata connectorMetadata) {
+            @Injectable PaimonMetadata connectorMetadata) {
         ConnectContext ctx = new ConnectContext();
         ctx.setSessionVariable(new SessionVariable());
         ctx.getSessionVariable().setPaimonGlobalIndexScanStage(2);
@@ -571,12 +572,12 @@ public class PaimonScanNodeTest {
                 {
                     metadataMgr.getOptionalMetadata(anyString);
                     result = Optional.of(connectorMetadata);
-                    connectorMetadata.evaluateIndex((Table) any, (IndexCondition) any, (TvrVersionRange) any);
+                    connectorMetadata.evaluateIndex((Table) any, (PaimonIndexCondition) any, (TvrVersionRange) any);
                     result = Optional.of(indexResult);
                 }
             };
 
-            List<GetRemoteFilesParams> captured = new ArrayList<>();
+            List<PaimonGetRemoteFilesParams> captured = new ArrayList<>();
             PaimonSplitsInfo appliedSplits = new PaimonSplitsInfo(List.of(), List.of(createDataSplit()), null, true);
             List<RemoteFileInfo> remoteFiles = List.of(RemoteFileInfo.builder()
                     .setFiles(List.of(PaimonRemoteFileDesc.createPaimonRemoteFileDesc(appliedSplits))).build());
@@ -592,7 +593,7 @@ public class PaimonScanNodeTest {
                     result = new Delegate<List<RemoteFileInfo>>() {
                         @SuppressWarnings("unused")
                         List<RemoteFileInfo> getRemoteFiles(Table ignored, GetRemoteFilesParams params) {
-                            captured.add(params);
+                            captured.add((PaimonGetRemoteFilesParams) params);
                             return remoteFiles;
                         }
                     };
@@ -603,12 +604,12 @@ public class PaimonScanNodeTest {
             desc.setTable(table);
             PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
             scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
-            IndexCondition condition = new IndexCondition(ConstantOperator.createBoolean(true), Map.of(1, 0));
+            PaimonIndexCondition condition = new PaimonIndexCondition(ConstantOperator.createBoolean(true), Map.of(1, 0));
             scanNode.setupScanRangeLocations(desc, null, -1, condition);
 
             Assertions.assertEquals(1, captured.size());
             Assertions.assertFalse(captured.get(0).isDisableGlobalIndex());
-            Assertions.assertSame(indexResult, captured.get(0).getConnectorIndexResult());
+            Assertions.assertSame(indexResult, captured.get(0).getIndexResult());
             Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
             String explain = scanNode.getNodeExplainString("", com.starrocks.thrift.TExplainLevel.NORMAL);
             Assertions.assertTrue(explain.contains("RECOGNIZED INDEX CONDITION: true"), explain);
@@ -621,7 +622,7 @@ public class PaimonScanNodeTest {
     @Test
     public void testGlobalIndexStageTwoFallsBackWhenDistributedEvaluationFails(
             @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table,
-            @Mocked ConnectorMetadata connectorMetadata) {
+            @Injectable PaimonMetadata connectorMetadata) {
         ConnectContext ctx = new ConnectContext();
         ctx.setSessionVariable(new SessionVariable());
         ctx.getSessionVariable().setPaimonGlobalIndexScanStage(2);
@@ -631,13 +632,13 @@ public class PaimonScanNodeTest {
                 {
                     metadataMgr.getOptionalMetadata(anyString);
                     result = Optional.of(connectorMetadata);
-                    connectorMetadata.evaluateIndex((Table) any, (IndexCondition) any, (TvrVersionRange) any);
+                    connectorMetadata.evaluateIndex((Table) any, (PaimonIndexCondition) any, (TvrVersionRange) any);
                     result = new IllegalArgumentException(
                             "Paimon Global Index shard upper bound must be below Long.MAX_VALUE");
                 }
             };
 
-            List<GetRemoteFilesParams> captured = new ArrayList<>();
+            List<PaimonGetRemoteFilesParams> captured = new ArrayList<>();
             List<RemoteFileInfo> remoteFiles = createRemoteFiles(createDataSplit());
             new Expectations() {
                 {
@@ -651,7 +652,7 @@ public class PaimonScanNodeTest {
                     result = new Delegate<List<RemoteFileInfo>>() {
                         @SuppressWarnings("unused")
                         List<RemoteFileInfo> getRemoteFiles(Table ignored, GetRemoteFilesParams params) {
-                            captured.add(params);
+                            captured.add((PaimonGetRemoteFilesParams) params);
                             return remoteFiles;
                         }
                     };
@@ -663,12 +664,12 @@ public class PaimonScanNodeTest {
             PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
             scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
             ConstantOperator predicate = ConstantOperator.createBoolean(true);
-            IndexCondition condition = new IndexCondition(predicate, Map.of(1, 0));
+            PaimonIndexCondition condition = new PaimonIndexCondition(predicate, Map.of(1, 0));
             scanNode.setupScanRangeLocations(desc, predicate, -1, condition);
 
             Assertions.assertEquals(1, captured.size());
             Assertions.assertFalse(captured.get(0).isDisableGlobalIndex());
-            Assertions.assertNull(captured.get(0).getConnectorIndexResult());
+            Assertions.assertNull(captured.get(0).getIndexResult());
             Assertions.assertSame(predicate, captured.get(0).getPredicate());
             Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
             String explain = scanNode.getNodeExplainString("", com.starrocks.thrift.TExplainLevel.NORMAL);
@@ -682,7 +683,7 @@ public class PaimonScanNodeTest {
     @Test
     public void testCancelledGlobalIndexDoesNotFallBackToSdk(
             @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table,
-            @Mocked ConnectorMetadata connectorMetadata) {
+            @Injectable PaimonMetadata connectorMetadata) {
         for (boolean evaluationFails : List.of(false, true)) {
             ConnectContext ctx = new ConnectContext();
             ctx.setSessionVariable(new SessionVariable());
@@ -698,10 +699,10 @@ public class PaimonScanNodeTest {
                         result = metadataMgr;
                         metadataMgr.getOptionalMetadata(anyString);
                         result = Optional.of(connectorMetadata);
-                        connectorMetadata.evaluateIndex((Table) any, (IndexCondition) any, (TvrVersionRange) any);
-                        result = new Delegate<Optional<ConnectorIndexResult>>() {
+                        connectorMetadata.evaluateIndex((Table) any, (PaimonIndexCondition) any, (TvrVersionRange) any);
+                        result = new Delegate<Optional<PaimonGlobalIndexResult>>() {
                             @SuppressWarnings("unused")
-                            Optional<ConnectorIndexResult> evaluate(Table ignored, IndexCondition condition,
+                            Optional<PaimonGlobalIndexResult> evaluate(Table ignored, PaimonIndexCondition condition,
                                                                     TvrVersionRange range) {
                                 ctx.setKilled();
                                 if (evaluationFails) {
@@ -717,7 +718,7 @@ public class PaimonScanNodeTest {
                 desc.setTable(table);
                 PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
                 scanNode.setTvrVersionRange(TvrTableSnapshot.of(1L));
-                IndexCondition condition = new IndexCondition(ConstantOperator.createBoolean(true), Map.of(1, 0));
+                PaimonIndexCondition condition = new PaimonIndexCondition(ConstantOperator.createBoolean(true), Map.of(1, 0));
 
                 Assertions.assertThrows(StarRocksConnectorException.class,
                         () -> scanNode.setupScanRangeLocations(desc, null, -1, condition));
@@ -730,7 +731,7 @@ public class PaimonScanNodeTest {
     @Test
     public void testGlobalIndexStageTwoFallsBackWhenIndexedSplitPlanningFails(
             @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table,
-            @Mocked ConnectorMetadata connectorMetadata) {
+            @Injectable PaimonMetadata connectorMetadata) {
         ConnectContext ctx = new ConnectContext();
         ctx.setSessionVariable(new SessionVariable());
         ctx.getSessionVariable().setPaimonGlobalIndexScanStage(2);
@@ -744,12 +745,12 @@ public class PaimonScanNodeTest {
                 {
                     metadataMgr.getOptionalMetadata(anyString);
                     result = Optional.of(connectorMetadata);
-                    connectorMetadata.evaluateIndex((Table) any, (IndexCondition) any, (TvrVersionRange) any);
+                    connectorMetadata.evaluateIndex((Table) any, (PaimonIndexCondition) any, (TvrVersionRange) any);
                     result = Optional.of(indexResult);
                 }
             };
 
-            List<GetRemoteFilesParams> captured = new ArrayList<>();
+            List<PaimonGetRemoteFilesParams> captured = new ArrayList<>();
             List<RemoteFileInfo> remoteFiles = createRemoteFiles(createDataSplit());
             new Expectations() {
                 {
@@ -763,8 +764,8 @@ public class PaimonScanNodeTest {
                     result = new Delegate<List<RemoteFileInfo>>() {
                         @SuppressWarnings("unused")
                         List<RemoteFileInfo> getRemoteFiles(Table ignored, GetRemoteFilesParams params) {
-                            captured.add(params);
-                            if (params.getConnectorIndexResult() != null) {
+                            captured.add((PaimonGetRemoteFilesParams) params);
+                            if (((PaimonGetRemoteFilesParams) params).getIndexResult() != null) {
                                 throw new StarRocksConnectorException("test IndexedSplit planning failure");
                             }
                             return remoteFiles;
@@ -777,12 +778,12 @@ public class PaimonScanNodeTest {
             desc.setTable(table);
             PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
             scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
-            IndexCondition condition = new IndexCondition(ConstantOperator.createBoolean(true), Map.of(1, 0));
+            PaimonIndexCondition condition = new PaimonIndexCondition(ConstantOperator.createBoolean(true), Map.of(1, 0));
             scanNode.setupScanRangeLocations(desc, null, -1, condition);
 
             Assertions.assertEquals(2, captured.size());
-            Assertions.assertSame(indexResult, captured.get(0).getConnectorIndexResult());
-            Assertions.assertNull(captured.get(1).getConnectorIndexResult());
+            Assertions.assertSame(indexResult, captured.get(0).getIndexResult());
+            Assertions.assertNull(captured.get(1).getIndexResult());
             Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
             String explain = scanNode.getNodeExplainString("", com.starrocks.thrift.TExplainLevel.NORMAL);
             Assertions.assertTrue(explain.contains("DISTRIBUTED INDEX: SDK fallback"), explain);

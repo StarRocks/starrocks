@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从 Bitmap 中删除指定的数值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_remove

@@ -25,6 +25,7 @@ import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.paimon.index.PaimonIndexMetadataCache;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
@@ -49,6 +50,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.paimon.index.PaimonIndexMetadataCache.DEFAULT_INDEX_META_CACHE_MAX_ENTRIES;
 import static org.apache.paimon.options.CatalogOptions.METASTORE;
 import static org.apache.paimon.options.CatalogOptions.URI;
 import static org.apache.paimon.options.CatalogOptions.WAREHOUSE;
@@ -63,7 +65,6 @@ public class PaimonConnector implements Connector {
     private static final long DEFAULT_META_CACHE_TTL_SEC = 24L * 60 * 60;
     public static final String PAIMON_INDEX_META_CACHE_MAX_ENTRIES =
             "paimon_index_metadata_cache_max_entries";
-    private static final long DEFAULT_INDEX_META_CACHE_MAX_ENTRIES = 1000L;
     // mirrors iceberg_table_cache_refresh_interval_sec, which feeds Caffeine's refreshAfterWrite
     public static final String PAIMON_TABLE_CACHE_REFRESH_INTERVAL =
             "paimon_table_cache_refresh_interval_sec";

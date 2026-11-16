@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE FILE 创建文件并自动上传并持久化在 StarRocks 集群中。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE FILE

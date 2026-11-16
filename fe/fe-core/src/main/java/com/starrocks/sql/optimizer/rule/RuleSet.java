@@ -73,7 +73,7 @@ import com.starrocks.sql.optimizer.rule.ivm.IvmVersionIcebergScanRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionJoinRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionProjectRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionUnionRule;
-import com.starrocks.sql.optimizer.rule.transformation.ApplyPredicateIndexRule;
+import com.starrocks.sql.optimizer.rule.transformation.ApplyPredicatePaimonIndexRule;
 import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
@@ -267,9 +267,9 @@ public class RuleSet {
             new RewriteToVectorPlanRule()
     ));
 
-    public static final Rule APPLY_CONNECTOR_INDEX_RULES =
-            new CombinationRule(RuleType.GP_APPLY_CONNECTOR_INDEX, ImmutableList.of(
-                    ApplyPredicateIndexRule.PAIMON_SCAN
+    public static final Rule APPLY_PAIMON_INDEX_RULES =
+            new CombinationRule(RuleType.GP_APPLY_PAIMON_INDEX, ImmutableList.of(
+                    ApplyPredicatePaimonIndexRule.PAIMON_SCAN
             ));
 
     public static final Rule PRUNE_COLUMNS_RULES = new CombinationRule(RuleType.GP_PRUNE_COLUMNS, ImmutableList.of(

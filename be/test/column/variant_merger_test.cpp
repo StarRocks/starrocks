@@ -234,9 +234,10 @@ static MutableColumnPtr build_nullable_variant_column_from_timestamp_ntz_micros(
 }
 
 PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_numeric_and_decimal_cases) {
+    // A BIGINT does not fit a double exactly, so a BIGINT / DOUBLE path is hoisted to VARIANT.
     auto numeric = VariantColumnMerger::choose_common_type(TYPE_BIGINT_DESC, TYPE_DOUBLE_DESC);
     ASSERT_TRUE(numeric.ok());
-    ASSERT_EQ(TYPE_DOUBLE_DESC, numeric.value());
+    ASSERT_EQ(TypeDescriptor(TYPE_VARIANT), numeric.value());
 
     auto decimal =
             VariantColumnMerger::choose_common_type(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 2),
@@ -418,11 +419,11 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_numeric_widen) {
 
     auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
     ASSERT_EQ((std::vector<std::string>{"a"}), merged->shredded_paths());
-    ASSERT_EQ((std::vector<TypeDescriptor>{TYPE_DOUBLE_DESC}), merged->shredded_types());
-
-    const auto* typed_a = down_cast<const NullableColumn*>(merged->typed_column_by_index(0));
-    ASSERT_DOUBLE_EQ(10.0, typed_a->get(0).get_double());
-    ASSERT_DOUBLE_EQ(30.5, typed_a->get(1).get_double());
+    // A BIGINT does not fit a double exactly, so a BIGINT / DOUBLE path is hoisted to VARIANT, which keeps the type
+    // of each value.
+    ASSERT_EQ((std::vector<TypeDescriptor>{TypeDescriptor(TYPE_VARIANT)}), merged->shredded_types());
+    assert_variant_row_json(merged, 0, R"({"a":10})");
+    assert_variant_row_json(merged, 1, R"({"a":30.5})");
 }
 
 PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_array_conflict_hoist_variant) {
@@ -892,6 +893,45 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_array_of_variant_path_with_variant_
     EXPECT_EQ(TYPE_VARIANT, merged->shredded_types()[merged->find_shredded_path("a")].type);
     assert_variant_row_json(merged, 0, R"({"a":[{"k":1},{"k":2}],"x":1})");
     assert_variant_row_json(merged, 1, R"({"a":[3],"x":2})");
+}
+
+// A float and an integer are merged into a double only when the double holds every value of the integer type exactly.
+PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_float_and_integer_is_lossless) {
+    const auto choose = [](const TypeDescriptor& lhs, const TypeDescriptor& rhs) {
+        auto common = VariantColumnMerger::choose_common_type(lhs, rhs);
+        EXPECT_TRUE(common.ok()) << common.status().to_string();
+        return common.ok() ? common.value() : TypeDescriptor(TYPE_NULL);
+    };
+    const TypeDescriptor largeint(TYPE_LARGEINT);
+    const TypeDescriptor variant(TYPE_VARIANT);
+
+    // Exact in a double: unchanged.
+    EXPECT_EQ(TYPE_DOUBLE_DESC, choose(TYPE_INT_DESC, TYPE_DOUBLE_DESC));
+    EXPECT_EQ(TYPE_DOUBLE_DESC, choose(TYPE_DOUBLE_DESC, TYPE_INT_DESC));
+    EXPECT_EQ(TYPE_DOUBLE_DESC, choose(TYPE_SMALLINT_DESC, TYPE_FLOAT_DESC));
+    EXPECT_EQ(TYPE_DOUBLE_DESC, choose(TYPE_FLOAT_DESC, TYPE_DOUBLE_DESC));
+    // Not exact in a double: both sides keep their own type under VARIANT, whatever the order.
+    EXPECT_EQ(variant, choose(TYPE_BIGINT_DESC, TYPE_DOUBLE_DESC));
+    EXPECT_EQ(variant, choose(TYPE_DOUBLE_DESC, TYPE_BIGINT_DESC));
+    EXPECT_EQ(variant, choose(TYPE_BIGINT_DESC, TYPE_FLOAT_DESC));
+    EXPECT_EQ(variant, choose(largeint, TYPE_DOUBLE_DESC));
+    // Integers alone are still widened.
+    EXPECT_EQ(TYPE_BIGINT_DESC, choose(TYPE_INT_DESC, TYPE_BIGINT_DESC));
+}
+
+// The hoist that choose_common_type asks for must keep a BIGINT value that a double would round: 2^53 + 1 and the
+// largest BIGINT.
+PARALLEL_TEST(VariantColumnMergerTest, bigint_typed_column_hoisted_to_variant_keeps_the_exact_value) {
+    auto src = build_nullable_int64_column({9007199254740993LL, 9223372036854775807LL, -9007199254740993LL},
+                                           {0, 0, 0}); // 2^53 + 1, INT64_MAX, -(2^53 + 1)
+    auto casted = VariantColumnMerger::cast_typed_column(*src, TYPE_BIGINT_DESC, TypeDescriptor(TYPE_VARIANT));
+    ASSERT_TRUE(casted.ok()) << casted.status().to_string();
+
+    const auto* variant = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(casted.value().get()));
+    ASSERT_NE(nullptr, variant);
+    assert_variant_row_json(variant, 0, "9007199254740993");
+    assert_variant_row_json(variant, 1, "9223372036854775807");
+    assert_variant_row_json(variant, 2, "-9007199254740993");
 }
 
 } // namespace starrocks

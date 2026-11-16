@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "StarRocks Migration Tool (SMT) は Flink を通じてソースデータベースから StarRocks にデータをロードし、テーブル作成と Flink ジョブ実行を自動化します。"
+products: [oss, enterprise, anywhere]
 ---
 
 # StarRocks Migration Tool (SMT)

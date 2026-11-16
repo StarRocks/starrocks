@@ -21,7 +21,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.tvr.TvrTableSnapshot;
-import com.starrocks.connector.paimon.PaimonIndexTable;
+import com.starrocks.connector.paimon.index.PaimonIndexTable;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;

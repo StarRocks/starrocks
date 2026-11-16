@@ -359,14 +359,15 @@ b1
 set enable_iceberg_identity_column_optimize = false;
 -- result:
 -- !result
-function: assert_explain_contains('select v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated', '$partition_key')
--- result:
-None
--- !result
 select v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated order by v;
 -- result:
 a2
 b1
+-- !result
+select p, v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated order by v;
+-- result:
+1	a2
+2	b1
 -- !result
 select count(*) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated;
 -- result:

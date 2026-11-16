@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ARRAY_FILTER関数は指定されたフィルターに一致する配列から値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_filter

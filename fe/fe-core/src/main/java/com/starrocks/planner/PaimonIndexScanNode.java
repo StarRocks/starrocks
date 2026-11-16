@@ -16,10 +16,10 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.index.ConnectorIndexShard;
-import com.starrocks.connector.paimon.PaimonGlobalIndexRequest;
-import com.starrocks.connector.paimon.PaimonIndexTable;
+import com.starrocks.connector.paimon.PaimonMetadata;
+import com.starrocks.connector.paimon.index.PaimonGlobalIndexRequest;
+import com.starrocks.connector.paimon.index.PaimonIndexShard;
+import com.starrocks.connector.paimon.index.PaimonIndexTable;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -77,24 +77,23 @@ public final class PaimonIndexScanNode extends ScanNode {
         }
         request.validatePredicate(nativeTable.schema());
 
-        ConnectorMetadata metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getOptionalMetadata(table.getCatalogName())
-                .orElseThrow(() -> new IllegalStateException("Missing connector metadata for "
+        PaimonMetadata metadata = PaimonMetadata.resolve(table)
+                .orElseThrow(() -> new IllegalStateException("Missing Paimon metadata for "
                         + table.getCatalogName()));
-        List<ConnectorIndexShard> shards = metadata.getIndexShards(
+        List<PaimonIndexShard> shards = metadata.getIndexShards(
                 table, snapshotId, request.getRequiredIndexes());
         if (shards.isEmpty()) {
             throw new IllegalStateException("Paimon Global Index does not completely cover snapshot " + snapshotId);
         }
 
         // Paimon converts the inclusive upper bound to an exclusive bound by adding one.
-        for (ConnectorIndexShard shard : shards) {
+        for (PaimonIndexShard shard : shards) {
             if (shard.getTo() == Long.MAX_VALUE) {
                 throw new IllegalArgumentException("Paimon Global Index shard upper bound must be below Long.MAX_VALUE");
             }
         }
         for (int shardId = 0; shardId < shards.size(); shardId++) {
-            ConnectorIndexShard shard = shards.get(shardId);
+            PaimonIndexShard shard = shards.get(shardId);
             scanRanges.add(createScanRange(shardId, shard, queryJson, tablePath, snapshotId));
         }
         // args is an input binding, not a filter over the raw JSON emitted by the scanner.
@@ -133,7 +132,7 @@ public final class PaimonIndexScanNode extends ScanNode {
     }
 
     private static TScanRangeLocations createScanRange(
-            int shardId, ConnectorIndexShard shard, String queryJson, String tablePath, long snapshotId) {
+            int shardId, PaimonIndexShard shard, String queryJson, String tablePath, long snapshotId) {
         TPaimonGlobalIndexScanRange request = new TPaimonGlobalIndexScanRange();
         request.setProtocol_version(PaimonGlobalIndexRequest.CURRENT_VERSION);
         request.setShard_id(shardId);

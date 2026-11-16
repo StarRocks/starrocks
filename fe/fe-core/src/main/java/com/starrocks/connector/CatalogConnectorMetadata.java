@@ -25,17 +25,13 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
-import com.starrocks.connector.index.ConnectorIndexMetadata;
-import com.starrocks.connector.index.ConnectorIndexResult;
-import com.starrocks.connector.index.ConnectorIndexShard;
-import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableName;
@@ -262,23 +258,6 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     }
 
     @Override
-    public ConnectorIndexMetadata getIndexMetadata(Table table, TvrVersionRange versionRange) {
-        return delegateFor(table).getIndexMetadata(table, versionRange);
-    }
-
-    @Override
-    public Optional<ConnectorIndexResult> evaluateIndex(
-            Table table, IndexCondition condition, TvrVersionRange versionRange) {
-        return delegateFor(table).evaluateIndex(table, condition, versionRange);
-    }
-
-    @Override
-    public List<ConnectorIndexShard> getIndexShards(
-            Table table, long snapshotId, Map<Integer, IndexType> requiredIndexes) {
-        return delegateFor(table).getIndexShards(table, snapshotId, requiredIndexes);
-    }
-
-    @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         return normal.getPartitions(table, partitionNames);
     }
@@ -294,6 +273,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
                                          TvrVersionRange version) {
         return normal.getTableStatistics(session, table, columns, partitionKeys, predicate, limit, version);
+    }
+
+    @Override
+    public Map<String, Pair<Double, Double>> getPartitionSourceColumnRanges(Table table, TvrVersionRange version) {
+        return normal.getPartitionSourceColumnRanges(table, version);
     }
 
     @Override

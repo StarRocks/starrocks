@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "How to use the StarRocks Kafka connector (Kafka Connect sink) to continuously load data from Apache Kafka topics into StarRocks with at-least-once semantics."
+products: [oss, enterprise, anywhere]
 ---
 
 # Load data using Kafka connector

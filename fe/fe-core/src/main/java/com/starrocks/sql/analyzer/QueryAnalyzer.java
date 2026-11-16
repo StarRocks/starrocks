@@ -48,7 +48,7 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.concurrent.lock.SnapshotCopyValidator;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.paimon.PaimonIndexTable;
+import com.starrocks.connector.paimon.index.PaimonIndexTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -1698,12 +1698,23 @@ public class QueryAnalyzer {
                 throw new CyclicViewException(
                         "View " + node.getName() + " contains a cycle in its definition");
             }
+            ConnectContext aliasContext = ConnectContext.get();
             boolean isRelationAliasCaseInSensitive = false;
-            if (ConnectContext.get() != null) {
-                isRelationAliasCaseInSensitive = ConnectContext.get().isRelationAliasCaseInsensitive();
-                // For hive view, relation alias is case-insensitive
-                if (node.getView().isHiveView()) {
-                    ConnectContext.get().setRelationAliasCaseInSensitive(true);
+            Boolean aliasModeOutsideConnectorView = null;
+            if (aliasContext != null) {
+                isRelationAliasCaseInSensitive = aliasContext.isRelationAliasCaseInsensitive();
+                aliasModeOutsideConnectorView = aliasContext.getRelationAliasCaseInsensitiveOutsideConnectorView();
+                if (node.getView().isConnectorView()) {
+                    // Views defined by external engines (Hive, Spark, Trino) resolve relation aliases
+                    // case-insensitively
+                    if (aliasModeOutsideConnectorView == null) {
+                        aliasContext.setRelationAliasCaseInsensitiveOutsideConnectorView(
+                                isRelationAliasCaseInSensitive);
+                    }
+                    aliasContext.setRelationAliasCaseInSensitive(true);
+                } else if (aliasModeOutsideConnectorView != null) {
+                    // A native view keeps the alias rule of the query that references the connector view
+                    aliasContext.setRelationAliasCaseInSensitive(aliasModeOutsideConnectorView);
                 }
             }
             Scope queryOutputScope;
@@ -1718,8 +1729,9 @@ public class QueryAnalyzer {
                         "function(s) or definer/invoker of view lack rights to use them: " + e.getMessage(), e);
             } finally {
                 viewExpansionStack.remove(viewKey);
-                if (ConnectContext.get() != null && node.getView().isHiveView()) {
-                    ConnectContext.get().setRelationAliasCaseInSensitive(isRelationAliasCaseInSensitive);
+                if (aliasContext != null) {
+                    aliasContext.setRelationAliasCaseInSensitive(isRelationAliasCaseInSensitive);
+                    aliasContext.setRelationAliasCaseInsensitiveOutsideConnectorView(aliasModeOutsideConnectorView);
                 }
             }
 
@@ -1830,7 +1842,7 @@ public class QueryAnalyzer {
             ArrayList<Field> fields = new ArrayList<>();
             for (int fieldIdx = 0; fieldIdx < outputSize; ++fieldIdx) {
                 Field oldField = leftChildScope.getRelationFields().getFieldByIndex(fieldIdx);
-                if (outputTypes[fieldIdx].isGeoType() &&
+                if ((outputTypes[fieldIdx].isGeoType() || outputTypes[fieldIdx].hasNestedGeoType()) &&
                         !(node instanceof UnionRelation && node.getQualifier().equals(SetQualifier.ALL))) {
                     throw new SemanticException("%s not support set operation", outputTypes[fieldIdx]);
                 }

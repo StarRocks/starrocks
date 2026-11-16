@@ -241,7 +241,7 @@ public class LogicalPlanPrinter {
         public OperatorStr visitLogicalPaimonScan(OptExpression optExpression, Integer step) {
             LogicalPaimonScanOperator scan = optExpression.getOp().cast();
             String suffix = scan.getIndexCondition() == null ? "" : " recognized index[predicate="
-                    + scalarOperatorStringFunction.apply(scan.getIndexCondition().getPredicate()) + "]";
+                    + scalarOperatorStringFunction.apply(scan.getIndexCondition().predicate()) + "]";
             return printLogicalScan(scan, step, suffix);
         }
 
@@ -528,7 +528,7 @@ public class LogicalPlanPrinter {
         public OperatorStr visitPhysicalPaimonScan(OptExpression optExpression, Integer step) {
             PhysicalPaimonScanOperator scan = optExpression.getOp().cast();
             String suffix = scan.getIndexCondition() == null ? "" : " recognized index[predicate="
-                    + scalarOperatorStringFunction.apply(scan.getIndexCondition().getPredicate()) + "]";
+                    + scalarOperatorStringFunction.apply(scan.getIndexCondition().predicate()) + "]";
             return visitScanCommon(optExpression, step, "PAIMON SCAN", suffix);
         }
 

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Use DROP RESOURCE to drop an existing resource."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP RESOURCE

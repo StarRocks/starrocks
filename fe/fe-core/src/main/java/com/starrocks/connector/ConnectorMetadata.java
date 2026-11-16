@@ -26,17 +26,13 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
-import com.starrocks.connector.index.ConnectorIndexMetadata;
-import com.starrocks.connector.index.ConnectorIndexResult;
-import com.starrocks.connector.index.ConnectorIndexShard;
-import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -137,23 +133,6 @@ public interface ConnectorMetadata {
      */
     default Table getTable(ConnectContext context, String dbName, String tblName) {
         return null;
-    }
-
-    /** Returns connector-neutral index capabilities exposed for the table at the requested version. */
-    default ConnectorIndexMetadata getIndexMetadata(Table table, TvrVersionRange versionRange) {
-        return ConnectorIndexMetadata.empty();
-    }
-
-    /** Evaluates an optional index candidate request without removing the original scan predicate. */
-    default Optional<ConnectorIndexResult> evaluateIndex(
-            Table table, IndexCondition condition, TvrVersionRange versionRange) {
-        return Optional.empty();
-    }
-
-    /** Returns physical index shards only if every requested field fully covers the pinned snapshot. */
-    default List<ConnectorIndexShard> getIndexShards(
-            Table table, long snapshotId, Map<Integer, IndexType> requiredIndexes) {
-        return List.of();
     }
 
     /**
@@ -297,6 +276,18 @@ public interface ConnectorMetadata {
                                           long limit,
                                           TvrVersionRange tableVersionRange) {
         return Statistics.builder().build();
+    }
+
+    /**
+     * The value range each partition source column covers in the given table version, read from table metadata
+     * without scanning data. Used to widen ANALYZE min/max that predate later ingestion. Values are in the
+     * optimizer's statistics domain (see {@link com.starrocks.statistic.StatisticUtils#convertStatisticsToDouble}).
+     *
+     * @return lower-cased column name to [min, max]; empty when unknown or unsupported
+     */
+    default Map<String, Pair<Double, Double>> getPartitionSourceColumnRanges(Table table,
+                                                                          TvrVersionRange tableVersionRange) {
+        return Map.of();
     }
 
     default boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {

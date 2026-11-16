@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "マテリアライズドビューを削除します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP MATERIALIZED VIEW

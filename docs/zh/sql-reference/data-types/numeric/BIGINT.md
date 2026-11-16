@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "BIGINT 是 8 字节有符号整数，取值范围为 [-9223372036854775808, 9223372036854775807]。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # BIGINT

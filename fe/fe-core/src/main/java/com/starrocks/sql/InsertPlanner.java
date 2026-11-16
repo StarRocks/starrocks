@@ -14,6 +14,7 @@
 
 package com.starrocks.sql;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
@@ -518,6 +519,8 @@ public class InsertPlanner {
         //6. Fill in the shadow column
         optExprBuilder = fillShadowColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
 
+        checkExternalWriteTypes(targetTable, outputFullSchema, outputColumns);
+
         //7. Cast output columns type to target type
         optExprBuilder =
                 castOutputColumnsTypeToTargetColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder);
@@ -775,7 +778,7 @@ public class InsertPlanner {
             optimizerContext.setSourceTablesCount(sourceTablesCount);
             if (session.getSessionVariable().isEnableIVMRefresh()) {
                 // Position i of outputColumns writes targetTable fullSchema[i]; IvmRewriter relies on
-                // this pairing to bind aggregates to MV state columns (bindStateColumnsForAggregate).
+                // this pairing to bind aggregates to MV state columns (bindMvColumnsForAggregate).
                 optimizerContext.getTvrOptContext().setIvmInsertOutputColumns(outputColumns);
             }
             Optimizer optimizer = OptimizerFactory.create(optimizerContext);
@@ -850,6 +853,10 @@ public class InsertPlanner {
         ValuesRelation values = (ValuesRelation) insertStatement.getQueryStatement().getQueryRelation();
         RelationFields fields = insertStatement.getQueryStatement().getQueryRelation().getRelationFields();
 
+        // The values rows do not contain the columns skipped by needToSkip() (e.g. partition columns of
+        // a static partition insert, which may be at any position for Iceberg tables) nor generated
+        // columns, so the source rows are indexed separately from the target schema.
+        int sourceIdx = 0;
         for (int columnIdx = 0; columnIdx < outputBaseSchema.size(); ++columnIdx) {
             if (needToSkip(insertStatement, columnIdx)) {
                 continue;
@@ -859,24 +866,25 @@ public class InsertPlanner {
             if (targetColumn.isGeneratedColumn()) {
                 continue;
             }
+            int valueIdx = sourceIdx++;
             boolean isAutoIncrement = targetColumn.isAutoIncrement();
             if (insertStatement.getTargetColumnNames() == null) {
                 for (List<Expr> row : values.getRows()) {
-                    if (isAutoIncrement && row.get(columnIdx).getType() == NullType.NULL) {
+                    if (isAutoIncrement && row.get(valueIdx).getType() == NullType.NULL) {
                         throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
                                 targetColumn.getName() + " You can use `default` for an" +
                                 " AUTO INCREMENT column");
                     }
-                    if (row.get(columnIdx) instanceof DefaultValueExpr) {
+                    if (row.get(valueIdx) instanceof DefaultValueExpr) {
                         if (isAutoIncrement) {
-                            row.set(columnIdx, new NullLiteral());
+                            row.set(valueIdx, new NullLiteral());
                         } else {
-                            row.set(columnIdx, new StringLiteral(targetColumn.calculatedDefaultValue()));
+                            row.set(valueIdx, new StringLiteral(targetColumn.calculatedDefaultValue()));
                         }
                     }
-                    row.set(columnIdx, TypeManager.addCastExpr(row.get(columnIdx), targetColumn.getType()));
+                    row.set(valueIdx, TypeManager.addCastExpr(row.get(valueIdx), targetColumn.getType()));
                 }
-                fields.getFieldByIndex(columnIdx).setType(targetColumn.getType());
+                fields.getFieldByIndex(valueIdx).setType(targetColumn.getType());
             } else {
                 int idx = insertStatement.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx != -1) {
@@ -906,6 +914,9 @@ public class InsertPlanner {
                                             InsertStmt insertStatement, List<ColumnRefOperator> outputColumns) {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
+        // Same as castLiteralToTargetColumnsType(): the query output does not contain skipped
+        // partition columns nor generated columns, so it is indexed separately.
+        int sourceIdx = 0;
         for (int columnIdx = 0; columnIdx < outputBaseSchema.size(); ++columnIdx) {
             if (needToSkip(insertStatement, columnIdx)) {
                 continue;
@@ -915,10 +926,11 @@ public class InsertPlanner {
             if (targetColumn.isGeneratedColumn()) {
                 continue;
             }
+            int outputIdx = sourceIdx++;
             if (insertStatement.getTargetColumnNames() == null) {
-                outputColumns.add(logicalPlan.getOutputColumn().get(columnIdx));
-                columnRefMap.put(logicalPlan.getOutputColumn().get(columnIdx),
-                        logicalPlan.getOutputColumn().get(columnIdx));
+                outputColumns.add(logicalPlan.getOutputColumn().get(outputIdx));
+                columnRefMap.put(logicalPlan.getOutputColumn().get(outputIdx),
+                        logicalPlan.getOutputColumn().get(outputIdx));
             } else {
                 int idx = insertStatement.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx == -1) {
@@ -1169,6 +1181,7 @@ public class InsertPlanner {
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         List<ScalarOperatorRewriteRule> rewriteRules = Arrays.asList(new FoldConstantsRule());
         for (int columnIdx = 0; columnIdx < outputFullSchema.size(); ++columnIdx) {
+            checkGeoAssignment(outputColumns.get(columnIdx).getType(), outputFullSchema.get(columnIdx));
             if (!outputFullSchema.get(columnIdx).getType().matchesType(outputColumns.get(columnIdx).getType())) {
                 Column c = outputFullSchema.get(columnIdx);
                 ColumnRefOperator k = columnRefFactory.create(c.getName(), c.getType(), c.isAllowNull());
@@ -1181,6 +1194,20 @@ public class InsertPlanner {
             }
         }
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
+    }
+
+
+    @VisibleForTesting
+    static void checkGeoAssignment(Type sourceType, Column targetColumn) {
+        Type targetType = targetColumn.getType();
+        if (!sourceType.equals(targetType) &&
+                (sourceType.isGeoType() || sourceType.hasNestedGeoType() ||
+                        targetType.isGeoType() || targetType.hasNestedGeoType())) {
+            throw new SemanticException("Cannot assign %s to column '%s' of type %s in INSERT: " +
+                    "native geo assignments require identical types (including geo descriptors). " +
+                    "Use ST_AsText/ST_AsBinary for VARCHAR/VARBINARY targets",
+                    sourceType.toSql(), targetColumn.getName(), targetType.toSql());
+        }
     }
 
 
@@ -1313,7 +1340,8 @@ public class InsertPlanner {
         List<Expr> partitionColValues = insertStatement.getTargetPartitionNames().getPartitionColValues();
         List<String> tablePartitionColumnNames = targetTable.getPartitionColumnNames();
 
-        for (Column column : targetTable.getFullSchema()) {
+        for (int columnIdx = 0; columnIdx < outputFullSchema.size(); ++columnIdx) {
+            Column column = outputFullSchema.get(columnIdx);
             String columnName = column.getName();
             if (tablePartitionColumnNames.contains(columnName)) {
                 int index = partitionColNames.indexOf(columnName);
@@ -1323,11 +1351,31 @@ public class InsertPlanner {
                         ConstantOperator.createObject(expr.getRealObjectValue(), type);
                 ColumnRefOperator col = columnRefFactory
                         .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
-                outputColumns.add(col);
+                outputColumns.add(columnIdx, col);
                 columnRefMap.put(col, scalarOperator);
             }
         }
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
+    }
+
+    @VisibleForTesting
+    static void checkExternalWriteTypes(Table table, List<Column> columns, List<ColumnRefOperator> outputColumns) {
+        Preconditions.checkState(columns.size() == outputColumns.size(),
+                "columns size %s must equal outputColumns size %s", columns.size(), outputColumns.size());
+        if (!table.isIcebergTable() && !table.isHiveTable() && !table.isTableFunctionTable()) {
+            return;
+        }
+        for (int i = 0; i < columns.size(); i++) {
+            Type targetType = columns.get(i).getType();
+            Type outputType = outputColumns.get(i).getType();
+            if (targetType.isGeoType() || targetType.hasNestedGeoType()
+                    || outputType.isGeoType() || outputType.hasNestedGeoType()) {
+                throw new SemanticException("Cannot write native geo values to external table column '%s' " +
+                        "(target type %s, output type %s). " +
+                        "Use ST_AsText/ST_AsBinary to serialize geo values before writing",
+                        columns.get(i).getName(), targetType.toSql(), outputType.toSql());
+            }
+        }
     }
 
     private boolean needToSkip(InsertStmt stmt, int columnIdx) {

@@ -3,6 +3,7 @@ sidebar_position: 50
 displayed_sidebar: docs
 description: "Best practices and client-side code patterns for getting the fastest large result-set reads out of StarRocks with Arrow Flight SQL."
 keywords: ['arrow flight sql', 'performance', 'best practices', 'optimization', 'parquet', 'jdbc']
+products: [oss, enterprise]
 ---
 
 # Arrow Flight SQL Best Practices

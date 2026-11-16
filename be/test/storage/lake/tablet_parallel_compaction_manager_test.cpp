@@ -37,6 +37,7 @@
 #include "storage/datum_variant.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task_context.h"
+#include "storage/lake/sort_key_bounds_test_util.h"
 #include "storage/lake/tablet_splitter.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/versioned_tablet.h"
@@ -447,8 +448,8 @@ protected:
             segment_meta->set_num_rows(rows_each);
             // The sampler rejects any sample outside [sort_key_min, sort_key_max], so these must be
             // the segment's real first and last key -- not a rounded envelope.
-            segment_meta->mutable_sort_key_min()->CopyFrom(make_varchar_tuple(start_key));
-            segment_meta->mutable_sort_key_max()->CopyFrom(make_varchar_tuple(start_key + rows_each - 1));
+            segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_varchar_tuple(start_key));
+            segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_varchar_tuple(start_key + rows_each - 1));
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -4753,8 +4754,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_can_use_range_split) {
             rowset->set_data_size(1024 * 1024);
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(fmt::format("seg_{}.dat", i));
-            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
-            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 99));
+            segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
+            segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 99));
             segment_meta->set_num_rows(100);
         }
 
@@ -4788,8 +4789,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
             rowset->set_data_size(2000);
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(fmt::format("seg_{}.dat", i));
-            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
-            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 15));
+            segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
+            segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 15));
             segment_meta->set_num_rows(200);
         }
 
@@ -4827,8 +4828,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
         for (int i = 0; i < 3; i++) {
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(fmt::format("seg_{}.dat", i));
-            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
-            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 9));
+            segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
+            segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 9));
             segment_meta->set_num_rows(0);
         }
 
@@ -4866,8 +4867,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
         for (int i = 0; i < 2; i++) {
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(fmt::format("seg_{}.dat", i));
-            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
-            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 5));
+            segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
+            segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 5));
             segment_meta->set_num_rows(i == 0 ? 100 : 300);
         }
 
@@ -4925,8 +4926,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_samp
         segment_meta->set_filename(seg_name);
         segment_meta->set_size(seg_size);
         segment_meta->set_num_rows(num_rows);
-        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(0));
-        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(static_cast<int32_t>(num_rows - 1)));
+        segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(0));
+        segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(static_cast<int32_t>(num_rows - 1)));
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
@@ -4969,8 +4970,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_samp
         segment_meta->set_size(2500);
         segment_meta->set_num_rows(250);
         segment_meta->set_deprecated_sort_key_sample_row_interval(100);
-        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(0));
-        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(249));
+        segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(0));
+        segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(249));
         segment_meta->add_deprecated_sort_key_samples()->CopyFrom(make_int_tuple(100));
         segment_meta->add_deprecated_sort_key_samples()->CopyFrom(make_int_tuple(200));
 
@@ -5024,8 +5025,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_samp
         // entry-0 == sort_key_min comparison the sampler calls the check that "empirically subsumes
         // every static assumption the predicate makes". Without them this case would establish "the
         // sibling segment is still sampled" with the only cross-source verification switched off.
-        sm_present->mutable_sort_key_min()->CopyFrom(make_int_tuple(0));
-        sm_present->mutable_sort_key_max()->CopyFrom(make_int_tuple(static_cast<int32_t>(num_rows - 1)));
+        sm_present->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(0));
+        sm_present->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(static_cast<int32_t>(num_rows - 1)));
 
         // Never written to disk; with experimental_lake_ignore_lost_segment=true this
         // becomes a null LoadedSegment placeholder instead of a hard load error.
@@ -5033,8 +5034,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_samp
         sm_lost->set_filename("seg_missing.dat");
         sm_lost->set_size(100);
         sm_lost->set_num_rows(10);
-        sm_lost->mutable_sort_key_min()->CopyFrom(make_int_tuple(1000));
-        sm_lost->mutable_sort_key_max()->CopyFrom(make_int_tuple(1009));
+        sm_lost->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(1000));
+        sm_lost->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(1009));
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
@@ -5094,15 +5095,15 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_samp
         sm_small->set_filename(small_name);
         sm_small->set_size(2000);
         sm_small->set_num_rows(200);
-        sm_small->mutable_sort_key_min()->CopyFrom(make_int_tuple(0));
-        sm_small->mutable_sort_key_max()->CopyFrom(make_int_tuple(199));
+        sm_small->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(0));
+        sm_small->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(199));
 
         auto* sm_large = rowset->add_segment_metas();
         sm_large->set_filename(large_name);
         sm_large->set_size(20000);
         sm_large->set_num_rows(2000);
-        sm_large->mutable_sort_key_min()->CopyFrom(make_int_tuple(1000));
-        sm_large->mutable_sort_key_max()->CopyFrom(make_int_tuple(2999));
+        sm_large->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(1000));
+        sm_large->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(2999));
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
@@ -5164,8 +5165,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_samp
             sm->set_filename(name);
             sm->set_size(10000);
             sm->set_num_rows(kRowsPerSegment);
-            sm->mutable_sort_key_min()->CopyFrom(make_int_tuple(static_cast<int32_t>(start_key)));
-            sm->mutable_sort_key_max()->CopyFrom(make_int_tuple(static_cast<int32_t>(start_key + kRowsPerSegment - 1)));
+            sm->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(static_cast<int32_t>(start_key)));
+            sm->mutable_deprecated_sort_key_max()->CopyFrom(
+                    make_int_tuple(static_cast<int32_t>(start_key + kRowsPerSegment - 1)));
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -5214,8 +5216,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_samp
         segment_meta->set_filename(seg_name);
         segment_meta->set_size(seg_size);
         segment_meta->set_num_rows(num_rows);
-        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(0));
-        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(static_cast<int32_t>(num_rows - 1)));
+        segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(0));
+        segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(static_cast<int32_t>(num_rows - 1)));
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
@@ -5471,8 +5473,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_range_split_groups) {
 
         auto* segment_meta = rowset->add_segment_metas();
         segment_meta->set_filename(fmt::format("seg_{}.dat", i));
-        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
-        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
+        segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
+        segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
         segment_meta->set_num_rows(1000);
     }
 
@@ -5499,6 +5501,87 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_range_split_groups) {
 
     EXPECT_TRUE(groups.front().is_first_range);
     EXPECT_TRUE(groups.back().is_last_range);
+}
+
+// Range-split compaction collects the same bounds and plans the same subtasks whether the segments carry the
+// deprecated pair, the encoded pair or a mix of both, and is not used in any of them once one segment has no bounds.
+TEST_F(TabletParallelCompactionManagerTest, RangeSplitIdenticalAcrossRepresentations) {
+    // The rowsets of test_create_range_split_groups: four single-segment rowsets over overlapping key ranges.
+    auto base = generate_simple_tablet_metadata(DUP_KEYS);
+    base->set_version(5);
+    for (int i = 0; i < 4; i++) {
+        auto* rowset = base->add_rowsets();
+        rowset->set_id(i);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(1000);
+        rowset->set_data_size(10 * 1024 * 1024);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+        segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
+        segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
+        segment_meta->set_num_rows(1000);
+    }
+    auto rowsets_of = [&](const std::shared_ptr<TabletMetadataPB>& metadata) {
+        metadata->set_id(next_id());
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        std::vector<RowsetPtr> rowsets;
+        for (int i = 0; i < metadata->rowsets_size(); i++) {
+            rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), metadata, i, 0));
+        }
+        return rowsets;
+    };
+
+    std::vector<SegmentSplitInfo> expected_bounds;
+    std::vector<SubtaskGroup> expected_groups;
+    for (const auto repr : {SortKeyBoundsRepr::kDeprecated, SortKeyBoundsRepr::kEncoded, SortKeyBoundsRepr::kMixed}) {
+        SCOPED_TRACE(fmt::format("representation {}", static_cast<int>(repr)));
+        auto metadata = std::make_shared<TabletMetadataPB>(*base);
+        convert_sort_key_bounds(metadata.get(), repr);
+        const auto rowsets = rowsets_of(metadata);
+        EXPECT_TRUE(TabletParallelCompactionManager::_can_use_range_split(rowsets));
+        ASSIGN_OR_ABORT(auto bounds, TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, 2));
+        ASSERT_EQ(4u, bounds.size());
+        auto groups = _manager->_create_range_split_groups(metadata->id(), rowsets, 3, 15 * 1024 * 1024);
+        ASSERT_GE(groups.size(), 2u);
+        for (const auto& group : groups) EXPECT_EQ(SubtaskType::RANGE_SPLIT, group.type);
+
+        if (repr == SortKeyBoundsRepr::kDeprecated) {
+            expected_bounds = std::move(bounds);
+            expected_groups = std::move(groups);
+        } else {
+            for (size_t i = 0; i < bounds.size(); ++i) {
+                EXPECT_EQ(expected_bounds[i].min_key.size(), bounds[i].min_key.size()) << i;
+                EXPECT_EQ(expected_bounds[i].max_key.size(), bounds[i].max_key.size()) << i;
+                EXPECT_TRUE(expected_bounds[i].min_key == bounds[i].min_key) << i;
+                EXPECT_TRUE(expected_bounds[i].max_key == bounds[i].max_key) << i;
+                EXPECT_EQ(expected_bounds[i].num_rows, bounds[i].num_rows) << i;
+                EXPECT_EQ(expected_bounds[i].data_size, bounds[i].data_size) << i;
+            }
+            ASSERT_EQ(expected_groups.size(), groups.size());
+            for (size_t i = 0; i < groups.size(); ++i) {
+                const auto& expected = expected_groups[i];
+                EXPECT_EQ(expected.range_lower_bound.size(), groups[i].range_lower_bound.size()) << i;
+                EXPECT_EQ(expected.range_upper_bound.size(), groups[i].range_upper_bound.size()) << i;
+                EXPECT_TRUE(expected.range_lower_bound == groups[i].range_lower_bound) << i;
+                EXPECT_TRUE(expected.range_upper_bound == groups[i].range_upper_bound) << i;
+                EXPECT_EQ(expected.range_lower_inclusive, groups[i].range_lower_inclusive) << i;
+                EXPECT_EQ(expected.range_upper_inclusive, groups[i].range_upper_inclusive) << i;
+                EXPECT_EQ(expected.is_first_range, groups[i].is_first_range) << i;
+                EXPECT_EQ(expected.is_last_range, groups[i].is_last_range) << i;
+                EXPECT_EQ(expected.total_bytes, groups[i].total_bytes) << i;
+                EXPECT_EQ(expected.range_split_rowsets.size(), groups[i].range_split_rowsets.size()) << i;
+            }
+        }
+
+        // A segment without bounds, such as a replicated one, rules range split out.
+        auto boundless = std::make_shared<TabletMetadataPB>(*metadata);
+        auto* segment = boundless->mutable_rowsets(1)->mutable_segment_metas(0);
+        segment->clear_deprecated_sort_key_min();
+        segment->clear_deprecated_sort_key_max();
+        segment->clear_sort_key_min_encoded();
+        segment->clear_sort_key_max_encoded();
+        EXPECT_FALSE(TabletParallelCompactionManager::_can_use_range_split(rowsets_of(boundless)));
+    }
 }
 
 TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_range_split) {
@@ -5831,8 +5914,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_segment_metas
             sm->set_size(500);
             sm->set_segment_idx(j); // Each subtask starts from 0
             sm->set_num_rows(50);
-            sm->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100 + j * 50));
-            sm->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + j * 50 + 49));
+            sm->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(i * 100 + j * 50));
+            sm->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + j * 50 + 49));
         }
 
         {
@@ -7404,8 +7487,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_range_split_groups_error
             rowset->set_data_size(10 * 1024 * 1024);
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(fmt::format("seg_{}.dat", i));
-            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(100));
-            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(100));
+            segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(100));
+            segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(100));
             segment_meta->set_num_rows(1000);
         }
 
@@ -7599,8 +7682,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_vlog_paths) {
             rowset->set_data_size(10 * 1024 * 1024);
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(fmt::format("seg_{}.dat", i));
-            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
-            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
+            segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
+            segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
             segment_meta->set_num_rows(1000);
         }
 
@@ -7763,8 +7846,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
         auto* segment_meta = rowset->add_segment_metas();
         segment_meta->set_filename(segment_name);
         segment_meta->set_size(segment_size);
-        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(start_key));
-        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(start_key + kRowsPerRowset - 1));
+        segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(start_key));
+        segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(start_key + kRowsPerRowset - 1));
         segment_meta->set_num_rows(kRowsPerRowset);
     }
 

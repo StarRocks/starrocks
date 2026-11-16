@@ -32,12 +32,13 @@ import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MockedMetadataMgr;
-import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
-import com.starrocks.connector.paimon.PaimonGlobalIndexRequest;
-import com.starrocks.connector.paimon.PaimonGlobalIndexService;
+import com.starrocks.connector.paimon.PaimonGetRemoteFilesParams;
 import com.starrocks.connector.paimon.PaimonMetadata;
+import com.starrocks.connector.paimon.index.PaimonGlobalIndexRequest;
+import com.starrocks.connector.paimon.index.PaimonGlobalIndexService;
+import com.starrocks.connector.paimon.index.PaimonIndexCondition;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SimpleExecutor;
@@ -165,7 +166,7 @@ public class PaimonGlobalIndexAuthorizationTest extends ConnectorPlanTestBase {
                         new TableMetaMetadata(CATALOG, "paimon")));
         table = (PaimonTable) metadata.getTable(connectContext, "db1", "indexed_table");
         nativeTable = (FileStoreTable) table.getNativeTable();
-        IndexCondition condition = new IndexCondition(new BinaryPredicateOperator(BinaryType.EQ,
+        PaimonIndexCondition condition = new PaimonIndexCondition(new BinaryPredicateOperator(BinaryType.EQ,
                 new ColumnRefOperator(1, IntegerType.INT, "id", true), ConstantOperator.createInt(1)), Map.of(1, 0));
         request = PaimonGlobalIndexRequest.create(nativeTable.location().toString(), "main",
                 nativeTable.latestSnapshot().orElseThrow().id(), nativeTable.schema().id(),
@@ -218,7 +219,7 @@ public class PaimonGlobalIndexAuthorizationTest extends ConnectorPlanTestBase {
             assertContains(plan(QUERY, caller), "PREDICATES:");
 
             assertEquals(1, executions.get());
-            assertNotNull(lastScanParams().getConnectorIndexResult());
+            assertNotNull(lastScanParams().getIndexResult());
             assertSame(caller, ConnectContext.get());
             assertEquals(ConnectContext.InternalQueryPurpose.NONE, caller.getInternalQueryPurpose());
         }
@@ -231,10 +232,10 @@ public class PaimonGlobalIndexAuthorizationTest extends ConnectorPlanTestBase {
 
         assertContains(plan(QUERY, caller), "PREDICATES:");
 
-        verify(metadata).evaluateIndex(any(Table.class), any(IndexCondition.class), any(TvrVersionRange.class));
+        verify(metadata).evaluateIndex(any(Table.class), any(PaimonIndexCondition.class), any(TvrVersionRange.class));
         verify(metadata, never()).getIndexShards(any(Table.class), anyLong(), anyMap());
         assertEquals(0, executions.get());
-        assertNull(lastScanParams().getConnectorIndexResult());
+        assertNull(lastScanParams().getIndexResult());
         assertSame(caller, ConnectContext.get());
     }
 
@@ -261,7 +262,7 @@ public class PaimonGlobalIndexAuthorizationTest extends ConnectorPlanTestBase {
             assertContains(plan("SELECT id FROM " + BASE_TABLE, caller),
                     "PREDICATES:", "id = 1", "DISTRIBUTED INDEX: applied", "99");
             assertEquals(1, executions.get());
-            assertNotNull(lastScanParams().getConnectorIndexResult());
+            assertNotNull(lastScanParams().getIndexResult());
             assertSame(caller, ConnectContext.get());
         } finally {
             provider.setAccessControl(CATALOG, previous);
@@ -282,10 +283,10 @@ public class PaimonGlobalIndexAuthorizationTest extends ConnectorPlanTestBase {
             assertTrue(failure.getCause().getMessage().contains("cannot consume policy-rewritten shard results"));
 
             assertContains(plan(QUERY, caller), "PREDICATES:", "DISTRIBUTED INDEX: SDK fallback");
-            verify(metadata).evaluateIndex(any(Table.class), any(IndexCondition.class), any(TvrVersionRange.class));
+            verify(metadata).evaluateIndex(any(Table.class), any(PaimonIndexCondition.class), any(TvrVersionRange.class));
             verify(metadata, never()).getIndexShards(any(Table.class), anyLong(), anyMap());
             assertEquals(0, executions.get());
-            assertNull(lastScanParams().getConnectorIndexResult());
+            assertNull(lastScanParams().getIndexResult());
             assertSame(caller, ConnectContext.get());
         } finally {
             provider.setAccessControl(CATALOG, previous);
@@ -329,7 +330,7 @@ public class PaimonGlobalIndexAuthorizationTest extends ConnectorPlanTestBase {
         ErrorReportException error = assertThrows(ErrorReportException.class, () -> plan(QUERY, caller));
 
         assertTrue(error.getMessage().contains("Access denied"), error.getMessage());
-        verify(metadata, never()).evaluateIndex(any(Table.class), any(IndexCondition.class), any(TvrVersionRange.class));
+        verify(metadata, never()).evaluateIndex(any(Table.class), any(PaimonIndexCondition.class), any(TvrVersionRange.class));
         verify(metadata, never()).getRemoteFiles(any(Table.class), any(GetRemoteFilesParams.class));
         assertEquals(0, executions.get());
     }
@@ -419,10 +420,10 @@ public class PaimonGlobalIndexAuthorizationTest extends ConnectorPlanTestBase {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext), connectContext);
     }
 
-    private static GetRemoteFilesParams lastScanParams() {
+    private static PaimonGetRemoteFilesParams lastScanParams() {
         ArgumentCaptor<GetRemoteFilesParams> params = ArgumentCaptor.forClass(GetRemoteFilesParams.class);
         verify(metadata, atLeastOnce()).getRemoteFiles(any(Table.class), params.capture());
-        return params.getValue();
+        return (PaimonGetRemoteFilesParams) params.getValue();
     }
 
     private static AtomicInteger mockIndexExecution(ConnectContext caller) {

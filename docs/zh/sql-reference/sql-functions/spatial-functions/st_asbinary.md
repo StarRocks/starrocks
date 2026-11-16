@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将原生 GEOMETRY 或 GEOGRAPHY 值序列化为 WKB。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_AsBinary, ST_AsWKB

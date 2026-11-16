@@ -16,7 +16,10 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.Pair;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -162,6 +165,35 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             }
         }
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
+    }
+
+    @Test
+    public void testCountPlaceholderSlotIsBigint() throws Exception {
+        // With one-stage aggregation the scan ships ___count___ through an exchange before the sum,
+        // so the receiver deserializes it by the scan slot type, which must match the BIGINT BE fills.
+        SessionVariable sv = connectContext.getSessionVariable();
+        int aggStage = sv.getNewPlannerAggStage();
+        sv.setEnableRewriteSimpleAggToHdfsScan(true);
+        sv.setNewPlanerAggStage(1);
+        try {
+            String[] sqlString = {
+                    "select count(*) from lineitem_par",
+                    "select count(*) from iceberg0.partitioned_db.t1",
+            };
+            for (String sql : sqlString) {
+                ExecPlan plan = getExecPlan(sql);
+                assertContains(plan.getExplainString(TExplainLevel.NORMAL), "___count___");
+                ScanNode scanNode = plan.getScanNodes().get(0);
+                SlotDescriptor countSlot = plan.getDescTbl().getTupleDesc(scanNode.getTupleIds().get(0))
+                        .getSlots().stream()
+                        .filter(slot -> slot.getColumn() != null && "___count___".equals(slot.getColumn().getName()))
+                        .findFirst().orElseThrow();
+                Assertions.assertEquals(IntegerType.BIGINT, countSlot.getType(), sql);
+            }
+        } finally {
+            sv.setNewPlanerAggStage(aggStage);
+            sv.setEnableRewriteSimpleAggToHdfsScan(false);
+        }
     }
 
     @Test

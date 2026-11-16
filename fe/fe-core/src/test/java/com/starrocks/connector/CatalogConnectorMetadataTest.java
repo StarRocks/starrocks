@@ -22,16 +22,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
-import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
-import com.starrocks.connector.index.ConnectorIndexMetadata;
-import com.starrocks.connector.index.ConnectorIndexMetadata.TableType;
-import com.starrocks.connector.index.ConnectorIndexResult;
-import com.starrocks.connector.index.ConnectorIndexShard;
-import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
-import com.starrocks.connector.paimon.PaimonIndexTable;
+import com.starrocks.connector.paimon.index.PaimonIndexTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
@@ -175,40 +169,11 @@ public class CatalogConnectorMetadataTest {
     }
 
     @Test
-    void testGetIndexMetadataDelegatesToNormalMetadata(@Mocked ConnectorMetadata connectorMetadata) {
-        PaimonTable table = new PaimonTable();
-        TvrTableSnapshot version = TvrTableSnapshot.of(7L);
-        ConnectorIndexMetadata expected = ConnectorIndexMetadata.of(
-                7L, TableType.DATA_EVOLUTION, List.of());
-        new Expectations() {
-            {
-                connectorMetadata.getIndexMetadata(table, version);
-                result = expected;
-                times = 1;
-            }
-        };
-
-        CatalogConnectorMetadata metadata = new CatalogConnectorMetadata(
-                connectorMetadata, informationSchemaMetadata, metaMetadata);
-
-        assertSame(expected, metadata.getIndexMetadata(table, version));
-    }
-
-    @Test
-    void testIndexExecutionDelegationAndVirtualTable(@Mocked ConnectorMetadata connectorMetadata) {
+    void testVirtualIndexTableLookupDelegatesToNormalMetadata(@Mocked ConnectorMetadata connectorMetadata) {
         PaimonTable table = new PaimonTable();
         PaimonIndexTable virtual = new PaimonIndexTable(table);
         TvrTableSnapshot version = TvrTableSnapshot.of(7L);
-        IndexCondition condition = new IndexCondition(null);
-        ConnectorIndexResult candidate = () -> 7L;
-        List<ConnectorIndexShard> shards = List.of(new ConnectorIndexShard(0, 9));
         new Expectations() {{
-                connectorMetadata.evaluateIndex(table, condition, version);
-                result = Optional.of(candidate);
-                times = 1;
-                connectorMetadata.getIndexShards(table, 7L, Map.of(0, IndexType.RANGE));
-                result = shards;
-                times = 1;
                 connectorMetadata.getTable((ConnectContext) any, "db", "orders$global_index");
                 result = virtual;
                 connectorMetadata.tableExists((ConnectContext) any, "db", "orders$global_index");
@@ -218,8 +183,6 @@ public class CatalogConnectorMetadataTest {
             }};
         CatalogConnectorMetadata metadata = new CatalogConnectorMetadata(
                 connectorMetadata, informationSchemaMetadata, metaMetadata);
-        assertSame(candidate, metadata.evaluateIndex(table, condition, version).orElseThrow());
-        assertEquals(shards, metadata.getIndexShards(table, 7L, Map.of(0, IndexType.RANGE)));
         assertSame(virtual, metadata.getTable(null, "db", "orders$global_index"));
         assertSame(table, virtual.getInnerTable());
         assertTrue(metadata.tableExists(null, "db", "orders$global_index"));

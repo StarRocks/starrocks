@@ -2,11 +2,9 @@
 displayed_sidebar: docs
 description: "Resource groups in StarRocks enable resource isolation and multi-tenant management by limiting query resource consumption through CPU, memory, and concurrency controls."
 keywords: ['fuzai', 'ziyuan', 'ziyuanzu'] 
+products: [oss, enterprise, cloud, anywhere]
 ---
 
-import ScopeParam from '../../../_assets/commonMarkdown/rg_scope_param.mdx'
-import WhSyntaxExample from '../../../_assets/commonMarkdown/rg_wh_syntax_example.mdx'
-import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.mdx'
 
 # 资源隔离
 
@@ -46,7 +44,7 @@ import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.md
 | exclusive_cpu_percent      | 该资源组的 CPU 硬隔离百分比。自 v4.1 起支持。                         | [0, 100] (大于 0 时生效)                      | 0      |
 | mem_limit                  | 该资源组在当前 BE 节点可使用于查询的内存的比例。                 | (0, 1] (必填项)                              | -      |
 | mem_pool                   | 将资源组进行分组以共享内存限制。                 | 字符串                                     | default_mem_pool |
-| spill_mem_limit_threshold  | 该资源组触发落盘的内存占用阈值。                               | (0, 1]                                      | 1.0    |
+| spill_mem_limit_threshold  | 该资源组触发落盘的内存占用阈值。                               | (0, 1)                                      | 1.0    |
 | concurrency_limit          | 该资源组中并发查询数的上限。                                  | 整数 (大于 0 才生效)                           | 0      |
 | mem_used_pct_limit         | 该资源组的内存使用率上限。需要启用 `enable_group_level_query_queue`。仅当 `enable_query_queue_v2` 为 `false` 时可用。 | [0, 1] (大于 0 才生效)                        | 0      |
 | big_query_cpu_second_limit | 该资源组的大查询任务在每个 BE 上可以使用 CPU 的时间上限。         | 整数 (大于 0 才生效)                          | 0      |
@@ -62,9 +60,9 @@ import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.md
 您可以通过以下任一参数设置该权重：
 
 - `cpu_weight`：直接设置 CPU 调度权重。取值范围为 (0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。只有大于 0 时才生效。
-- `cpu_weight_percent`：自 v4.1 起支持，用百分比设置 CPU 调度权重。取值范围为 [0, 100]。只有大于 0 时才生效。如果 `min_be_cpu_cores * cpu_weight_percent / 100 < 1`，系统会返回错误，其中 `min_be_cpu_cores` 表示所有 BE 的 CPU 核数的最小值。
+- `cpu_weight_percent`：自 v4.1 起支持，用百分比设置 CPU 调度权重。取值范围为 [0, 100]。只有大于 0 时才生效。
 
-实际使用时，每个 BE 会根据本机 CPU 核数 `be_cpu_cores` 将 `cpu_weight_percent` 换算为真实的 `cpu_weight`：`cpu_weight = be_cpu_cores * cpu_weight_percent / 100`。
+实际使用时，每个 BE 会根据本机 CPU 核数 `be_cpu_cores` 将 `cpu_weight_percent` 换算为真实的 `cpu_weight`：`cpu_weight = max(1, be_cpu_cores * cpu_weight_percent / 100)`，其中除法向下取整。
 
 `cpu_weight`、`cpu_weight_percent`、`exclusive_cpu_cores` 和 `exclusive_cpu_percent` 中有且只能有一个为正数。
 
@@ -104,8 +102,6 @@ import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.md
 UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_resource_group_cpu_borrowing";
 ```
 
-<ScopeParam />
-
 #### 内存资源相关配置项
 
 ##### `mem_limit`
@@ -140,10 +136,10 @@ WITH (
 
 该资源组触发落盘的内存占用阈值（百分比）。取值范围：(0,1)，默认值为 1，即不生效。该参数自 v3.1.7 版本引入。
 
-- 如果开启自动落盘功能（即系统变量 `spill_mode` 设置为 `auto`），但未开启资源组功能，系统将在查询的内存占用超过 `query_mem_limit` 的 80% 时触发中间结果落盘。其中 `query_mem_limit` 为单个查询可使用的内存上限，由系统变量 `query_mem_limit` 控制，默认值为 0，代表不设限制。
+- 如果开启自动落盘功能（即系统变量 `spill_mode` 设置为 `auto`），但未开启资源组功能，系统将在查询的内存占用超过其有效内存上限的 80% 时触发中间结果落盘。有效内存上限为 `query_mem_limit`（如已设置）与查询从 BE 继承的内存上限中的较小值。在 v4.0.16 和 v4.1.6 之前的版本中，该 80% 不考虑 `query_mem_limit`，仅根据从 BE 继承的内存上限计算。其中 `query_mem_limit` 为单个查询可使用的内存上限，由系统变量 `query_mem_limit` 控制，默认值为 0，代表不设限制。
 - 如果开启自动落盘功能且查询命中资源组（包括所有系统内建资源组）后，该查询满足以下任意情况时，都将触发中间结果落盘：
   - 当前资源组内所有查询使用的内存超过 `当前 BE 节点内存上限 * mem_limit * spill_mem_limit_threshold` 时
-  - 当前查询占用超过 `query_mem_limit` 的 80% 时。
+  - 当前查询占用超过其有效内存上限的 80% 时。有效内存上限为 `query_mem_limit`（如已设置）、`big_query_mem_limit`（如已设置）与资源组内存上限中的最小值。在 v4.0.16 和 v4.1.6 之前的版本中，仅考虑资源组的内存上限。
 
 #### 查询并发相关配置项
 
@@ -189,7 +185,7 @@ WITH (
 
 如果普通查询受资源组管理，但是没有匹配到分类器，系统将默认为其分配 `default_wg`。该资源组的默认资源配置如下：
 
-- `cpu_weight`：BE 的 CPU 核数。
+- `cpu_weight_percent`：100，即每个 BE 的 CPU 核数。（如果 `default_wg` 创建于 v4.1 之前，升级后仍保留 `cpu_weight`，其值为创建时所有 BE 的平均 CPU 核数。）
 - `mem_limit`：100%。
 - `concurrency_limit`：0。
 - `big_query_cpu_second_limit`：0。
@@ -202,7 +198,7 @@ WITH (
 
 如果创建异步物化视图时没有通过 `resource_group` 属性指定资源组，该物化视图刷新时，系统将默认为其分配 `default_mv_wg`。该资源组的默认资源配置如下：
 
-- `cpu_weight`：1。
+- `cpu_weight_percent`：1，在 CPU 核数少于 200 的 BE 上即 CPU 权重为 1。（如果 `default_mv_wg` 创建于 v4.1 之前，升级后仍保留 `cpu_weight`：1。）
 - `mem_limit`：80%。
 - `concurrency_limit`: 0。
 - `spill_mem_limit_threshold`: 80%。
@@ -218,9 +214,9 @@ WITH (
 - `role`：用户所属的 Role。
 - `query_type`: 查询类型，目前支持 `SELECT` 与 `INSERT` (2.5及以后)。当 `query_type` 为 `insert` 的资源组有 INSERT INTO 或 Broker Load 导入任务正在运行时，当前 BE 节点会为其预留相应的计算资源。
 - `source_ip`：发起查询的 IP 地址，类型为 CIDR。
-- `db`：查询所访问的 Database，可以为 `,` 分割的字符串。
-- `plan_cpu_cost_range`：系统估计的查询 CPU 开销范围。格式为 `(DOUBLE, DOUBLE]`。默认为 NULL，表示没有该限制。fe.audit.log 的 `PlanCpuCost` 列为系统估计的该查询的 CPU 开销。自 v3.1.4 版本起，StarRocks 支持该参数。
-- `plan_mem_cost_range`：系统估计的查询内存开销范围。格式为 `(DOUBLE, DOUBLE]`。默认为 NULL，表示没有该限制。fe.audit.log 的 `PlanMemCost` 列为系统估计的该查询的内存开销。自 v3.1.4 版本起，StarRocks 支持该参数。
+- `db`：查询所访问的 Database，可以为 `,` 分割的字符串。只有当分类器的 `db` 包含查询所访问的所有 Database 时，该分类器才能匹配该查询。
+- `plan_cpu_cost_range`：系统估计的查询 CPU 开销范围。格式为 `[DOUBLE, DOUBLE)`。默认为 NULL，表示没有该限制。fe.audit.log 的 `PlanCpuCost` 列为系统估计的该查询的 CPU 开销。自 v3.1.4 版本起，StarRocks 支持该参数。
+- `plan_mem_cost_range`：系统估计的查询内存开销范围。格式为 `[DOUBLE, DOUBLE)`。默认为 NULL，表示没有该限制。fe.audit.log 的 `PlanMemCost` 列为系统估计的该查询的内存开销。自 v3.1.4 版本起，StarRocks 支持该参数。
 
 系统在为查询任务匹配分类器时，查询任务的信息与分类器的条件完全相同，才能视为匹配。如果存在多个分类器的条件与查询任务完全匹配，则需要计算不同分类器的匹配度。其中只有匹配度最高的分类器才会生效。
 
@@ -232,9 +228,9 @@ WITH (
 
 - 如果 `user` 一致，则该分类器匹配度增加 1。
 - 如果 `role` 一致，则该分类器匹配度增加 1。
-- 如果 `query_type` 一致，则该分类器匹配度增加 1 + 1/分类器的 `query_type` 数量。
-- 如果 `source_ip` 一致，则该分类器匹配度增加 1 + (32 - cidr_prefix)/64。
-- 如果查询的 `db` 匹配，则匹配度加 10。
+- 如果 `query_type` 一致，则该分类器匹配度增加 1 + 0.1/分类器的 `query_type` 数量。
+- 如果 `source_ip` 一致，则该分类器匹配度增加 1 + cidr_prefix/64。
+- 如果查询的 `db` 匹配，则匹配度增加 10 × 分类器中 `db` 的数量。
 - 如果查询的 CPU 开销在 `plan_cpu_cost_range` 范围内，则该分类器匹配度增加 1。
 - 如果查询的内存开销在 `plan_mem_cost_range` 范围内，则该分类器匹配度增加 1。
 
@@ -256,14 +252,6 @@ classifier B (user='Alice', source_ip = '192.168.1.0/24')
 -- 因为分类器 C 限定的查询类型数量更少，所以 C 的匹配度比 D 高。
 classifier C (user='Alice', query_type in ('select'))
 classifier D (user='Alice', query_type in ('insert','select')）
-```
-
-如果多个分类器的匹配度相同，那么会随机选择其中一个分类器。
-
-```Plain
--- 如果一个查询同时查询了 db1 和 db2，并且命中的分类器中 E 和 F 的匹配度最高，那么会从 E 和 F 中随机选择一个。
-classifier E (db='db1')
-classifier F (db='db2')
 ```
 
 ## 隔离计算资源
@@ -289,7 +277,40 @@ SET GLOBAL enable_pipeline_engine = true;
 
 创建资源组，关联分类器，并分配资源。
 
-<WhSyntaxExample />
+```SQL
+CREATE RESOURCE GROUP <group_name> 
+TO (
+    user='string', 
+    role='string', 
+    query_type in ('select'), 
+    source_ip='cidr'
+) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (`,`).
+WITH (
+    "{ cpu_weight | exclusive_cpu_cores }" = "INT",
+    "mem_limit" = "m%",
+    "concurrency_limit" = "INT",
+    "type" = "str" --The type of the resource group. Set the value to normal.
+);
+```
+
+示例：
+
+```SQL
+CREATE RESOURCE GROUP rg1
+TO 
+    (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.x.x/24'),
+    (user='rg1_user2', query_type in ('select'), source_ip='192.168.x.x/24'),
+    (user='rg1_user3', source_ip='192.168.x.x/24'),
+    (user='rg1_user4'),
+    (db='db1')
+WITH (
+    'exclusive_cpu_cores' = '10',
+    'mem_limit' = '20%',
+    'big_query_cpu_second_limit' = '100',
+    'big_query_scan_rows_limit' = '100000',
+    'big_query_mem_limit' = '1073741824'
+);
+```
 
 ### 指定资源组（可选）
 
@@ -355,7 +376,12 @@ SHOW VERBOSE RESOURCE GROUP group_name;
 
 为已有的资源组修改资源配额。
 
-<WhAlterSyntax />
+```SQL
+ALTER RESOURCE GROUP group_name WITH (
+    'cpu_core_limit' = 'INT',
+    'mem_limit' = 'm%'
+);
+```
 
 删除指定资源组。
 

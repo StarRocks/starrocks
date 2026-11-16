@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "approx_count_distinct 返回类似 COUNT(DISTINCT col) 的近似值，速度更快且使用固定大小内存。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # approx_count_distinct

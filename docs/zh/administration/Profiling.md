@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "通过选择合适的表类型和建表策略优化 StarRocks 性能。"
+products: [oss]
 ---
 
 # 优化性能

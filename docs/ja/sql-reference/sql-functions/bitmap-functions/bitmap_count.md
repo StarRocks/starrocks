@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "入力されたビットマップの1ビット数を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_count

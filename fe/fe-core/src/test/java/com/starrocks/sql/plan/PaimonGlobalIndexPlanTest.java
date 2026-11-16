@@ -21,22 +21,22 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.CatalogConnectorMetadata;
-import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MockedMetadataMgr;
-import com.starrocks.connector.index.ConnectorIndexDescriptor;
-import com.starrocks.connector.index.ConnectorIndexDescriptor.Coverage;
-import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
-import com.starrocks.connector.index.ConnectorIndexDescriptor.Operation;
-import com.starrocks.connector.index.ConnectorIndexMetadata;
-import com.starrocks.connector.index.ConnectorIndexMetadata.TableType;
-import com.starrocks.connector.index.ConnectorIndexShard;
-import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
-import com.starrocks.connector.paimon.PaimonGlobalIndexRequest;
-import com.starrocks.connector.paimon.PaimonGlobalIndexService;
-import com.starrocks.connector.paimon.PaimonIndexTable;
+import com.starrocks.connector.paimon.PaimonGetRemoteFilesParams;
 import com.starrocks.connector.paimon.PaimonMetadata;
+import com.starrocks.connector.paimon.index.PaimonGlobalIndexRequest;
+import com.starrocks.connector.paimon.index.PaimonGlobalIndexService;
+import com.starrocks.connector.paimon.index.PaimonIndexCondition;
+import com.starrocks.connector.paimon.index.PaimonIndexDescriptor;
+import com.starrocks.connector.paimon.index.PaimonIndexDescriptor.Coverage;
+import com.starrocks.connector.paimon.index.PaimonIndexDescriptor.IndexType;
+import com.starrocks.connector.paimon.index.PaimonIndexDescriptor.Operation;
+import com.starrocks.connector.paimon.index.PaimonIndexMetadata;
+import com.starrocks.connector.paimon.index.PaimonIndexMetadata.TableType;
+import com.starrocks.connector.paimon.index.PaimonIndexShard;
+import com.starrocks.connector.paimon.index.PaimonIndexTable;
 import com.starrocks.planner.PaimonIndexScanNode;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.qe.ConnectContext;
@@ -112,19 +112,19 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
             indexMetadataLoads.incrementAndGet();
             Table table = invocation.getArgument(0);
             TvrVersionRange versionRange = invocation.getArgument(1);
-            long snapshotId = versionRange == null ? ConnectorIndexMetadata.UNKNOWN_SNAPSHOT_ID
-                    : versionRange.end().orElse(ConnectorIndexMetadata.UNKNOWN_SNAPSHOT_ID);
+            long snapshotId = versionRange == null ? PaimonIndexMetadata.UNKNOWN_SNAPSHOT_ID
+                    : versionRange.end().orElse(PaimonIndexMetadata.UNKNOWN_SNAPSHOT_ID);
             if ("vector_table".equals(table.getName())) {
-                ConnectorIndexDescriptor descriptor = new ConnectorIndexDescriptor(
+                PaimonIndexDescriptor descriptor = new PaimonIndexDescriptor(
                         IndexType.RANGE, 0, "pk",
                         Set.of(Operation.EQUAL), Coverage.UNKNOWN);
-                return ConnectorIndexMetadata.of(snapshotId, TableType.DATA_EVOLUTION,
+                return PaimonIndexMetadata.of(snapshotId, TableType.DATA_EVOLUTION,
                         List.of(descriptor), Map.of("pk", 0, "embedding", 1), Set.of());
             }
-            ConnectorIndexDescriptor descriptor = new ConnectorIndexDescriptor(
+            PaimonIndexDescriptor descriptor = new PaimonIndexDescriptor(
                     IndexType.BITMAP, 0, "pk",
                     Set.of(Operation.EQUAL), Coverage.UNKNOWN);
-            return ConnectorIndexMetadata.of(snapshotId, TableType.DATA_EVOLUTION,
+            return PaimonIndexMetadata.of(snapshotId, TableType.DATA_EVOLUTION,
                     List.of(descriptor));
         }).when(indexedMetadata).getIndexMetadata(any(Table.class), any(TvrVersionRange.class));
 
@@ -219,7 +219,7 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
         }).when(indexedMetadata).getTableStatistics(any(), any(), anyMap(), any(), any(), anyLong(), any());
         doAnswer(invocation -> {
             if (computingStatistics.get()) {
-                GetRemoteFilesParams params = invocation.getArgument(1);
+                PaimonGetRemoteFilesParams params = invocation.getArgument(1);
                 statisticsIndexDisabled.add(params.isDisableGlobalIndex());
             }
             return invocation.callRealMethod();
@@ -249,13 +249,13 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
         connectContext.getSessionVariable().setPaimonGlobalIndexScanStage(2);
         AtomicInteger evaluations = new AtomicInteger();
         doAnswer(invocation -> {
-            com.starrocks.connector.index.IndexCondition condition = invocation.getArgument(1);
-            Assertions.assertFalse(condition.getFieldIds().isEmpty());
-            Assertions.assertTrue(condition.getFieldIds().containsValue(0));
+            com.starrocks.connector.paimon.index.PaimonIndexCondition condition = invocation.getArgument(1);
+            Assertions.assertFalse(condition.columnRefToFieldId().isEmpty());
+            Assertions.assertTrue(condition.columnRefToFieldId().containsValue(0));
             evaluations.incrementAndGet();
             return java.util.Optional.empty();
         }).when(indexedMetadata).evaluateIndex(any(Table.class),
-                any(com.starrocks.connector.index.IndexCondition.class), any(TvrVersionRange.class));
+                any(com.starrocks.connector.paimon.index.PaimonIndexCondition.class), any(TvrVersionRange.class));
         try {
             String plan = getFragmentPlan("SELECT pk FROM unpartitioned_table WHERE pk = '1'");
             assertContains(plan, "PREDICATES:");
@@ -284,7 +284,7 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
         PaimonTable table = (PaimonTable) indexedMetadata.getTable(
                 connectContext, "pmn_db1", "unpartitioned_table");
         PaimonGlobalIndexRequest request = createVirtualIndexRequest(table);
-        doAnswer(invocation -> List.of(new ConnectorIndexShard(0, 4), new ConnectorIndexShard(5, 9)))
+        doAnswer(invocation -> List.of(new PaimonIndexShard(0, 4), new PaimonIndexShard(5, 9)))
                 .when(indexedMetadata).getIndexShards(any(Table.class), anyLong(), anyMap());
         try {
             // COUNT and args-only projections prune index_result, exercising the scan-predicate
@@ -350,7 +350,7 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
         PaimonTable table = (PaimonTable) indexedMetadata.getTable(
                 connectContext, "pmn_db1", "unpartitioned_table");
         String transport = createVirtualIndexRequest(table).toTransportString();
-        doAnswer(invocation -> List.of(new ConnectorIndexShard(0, 4), new ConnectorIndexShard(5, 9)))
+        doAnswer(invocation -> List.of(new PaimonIndexShard(0, 4), new PaimonIndexShard(5, 9)))
                 .when(indexedMetadata).getIndexShards(any(Table.class), anyLong(), anyMap());
         try {
             for (String projection : List.of("to_base64(index_result)", "count(*)", "args")) {
@@ -419,7 +419,7 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
         FileStoreTable nativeTable = (FileStoreTable) table.getNativeTable();
         long snapshotId = nativeTable.latestSnapshot().orElseThrow().id();
         ColumnRefOperator column = new ColumnRefOperator(1, VarcharType.VARCHAR, "pk", true);
-        IndexCondition condition = new IndexCondition(new BinaryPredicateOperator(
+        PaimonIndexCondition condition = new PaimonIndexCondition(new BinaryPredicateOperator(
                 BinaryType.EQ, column, ConstantOperator.createVarchar("1")), Map.of(1, 0));
         return PaimonGlobalIndexRequest.create(nativeTable.location().toString(), "main", snapshotId,
                 nativeTable.schema().id(), nativeTable.schema().timeMillis(), condition);
@@ -474,7 +474,7 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
         boolean defaultScanCache = defaults.isEnableScanDataCache();
         boolean defaultPopulate = defaults.isEnablePopulateDataCache();
         String defaultMode = defaults.getDataCachePopulateMode().toString();
-        doAnswer(invocation -> List.of(new ConnectorIndexShard(0, 9)))
+        doAnswer(invocation -> List.of(new PaimonIndexShard(0, 9)))
                 .when(indexedMetadata).getIndexShards(any(Table.class), anyLong(), anyMap());
         try {
             // #80890 deliberately gives caller-bound internal queries fresh session defaults and

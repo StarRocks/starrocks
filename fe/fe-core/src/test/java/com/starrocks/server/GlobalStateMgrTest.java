@@ -47,7 +47,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ConfigRefreshDaemon;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
@@ -517,7 +516,6 @@ public class GlobalStateMgrTest {
 
             Assertions.assertEquals(1, firstStartupNodeMgr.resetFrontendsCount);
             Assertions.assertEquals(1, firstStartupMgr.initCaseInsensitiveCount);
-            Assertions.assertEquals(1, firstStartupMgr.enableAdaptiveSinkDopCount);
 
             Config.bdbje_reset_election_group = true;
             BootstrapNodeMgr resetElectionNodeMgr = new BootstrapNodeMgr(false);
@@ -528,7 +526,6 @@ public class GlobalStateMgrTest {
 
             Assertions.assertEquals(1, resetElectionNodeMgr.resetFrontendsCount);
             Assertions.assertEquals(0, resetElectionMgr.initCaseInsensitiveCount);
-            Assertions.assertEquals(0, resetElectionMgr.enableAdaptiveSinkDopCount);
 
             Config.bdbje_reset_election_group = false;
             BootstrapNodeMgr normalNodeMgr = new BootstrapNodeMgr(false);
@@ -538,7 +535,6 @@ public class GlobalStateMgrTest {
 
             Assertions.assertEquals(0, normalNodeMgr.resetFrontendsCount);
             Assertions.assertEquals(0, normalMgr.initCaseInsensitiveCount);
-            Assertions.assertEquals(0, normalMgr.enableAdaptiveSinkDopCount);
         } finally {
             Config.bdbje_reset_election_group = oldResetElectionGroup;
         }
@@ -565,7 +561,6 @@ public class GlobalStateMgrTest {
 
     private static class BootstrapGlobalStateMgr extends GlobalStateMgr {
         private int initCaseInsensitiveCount;
-        private int enableAdaptiveSinkDopCount;
 
         private BootstrapGlobalStateMgr(NodeMgr nodeMgr) {
             super(nodeMgr);
@@ -574,11 +569,6 @@ public class GlobalStateMgrTest {
         @Override
         void initCaseInsensitive() {
             initCaseInsensitiveCount++;
-        }
-
-        @Override
-        void enableAdaptiveSinkDopForFirstStartup() throws StarRocksException {
-            enableAdaptiveSinkDopCount++;
         }
     }
 

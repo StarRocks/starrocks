@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回两个原生平面多边形或多多边形的并集。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Union

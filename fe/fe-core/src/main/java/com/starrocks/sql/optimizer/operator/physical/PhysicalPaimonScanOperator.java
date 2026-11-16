@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.starrocks.connector.index.IndexCondition;
+import com.starrocks.connector.paimon.index.PaimonIndexCondition;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -27,7 +27,7 @@ import java.util.Objects;
 
 public class PhysicalPaimonScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
-    private final IndexCondition indexCondition;
+    private final PaimonIndexCondition indexCondition;
 
     public PhysicalPaimonScanOperator(LogicalPaimonScanOperator scan) {
         super(OperatorType.PHYSICAL_PAIMON_SCAN, scan);
@@ -35,7 +35,7 @@ public class PhysicalPaimonScanOperator extends PhysicalScanOperator {
         this.indexCondition = scan.getIndexCondition();
     }
 
-    public IndexCondition getIndexCondition() {
+    public PaimonIndexCondition getIndexCondition() {
         return indexCondition;
     }
 

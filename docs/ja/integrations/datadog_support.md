@@ -2,6 +2,7 @@
 sidebar_position: 80
 description: Datadog でモニタリングする
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # Monitor with Datadog

@@ -57,6 +57,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -1308,6 +1309,28 @@ public class TaskManagerTest {
         Assertions.assertNotNull(
                 taskManager.getPeriodFutureMap().get(task.getId())
         );
+    }
+
+    @Test
+    public void testResumingAScheduledTaskCancelsTheSubmitterItReplaces() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("test");
+        TaskSchedule schedule = new TaskSchedule();
+        schedule.setStartTime(System.currentTimeMillis() / 1000 * 1000);
+        schedule.setPeriod(60);
+        schedule.setTimeUnit(TimeUnit.SECONDS);
+        task.setSchedule(schedule);
+        task.setType(Constants.TaskType.PERIODICAL);
+        task.setState(Constants.TaskState.ACTIVE);
+        task.setLastScheduleTime(-1);
+        taskManager.registerScheduler(task);
+        ScheduledFuture<?> first = taskManager.getPeriodFutureMap().get(task.getId());
+
+        // a task resumed while its schedule is still registered
+        taskManager.resumeTask(task, true);
+
+        Assertions.assertTrue(first.isCancelled(), "the replaced submitter would keep submitting");
+        Assertions.assertFalse(taskManager.getPeriodFutureMap().get(task.getId()).isCancelled());
     }
 
     @Test

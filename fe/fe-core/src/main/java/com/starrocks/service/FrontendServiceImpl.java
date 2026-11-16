@@ -120,6 +120,7 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.statistics.ConnectorTableTriggerAnalyzeMgr;
 import com.starrocks.failpoint.FailPoint;
 import com.starrocks.failpoint.TriggerPolicy;
 import com.starrocks.http.BaseAction;
@@ -412,6 +413,9 @@ import com.starrocks.thrift.TTabletReshardJobsResponse;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTrackingLoadInfo;
 import com.starrocks.thrift.TTransactionStatus;
+import com.starrocks.thrift.TTriggerExternalAnalyzeRequest;
+import com.starrocks.thrift.TTriggerExternalAnalyzeResponse;
+import com.starrocks.thrift.TTriggerExternalAnalyzeTable;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUpdateFailPointRequest;
@@ -2074,6 +2078,28 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TRefreshScanCredentialsResponse refreshScanCredentials(TRefreshScanCredentialsRequest request)
             throws TException {
         return ScanCredentialsRefresher.refresh(request);
+    }
+
+    // A follower's query found external table statistics missing or expired; the leader runs the analyze. Only
+    // buffered here, the trigger analyze scheduler resolves and queues the tables.
+    @Override
+    public TTriggerExternalAnalyzeResponse triggerExternalAnalyze(TTriggerExternalAnalyzeRequest request)
+            throws TException {
+        TTriggerExternalAnalyzeResponse response = new TTriggerExternalAnalyzeResponse();
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            TStatus status = new TStatus(TStatusCode.CANCELLED);
+            status.addToError_msgs("current node is not leader");
+            response.setStatus(status);
+            return response;
+        }
+        if (request != null && request.isSetTables()) {
+            ConnectorTableTriggerAnalyzeMgr mgr = GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr();
+            for (TTriggerExternalAnalyzeTable table : request.getTables()) {
+                mgr.addTriggeredColumns(table.getTable_uuid(), table.getColumns());
+            }
+        }
+        response.setStatus(new TStatus(OK));
+        return response;
     }
 
     @Override

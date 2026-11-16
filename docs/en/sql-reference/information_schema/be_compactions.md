@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "be_compactions provides statistical information on compaction tasks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # be_compactions
