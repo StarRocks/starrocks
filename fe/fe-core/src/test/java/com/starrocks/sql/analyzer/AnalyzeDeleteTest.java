@@ -14,12 +14,8 @@
 
 package com.starrocks.sql.analyzer;
 
-<<<<<<< HEAD
-=======
-import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.qe.ConnectContext;
->>>>>>> bbb654a ([BugFix][RB-917] Reject DELETE on a non-Primary-Key table inside an explicit transaction (#82368))
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
@@ -100,87 +96,6 @@ public class AnalyzeDeleteTest {
                 "with tp2cte as (select * from tprimary2 where v2 < 10) delete from tprimary using " +
                         "tp2cte where tprimary.pk = tp2cte.pk");
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testNonPrimaryKeyDeleteEmitsOkInfo() {
-        boolean original = Config.enable_non_primary_key_delete_warning;
-        try {
-            Config.enable_non_primary_key_delete_warning = true;
-            DeleteStmt stmt = (DeleteStmt) analyzeSuccess("delete from tjson where v_int = 1");
-            String info = stmt.getOkInfoMessage();
-            Assertions.assertNotNull(info, "Duplicate Key DELETE should attach an OK info message");
-            Assertions.assertTrue(info.contains("Duplicate Key"),
-                    "info should name the keys type: " + info);
-            Assertions.assertTrue(info.contains("TRUNCATE PARTITION"),
-                    "info should recommend TRUNCATE PARTITION: " + info);
-            Assertions.assertTrue(info.contains("Primary Key"),
-                    "info should recommend Primary Key table for frequent deletes: " + info);
-        } finally {
-            Config.enable_non_primary_key_delete_warning = original;
-        }
-    }
-
-    @Test
-    public void testPrimaryKeyDeleteDoesNotEmitOkInfo() {
-        boolean original = Config.enable_non_primary_key_delete_warning;
-        try {
-            Config.enable_non_primary_key_delete_warning = true;
-            DeleteStmt stmt = (DeleteStmt) analyzeSuccess("delete from tprimary where pk = 1");
-            Assertions.assertNull(stmt.getOkInfoMessage(),
-                    "Primary Key DELETE should not attach an OK info message");
-        } finally {
-            Config.enable_non_primary_key_delete_warning = original;
-        }
-    }
-
-    @Test
-    public void testNonPrimaryKeyDeleteWarningCanBeDisabled() {
-        boolean original = Config.enable_non_primary_key_delete_warning;
-        try {
-            Config.enable_non_primary_key_delete_warning = false;
-            DeleteStmt stmt = (DeleteStmt) analyzeSuccess("delete from tjson where v_int = 1");
-            Assertions.assertNull(stmt.getOkInfoMessage(),
-                    "OK info should be suppressed when the FE config knob is off");
-        } finally {
-            Config.enable_non_primary_key_delete_warning = original;
-        }
-    }
-
-    @Test
-    public void testAggregateKeyDeleteEmitsOkInfo() {
-        boolean original = Config.enable_non_primary_key_delete_warning;
-        try {
-            Config.enable_non_primary_key_delete_warning = true;
-            DeleteStmt stmt = (DeleteStmt) analyzeSuccess("delete from test_object where v1 = 1");
-            String info = stmt.getOkInfoMessage();
-            Assertions.assertNotNull(info, "Aggregate Key DELETE should attach an OK info message");
-            Assertions.assertTrue(info.contains("Aggregate"),
-                    "info should name the keys type: " + info);
-            Assertions.assertTrue(info.contains("TRUNCATE PARTITION"),
-                    "info should recommend TRUNCATE PARTITION: " + info);
-        } finally {
-            Config.enable_non_primary_key_delete_warning = original;
-        }
-    }
-
-    @Test
-    public void testUniqueKeyDeleteEmitsOkInfo() {
-        boolean original = Config.enable_non_primary_key_delete_warning;
-        try {
-            Config.enable_non_primary_key_delete_warning = true;
-            DeleteStmt stmt = (DeleteStmt) analyzeSuccess("delete from tunique_for_delete where k1 = 1");
-            String info = stmt.getOkInfoMessage();
-            Assertions.assertNotNull(info, "Unique Key DELETE should attach an OK info message");
-            Assertions.assertTrue(info.contains("Unique Key"),
-                    "info should name the keys type: " + info);
-            Assertions.assertTrue(info.contains("Primary Key"),
-                    "info should recommend Primary Key table: " + info);
-        } finally {
-            Config.enable_non_primary_key_delete_warning = original;
-        }
-    }
 
     // A DELETE on a table without a primary key runs as a delete job that begins and commits a
     // transaction of its own. Inside an explicit transaction it would take effect at once and
@@ -218,5 +133,4 @@ public class AnalyzeDeleteTest {
             ctx.getState().reset();
         }
     }
->>>>>>> bbb654a ([BugFix][RB-917] Reject DELETE on a non-Primary-Key table inside an explicit transaction (#82368))
 }
