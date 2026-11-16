@@ -16,7 +16,19 @@
 
 #include <gtest/gtest.h>
 
+<<<<<<< HEAD:be/test/exec/jni_scanner_test.cpp
 #include "runtime/descriptor_helper.h"
+=======
+#include <cstdlib>
+#include <string>
+
+#include "common/config_exec_fwd.h"
+#include "common/util/thrift_util.h"
+#include "runtime/descriptor_helper.h"
+#include "runtime/descriptors_ext.h"
+#include "runtime/java/jni_env.h"
+#include "runtime/java/jvm_helper.h"
+>>>>>>> 1fb059b ([BugFix][RB-929] Clear the pending JNI exception after JniScanner close and hold scanner refs as global refs (#83366)):be/test/connector/hive/scanner/jni_scanner_test.cpp
 #include "runtime/runtime_state.h"
 #include "util/thrift_util.h"
 
@@ -404,4 +416,67 @@ TEST_F(JniScannerTest, test_create_odps_jni_scanner) {
     check_jni_scanner_params(scanner->_jni_scanner_params, expected);
 }
 
+<<<<<<< HEAD:be/test/exec/jni_scanner_test.cpp
+=======
+// Test that scanner can be safely closed even when JNI initialization fails
+TEST_F(JniScannerTest, test_close_without_jni_init) {
+    // Create a simple JniScanner without initializing JNI
+    std::map<std::string, std::string> params = {{"test_key", "test_value"}};
+    auto scanner = std::make_unique<JniScanner>("com/test/TestFactory", params);
+
+    // This should not crash even if JNI is not initialized
+    // The do_close() method should check for nullptr JNIEnv and return early
+    scanner->do_close(_runtime_state);
+
+    // If we reach here, the test passed (no crash occurred)
+    ASSERT_TRUE(true);
+}
+
+// close() of the Java scanner may throw. do_close() must clear that exception so it does not stay
+// pending on the scan thread, and must release the scanner global ref.
+TEST_F(JniScannerTest, test_close_clears_pending_java_exception) {
+    if (std::getenv("JAVA_HOME") == nullptr) {
+        GTEST_SKIP() << "JAVA_HOME is not set";
+    }
+    JNIEnv* env = getJNIEnv();
+    if (env == nullptr) {
+        GTEST_SKIP() << "JVM is unavailable";
+    }
+
+    // The iterator of an empty ArrayList has a `remove()V` that throws IllegalStateException, which
+    // matches the `()V` signature JniScanner uses for the scanner's close() method.
+    jclass list_cls = env->FindClass("java/util/ArrayList");
+    ASSERT_NE(list_cls, nullptr);
+    LOCAL_REF_GUARD_ENV(env, list_cls);
+    jmethodID list_constructor = env->GetMethodID(list_cls, "<init>", "()V");
+    ASSERT_NE(list_constructor, nullptr);
+    jobject list = env->NewObject(list_cls, list_constructor);
+    ASSERT_NE(list, nullptr);
+    LOCAL_REF_GUARD_ENV(env, list);
+    jmethodID iterator_method = env->GetMethodID(list_cls, "iterator", "()Ljava/util/Iterator;");
+    ASSERT_NE(iterator_method, nullptr);
+    jobject iterator = env->CallObjectMethod(list, iterator_method);
+    ASSERT_NE(iterator, nullptr);
+    LOCAL_REF_GUARD_ENV(env, iterator);
+    jclass iterator_cls = env->GetObjectClass(iterator);
+    ASSERT_NE(iterator_cls, nullptr);
+    LOCAL_REF_GUARD_ENV(env, iterator_cls);
+    jmethodID remove_method = env->GetMethodID(iterator_cls, "remove", "()V");
+    ASSERT_NE(remove_method, nullptr);
+    ASSERT_FALSE(env->ExceptionCheck());
+
+    std::map<std::string, std::string> params = {{"test_key", "test_value"}};
+    auto scanner = std::make_unique<JniScanner>("com/test/TestFactory", params);
+    scanner->_jni_scanner_obj = env->NewGlobalRef(iterator);
+    scanner->_jni_scanner_cls = (jclass)env->NewGlobalRef(iterator_cls);
+    scanner->_jni_scanner_close = remove_method;
+
+    scanner->do_close(_runtime_state);
+
+    ASSERT_FALSE(env->ExceptionCheck()) << "do_close() left a pending Java exception";
+    ASSERT_EQ(scanner->_jni_scanner_obj, nullptr);
+    ASSERT_EQ(scanner->_jni_scanner_cls, nullptr);
+}
+
+>>>>>>> 1fb059b ([BugFix][RB-929] Clear the pending JNI exception after JniScanner close and hold scanner refs as global refs (#83366)):be/test/connector/hive/scanner/jni_scanner_test.cpp
 } // namespace starrocks
