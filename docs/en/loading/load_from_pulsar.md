@@ -96,6 +96,27 @@ Routine Load supports the following custom parameters for Pulsar.
 | ---------------------------------------- | -------- | ------------------------------------------------------------ |
 | property.pulsar_default_initial_position | No       | The default initial positions when the topic's partitions are subscribed. The parameter takes effect when `pulsar_initial_positions` is not specified. Its valid values are the same as the valid values of `pulsar_initial_positions`.Example: `"``property.pulsar_default_initial_position" = "POSITION_EARLIEST"` |
 | property.auth.token                      | No       | If Pulsar enables authenticating clients using security tokens, you need the token string to verify your identity.Example: `"p``roperty.auth.token" = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUJzdWIiOiJqaXV0aWFuY2hlbiJ9.lulGngOC72vE70OW54zcbyw7XdKSOxET94WT_hIqD"` |
+| property.connection_timeout_ms | No | Connection timeout in milliseconds. Valid range: `1` to `2147483647`. If omitted, uses the Pulsar client default (`10000` ms). |
+| property.operation_timeout_seconds | No | Client operation timeout in seconds, including consumer creation. Valid range: `1` to `2147483`. If omitted, uses the Pulsar client default (`30` seconds). |
+
+### Configure Pulsar client timeouts
+
+Set `property.connection_timeout_ms` and `property.operation_timeout_seconds` in the `FROM PULSAR` properties when creating a job. Both properties are optional and apply only to that job's Pulsar clients. They do not change the Routine Load task timeout or guarantee recovery from a broker or network outage. Allow enough time in `task_timeout_second` for client operations and loading.
+
+To change an existing job's timeouts:
+
+```sql
+PAUSE ROUTINE LOAD FOR routine_wiki_edit_1;
+ALTER ROUTINE LOAD FOR routine_wiki_edit_1
+FROM PULSAR
+(
+    "property.connection_timeout_ms" = "25000",
+    "property.operation_timeout_seconds" = "60"
+);
+RESUME ROUTINE LOAD FOR routine_wiki_edit_1;
+```
+
+The updated properties take effect on subsequent tasks without restarting a BE. A cached consumer with different properties is not reused. Changing these timeouts does not change the subscription or its initial-position settings. Upgrade all FEs and BEs to a version supporting these properties before using them; older BEs ignore unsupported custom properties.
 
 ## Check a load job and task
 
@@ -145,6 +166,6 @@ When Routine Load is used to consume data from Pulsar, most returned parameters 
 
 **Take note of the following points**:
 
-- Among the `data_source_properties` related parameters, only `pulsar_partitions`, `pulsar_initial_positions`, and custom Pulsar parameters `property.pulsar_default_initial_position` and `property.auth.token` are currently supported to be modified.  The parameters `pulsar_service_url`, `pulsar_topic`, and `pulsar_subscription` cannot be modified.
+- Among the `data_source_properties` related parameters, only `pulsar_partitions`, `pulsar_initial_positions`, and custom Pulsar parameters `property.pulsar_default_initial_position`, `property.auth.token`, `property.connection_timeout_ms`, and `property.operation_timeout_seconds` are currently supported to be modified.  The parameters `pulsar_service_url`, `pulsar_topic`, and `pulsar_subscription` cannot be modified.
 - If you need to modify the partition to be consumed and the matched initilal position, you need to make sure that you specify the partition using `pulsar_partitions` when you create the Routine Load job, and only the intial position `pulsar_initial_positions` of the specified partition can be modified.
 - If you specify only Topic `pulsar_topic` when creating a Routine Load job, but not partitions `pulsar_partitions`, you can modify the starting position of all partitions under topic via `pulsar_default_initial_position`.

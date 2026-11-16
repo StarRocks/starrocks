@@ -15,6 +15,7 @@
 #include "data_workflows/load/routine_load/data_consumer.h"
 
 #include <chrono>
+#include <limits>
 #include <map>
 #include <thread>
 #include <vector>
@@ -24,6 +25,7 @@
 // Routine load dependencies.
 #include "base/concurrency/stopwatch.hpp"
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "data_workflows/load/routine_load/data_consumer_group.h"
 #include "exec/exec_env.h"
 #include "librdkafka/rdkafka.h"
@@ -428,6 +430,100 @@ TEST_F(KafkaDataConsumerTest, build_kafka_message_meta_absent_key_headers) {
 }
 
 #ifndef __APPLE__
+class PulsarClientConfigurationTest : public testing::Test {
+protected:
+    void SetUp() override {
+        SyncPoint::GetInstance()->SetCallBack("PulsarDataConsumer::init:config", [&](void* arg) {
+            const auto& config = *static_cast<pulsar::ClientConfiguration*>(arg);
+            _connection_timeout_ms = config.getConnectionTimeout();
+            _operation_timeout_seconds = config.getOperationTimeoutSeconds();
+            ++_clients_created;
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+    }
+
+    void TearDown() override {
+        SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+    }
+
+    std::unique_ptr<StreamLoadContext> context(const std::map<std::string, std::string>& properties) {
+        TPulsarLoadInfo info;
+        info.service_url = "pulsar://localhost:6650";
+        info.topic = "persistent://public/default/timeouts";
+        info.subscription = "timeouts-test";
+        info.properties = properties;
+        auto ctx = std::make_unique<StreamLoadContext>(nullptr);
+        ctx->load_src_type = TLoadSourceType::PULSAR;
+        ctx->pulsar_info = std::make_unique<PulsarLoadInfo>(info);
+        return ctx;
+    }
+
+    int _connection_timeout_ms = 0;
+    int _operation_timeout_seconds = 0;
+    int _clients_created = 0;
+};
+
+TEST_F(PulsarClientConfigurationTest, omitted_timeouts_preserve_client_defaults) {
+    auto ctx = context({});
+    PulsarDataConsumer consumer(ctx.get());
+    ASSERT_OK(consumer.init(ctx.get()));
+    pulsar::ClientConfiguration defaults;
+    EXPECT_EQ(defaults.getConnectionTimeout(), _connection_timeout_ms);
+    EXPECT_EQ(defaults.getOperationTimeoutSeconds(), _operation_timeout_seconds);
+    EXPECT_EQ(1, _clients_created);
+}
+
+TEST_F(PulsarClientConfigurationTest, applies_timeouts_and_invalidates_cached_consumer) {
+    auto ctx = context({{"connection_timeout_ms", "25000"}, {"operation_timeout_seconds", "60"}});
+    PulsarDataConsumer consumer(ctx.get());
+    ASSERT_OK(consumer.init(ctx.get()));
+    EXPECT_EQ(25000, _connection_timeout_ms);
+    EXPECT_EQ(60, _operation_timeout_seconds);
+    EXPECT_TRUE(consumer.match(ctx.get()));
+
+    auto changed_connection = context({{"connection_timeout_ms", "30000"}, {"operation_timeout_seconds", "60"}});
+    auto changed_operation = context({{"connection_timeout_ms", "25000"}, {"operation_timeout_seconds", "90"}});
+    auto defaults = context({});
+    EXPECT_FALSE(consumer.match(changed_connection.get()));
+    EXPECT_FALSE(consumer.match(changed_operation.get()));
+    EXPECT_FALSE(consumer.match(defaults.get()));
+}
+
+TEST_F(PulsarClientConfigurationTest, accepts_bounds_and_independent_overrides) {
+    for (const auto& key : {"connection_timeout_ms", "operation_timeout_seconds"}) {
+        int maximum = std::string(key) == "connection_timeout_ms" ? std::numeric_limits<int>::max()
+                                                                  : std::numeric_limits<int>::max() / 1000;
+        for (int value : {1, maximum}) {
+            auto ctx = context({{key, std::to_string(value)}});
+            PulsarDataConsumer consumer(ctx.get());
+            ASSERT_OK(consumer.init(ctx.get()));
+            pulsar::ClientConfiguration defaults;
+            EXPECT_EQ(std::string(key) == "connection_timeout_ms" ? value : defaults.getConnectionTimeout(),
+                      _connection_timeout_ms);
+            EXPECT_EQ(std::string(key) == "operation_timeout_seconds" ? value : defaults.getOperationTimeoutSeconds(),
+                      _operation_timeout_seconds);
+        }
+    }
+}
+
+TEST_F(PulsarClientConfigurationTest, rejects_invalid_timeouts_before_client_creation) {
+    for (const auto& key : {"connection_timeout_ms", "operation_timeout_seconds"}) {
+        for (const auto& value : {"", "0", "-1", "+1", " 1", "1 ", "1ms", "1.5", "2147483648"}) {
+            auto ctx = context({{key, value}});
+            PulsarDataConsumer consumer(ctx.get());
+            auto status = consumer.init(ctx.get());
+            ASSERT_FALSE(status.ok()) << key << "=" << value;
+            EXPECT_EQ(0, status.message().find("PAUSE: property."));
+            EXPECT_NE(std::string::npos, status.message().find(key));
+        }
+    }
+    auto ctx = context({{"operation_timeout_seconds", "2147484"}});
+    PulsarDataConsumer consumer(ctx.get());
+    EXPECT_FALSE(consumer.init(ctx.get()).ok());
+    EXPECT_EQ(0, _clients_created);
+}
+
 // build_pulsar_message_meta over a locally-built message: topic is the configured logical topic, the
 // PARTITION index is parsed out of the per-message name, key/properties are surfaced, and to_string()
 // exercises the PULSAR rendering branch. The message topic name is passed in rather than read via
