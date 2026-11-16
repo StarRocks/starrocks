@@ -57,11 +57,11 @@ function: assert_query_contains("show create table t_arr", "AS array_contains([`
 -- result:
 None
 -- !result
-function: assert_query_contains("show create table t_map", "AS map{1:`s`}[1]")
+function: assert_query_contains("show create table t_map", "AS MAP{1:`s`}[1]")
 -- result:
 None
 -- !result
-function: assert_query_contains("show create table t_mapf", "AS map{1:`s`}[1]")
+function: assert_query_contains("show create table t_mapf", "AS MAP{1:`s`}[1]")
 -- result:
 None
 -- !result
@@ -73,7 +73,7 @@ CREATE TABLE t_arr_copy (id int, a int, b int, c boolean NULL AS array_contains(
 DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- result:
 -- !result
-CREATE TABLE t_map_copy (id int, s varchar(20), m varchar(20) NULL AS map{1:`s`}[1])
+CREATE TABLE t_map_copy (id int, s varchar(20), m varchar(20) NULL AS MAP{1:`s`}[1])
 DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- result:
 -- !result
@@ -97,7 +97,7 @@ function: assert_query_contains("show create table t_arr_copy", "AS array_contai
 -- result:
 None
 -- !result
-function: assert_query_contains("show create table t_map_copy", "AS map{1:`s`}[1]")
+function: assert_query_contains("show create table t_map_copy", "AS MAP{1:`s`}[1]")
 -- result:
 None
 -- !result
