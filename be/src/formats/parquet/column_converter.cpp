@@ -630,7 +630,7 @@ static std::unique_ptr<ColumnConverter> make_int32_decimal_converter(bool src_un
     return std::make_unique<PrimitiveToDecimalConverter<int32_t, DestType, false>>(src_scale, dst_scale);
 }
 
-class BinaryToGeographyConverter final : public ColumnConverter {
+class BinaryToGeoConverter final : public ColumnConverter {
 public:
     Status convert(const Column* src, Column* dst) override;
 };
@@ -775,7 +775,8 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
                     std::make_unique<VarBinaryToDecimalConverter<TYPE_DECIMAL128>>(field.scale, typeDescriptor.scale);
             break;
         case LogicalType::TYPE_GEOGRAPHY:
-            *converter = std::make_unique<BinaryToGeographyConverter>();
+        case LogicalType::TYPE_GEOMETRY:
+            *converter = std::make_unique<BinaryToGeoConverter>();
             break;
         default:
             break;
@@ -1306,12 +1307,14 @@ Status Int64ToTimeConverter::convert(const Column* src, Column* dst) {
     return Status::OK();
 }
 
-Status BinaryToGeographyConverter::convert(const Column* src, Column* dst) {
+Status BinaryToGeoConverter::convert(const Column* src, Column* dst) {
     const auto* input = down_cast<const NullableColumn*>(src);
     const auto* binary = down_cast<const BinaryColumn*>(input->data_column().get());
     auto* geo = down_cast<GeoColumn*>(ColumnHelper::get_data_column(dst));
     if (!dst->is_nullable() && input->has_null()) {
-        return Status::InvalidArgument("Cannot write NULL Parquet GEOGRAPHY values to a non-nullable column");
+        const auto* kind = geo->descriptor().type.logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY ? "GEOGRAPHY" : "GEOMETRY";
+        return Status::InvalidArgument(
+                strings::Substitute("Cannot write NULL Parquet $0 values to a non-nullable column", kind));
     }
     geo->reset_column();
     geo->append_wkb_column(*binary);
