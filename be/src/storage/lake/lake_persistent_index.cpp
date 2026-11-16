@@ -312,58 +312,6 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     return Status::OK();
 }
 
-<<<<<<< HEAD
-=======
-Status LakePersistentIndex::ingest_tombstone_sst(const FileMetaPB& sst_meta,
-                                                 const PersistentIndexSstableRangePB& sst_range, uint32_t rssid,
-                                                 int64_t version, const DelvecPagePB& mask_page,
-                                                 DelVectorPtr mask_delvec) {
-    RETURN_IF_ERROR(_ensure_initialized("ingest_tombstone_sst"));
-    auto* block_cache = _tablet_mgr->primary_key_mgr()->block_cache();
-    if (block_cache == nullptr) {
-        return Status::InternalError("Block cache is null.");
-    }
-    // The file sorts after the tombstones the memtable holds for |rssid|, which go into an sstable first.
-    RETURN_IF_ERROR(sync_flush_all_memtables(config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
-    TRACE_COUNTER_SCOPE_LATENCY_US("ingest_sst_latency_us");
-    RandomAccessFileOptions ropts;
-    if (!sst_meta.encryption_meta().empty()) {
-        ASSIGN_OR_RETURN(ropts.encryption_info,
-                         KeyCache::instance().unwrap_encryption_meta(sst_meta.encryption_meta()));
-    }
-    auto location = _tablet_mgr->sst_location(_tablet_id, sst_meta.name());
-    ASSIGN_OR_RETURN(auto rf, PersistentIndexSstable::open_sstable_file(ropts, location, sst_meta.size()));
-    // The sstable was written with entry version 0; stamp |version| at read time via shared_version
-    // (PersistentIndexSstable::multi_get projects it onto tombstones while preserving the rssid/rowid sentinel).
-    // shared_version>0 requires shared_rssid, which tombstones ignore. max_rss_rowid = rssid<<32|UINT32_MAX
-    // (delete-row sentinel) makes the tombstone sstable the newest fileset layer so it shadows the existing rows --
-    // ordering identical to a memtable-flushed tombstone.
-    PersistentIndexSstablePB sstable_pb;
-    sstable_pb.set_filename(sst_meta.name());
-    sstable_pb.set_filesize(sst_meta.size());
-    sstable_pb.set_max_rss_rowid((static_cast<uint64_t>(rssid) << 32) | static_cast<uint64_t>(UINT32_MAX));
-    sstable_pb.set_encryption_meta(sst_meta.encryption_meta());
-    sstable_pb.set_shared_version(version);
-    sstable_pb.set_shared_rssid(rssid);
-    // Preserve the shared flag from sst_meta (mirrors ingest_sst). During tablet split cross-publish every child
-    // ingests the same tombstone sstable; dropping the flag would record the shared file as private, letting one
-    // child's compaction/vacuum delete a file the siblings still reference.
-    sstable_pb.set_shared(sst_meta.shared());
-    if (mask_page.size() > 0) {
-        sstable_pb.mutable_delvec()->CopyFrom(mask_page);
-    }
-    sstable_pb.mutable_range()->CopyFrom(sst_range);
-    auto sstable = std::make_unique<PersistentIndexSstable>();
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), true /* need filter */,
-                                  std::move(mask_delvec)));
-    const uint64_t direct_max_rss_rowid = sstable_pb.max_rss_rowid();
-    RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
-    _memtable->advance_max_rss_rowid(direct_max_rss_rowid);
-    TRACE_COUNTER_INCREMENT("ingest_sst_times", 1);
-    return Status::OK();
-}
-
->>>>>>> faa9cf8b6be... [BugFix][RB-1546] Open shared-data PK index sstables with their recorded size (#69452)
 Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
     if (_memtable == nullptr) {
         return Status::OK(); // nothing built yet; a no-op, as before the merge
@@ -738,7 +686,7 @@ Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* 
                          KeyCache::instance().unwrap_encryption_meta(del_sst_meta.encryption_meta()));
     }
     auto location = _tablet_mgr->sst_location(_tablet_id, del_sst_meta.name());
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(ropts, location));
+    ASSIGN_OR_RETURN(auto rf, PersistentIndexSstable::open_sstable_file(ropts, location, del_sst_meta.size()));
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(del_sst_meta.name());
     sstable_pb.set_filesize(del_sst_meta.size());
