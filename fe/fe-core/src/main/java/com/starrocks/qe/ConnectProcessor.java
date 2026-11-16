@@ -96,7 +96,6 @@ import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.staros.StarMgrServer;
@@ -412,7 +411,6 @@ public class ConnectProcessor {
         if (!Config.enable_audit_sql) {
             return "?";
         }
-        boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
         if (parsedStmt == null) {
             // invalid sql, record the original statement to avoid audit log can't replay
             // but redact sensitive credentials first
@@ -420,15 +418,10 @@ public class ConnectProcessor {
                 return "this is a desensitized invalid sql";
             }
             return SqlCredentialRedactor.redact(origStmt);
+        } else if (Config.enable_sql_desensitize_in_log) {
+            return AstToSQLBuilder.toDesensitizedSQL(parsedStmt);
         } else if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             return SqlCredentialRedactor.redact(origStmt);
-        } else if (Config.enable_sql_desensitize_in_log) {
-            // Some information like username, password in the stmt should not be printed.
-            return AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
-                            .setColumnSimplifyTableName(false)
-                            .setHideCredential(needEncrypt)
-                            .setEnableDigest(Config.enable_sql_desensitize_in_log))
-                    .orElse("this is a desensitized sql");
         } else {
             // Always redact credentials as defense in depth - raw SQL may contain
             // credentials that AuditEncryptionChecker does not yet recognize
@@ -520,18 +513,21 @@ public class ConnectProcessor {
         return AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(parsedStmt);
     }
 
-    private void setStmtFailure(Throwable e, String auditSql) {
+    private void setStmtFailure(Throwable e, String auditSql, StatementBase parsedStmt) {
         if (e instanceof AnalysisException || e instanceof ErrorReportException
                 || e instanceof SemanticException
                 || (e instanceof StarRocksPlannerException
                 && ((StarRocksPlannerException) e).getType() == ErrorType.USER_ERROR)) {
             LOG.info("Process one statement failed. SQL: {}, error: {}",
-                    SqlCredentialRedactor.redact(auditSql), e.getMessage());
+                    LogUtil.redactSqlForLog(auditSql, parsedStmt),
+                    LogUtil.desensitizeMessage(e));
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             return;
         }
-        LOG.warn("Process one statement failed. SQL: {}", SqlCredentialRedactor.redact(auditSql), e);
+        LOG.warn("Process one statement failed. SQL: {}",
+                LogUtil.redactSqlForLog(auditSql, parsedStmt),
+                LogUtil.desensitize(e));
         ctx.getState().setError(e.getMessage());
         ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
     }
@@ -546,7 +542,7 @@ public class ConnectProcessor {
     }
 
     private void auditStmtFailure(Throwable e, StatementBase parsedStmt, String auditSql) {
-        setStmtFailure(e, auditSql);
+        setStmtFailure(e, auditSql, parsedStmt);
         auditCurrentStmt(auditSql, parsedStmt);
     }
 
@@ -739,7 +735,8 @@ public class ConnectProcessor {
             }
         } catch (AnalysisException e) {
             if (!parseSucceeded) {
-                LOG.warn("Failed to parse SQL: " + SqlCredentialRedactor.redact(originStmt) + ", because.", e);
+                LOG.warn("Failed to parse SQL: " + LogUtil.redactSqlForLog(originStmt, null)
+                        + ", because.", LogUtil.desensitize(e));
             }
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
@@ -753,8 +750,8 @@ public class ConnectProcessor {
         } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
-            LOG.warn("Process one query failed. SQL: " + SqlCredentialRedactor.redact(originStmt) +
-                    ", because unknown reason: ", e);
+            LOG.warn("Process one query failed. SQL: " + LogUtil.redactSqlForLog(originStmt, null) +
+                    ", because unknown reason: ", LogUtil.desensitize(e));
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
             if (!executeInvoked) {
