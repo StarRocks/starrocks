@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: Cloud based Kafka from AutoMQ
+products: [oss, enterprise, anywhere]
 ---
 
 # AutoMQ Kafka

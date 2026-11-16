@@ -1,6 +1,7 @@
 ---
 keywords: ['xiugai', 'ziyuan'] 
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER RESOURCE

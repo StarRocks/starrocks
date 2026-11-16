@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 sidebar_label: "ログ、サーバー、およびメタデータ"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 設定 - ログ、サーバー、およびメタデータ

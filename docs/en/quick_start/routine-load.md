@@ -3,6 +3,7 @@ displayed_sidebar: docs
 sidebar_position: 60
 toc_max_heading_level: 2
 description: Kafka routine load with shared-data storage
+products: [oss]
 ---
 
 # Kafka routine load StarRocks using shared-data storage

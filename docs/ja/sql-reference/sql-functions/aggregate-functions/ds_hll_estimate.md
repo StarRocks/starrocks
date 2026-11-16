@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "シリアライズされた DataSketches HyperLogLog (HLL) スケッチから近似重複除去カウントを推定します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_hll_estimate

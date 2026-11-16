@@ -1,6 +1,7 @@
 ---
 sidebar_position: 50
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # 数据湖相关 FAQ

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された四半期数を日付から減算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # quarters_sub

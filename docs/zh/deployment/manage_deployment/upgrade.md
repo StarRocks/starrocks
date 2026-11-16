@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 keywords: ['shengji']
+products: [oss]
 ---
 
 # 升级 StarRocks

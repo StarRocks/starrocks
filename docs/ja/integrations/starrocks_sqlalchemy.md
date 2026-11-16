@@ -3,6 +3,7 @@ sidebar_position: 120
 displayed_sidebar: docs
 description: "スキーマ管理と移行"
 sidebar_label: "スキーマ管理と移行"
+products: [oss, enterprise, anywhere]
 ---
 
 # SQLAlchemy と Alembic によるスキーマ管理と移行

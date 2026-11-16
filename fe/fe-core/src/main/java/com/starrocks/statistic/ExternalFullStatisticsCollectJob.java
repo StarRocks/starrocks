@@ -182,7 +182,10 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     // row is never double-counted even if this cleanup fails - it just wastes a bit of space until
     // the next collection retries it. Best-effort: must never fail a job whose actual stats write
     // already succeeded.
-    private void cleanupStaleRawKeyedRows(ConnectContext context, long jobId) {
+    protected void cleanupStaleRawKeyedRows(ConnectContext context, long jobId) {
+        if (GlobalStateMgr.getCurrentState().getAnalyzeMgr().isAnalyzeCancelled(jobId)) {
+            return;
+        }
         String rawTableUuid = table.getUUID();
         boolean ok = new StatisticExecutor().dropExternalStatRawPartitions(context, rawTableUuid, partitionNames, columnNames);
         if (!ok) {

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 2
 description: Separate compute and storage
+products: [oss]
 ---
 
 # Separate storage and compute

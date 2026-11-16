@@ -1,6 +1,7 @@
 ---
 sidebar_position: 70
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # INSERT を使用したデータのロード

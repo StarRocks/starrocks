@@ -3,6 +3,7 @@ sidebar_position: 10
 displayed_sidebar: docs
 sidebar_label: AWS
 description: "This topic describes how to authenticate with AWS"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Authenticate to AWS resources

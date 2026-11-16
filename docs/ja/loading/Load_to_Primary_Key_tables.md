@@ -1,6 +1,7 @@
 ---
 sidebar_position: 140
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ロードによるデータ変更

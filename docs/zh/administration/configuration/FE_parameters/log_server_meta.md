@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 sidebar_label: "日志、服务器和元数据"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 配置 - 日志、服务器和元数据

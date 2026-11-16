@@ -1,3 +1,7 @@
+---
+products: [oss]
+---
+
 # Setup development environment with Docker
 
 This directory provides Docker-based build tools for StarRocks that use the official `starrocks/dev-env-ubuntu:latest` development environment image. This ensures consistent builds across different host systems by using a standardized Ubuntu environment with all required toolchains and dependencies pre-installed.

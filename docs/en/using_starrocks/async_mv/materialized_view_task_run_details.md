@@ -1,3 +1,7 @@
+---
+products: [oss, enterprise, cloud, anywhere]
+---
+
 # Understand Materialized View Task Runs
 
 The information of materialized view refresh task runs can help understand materialized view refresh behavior, troubleshoot issues, and monitor performance.

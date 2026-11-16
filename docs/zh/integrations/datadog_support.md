@@ -2,6 +2,7 @@
 sidebar_position: 80
 displayed_sidebar: docs
 sidebar_label: Datadog
+products: [oss, enterprise, anywhere]
 ---
 
 # StarRocks 集成 Datadog

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 unlisted: True
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SQL statement template

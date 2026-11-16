@@ -1,6 +1,7 @@
 ---
 sidebar_position: 80
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Metabase

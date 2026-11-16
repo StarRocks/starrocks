@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 70
+products: [oss, enterprise, anywhere]
 ---
 
 # レプリカの管理

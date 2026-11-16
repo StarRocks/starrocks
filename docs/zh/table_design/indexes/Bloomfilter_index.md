@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords: ['suoyin']
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Bloom filter 索引

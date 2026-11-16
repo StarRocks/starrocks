@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 4
+products: [oss, enterprise, anywhere]
 ---
 
 # 报警管理

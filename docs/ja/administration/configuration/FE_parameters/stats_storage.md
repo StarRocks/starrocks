@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 sidebar_label: "統計とストレージ"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 設定 - 統計とストレージ

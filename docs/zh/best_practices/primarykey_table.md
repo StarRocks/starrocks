@@ -1,5 +1,6 @@
 ---
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 主键表

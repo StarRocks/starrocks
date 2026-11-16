@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Adds a specified number of quarters to the date, accurate to the quarter."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # quarters_add

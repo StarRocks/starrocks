@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 toc_max_heading_level: 2
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Data Cache

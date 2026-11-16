@@ -1,6 +1,7 @@
 ---
 sidebar_position: 80
 displayed_sidebar: docs
+products: [oss, enterprise]
 ---
 
 # 资源隔离故障排查

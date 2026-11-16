@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['fuzai', 'ziyuan', 'ziyuanzu'] 
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 资源隔离

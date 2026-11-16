@@ -1,13 +1,12 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 4
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # GRANT
 
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
-import GrantCreateWarehouse from '../../../_assets/commonMarkdown/grant_create_warehouse.mdx'
-import GrantWarehouse from '../../../_assets/commonMarkdown/grant_warehouse.mdx'
 
 ## 功能
 
@@ -35,7 +34,12 @@ import GrantWarehouse from '../../../_assets/commonMarkdown/grant_warehouse.mdx'
 
 #### System 相关
 
-<GrantCreateWarehouse />
+```SQL
+GRANT
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME | SECURITY } 
+    ON SYSTEM
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
+```
 
 #### Resource group 相关
 
@@ -192,8 +196,6 @@ GRANT
     ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUMES} 
     TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
-
-<GrantWarehouse />
 
 ### 授予角色给用户或者其他角色
 

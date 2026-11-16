@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "ログ、サーバー、およびメタデータ"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'

@@ -1,6 +1,7 @@
 ---
 sidebar_position: 20
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Block Cache のウォームアップ

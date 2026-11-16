@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Query and Loading"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'

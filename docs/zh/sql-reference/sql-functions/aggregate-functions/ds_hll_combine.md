@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将多个序列化的 DataSketches HyperLogLog (HLL) 草图合并为单个序列化草图，用于近似去重计数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_hll_combine

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical d - h"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # メトリクス d から h

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords: ['profile', 'query', 'tune']
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Query Tuning Recipes

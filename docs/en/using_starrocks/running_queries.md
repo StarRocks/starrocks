@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 9
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # View Running Queries

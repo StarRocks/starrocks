@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 keywords: ['Stream Load']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 从本地文件系统导入数据

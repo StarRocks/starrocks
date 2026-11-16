@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 unlisted: true
+products: [oss]
 ---
 
 # SQL 命令模板

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 50
 sidebar_label: "Feature Support"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Feature Support: Asynchronous Materialized Views

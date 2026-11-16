@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 70
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 查询提示

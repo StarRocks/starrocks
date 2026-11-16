@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 0.5
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 函数

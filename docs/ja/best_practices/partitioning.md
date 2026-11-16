@@ -1,5 +1,6 @@
 ---
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # パーティショニング

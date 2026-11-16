@@ -1,6 +1,7 @@
 ---
 sidebar_position: 90
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # FQDN アクセスを有効にする

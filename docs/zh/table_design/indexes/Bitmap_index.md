@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords: ['suoyin']
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Bitmap 索引

@@ -1,6 +1,7 @@
 ---
 sidebar_position: 110
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Apache Flink® からデータを継続的にロードする

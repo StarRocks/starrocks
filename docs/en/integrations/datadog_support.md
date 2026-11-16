@@ -3,6 +3,7 @@ sidebar_position: 80
 displayed_sidebar: docs
 description: Monitor with Datadog
 sidebar_label: Datadog
+products: [oss, enterprise, anywhere]
 ---
 
 # Monitor with Datadog

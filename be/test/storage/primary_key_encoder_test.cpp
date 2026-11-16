@@ -18,8 +18,11 @@
 
 #include <memory>
 
+#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/datum.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "column/schema.h"
 #include "gutil/stringprintf.h"
 #include "storage/chunk_helper.h"
@@ -41,6 +44,28 @@ static unique_ptr<Schema> create_key_schema(const vector<LogicalType>& types) {
         sort_key_idxes[i] = i;
     }
     return std::make_unique<Schema>(std::move(fields), PRIMARY_KEYS, sort_key_idxes);
+}
+
+TEST(PrimaryKeyEncoderTest, testDeleteFileBinaryColumnSizeCheck) {
+    std::vector<Slice> strings{{"a"}, {"bb"}, {"ccc"}};
+
+    auto binary = BinaryColumn::create();
+    binary->append_strings(strings.data(), strings.size());
+    ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*binary).ok());
+
+    auto nullable_data = BinaryColumn::create();
+    nullable_data->append_strings(strings.data(), strings.size());
+    auto nullable = NullableColumn::create(std::move(nullable_data), NullColumn::create(strings.size(), 0));
+    ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*nullable).ok());
+
+    auto large_binary = LargeBinaryColumn::create();
+    large_binary->append_strings(strings.data(), strings.size());
+    ASSERT_FALSE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*large_binary).ok());
+
+    auto fixed = Int32Column::create();
+    int32_t value = 1;
+    fixed->append_numbers(&value, sizeof(value));
+    ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*fixed).ok());
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt32) {

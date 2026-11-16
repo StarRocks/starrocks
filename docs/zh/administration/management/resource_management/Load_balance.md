@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['fuzai'] 
+products: [oss, enterprise, anywhere]
 ---
 
 # 负载均衡

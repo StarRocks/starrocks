@@ -2,6 +2,7 @@
 sidebar_position: 60
 displayed_sidebar: docs
 sidebar_label: "Feature Support"
+products: [oss, enterprise, anywhere]
 ---
 
 # Feature Support: Data Lake Analytics

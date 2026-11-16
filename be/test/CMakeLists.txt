@@ -157,6 +157,7 @@ set(EXEC_FILES
         ./exprs/bitmap_functions_test.cpp
         ./exprs/case_expr_test.cpp
         ./exprs/cast_expr_test.cpp
+        ./exprs/cast_expr_core_test.cpp
         ./exprs/unary_function_test.cpp
         ./exprs/decimal_cast_expr_decimal_test.cpp
         ./exprs/decimal_cast_expr_integer_test.cpp
@@ -641,6 +642,7 @@ set(EXEC_FILES
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
         ./udf/python/env_test.cpp
+        ./udf/udf_call_stub_test.cpp
         ./util/table_metrics_mgr_test.cpp
         ./util/jvm_metrics_test.cpp
         ./storage/lake/table_schema_service_test.cpp

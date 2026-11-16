@@ -1,6 +1,7 @@
 ---
 sidebar_position: 1
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Data type overview

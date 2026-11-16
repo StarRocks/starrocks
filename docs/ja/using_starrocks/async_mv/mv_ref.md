@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 sidebar_label: "関連リファレンス"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 非同期マテリアライズドビューリファレンス

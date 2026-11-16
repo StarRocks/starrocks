@@ -2,6 +2,7 @@
 sidebar_position: 90
 displayed_sidebar: docs
 sidebar_label: FE メモリ
+products: [oss, enterprise]
 ---
 
 # FE ヒープメモリのトラブルシューティング

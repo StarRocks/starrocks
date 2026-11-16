@@ -1,6 +1,7 @@
 ---
 sidebar_position: 120
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # 存算分离集群 Compaction

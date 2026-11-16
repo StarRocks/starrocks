@@ -1,6 +1,7 @@
 ---
 sidebar_position: 90
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # StarRocks JDBC 驱动

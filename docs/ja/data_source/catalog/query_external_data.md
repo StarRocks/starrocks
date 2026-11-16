@@ -1,6 +1,7 @@
 ---
 sidebar_position: 160
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # 外部データのクエリ

@@ -3,6 +3,7 @@ sidebar_position: 70
 displayed_sidebar: docs
 sidebar_label: Community Chat
 description: Slack with the community
+products: [oss, enterprise]
 ---
 
 # Community Chat (via Slack)

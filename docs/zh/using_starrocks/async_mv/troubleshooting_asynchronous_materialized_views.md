@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 异步物化视图故障排除

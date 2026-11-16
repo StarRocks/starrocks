@@ -1,10 +1,10 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE MATERIALIZED VIEW
 
-import MVWarehouse from '../../../_assets/commonMarkdown/mv_warehouse.mdx'
 
 ## 説明
 
@@ -413,8 +413,6 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
     - Rangeパーティションのマテリアライズドビューについては、StarRocksはFEのパーティション剪定機能を使用してパーティションをフィルタリングおよび削除することのみができます。パーティション剪定でサポートされていない述語に対応するパーティションは、フィルタリングおよび削除できません。
 
   共通パーティション式TTLと`force_mv`セマンティクスの詳細なガイダンスについては、[例6](#例)を参照してください。
-
-<MVWarehouse />
 
 **query_statement** (必須)
 

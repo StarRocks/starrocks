@@ -15,6 +15,7 @@
 package com.starrocks.authentication;
 
 import com.google.common.base.Strings;
+import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -22,9 +23,11 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.thrift.TUserRoles;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -68,6 +71,19 @@ public class UserIdentityUtils {
         return tUserIdent;
     }
 
+    public static TUserIdentity callerToThrift(ConnectContext context) {
+        TUserIdentity tUserIdent = toThrift(context.getCurrentUserIdentity());
+        if (context.getCurrentRoleIds() != null) {
+            TUserRoles userRoles = new TUserRoles();
+            userRoles.setRole_id_list(new ArrayList<>(context.getCurrentRoleIds()));
+            tUserIdent.setCurrent_role_ids(userRoles);
+        }
+        if (context.getGroups() != null && !context.getGroups().isEmpty()) {
+            tUserIdent.setGroups(new ArrayList<>(context.getGroups()));
+        }
+        return tUserIdent;
+    }
+
     public static UserIdentity fromThrift(TUserIdentity tUserIdent) {
         return new UserIdentity(tUserIdent.getUsername(), tUserIdent.getHost(), tUserIdent.is_domain,
                 tUserIdent.is_ephemeral, NodePosition.ZERO);
@@ -86,6 +102,12 @@ public class UserIdentityUtils {
     public static void setAuthInfoFromThrift(ConnectContext context, TUserIdentity tUserIdent) {
         UserIdentity userIdentity = UserIdentityUtils.fromThrift(tUserIdent);
         context.setCurrentUserIdentity(userIdentity);
+        // The groups were resolved when the session logged in, from the directory, the token claims or a group
+        // provider, and cannot be resolved again here: a token is gone after login, and a directory lookup per RPC
+        // is too slow. They are taken as sent, like the user name. The privilege collection grants the roles mapped
+        // to them, as it does for the session itself.
+        Set<String> groups = tUserIdent.isSetGroups() ? new HashSet<>(tUserIdent.getGroups()) : new HashSet<>();
+        context.setGroups(groups);
         if (tUserIdent.isSetCurrent_role_ids()) {
             List<Long> roleIdList = tUserIdent.current_role_ids.getRole_id_list();
             Set<Long> requestedRoleIds = roleIdList != null ? new HashSet<>(roleIdList) : new HashSet<>();
@@ -98,15 +120,19 @@ public class UserIdentityUtils {
                 return;
             }
             try {
-                Set<Long> actualRoleIds =
-                        GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdsByUser(userIdentity);
+                // A role is kept if it is granted to the user or to one of its groups, as the session got its roles.
+                AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+                Set<Long> actualRoleIds = new HashSet<>(authorizationMgr.getRoleIdsByUser(userIdentity));
+                for (String group : groups) {
+                    actualRoleIds.addAll(authorizationMgr.getRoleIdListByGroup(group));
+                }
                 requestedRoleIds.retainAll(actualRoleIds);
             } catch (PrivilegeException e) {
                 LOG.warn("Failed to validate role IDs for user {}: {}", userIdentity, e.getMessage());
             }
             context.setCurrentRoleIds(requestedRoleIds);
         } else {
-            context.setCurrentRoleIds(userIdentity);
+            context.setCurrentRoleIds(userIdentity, groups);
         }
     }
 

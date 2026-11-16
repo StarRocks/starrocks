@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "存算分离、数据湖和其他"
 keywords: ['Canshu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'

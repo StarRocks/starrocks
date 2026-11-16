@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # Setup StarRocks FE 開発環境を IDEA で設定する

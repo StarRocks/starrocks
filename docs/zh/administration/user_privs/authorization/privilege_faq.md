@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 50
+products: [oss, enterprise, anywhere]
 ---
 
 # 权限系统 FAQ

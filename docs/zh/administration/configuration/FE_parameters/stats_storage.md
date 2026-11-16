@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 sidebar_label: "统计报告和存储"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 配置 - 统计报告和存储

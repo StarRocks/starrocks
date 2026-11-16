@@ -3,6 +3,7 @@ sidebar_position: 20
 displayed_sidebar: docs
 sidebar_label: Microsoft Azure Storage
 description: "This topic describes how to authenticate with Azure"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Authenticate to Microsoft Azure Storage

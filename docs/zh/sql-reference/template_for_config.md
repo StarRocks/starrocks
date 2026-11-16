@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 unlisted: true
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE/BE 参数和变量模板

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
+products: [oss, enterprise, anywhere]
 ---
 
 # Capabilities of different table types

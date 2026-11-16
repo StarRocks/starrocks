@@ -1,3 +1,7 @@
+---
+products: [oss, enterprise, cloud, anywhere]
+---
+
 # ds_hll_accumulate
 
 Accumulates values into a HyperLogLog sketch and returns the serialized sketch as a VARBINARY. This function is part of the DataSketches HLL family of functions for approximate distinct counting.

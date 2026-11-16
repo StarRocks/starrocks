@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['CTAS']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE TABLE AS SELECT

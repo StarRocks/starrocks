@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 共有データクラスタの監視メトリクス

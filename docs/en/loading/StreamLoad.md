@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 keywords: ['Stream Load']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Load data from a local file system

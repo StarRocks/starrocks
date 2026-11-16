@@ -26,14 +26,56 @@
 #include "column/nullable_column.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
+#include "storage/primary_key_encoder.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "types/hll.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/hash_util.hpp"
 #include "util/json.h"
 
 namespace starrocks::serde {
+
+TEST(ColumnArraySerdeTest, binary_column_offset_payload_limit) {
+    auto column = BinaryColumn::create();
+    auto& offsets = column->get_offset();
+    const size_t limit_count = Column::MAX_CAPACITY_LIMIT / sizeof(BinaryColumn::Offset);
+    // Reserve virtual space without initializing the multi-GiB offset payload.
+    raw::make_room(&offsets, limit_count);
+    offsets.resize(limit_count - 1);
+    offsets.back() = 0;
+    ASSERT_TRUE(column->is_payload_size_representable().ok());
+    offsets.resize(limit_count);
+    offsets.back() = 0;
+    ASSERT_TRUE(column->is_payload_size_representable().is_capacity_limit_exceeded());
+    auto pk_status = PrimaryKeyEncoder::check_delete_file_binary_column_size(*column);
+    ASSERT_TRUE(pk_status.is_capacity_limit_exceeded());
+    ASSERT_NE(std::string::npos, std::string(pk_status.message()).find("offset payload size"));
+    std::vector<uint8_t> buffer(16);
+    auto result = ColumnArraySerde::serialize(*column, buffer.data());
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_capacity_limit_exceeded());
+    ASSERT_NE(std::string::npos, std::string(result.status().message()).find("offset payload size"));
+}
+
+TEST(ColumnArraySerdeTest, binary_column_byte_payload_limit) {
+    auto column = BinaryColumn::create();
+    auto& bytes = column->get_bytes();
+    DeferOp reset([&] { bytes.clear(); });
+    raw::make_room(&bytes, Column::MAX_CAPACITY_LIMIT);
+    bytes.resize(Column::MAX_CAPACITY_LIMIT - 1);
+    ASSERT_TRUE(column->is_payload_size_representable().ok());
+    bytes.resize(Column::MAX_CAPACITY_LIMIT);
+    auto pk_status = PrimaryKeyEncoder::check_delete_file_binary_column_size(*column);
+    ASSERT_TRUE(pk_status.is_capacity_limit_exceeded());
+    ASSERT_NE(std::string::npos, std::string(pk_status.message()).find("byte payload size"));
+    std::vector<uint8_t> buffer(16);
+    auto result = ColumnArraySerde::serialize(*column, buffer.data());
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_capacity_limit_exceeded());
+    ASSERT_NE(std::string::npos, std::string(result.status().message()).find("byte payload size"));
+}
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ColumnArraySerdeTest, json_column) {

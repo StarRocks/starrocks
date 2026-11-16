@@ -2,6 +2,7 @@
 sidebar_position: 1
 sidebar_label: '概述'
 keywords: ['nei cun', 'S3 API', 'reduce cost', 'efficiency', 'efficient', 'performance']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 最佳实践

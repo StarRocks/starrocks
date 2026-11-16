@@ -2,6 +2,7 @@
 sidebar_position: 60
 displayed_sidebar: docs
 sidebar_label: 機能サポート
+products: [oss, enterprise, anywhere]
 ---
 
 # 機能サポート: データレイク分析

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 使用物化视图进行数据建模

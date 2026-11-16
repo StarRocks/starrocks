@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 10
 keywords: ['linshi'] 
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 表概览
@@ -171,6 +172,6 @@ StarRocks 提供内置索引，包括前缀索引、Ordinal 索引和 ZoneMap �
 - 不支持 EXPORT 语句导出。
 - 不支持通过异步任务创建临时表或向其中导入/导出数据（通过 SUBMIT TASK 语句）。
 
-###  更多特性
+### 更多特性
 
 除了上述常用的特性之外，您还可以根据业务需求使用更多的特性，设计更加健壮的表结构，例如通过 Bitmap 和 HLL 列来加速去重计数，指定生成列或者自增列来加速部分查询，配置灵活的数据自动降冷策略来降低运维成本，配置 Colocate Join 来加速多表 JOIN 查询。

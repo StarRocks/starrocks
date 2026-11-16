@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 9
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 実行中のクエリを表示

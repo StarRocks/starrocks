@@ -1,6 +1,7 @@
 ---
 sidebar_position: 50
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # Helm を使用して StarRocks をデプロイする

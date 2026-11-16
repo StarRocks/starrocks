@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 unlisted: True
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE/BE パラメーターと変数の記述テンプレート

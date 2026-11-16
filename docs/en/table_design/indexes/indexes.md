@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 5
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Indexes

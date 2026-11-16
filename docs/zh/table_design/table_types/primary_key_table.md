@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords: ['zhujian']
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 主键表

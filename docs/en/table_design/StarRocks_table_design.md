@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Table overview

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Hadoop Wildfly Native SSL ライブラリ問題"
 sidebar_position: 110
+products: [oss, enterprise]
 ---
 # FAQ：StarRocks における Hadoop 3.4.3 Wildfly Native SSL ライブラリ問題
 

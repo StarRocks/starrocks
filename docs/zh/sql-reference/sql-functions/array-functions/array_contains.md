@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['shu zu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_contains

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "能力边界"
 sidebar_position: 50
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 功能边界：数据分布

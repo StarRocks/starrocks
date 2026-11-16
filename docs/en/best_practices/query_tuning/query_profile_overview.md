@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords: ['profile', 'query', 'slow']
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Query Profile Overview

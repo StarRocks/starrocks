@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 60
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Explain Analyze

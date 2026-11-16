@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 10
 keywords: ['cha xun']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 查询调优简介

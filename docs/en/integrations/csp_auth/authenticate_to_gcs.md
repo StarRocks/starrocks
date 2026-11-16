@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 sidebar_label: Google Cloud Storage (GCS)
 description: "This topic describes how to authenticate with GCS"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Authenticate to Google Cloud Storage

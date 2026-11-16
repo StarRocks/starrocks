@@ -1,6 +1,7 @@
 ---
 sidebar_position: 150
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # 导入过程中实现数据转换

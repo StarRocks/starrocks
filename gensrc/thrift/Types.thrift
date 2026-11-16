@@ -514,6 +514,8 @@ struct TUserIdentity {
     3: optional bool is_domain
     4: optional bool is_ephemeral
     5: optional TUserRoles current_role_ids
+    // The groups resolved by the session, forwarded when the FE rebuilds a schema-scan RPC caller.
+    6: optional list<string> groups
 }
 
 const i32 TSNAPSHOT_REQ_VERSION1 = 3; // corresponding to alpha rowset

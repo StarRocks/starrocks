@@ -116,7 +116,9 @@ const MOVED_DOCS = [
   { from: "/docs/cover_pages/manage_deployment/", to: "/docs/deployment/manage_deployment/" },
   { from: "/docs/cover_pages/shared_nothing_deployment/", to: "/docs/deployment/" },
   { from: "/docs/data_source/block_cache_warmup/", to: "/docs/data_source/data_cache/block_cache_warmup/" },
-  { from: "/docs/data_source/catalog/catalog_intro/", to: "/docs/data_source/catalog/" },
+  { from: "/docs/data_source/catalog/catalog_intro/", to: "/docs/data_source/catalog/catalog_overview/" },
+  // The Catalog category opens on its overview page; the DocCardList index page is gone.
+  { from: "/docs/data_source/catalog/", to: "/docs/data_source/catalog/catalog_overview/" },
   { from: "/docs/data_source/catalog/iceberg/iceberg_catalog/", to: "/docs/data_source/catalog/iceberg/" },
   { from: "/docs/data_source/data_cache_observe/", to: "/docs/data_source/data_cache/data_cache_observe/" },
   { from: "/docs/data_source/data_cache_troubleshooting/", to: "/docs/data_source/data_cache/data_cache_troubleshooting/" },

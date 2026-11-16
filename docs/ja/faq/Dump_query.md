@@ -1,6 +1,7 @@
 ---
 sidebar_position: 70
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # query_dump インターフェース

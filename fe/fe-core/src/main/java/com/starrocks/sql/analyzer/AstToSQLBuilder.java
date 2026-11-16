@@ -435,8 +435,12 @@ public class AstToSQLBuilder {
         @Override
         public String visitArrayExpr(ArrayExpr node, Void context) {
             StringBuilder sb = new StringBuilder();
-            Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
-            sb.append(type.toString());
+            Type nodeType = node.getType();
+            // An unanalyzed [...] has no type yet (the parser leaves it null), e.g. a generated column expression
+            // rendered by SHOW CREATE TABLE. Print the bare literal and let analysis infer the type on the way back in.
+            if (nodeType != null) {
+                sb.append(AnalyzerUtils.replaceNullType2Boolean(nodeType).toString());
+            }
             sb.append('[');
             sb.append(node.getChildren().stream().map(this::visit).collect(Collectors.joining(", ")));
             sb.append(']');
@@ -446,8 +450,14 @@ public class AstToSQLBuilder {
         @Override
         public String visitMapExpr(MapExpr node, Void context) {
             StringBuilder sb = new StringBuilder();
-            Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
-            sb.append(type.toString());
+            Type nodeType = node.getType();
+            if (nodeType != null && nodeType.isMapType()) {
+                sb.append(AnalyzerUtils.replaceNullType2Boolean(nodeType).toString());
+            } else {
+                // An unanalyzed map{...} / map(k, v) only carries the ANY_MAP placeholder from the parser, whose
+                // toString() is not valid SQL. Print the untyped constructor and let analysis infer the type.
+                sb.append("map");
+            }
             sb.append("{");
             for (int i = 0; i < node.getChildren().size(); i = i + 2) {
                 if (i > 0) {

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 40
 keywords: ['ssl', 'tls']
+products: [oss, enterprise, anywhere]
 ---
 
 # SSL Authentication

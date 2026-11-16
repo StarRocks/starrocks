@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 60
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../_assets/commonMarkdown/_beta.mdx'

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['ziyuan'] 
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP RESOURCE

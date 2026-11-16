@@ -130,6 +130,8 @@ public:
     static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, const std::vector<ColumnId>& key_idxes,
                                 bool large_column = false);
 
+    static Status check_delete_file_binary_column_size(const Column& column);
+
     static void encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
 
     static Status encode_sort_key(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 50
 keywords: ['explode']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Use Lateral Join for column-to-row conversion

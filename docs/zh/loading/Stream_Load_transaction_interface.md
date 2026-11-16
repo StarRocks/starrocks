@@ -2,6 +2,7 @@
 sidebar_position: 90
 displayed_sidebar: docs
 keywords: ['Stream Load']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 使用 Stream Load 事务接口导入

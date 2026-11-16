@@ -1,6 +1,7 @@
 ---
 sidebar_position: 100
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 设置时区

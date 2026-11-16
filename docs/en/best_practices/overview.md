@@ -2,6 +2,7 @@
 sidebar_position: 1
 sidebar_label: "Overview"
 keywords: ['S3 API', 'reduce cost', 'efficiency', 'efficient', 'performance']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Best Practices

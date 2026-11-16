@@ -1,6 +1,7 @@
 ---
 keywords: ['xiugai', 'shitu'] 
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER VIEW

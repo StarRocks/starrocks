@@ -1,3 +1,7 @@
+---
+products: [oss, enterprise, cloud, anywhere]
+---
+
 # percentile_approx_weight
 
 Returns the approximation of the pth percentile with weight. `percentile_approx_weight` is a weighted version of `PERCENTILE_APPROX`, and allows users to specify a weight (a constant value or numeric column) for each input value.

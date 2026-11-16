@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords: ['suoyin']
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 前缀索引和排序键

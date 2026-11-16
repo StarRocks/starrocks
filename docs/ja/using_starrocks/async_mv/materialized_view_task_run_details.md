@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks のマテリアライズドビューのリフレッシュタスク実行の詳細を確認・解釈し、リフレッシュ動作の理解、失敗のトラブルシュート、性能の監視に役立てる方法。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # マテリアライズドビュータスク実行の理解

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords: ['ウィンドウ関数', 'ウィンドウ']
 sidebar_position: 0.9
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ウィンドウ関数

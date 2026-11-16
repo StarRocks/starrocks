@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # JSON Web Token Authentication

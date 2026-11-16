@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将值累积到 HyperLogLog 草图中，并返回序列化的草图作为 VARBINARY，用于近似去重计数。属于 DataSketches HLL 函数族。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_hll_accumulate

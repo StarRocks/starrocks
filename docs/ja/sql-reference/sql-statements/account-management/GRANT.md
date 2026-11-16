@@ -1,14 +1,12 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 4
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # GRANT
 
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
-import MultiServiceAccess from '../../../_assets/commonMarkdown/multi-service-access.mdx'
-import GrantCreateWarehouse from '../../../_assets/commonMarkdown/grant_create_warehouse.mdx'
-import GrantWarehouse from '../../../_assets/commonMarkdown/grant_warehouse.mdx'
 
 ## 説明
 
@@ -35,7 +33,12 @@ GRANT 操作を実行する前に、関連するユーザーまたはロール�
 
 #### システム
 
-<GrantCreateWarehouse />
+```SQL
+GRANT
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME | SECURITY } 
+    ON SYSTEM
+    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+```
 
 #### リソースグループ
 
@@ -193,8 +196,6 @@ GRANT
     TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
-<GrantWarehouse />
-
 ### ロールをロールまたはユーザーに付与
 
 ```SQL
@@ -271,4 +272,4 @@ GRANT db_admin, user_admin, cluster_admin TO EXTERNAL GROUP admin_group;
 
 <UserPrivilegeCase />
 
-<MultiServiceAccess />
+マルチサービスアクセス制御のベストプラクティスについては、[Multi-service access control](../../../administration/user_privs/authorization/User_privilege.md#multi-service-access-control) を参照してください。

@@ -1,6 +1,7 @@
 ---
 sidebar_position: 150
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # Transform data at loading

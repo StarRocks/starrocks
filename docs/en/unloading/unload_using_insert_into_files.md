@@ -1,6 +1,7 @@
 ---
 sidebar_position: 60
 displayed_sidebar: docs
+products: [oss, enterprise]
 ---
 
 # Unload data using INSERT INTO FILES

@@ -1,6 +1,7 @@
 ---
 sidebar_position: 50
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # 使用 Helm 部署 StarRocks 集群

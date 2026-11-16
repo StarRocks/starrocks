@@ -2,6 +2,7 @@
 sidebar_position: 60
 description: Kafka ルーチン ロード with 共有データ storage
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # Kafka routine load StarRocks using shared-data storage

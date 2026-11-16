@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Feature Support"
 sidebar_position: 50
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Feature Support: Data Distribution

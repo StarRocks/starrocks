@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Shared-data, Data Lake, and Others"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE Configuration - Shared-data, Data Lake, and Others

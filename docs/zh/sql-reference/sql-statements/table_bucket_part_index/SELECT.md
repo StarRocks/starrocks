@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['lianjie'] 
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SELECT

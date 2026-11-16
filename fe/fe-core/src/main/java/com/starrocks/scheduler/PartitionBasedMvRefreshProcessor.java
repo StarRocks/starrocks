@@ -25,6 +25,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
+import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
@@ -975,7 +976,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             Optional<Table> optTable = MvUtils.getTable(baseTableInfo);
             if (optTable.isEmpty()) {
                 logger.warn("table {} do not exist when refreshing materialized view", baseTableInfo.getTableInfoStr());
-                mv.setInactiveAndReason(
+                AlterMVJobExecutor.inactiveMvFromRefresh(mv,
                         MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                 throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
             }
@@ -1012,7 +1013,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             Optional<Table> optNewTable = MvUtils.getTable(baseTableInfo);
             if (optNewTable.isEmpty()) {
                 logger.warn("table {} does not exist after refreshing materialized view", baseTableInfo.getTableInfoStr());
-                mv.setInactiveAndReason(
+                AlterMVJobExecutor.inactiveMvFromRefresh(mv,
                         MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                 throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
             }

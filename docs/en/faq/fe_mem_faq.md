@@ -2,6 +2,7 @@
 sidebar_position: 90
 displayed_sidebar: docs
 sidebar_label: "FE Memory FAQ"
+products: [oss, enterprise]
 ---
 
 # Troubleshooting FE Heap Memory
