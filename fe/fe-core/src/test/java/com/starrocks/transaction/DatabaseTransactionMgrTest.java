@@ -114,6 +114,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -1947,6 +1948,204 @@ public class DatabaseTransactionMgrTest {
             commitCompleted.countDown();
             abortThread.join(5_000);
         }
+    }
+
+    // The other order of the race above (StarRocksTest#12666): COMMIT and ROLLBACK sent together to a PREPARED
+    // transaction, and the rollback takes the transaction lock first, after the commit has looked the transaction
+    // up. The commit must fail on the ABORTED state. It used to check and copy the PREPARED object it had looked
+    // up and store a COMMITTED state over the abort, while the abort had already told the backends to delete the
+    // load's txn logs and segments: publish never finished, or the data became visible without its files.
+    @Test
+    public void testCommitPreparedLosingRaceToRollbackKeepsTxnAborted() throws Exception {
+        Database db = masterGlobalStateMgr.getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr dbTxnMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        int runningTxnNumsBefore = dbTxnMgr.getRunningTxnNums();
+        long nextVersionBefore = racePartition().getNextVersion();
+
+        long txnId = beginStreamLoadTxn("test_commit_rollback_race_");
+        masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, txnId, -1,
+                buildTabletCommitInfoList(), Lists.newArrayList(), null);
+        assertEquals(TransactionStatus.PREPARED, dbTxnMgr.getTransactionState(txnId).getTransactionStatus());
+
+        Throwable[] errors = raceWithRollback(dbTxnMgr, txnId, () -> {
+            masterTransMgr.commitPreparedTransaction(db, txnId, 1000L);
+            return null;
+        });
+
+        assertTxnStaysAborted(dbTxnMgr, txnId, runningTxnNumsBefore, nextVersionBefore);
+        assertNull(errors[1], "the rollback must succeed");
+        assertTrue(errors[0] instanceof TransactionCommitFailedException, "the commit must fail, got " + errors[0]);
+    }
+
+    // The same race one step earlier: the rollback lands after prepare has looked the transaction up. Prepare must
+    // fail on the ABORTED state; storing PREPARED over the abort would let a later commit publish a load whose files
+    // the abort has removed.
+    @Test
+    public void testPrepareLosingRaceToRollbackKeepsTxnAborted() throws Exception {
+        DatabaseTransactionMgr dbTxnMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        int runningTxnNumsBefore = dbTxnMgr.getRunningTxnNums();
+        long nextVersionBefore = racePartition().getNextVersion();
+
+        long txnId = beginStreamLoadTxn("test_prepare_rollback_race_");
+
+        Throwable[] errors = raceWithRollback(dbTxnMgr, txnId, () -> {
+            masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, txnId, -1,
+                    buildTabletCommitInfoList(), Lists.newArrayList(), null);
+            return null;
+        });
+
+        assertTxnStaysAborted(dbTxnMgr, txnId, runningTxnNumsBefore, nextVersionBefore);
+        assertNull(errors[1], "the rollback must succeed");
+        assertTrue(errors[0] instanceof TransactionCommitFailedException, "the prepare must fail, got " + errors[0]);
+    }
+
+    // A one-step commit (prepare and commit in one call, as a plain load does) racing an abort, such as the one the
+    // timeout checker or a cancel sends. Checking the latest state in the commit step alone is not enough: the
+    // prepare step would store PREPARED over the abort, and the commit step would then commit that PREPARED state.
+    @Test
+    public void testOneStepCommitLosingRaceToAbortKeepsTxnAborted() throws Exception {
+        DatabaseTransactionMgr dbTxnMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        int runningTxnNumsBefore = dbTxnMgr.getRunningTxnNums();
+        long nextVersionBefore = racePartition().getNextVersion();
+
+        long txnId = beginStreamLoadTxn("test_one_step_commit_abort_race_");
+
+        Throwable[] errors = raceWithRollback(dbTxnMgr, txnId, () -> masterTransMgr.commitTransaction(
+                GlobalStateMgrTestUtil.testDbId1, txnId, buildTabletCommitInfoList(), Lists.newArrayList(), null));
+
+        assertTxnStaysAborted(dbTxnMgr, txnId, runningTxnNumsBefore, nextVersionBefore);
+        assertNull(errors[1], "the abort must succeed");
+        assertTrue(errors[0] instanceof TransactionCommitFailedException, "the commit must fail, got " + errors[0]);
+    }
+
+    // The rollback aborts the transaction and the label cleaner then drops it, both after the commit has looked it
+    // up. The commit must report the transaction as not found: falling back to the PREPARED copy it looked up would
+    // bring back, as COMMITTED, a load whose files the abort has already removed.
+    @Test
+    public void testCommitPreparedLosingRaceToAbortAndLabelCleanupReportsNotFound() throws Exception {
+        Database db = masterGlobalStateMgr.getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr dbTxnMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        int runningTxnNumsBefore = dbTxnMgr.getRunningTxnNums();
+        long nextVersionBefore = racePartition().getNextVersion();
+
+        long txnId = beginStreamLoadTxn("test_commit_rollback_cleanup_race_");
+        masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, txnId, -1,
+                buildTabletCommitInfoList(), Lists.newArrayList(), null);
+
+        // An hour from now every finished transaction has outlived label_keep_max_second, so the cleaner drops them all.
+        Throwable[] errors = raceWithRollback(dbTxnMgr, txnId, () -> {
+            masterTransMgr.commitPreparedTransaction(db, txnId, 1000L);
+            return null;
+        }, () -> dbTxnMgr.removeExpiredTxns(System.currentTimeMillis() + 3_600_000L));
+
+        assertNull(errors[1], "the rollback must succeed");
+        assertTrue(errors[0] instanceof TransactionNotFoundException, "the commit must fail, got " + errors[0]);
+        assertNull(dbTxnMgr.getTransactionState(txnId), "the dropped transaction must not come back");
+        assertEquals(runningTxnNumsBefore, dbTxnMgr.getRunningTxnNums(),
+                "the dropped transaction must not be back among the running ones");
+        assertEquals(nextVersionBefore, racePartition().getNextVersion(),
+                "no partition version may be handed to the dropped transaction");
+    }
+
+    private long beginStreamLoadTxn(String labelPrefix) throws Exception {
+        return masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), labelPrefix + System.nanoTime(),
+                transactionSource, TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                Config.stream_load_default_timeout_second);
+    }
+
+    private PhysicalPartition racePartition() {
+        OlapTable table = (OlapTable) masterGlobalStateMgr.getLocalMetastore().getTable(
+                GlobalStateMgrTestUtil.testDbId1, GlobalStateMgrTestUtil.testTableId1);
+        return table.getPartition(GlobalStateMgrTestUtil.testPartition1).getDefaultPhysicalPartition();
+    }
+
+    // Runs stateChange on its own thread and parks it at its first write lock on txnId, that is after it has looked
+    // the transaction up and before it holds the transaction lock. A rollback then aborts the transaction from a
+    // third thread, and the parked thread goes on once the ABORTED state is stored. The rollback cannot run on the
+    // test thread: OlapTable's postAbort takes a table read lock, which a parked prepare or commit holds in write
+    // mode until it returns.
+    // Returns {error of stateChange, error of the rollback}, null where the call succeeded.
+    private Throwable[] raceWithRollback(DatabaseTransactionMgr dbTxnMgr, long txnId, Callable<?> stateChange)
+            throws InterruptedException {
+        return raceWithRollback(dbTxnMgr, txnId, stateChange, () -> {});
+    }
+
+    // Same, and the parked thread runs beforeRelease once the ABORTED state is stored, before it goes on.
+    private Throwable[] raceWithRollback(DatabaseTransactionMgr dbTxnMgr, long txnId, Callable<?> stateChange,
+                                         Runnable beforeRelease) throws InterruptedException {
+        AtomicReference<Thread> racerRef = new AtomicReference<>();
+        AtomicBoolean parked = new AtomicBoolean(false);
+        CountDownLatch racerLookedUpTxn = new CountDownLatch(1);
+        // The mock acts only on the racing thread, which is dead once this method returns, so it does not affect
+        // the tests that run after this one.
+        new MockUp<TransactionState>() {
+            @Mock
+            public void writeLock(Invocation inv) {
+                TransactionState ts = inv.getInvokedInstance();
+                if (Thread.currentThread() == racerRef.get() && ts.getTransactionId() == txnId
+                        && parked.compareAndSet(false, true)) {
+                    racerLookedUpTxn.countDown();
+                    awaitTxnStatus(dbTxnMgr, txnId, TransactionStatus.ABORTED);
+                    beforeRelease.run();
+                }
+                inv.proceed();
+            }
+        };
+
+        Throwable[] errors = new Throwable[2];
+        Thread racer = new Thread(() -> {
+            try {
+                stateChange.call();
+            } catch (Throwable t) {
+                errors[0] = t;
+            }
+        }, "txn-race-state-change");
+        Thread rollback = new Thread(() -> {
+            try {
+                dbTxnMgr.abortTransaction(txnId, true, "User Aborted", null,
+                        Lists.newArrayList(), Lists.newArrayList());
+            } catch (Throwable t) {
+                errors[1] = t;
+            }
+        }, "txn-race-rollback");
+        racerRef.set(racer);
+        racer.start();
+        assertTrue(racerLookedUpTxn.await(10, TimeUnit.SECONDS), "the racing thread did not reach the txn lock");
+        rollback.start();
+        racer.join(30_000);
+        rollback.join(30_000);
+        assertFalse(racer.isAlive(), "the racing thread did not finish");
+        assertFalse(rollback.isAlive(), "the rollback did not finish");
+        return errors;
+    }
+
+    private static void awaitTxnStatus(DatabaseTransactionMgr dbTxnMgr, long txnId, TransactionStatus status) {
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (dbTxnMgr.getTransactionState(txnId).getTransactionStatus() != status) {
+            if (System.currentTimeMillis() > deadline) {
+                throw new IllegalStateException("transaction " + txnId + " did not reach " + status);
+            }
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
+        }
+    }
+
+    private void assertTxnStaysAborted(DatabaseTransactionMgr dbTxnMgr, long txnId, int runningTxnNumsBefore,
+                                       long nextVersionBefore) {
+        TransactionState state = dbTxnMgr.getTransactionState(txnId);
+        assertEquals(TransactionStatus.ABORTED, state.getTransactionStatus(), "the abort must stand");
+        assertEquals("User Aborted", state.getReason());
+        assertTrue(dbTxnMgr.getCommittedTxnList().stream().noneMatch(txn -> txn.getTransactionId() == txnId),
+                "an aborted transaction must not be queued for publish");
+        assertEquals(runningTxnNumsBefore, dbTxnMgr.getRunningTxnNums(),
+                "the aborted transaction must not be back among the running ones");
+        assertEquals(nextVersionBefore, racePartition().getNextVersion(),
+                "no partition version may be handed to the aborted transaction");
     }
 
     @Test
