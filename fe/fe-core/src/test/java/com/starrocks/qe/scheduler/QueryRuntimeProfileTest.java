@@ -127,13 +127,24 @@ public class QueryRuntimeProfileTest {
         Assertions.assertEquals(100, cacheMetrics.getReadBytes().getBytes());
         Assertions.assertEquals(200, cacheMetrics.getWriteBytes().getBytes());
         Assertions.assertEquals(1, cacheMetrics.getCount());
+    }
 
-        profile.buildLoadInformationUpdates(execState, params).forEach(Runnable::run);
+    @Test
+    public void testLoadCountersAndCacheMetricsAggregateAcrossReports() {
+        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
+        TReportExecStatusParams params = new TReportExecStatusParams()
+                .setBackend_id(10)
+                .setLoad_counters(Map.of(LoadEtlTask.DPP_NORMAL_ALL, "7", LoadEtlTask.DPP_ABNORMAL_ALL, "2",
+                        LoadJob.UNSELECTED_ROWS, "1", LoadJob.LOADED_BYTES, "100"))
+                .setLoad_datacache_metrics(new TLoadDataCacheMetrics().setRead_bytes(100).setWrite_bytes(200).setCount(1));
+        for (int i = 0; i < 2; i++) {
+            profile.buildLoadInformationUpdates(null, params).forEach(Runnable::run);
+        }
         Assertions.assertEquals("14", profile.getLoadCounters().get(LoadEtlTask.DPP_NORMAL_ALL));
         Assertions.assertEquals("4", profile.getLoadCounters().get(LoadEtlTask.DPP_ABNORMAL_ALL));
         Assertions.assertEquals("2", profile.getLoadCounters().get(LoadJob.UNSELECTED_ROWS));
         Assertions.assertEquals("200", profile.getLoadCounters().get(LoadJob.LOADED_BYTES));
-        cacheMetrics = profile.getDataCacheSelectMetrics().getBeMetrics().get(10L);
+        LoadDataCacheMetrics cacheMetrics = profile.getDataCacheSelectMetrics().getBeMetrics().get(10L);
         Assertions.assertEquals(200, cacheMetrics.getReadBytes().getBytes());
         Assertions.assertEquals(400, cacheMetrics.getWriteBytes().getBytes());
         Assertions.assertEquals(2, cacheMetrics.getCount());
