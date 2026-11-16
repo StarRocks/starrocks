@@ -70,3 +70,10 @@ SELECT id, dt, val FROM mv_ice_month ORDER BY dt, id;
 DROP MATERIALIZED VIEW mv_ice_month;
 -- result:
 -- !result
+CLEANUP {
+drop materialized view if exists default_catalog.db_${uuid0}.mv_ice_month;
+drop table if exists mv_icedrop_${uuid0}.ice_drop_db_${uuid0}.fact_i force;
+drop database if exists mv_icedrop_${uuid0}.ice_drop_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists mv_icedrop_${uuid0};
+} END CLEANUP
