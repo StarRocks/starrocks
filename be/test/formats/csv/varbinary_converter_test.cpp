@@ -56,6 +56,27 @@ TEST_F(VarBinaryConverterTest, test_read_varbinary) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(VarBinaryConverterTest, test_read_varbinary_non_null_terminated_slice) {
+    auto conv = csv::get_converter(_type, false);
+    auto col = ColumnHelper::create_column(_type, false);
+
+    // Simulate slices pointing into a contiguous CSV line buffer without NUL terminators at slice end:
+    // 1) Leading space followed by ',' after the slice -> previously read ',' and fell back to raw " ZWZnaGlq"!
+    const std::string csv_buf1 = " ZWZnaGlq,next_column";
+    Slice slice1(csv_buf1.data(), 9); // " ZWZnaGlq"
+    EXPECT_TRUE(conv->read_string(col.get(), slice1, Converter::Options()));
+
+    // 2) 4 leading spaces followed by "AAAA" after the slice -> previously decoded "AAAA" from next column!
+    const std::string csv_buf2 = "    YWJjZA==AAAA";
+    Slice slice2(csv_buf2.data(), 12); // "    YWJjZA=="
+    EXPECT_TRUE(conv->read_string(col.get(), slice2, Converter::Options()));
+
+    ASSERT_EQ(2, col->size());
+    EXPECT_EQ(Slice("efghij"), col->get(0).get_slice());
+    EXPECT_EQ(Slice("abcd"), col->get(1).get_slice());
+}
+
+// NOLINTNEXTLINE
 TEST_F(VarBinaryConverterTest, test_read_varbinary_fallback) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);

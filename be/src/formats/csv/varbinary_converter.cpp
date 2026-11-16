@@ -68,7 +68,7 @@ bool VarBinaryConverter::read_string(Column* column, const Slice& s, const Optio
     auto buf = new char[s.size + 3];
     DeferOp defer([&]() { delete[] buf; });
 
-    int r = base64_decode2(s.data + start, s.size, buf);
+    int r = base64_decode2(s.data + start, s.size - start, buf);
     char* data = buf;
     int len = r;
 
