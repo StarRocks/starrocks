@@ -1856,6 +1856,24 @@ TEST_F(EncryptionFunctionsTest, from_base64ConstTest) {
     }
 }
 
+TEST_F(EncryptionFunctionsTest, from_base64RejectsEmbeddedNullAndMidPadding) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto col = BinaryColumn::create();
+    col->append(Slice("SGVs\0bG8=", 9));
+    col->append(Slice("====SGVsbG8="));
+    col->append(Slice("SG==VsbG8="));
+    col->append(Slice("SGVsbG8="));
+
+    Columns columns{std::move(col)};
+    ColumnPtr result = EncryptionFunctions::from_base64(ctx.get(), columns).value();
+    ASSERT_EQ(4, result->size());
+    EXPECT_TRUE(result->is_null(0));
+    EXPECT_TRUE(result->is_null(1));
+    EXPECT_TRUE(result->is_null(2));
+    EXPECT_FALSE(result->is_null(3));
+    EXPECT_EQ(Slice("Hello"), result->get(3).get_slice());
+}
+
 TEST_F(EncryptionFunctionsTest, to_base64Test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;

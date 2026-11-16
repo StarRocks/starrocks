@@ -133,4 +133,22 @@ TEST(Base64CodingTest, DecodeEmptyInput) {
     EXPECT_EQ(out, "");
 }
 
+TEST(Base64CodingTest, RejectsEmbeddedNullMidPaddingAndHighBitBytes) {
+    std::string out = "initial";
+    EXPECT_FALSE(base64_decode(std::string("SGVs\0bG8=", 9), &out));
+    EXPECT_TRUE(out.empty());
+
+    out = "initial";
+    EXPECT_FALSE(base64_decode("====SGVsbG8=", &out));
+    EXPECT_TRUE(out.empty());
+
+    out = "initial";
+    EXPECT_FALSE(base64_decode("SG==VsbG8=", &out));
+    EXPECT_TRUE(out.empty());
+
+    out = "initial";
+    EXPECT_FALSE(base64_decode(std::string("\x80\xff\xfe\xfd", 4), &out));
+    EXPECT_TRUE(out.empty());
+}
+
 } // namespace starrocks
