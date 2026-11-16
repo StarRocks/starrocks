@@ -59,7 +59,8 @@ GeoColumn::GeoColumn(const TypeDescriptor& type, size_t size)
         : GeoColumn(GeoColumnDescriptor{type.geo_type.value_or(GeoTypeDescriptor{})}) {
     // The caller passes a valid geo type (see TypeDescriptor::create_geo_type).
     DCHECK(type.geo_type.has_value());
-    DCHECK_EQ(type.type == TYPE_GEOGRAPHY, type.geo_type->logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY);
+    DCHECK_EQ(type.type == TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
+              type.geo_type->logical_type);
     resize(size);
 }
 
