@@ -82,9 +82,18 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     private final Set<PredicateSearchKey> scannedTables = new HashSet<>();
     private final DeltaStatisticProvider statisticProvider = new DeltaStatisticProvider();
     private final ConnectorProperties properties;
+    private final DeltaLakeSnapshotStatisticsCache snapshotStatisticsCache;
 
     public DeltaLakeMetadata(HdfsEnvironment hdfsEnvironment, String catalogName, DeltaMetastoreOperations deltaOps,
                              DeltaLakeCacheUpdateProcessor cacheUpdateProcessor, ConnectorProperties properties) {
+        this(hdfsEnvironment, catalogName, deltaOps, cacheUpdateProcessor, properties,
+                new DeltaLakeSnapshotStatisticsCache());
+    }
+
+    public DeltaLakeMetadata(HdfsEnvironment hdfsEnvironment, String catalogName, DeltaMetastoreOperations deltaOps,
+                             DeltaLakeCacheUpdateProcessor cacheUpdateProcessor, ConnectorProperties properties,
+                             DeltaLakeSnapshotStatisticsCache snapshotStatisticsCache) {
+        this.snapshotStatisticsCache = snapshotStatisticsCache;
         this.hdfsEnvironment = hdfsEnvironment;
         this.catalogName = catalogName;
         this.deltaOps = deltaOps;
@@ -155,6 +164,21 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         }
 
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
+        DeltaUtils.checkProtocolAndMetadata(((SnapshotImpl) deltaLakeTable.getDeltaSnapshot()).getProtocol(),
+                deltaLakeTable.getDeltaMetadata());
+        if (session.getSessionVariable().isEnableDeltaLakeCachedStatistics()
+                && !session.getSessionVariable().enableDeltaLakeColumnStatistics()) {
+            Long rowCount = snapshotStatisticsCache.getRowCount(snapshotStatisticsKey(deltaLakeTable));
+            Tracers.record(EXTERNAL, "DELTA_LAKE.statisticsSource", rowCount == null ? "default" : "snapshot_cache");
+            Statistics.Builder statistics = Statistics.buildFrom(StatisticsUtils.buildDefaultStatistics(columns.keySet()))
+                    .setTableRowCountMayInaccurate(true);
+            if (rowCount != null) {
+                // This count covers the whole snapshot; partition predicate selectivity still applies.
+                statistics.setOutputRowCount(rowCount).setStatsSource(Statistics.StatsSource.SNAPSHOT_CACHE);
+            }
+            return statistics.build();
+        }
+        Tracers.record(EXTERNAL, "DELTA_LAKE.statisticsSource", "files");
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         String dbName = deltaLakeTable.getCatalogDBName();
         String tableName = deltaLakeTable.getCatalogTableName();
@@ -378,23 +402,63 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         return result;
     }
 
+    private static DeltaLakeSnapshotStatisticsCache.Key snapshotStatisticsKey(DeltaLakeTable table) {
+        return new DeltaLakeSnapshotStatisticsCache.Key(table.getTableLocation(), table.getDeltaMetadata().getId(),
+                ((SnapshotImpl) table.getDeltaSnapshot()).getVersion());
+    }
+
     private RemoteFileInfoSource buildRemoteInfoSource(Table table, GetRemoteFilesParams params) {
         CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> iterator =
                 buildFileScanTaskIterator(table, params.getPredicate(), params.isEnableColumnStats());
+        DeltaLakeSnapshotStatisticsCache.Collector statistics = params.getPredicate() == null
+                ? snapshotStatisticsCache.newCollector(snapshotStatisticsKey((DeltaLakeTable) table)) : null;
         return new RemoteFileInfoSource() {
+            private boolean closed;
+
             @Override
             public RemoteFileInfo getOutput() {
-                Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair = iterator.next();
-                return new DeltaRemoteFileInfo(pair.first);
+                if (closed) {
+                    throw new IllegalStateException("Delta file source is closed");
+                }
+                try {
+                    Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair = iterator.next();
+                    if (statistics != null) {
+                        statistics.add(pair.first.getRecords());
+                    }
+                    return new DeltaRemoteFileInfo(pair.first);
+                } catch (RuntimeException e) {
+                    if (statistics != null) {
+                        statistics.abort();
+                    }
+                    throw e;
+                }
             }
 
             @Override
             public boolean hasMoreOutput() {
-                return iterator.hasNext();
+                if (closed) {
+                    return false;
+                }
+                try {
+                    boolean hasNext = iterator.hasNext();
+                    if (!hasNext && statistics != null) {
+                        statistics.complete();
+                    }
+                    return hasNext;
+                } catch (RuntimeException e) {
+                    if (statistics != null) {
+                        statistics.abort();
+                    }
+                    throw e;
+                }
             }
 
             @Override
             public void close() {
+                closed = true;
+                if (statistics != null) {
+                    statistics.abort();
+                }
                 try {
                     iterator.close();
                 } catch (Exception ignored) {
@@ -430,6 +494,8 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                     .collect(Collectors.toSet());
         }
 
+        DeltaLakeSnapshotStatisticsCache.Collector snapshotStatistics = operator == null
+                ? snapshotStatisticsCache.newCollector(snapshotStatisticsKey(deltaLakeTable)) : null;
         List<FileScanTask> files = Lists.newArrayList();
         boolean enableCollectColumnStats = enableCollectColumnStatistics(connectContext);
         String traceLabel = enableCollectColumnStats ? "DELTA_LAKE.updateDeltaLakeFileStats" :
@@ -440,6 +506,9 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             while (iterator.hasNext()) {
                 Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair = iterator.next();
                 files.add(pair.first);
+                if (snapshotStatistics != null) {
+                    snapshotStatistics.add(pair.first.getRecords());
+                }
                 try (Timer ignored = Tracers.watchScope(EXTERNAL, traceLabel)) {
                     statisticProvider.updateFileStats(deltaLakeTable, key, pair.first, pair.second,
                             nonPartitionPrimitiveColumns, partitionPrimitiveColumns);
@@ -447,6 +516,9 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             }
         } catch (IOException e) {
             throw new StarRocksConnectorException("Failed to iter deltalake file scan iterator", e);
+        }
+        if (snapshotStatistics != null) {
+            snapshotStatistics.complete();
         }
         splitTasks.put(key, files);
         scannedTables.add(key);
