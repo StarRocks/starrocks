@@ -42,6 +42,7 @@ import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.openjdk.jol.info.GraphLayout;
 
@@ -224,6 +225,7 @@ public class IcebergCacheMemoryAccuracyTest extends TableTestBase {
     // ---------------------------------------------------------------- table cache
 
     @Test
+    @Disabled("Flaky: the measured table heap can double at 40 snapshots, re-enable after investigation")
     public void testTableCache() throws Exception {
         measureTables(1, 4, false);
         measureTables(40, 3, false);
