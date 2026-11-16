@@ -19,7 +19,6 @@ import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import com.starrocks.builtins.VectorizedBuiltinFunctions.AIFunctionDescriptor;
 import com.starrocks.catalog.Function;
 import com.starrocks.context.ai.AIProvider;
-import com.starrocks.context.ai.AIProviderProtocol;
 import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.server.AIProviderMgr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -27,9 +26,8 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import org.apache.commons.lang.StringUtils;
 
-/** Resolves provider metadata and validates its use by SQL AI functions. */
+/** Resolves provider metadata and checks provider types for SQL AI functions. */
 public final class AIFunctionProviderResolver {
 
     private AIFunctionProviderResolver() {
@@ -93,33 +91,4 @@ public final class AIFunctionProviderResolver {
         }
         return provider;
     }
-
-    /** Checks AI function execution support after the caller checks provider usage privileges. */
-    public static void validateForAIFunction(AIProvider provider) {
-        AIProviderType type = provider.getType();
-        if (type != AIProviderType.CHAT && type != AIProviderType.EMBEDDING) {
-            throw new SemanticException("AI functions require a CHAT or EMBEDDING provider, not " + type);
-        }
-        AIProviderProtocol protocol = provider.getProtocol();
-        if (protocol != AIProviderProtocol.OPENAI) {
-            throw new SemanticException("AI functions only support an OPENAI provider protocol now, not " + protocol);
-        }
-        String endpoint = provider.getEndpoint();
-        String model = provider.getModel();
-        if (StringUtils.isEmpty(endpoint) || StringUtils.isEmpty(model)) {
-            throw new SemanticException("AI provider requires a valid endpoint and model");
-        }
-        final Integer timeout;
-        final Integer dimensions;
-        try {
-            timeout = provider.getTimeoutMs();
-            dimensions = type == AIProviderType.EMBEDDING ? provider.getDimensions() : null;
-        } catch (NumberFormatException e) {
-            throw new SemanticException("AI provider timeout_ms and dimensions must be positive integers");
-        }
-        if ((timeout != null && timeout <= 0) || (dimensions != null && dimensions <= 0)) {
-            throw new SemanticException("AI provider timeout_ms and dimensions must be positive integers");
-        }
-    }
-
 }

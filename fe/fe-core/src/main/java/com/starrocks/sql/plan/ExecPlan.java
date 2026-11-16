@@ -167,7 +167,6 @@ public class ExecPlan {
                 AccessDeniedException.reportAccessDenied(null, connectContext.getCurrentUserIdentity(),
                         connectContext.getCurrentRoleIds(), PrivilegeType.USAGE.name(), "AI PROVIDER", provider.getName());
             }
-            AIFunctionProviderResolver.validateForAIFunction(provider);
             usedProviders.put(provider.getId(), new AIProvider(provider));
             entry.setValue(call.withAIProviderId(provider.getId()));
         }

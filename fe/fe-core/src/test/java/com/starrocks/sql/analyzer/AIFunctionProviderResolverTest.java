@@ -54,7 +54,8 @@ public class AIFunctionProviderResolverTest {
         Map<AIProviderProtocol, TAIProviderProtocol> protocols = Map.of(
                 AIProviderProtocol.OPENAI, TAIProviderProtocol.OPENAI,
                 AIProviderProtocol.ANTHROPIC, TAIProviderProtocol.ANTHROPIC,
-                AIProviderProtocol.COHERE, TAIProviderProtocol.COHERE);
+                AIProviderProtocol.COHERE, TAIProviderProtocol.COHERE,
+                AIProviderProtocol.DASHSCOPE, TAIProviderProtocol.DASHSCOPE);
         protocols.forEach((protocol, wireProtocol) -> {
             AIProvider provider = provider(AIProviderType.CHAT);
             provider.mergeParams(Map.of("protocol", protocol.lower()));
@@ -87,50 +88,6 @@ public class AIFunctionProviderResolverTest {
         Assertions.assertFalse(wire.getParams().containsKey("api_key"));
         Assertions.assertFalse(wire.getParams().containsKey("dimensions"));
         Assertions.assertFalse(wire.getParams().containsKey("timeout_ms"));
-    }
-
-    @Test
-    public void testUnsupportedTypesAndProtocolsFailBeforeExecution() {
-        Assertions.assertThrows(SemanticException.class,
-                () -> AIFunctionProviderResolver.validateForAIFunction(provider(AIProviderType.RERANK)));
-        for (AIProviderType type : new AIProviderType[] {AIProviderType.CHAT, AIProviderType.EMBEDDING}) {
-            AIProvider provider = provider(type);
-            for (String protocol : new String[] {"anthropic", "cohere"}) {
-                provider.mergeParams(Map.of("protocol", protocol, "api_key", "secret-test-key"));
-                SemanticException error = Assertions.assertThrows(SemanticException.class,
-                        () -> AIFunctionProviderResolver.validateForAIFunction(provider));
-                Assertions.assertTrue(error.getMessage().contains("OPENAI"));
-                Assertions.assertFalse(error.getMessage().contains("secret-test-key"));
-            }
-        }
-    }
-
-    @Test
-    public void testPositiveIntegerValidationAndEmptyDefaults() {
-        for (String key : new String[] {"timeout_ms", "dimensions"}) {
-            for (String value : new String[] {"0", "-1", "2147483648", "12junk"}) {
-                AIProvider provider = provider(AIProviderType.EMBEDDING);
-                provider.mergeParams(Map.of(key, value));
-                Assertions.assertThrows(SemanticException.class,
-                        () -> AIFunctionProviderResolver.validateForAIFunction(provider));
-            }
-            for (String value : new String[] {"", "1", "+123", "2147483647"}) {
-                AIProvider provider = provider(AIProviderType.EMBEDDING);
-                provider.mergeParams(Map.of(key, value));
-                Assertions.assertDoesNotThrow(() -> AIFunctionProviderResolver.validateForAIFunction(provider));
-            }
-        }
-    }
-
-    @Test
-    public void testHttpAndHttpsWithOptionalKey() {
-        for (String scheme : new String[] {"http", "https"}) {
-            AIProvider provider = provider(AIProviderType.CHAT);
-            provider.mergeParams(Map.of("endpoint", scheme + "://models.example.test/v1/inference"));
-            Assertions.assertDoesNotThrow(() -> AIFunctionProviderResolver.validateForAIFunction(provider));
-            provider.mergeParams(Map.of("api_key", "test-key"));
-            Assertions.assertDoesNotThrow(() -> AIFunctionProviderResolver.validateForAIFunction(provider));
-        }
     }
 
     private static AIProvider provider(AIProviderType type) {

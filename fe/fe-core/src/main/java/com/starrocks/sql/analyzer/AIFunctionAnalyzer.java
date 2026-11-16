@@ -60,7 +60,6 @@ final class AIFunctionAnalyzer {
         Authorizer.checkAIFunctionUsage(context, node);
         AIProvider provider = AIFunctionProviderResolver.resolveProvider(context.getGlobalStateMgr().getAIProviderMgr(), node);
         Authorizer.checkAIProviderUsage(context, provider);
-        AIFunctionProviderResolver.validateForAIFunction(provider);
     }
 
     // Arguments have been reordered and defaults appended by the named argument framework.

@@ -140,14 +140,16 @@ class StatementPlannerTest extends PlanTestBase {
     }
 
     @Test
-    public void testAuthorizationPrecedesAIProviderResolution() throws Exception {
+    public void testAIFunctionAuthorizationPrecedesProviderResolution() throws Exception {
         boolean oldBypassAuthorizerCheck = connectContext.isBypassAuthorizerCheck();
         connectContext.setBypassAuthorizerCheck(false);
         RuntimeException denied = new RuntimeException("authorization-order-sentinel");
         try (MockedStatic<Authorizer> authorizer = mockStatic(Authorizer.class)) {
-            authorizer.when(() -> Authorizer.check(Mockito.any(), Mockito.same(connectContext))).thenThrow(denied);
-            StatementBase statement = UtFrameUtils.parseStmtWithNewParser(
-                    "select ai_complete('missing_authorization_order_provider', 'explicit-model', 'prompt')", connectContext);
+            authorizer.when(() -> Authorizer.checkAIFunctionUsage(Mockito.same(connectContext), Mockito.any()))
+                    .thenThrow(denied);
+            StatementBase statement = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                    "select ai_complete(prompt => 'prompt', provider => 'missing_authorization_order_provider', "
+                            + "model => 'explicit-model')", connectContext);
 
             Assertions.assertSame(denied,
                     Assertions.assertThrows(RuntimeException.class,
