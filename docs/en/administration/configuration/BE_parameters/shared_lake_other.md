@@ -1018,6 +1018,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: High water memory threshold expressed as a percentage of the process memory limit. When total memory consumption rises above this percentage, BE begins to free memory gradually (currently by evicting data cache and update cache, and by shrinking the shared-data metadata caches) to relieve pressure. The monitor uses this value to compute memory_high = mem_limit * memory_high_level / 100 and, if consumption `>` memory_high, performs controlled eviction guided by the GC advisor; if consumption exceeds memory_urgent_level (a separate config), more aggressive immediate reductions occur. This value is also consulted to disable certain memory‑intensive operations (for example, primary-key preload) when the threshold is exceeded. Must satisfy validation with memory_urgent_level (memory_urgent_level `>` memory_high_level, memory_high_level `>=` 1, memory_urgent_level `<=` 100).
 - Introduced in: v3.2.0
 
+### olap_string_max_length
+
+- Default: 1048576
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum string length used by BE string functions, such as `repeat` and `concat`, to limit the size of each result. The default is 1 MiB. These functions return `NULL` when a result exceeds this limit. The limit is measured in bytes, not characters.
+- Introduced in: -
+
 ### report_exec_rpc_request_retry_num
 
 - Default: 10
