@@ -1971,8 +1971,13 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
                 _range_iter.set_range(&_scan_range);
                 _opts.stats->runtime_stats_filtered += (prev_size - _range_iter.remaining_rows());
                 if (_prefetch_window != nullptr) {
-                    // The window walks the scan range it was built on; restart it on the narrowed one.
-                    _init_prefetch_window(_range_iter.has_more() ? _range_iter.begin() : _scan_range.end());
+                    // The window walks the scan range it was built on; restart it on the narrowed one, or drop it
+                    // when the filter left no row to read.
+                    if (_range_iter.has_more()) {
+                        _init_prefetch_window(_range_iter.begin());
+                    } else {
+                        _reset_prefetch_window();
+                    }
                 }
                 return Status::OK();
             },
@@ -2956,6 +2961,12 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
     size_t read_num = 0;
     SparseRange<> range;
 
+    // Every raw batch moves the read-ahead along, also when the predicates filter out whole batches and one output
+    // chunk takes many of them.
+    if (_prefetch_window != nullptr && _range_iter.has_more()) {
+        _prefetch_window->advance(_range_iter.begin());
+    }
+
     // Always seek columns if switching between late materialization modes or position changed
     // This ensures all column iterators (_column_iterators vs _column_iterators_for_predicate_late_materialize)
     // are synchronized at the same position
@@ -3166,10 +3177,6 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     _context->_adapt_global_dict_chunk->reset();
 
     Chunk* chunk = _context->_read_chunk.get();
-
-    if (_prefetch_window != nullptr && _range_iter.has_more()) {
-        _prefetch_window->advance(_range_iter.begin());
-    }
 
     StatusOr<size_t> predicte_result = _predicate_evaluate(rowid);
 
