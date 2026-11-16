@@ -21,6 +21,7 @@
 #include "compute_env/spill/block_manager.h"
 #include "compute_env/spill/common.h"
 #include "fmt/format.h"
+#include "fs/remote_read_context.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
 
@@ -30,7 +31,7 @@ public:
     FileBlockContainer(DirPtr dir, const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
                        int32_t plan_node_id, std::string plan_node_name, uint64_t id, size_t acquired_size,
                        bool skip_parent_path_deletion, bool skip_file_deletion, bool flat_layout,
-                       std::string flat_name_prefix)
+                       std::string flat_name_prefix, const RemoteReadContext& remote_read)
             : _dir(std::move(dir)),
               _query_id(query_id),
               _fragment_instance_id(fragment_instance_id),
@@ -41,7 +42,8 @@ public:
               _skip_parent_path_deletion(skip_parent_path_deletion),
               _skip_file_deletion(skip_file_deletion),
               _flat_layout(flat_layout),
-              _flat_name_prefix(std::move(flat_name_prefix)) {
+              _flat_name_prefix(std::move(flat_name_prefix)),
+              _remote_read(remote_read) {
         // Design invariant: when skip_file_deletion = true (Lake write path),
         // skip_parent_path_deletion MUST also be true. Otherwise the destructor would attempt
         // to delete the parent directory while the spill file is still present on remote
@@ -129,7 +131,8 @@ public:
                                                   const TUniqueId& fragment_instance_id, int32_t plan_node_id,
                                                   const std::string& plan_node_name, uint64_t id, size_t block_size,
                                                   bool skip_parent_path_deletion, bool skip_file_deletion,
-                                                  bool flat_layout, const std::string& flat_name_prefix);
+                                                  bool flat_layout, const std::string& flat_name_prefix,
+                                                  const RemoteReadContext& remote_read);
 
 private:
     DirPtr _dir;
@@ -157,6 +160,8 @@ private:
     bool _flat_layout = false;
     // Caller-supplied prefix used in flat layout. Format: "<txn_id_hex>_<load_id>_<frag_id>".
     std::string _flat_name_prefix;
+    // Whom the reads of this container are for when it is in starlet storage.
+    RemoteReadContext _remote_read;
 };
 
 Status FileBlockContainer::open() {
@@ -190,8 +195,9 @@ Status FileBlockContainer::flush() {
 }
 
 StatusOr<std::unique_ptr<io::InputStreamWrapper>> FileBlockContainer::get_readable() {
-    std::string file_path = path();
-    ASSIGN_OR_RETURN(auto f, _dir->fs()->new_sequential_file(file_path));
+    SequentialFileOptions opts;
+    opts.remote_read = _remote_read;
+    ASSIGN_OR_RETURN(auto f, _dir->fs()->new_sequential_file(opts, path()));
     return f;
 }
 
@@ -200,10 +206,11 @@ StatusOr<FileBlockContainerPtr> FileBlockContainer::create(const DirPtr& dir, co
                                                            const std::string& plan_node_name, uint64_t id,
                                                            size_t block_size, bool skip_parent_path_deletion,
                                                            bool skip_file_deletion, bool flat_layout,
-                                                           const std::string& flat_name_prefix) {
-    auto container = std::make_shared<FileBlockContainer>(dir, query_id, fragment_instance_id, plan_node_id,
-                                                          plan_node_name, id, block_size, skip_parent_path_deletion,
-                                                          skip_file_deletion, flat_layout, flat_name_prefix);
+                                                           const std::string& flat_name_prefix,
+                                                           const RemoteReadContext& remote_read) {
+    auto container = std::make_shared<FileBlockContainer>(
+            dir, query_id, fragment_instance_id, plan_node_id, plan_node_name, id, block_size,
+            skip_parent_path_deletion, skip_file_deletion, flat_layout, flat_name_prefix, remote_read);
     RETURN_IF_ERROR(container->open());
     return container;
 }
@@ -263,8 +270,8 @@ private:
     FileBlockContainerPtr _container;
 };
 
-FileBlockManager::FileBlockManager(const TUniqueId& query_id, DirManager* dir_mgr)
-        : _query_id(query_id), _dir_mgr(dir_mgr) {}
+FileBlockManager::FileBlockManager(const TUniqueId& query_id, DirManager* dir_mgr, const RemoteReadContext& remote_read)
+        : _query_id(query_id), _dir_mgr(dir_mgr), _remote_read(remote_read) {}
 
 Status FileBlockManager::open() {
     return Status::OK();
@@ -315,7 +322,7 @@ StatusOr<FileBlockContainerPtr> FileBlockManager::get_or_create_container(
     ASSIGN_OR_RETURN(auto block_container,
                      FileBlockContainer::create(dir, _query_id, fragment_instance_id, plan_node_id, plan_node_name, id,
                                                 block_size, skip_parent_path_deletion, skip_file_deletion, flat_layout,
-                                                flat_name_prefix));
+                                                flat_name_prefix, _remote_read));
     RETURN_IF_ERROR(block_container->open());
     return block_container;
 }
