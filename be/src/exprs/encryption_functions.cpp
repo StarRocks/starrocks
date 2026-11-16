@@ -478,6 +478,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::from_base64(FunctionContext* ctx, const
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     const int size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+    std::vector<char> decoded_buf;
     for (int row = 0; row < size; ++row) {
         if (src_viewer.is_null(row)) {
             result.append_null();
@@ -490,17 +491,17 @@ StatusOr<ColumnPtr> EncryptionFunctions::from_base64(FunctionContext* ctx, const
             continue;
         }
 
-        int cipher_len = src_value.size;
-        std::unique_ptr<char[]> p;
-        p.reset(new char[cipher_len + 3]);
+        if (decoded_buf.size() < src_value.size) {
+            decoded_buf.resize(src_value.size);
+        }
 
-        int len = base64_decode2(src_value.data, src_value.size, p.get());
+        int64_t len = base64_decode2(src_value.data, src_value.size, decoded_buf.data());
         if (len < 0) {
             result.append_null();
             continue;
         }
 
-        result.append(Slice(p.get(), len));
+        result.append(Slice(decoded_buf.data(), len));
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
@@ -529,7 +530,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::to_base64(FunctionContext* ctx, const C
             throw std::runtime_error(ss.str());
         }
 
-        size_t encoded_len = (size_t)(4.0 * ceil((double)src_value.size / 3.0)) + 1;
+        size_t encoded_len = ((src_value.size + 2) / 3) * 4;
         if (encoded_buf.size() < encoded_len) {
             encoded_buf.resize(encoded_len);
         }
@@ -862,13 +863,13 @@ struct EncodeColumnToDigest {
             } else if constexpr (sizeof(CppType) == 2) {
                 marker_type = RowFingerprintValueType::Int16;
             } else if constexpr (sizeof(CppType) == 4) {
-                marker_type = (LT == TYPE_FLOAT)
-                                      ? RowFingerprintValueType::Float
-                                      : lt_is_date<LT> ? RowFingerprintValueType::Date : RowFingerprintValueType::Int32;
+                marker_type = (LT == TYPE_FLOAT) ? RowFingerprintValueType::Float
+                              : lt_is_date<LT>   ? RowFingerprintValueType::Date
+                                                 : RowFingerprintValueType::Int32;
             } else if constexpr (sizeof(CppType) == 8) {
-                marker_type = (LT == TYPE_DOUBLE) ? RowFingerprintValueType::Double
-                                                  : lt_is_datetime<LT> ? RowFingerprintValueType::DateTime
-                                                                       : RowFingerprintValueType::Int64;
+                marker_type = (LT == TYPE_DOUBLE)  ? RowFingerprintValueType::Double
+                              : lt_is_datetime<LT> ? RowFingerprintValueType::DateTime
+                                                   : RowFingerprintValueType::Int64;
             } else if constexpr (sizeof(CppType) == 16) {
                 marker_type = lt_is_decimal<LT> ? RowFingerprintValueType::Decimal : RowFingerprintValueType::Int128;
             } else {
