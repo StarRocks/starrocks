@@ -12,18 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.common;
+package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
-import com.starrocks.builtins.VectorizedBuiltinFunctions.AICapability;
 import com.starrocks.builtins.VectorizedBuiltinFunctions.AIFunctionDescriptor;
 import com.starrocks.catalog.Function;
 import com.starrocks.context.ai.AIProvider;
 import com.starrocks.context.ai.AIProviderProtocol;
 import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.server.AIProviderMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -31,22 +29,10 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import org.apache.commons.lang.StringUtils;
 
-/** Resolves and validates providers used by AI functions. */
-public final class AIModelConfigs {
+/** Resolves provider metadata and validates its use by SQL AI functions. */
+public final class AIFunctionProviderResolver {
 
-    private AIModelConfigs() {
-    }
-
-    public static AICapability getAICapability(Function function) {
-        return descriptor(function).capability();
-    }
-
-    public static int getModelArgument(Function function) {
-        return descriptor(function).modelArgument();
-    }
-
-    public static int getProviderArgument(Function function) {
-        return descriptor(function).providerArgument();
+    private AIFunctionProviderResolver() {
     }
 
     private static AIFunctionDescriptor descriptor(Function function) {
@@ -55,7 +41,7 @@ public final class AIModelConfigs {
         return descriptor;
     }
 
-    public static String providerName(Expr expression) {
+    private static String providerName(Expr expression) {
         Preconditions.checkState(expression != null, "AI function is missing its provider argument");
         if (!expression.isConstant()) {
             throw new SemanticException("AI function requires a constant AI provider name", expression.getPos());
@@ -71,8 +57,8 @@ public final class AIModelConfigs {
         return literal.getValue();
     }
 
-    public static AIProviderType parseProviderType(Function function) {
-        switch (getAICapability(function)) {
+    public static AIProviderType requiredProviderType(Function function) {
+        switch (descriptor(function).capability()) {
             case CHAT -> {
                 return AIProviderType.CHAT;
             }
@@ -83,15 +69,10 @@ public final class AIModelConfigs {
         }
     }
 
-    public static boolean shouldUseDefaultProvider(FunctionCallExpr call) {
-        int argument = getProviderArgument(call.getFn());
-        return argument < 0 || providerName(call.getChild(argument)).isEmpty();
-    }
-
     /** Resolve without capturing a plan snapshot; also used before optimizer pruning for authorization. */
     public static AIProvider resolveProvider(AIProviderMgr manager, FunctionCallExpr call) {
-        int argument = getProviderArgument(call.getFn());
-        AIProviderType requiredAIProviderType = parseProviderType(call.getFn());
+        int argument = descriptor(call.getFn()).providerArgument();
+        AIProviderType requiredAIProviderType = requiredProviderType(call.getFn());
         AIProvider provider;
         String name = argument < 0 ? "" : providerName(call.getChild(argument));
         if (!name.isEmpty()) {
@@ -113,7 +94,8 @@ public final class AIModelConfigs {
         return provider;
     }
 
-    public static void validateProvider(AIProvider provider) {
+    /** Checks AI function execution support after the caller checks provider usage privileges. */
+    public static void validateForAIFunction(AIProvider provider) {
         AIProviderType type = provider.getType();
         if (type != AIProviderType.CHAT && type != AIProviderType.EMBEDDING) {
             throw new SemanticException("AI functions require a CHAT or EMBEDDING provider, not " + type);

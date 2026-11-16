@@ -36,12 +36,12 @@ import com.starrocks.planner.SlotId;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
+import com.starrocks.sql.analyzer.AIFunctionProviderResolver;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.common.AIModelConfigs;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -151,14 +151,15 @@ public class ExecPlan {
 
     // Bind only physical AIProject calls. Rebuilt plans independently capture current metadata.
     Map<String, AIProvider> bindAIProviders(Map<SlotId, Expr> projectMap) {
-        Map<String, AIProvider> usedConfigs = new HashMap<>();
+        Map<String, AIProvider> usedProviders = new HashMap<>();
         for (Map.Entry<SlotId, Expr> entry : projectMap.entrySet()) {
             if (!(entry.getValue() instanceof FunctionCallExpr call)
                     || call.getFn() == null || !call.getFn().isAI()) {
                 // ignore none AI functions
                 continue;
             }
-            AIProvider provider = AIModelConfigs.resolveProvider(connectContext.getGlobalStateMgr().getAIProviderMgr(), call);
+            AIProvider provider = AIFunctionProviderResolver.resolveProvider(
+                    connectContext.getGlobalStateMgr().getAIProviderMgr(), call);
 
             try {
                 Authorizer.checkAIProviderAction(connectContext, provider, PrivilegeType.USAGE);
@@ -166,11 +167,11 @@ public class ExecPlan {
                 AccessDeniedException.reportAccessDenied(null, connectContext.getCurrentUserIdentity(),
                         connectContext.getCurrentRoleIds(), PrivilegeType.USAGE.name(), "AI PROVIDER", provider.getName());
             }
-            AIModelConfigs.validateProvider(provider);
-            usedConfigs.put(provider.getId(), new AIProvider(provider));
+            AIFunctionProviderResolver.validateForAIFunction(provider);
+            usedProviders.put(provider.getId(), new AIProvider(provider));
             entry.setValue(call.withAIProviderId(provider.getId()));
         }
-        return Map.copyOf(usedConfigs);
+        return Map.copyOf(usedProviders);
     }
 
     // Lake (cloud-native) table ids scanned by >=2 scan operators in this plan (self-join / multi-scan of one

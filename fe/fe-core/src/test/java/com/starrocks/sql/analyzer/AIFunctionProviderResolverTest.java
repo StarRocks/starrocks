@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.common;
+package com.starrocks.sql.analyzer;
 
 import com.starrocks.context.ai.AIProvider;
 import com.starrocks.context.ai.AIProviderProtocol;
 import com.starrocks.context.ai.AIProviderType;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TAIProvider;
 import com.starrocks.thrift.TAIProviderProtocol;
 import com.starrocks.thrift.TAIProviderType;
@@ -27,7 +26,7 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
 
-public class AIModelConfigsTest {
+public class AIFunctionProviderResolverTest {
     @Test
     public void testProviderTypeMappingAndProtocolNormalization() {
         Map<AIProviderType, TAIProviderType> types = Map.of(
@@ -93,13 +92,13 @@ public class AIModelConfigsTest {
     @Test
     public void testUnsupportedTypesAndProtocolsFailBeforeExecution() {
         Assertions.assertThrows(SemanticException.class,
-                () -> AIModelConfigs.validateProvider(provider(AIProviderType.RERANK)));
+                () -> AIFunctionProviderResolver.validateForAIFunction(provider(AIProviderType.RERANK)));
         for (AIProviderType type : new AIProviderType[] {AIProviderType.CHAT, AIProviderType.EMBEDDING}) {
             AIProvider provider = provider(type);
             for (String protocol : new String[] {"anthropic", "cohere"}) {
                 provider.mergeParams(Map.of("protocol", protocol, "api_key", "secret-test-key"));
                 SemanticException error = Assertions.assertThrows(SemanticException.class,
-                        () -> AIModelConfigs.validateProvider(provider));
+                        () -> AIFunctionProviderResolver.validateForAIFunction(provider));
                 Assertions.assertTrue(error.getMessage().contains("OPENAI"));
                 Assertions.assertFalse(error.getMessage().contains("secret-test-key"));
             }
@@ -112,12 +111,13 @@ public class AIModelConfigsTest {
             for (String value : new String[] {"0", "-1", "2147483648", "12junk"}) {
                 AIProvider provider = provider(AIProviderType.EMBEDDING);
                 provider.mergeParams(Map.of(key, value));
-                Assertions.assertThrows(SemanticException.class, () -> AIModelConfigs.validateProvider(provider));
+                Assertions.assertThrows(SemanticException.class,
+                        () -> AIFunctionProviderResolver.validateForAIFunction(provider));
             }
             for (String value : new String[] {"", "1", "+123", "2147483647"}) {
                 AIProvider provider = provider(AIProviderType.EMBEDDING);
                 provider.mergeParams(Map.of(key, value));
-                Assertions.assertDoesNotThrow(() -> AIModelConfigs.validateProvider(provider));
+                Assertions.assertDoesNotThrow(() -> AIFunctionProviderResolver.validateForAIFunction(provider));
             }
         }
     }
@@ -127,9 +127,9 @@ public class AIModelConfigsTest {
         for (String scheme : new String[] {"http", "https"}) {
             AIProvider provider = provider(AIProviderType.CHAT);
             provider.mergeParams(Map.of("endpoint", scheme + "://models.example.test/v1/inference"));
-            Assertions.assertDoesNotThrow(() -> AIModelConfigs.validateProvider(provider));
+            Assertions.assertDoesNotThrow(() -> AIFunctionProviderResolver.validateForAIFunction(provider));
             provider.mergeParams(Map.of("api_key", "test-key"));
-            Assertions.assertDoesNotThrow(() -> AIModelConfigs.validateProvider(provider));
+            Assertions.assertDoesNotThrow(() -> AIFunctionProviderResolver.validateForAIFunction(provider));
         }
     }
 
