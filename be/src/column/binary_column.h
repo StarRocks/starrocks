@@ -68,27 +68,9 @@ public:
     using Byte = uint8_t;
     using Bytes = starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
 
-<<<<<<< HEAD
-    struct BinaryDataProxyContainer {
-        BinaryDataProxyContainer(const BinaryColumnBase& column) : _column(column) {}
-=======
-    using ProxyContainer = ::starrocks::BinaryDataProxyContainer;
-
-    struct ImmContainer {
-        ImmContainer() = default;
-        explicit ImmContainer(const BinaryColumnBase& column) : _column(&column) {}
->>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
-
-        Slice operator[](size_t index) const { return _column.get_slice(index); }
-
-        size_t size() const { return _column.size(); }
-
-    private:
-        const BinaryColumnBase& _column;
-    };
-
     using Container = Buffer<Slice>;
     using GermanStringContainer = Buffer<GermanString>;
+    using BinaryDataProxyContainer = starrocks::BinaryDataProxyContainer;
     using ProxyContainer = BinaryDataProxyContainer;
     using ImmContainer = BinaryDataProxyContainer;
 
@@ -416,9 +398,7 @@ public:
         return _german_strings;
     }
 
-    const BinaryDataProxyContainer& get_proxy_data() const { return _immuable_container; }
-
-    ProxyContainer get_proxy_data() const { return ProxyContainer(*this); }
+    const ProxyContainer& get_proxy_data() const { return _immuable_container; }
 
     Bytes& get_bytes() {
         _ensure_materialized();

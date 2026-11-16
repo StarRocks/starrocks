@@ -631,12 +631,6 @@ public:
         return down_cast<const BinaryColumn*>(get_data_column(column));
     }
 
-<<<<<<< HEAD
-=======
-    // If column[row] is not null and is a binary column, writes the slice to *out and returns true.
-    // Handles ConstColumn (normalises row to 0) and NullableColumn (null check).
-    static bool get_binary_slice_at(const Column* column, size_t row, Slice* out);
-
     static inline Slice get_binary_slice(const Column* column, size_t row) {
         const Column* data_column = get_data_column(column);
         size_t index = column->is_constant() ? 0 : row;
@@ -723,7 +717,6 @@ public:
         }
     }
 
->>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
     static bool is_all_const(const Columns& columns);
 
     // Returns

@@ -461,10 +461,10 @@ public:
         if constexpr (IsSlice<T>) {
             const Column* data_column = ColumnHelper::get_data_column(columns[0]);
             if (data_column->is_large_binary()) {
-                const auto container_data = down_cast<const LargeBinaryColumn*>(data_column)->immutable_data();
+                const auto& container_data = down_cast<const LargeBinaryColumn*>(data_column)->get_proxy_data();
                 build_and_update(container_data);
             } else {
-                const auto container_data = down_cast<const BinaryColumn*>(data_column)->immutable_data();
+                const auto& container_data = down_cast<const BinaryColumn*>(data_column)->get_proxy_data();
                 build_and_update(container_data);
             }
         } else {
@@ -508,10 +508,10 @@ public:
         if constexpr (IsSlice<T>) {
             const Column* data_column = ColumnHelper::get_data_column(columns[0]);
             if (data_column->is_large_binary()) {
-                const auto container_data = down_cast<const LargeBinaryColumn*>(data_column)->immutable_data();
+                const auto& container_data = down_cast<const LargeBinaryColumn*>(data_column)->get_proxy_data();
                 build_and_update(container_data);
             } else {
-                const auto container_data = down_cast<const BinaryColumn*>(data_column)->immutable_data();
+                const auto& container_data = down_cast<const BinaryColumn*>(data_column)->get_proxy_data();
                 build_and_update(container_data);
             }
         } else {

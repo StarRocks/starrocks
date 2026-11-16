@@ -20,11 +20,7 @@
 #include <limits>
 #include <type_traits>
 
-<<<<<<< HEAD
-=======
-#include "base/container/raw_container.h"
 #include "column/column_helper.h"
->>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
 #include "exprs/agg/maxmin.h"

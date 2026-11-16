@@ -208,7 +208,6 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         const auto* input_column = down_cast<const ArrayColumn*>(column);
         auto offset_size = input_column->get_element_offset_size(row_num);
-<<<<<<< HEAD
         const auto& array_element = input_column->elements();
         const auto* element_data_column = ColumnHelper::get_data_column(&array_element);
 
@@ -235,21 +234,7 @@ public:
                 ctx->set_error("array_agg: unexpected array element column type");
                 return;
             }
-        }
 
-        // Array elements are normally nullable, but nothing in the type system guarantees it.
-        size_t element_null_count = array_element.is_nullable()
-                                            ? down_cast<const NullableColumn&>(array_element)
-                                                      .null_count(offset_size.first, offset_size.second)
-                                            : 0;
-        DCHECK_LE(element_null_count, offset_size.second);
-
-        this->data(state).update(ctx->mem_pool(), *down_cast<const InputColumnType*>(element_data_column),
-                                 offset_size.first, offset_size.second - element_null_count);
-        this->data(state).append_null(element_null_count);
-=======
-        auto& array_element = down_cast<const NullableColumn&>(input_column->elements());
-        if constexpr (lt_is_string_or_binary<LT>) {
             MemPool* mem_pool = ctx->mem_pool();
             if constexpr (std::is_same_v<State<LT, is_distinct, MyHashSet>,
                                          ArrayAggWindowState<LT, is_distinct, MyHashSet>>) {
@@ -266,16 +251,17 @@ public:
                 }
             });
         } else {
-            auto* element_data_column =
-                    down_cast<const InputColumnType*>(ColumnHelper::get_data_column(&array_element));
-            size_t element_null_count = array_element.null_count(offset_size.first, offset_size.second);
+            // Array elements are normally nullable, but nothing in the type system guarantees it.
+            size_t element_null_count = array_element.is_nullable()
+                                                ? down_cast<const NullableColumn&>(array_element)
+                                                          .null_count(offset_size.first, offset_size.second)
+                                                : 0;
             DCHECK_LE(element_null_count, offset_size.second);
 
-            this->data(state).update(ctx->mem_pool(), *element_data_column, offset_size.first,
-                                     offset_size.second - element_null_count);
+            this->data(state).update(ctx->mem_pool(), *down_cast<const InputColumnType*>(element_data_column),
+                                     offset_size.first, offset_size.second - element_null_count);
             this->data(state).append_null(element_null_count);
         }
->>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
