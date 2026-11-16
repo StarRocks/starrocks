@@ -1780,12 +1780,6 @@ public class InsertPlanTest extends PlanTestBase {
                 nativeTable.schema();
                 result = icebergSchema;
                 minTimes = 0;
-
-                // IcebergTableSink's constructor calls nativeTable.encryption(); BaseTable(null, null)
-                // would NPE on its null TableOperations, so stub the plaintext manager.
-                nativeTable.encryption();
-                result = PlaintextEncryptionManager.instance();
-                minTimes = 0;
             }
         };
 
