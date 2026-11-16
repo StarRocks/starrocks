@@ -168,4 +168,17 @@ TEST(Base64CodingTest, Base64Encode2AndDecode2EmptyAndNullBoundary) {
     EXPECT_EQ(-1, base64_decode2("YWJjZA==", 8, nullptr));
 }
 
+TEST(Base64CodingTest, InPlaceAliasedEncodeAndDecode) {
+    std::string s = "Hello, StarRocks in-place Base64!";
+    base64_encode(s, &s);
+    EXPECT_EQ("SGVsbG8sIFN0YXJSb2NrcyBpbi1wbGFjZSBCYXNlNjQh", s);
+
+    ASSERT_TRUE(base64_decode(s, &s));
+    EXPECT_EQ("Hello, StarRocks in-place Base64!", s);
+
+    std::string invalid = "abc*def";
+    EXPECT_FALSE(base64_decode(invalid, &invalid));
+    EXPECT_TRUE(invalid.empty());
+}
+
 } // namespace starrocks

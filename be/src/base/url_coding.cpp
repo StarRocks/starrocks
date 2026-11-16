@@ -19,18 +19,35 @@
 
 #include <curl/curl.h>
 
+#include <utility>
+
 #include "base/utility/defer_op.h"
 #include "simdutf.h"
 
 namespace starrocks {
 
 void base64_encode(const std::string& in, std::string* out) {
+    if (&in == out) {
+        std::string tmp;
+        base64_encode(in, &tmp);
+        *out = std::move(tmp);
+        return;
+    }
     out->resize(simdutf::base64_length_from_binary(in.size()));
     size_t len = simdutf::binary_to_base64(in.data(), in.size(), out->data());
     out->resize(len);
 }
 
 bool base64_decode(const std::string& in, std::string* out) {
+    if (&in == out) {
+        std::string tmp;
+        if (!base64_decode(in, &tmp)) {
+            out->clear();
+            return false;
+        }
+        *out = std::move(tmp);
+        return true;
+    }
     out->resize(simdutf::maximal_binary_length_from_base64(in.data(), in.size()));
     simdutf::result r = simdutf::base64_to_binary(in.data(), in.size(), out->data());
     if (r.error != simdutf::error_code::SUCCESS) {
