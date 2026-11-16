@@ -3875,7 +3875,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     try {
                         icebergDataFiles.forEach(batchWrite::addFile);
                         batchWrite.commit();
-                        publishStagedTransaction(txn);
+                        txn.commitTransaction();
                         return;
                     } catch (CommitFailedException e) {
                         // A rewrite's commit only fails here after Iceberg's own retries all lost the
@@ -3900,11 +3900,6 @@ public class IcebergMetadata implements ConnectorMetadata {
                         txn = nativeTbl.newTransaction();
                     }
                 }
-<<<<<<< HEAD
-                batchWrite.commit();
-                transaction.commitTransaction();
-=======
->>>>>>> b7a153baf0d... [BugFix][RB-871] Retry an Iceberg rewrite commit that lost every Iceberg retry to concurrent appends (#69946)
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
 
             // Record metrics after successful commit
