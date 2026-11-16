@@ -67,7 +67,9 @@ TEST(ArrowFlightAuthServerMiddlewareTest, BearerFactoryAcceptsAnyToken) {
 
     for (const std::string& token : {std::string(kBearerDefaultToken), std::string("some-other-token")}) {
         arrow::flight::CallHeaders headers;
-        headers.insert({kAuthHeader, std::string(kBearerPrefix) + token});
+        // CallHeaders holds string_views, so the header value must outlive the call.
+        const std::string auth_value = std::string(kBearerPrefix) + token;
+        headers.insert({kAuthHeader, auth_value});
         FakeServerCallContext context(std::move(headers));
 
         std::shared_ptr<arrow::flight::ServerMiddleware> middleware;
@@ -96,7 +98,8 @@ TEST(ArrowFlightAuthServerMiddlewareTest, HeaderFactorySendsDefaultBearerToken) 
     NoOpHeaderAuthServerMiddlewareFactory factory;
     arrow::flight::CallInfo info{arrow::flight::FlightMethod::Handshake};
     arrow::flight::CallHeaders headers;
-    headers.insert({kAuthHeader, std::string(kBasicPrefix) + arrow::util::base64_encode("user:pass")});
+    const std::string auth_value = std::string(kBasicPrefix) + arrow::util::base64_encode("user:pass");
+    headers.insert({kAuthHeader, auth_value});
     FakeServerCallContext context(std::move(headers));
 
     std::shared_ptr<arrow::flight::ServerMiddleware> middleware;
