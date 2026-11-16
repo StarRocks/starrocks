@@ -73,12 +73,6 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("client_secret");
         SENSITIVE_KEY.add("ldap_bind_root_pwd");
         SENSITIVE_KEY.add("ldap_ssl_conn_trust_store_pwd");
-<<<<<<< HEAD
-=======
-        SENSITIVE_KEY.add("fs.obs.access_key");
-        SENSITIVE_KEY.add("fs.obs.secret_key");
-        SENSITIVE_KEY.add("fs.obs.access.key");
-        SENSITIVE_KEY.add("fs.obs.secret.key");
         // Catalog / storage credentials masked by SHOW CREATE CATALOG, so that the AST rendering and the
         // audit log redaction (SqlCredentialRedactor seeds from this set) cover the same keys.
         SENSITIVE_KEY.addAll(CredentialUtil.CREDENTIAL_KEYS);
@@ -103,7 +97,6 @@ public class PrintableMap<K, V> {
             }
         }
         return false;
->>>>>>> d3797dc ([BugFix][RB-1362] Mask catalog credentials in logs, audit and SHOW CREATE CATALOG (#83307))
     }
 
     public PrintableMap(Map<K, V> map, String keyValueSaperator,

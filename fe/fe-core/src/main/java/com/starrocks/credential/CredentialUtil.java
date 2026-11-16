@@ -71,21 +71,9 @@ public class CredentialUtil {
             CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY,
             CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY,
 
-<<<<<<< HEAD
-        // Mask for tencent's credential
-        doMask(properties, CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY);
-        doMask(properties, CloudConfigurationConstants.TENCENT_COS_SECRET_KEY);
-=======
-            // huawei obs
-            CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY,
-            CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY,
-            CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY_DOT,
-            CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY_DOT,
-
             // tencent
             CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY,
             CloudConfigurationConstants.TENCENT_COS_SECRET_KEY,
->>>>>>> d3797dc ([BugFix][RB-1362] Mask catalog credentials in logs, audit and SHOW CREATE CATALOG (#83307))
 
             // hdfs. The *_KEYTAB keys hold a path rather than the credential itself, so only the inline
             // keytab content and the password are masked. The deprecated bare "password" key needs no
