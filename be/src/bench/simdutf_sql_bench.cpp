@@ -403,3 +403,39 @@ BENCHMARK(BM_SqlBase64Decode_Simdutf)->Arg(44)->Arg(172)->Arg(1368);
 } // namespace starrocks
 
 BENCHMARK_MAIN();
+
+// ============================================================================
+// Empirical Results on GCP n4-standard-32 (Intel Xeon Platinum 8581C @ 2.10GHz
+// Emerald Rapids, GCC 14, taskset -c 2, 4,096 rows per BinaryColumn chunk):
+//
+// Benchmark (AVX-512 icelake)            5.2.8 (4.1.7)    9.1.0 (HEAD)     9.4.0 (PR)   Speedup (vs 9.1.0)
+// --------------------------------------------------------------------------------------------------------
+// BM_SqlUtf8Length_Ascii/16                 39,281 ns        36,134 ns      15,224 ns     2.37x (4.01 GiB/s)
+// BM_SqlUtf8Length_Ascii/48                124,778 ns       121,899 ns      15,221 ns     8.01x (12.03 GiB/s)
+// BM_SqlUtf8Length_Ascii/100                68,623 ns        82,803 ns      22,770 ns     3.64x (16.75 GiB/s)
+// BM_SqlUtf8Length_Ascii/256                35,919 ns        32,811 ns      31,782 ns     1.03x (30.73 GiB/s)
+// BM_SqlUtf8Length_Utf8/16                  60,662 ns        60,626 ns      15,160 ns     4.00x (4.03 GiB/s)
+// BM_SqlUtf8Length_Utf8/48                 156,981 ns       160,360 ns      15,135 ns    10.60x (12.10 GiB/s)
+// BM_SqlUtf8Length_Utf8/100                143,263 ns       138,552 ns      21,543 ns     6.43x (17.71 GiB/s)
+// BM_SqlUtf8Length_Utf8/256                 34,297 ns        30,937 ns      29,818 ns     1.04x (32.75 GiB/s)
+// BM_SqlSubstr_Ascii/24                      7,111 ns         7,118 ns       6,538 ns     1.09x (14.00 GiB/s)
+// BM_SqlSubstr_Ascii/64                      9,504 ns         9,446 ns       8,326 ns     1.13x (29.32 GiB/s)
+// BM_SqlSubstr_Ascii/192                    16,322 ns        16,342 ns      12,981 ns     1.26x (56.42 GiB/s)
+// BM_SqlReverse_Ascii/64                    14,494 ns        14,355 ns      12,856 ns     1.12x (18.99 GiB/s)
+// BM_SqlReverse_Ascii/192                   41,335 ns        40,605 ns      33,374 ns     1.22x (21.95 GiB/s)
+// BM_SqlLocate_Utf8/32                     154,541 ns       154,954 ns     107,469 ns     1.44x (1.14 GiB/s)
+// BM_SqlLocate_Utf8/48                     219,663 ns       219,649 ns     112,525 ns     1.95x (1.63 GiB/s)
+// BM_SqlLocate_Utf8/96                     153,685 ns       148,768 ns     137,274 ns     1.08x (2.67 GiB/s)
+//
+// Benchmark (AVX2 haswell)               5.2.8 (4.1.7)    9.1.0 (HEAD)     9.4.0 (PR)   Speedup (vs 9.1.0)
+// --------------------------------------------------------------------------------------------------------
+// BM_ScannerValidateUtf8_PerRecord/96/0     24,182 ns        26,133 ns      16,315 ns     1.60x (22.45 GiB/s)
+// BM_ScannerValidateUtf8_PerRecord/160/0    30,835 ns        29,672 ns      19,824 ns     1.50x (30.79 GiB/s)
+// BM_ScannerValidateUtf8_PerRecord/240/0    54,222 ns        52,999 ns      25,001 ns     2.12x (36.62 GiB/s)
+// BM_ScannerValidateUtf8_PerRecord/240/1   114,642 ns       116,600 ns     105,792 ns     1.10x (8.65 GiB/s)
+//
+// Base64 Legacy Scalar vs simdutf 9.4.0 (4,096 rows/chunk):
+// --------------------------------------------------------------------------------------------------------
+// BM_SqlBase64Encode (32B / 128B / 1024B):  119,593 / 396,195 / 2,894,851 ns -> 24,275 / 35,628 / 178,706 ns (4.93x / 11.12x / 16.20x)
+// BM_SqlBase64Decode (44B / 172B / 1368B):  331,374 / 1,112,093 / 8,418,747 ns -> 57,308 / 76,722 / 327,377 ns (5.78x / 14.50x / 25.72x)
+// ============================================================================
