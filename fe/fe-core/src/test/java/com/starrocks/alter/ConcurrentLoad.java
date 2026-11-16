@@ -73,6 +73,19 @@ public class ConcurrentLoad {
     }
 
     /**
+     * Begins a two-phase load and prepares it on every tablet of the table, as the stream load transaction interface
+     * does (begin, load, prepare), and returns its transaction id. The load stays PREPARED until the test commits or
+     * rolls it back.
+     */
+    public static long prepare(Database db, OlapTable table) throws Exception {
+        long txnId = begin(db, table);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(db.getId(), txnId,
+                Config.prepared_transaction_default_timeout_second * 1000L, commitInfos(table), new ArrayList<>(),
+                null);
+        return txnId;
+    }
+
+    /**
      * Commits a begun load on every tablet of the table, holding the table WRITE lock as a load does.
      */
     public static TransactionState commit(Database db, OlapTable table, long txnId) throws Exception {

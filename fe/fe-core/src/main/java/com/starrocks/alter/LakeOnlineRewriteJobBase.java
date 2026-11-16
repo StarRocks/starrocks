@@ -1067,6 +1067,7 @@ public abstract class LakeOnlineRewriteJobBase
             if (!isPreviousLoadFinished(dbId, tableId, watershedTxnId)) {
                 LOG.info("wait transactions before {} to be finished, online rewrite job: {}",
                         watershedTxnId, jobId);
+                LakeAlterWaitGuard.cancelIfCommitsRejected(this, watershedTxnId);
                 return;
             }
         } catch (AnalysisException e) {
@@ -2203,6 +2204,7 @@ public abstract class LakeOnlineRewriteJobBase
                         advanceVisibleVersionForForceSkip(table, commitVersionMapView());
                     }
                     removeShadowIndexOnCancel(table);
+                    GlobalStateMgr.getCurrentState().getCompactionMgr().resumeCompactionAfterAlter(dbId, table);
                 }
             }
         });
@@ -2233,8 +2235,11 @@ public abstract class LakeOnlineRewriteJobBase
             if (physicalPartition == null) {
                 continue;
             }
-            // Release the GC pin (may have been set in RUNNING or not at all).
-            physicalPartition.setMinRetainVersion(0);
+            PartitionRewriteState state = entry.getValue();
+            // Before the transaction drain there is no rewrite pin. A reserved version means it was already released.
+            if (state.watershedVersion != null && state.commitVersion == null) {
+                physicalPartition.releaseMinRetainVersion(state.watershedVersion);
+            }
             // Drop the shadow index from the partition's catalog index map (if it was exposed).
             physicalPartition.deleteMaterializedIndexByMetaId(shadowIndexMetaId);
         }
@@ -2399,6 +2404,7 @@ public abstract class LakeOnlineRewriteJobBase
                 }
                 // Remove all shadow artifacts so the catalog is clean after cancel replay.
                 removeShadowIndexOnCancel(table);
+                GlobalStateMgr.getCurrentState().getCompactionMgr().resumeCompactionAfterAlter(dbId, table);
             } else {
                 throw new RuntimeException("unknown job state '" + jobState.name() + "'");
             }

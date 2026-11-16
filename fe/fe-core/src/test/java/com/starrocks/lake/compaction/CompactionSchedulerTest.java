@@ -24,6 +24,7 @@ import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
@@ -430,6 +431,8 @@ public class CompactionSchedulerTest {
     @Test
     public void testDeferredPriorityCompactionWaitsForRetryDeadline() {
         OlapTable table = new LakeTable();
+        table.setId(2);
+        table.addPartition(new Partition(10, 3, "p", new MaterializedIndex(), null));
         table.setState(OlapTable.OlapTableState.ROLLUP);
         String oldSelector = Config.lake_compaction_selector;
         Config.lake_compaction_selector = "ScoreSelector";
@@ -472,7 +475,16 @@ public class CompactionSchedulerTest {
         Assertions.assertTrue(compactionManager.choosePartitionsToCompact(Set.of()).isEmpty());
 
         // Past the deadline the retained request is selected again.
-        compactionManager.getStatistics(partition).setNextCompactionTime(System.currentTimeMillis() - 1);
+        compactionManager.getStatistics(partition).setAlterCompactionRetryTime(System.currentTimeMillis() - 1);
+        selected = compactionManager.choosePartitionsToCompact(Set.of());
+        Assertions.assertEquals(1, selected.size());
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT, selected.get(0).getPriority());
+
+        // A retry can be skipped just before the rollup ends. Clear that pause after the state change.
+        Assertions.assertNull(compactionScheduler.startCompaction(selected.get(0), info));
+        Assertions.assertTrue(compactionManager.choosePartitionsToCompact(Set.of()).isEmpty());
+        table.setState(OlapTable.OlapTableState.NORMAL);
+        compactionManager.resumeCompactionAfterAlter(1, table);
         selected = compactionManager.choosePartitionsToCompact(Set.of());
         Assertions.assertEquals(1, selected.size());
         Assertions.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT, selected.get(0).getPriority());

@@ -49,6 +49,9 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.PartitionIdentifier;
+import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
@@ -746,6 +749,57 @@ public class LakeTableSchemaChangeJobTest {
 
         schemaChangeJob.cancel("test");
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+    }
+
+    /**
+     * StarRocksTest#12647: the table does not compact while the job waits for earlier transactions. Once a
+     * partition's compaction score is above lake_compaction_score_upper_bound, every commit into it is rejected, the
+     * commits of those transactions included, so the job is cancelled: the table is NORMAL again and compacts.
+     */
+    @Test
+    public void testCancelledWhileWaitingTxnOnceCommitsAreRejected() throws Exception {
+        long txnId = ConcurrentLoad.begin(db, table);
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        drivePendingJob(schemaChangeJob);
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+
+        PhysicalPartition physicalPartition =
+                table.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition();
+        long externalPinVersion = physicalPartition.getVisibleVersion();
+        physicalPartition.setMinRetainVersion(externalPinVersion);
+        PartitionIdentifier partition = new PartitionIdentifier(db.getId(), table.getId(), physicalPartition.getId());
+        CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        long oldUpperBound = Config.lake_compaction_score_upper_bound;
+        Config.lake_enable_ingest_slowdown = true;
+        Config.lake_compaction_score_upper_bound = 100;
+        try {
+            // At the bound commits still go through, and the job keeps waiting.
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 100.0));
+            schemaChangeJob.runWaitingTxnJob();
+            Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 101.0));
+            schemaChangeJob.run();
+            Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+            Assertions.assertTrue(schemaChangeJob.errMsg.contains("partition " + physicalPartition.getId()),
+                    schemaChangeJob.errMsg);
+            Assertions.assertTrue(schemaChangeJob.errMsg.contains("lake_compaction_score_upper_bound 100"),
+                    schemaChangeJob.errMsg);
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+            Assertions.assertEquals(externalPinVersion, physicalPartition.getMinRetainVersion());
+            Assertions.assertEquals(0,
+                    physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+        } finally {
+            physicalPartition.setMinRetainVersion(0);
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_compaction_score_upper_bound = oldUpperBound;
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(0.0, 0.0, 0.0));
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), txnId, "test done");
+        }
     }
 
     @Test
@@ -2324,7 +2378,10 @@ public class LakeTableSchemaChangeJobTest {
         // The follower starts from the catalog as it was before the alter.
         UtFrameUtils.PseudoImage initialImage = saveMetastore();
         LakeTableSchemaChangeJob job = runningJobWithUnfinishedTasks();
+        PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+        Assertions.assertEquals(partition.getVisibleVersion(), partition.getMinRetainVersion());
         Assertions.assertTrue(job.cancel("cancel"));
+        Assertions.assertEquals(0, partition.getMinRetainVersion());
         List<LakeTableSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
         Assertions.assertEquals(
                 List.of(AlterJobV2.JobState.PENDING, AlterJobV2.JobState.WAITING_TXN, AlterJobV2.JobState.CANCELLED),
@@ -2336,7 +2393,11 @@ public class LakeTableSchemaChangeJobTest {
         replayOn(followerMetastore, followerHandler, entries.get(0));
         replayOn(followerMetastore, followerHandler, entries.get(1));
         Assertions.assertEquals(1, shadowIndexCount(followerTable));
+        PhysicalPartition followerPartition = followerTable.getPhysicalPartitions().iterator().next();
+        long externalPinVersion = followerPartition.getVisibleVersion();
+        followerPartition.setMinRetainVersion(externalPinVersion);
         replayOn(followerMetastore, followerHandler, entries.get(2));
+        Assertions.assertEquals(externalPinVersion, followerPartition.getMinRetainVersion());
 
         // The CANCELLED replay drops the shadow indexes it reads from the entry; the prune comes after it.
         LakeTableSchemaChangeJob retained = entries.get(0);

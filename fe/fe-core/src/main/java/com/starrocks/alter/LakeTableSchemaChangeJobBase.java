@@ -19,6 +19,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -30,7 +31,13 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
+=======
+import java.util.Collection;
+import java.util.HashMap;
+>>>>>>> 59b6a5f5a4b... [BugFix][RB-918] Cancel a lake alter that waits for earlier transactions once its table rejects commits (#67716)
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -45,6 +52,10 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
     @SerializedName(value = "watershedGtid")
     protected long commitGtid = 0;
 
+    // Heavy schema change and hash rollup dispatch their rewrite tasks without journaling RUNNING.
+    // Track each live pin as it is acquired, including if dispatch fails partway through the partitions.
+    private transient Map<Long, Long> rewriteVersionPins = new HashMap<>();
+
     public LakeTableSchemaChangeJobBase(long jobId, JobType jobType, long dbId, long tableId,
                                         String tableName, long timeoutMs) {
         super(jobId, jobType, dbId, tableId, tableName, timeoutMs);
@@ -58,6 +69,57 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
         super(job);
         this.watershedTxnId = job.watershedTxnId;
         this.commitGtid = job.commitGtid;
+<<<<<<< HEAD
+=======
+        this.historySchema = job.historySchema;
+    }
+
+    protected void pinVersionForRewrite(PhysicalPartition partition, long version) {
+        partition.setMinRetainVersion(version);
+        rewriteVersionPins.put(partition.getId(), version);
+    }
+
+    protected void releaseRewriteVersionPin(PhysicalPartition partition) {
+        Long version = rewriteVersionPins.remove(partition.getId());
+        if (version != null) {
+            partition.releaseMinRetainVersion(version);
+        }
+    }
+
+    @Override
+    public void pruneMeta() {
+        rewriteVersionPins = new HashMap<>();
+    }
+
+    /**
+     * The index metas whose schemas leave the catalog at the FINISHED flip. Empty for a job that only adds an index.
+     */
+    protected Collection<Long> retiredIndexMetaIdsAtFlip() {
+        return List.of();
+    }
+
+    /**
+     * Snapshot the schemas the FINISHED flip is about to retire. Call under the flip's table WRITE lock and before
+     * persistStateChange, so the journal carries it and every load bound to them is below its threshold.
+     */
+    protected void snapshotRetiredSchemas(OlapTable table) {
+        Collection<Long> retiredIndexMetaIds = retiredIndexMetaIdsAtFlip();
+        if (!retiredIndexMetaIds.isEmpty()) {
+            this.historySchema = buildHistorySchema(table, retiredIndexMetaIds);
+        }
+    }
+
+    @Override
+    public Optional<OlapTableHistorySchema> getHistorySchema() {
+        return Optional.ofNullable(historySchema);
+    }
+
+    @Override
+    public boolean isExpire() {
+        boolean expiredByTime = super.isExpire();
+        boolean expiredByHistorySchema = expireHistorySchema(historySchema);
+        return expiredByTime && expiredByHistorySchema;
+>>>>>>> 59b6a5f5a4b... [BugFix][RB-918] Cancel a lake alter that waits for earlier transactions once its table rejects commits (#67716)
     }
 
     // NOTE: Metadata access in these jobs locks only the job's own table
@@ -89,6 +151,11 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
     public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
         GlobalTransactionMgr globalTxnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         return globalTxnMgr.isPreviousTransactionsFinished(txnId, dbId, Lists.newArrayList(tableId));
+    }
+
+    @Override
+    protected void onComputeResourceUnavailable() {
+        LakeAlterWaitGuard.checkWithoutComputeResource(this);
     }
 
     protected boolean tableExists() {

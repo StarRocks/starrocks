@@ -24,8 +24,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.PartitionIdentifier;
+import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.WALApplier;
 import com.starrocks.qe.ConnectContext;
@@ -51,6 +55,8 @@ import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.transaction.TransactionIdGenerator;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -229,6 +235,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         // GlobalStateMgr.getCurrentState().getLockManager(); supply a real
         // LockManager so cancelImpl can take its locks.
         when(gsm.getLockManager()).thenReturn(new com.starrocks.common.util.concurrent.lock.LockManager());
+        when(gsm.getCompactionMgr()).thenReturn(new CompactionMgr());
         // Build the EditLog mock OUTSIDE the chained when(..) to avoid
         // Mockito's UnfinishedStubbing detection (mockEditLog itself does
         // doAnswer().when(edit) which Mockito interprets as nested
@@ -1111,21 +1118,159 @@ public class LakeTableIndexFastPathJobBaseTest {
     // -------- runWaitingTxnJob --------
 
     @Test
-    public void testRunWaitingTxnJob_PreviousTxnsNotFinishedReturns() throws Exception {
+    public void testRunWaitingTxnJob_DoesNotCancelWhenLastBlockerFinishes() throws Exception {
         LakeTableAddIndexJob job = newJob();
         setField(job, "jobState", AlterJobV2.JobState.WAITING_TXN);
         setField(job, "watershedTxnId", 5L);
 
-        GlobalStateMgr gsm = mock(GlobalStateMgr.class);
+        OlapTable table = mock(OlapTable.class);
+        when(table.getId()).thenReturn(3L);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        when(table.getAllPhysicalPartitions()).thenReturn(List.of(new PhysicalPartition(11L, 11L)));
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
         GlobalTransactionMgr txnMgr = mock(GlobalTransactionMgr.class);
-        when(txnMgr.isPreviousTransactionsFinished(eq(5L), eq(2L), any())).thenReturn(false);
+        when(txnMgr.isPreviousTransactionsFinished(eq(5L), eq(2L), any())).thenReturn(false, true);
         when(gsm.getGlobalTransactionMgr()).thenReturn(txnMgr);
+        CompactionMgr compactionMgr = new CompactionMgr();
+        compactionMgr.handleLoadingFinished(new PartitionIdentifier(2L, 3L, 11L), 2,
+                System.currentTimeMillis(), new Quantiles(1.0, 1.0, 101.0));
+        when(gsm.getCompactionMgr()).thenReturn(compactionMgr);
 
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        long oldUpperBound = Config.lake_compaction_score_upper_bound;
+        Config.lake_enable_ingest_slowdown = true;
+        Config.lake_compaction_score_upper_bound = 100;
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            // The last transaction was running at the first check and became visible before the guard checked again.
             invokePrivate(job, "runWaitingTxnJob");
+            verify(txnMgr).getOldestPreviousRunningTransaction(5L, 2L, List.of(3L));
+            assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+            invokePrivate(job, "runWaitingTxnJob");
+            assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        } finally {
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_compaction_score_upper_bound = oldUpperBound;
         }
-        assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+    }
+
+    /**
+     * StarRocksTest#12647: the table does not compact while the job waits. Once a partition's compaction score is
+     * above lake_compaction_score_upper_bound, every commit into it is rejected, the commit of the transaction the job
+     * waits for included, so the job is cancelled, naming that transaction, instead of keeping the table read-only.
+     */
+    @Test
+    public void testRunWaitingTxnJob_CancelsOnceCommitsAreRejected() throws Exception {
+        LakeTableAddIndexJob job = Mockito.spy(newJob());
+        Mockito.doNothing().when(job).createConnectContextIfNeeded();
+        setField(job, "jobState", AlterJobV2.JobState.WAITING_TXN);
+        setField(job, "watershedTxnId", 5L);
+
+        CompactionMgr compactionMgr = new CompactionMgr();
+        // The table has partition 11. Partition 12 was dropped, but the scheduler has not cleaned up its statistics.
+        OlapTable table = mock(OlapTable.class);
+        when(table.getId()).thenReturn(3L);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        when(table.getAllPhysicalPartitions()).thenReturn(List.of(new PhysicalPartition(11L, 11L)));
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
+        WarehouseManager warehouseManager = mock(WarehouseManager.class);
+        when(warehouseManager.acquireComputeResource(any(CRAcquireContext.class)))
+                .thenThrow(new IllegalStateException("compute resource unavailable"));
+        when(gsm.getWarehouseMgr()).thenReturn(warehouseManager);
+        GlobalTransactionMgr txnMgr = mock(GlobalTransactionMgr.class);
+        when(txnMgr.isPreviousTransactionsFinished(eq(5L), eq(2L), any())).thenReturn(false);
+        TransactionState prepared = mock(TransactionState.class);
+        when(prepared.getTransactionId()).thenReturn(4L);
+        when(prepared.getLabel()).thenReturn("prepared_load");
+        when(prepared.getTransactionStatus()).thenReturn(TransactionStatus.PREPARED);
+        when(txnMgr.getOldestPreviousRunningTransaction(eq(5L), eq(2L), any())).thenReturn(prepared);
+        when(gsm.getGlobalTransactionMgr()).thenReturn(txnMgr);
+        when(gsm.getCompactionMgr()).thenReturn(compactionMgr);
+        PartitionIdentifier partition = new PartitionIdentifier(2L, 3L, 11L);
+        PartitionIdentifier droppedPartition = new PartitionIdentifier(2L, 3L, 12L);
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        long oldUpperBound = Config.lake_compaction_score_upper_bound;
+        Config.lake_enable_ingest_slowdown = true;
+        Config.lake_compaction_score_upper_bound = 100;
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            // At the bound commits still go through, and the job keeps waiting.
+            compactionMgr.handleLoadingFinished(partition, 2, System.currentTimeMillis(), new Quantiles(1.0, 1.0, 100.0));
+            invokePrivate(job, "runWaitingTxnJob");
+            assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+            // A score left behind by the dropped partition rejects no commit, so it does not cancel the job either.
+            compactionMgr.handleLoadingFinished(droppedPartition, 2, System.currentTimeMillis(),
+                    new Quantiles(1.0, 1.0, 500.0));
+            invokePrivate(job, "runWaitingTxnJob");
+            assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+
+            // Above the bound commits are rejected, and the job can cancel without acquiring a compute resource.
+            compactionMgr.handleLoadingFinished(partition, 3, System.currentTimeMillis(), new Quantiles(1.0, 1.0, 101.0));
+            job.run();
+            assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+            assertTrue(job.errMsg.contains("transaction 4 (label prepared_load, PREPARED)"), job.errMsg);
+            assertTrue(job.errMsg.contains("partition 11"), job.errMsg);
+            assertTrue(job.errMsg.contains("lake_compaction_score_upper_bound 100"), job.errMsg);
+            verify(table).setState(OlapTable.OlapTableState.NORMAL);
+        } finally {
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_compaction_score_upper_bound = oldUpperBound;
+        }
+    }
+
+    /**
+     * After a leader change the job comes back in PENDING with its watershed recorded: the fast path journals the
+     * watershed while PENDING and enters WAITING_TXN only in memory. A round without a compute resource still cancels
+     * it once commits into its table are rejected, since it waits for the same transactions.
+     */
+    @Test
+    public void testReplayedPendingJobIsCancelledWithoutComputeResourceOnceCommitsAreRejected() throws Exception {
+        LakeTableAddIndexJob job = Mockito.spy(newJob());
+        Mockito.doNothing().when(job).createConnectContextIfNeeded();
+        setField(job, "jobState", AlterJobV2.JobState.PENDING);
+        setField(job, "watershedTxnId", 5L);
+
+        CompactionMgr compactionMgr = new CompactionMgr();
+        OlapTable table = mock(OlapTable.class);
+        when(table.getId()).thenReturn(3L);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        when(table.getAllPhysicalPartitions()).thenReturn(List.of(new PhysicalPartition(11L, 11L)));
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
+        WarehouseManager warehouseManager = mock(WarehouseManager.class);
+        when(warehouseManager.acquireComputeResource(any(CRAcquireContext.class)))
+                .thenThrow(new IllegalStateException("compute resource unavailable"));
+        when(gsm.getWarehouseMgr()).thenReturn(warehouseManager);
+        GlobalTransactionMgr txnMgr = mock(GlobalTransactionMgr.class);
+        TransactionState prepared = mock(TransactionState.class);
+        when(prepared.getTransactionId()).thenReturn(4L);
+        when(prepared.getLabel()).thenReturn("prepared_load");
+        when(prepared.getTransactionStatus()).thenReturn(TransactionStatus.PREPARED);
+        when(txnMgr.getOldestPreviousRunningTransaction(eq(5L), eq(2L), any())).thenReturn(prepared);
+        when(gsm.getGlobalTransactionMgr()).thenReturn(txnMgr);
+        when(gsm.getCompactionMgr()).thenReturn(compactionMgr);
+        PartitionIdentifier partition = new PartitionIdentifier(2L, 3L, 11L);
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        long oldUpperBound = Config.lake_compaction_score_upper_bound;
+        Config.lake_enable_ingest_slowdown = true;
+        Config.lake_compaction_score_upper_bound = 100;
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            // At the bound commits still go through: the job stays PENDING until it gets a compute resource.
+            compactionMgr.handleLoadingFinished(partition, 2, System.currentTimeMillis(), new Quantiles(1.0, 1.0, 100.0));
+            job.run();
+            assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+
+            // Above the bound commits are rejected, and the job is cancelled without a compute resource.
+            compactionMgr.handleLoadingFinished(partition, 3, System.currentTimeMillis(), new Quantiles(1.0, 1.0, 101.0));
+            job.run();
+            assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+            assertTrue(job.errMsg.contains("transaction 4 (label prepared_load, PREPARED)"), job.errMsg);
+            assertTrue(job.errMsg.contains("partition 11"), job.errMsg);
+            verify(table).setState(OlapTable.OlapTableState.NORMAL);
+        } finally {
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_compaction_score_upper_bound = oldUpperBound;
+        }
     }
 
     @Test
