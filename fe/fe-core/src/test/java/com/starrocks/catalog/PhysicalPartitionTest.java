@@ -31,8 +31,22 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
+>>>>>>> 4f1c87a ([BugFix][RB-96] Make PhysicalPartition index maps copy-on-write for lock-free planning (#83358))
 
 public class PhysicalPartitionTest {
     private static final long BASE_INDEX_ID = 30000L;
@@ -504,11 +518,13 @@ public class PhysicalPartitionTest {
         Assertions.assertEquals(2, indexMetaIdToIndexIds.get(baseMetaId).size());
 
         partition.deleteMaterializedIndexByIndexId(baseIndexId1);
+        indexMetaIdToIndexIds = Deencapsulation.getField(partition, "indexMetaIdToIndexIds");
         Assertions.assertTrue(indexMetaIdToIndexIds.containsKey(baseMetaId));
         Assertions.assertEquals(1, indexMetaIdToIndexIds.get(baseMetaId).size());
         Assertions.assertEquals(baseIndexId2, (long) indexMetaIdToIndexIds.get(baseMetaId).get(0));
 
         partition.deleteMaterializedIndexByIndexId(baseIndexId2);
+        indexMetaIdToIndexIds = Deencapsulation.getField(partition, "indexMetaIdToIndexIds");
         Assertions.assertFalse(indexMetaIdToIndexIds.containsKey(baseMetaId));
     }
 
@@ -623,4 +639,246 @@ public class PhysicalPartitionTest {
         Assertions.assertEquals(9, partition.getActualBucketNum(
                 new HashDistributionInfo(9, distributionColumns)));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testQueryableIndexPinnedUntilUnshareFinishes() {
+        long baseMetaId = 3100L;
+        MaterializedIndex parent = new MaterializedIndex(3001L, baseMetaId, IndexState.NORMAL, 100L);
+        PhysicalPartition partition = new PhysicalPartition(1000L, 2000L, parent);
+        MaterializedIndex children = new MaterializedIndex(3002L, baseMetaId, IndexState.NORMAL, 100L);
+
+        partition.pinQueryableIndex(baseMetaId, parent.getId());
+        partition.addMaterializedIndex(children, true);
+
+        Assertions.assertTrue(partition.isUnsharing());
+        Assertions.assertEquals(parent, partition.getQueryableBaseIndex());
+        Assertions.assertEquals(children, partition.getLatestBaseIndex());
+        Assertions.assertEquals(List.of(parent), partition.getQueryableMaterializedIndices(IndexExtState.VISIBLE));
+        Assertions.assertEquals(Set.of(parent.getId(), children.getId()),
+                partition.getMaterializedIndicesForVacuum(IndexExtState.VISIBLE).stream()
+                        .map(MaterializedIndex::getId).collect(Collectors.toSet()));
+
+        String json = GsonUtils.GSON.toJson(partition);
+        PhysicalPartition restored = GsonUtils.GSON.fromJson(json, PhysicalPartition.class);
+        Assertions.assertTrue(restored.isUnsharing());
+        Assertions.assertEquals(parent.getId(), restored.getQueryableBaseIndex().getId());
+        // The publish thread reads the pins without the table lock, so replay must not quietly hand
+        // the field back as the plain map GSON builds.
+        Assertions.assertInstanceOf(ConcurrentHashMap.class,
+                Deencapsulation.getField(restored, "queryIndexMetaIdToIndexId"));
+
+        Assertions.assertTrue(partition.finishUnshare());
+        Assertions.assertFalse(partition.finishUnshare());
+        Assertions.assertFalse(partition.isUnsharing());
+        Assertions.assertEquals(children, partition.getQueryableBaseIndex());
+    }
+
+    @Test
+    public void testReleaseMinRetainVersionKeepsAPinSetByAnotherHolder() {
+        PhysicalPartition partition = new PhysicalPartition(1L, 2L, new MaterializedIndex());
+        partition.setMinRetainVersion(3);
+        Assertions.assertTrue(partition.releaseMinRetainVersion(3));
+        Assertions.assertEquals(0, partition.getMinRetainVersion());
+
+        partition.setMinRetainVersion(3);
+        // Another holder pinned a different version since.
+        partition.setMinRetainVersion(7);
+        Assertions.assertFalse(partition.releaseMinRetainVersion(3));
+        Assertions.assertEquals(7, partition.getMinRetainVersion());
+    }
+
+    @Test
+    public void testIndexMutationsLeaveCapturedMapsUntouched() {
+        // A planner reads these maps off a copy of the table taken under its READ lock, but the copy shares this
+        // PhysicalPartition, so it reads them after the lock is released. No mutator may change a map or an id list
+        // that such a reader may already hold.
+        long baseMetaId = 3100L;
+        long rollupMetaId = 4100L;
+        long shadowMetaId = 5100L;
+        long newBaseMetaId = 6100L;
+        MaterializedIndex base1 = new MaterializedIndex(3001L, baseMetaId, IndexState.NORMAL, 100L);
+        MaterializedIndex base2 = new MaterializedIndex(3002L, baseMetaId, IndexState.NORMAL, 100L);
+        MaterializedIndex base3 = new MaterializedIndex(3003L, baseMetaId, IndexState.NORMAL, 100L);
+        MaterializedIndex rollup1 = new MaterializedIndex(4001L, rollupMetaId, IndexState.NORMAL, 200L);
+        MaterializedIndex rollup2 = new MaterializedIndex(4002L, rollupMetaId, IndexState.NORMAL, 200L);
+        MaterializedIndex shadow = new MaterializedIndex(5001L, shadowMetaId, IndexState.SHADOW, 300L);
+        MaterializedIndex newBase = new MaterializedIndex(6001L, newBaseMetaId, IndexState.SHADOW, 400L);
+
+        PhysicalPartition partition = new PhysicalPartition(1000L, 2000L, base1);
+        mutateAfterCapture(partition, () -> partition.createRollupIndex(rollup1));
+        mutateAfterCapture(partition, () -> partition.addMaterializedIndex(base2, true));
+        mutateAfterCapture(partition, () -> partition.addMaterializedIndex(rollup2, false));
+        Assertions.assertEquals(List.of(3001L, 3002L), indexIds(partition.getBaseIndices()));
+        Assertions.assertSame(rollup2, partition.getLatestIndex(rollupMetaId));
+
+        // The recycle bin erasing a superseded generation, then the last generation of a meta.
+        mutateAfterCapture(partition, () -> partition.deleteMaterializedIndexByIndexId(base1.getId()));
+        Assertions.assertEquals(List.of(3002L), indexIds(partition.getBaseIndices()));
+        mutateAfterCapture(partition, () -> partition.deleteMaterializedIndexByIndexId(rollup1.getId()));
+        mutateAfterCapture(partition, () -> partition.deleteMaterializedIndexByIndexId(rollup2.getId()));
+        Assertions.assertNull(partition.getLatestIndex(rollupMetaId));
+
+        // Erasing the generation queries are pinned to.
+        partition.pinQueryableIndex(baseMetaId, base2.getId());
+        mutateAfterCapture(partition, () -> partition.addMaterializedIndex(base3, true));
+        mutateAfterCapture(partition, () -> partition.deleteMaterializedIndexByIndexId(base2.getId()));
+        Assertions.assertFalse(partition.isUnsharing());
+        Assertions.assertSame(base3, partition.getQueryableBaseIndex());
+
+        // A rollup job: shadow index created, made visible, dropped.
+        mutateAfterCapture(partition, () -> partition.createRollupIndex(shadow));
+        Assertions.assertEquals(List.of(5001L), indexIds(partition.getLatestMaterializedIndices(IndexExtState.SHADOW)));
+        // A shadow index is not a materialized view a query can use.
+        Assertions.assertFalse(partition.hasMaterializedView());
+        mutateAfterCapture(partition, () -> partition.visualiseShadowIndex(shadow.getId(), false));
+        Assertions.assertEquals(IndexState.NORMAL, shadow.getState());
+        Assertions.assertTrue(partition.hasMaterializedView());
+        mutateAfterCapture(partition, () -> partition.deleteMaterializedIndexByMetaId(shadowMetaId));
+        Assertions.assertFalse(partition.hasMaterializedView());
+
+        // A schema change replacing the base index.
+        mutateAfterCapture(partition, () -> partition.createRollupIndex(newBase));
+        mutateAfterCapture(partition, () -> partition.deleteMaterializedIndexByMetaId(baseMetaId));
+        mutateAfterCapture(partition, () -> partition.visualiseShadowIndex(newBase.getId(), true));
+        Assertions.assertSame(newBase, partition.getLatestBaseIndex());
+        Assertions.assertFalse(partition.hasMaterializedView());
+
+        // Restore / external table: the base index is set on a partition created without one.
+        PhysicalPartition restored = new PhysicalPartition(1001L, 2000L);
+        MaterializedIndex restoredBase = new MaterializedIndex(7001L, 7100L, IndexState.NORMAL, 500L);
+        mutateAfterCapture(restored, () -> restored.setBaseIndex(restoredBase));
+        Assertions.assertSame(restoredBase, restored.getLatestBaseIndex());
+    }
+
+    @Test
+    public void testIndexIdListsSurviveImageRoundTrip() {
+        long baseMetaId = 3100L;
+        PhysicalPartition written = new PhysicalPartition(1000L, 2000L,
+                new MaterializedIndex(3001L, baseMetaId, IndexState.NORMAL, 100L));
+        written.addMaterializedIndex(new MaterializedIndex(3002L, baseMetaId, IndexState.NORMAL, 100L), true);
+
+        // The id lists the mutators publish are written to the image as the same arrays, and a loaded partition is
+        // modified the same way.
+        PhysicalPartition loaded = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(written), PhysicalPartition.class);
+        Assertions.assertEquals(List.of(3001L, 3002L), indexIds(loaded.getBaseIndices()));
+        mutateAfterCapture(loaded, () -> loaded.addMaterializedIndex(
+                new MaterializedIndex(3003L, baseMetaId, IndexState.NORMAL, 100L), true));
+        mutateAfterCapture(loaded, () -> loaded.deleteMaterializedIndexByIndexId(3001L));
+
+        PhysicalPartition reloaded = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(loaded), PhysicalPartition.class);
+        Assertions.assertEquals(List.of(3002L, 3003L), indexIds(reloaded.getBaseIndices()));
+    }
+
+    @Test
+    public void testLockFreeReadersSurviveConcurrentIndexMutation() throws Exception {
+        runReadersAgainstConcurrentIndexMutation(true);
+        runReadersAgainstConcurrentIndexMutation(false);
+    }
+
+    /**
+     * One thread keeps doing what tablet split / merge and the recycle bin do to a partition -- add a base index
+     * generation, erase the oldest -- plus a rollup job creating and dropping a shadow index, while another reads the
+     * partition the way a planner does, without the table lock.
+     */
+    private static void runReadersAgainstConcurrentIndexMutation(boolean withRollup) throws InterruptedException {
+        long baseMetaId = 3100L;
+        long shadowMetaId = 5100L;
+        AtomicLong nextIndexId = new AtomicLong(100000L);
+        Deque<Long> baseIndexIds = new ArrayDeque<>();
+        PhysicalPartition partition = new PhysicalPartition(1000L, 2000L,
+                new MaterializedIndex(nextIndexId.get(), baseMetaId, IndexState.NORMAL, 100L));
+        baseIndexIds.add(nextIndexId.getAndIncrement());
+        for (int i = 0; i < 7; i++) {
+            long indexId = nextIndexId.getAndIncrement();
+            partition.addMaterializedIndex(new MaterializedIndex(indexId, baseMetaId, IndexState.NORMAL, 100L), true);
+            baseIndexIds.add(indexId);
+        }
+        if (withRollup) {
+            partition.createRollupIndex(
+                    new MaterializedIndex(nextIndexId.getAndIncrement(), 4100L, IndexState.NORMAL, 200L));
+        }
+
+        AtomicBoolean stop = new AtomicBoolean(false);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread writer = new Thread(() -> runUntilStopped(stop, failure, () -> {
+            long indexId = nextIndexId.getAndIncrement();
+            partition.addMaterializedIndex(new MaterializedIndex(indexId, baseMetaId, IndexState.NORMAL, 100L), true);
+            baseIndexIds.addLast(indexId);
+            partition.deleteMaterializedIndexByIndexId(baseIndexIds.removeFirst());
+            partition.createRollupIndex(new MaterializedIndex(
+                    nextIndexId.getAndIncrement(), shadowMetaId, IndexState.SHADOW, 300L));
+            partition.deleteMaterializedIndexByMetaId(shadowMetaId);
+        }), "index-writer");
+        Thread reader = new Thread(() -> runUntilStopped(stop, failure, () -> {
+            Assertions.assertEquals(withRollup, partition.hasMaterializedView());
+            partition.getLatestBaseIndex();
+            partition.getQueryableBaseIndex();
+            partition.getLatestMaterializedIndices(IndexExtState.ALL);
+            partition.getQueryableMaterializedIndices(IndexExtState.ALL);
+            partition.getAllMaterializedIndices(IndexExtState.ALL);
+            partition.getShardGroupIds();
+            partition.storageDataSize();
+            partition.toString();
+        }), "index-reader");
+
+        writer.start();
+        reader.start();
+        try {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+            while (!stop.get() && System.nanoTime() < deadline) {
+                Thread.sleep(10);
+            }
+        } finally {
+            stop.set(true);
+            writer.join(TimeUnit.SECONDS.toMillis(30));
+            reader.join(TimeUnit.SECONDS.toMillis(30));
+        }
+        Assertions.assertFalse(writer.isAlive() || reader.isAlive(), "writer or reader did not stop");
+        if (failure.get() != null) {
+            throw new AssertionError("withRollup=" + withRollup + ": " + failure.get(), failure.get());
+        }
+    }
+
+    private static void runUntilStopped(AtomicBoolean stop, AtomicReference<Throwable> failure, Runnable step) {
+        try {
+            while (!stop.get()) {
+                step.run();
+            }
+        } catch (Throwable t) {
+            failure.compareAndSet(null, t);
+            stop.set(true);
+        }
+    }
+
+    private static List<Long> indexIds(List<MaterializedIndex> indexes) {
+        return indexes.stream().map(MaterializedIndex::getId).collect(Collectors.toList());
+    }
+
+    /**
+     * Runs {@code mutation} and checks it left alone the index maps and id lists a lock-free reader may already hold.
+     * The index maps are compared entry by entry by identity, as MaterializedIndex#equals ignores the id.
+     */
+    private static void mutateAfterCapture(PhysicalPartition partition, Runnable mutation) {
+        Map<Long, List<Long>> indexIds = Deencapsulation.getField(partition, "indexMetaIdToIndexIds");
+        Map<Long, MaterializedIndex> visible = Deencapsulation.getField(partition, "idToVisibleIndex");
+        Map<Long, MaterializedIndex> shadow = Deencapsulation.getField(partition, "idToShadowIndex");
+        Map<Long, List<Long>> indexIdsBefore = new HashMap<>();
+        indexIds.forEach((metaId, ids) -> indexIdsBefore.put(metaId, new ArrayList<>(ids)));
+        Map<Long, MaterializedIndex> visibleBefore = new HashMap<>(visible);
+        Map<Long, MaterializedIndex> shadowBefore = new HashMap<>(shadow);
+
+        mutation.run();
+
+        Assertions.assertEquals(indexIdsBefore, indexIds);
+        assertSameEntries(visibleBefore, visible);
+        assertSameEntries(shadowBefore, shadow);
+    }
+
+    private static void assertSameEntries(Map<Long, MaterializedIndex> expected, Map<Long, MaterializedIndex> actual) {
+        Assertions.assertEquals(expected.keySet(), actual.keySet());
+        expected.forEach((id, index) -> Assertions.assertSame(index, actual.get(id), "index " + id));
+    }
+>>>>>>> 4f1c87a ([BugFix][RB-96] Make PhysicalPartition index maps copy-on-write for lock-free planning (#83358))
 }
