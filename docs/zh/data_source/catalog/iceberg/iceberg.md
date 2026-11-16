@@ -54,6 +54,8 @@ StarRocks 原样保留 CRS 标识符。`OGC:CRS84` 和 `EPSG:4326` 是不同的�
 | Parquet         | SNAPPY, LZ4, ZSTD, GZIP, 和 NO_COMPRESSION      | <ul><li>v1 表：支持。 </li><li>v2 表：从 StarRocks v3.1 开始支持，其中对这些 v2 表的查询支持位置删除。在 v3.1.10、v3.2.5、v3.3 及其更高版本中，对 v2 表的查询还支持等值删除。 </li></ul> |
 | ORC             | ZLIB, SNAPPY, LZO, LZ4, ZSTD, 和 NO_COMPRESSION | <ul><li>v1 表：支持。 </li><li>v2 表：从 StarRocks v3.0 开始支持，其中对这些 v2 表的查询支持位置删除。在 v3.1.8、v3.2.3、v3.3 及其更高版本中，对 v2 表的查询还支持等值删除。 </li></ul> |
 
+升级到支持查询 Iceberg 嵌套 `GEOGRAPHY` 的 FE 版本之前，请先将所有 BE 和 CN 节点升级到支持读取 Parquet 嵌套 `GEOGRAPHY` 的版本。
+
 ## 集成准备
 
 在创建 Iceberg catalog 之前，请确保您的 StarRocks 集群可以与 Iceberg 集群的存储系统和元存储集成。
