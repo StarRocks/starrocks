@@ -19,6 +19,9 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateIndexClause;
@@ -26,9 +29,12 @@ import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.system.Frontend;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -53,6 +59,9 @@ import java.util.Set;
  * parameter surface reasons — all stay on the legacy schema-change path. Plain
  * bloom filter is a table-level property rather than a {@link CreateIndexClause}
  * (it takes the fast path via the bloom_filter_columns handler, not this one).
+ *
+ * <p>Every fast path also waits until each FE that can become leader rebuilds a
+ * fast-path job's BE payload (see {@link #electableFrontendsRebuildPayload}).
  */
 public final class SchemaChangeIndexFastPathClassifier {
 
@@ -64,8 +73,9 @@ public final class SchemaChangeIndexFastPathClassifier {
     /**
      * @return true if every clause in {@code alterClauses} is a
      *         {@link CreateIndexClause} whose index type is supported, AND the
-     *         table is a cloud-native (lake) table. Column-level checks run
-     *         later in the Job class.
+     *         table is a cloud-native (lake) table, AND every electable FE
+     *         rebuilds the payload. Column-level checks run later in the Job
+     *         class.
      */
     public static boolean shouldUseAddIndexFastPath(OlapTable table, List<AlterClause> alterClauses) {
         if (!Config.enable_lake_add_index_fast_path) {
@@ -90,13 +100,14 @@ public final class SchemaChangeIndexFastPathClassifier {
                 return false;
             }
         }
-        return true;
+        return electableFrontendsRebuildPayload();
     }
 
     /**
      * @return true if every clause in {@code alterClauses} is a
      *         {@link DropIndexClause} naming an existing index of a supported
-     *         type, AND the table is a cloud-native (lake) table.
+     *         type, AND the table is a cloud-native (lake) table, AND every
+     *         electable FE rebuilds the payload.
      */
     public static boolean shouldUseDropIndexFastPath(OlapTable table, List<AlterClause> alterClauses) {
         if (!Config.enable_lake_add_index_fast_path) {
@@ -122,7 +133,7 @@ public final class SchemaChangeIndexFastPathClassifier {
                 return false;
             }
         }
-        return true;
+        return electableFrontendsRebuildPayload();
     }
 
     /**
@@ -155,7 +166,8 @@ public final class SchemaChangeIndexFastPathClassifier {
      * <p>Rules:
      * <ul>
      *   <li>Must be a single clause (no mixed alter).</li>
-     *   <li>Lake table, classifier config enabled.</li>
+     *   <li>Lake table, classifier config enabled, every electable FE
+     *       rebuilds the payload.</li>
      *   <li>Only {@code bloom_filter_columns} (and optionally
      *       {@code bloom_filter_fpp} left unchanged) in the property map.
      *       An fpp change forces the legacy path because existing segments
@@ -291,8 +303,48 @@ public final class SchemaChangeIndexFastPathClassifier {
                 }
             }
         }
+        if (!electableFrontendsRebuildPayload()) {
+            return null;
+        }
         return new BloomFilterDelta(
                 Collections.unmodifiableSet(added), Collections.unmodifiableSet(dropped));
+    }
+
+    /**
+     * Whether every FE that can become leader rebuilds the BE payload of a lake index fast-path job it takes over.
+     * The job journals no payload, and an FE from before the rebuild cannot read one from the journal either: when
+     * it takes over a job, it sends BE empty requests, so ADD INDEX finishes without building the index on existing
+     * data and DROP INDEX is cancelled. Until every electable FE reports the rebuild in its heartbeat (for example,
+     * while the FEs are being upgraded one by one), the alter takes the regular schema change, whose jobs every
+     * version runs.
+     */
+    static boolean electableFrontendsRebuildPayload() {
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        List<String> missing = frontendsWithoutPayloadRebuild(nodeMgr.getFrontends(null), nodeMgr.getNodeName());
+        if (missing.isEmpty()) {
+            return true;
+        }
+        LOG.info("lake index fast path declined: FE {} cannot rebuild the payload of a fast-path job it takes over,"
+                + " so the alter takes the regular schema change", missing);
+        return false;
+    }
+
+    /**
+     * The FEs other than {@code selfName} that can become leader (observers cannot) but are not alive or do not
+     * report the payload rebuild. An FE that is not alive counts as one that does not: it may come back on another
+     * version.
+     */
+    static List<String> frontendsWithoutPayloadRebuild(Collection<Frontend> frontends, String selfName) {
+        List<String> missing = new ArrayList<>();
+        for (Frontend fe : frontends) {
+            if (fe.getRole() == FrontendNodeType.OBSERVER || fe.getNodeName().equals(selfName)) {
+                continue;
+            }
+            if (!fe.isAlive() || !fe.rebuildsLakeIndexPayload()) {
+                missing.add(fe.getNodeName());
+            }
+        }
+        return missing;
     }
 
     public static boolean isSupportedIndexType(IndexDef.IndexType type) {

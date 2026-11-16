@@ -161,8 +161,8 @@ public class GeneratedColumnTest extends PlanTestBase {
         String[][] cases = {
                 // {column definition, expected rendering for non primary key tables}
                 {"c boolean AS array_contains([a, b], 3)", "AS array_contains([`a`, `b`], 3)"},
-                {"m varchar(20) AS map{'k': s}['k']", "AS map{'k':`s`}['k']"},
-                {"m varchar(20) AS map('k', s)['k']", "AS map{'k':`s`}['k']"},
+                {"m varchar(20) AS map{'k': s}['k']", "AS MAP{'k':`s`}['k']"},
+                {"m varchar(20) AS map('k', s)['k']", "AS MAP{'k':`s`}['k']"},
                 {"d2 boolean AS array_contains(ARRAY<DATE>['2020-01-01'], d)",
                         "AS array_contains(ARRAY<DATE>['2020-01-01'], `d`)"},
         };

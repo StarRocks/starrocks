@@ -67,6 +67,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
@@ -192,14 +193,14 @@ public class StatementPlanner {
                 setExplainToQueryDetail(plan, stmt, session, ResourceGroupClassifier.QueryType.INSERT);
                 return plan;
             } else if (stmt instanceof UpdateStmt updateStmt) {
-                return planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
-                        () -> new UpdatePlanner().plan(updateStmt, session));
+                return withExplainInQueryDetail(planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
+                        () -> new UpdatePlanner().plan(updateStmt, session)), stmt, session);
             } else if (stmt instanceof DeleteStmt deleteStmt) {
-                return planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
-                        () -> new DeletePlanner().plan(deleteStmt, session));
+                return withExplainInQueryDetail(planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
+                        () -> new DeletePlanner().plan(deleteStmt, session)), stmt, session);
             } else if (stmt instanceof MergeIntoStmt mergeIntoStmt) {
-                return planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
-                        () -> new MergeIntoPlanner().plan(mergeIntoStmt, session));
+                return withExplainInQueryDetail(planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
+                        () -> new MergeIntoPlanner().plan(mergeIntoStmt, session)), stmt, session);
             }
         } catch (OutOfMemoryError e) {
             LOG.warn("planner out of memory, sql is:" + stmt.getOrigStmt().getOrigStmt());
@@ -227,6 +228,20 @@ public class StatementPlanner {
         return null;
     }
 
+    // Under enable_sql_desensitize_in_log, StmtExecutor#handleExplainStmt keeps the planning-time plan in the query
+    // detail instead of the client's copy; queries and INSERT record one above, so EXPLAIN on these DMLs does too.
+    private static ExecPlan withExplainInQueryDetail(ExecPlan plan, StatementBase stmt, ConnectContext session) {
+        if (stmt.isExplain() && Config.enable_sql_desensitize_in_log && session.getQueryDetail() != null) {
+            if (plan == null) {
+                // DELETE run by DeleteHandler has no plan
+                session.getQueryDetail().setExplain("PLAN NOT AVAILABLE\n");
+            } else {
+                setExplainToQueryDetail(plan, stmt, session, ResourceGroupClassifier.QueryType.INSERT);
+            }
+        }
+        return plan;
+    }
+
     /**
      * Generate a query plan for query detail.
      * Explaining internal table is very quick, we prefer to use EXPLAIN COSTS.
@@ -243,7 +258,11 @@ public class StatementPlanner {
         StatementBase.ExplainLevel level = AnalyzerUtils.hasExternalTables(stmt) ?
                 StatementBase.ExplainLevel.defaultValue() :
                 StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
-        session.getQueryDetail().setExplain(buildExplainString(plan, stmt, session, queryType, level));
+        // the plan quotes literal values, which enable_sql_desensitize_in_log keeps out of query details
+        String explain = Config.enable_sql_desensitize_in_log
+                ? ExprToSql.withDigestedLiterals(() -> buildExplainString(plan, stmt, session, queryType, level))
+                : buildExplainString(plan, stmt, session, queryType, level);
+        session.getQueryDetail().setExplain(explain);
     }
 
     /**
