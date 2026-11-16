@@ -491,7 +491,12 @@ bool TypeDescriptor::is_geo_type() const {
 }
 
 TypeDescriptor TypeDescriptor::create_geo_type(LogicalType type, GeoTypeDescriptor descriptor) {
-    TypeDescriptor result(type);
+    // Callers guarantee a concrete kind that matches the primitive; a geo type without one has no meaning.
+    DCHECK(type == TYPE_GEOGRAPHY || type == TYPE_GEOMETRY);
+    DCHECK_NE(GEO_LOGICAL_TYPE_UNKNOWN, descriptor.logical_type);
+    DCHECK_EQ(type == TYPE_GEOGRAPHY, descriptor.logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY);
+    TypeDescriptor result;
+    result.type = type;
     result.geo_type = std::move(descriptor);
     return result;
 }

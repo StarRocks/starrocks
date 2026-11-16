@@ -67,11 +67,21 @@ TEST(NativeGeoTypeTest, OptionalSemanticMetadata) {
             EXPECT_FALSE(type.is_assignable(type));
         }
     }
-    auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, {});
+    auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor(TYPE_GEOGRAPHY).type);
     EXPECT_TRUE(TypeDescriptor::from_thrift(type.to_thrift()).geo_type.has_value());
     EXPECT_TRUE(TypeDescriptor::from_protobuf(type.to_protobuf()).geo_type.has_value());
     EXPECT_NE(TypeDescriptor(TYPE_GEOGRAPHY), type);
 }
+
+#ifndef NDEBUG
+TEST(NativeGeoTypeDeathTest, GeoTypeRequiresMatchingDescriptor) {
+    testing::FLAGS_gtest_death_test_style = "threadsafe";
+    const auto geography = descriptor(TYPE_GEOGRAPHY).type;
+    EXPECT_DEATH((void)TypeDescriptor::create_geo_type(TYPE_INT, geography), "Check failed");
+    EXPECT_DEATH((void)TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, GeoTypeDescriptor{}), "Check failed");
+    EXPECT_DEATH((void)TypeDescriptor::create_geo_type(TYPE_GEOMETRY, geography), "Check failed");
+}
+#endif
 
 TEST(NativeGeoTypeTest, ConversionDoesNotValidateSemantics) {
     // FE validates the type; consumers decide which edge algorithms they support.
