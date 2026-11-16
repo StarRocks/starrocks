@@ -70,7 +70,19 @@ public:
     void set_url(std::string url) { _url = std::move(url); }
 
     void touch() { _last_touch_time = MonotonicSeconds(); }
-    bool expired() { return MonotonicSeconds() - _last_touch_time > config::python_worker_expire_time_sec; }
+    // Unused and idle for longer than python_worker_expire_time_sec.
+    bool expired() {
+        return num_clients() == 0 && MonotonicSeconds() - _last_touch_time > config::python_worker_expire_time_sec;
+    }
+
+    // A worker is in use while a call stub is connected to it, and an idle worker that is in use
+    // must not be expired. The idle time counts from when the last stub disconnects.
+    void add_client() { _num_clients.fetch_add(1); }
+    void remove_client() {
+        touch();
+        _num_clients.fetch_sub(1);
+    }
+    int num_clients() const { return _num_clients.load(); }
 
     void mark_dead() { _is_dead = true; }
     bool is_dead() { return _is_dead; }
@@ -80,7 +92,8 @@ private:
     bool _is_dead{};
     std::string _url;
     pid_t _pid = -1;
-    int64_t _last_touch_time = 0;
+    std::atomic<int64_t> _last_touch_time{0};
+    std::atomic<int> _num_clients{0};
 };
 
 class PyWorkerManager {
