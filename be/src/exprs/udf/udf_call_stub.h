@@ -19,6 +19,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 #include <vector>
 
 #include "column/vectorized_fwd.h"
@@ -81,6 +82,23 @@ private:
     mutable std::mutex _lock;
     std::vector<std::unique_ptr<UDFCallStub>> _idle;
     size_t _num_built = 0;
+};
+
+// The stub pools of one UDF call site, one per pipeline driver. A stub stays on the worker processes
+// of the driver that built it (see PyWorkerManager::_acquire_worker), so drivers must not share
+// stubs: stubs built by one driver would otherwise put every driver on that driver's few workers.
+class DriverUDFCallStubPools {
+public:
+    using StubBuilder = std::function<std::unique_ptr<UDFCallStub>(int32_t driver_id)>;
+
+    StatusOr<ColumnPtr> evaluate(int32_t driver_id, const StubBuilder& build, const Columns& columns, size_t row_num);
+
+    // The pool of a driver, or nullptr if the driver has made no call yet.
+    const UDFCallStubPool* pool(int32_t driver_id) const;
+
+private:
+    mutable std::mutex _lock;
+    std::unordered_map<int32_t, std::unique_ptr<UDFCallStubPool>> _pools;
 };
 
 } // namespace starrocks

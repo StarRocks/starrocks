@@ -33,7 +33,7 @@
 namespace starrocks {
 
 struct ArrowCallStubCtx {
-    UDFCallStubPool stubs;
+    DriverUDFCallStubPools stubs;
 };
 
 ArrowFunctionCallExpr::ArrowFunctionCallExpr(const TExprNode& node) : Expr(node) {}
@@ -48,8 +48,8 @@ StatusOr<ColumnPtr> ArrowFunctionCallExpr::evaluate_checked(ExprContext* context
 
     FunctionContext* function_context = context->fn_context(_fn_context_index);
     return _call_stub_ctx->stubs.evaluate(
-            [&]() { return _build_stub(CurrentThread::current().get_driver_id(), function_context); }, columns,
-            num_rows);
+            CurrentThread::current().get_driver_id(),
+            [&](int32_t driver_id) { return _build_stub(driver_id, function_context); }, columns, num_rows);
 }
 
 Status ArrowFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context) {

@@ -165,6 +165,31 @@ TEST(UDFCallStubPoolTest, ConcurrentCallsUseSeparateStubs) {
     ASSERT_EQ(pool.num_built(), pool.num_idle());
 }
 
+// A stub stays on the workers of the driver that built it, so a driver must build its own stubs
+// instead of taking idle ones another driver built.
+TEST(UDFCallStubPoolTest, DriversDoNotShareStubs) {
+    EchoStubFactory factory;
+    DriverUDFCallStubPools pools;
+    std::vector<int32_t> built_for;
+    auto build = [&](int32_t driver_id) {
+        built_for.push_back(driver_id);
+        return factory.builder()();
+    };
+
+    for (int i = 0; i < 3; ++i) {
+        ASSIGN_OR_ABORT(auto result, pools.evaluate(0, build, {make_bigint_column(i * 100, 8)}, 8));
+        assert_echoed(result, i * 100, 8);
+    }
+    ASSIGN_OR_ABORT(auto result, pools.evaluate(1, build, {make_bigint_column(1000, 8)}, 8));
+    assert_echoed(result, 1000, 8);
+
+    ASSERT_EQ((std::vector<int32_t>{0, 1}), built_for);
+    ASSERT_EQ(1, pools.pool(0)->num_built());
+    ASSERT_EQ(1, pools.pool(0)->num_idle());
+    ASSERT_EQ(1, pools.pool(1)->num_built());
+    ASSERT_EQ(nullptr, pools.pool(2));
+}
+
 // A failed call may leave an unread reply on the stub's stream; the next call must not inherit it.
 TEST(UDFCallStubPoolTest, FailedStubIsNotReused) {
     UDFCallStubPool pool;

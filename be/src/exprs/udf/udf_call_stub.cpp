@@ -235,6 +235,26 @@ size_t UDFCallStubPool::num_built() const {
     return _num_built;
 }
 
+StatusOr<ColumnPtr> DriverUDFCallStubPools::evaluate(int32_t driver_id, const StubBuilder& build,
+                                                     const Columns& columns, size_t row_num) {
+    UDFCallStubPool* pool = nullptr;
+    {
+        std::lock_guard<std::mutex> guard(_lock);
+        auto& slot = _pools[driver_id];
+        if (slot == nullptr) {
+            slot = std::make_unique<UDFCallStubPool>();
+        }
+        pool = slot.get();
+    }
+    return pool->evaluate([&]() { return build(driver_id); }, columns, row_num);
+}
+
+const UDFCallStubPool* DriverUDFCallStubPools::pool(int32_t driver_id) const {
+    std::lock_guard<std::mutex> guard(_lock);
+    auto it = _pools.find(driver_id);
+    return it == _pools.end() ? nullptr : it->second.get();
+}
+
 size_t UDFCallStubPool::num_idle() const {
     std::lock_guard<std::mutex> guard(_lock);
     return _idle.size();
