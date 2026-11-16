@@ -17,12 +17,8 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
-<<<<<<< HEAD
-=======
 #include <limits>
 #include <optional>
-#include <random>
->>>>>>> 6895756 ([BugFix] Support reading Parquet BYTE_ARRAY decimals (#82544))
 
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -36,6 +32,7 @@
 #include "fs/fs.h"
 #include "parquet_test_util/util.h"
 #include "runtime/descriptor_helper.h"
+#include "testutil/assert.h"
 
 namespace starrocks::parquet {
 
@@ -183,23 +180,23 @@ TEST_F(ColumnConverterTest, TestByteArrayTest) {
             check(file_path, col_type, col_name, "[6.7]", expected_rows, true);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMALV2, 5, 1);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMALV2, -1, 5, 1);
             check(file_path, col_type, col_name, "[6.7]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32, 5, 1);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32, -1, 5, 1);
             check(file_path, col_type, col_name, "[6.7]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, 18, 8);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, -1, 18, 8);
             check(file_path, col_type, col_name, "[6.70000000]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 5, 0);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, 5, 0);
             check(file_path, col_type, col_name, "[6]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 38, 2);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, 38, 2);
             check(file_path, col_type, col_name, "[6.70]", expected_rows);
         }
     }
@@ -769,7 +766,7 @@ TEST_F(ColumnConverterTest, ByteArrayDecimalVariableLength) {
         const ParquetField field = make_field(18, 8);
 
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, 18, 8);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, -1, 18, 8);
             auto dst = convert(field, col_type, values);
             auto* nullable = down_cast<NullableColumn*>(dst.get());
             auto& data = down_cast<Decimal64Column*>(nullable->data_column_raw_ptr())->get_data();
@@ -782,7 +779,7 @@ TEST_F(ColumnConverterTest, ByteArrayDecimalVariableLength) {
         }
         {
             // Scale up: DECIMAL(18, 8) -> DECIMAL(38, 10).
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 38, 10);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, 38, 10);
             auto dst = convert(field, col_type, values);
             auto* nullable = down_cast<NullableColumn*>(dst.get());
             auto& data = down_cast<Decimal128Column*>(nullable->data_column_raw_ptr())->get_data();
@@ -793,7 +790,7 @@ TEST_F(ColumnConverterTest, ByteArrayDecimalVariableLength) {
         }
         {
             // Scale down: DECIMAL(18, 8) -> DECIMAL(18, 2) truncates like the other decimal converters.
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, 18, 2);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, -1, 18, 2);
             auto dst = convert(field, col_type, values);
             auto* nullable = down_cast<NullableColumn*>(dst.get());
             auto& data = down_cast<Decimal64Column*>(nullable->data_column_raw_ptr())->get_data();
@@ -803,7 +800,7 @@ TEST_F(ColumnConverterTest, ByteArrayDecimalVariableLength) {
         }
         {
             // DECIMALV2 always uses scale 9.
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMALV2, 27, 9);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMALV2, -1, 27, 9);
             auto dst = convert(field, col_type, values);
             auto* nullable = down_cast<NullableColumn*>(dst.get());
             auto& data = down_cast<DecimalColumn*>(nullable->data_column_raw_ptr())->get_data();
@@ -820,7 +817,7 @@ TEST_F(ColumnConverterTest, ByteArrayDecimalVariableLength) {
         for (auto v : unscaled) {
             values.emplace_back(encode(v));
         }
-        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32, 9, 2);
+        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32, -1, 9, 2);
         auto dst = convert(make_field(9, 2), col_type, values);
         auto* nullable = down_cast<NullableColumn*>(dst.get());
         auto& data = down_cast<Decimal32Column*>(nullable->data_column_raw_ptr())->get_data();
@@ -851,7 +848,7 @@ TEST_F(ColumnConverterTest, ByteArrayDecimalVariableLength) {
         // 17 bytes whose sign byte disagrees with the remaining 16 bytes does not fit.
         values.emplace_back(std::string(1, '\x00') + std::string(1, '\x80') + std::string(15, '\x00'));
 
-        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 38, 0);
+        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, 38, 0);
         auto dst = convert(make_field(38, 0), col_type, values);
         auto* nullable = down_cast<NullableColumn*>(dst.get());
         auto& data = down_cast<Decimal128Column*>(nullable->data_column_raw_ptr())->get_data();
@@ -871,7 +868,7 @@ TEST_F(ColumnConverterTest, ByteArrayDecimalVariableLength) {
 
     // Footer min/max statistics share the converter.
     {
-        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, 18, 8);
+        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, -1, 18, 8);
         const ParquetField field = make_field(18, 8);
         auto column = ColumnHelper::create_column(col_type, true);
         std::vector<std::string> stats_values = {encode(-123456789), encode(670000000)};
@@ -886,7 +883,7 @@ TEST_F(ColumnConverterTest, ByteArrayDecimalVariableLength) {
 
     // A bound that does not fit is not decoded as a null bound: pruning is skipped instead.
     {
-        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 38, 0);
+        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, 38, 0);
         const ParquetField field = make_field(40, 0);
         auto column = ColumnHelper::create_column(col_type, true);
         // 1 and 2^128.
@@ -905,7 +902,7 @@ TEST_F(ColumnConverterTest, ByteArrayDecimalVariableLength) {
         for (auto v : unscaled) {
             values.emplace_back(encode(v));
         }
-        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32, 9, 0);
+        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32, -1, 9, 0);
         auto dst = convert(make_field(39, 39), col_type, values);
         auto* nullable = down_cast<NullableColumn*>(dst.get());
         auto& data = down_cast<Decimal32Column*>(nullable->data_column_raw_ptr())->get_data();

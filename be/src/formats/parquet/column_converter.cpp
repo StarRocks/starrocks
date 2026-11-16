@@ -370,8 +370,6 @@ private:
     int32_t _type_length = 0;
 };
 
-<<<<<<< HEAD
-=======
 // This class is to convert *variable length* binary (parquet BYTE_ARRAY) to decimal.
 // Unlike FIXED_LEN_BYTE_ARRAY, each value may have its own length, so values are
 // located through the binary column's offsets instead of a fixed stride.
@@ -510,70 +508,6 @@ private:
     bool _scale_down_to_zero = false;
 };
 
-// UUID is stored as 16 raw bytes; the canonical string form is 36 characters:
-// xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-static constexpr int kUUIDByteLength = 16;
-static constexpr int kUUIDStringLength = 36;
-
-Status FixedLenByteArrayToUUIDConverter::convert(const Column* src, Column* dst) {
-    auto* src_nullable = ColumnHelper::as_raw_column<NullableColumn>(src);
-    auto* dst_nullable = down_cast<NullableColumn*>(dst);
-    auto* src_col = ColumnHelper::as_raw_column<BinaryColumn>(src_nullable->data_column());
-    auto* dst_col = ColumnHelper::as_raw_column<BinaryColumn>(dst_nullable->data_column_raw_ptr());
-
-    const auto& src_null = src_nullable->null_column()->get_data();
-    auto& dst_null = dst_nullable->null_column_raw_ptr()->get_data();
-
-    size_t n = src_col->size();
-    dst_null.resize(n);
-    memcpy(dst_null.data(), src_null.data(), n);
-
-    static constexpr char HEX[] = "0123456789abcdef";
-    char buf[kUUIDStringLength];
-
-    for (size_t i = 0; i < n; i++) {
-        if (src_null[i]) {
-            dst_col->append_default();
-            continue;
-        }
-        Slice s = src_col->get_slice(i);
-        if (UNLIKELY(s.size != kUUIDByteLength)) {
-            return Status::Corruption(strings::Substitute(
-                    "parquet UUID column has unexpected byte length $0, expected $1", s.size, kUUIDByteLength));
-        }
-        const auto* bytes = reinterpret_cast<const uint8_t*>(s.data);
-        int pos = 0;
-        for (int j = 0; j < 4; j++) {
-            buf[pos++] = HEX[bytes[j] >> 4];
-            buf[pos++] = HEX[bytes[j] & 0xf];
-        }
-        buf[pos++] = '-';
-        for (int j = 4; j < 6; j++) {
-            buf[pos++] = HEX[bytes[j] >> 4];
-            buf[pos++] = HEX[bytes[j] & 0xf];
-        }
-        buf[pos++] = '-';
-        for (int j = 6; j < 8; j++) {
-            buf[pos++] = HEX[bytes[j] >> 4];
-            buf[pos++] = HEX[bytes[j] & 0xf];
-        }
-        buf[pos++] = '-';
-        for (int j = 8; j < 10; j++) {
-            buf[pos++] = HEX[bytes[j] >> 4];
-            buf[pos++] = HEX[bytes[j] & 0xf];
-        }
-        buf[pos++] = '-';
-        for (int j = 10; j < kUUIDByteLength; j++) {
-            buf[pos++] = HEX[bytes[j] >> 4];
-            buf[pos++] = HEX[bytes[j] & 0xf];
-        }
-        dst_col->append(Slice(buf, kUUIDStringLength));
-    }
-    dst_nullable->set_has_null(src_nullable->has_null());
-    return Status::OK();
-}
-
->>>>>>> 6895756 ([BugFix] Support reading Parquet BYTE_ARRAY decimals (#82544))
 template <typename DestType>
 static std::unique_ptr<ColumnConverter> make_int32_numeric_converter(bool src_unsigned) {
     if (src_unsigned) {
@@ -713,8 +647,6 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
             col_type != LogicalType::TYPE_VARBINARY) {
             need_convert = true;
         }
-<<<<<<< HEAD
-=======
         switch (col_type) {
         case LogicalType::TYPE_DECIMALV2:
             // All DecimalV2 use scale 9 as scale
@@ -732,13 +664,9 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
             *converter =
                     std::make_unique<VarBinaryToDecimalConverter<TYPE_DECIMAL128>>(field.scale, typeDescriptor.scale);
             break;
-        case LogicalType::TYPE_GEOGRAPHY:
-            *converter = std::make_unique<BinaryToGeographyConverter>();
-            break;
         default:
             break;
         }
->>>>>>> 6895756 ([BugFix] Support reading Parquet BYTE_ARRAY decimals (#82544))
         break;
     }
     case tparquet::Type::type::FIXED_LEN_BYTE_ARRAY: {
