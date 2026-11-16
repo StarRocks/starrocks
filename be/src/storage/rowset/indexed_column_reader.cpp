@@ -113,6 +113,7 @@ IndexedColumnIterator::IndexedColumnIterator(const IndexedColumnReader* reader, 
           _value_iter(&reader->_value_index_reader) {}
 
 Status IndexedColumnIterator::_read_data_page(const PagePointer& pp) {
+    _data_page.reset();
     PageHandle handle;
     Slice body;
     PageFooterPB footer;
@@ -128,6 +129,8 @@ Status IndexedColumnIterator::seek_to_ordinal(ordinal_t idx) {
     if (!_reader->support_ordinal_seek()) {
         return Status::NotSupported("no ordinal index");
     }
+
+    _seeked = false;
 
     // it's ok to seek past the last value
     if (idx == _reader->num_values()) {
@@ -150,7 +153,11 @@ Status IndexedColumnIterator::seek_to_ordinal(ordinal_t idx) {
     }
 
     ordinal_t offset_in_page = idx - _data_page->first_ordinal();
-    RETURN_IF_ERROR(_data_page->seek(offset_in_page));
+    Status s = _data_page->seek(offset_in_page);
+    if (!s.ok()) {
+        _data_page.reset();
+        return s;
+    }
     _current_ordinal = idx;
     _seeked = true;
     return Status::OK();
@@ -164,6 +171,8 @@ Status IndexedColumnIterator::seek_at_or_after(const void* key, bool* exact_matc
     if (_reader->num_values() == 0) {
         return Status::NotFound("value index is empty ");
     }
+
+    _seeked = false;
 
     bool load_data_page = false;
     PagePointer data_page_pp;
@@ -189,8 +198,39 @@ Status IndexedColumnIterator::seek_at_or_after(const void* key, bool* exact_matc
     }
 
     // seek inside data page
-    RETURN_IF_ERROR(_data_page->data_decoder()->seek_at_or_after_value(key, exact_match));
-    RETURN_IF_ERROR(_data_page->seek(_data_page->data_decoder()->current_index()));
+    Status st = _data_page->data_decoder()->seek_at_or_after_value(key, exact_match);
+    if (st.is_not_found()) {
+        // Probe with a copy so an end-of-index miss keeps the cursor on the
+        // cached terminal page.
+        auto next_iter = _value_iter;
+        if (!_reader->_has_index_page || !next_iter.move_next()) {
+            // A value seek can move the decoder without updating the page's
+            // offset. Restore it directly: ParsedPage::seek may skip the same
+            // offset. Keep the parsed page for subsequent ordinary misses.
+            auto* decoder = _data_page->data_decoder();
+            if (decoder->current_index() != _data_page->offset()) {
+                Status restore_status = decoder->seek_to_position_in_page(_data_page->offset());
+                if (!restore_status.ok()) {
+                    _data_page.reset();
+                    return restore_status;
+                }
+            }
+            return st;
+        }
+        // The value index stores each page's first key. A key between pages is
+        // routed to the preceding page, so the next page's first value is its
+        // lower bound in the column.
+        RETURN_IF_ERROR(_read_data_page(next_iter.current_page_pointer()));
+        _value_iter = next_iter;
+        st = _data_page->seek(0);
+        *exact_match = false;
+    } else if (st.ok()) {
+        st = _data_page->seek(_data_page->data_decoder()->current_index());
+    }
+    if (!st.ok()) {
+        _data_page.reset();
+        return st;
+    }
     _current_ordinal = _data_page->first_ordinal() + _data_page->offset();
     DCHECK(_data_page->contains(_current_ordinal));
     _seeked = true;
