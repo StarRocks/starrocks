@@ -80,7 +80,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
      * query is planned off a copy of the table taken under its READ lock (OlapTable#copyOnlyForQuery), but that copy
      * shares this object, so the planner reads these maps after the lock is released.
      *
-     * Writers -- DDL, tablet split / merge, the recycle bin and the replayer -- must still hold the table's WRITE
+     * Writers -- DDL, tablet split / merge and the replayer -- must still hold the table's WRITE
      * lock. Copy-on-write does not make two writers safe against each other (each would copy the same map and one
      * change would be lost); it only keeps a writer from changing a map that a reader already holds. A writer never
      * modifies a map, or an id list in indexMetaIdToIndexIds, that it has published: it publishes a new one, so a
@@ -88,9 +88,8 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
      *
      * Two reads may still see two different states; a plan that overlaps a change of the layout it uses is
      * re-planned through OlapTable#lastSchemaUpdateTime. An index is published before its id, so a newly published
-     * id resolves. An id read earlier stops resolving once its generation is erased; the recycle bin erases only
-     * generations a newer one has superseded, so a reader walking all generations must skip a missing index.
-     * (queryIndexMetaIdToIndexId is a ConcurrentHashMap updated key by key, and is not copied.)
+     * id resolves. An id read earlier stops resolving once its generation is removed; tablet split / merge removes
+     * only generations a newer one has superseded, so a reader walking all generations must skip a missing index.
      */
 
     /**
@@ -464,19 +463,11 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
             return null;
         }
 
-<<<<<<< HEAD
-        if (index != null) {
-            List<Long> indexIds = indexMetaIdToIndexIds.get(index.getMetaId());
-            Preconditions.checkState(indexIds != null && indexIds.remove(indexId),
-                    String.format("index id %d not found in indexMetaIdToIndexIds", indexId));
-=======
         long indexMetaId = index.getMetaId();
         List<Long> indexIds = indexMetaIdToIndexIds.get(indexMetaId);
         Preconditions.checkState(indexIds != null && indexIds.contains(indexId),
                 String.format("index id %d not found in indexMetaIdToIndexIds", indexId));
->>>>>>> 4f1c87a ([BugFix][RB-96] Make PhysicalPartition index maps copy-on-write for lock-free planning (#83358))
 
-        queryIndexMetaIdToIndexId.remove(indexMetaId, indexId);
         List<Long> remainingIds = indexIds.stream().filter(id -> id != indexId).collect(ImmutableList.toImmutableList());
         indexMetaIdToIndexIds = remainingIds.isEmpty()
                 ? copyWithout(indexMetaIdToIndexIds, indexMetaId)
@@ -717,8 +708,8 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public boolean hasMaterializedView() {
-        // Decided from the visible indexes alone: the base index id list changes with every tablet split, merge
-        // and recycle-bin erase, and a lock-free reader combining the two can see them at different moments.
+        // Decided from the visible indexes alone: the base index id list changes with every tablet split and merge,
+        // and a lock-free reader combining the two can see them at different moments.
         long baseMetaId = baseIndexMetaId;
         for (MaterializedIndex index : idToVisibleIndex.values()) {
             if (index.getMetaId() != baseMetaId) {

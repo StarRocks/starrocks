@@ -37,16 +37,11 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-<<<<<<< HEAD
-=======
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
->>>>>>> 4f1c87a ([BugFix][RB-96] Make PhysicalPartition index maps copy-on-write for lock-free planning (#83358))
 
 public class PhysicalPartitionTest {
     private static final long BASE_INDEX_ID = 30000L;
@@ -639,55 +634,6 @@ public class PhysicalPartitionTest {
         Assertions.assertEquals(9, partition.getActualBucketNum(
                 new HashDistributionInfo(9, distributionColumns)));
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testQueryableIndexPinnedUntilUnshareFinishes() {
-        long baseMetaId = 3100L;
-        MaterializedIndex parent = new MaterializedIndex(3001L, baseMetaId, IndexState.NORMAL, 100L);
-        PhysicalPartition partition = new PhysicalPartition(1000L, 2000L, parent);
-        MaterializedIndex children = new MaterializedIndex(3002L, baseMetaId, IndexState.NORMAL, 100L);
-
-        partition.pinQueryableIndex(baseMetaId, parent.getId());
-        partition.addMaterializedIndex(children, true);
-
-        Assertions.assertTrue(partition.isUnsharing());
-        Assertions.assertEquals(parent, partition.getQueryableBaseIndex());
-        Assertions.assertEquals(children, partition.getLatestBaseIndex());
-        Assertions.assertEquals(List.of(parent), partition.getQueryableMaterializedIndices(IndexExtState.VISIBLE));
-        Assertions.assertEquals(Set.of(parent.getId(), children.getId()),
-                partition.getMaterializedIndicesForVacuum(IndexExtState.VISIBLE).stream()
-                        .map(MaterializedIndex::getId).collect(Collectors.toSet()));
-
-        String json = GsonUtils.GSON.toJson(partition);
-        PhysicalPartition restored = GsonUtils.GSON.fromJson(json, PhysicalPartition.class);
-        Assertions.assertTrue(restored.isUnsharing());
-        Assertions.assertEquals(parent.getId(), restored.getQueryableBaseIndex().getId());
-        // The publish thread reads the pins without the table lock, so replay must not quietly hand
-        // the field back as the plain map GSON builds.
-        Assertions.assertInstanceOf(ConcurrentHashMap.class,
-                Deencapsulation.getField(restored, "queryIndexMetaIdToIndexId"));
-
-        Assertions.assertTrue(partition.finishUnshare());
-        Assertions.assertFalse(partition.finishUnshare());
-        Assertions.assertFalse(partition.isUnsharing());
-        Assertions.assertEquals(children, partition.getQueryableBaseIndex());
-    }
-
-    @Test
-    public void testReleaseMinRetainVersionKeepsAPinSetByAnotherHolder() {
-        PhysicalPartition partition = new PhysicalPartition(1L, 2L, new MaterializedIndex());
-        partition.setMinRetainVersion(3);
-        Assertions.assertTrue(partition.releaseMinRetainVersion(3));
-        Assertions.assertEquals(0, partition.getMinRetainVersion());
-
-        partition.setMinRetainVersion(3);
-        // Another holder pinned a different version since.
-        partition.setMinRetainVersion(7);
-        Assertions.assertFalse(partition.releaseMinRetainVersion(3));
-        Assertions.assertEquals(7, partition.getMinRetainVersion());
-    }
 
     @Test
     public void testIndexMutationsLeaveCapturedMapsUntouched() {
@@ -713,19 +659,16 @@ public class PhysicalPartitionTest {
         Assertions.assertEquals(List.of(3001L, 3002L), indexIds(partition.getBaseIndices()));
         Assertions.assertSame(rollup2, partition.getLatestIndex(rollupMetaId));
 
-        // The recycle bin erasing a superseded generation, then the last generation of a meta.
+        // Tablet split / merge removing a superseded generation, then the last generation of a meta.
         mutateAfterCapture(partition, () -> partition.deleteMaterializedIndexByIndexId(base1.getId()));
         Assertions.assertEquals(List.of(3002L), indexIds(partition.getBaseIndices()));
         mutateAfterCapture(partition, () -> partition.deleteMaterializedIndexByIndexId(rollup1.getId()));
         mutateAfterCapture(partition, () -> partition.deleteMaterializedIndexByIndexId(rollup2.getId()));
         Assertions.assertNull(partition.getLatestIndex(rollupMetaId));
 
-        // Erasing the generation queries are pinned to.
-        partition.pinQueryableIndex(baseMetaId, base2.getId());
         mutateAfterCapture(partition, () -> partition.addMaterializedIndex(base3, true));
         mutateAfterCapture(partition, () -> partition.deleteMaterializedIndexByIndexId(base2.getId()));
-        Assertions.assertFalse(partition.isUnsharing());
-        Assertions.assertSame(base3, partition.getQueryableBaseIndex());
+        Assertions.assertSame(base3, partition.getLatestBaseIndex());
 
         // A rollup job: shadow index created, made visible, dropped.
         mutateAfterCapture(partition, () -> partition.createRollupIndex(shadow));
@@ -778,9 +721,9 @@ public class PhysicalPartitionTest {
     }
 
     /**
-     * One thread keeps doing what tablet split / merge and the recycle bin do to a partition -- add a base index
-     * generation, erase the oldest -- plus a rollup job creating and dropping a shadow index, while another reads the
-     * partition the way a planner does, without the table lock.
+     * One thread keeps doing what tablet split / merge do to a partition -- add a base index generation, remove the
+     * oldest -- plus a rollup job creating and dropping a shadow index, while another reads the partition the way a
+     * planner does, without the table lock.
      */
     private static void runReadersAgainstConcurrentIndexMutation(boolean withRollup) throws InterruptedException {
         long baseMetaId = 3100L;
@@ -814,9 +757,7 @@ public class PhysicalPartitionTest {
         Thread reader = new Thread(() -> runUntilStopped(stop, failure, () -> {
             Assertions.assertEquals(withRollup, partition.hasMaterializedView());
             partition.getLatestBaseIndex();
-            partition.getQueryableBaseIndex();
             partition.getLatestMaterializedIndices(IndexExtState.ALL);
-            partition.getQueryableMaterializedIndices(IndexExtState.ALL);
             partition.getAllMaterializedIndices(IndexExtState.ALL);
             partition.getShardGroupIds();
             partition.storageDataSize();
@@ -880,5 +821,4 @@ public class PhysicalPartitionTest {
         Assertions.assertEquals(expected.keySet(), actual.keySet());
         expected.forEach((id, index) -> Assertions.assertSame(index, actual.get(id), "index " + id));
     }
->>>>>>> 4f1c87a ([BugFix][RB-96] Make PhysicalPartition index maps copy-on-write for lock-free planning (#83358))
 }
