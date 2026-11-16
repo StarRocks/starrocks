@@ -43,6 +43,17 @@ constexpr std::array<AIStatisticsCounter, 12> kAIStatisticsCounters = {{
         {"AITotalUsageCount", &AIExecutionStatistics::total_usage_count},
 }};
 
+struct AIAggregateCounter {
+    const char* name;
+    int64_t AIAggregateExecutionStatistics::*value;
+};
+constexpr std::array<AIAggregateCounter, 5> kAggregateCounters = {
+        {{"AIAggregateGroups", &AIAggregateExecutionStatistics::groups},
+         {"AIAggregateEmptyGroups", &AIAggregateExecutionStatistics::empty_groups},
+         {"AIAggregateLeafRequests", &AIAggregateExecutionStatistics::leaf_requests},
+         {"AIAggregateRounds", &AIAggregateExecutionStatistics::rounds},
+         {"AIAggregateLocalBudgetErrors", &AIAggregateExecutionStatistics::local_budget_errors}}};
+
 } // namespace
 
 AISinkOperator::AISinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
@@ -227,6 +238,9 @@ Status AISourceOperator::prepare(RuntimeState* state) {
         const auto& counter = kAIStatisticsCounters[i];
         _ai_counters[i] = _unique_metrics->add_counter(counter.name, counter.unit, strategy);
     }
+    for (size_t i = 0; i < kAggregateCounters.size(); ++i) {
+        _aggregate_counters[i] = _unique_metrics->add_counter(kAggregateCounters[i].name, TUnit::UNIT, strategy);
+    }
     RETURN_IF_ERROR(_processor->prepare(state, _degree_of_parallelism));
     RETURN_IF_ERROR(_processor->configuration_status());
     if (!state->enable_event_scheduler()) {
@@ -242,6 +256,11 @@ void AISourceOperator::close(RuntimeState* state) {
 }
 
 void AISourceOperator::update_metrics(RuntimeState*) {
+    const auto aggregate = _processor->aggregate_statistics(_driver_sequence);
+    for (size_t i = 0; i < kAggregateCounters.size(); ++i) {
+        if (_aggregate_counters[i] != nullptr)
+            COUNTER_SET(_aggregate_counters[i], aggregate.*kAggregateCounters[i].value);
+    }
     const AIExecutionStatistics statistics = _processor->statistics(_driver_sequence);
     for (size_t i = 0; i < kAIStatisticsCounters.size(); ++i) {
         if (_ai_counters[i] != nullptr) {

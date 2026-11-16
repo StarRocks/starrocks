@@ -1923,3 +1923,35 @@ vectorized_functions = [
     [210014, 'fl_get_checksum', True, False, 'VARCHAR', ['FILE'], 'FileFunctions::fl_get_checksum'],
     [210015, 'fl_get_inline', True, False, 'VARBINARY', ['FILE'], 'FileFunctions::fl_get_inline'],
 ]
+
+
+# Public semantic aggregates are lowered before execution. Internal functions never enter SQL lookup.
+ai_text_collector = [200154, '__ai_collect_text', True, False, 'VARBINARY', ['VARCHAR'], 'nullptr']
+
+
+ai_aggregate_functions = [
+    [200150, 'ai_agg', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR', 'JSON'], 'nullptr', {
+        'named_args': [
+            {'name': 'input'},
+            {'name': 'instruction'},
+            {'name': 'provider', 'default': ''},
+            {'name': 'model', 'default': ''},
+            {'name': 'options', 'default': {}},
+        ],
+        'aggregate': {'text': 'input', 'instruction': 'instruction', 'reducer_function_id': 200155},
+    }],
+]
+
+vectorized_functions += [
+    [200155, '__ai_agg_reduce', True, False, 'VARCHAR', ['VARBINARY', 'VARCHAR', 'VARCHAR', 'VARCHAR', 'JSON'], 'nullptr', {
+        'named_args': [
+            {'name': 'state'},
+            {'name': 'instruction'},
+            {'name': 'provider', 'default': ''},
+            {'name': 'model', 'default': ''},
+            {'name': 'options', 'default': {}},
+        ],
+        'ai': dict(ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', inputs=('state', 'instruction')),
+                   execution_kind='AGGREGATE_REDUCE', internal=True),
+    }],
+]

@@ -489,4 +489,73 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
         run.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         return run.buildTaskRunConnectContext();
     }
+
+    @Test
+    public void testSameNameAggregateSqlUdfPlansWithItsDeclaredArity() throws Exception {
+        boolean previousEnableUdf = Config.enable_udf;
+        Config.enable_udf = true;
+        String signature = "ai_rbac.ai_agg(STRING)";
+        String sql = "SELECT ai_rbac.ai_agg(prompt) FROM prompts";
+        try {
+            executeAsRoot("CREATE FUNCTION ai_agg(x STRING) RETURNS concat(x, 'suffix')");
+            executeAsRoot("GRANT USAGE ON FUNCTION " + signature + " TO '" + user + "'");
+            try (var ignored = caller.bindScope()) {
+                QueryStatement statement = (QueryStatement) analyze(sql);
+                FunctionCallExpr call = (FunctionCallExpr) statement.getQueryRelation().getOutputExpression().get(0);
+                Assertions.assertInstanceOf(SqlFunction.class, call.getFn());
+                Assertions.assertFalse(call.isNondeterministicBuiltinFnName());
+                ExecPlan plan = StatementPlanner.plan(statement, caller);
+                Assertions.assertTrue(executedAIFamilies(plan).isEmpty());
+            }
+        } finally {
+            executeAsRoot("DROP FUNCTION IF EXISTS " + signature);
+            Config.enable_udf = previousEnableUdf;
+        }
+    }
+
+    @Test
+    public void testAggregatePublicFamilyUsage() throws Exception {
+        executeAsRoot("REVOKE USAGE ON AI PROVIDER test_default_chat FROM '" + user + "'");
+        String sql = "SELECT ai_agg(prompt, 'summarize') FROM prompts";
+        assertDenied(sql);
+        executeAsRoot("GRANT USAGE ON AI FUNCTION ai_agg TO '" + user + "'");
+        assertDenied(sql, "AI PROVIDER");
+        executeAsRoot("GRANT USAGE ON AI PROVIDER test_default_chat TO '" + user + "'");
+        authorize(sql);
+        executeAsRoot("REVOKE USAGE ON AI PROVIDER test_default_chat FROM '" + user + "'");
+        assertDenied(sql, "AI PROVIDER");
+    }
+
+    @Test
+    public void testPreparedAggregateRechecksPublicUsage() throws Exception {
+        executeAsRoot("GRANT USAGE ON AI FUNCTION ai_agg TO '" + user + "'");
+        executeAsRoot("GRANT USAGE ON AI PROVIDER test_default_chat TO '" + user + "'");
+        PrepareStmt prepared = prepare("SELECT ai_agg(prompt, 'summarize') FROM prompts WHERE id = ?");
+        try {
+            ExecPlan first = executePrepared(prepared, 1);
+            ExecPlan second = executePrepared(prepared, 2);
+            Assertions.assertFalse(caller.getPreparedStmt(prepared.getName()).isCached());
+            Assertions.assertNotSame(first.getPhysicalPlan(), second.getPhysicalPlan());
+            Assertions.assertEquals(Set.of("__ai_agg_reduce"), executedAIFamilies(first));
+            executeAsRoot("REVOKE USAGE ON AI FUNCTION ai_agg FROM '" + user + "'");
+            Assertions.assertThrows(ErrorReportException.class, () -> executePrepared(prepared, 3));
+        } finally {
+            caller.removePreparedStmt(prepared.getName());
+        }
+    }
+
+    @Test
+    public void testPreparedAggregateRechecksDefaultProviderUsage() throws Exception {
+        executeAsRoot("GRANT USAGE ON AI FUNCTION ai_agg TO '" + user + "'");
+        executeAsRoot("GRANT USAGE ON AI PROVIDER test_default_chat TO '" + user + "'");
+        PrepareStmt prepared = prepare("SELECT ai_agg(prompt, 'summarize') FROM prompts WHERE id = ?");
+        try {
+            executePrepared(prepared, 1);
+            executeAsRoot("REVOKE USAGE ON AI PROVIDER test_default_chat FROM '" + user + "'");
+            Assertions.assertThrows(ErrorReportException.class, () -> executePrepared(prepared, 2));
+        } finally {
+            caller.removePreparedStmt(prepared.getName());
+        }
+    }
+
 }

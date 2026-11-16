@@ -1058,10 +1058,6 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitFunctionCall(FunctionCallExpr node, Scope scope) {
-            if (node.isNondeterministicBuiltinFnName()) {
-                ExprId exprId = analyzeState.getNextNondeterministicId();
-                node.setNondeterministicId(exprId);
-            }
             String fnName = node.getFunctionName();
 
             if (fnName.equalsIgnoreCase("date_part")) {
@@ -1181,11 +1177,7 @@ public class ExpressionAnalyzer {
                 FunctionAnalyzer.validateNullConstraints(fnName, fn, node);
 
                 node.setFn(fn);
-                node.setType(fn.getReturnType());
-                FunctionAnalyzer.analyze(node);
-                verifyNoAIInConditionalFunction(node);
-                checkGetQueryProfileAccess(node);
-                Authorizer.checkAIFunctionUsage(session, node);
+                finishResolvedFunctionCall(node);
                 return null;
             }
 
@@ -1208,11 +1200,7 @@ public class ExpressionAnalyzer {
                         }
                     }
                     node.setFn(fn);
-                    node.setType(fn.getReturnType());
-                    FunctionAnalyzer.analyze(node);
-                    verifyNoAIInConditionalFunction(node);
-                    checkGetQueryProfileAccess(node);
-                    Authorizer.checkAIFunctionUsage(session, node);
+                    finishResolvedFunctionCall(node);
                     return null;
                 }
                 // Try to provide a more user-friendly error message for positional calls
@@ -1225,12 +1213,20 @@ public class ExpressionAnalyzer {
                 throw new SemanticException(msg, node.getPos());
             }
             node.setFn(fn);
-            node.setType(fn.getReturnType());
+            finishResolvedFunctionCall(node);
+            return null;
+        }
+
+        private void finishResolvedFunctionCall(FunctionCallExpr node) {
+            node.setType(node.getFn().getReturnType());
+            if (node.isNondeterministicBuiltinFnName()) {
+                ExprId exprId = analyzeState.getNextNondeterministicId();
+                node.setNondeterministicId(exprId);
+            }
             FunctionAnalyzer.analyze(node);
             verifyNoAIInConditionalFunction(node);
             checkGetQueryProfileAccess(node);
             Authorizer.checkAIFunctionUsage(session, node);
-            return null;
         }
 
         // get_query_profile() serves the same payload as ANALYZE PROFILE through a BE-side RPC that carries no

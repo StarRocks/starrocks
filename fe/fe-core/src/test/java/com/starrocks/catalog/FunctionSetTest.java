@@ -472,4 +472,29 @@ public class FunctionSetTest {
             Assertions.assertTrue(resolved.isAI());
         }
     }
+
+    @Test
+    public void testAIAggregateUsesNamedArgumentsAndHidesImplementation() {
+        Function fn = functionSet.getFunction(new Function(new FunctionName("ai_agg"),
+                List.of(VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR,
+                        VarcharType.VARCHAR, JsonType.JSON), InvalidType.INVALID, false),
+                Function.CompareMode.IS_IDENTICAL);
+        AggregateFunction aggregate = Assertions.assertInstanceOf(AggregateFunction.class, fn);
+        Assertions.assertTrue(fn.isAI());
+        Assertions.assertTrue(fn.copy().isAI());
+        Assertions.assertFalse(aggregate.isAnalyticFn());
+        Assertions.assertEquals(com.starrocks.type.VarbinaryType.VARBINARY, aggregate.getIntermediateType());
+        Assertions.assertArrayEquals(new String[] {"input", "instruction", "provider", "model", "options"},
+                fn.getArgNames());
+        Assertions.assertNotNull(fn.getDefaultNamedExpr("provider"));
+        Assertions.assertNotNull(fn.getDefaultNamedExpr("model"));
+        Assertions.assertNotNull(fn.getDefaultNamedExpr("options"));
+        for (String name : List.of("ai_agg_state", "ai_agg_merge", "ai_agg_union", "ai_agg_if",
+                "__ai_collect_text", "__ai_agg_reduce")) {
+            Assertions.assertFalse(functionSet.isAggregateFunction(name));
+            Assertions.assertNull(functionSet.getFunction(new Function(new FunctionName(name),
+                    List.of(VarcharType.VARCHAR), InvalidType.INVALID, false), Function.CompareMode.IS_SUPERTYPE_OF));
+        }
+    }
+
 }
