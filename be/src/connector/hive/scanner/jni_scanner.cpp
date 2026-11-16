@@ -69,13 +69,19 @@ void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
         JNIEnv* env = JVMHelper::getInstance().getEnv();
         if (_jni_scanner_close != nullptr) {
             env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_close);
+            // do_close() cannot return a Status, so log and clear the exception thrown by close();
+            // otherwise it stays pending on this thread, which later runs unrelated JNI calls.
+            Status st = _check_jni_exception(env, "Failed to close the off-heap table scanner.");
+            if (!st.ok()) {
+                LOG(WARNING) << st.message();
+            }
         }
-        env->DeleteLocalRef(_jni_scanner_obj);
+        env->DeleteGlobalRef(_jni_scanner_obj);
         _jni_scanner_obj = nullptr;
     }
     if (_jni_scanner_cls != nullptr) {
         JNIEnv* env = JVMHelper::getInstance().getEnv();
-        env->DeleteLocalRef(_jni_scanner_cls);
+        env->DeleteGlobalRef(_jni_scanner_cls);
         _jni_scanner_cls = nullptr;
     }
 }
@@ -101,15 +107,27 @@ Status JniScanner::_init_jni_method(JNIEnv* env) {
 
 Status JniScanner::_init_jni_table_scanner(JNIEnv* env, RuntimeState* runtime_state) {
     jclass scanner_factory_class = env->FindClass(_jni_scanner_factory_class.c_str());
+    LOCAL_REF_GUARD_ENV(env, scanner_factory_class);
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to find the scanner factory class."));
     jmethodID scanner_factory_constructor = env->GetMethodID(scanner_factory_class, "<init>", "()V");
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get the scanner factory constructor."));
     jobject scanner_factory_obj = env->NewObject(scanner_factory_class, scanner_factory_constructor);
+    LOCAL_REF_GUARD_ENV(env, scanner_factory_obj);
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to create the scanner factory."));
     jmethodID get_scanner_method =
             env->GetMethodID(scanner_factory_class, "getScannerClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get the getScannerClass method."));
     jstring scanner_type = env->NewStringUTF(_scanner_type().c_str());
-    _jni_scanner_cls = (jclass)env->CallObjectMethod(scanner_factory_obj, get_scanner_method, scanner_type);
+    LOCAL_REF_GUARD_ENV(env, scanner_type);
+    jclass local_scanner_cls = (jclass)env->CallObjectMethod(scanner_factory_obj, get_scanner_method, scanner_type);
+    LOCAL_REF_GUARD_ENV(env, local_scanner_cls);
     RETURN_IF_ERROR(_check_jni_exception(env, "Failed to init the scanner class."));
-    env->DeleteLocalRef(scanner_factory_class);
-    env->DeleteLocalRef(scanner_factory_obj);
+    // The scanner class and object are used by later do_get_next/do_close calls, which may run on
+    // other threads, so keep them as global refs instead of local refs.
+    _jni_scanner_cls = (jclass)env->NewGlobalRef(local_scanner_cls);
+    if (_jni_scanner_cls == nullptr) {
+        return Status::InternalError("Failed to create a global reference of the scanner class.");
+    }
 
     jmethodID scanner_constructor = env->GetMethodID(_jni_scanner_cls, "<init>", "(ILjava/util/Map;)V");
     RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get a scanner class constructor."));
@@ -141,10 +159,14 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* env, RuntimeState* runtime_st
     LOG(INFO) << message;
 
     int fetch_size = runtime_state->chunk_size();
-    _jni_scanner_obj = env->NewObject(_jni_scanner_cls, scanner_constructor, fetch_size, hashmap_object);
+    jobject local_scanner_obj = env->NewObject(_jni_scanner_cls, scanner_constructor, fetch_size, hashmap_object);
+    LOCAL_REF_GUARD_ENV(env, local_scanner_obj);
     env->DeleteLocalRef(hashmap_object);
-    DCHECK(_jni_scanner_obj != nullptr);
     RETURN_IF_ERROR(_check_jni_exception(env, "Failed to initialize a scanner instance."));
+    _jni_scanner_obj = env->NewGlobalRef(local_scanner_obj);
+    if (_jni_scanner_obj == nullptr) {
+        return Status::InternalError("Failed to create a global reference of the scanner instance.");
+    }
 
     return Status::OK();
 }
