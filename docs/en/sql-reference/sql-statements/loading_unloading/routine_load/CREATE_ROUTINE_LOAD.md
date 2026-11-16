@@ -107,8 +107,6 @@ Required. The properties of the load job. Syntax:
 ```SQL
 PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 ```
-<<<<<<< StarRocks
-=======
 
 The following properties can also be set by a descriptive name. A statement cannot set both names of the same property. SHOW CREATE ROUTINE LOAD returns a property under the name that it was last set with. Once a property of a job has been set by a descriptive name, the `JobProperties` field returned by [SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md) contains the descriptive keys, such as `loadInterval`, beside the legacy keys, such as `maxBatchIntervalS`. Both show the values in effect, that is, after rounding.
 
@@ -125,8 +123,6 @@ A duration without a unit, such as `"10"`, is rejected.
 
 Only versions that support the descriptive names accept them. A statement that uses them, including the output of SHOW CREATE ROUTINE LOAD for a job with a property set by a descriptive name, fails on an earlier version with an error such as `load_interval is invalid property`. During a rolling upgrade, use the descriptive names after the Leader FE is upgraded.
 
-
->>>>>>> celerdata-enterprise
 #### `desired_concurrent_number`
 
 **Required**: No\

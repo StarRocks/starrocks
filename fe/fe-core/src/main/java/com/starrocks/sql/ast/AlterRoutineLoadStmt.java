@@ -22,11 +22,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.RoutineLoadDesc;
-<<<<<<< HEAD
-=======
 import com.starrocks.load.routineload.RoutineLoadPropertyNames;
-import com.starrocks.server.GlobalStateMgr;
->>>>>>> c7aacc7d95b... [Enhancement][RB-787] Accept descriptive names with units for routine load job properties (#69437)
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -61,11 +57,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             .add(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
-<<<<<<< HEAD
-=======
-            .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
             .addAll(RoutineLoadPropertyNames.LEGACY_NAMES.keySet())
->>>>>>> c7aacc7d95b... [Enhancement][RB-787] Accept descriptive names with units for routine load job properties (#69437)
             .build();
 
     private LabelName labelName;

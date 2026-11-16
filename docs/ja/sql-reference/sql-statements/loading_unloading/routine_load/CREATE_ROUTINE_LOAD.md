@@ -106,8 +106,6 @@ PARTITION (p1, p2, p3)
 ```SQL
 PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 ```
-<<<<<<< StarRocks
-=======
 
 以下のプロパティは、説明的な名前でも設定できます。1 つのステートメントで同じプロパティの 2 つの名前を両方設定することはできません。SHOW CREATE ROUTINE LOAD は、プロパティを最後に設定したときの名前で返します。ジョブのプロパティを説明的な名前で設定すると、[SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md) が返す `JobProperties` フィールドには、従来のキー（`maxBatchIntervalS` など）に加えて説明的な名前のキー（`loadInterval` など）も含まれ、いずれも切り上げ後に実際に適用される値を示します。
 
@@ -124,8 +122,6 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 説明的な名前は、それをサポートするバージョンでのみ使用できます。説明的な名前を使うステートメントは、説明的な名前で設定したプロパティを持つジョブの SHOW CREATE ROUTINE LOAD の出力も含め、それより前のバージョンでは `load_interval is invalid property` などのエラーになります。ローリングアップグレード中は、Leader FE のアップグレード後に説明的な名前を使用してください。
 
-
->>>>>>> celerdata-enterprise
 #### `desired_concurrent_number`
 
 **必須**: いいえ\
