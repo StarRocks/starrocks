@@ -105,6 +105,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -5553,6 +5554,22 @@ public class IcebergMetadataTest extends TableTestBase {
                 "EXPLAIN should contain table name");
         Assertions.assertTrue(explainString.contains("predicate:"),
                 "EXPLAIN should contain predicate info");
+    }
+
+    @Test
+    public void testMetadataDeleteNodeExplainStringDigestsPredicate() {
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME,
+                "resource_name", "iceberg_db", "iceberg_table", "",
+                Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
+                new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(987654));
+        IcebergMetadataDeleteNode node = new IcebergMetadataDeleteNode(new PlanNodeId(0), icebergTable, predicate);
+
+        Assertions.assertTrue(node.getExplainString().contains("987654"));
+        String digested = ExprToSql.withDigestedLiterals(node::getExplainString);
+        Assertions.assertTrue(digested.contains("predicate: ?"), digested);
+        Assertions.assertFalse(digested.contains("987654"), digested);
     }
 
     @Test
