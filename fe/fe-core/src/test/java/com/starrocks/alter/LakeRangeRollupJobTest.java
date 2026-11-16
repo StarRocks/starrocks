@@ -62,6 +62,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -863,6 +864,31 @@ public class LakeRangeRollupJobTest {
         // Guard flipped: rollup is now NORMAL, no longer SHADOW.
         assertFalse(job.flipNotYetApplied(table), "flipNotYetApplied must return false after the flip");
         assertEquals(OlapTable.OlapTableState.NORMAL, table.getState(), "table state must be NORMAL after flip");
+    }
+
+    @Test
+    public void testVisualiseShadowIndexInvalidatesPlansBeforeExposingTheRollup() {
+        List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        LakeRangeRollupJob job = newConfiguredRollupJobWithReservedCommit(List.of(baseSchema.get(1), baseSchema.get(0)));
+
+        // A lock-free plan reads the versions its table copy recorded and the layout later: the invalidation has to be
+        // in place when each rollup index is exposed, not only once the flip is done.
+        long beforeFlip = table.lastSchemaUpdateTime.get();
+        List<Long> invalidationAtExposure = new ArrayList<>();
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public boolean visualiseShadowIndex(Invocation invocation, long shadowIndexId, boolean isBaseIndex) {
+                invalidationAtExposure.add(table.lastSchemaUpdateTime.get());
+                return invocation.proceed(shadowIndexId, isBaseIndex);
+            }
+        };
+
+        job.visualiseShadowIndex(table);
+
+        assertFalse(invalidationAtExposure.isEmpty(), "the flip exposed no rollup index");
+        assertTrue(invalidationAtExposure.stream().allMatch(time -> time > beforeFlip),
+                "plans must be invalidated before the rollup index is exposed (before=" + beforeFlip
+                        + ", at exposure=" + invalidationAtExposure + ")");
     }
 
     // ---- AGG rewrite projection test (Task 10 Step 1) ----------------------

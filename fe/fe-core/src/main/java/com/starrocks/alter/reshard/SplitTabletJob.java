@@ -1050,6 +1050,14 @@ public class SplitTabletJob extends TabletReshardJob {
     private void addNewMaterializedIndexes() {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
             OlapTable olapTable = lockedTable.get();
+            // Installing the new materialized indexes changes the writable layout immediately. For an
+            // ordinary split the queryable layout changes too; ORDER BY != PK instead keeps it pinned
+            // until UNSHARE finishes. Bump the table's optimistic version so any plan racing either
+            // catalog transition is retried against a self-consistent layout. Mirrors
+            // MergePartitionJob's bump at its partition-replace commit point. This runs on both the
+            // leader (runRunningJob) and replay path (replayCleaningJob), so followers re-plan too.
+            // Before the install: a lock-free plan resolves the layout after it recorded the versions.
+            olapTable.lastSchemaUpdateTime.set(System.nanoTime());
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 PhysicalPartition physicalPartition = olapTable
                         .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
@@ -1076,14 +1084,6 @@ public class SplitTabletJob extends TabletReshardJob {
                             newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
                 }
             }
-
-            // Installing the new materialized indexes changes the writable layout immediately. For an
-            // ordinary split the queryable layout changes too; ORDER BY != PK instead keeps it pinned
-            // until UNSHARE finishes. Bump the table's optimistic version so any plan racing either
-            // catalog transition is retried against a self-consistent layout. Mirrors
-            // MergePartitionJob's bump at its partition-replace commit point. This runs on both the
-            // leader (runRunningJob) and replay path (replayCleaningJob), so followers re-plan too.
-            olapTable.lastSchemaUpdateTime.set(System.nanoTime());
         }
     }
 

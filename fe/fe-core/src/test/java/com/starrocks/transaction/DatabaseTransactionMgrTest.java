@@ -1646,6 +1646,106 @@ public class DatabaseTransactionMgrTest {
         assertEquals(TransactionStatus.VISIBLE, slaveDbTransMgr.getTransactionState(9003L).getTransactionStatus());
     }
 
+    /**
+     * StarRocksTest#12648: a follower replays one VISIBLE record of a transaction that wrote two partitions of a
+     * table. The leader moved both partitions' visible versions under the table WRITE lock; the replay has to as
+     * well, or a reader holding the table lock -- a query planning on the follower -- sees the transaction in one
+     * partition and not in the other.
+     */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testReplayVisibleTransactionHoldsTableWriteLock(boolean lake) throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
+        long dbId = GlobalStateMgrTestUtil.testDbId1;
+        OlapTable table = (OlapTable) slaveGlobalStateMgr.getLocalMetastore()
+                .getTable(dbId, GlobalStateMgrTestUtil.testTableId1);
+        PhysicalPartition first = table.getPartition(GlobalStateMgrTestUtil.testPartition1)
+                .getDefaultPhysicalPartition();
+        long base = first.getVisibleVersion();
+
+        // A second partition of the same table, at the same version.
+        long partition2Id = 30001L;
+        Partition partition2 = new Partition(partition2Id, partition2Id + 100, "p2",
+                new MaterializedIndex(GlobalStateMgrTestUtil.testIndexId1, IndexState.NORMAL),
+                new RandomDistributionInfo(10));
+        PhysicalPartition second = partition2.getDefaultPhysicalPartition();
+        second.updateVisibleVersion(base);
+        second.setNextVersion(base + 1);
+        table.getPartitionInfo().setDataProperty(partition2Id, DataProperty.DEFAULT_DATA_PROPERTY);
+        table.getPartitionInfo().setReplicationNum(partition2Id, (short) 3);
+        table.addPartition(partition2);
+
+        TransactionState txn = new TransactionState(dbId, List.of(table.getId()), 97001L, "replay_two_partitions",
+                null, TransactionState.LoadJobSourceType.FRONTEND, transactionSource, -1, 60_000);
+        long now = System.currentTimeMillis();
+        txn.setPrepareTime(now);
+        txn.setCommitTime(now);
+        txn.setFinishTime(now);
+        txn.setTransactionStatus(TransactionStatus.VISIBLE);
+        txn.setFinishState(new TxnFinishState());
+        addCommitInfo(txn, table.getId(), first.getId(), base + 1, now);
+        addCommitInfo(txn, table.getId(), second.getId(), base + 1, now);
+        // What the follower reads back from the journal.
+        TransactionState replayed = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(txn), TransactionState.class);
+
+        if (lake) {
+            new MockUp<Table>() {
+                @Mock
+                public boolean isCloudNativeTableOrMaterializedView() {
+                    return true;
+                }
+            };
+        }
+        // Stop the replayer right after it has published the first of the two partitions.
+        String replayerName = "follower-replayer";
+        CountDownLatch onePublished = new CountDownLatch(1);
+        CountDownLatch allowRest = new CountDownLatch(1);
+        AtomicBoolean paused = new AtomicBoolean(false);
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public void setVisibleVersion(Invocation invocation, long version, long time) throws InterruptedException {
+                invocation.proceed(version, time);
+                if (Thread.currentThread().getName().equals(replayerName) && paused.compareAndSet(false, true)) {
+                    onePublished.countDown();
+                    assertTrue(allowRest.await(10, TimeUnit.SECONDS));
+                }
+            }
+        };
+
+        DatabaseTransactionMgr mgr = slaveTransMgr.getDatabaseTransactionMgr(dbId);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread replayer = new Thread(() -> {
+            try {
+                mgr.replayUpsertTransactionState(replayed);
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        }, replayerName);
+        replayer.start();
+        try {
+            assertTrue(onePublished.await(10, TimeUnit.SECONDS));
+            // A query planning on the follower now asks for the table READ lock.
+            Locker locker = new Locker();
+            boolean locked = locker.tryLockTablesWithIntensiveDbLock(dbId, List.of(table.getId()), LockType.READ,
+                    200, TimeUnit.MILLISECONDS);
+            long seenFirst = first.getVisibleVersion();
+            long seenSecond = second.getVisibleVersion();
+            if (locked) {
+                locker.unLockTablesWithIntensiveDbLock(dbId, List.of(table.getId()), LockType.READ);
+            }
+            Assertions.assertFalse(locked, "a reader holding the table lock got in between the partitions of one "
+                    + "transaction and saw versions " + seenFirst + " and " + seenSecond);
+        } finally {
+            allowRest.countDown();
+            replayer.join(10_000);
+        }
+        Assertions.assertFalse(replayer.isAlive());
+        assertNull(failure.get());
+        assertEquals(base + 1, first.getVisibleVersion());
+        assertEquals(base + 1, second.getVisibleVersion());
+        assertEquals(TransactionStatus.VISIBLE, mgr.getTransactionState(97001L).getTransactionStatus());
+    }
+
     @Test
     public void testFinishTransactionBatchReturnsLatestStateBatch() throws StarRocksException {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);

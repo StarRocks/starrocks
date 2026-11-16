@@ -14,10 +14,22 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.context.ai.AIProviderType;
+=======
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.context.ai.AIProviderType;
+import com.starrocks.planner.OlapScanNode;
+import com.starrocks.qe.DDLStmtExecutor;
+>>>>>>> 3af8f421a29... [BugFix][RB-926] Stop queries from seeing a multi-partition transaction half visible (#67727)
 import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.AIProviderMgr;
@@ -314,6 +326,57 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
                 () -> Assertions.assertTrue(prepared.context().isCached()),
                 () -> Assertions.assertEquals(live.getId(), scan.getTable().getId()),
                 () -> Assertions.assertNotSame(live, scan.getTable(), "the cached plan scans the live table"));
+    }
+
+    /**
+     * A hit rebuilds the scan ranges off the table copy the plan was first made from, without copying the table
+     * again. The copy recorded the partitions' visible versions when it was taken, so that one plan reads one state
+     * of the table; a hit still has to read the table as it is at that EXECUTE, not as it was at the first one.
+     */
+    @Test
+    public void testCachedPointQueryReadsTheVersionThePartitionHasNow() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `pq_version` (\n" +
+                "  `pk` bigint NOT NULL,\n" +
+                "  `v` int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`pk`)\n" +
+                "DISTRIBUTED BY HASH(`pk`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        OlapTable live = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "pq_version");
+        PhysicalPartition partition = live.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        // One load is visible, so the partition has data and is not pruned as empty.
+        publish(partition, 2L);
+        PreparedQuery prepared = prepare("select v from pq_version where pk = ?");
+        ExecPlan first = execute(prepared, bigint(1));
+        Assertions.assertEquals(2L, scanVersion(first, partition));
+
+        // Another load becomes visible after the plan was cached.
+        publish(partition, 3L);
+
+        ExecPlan hit = execute(prepared, bigint(2));
+        Assertions.assertAll(
+                () -> Assertions.assertTrue(prepared.context().isCached()),
+                () -> Assertions.assertSame(first.getPhysicalPlan(), hit.getPhysicalPlan()),
+                () -> Assertions.assertEquals(3L, scanVersion(hit, partition),
+                        "a hit read the partition at the version of the EXECUTE that cached the plan"));
+    }
+
+    private static void publish(PhysicalPartition partition, long version) {
+        for (Tablet tablet : partition.getQueryableBaseIndex().getTablets()) {
+            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                replica.updateVersion(version);
+            }
+        }
+        partition.setDataVersion(version);
+        partition.updateVisibleVersion(version);
+    }
+
+    private static long scanVersion(ExecPlan plan, PhysicalPartition partition) {
+        OlapScanNode scan = (OlapScanNode) plan.getScanNodes().get(0);
+        Long version = scan.getScanPartitionVersions().get(partition.getId());
+        Assertions.assertNotNull(version, "the scan did not read partition " + partition.getId() + ": "
+                + scan.getScanPartitionVersions());
+        return version;
     }
 
     @Test

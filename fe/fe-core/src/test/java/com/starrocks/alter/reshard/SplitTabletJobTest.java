@@ -367,6 +367,18 @@ public class SplitTabletJobTest {
         tabletReshardJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, tabletReshardJob.getJobState());
 
+        // The plan invalidation has to be in place when the split children are installed, not only once the
+        // job is done: a lock-free plan reads the visible version its table copy recorded and the layout later.
+        long beforeInstall = table.lastSchemaUpdateTime.get();
+        List<Long> invalidationAtInstall = new ArrayList<>();
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public void addMaterializedIndex(Invocation invocation, MaterializedIndex index, boolean isBaseIndex) {
+                invalidationAtInstall.add(table.lastSchemaUpdateTime.get());
+                invocation.proceed(index, isBaseIndex);
+            }
+        };
+
         // runRunningJob() -> addNewMaterializedIndexes() installs the split-child indexes and changes
         // the partition tablet layout. It must bump lastSchemaUpdateTime so a query planned concurrently
         // is re-planned by StatementPlanner's retry loop against the new layout, instead of failing with
@@ -377,6 +389,10 @@ public class SplitTabletJobTest {
         long afterSplit = table.lastSchemaUpdateTime.get();
         Assertions.assertTrue(afterSplit > beforeSplit,
                 "split must bump lastSchemaUpdateTime (before=" + beforeSplit + ", after=" + afterSplit + ")");
+        Assertions.assertFalse(invalidationAtInstall.isEmpty(), "the split installed no index");
+        Assertions.assertTrue(invalidationAtInstall.stream().allMatch(time -> time > beforeInstall),
+                "plans must be invalidated before the split children are installed (before=" + beforeInstall
+                        + ", at install=" + invalidationAtInstall + ")");
     }
 
     @Test

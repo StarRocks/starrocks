@@ -740,6 +740,18 @@ public class MergeTabletJob extends TabletReshardJob {
     private void addNewMaterializedIndexes() {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
             OlapTable olapTable = lockedTable.get();
+            // Installing the new materialized indexes changes both the writable and queryable tablet
+            // layouts. A query that captured the old layout during planning (OlapScanNode fills
+            // scanTabletIds from getQueryableIndex(), then mapTabletsToPartitions() re-reads it) would
+            // otherwise hard-fail
+            // at plan build ("Invalid tablet id ... may have been dropped") or hand a CN a stale
+            // tablet/version whose metadata object no longer exists. Bump the table's optimistic
+            // version so StatementPlanner's retry loop (OptimisticVersion.validateTableUpdate) detects
+            // the change and re-plans against the new layout. Mirrors SplitTabletJob's bump at the
+            // same commit point. This runs on both the leader (runRunningJob) and the replay path
+            // (replayCleaningJob), so followers re-plan too. Before the install: a lock-free plan resolves the
+            // layout after it recorded the versions, and must not pair the merged tablets with an older one.
+            olapTable.lastSchemaUpdateTime.set(System.nanoTime());
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 PhysicalPartition physicalPartition = olapTable
                         .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
@@ -762,18 +774,6 @@ public class MergeTabletJob extends TabletReshardJob {
                             newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
                 }
             }
-
-            // Installing the new materialized indexes changes both the writable and queryable tablet
-            // layouts. A query that captured the old layout during planning (OlapScanNode fills
-            // scanTabletIds from getQueryableIndex(), then mapTabletsToPartitions() re-reads it) would
-            // otherwise hard-fail
-            // at plan build ("Invalid tablet id ... may have been dropped") or hand a CN a stale
-            // tablet/version whose metadata object no longer exists. Bump the table's optimistic
-            // version so StatementPlanner's retry loop (OptimisticVersion.validateTableUpdate) detects
-            // the change and re-plans against the new layout. Mirrors SplitTabletJob's bump at the
-            // same commit point. This runs on both the leader (runRunningJob) and the replay path
-            // (replayCleaningJob), so followers re-plan too.
-            olapTable.lastSchemaUpdateTime.set(System.nanoTime());
         }
     }
 

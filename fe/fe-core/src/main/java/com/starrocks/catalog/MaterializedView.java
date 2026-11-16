@@ -853,6 +853,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.dbId = dbId;
     }
 
+    /**
+     * The database and table ids of the lock that guards this MV's partitions. A synchronous MV that MV rewrite builds
+     * over a rollup index carries the index's id and shares its base table's partitions: its base table's lock.
+     */
+    public Pair<Long, Long> getPartitionLockTarget() {
+        if (refreshScheme != null && refreshScheme.getType() == MaterializedViewRefreshType.SYNC
+                && baseTableInfos != null && baseTableInfos.size() == 1
+                && GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(getDbId(), getId()) == null) {
+            BaseTableInfo baseTable = baseTableInfos.get(0);
+            return Pair.create(baseTable.getDbId(), baseTable.getTableId());
+        }
+        return Pair.create(getDbId(), getId());
+    }
+
     public synchronized boolean isActive() {
         return active;
     }
