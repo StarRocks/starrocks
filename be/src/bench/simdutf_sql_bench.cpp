@@ -434,8 +434,36 @@ BENCHMARK_MAIN();
 // BM_ScannerValidateUtf8_PerRecord/240/0    54,222 ns        52,999 ns      25,001 ns     2.12x (36.62 GiB/s)
 // BM_ScannerValidateUtf8_PerRecord/240/1   114,642 ns       116,600 ns     105,792 ns     1.10x (8.65 GiB/s)
 //
-// Base64 Legacy Scalar vs simdutf 9.4.0 (4,096 rows/chunk):
+// Base64 Legacy Scalar vs simdutf 9.4.0 on x86-64 (4,096 rows/chunk):
 // --------------------------------------------------------------------------------------------------------
 // BM_SqlBase64Encode (32B / 128B / 1024B):  119,593 / 396,195 / 2,894,851 ns -> 24,275 / 35,628 / 178,706 ns (4.93x / 11.12x / 16.20x)
 // BM_SqlBase64Decode (44B / 172B / 1368B):  331,374 / 1,112,093 / 8,418,747 ns -> 57,308 / 76,722 / 327,377 ns (5.78x / 14.50x / 25.72x)
+//
+// Empirical Results on GCP c4a-standard-4 (Google Axion ARM Neoverse-V2 @ 2.0GHz
+// ARM64/NEON, GCC 14, taskset -c 2, 4,096 rows per BinaryColumn chunk):
+//
+// Benchmark (ARM64 NEON)                 5.2.8 (4.1.7)    9.1.0 (HEAD)     9.4.0 (PR)   Speedup (vs 9.1.0)
+// --------------------------------------------------------------------------------------------------------
+// BM_SqlUtf8Length_Ascii/16                 17,843 ns        17,839 ns      17,838 ns     1.00x (3.42 GiB/s)
+// BM_SqlUtf8Length_Ascii/48                 32,089 ns        32,143 ns      32,130 ns     1.00x (5.70 GiB/s)
+// BM_SqlUtf8Length_Ascii/100                34,328 ns        34,323 ns      34,324 ns     1.00x (11.11 GiB/s)
+// BM_SqlUtf8Length_Ascii/256                32,680 ns        33,522 ns      33,331 ns     1.01x (29.30 GiB/s)
+// BM_SqlUtf8Length_Utf8/16                  17,837 ns        17,838 ns      17,838 ns     1.00x (3.42 GiB/s)
+// BM_SqlUtf8Length_Utf8/48                  31,660 ns        31,674 ns      31,661 ns     1.00x (5.78 GiB/s)
+// BM_SqlUtf8Length_Utf8/100                 32,938 ns        32,943 ns      32,946 ns     1.00x (11.58 GiB/s)
+// BM_SqlUtf8Length_Utf8/256                 31,282 ns        32,374 ns      31,976 ns     1.01x (30.54 GiB/s)
+// BM_SqlSubstr_Ascii/192                    16,441 ns        16,956 ns      16,667 ns     1.02x (43.94 GiB/s)
+// BM_SqlReverse_Ascii/192                   31,742 ns        32,520 ns      30,711 ns     1.06x (23.85 GiB/s)
+// BM_ScannerValidateUtf8_PerRecord/96/0     27,529 ns        26,705 ns      19,366 ns     1.38x (18.91 GiB/s)
+// BM_ScannerValidateUtf8_PerRecord/160/0    30,123 ns        29,187 ns      22,151 ns     1.32x (27.55 GiB/s)
+// BM_ScannerValidateUtf8_PerRecord/240/0    35,157 ns        34,352 ns      25,839 ns     1.33x (35.43 GiB/s)
+// BM_ScannerValidateUtf8_PerRecord/2048/0  164,734 ns       170,458 ns     158,502 ns     1.08x (49.29 GiB/s)
+// BM_ScannerValidateUtf8_PerRecord/96/1     81,567 ns        81,319 ns      77,516 ns     1.05x (4.72 GiB/s)
+// BM_ScannerValidateUtf8_PerRecord/160/1   113,694 ns       113,131 ns     107,711 ns     1.05x (5.67 GiB/s)
+// BM_ScannerValidateUtf8_PerRecord/240/1   143,907 ns       142,453 ns     135,498 ns     1.05x (6.76 GiB/s)
+//
+// Base64 Legacy Scalar vs simdutf 9.4.0 on ARM64/NEON (4,096 rows/chunk):
+// --------------------------------------------------------------------------------------------------------
+// BM_SqlBase64Encode (32B / 128B / 1024B):   88,585 / 300,835 / 2,293,064 ns ->  35,711 /  74,077 / 425,829 ns (2.48x / 4.06x / 5.38x)
+// BM_SqlBase64Decode (44B / 172B / 1368B):  246,123 / 974,210 / 7,570,223 ns -> 117,497 / 179,080 / 724,495 ns (2.09x / 5.44x / 10.45x)
 // ============================================================================
