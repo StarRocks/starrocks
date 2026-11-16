@@ -90,15 +90,11 @@ import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
-<<<<<<< HEAD
-=======
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.Logger;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
-import org.junit.jupiter.api.AfterEach;
->>>>>>> c5f159fd30f... [BugFix][RB-1549] Fix literal values leaking past enable_sql_desensitize_in_log (#69138)
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
