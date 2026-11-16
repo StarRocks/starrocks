@@ -87,6 +87,33 @@ This topic introduces the following types of BE configurations:
 - Description: Whether a compaction task in a shared-data cluster holds its input Segment objects on its own Rowset instances for the whole task, so that the per-column-group passes of vertical compaction reuse them instead of reloading them through the metadata cache. Without holding, whenever the metadata cache cannot hold all input segments (a small `lake_segment_metadata_cache_limit_percent`, or a node crowded with many tablets), every pass reloads and re-parses every input segment; that cost is CPU-bound and proportional to the column count, and can slow a wide-table compaction by an order of magnitude or make it fail with repeated memory-limit retries. While holding, the task does not fill the shared metadata cache with its input segments or delete vectors, because the inputs are deleted right after compaction and caching them only evicts other tablets' entries. The memory cost is one set of input segment metadata per running task, accounted on the compaction task's memory tracker and released with the task. Set this item to `false` to restore the previous behavior, in which compaction reuses segments through the shared metadata cache and fills that cache with its inputs.
 - Introduced in: v4.2
 
+### enable_compaction_parallel_merge_init
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the merge iterator of a compaction task prefills its inputs in parallel. A merge must read one chunk from every input before it can produce a row; by default those first reads happen one after another, so a task with many inputs pays one read round trip per input before any output. When enabled, the first reads are issued in parallel and committed in the original order, which keeps the merge result identical to the serial path. Recommended for shared-data clusters whose compaction reads reach object storage.
+- Introduced in: v4.2
+
+### compaction_parallel_merge_init_threads
+
+- Default: 16
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The maximum number of in-flight prefill reads a single compaction merge may issue at a time. Reads are executed by the shared prefill thread pool (see compaction_parallel_merge_init_pool_threads), and each read also decodes the first chunk of its input there. Takes effect only when enable_compaction_parallel_merge_init is enabled.
+- Introduced in: v4.2
+
+### compaction_parallel_merge_init_pool_threads
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The thread count of the shared pool that runs parallel merge prefill reads for all concurrent compaction tasks on the node. It is sized above the per-task in-flight limit so that concurrent tasks do not dilute each other; idle threads are reclaimed after 10 seconds, so an idle node pays nothing for the headroom. The reads also decode on this pool, so a larger value increases CPU and memory use as well as IO concurrency.
+- Introduced in: v4.2
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576

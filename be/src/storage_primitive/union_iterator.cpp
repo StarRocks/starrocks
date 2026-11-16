@@ -41,6 +41,18 @@ public:
 
     size_t merged_rows() const override { return _merged_rows; }
 
+    OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) override {
+        DCHECK_EQ(_cur_idx, 0);
+        OlapReaderStatistics* previous = nullptr;
+        for (auto& child : _children) {
+            if (auto* original = child->set_read_stats(stats); original != nullptr) {
+                DCHECK(previous == nullptr || previous == original);
+                previous = original;
+            }
+        }
+        return previous;
+    }
+
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         for (auto& child : _children) {
