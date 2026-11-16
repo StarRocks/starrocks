@@ -766,4 +766,201 @@ public class MVMirrorBasePartitionTest extends MVTestBase {
             Config.enable_mv_mirror_base_partition = original;
         }
     }
+
+    /**
+     * The retained day partitions cover May 1-2 only. A request that starts inside them but reaches into the
+     * deferred month component keeps the refresh scope non-empty, so the conflict cannot be detected by the
+     * empty-scope rule: the requested coverage has to be checked against the existing MV partitions instead.
+     */
+    @Test
+    public void testBoundedRefreshWithPartiallyCoveredDeferredShapeChangeIsRejected() throws Exception {
+        boolean original = Config.enable_mv_mirror_base_partition;
+        Config.enable_mv_mirror_base_partition = false;
+        try {
+            starRocksAssert.withTable(createTableSql("mirror_deferred2", MAY_RANGE));
+            executeInsertSql(connectContext,
+                    "insert into mirror_deferred2 partition(p202105) values('2021-05-06', 1, 1);");
+            starRocksAssert.withMaterializedView(createDayPartitionMvSql("mv_mirror_deferred2", "mirror_deferred2"),
+                    (mvName) -> {
+                        MaterializedView mv = getMv(DB_NAME, (String) mvName);
+                        Assertions.assertEquals(Constants.TaskRunState.SUCCESS,
+                                buildBoundedRun(mv, "2021-05-01", "2021-05-03", true).executeTaskRun(),
+                                "bounded eager refresh did not succeed");
+
+                        Config.enable_mv_mirror_base_partition = true;
+                        Set<String> before = mv.getRangePartitionMap().getPartitionNames();
+
+                        // May 2 is covered by the retained p20210502_20210503, so the refresh scope is non-empty
+                        // while May 3-15 have no partition to materialize.
+                        TaskRun explainRun = buildMVTaskRun(mv, DB_NAME);
+                        ExecuteOption executeOption = new ExecuteOption(explainRun.getTask());
+                        Map<String, String> explainProps = executeOption.getTaskRunProperties();
+                        explainProps.put(TaskRun.FORCE, "true");
+                        explainProps.put(TaskRun.PARTITION_START, "2021-05-02");
+                        explainProps.put(TaskRun.PARTITION_END, "2021-05-16");
+                        String plan = explainMVRefreshExecPlan(mv, executeOption,
+                                "explain refresh materialized view test.mv_mirror_deferred2 " +
+                                        "partition start (\"2021-05-02\") end (\"2021-05-16\") force;");
+                        Assertions.assertTrue(
+                                plan.contains("only partially covers a pending partition shape change"), plan);
+                        Assertions.assertEquals(before, mv.getRangePartitionMap().getPartitionNames(),
+                                "EXPLAIN must not reshape partitions");
+
+                        TaskRun taskRun = buildBoundedRun(mv, "2021-05-02", "2021-05-16", true);
+                        DmlException rejected = Assertions.assertThrows(DmlException.class,
+                                taskRun::executeTaskRun,
+                                "a range with uncovered partitions must not end as a successful refresh");
+                        Assertions.assertTrue(rejected.getMessage().contains(
+                                        "no existing partition of the materialized view covers"),
+                                rejected.getMessage());
+                        Assertions.assertEquals(before, mv.getRangePartitionMap().getPartitionNames(),
+                                "a rejected range must not reshape partitions");
+                        Assertions.assertTrue(mv.isActive(), "mv inactive: " + mv.getInactiveReason());
+                    });
+        } finally {
+            Config.enable_mv_mirror_base_partition = original;
+        }
+    }
+
+    /**
+     * When the retained day partitions tile the whole requested range there is no gap to report: the refresh
+     * keeps the existing layout and materializes the requested days, so it must not be rejected.
+     */
+    @Test
+    public void testBoundedRefreshWithFullyCoveredDeferredShapeChangeIsRefreshed() throws Exception {
+        boolean original = Config.enable_mv_mirror_base_partition;
+        Config.enable_mv_mirror_base_partition = false;
+        try {
+            starRocksAssert.withTable(createTableSql("mirror_deferred3", MAY_RANGE));
+            executeInsertSql(connectContext,
+                    "insert into mirror_deferred3 partition(p202105) values('2021-05-02', 1, 1);");
+            starRocksAssert.withMaterializedView(createDayPartitionMvSql("mv_mirror_deferred3", "mirror_deferred3"),
+                    (mvName) -> {
+                        MaterializedView mv = getMv(DB_NAME, (String) mvName);
+                        Assertions.assertEquals(Constants.TaskRunState.SUCCESS,
+                                buildBoundedRun(mv, "2021-05-01", "2021-05-03", true).executeTaskRun(),
+                                "bounded eager refresh did not succeed");
+
+                        Config.enable_mv_mirror_base_partition = true;
+                        Set<String> eagerDays = Sets.newHashSet("p20210501_20210502", "p20210502_20210503");
+                        Assertions.assertEquals(eagerDays, mv.getRangePartitionMap().getPartitionNames());
+
+                        // The two adjacent day partitions tile [May 1, May 3) even though the month component
+                        // cannot be replaced atomically, so the request is satisfiable in the retained layout.
+                        TaskRun taskRun = buildBoundedRun(mv, "2021-05-01", "2021-05-03", true);
+                        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, taskRun.executeTaskRun(),
+                                "a fully covered range must not be rejected");
+                        Assertions.assertEquals(eagerDays, mv.getRangePartitionMap().getPartitionNames(),
+                                "a fully covered refresh must keep the retained layout");
+                        MVTaskRunExtraMessage extraMessage =
+                                getPartitionBasedRefreshProcessor(taskRun).getMVTaskRunExtraMessage();
+                        Assertions.assertEquals(eagerDays, extraMessage.getMvPartitionsToRefresh(),
+                                "the requested days were not refreshed: " + extraMessage.getMvPartitionsToRefresh());
+                        Assertions.assertTrue(mv.isActive(), "mv inactive: " + mv.getInactiveReason());
+                    });
+        } finally {
+            Config.enable_mv_mirror_base_partition = original;
+        }
+    }
+
+    /**
+     * A request whose scope is empty keeps the strict rule: any pending shape change overlapping it is a
+     * conflict even when the retained partitions happen to cover the requested range. It must not be reported
+     * as up to date.
+     */
+    @Test
+    public void testEmptyScopeWithFullyCoveredDeferredShapeChangeIsStillRejected() throws Exception {
+        boolean original = Config.enable_mv_mirror_base_partition;
+        Config.enable_mv_mirror_base_partition = false;
+        try {
+            starRocksAssert.withTable(createTableSql("mirror_deferred4", MAY_RANGE));
+            executeInsertSql(connectContext,
+                    "insert into mirror_deferred4 partition(p202105) values('2021-05-02', 1, 1);");
+            starRocksAssert.withMaterializedView(createDayPartitionMvSql("mv_mirror_deferred4", "mirror_deferred4"),
+                    (mvName) -> {
+                        MaterializedView mv = getMv(DB_NAME, (String) mvName);
+                        Assertions.assertEquals(Constants.TaskRunState.SUCCESS,
+                                buildBoundedRun(mv, "2021-05-01", "2021-05-03", true).executeTaskRun(),
+                                "bounded eager refresh did not succeed");
+
+                        Config.enable_mv_mirror_base_partition = true;
+                        Set<String> before = mv.getRangePartitionMap().getPartitionNames();
+
+                        // No force and no base change: the requested days are already fresh, so the scope is empty.
+                        TaskRun taskRun = buildBoundedRun(mv, "2021-05-01", "2021-05-03", false);
+                        DmlException rejected = Assertions.assertThrows(DmlException.class,
+                                taskRun::executeTaskRun,
+                                "an empty scope over a pending shape change must not be reported as up to date");
+                        Assertions.assertTrue(rejected.getMessage().contains(
+                                        "only partially covers the pending partition shape change"),
+                                rejected.getMessage());
+                        Assertions.assertEquals(before, mv.getRangePartitionMap().getPartitionNames(),
+                                "a rejected range must not reshape partitions");
+                        Assertions.assertTrue(mv.isActive(), "mv inactive: " + mv.getInactiveReason());
+                    });
+        } finally {
+            Config.enable_mv_mirror_base_partition = original;
+        }
+    }
+
+    /**
+     * A queued batch whose window still holds retained partitions keeps refreshing them: skipping instead would
+     * drop that work and end the batch chain, and only the next scheduled run could resume it.
+     */
+    @Test
+    public void testQueuedBatchWithPartiallyCoveredDeferredShapeChangeKeepsRefreshing() throws Exception {
+        boolean original = Config.enable_mv_mirror_base_partition;
+        Config.enable_mv_mirror_base_partition = false;
+        try {
+            starRocksAssert.withTable(createTableSql("mirror_deferred5", MAY_RANGE));
+            executeInsertSql(connectContext,
+                    "insert into mirror_deferred5 partition(p202105) values('2021-05-02', 1, 1);");
+            starRocksAssert.withMaterializedView(createDayPartitionMvSql("mv_mirror_deferred5", "mirror_deferred5"),
+                    (mvName) -> {
+                        MaterializedView mv = getMv(DB_NAME, (String) mvName);
+                        Assertions.assertEquals(Constants.TaskRunState.SUCCESS,
+                                buildBoundedRun(mv, "2021-05-01", "2021-05-03", true).executeTaskRun(),
+                                "bounded eager refresh did not succeed");
+
+                        Config.enable_mv_mirror_base_partition = true;
+                        Set<String> eagerDays = Sets.newHashSet("p20210501_20210502", "p20210502_20210503");
+
+                        TaskRun batchRun = buildBoundedRun(mv, "2021-05-02", "2021-05-16", true);
+                        // marks the run as produced by the previous run of the same batch
+                        batchRun.getProperties().put(TaskRun.START_TASK_RUN_ID, UUIDUtil.genUUID().toString());
+                        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, batchRun.executeTaskRun(),
+                                "a queued batch must keep refreshing its retained partitions");
+                        MVTaskRunExtraMessage extraMessage =
+                                getPartitionBasedRefreshProcessor(batchRun).getMVTaskRunExtraMessage();
+                        Assertions.assertTrue(extraMessage.getMvPartitionsToRefresh().contains("p20210502_20210503"),
+                                "the retained partition inside the window was not refreshed: "
+                                        + extraMessage.getMvPartitionsToRefresh());
+                        Assertions.assertEquals(eagerDays, mv.getRangePartitionMap().getPartitionNames(),
+                                "a deferred shape change must keep the retained layout");
+                        Assertions.assertTrue(mv.isActive(), "mv inactive: " + mv.getInactiveReason());
+                    });
+        } finally {
+            Config.enable_mv_mirror_base_partition = original;
+        }
+    }
+
+    private static String createDayPartitionMvSql(String mvName, String tableName) {
+        return "create materialized view test." + mvName + "\n" +
+                "partition by date_trunc('day', k1)\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "properties('replication_num'='1', 'partition_refresh_number'='-1')\n" +
+                "refresh deferred manual\n" +
+                "as select k1, k2, sum(v1) as v1 from test." + tableName + " group by k1, k2";
+    }
+
+    private TaskRun buildBoundedRun(MaterializedView mv, String start, String end, boolean force) {
+        TaskRun taskRun = buildMVTaskRun(mv, DB_NAME);
+        if (force) {
+            taskRun.getProperties().put(TaskRun.FORCE, "true");
+        }
+        taskRun.getProperties().put(TaskRun.PARTITION_START, start);
+        taskRun.getProperties().put(TaskRun.PARTITION_END, end);
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        return taskRun;
+    }
 }

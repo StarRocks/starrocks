@@ -19,6 +19,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
+import com.google.common.collect.TreeRangeSet;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -201,8 +203,9 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
 
     /**
      * Remember the shape-change components this sync left untouched that overlap the requested range.
-     * The refresh planner reports them when no partition of the MV can cover the request, so a bounded
-     * refresh never claims a range it could not materialize is already up to date.
+     * The refresh planner rejects the request when its scope ends up empty, or when the existing MV partitions
+     * do not cover the part of the requested range those components take part in, so a bounded refresh never
+     * claims a range it could not materialize is already up to date.
      */
     private void recordDeferredShapeChangeRanges(Range<PartitionKey> rangeToInclude,
                                                  List<Range<PartitionKey>> deferredRanges) {
@@ -216,6 +219,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             return;
         }
         mvContext.setDeferredShapeChangeRanges(intersected);
+        mvContext.setRequestedRefreshRange(rangeToInclude);
         logger.warn("Materialized view {} cannot refresh the requested range {}: it only partially covers "
                         + "the pending partition shape change {}, which cannot be applied atomically. "
                         + "Refresh a range covering the whole component or the whole materialized view.",
@@ -231,6 +235,42 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     @VisibleForTesting
     public static boolean intersectsRequestedRange(Range<PartitionKey> requested, Range<PartitionKey> component) {
         return requested.isConnected(component) && !requested.intersection(component).isEmpty();
+    }
+
+    /**
+     * The parts of the requested range that a deferred shape change takes part in and that no existing MV
+     * partition covers.
+     *
+     * <p>Coverage is checked against the MV's partitions after this run's partition sync, never against the
+     * refresh scope: the scope only holds the partitions that still need a refresh, while a partition that is
+     * already fresh covers its range just as well. Two adjacent partitions (e.g. {@code p20210501_20210502} and
+     * {@code p20210502_20210503}) tile a request together, so only the union of the ranges decides coverage.
+     *
+     * @param requestedRange     the range this run was asked to refresh, null for a whole-MV refresh
+     * @param deferredComponents the untouched shape-change components that take part in {@code requestedRange}
+     */
+    @VisibleForTesting
+    public static List<Range<PartitionKey>> findUncoveredRanges(PCellSortedSet existingMvPartitions,
+                                                                 Range<PartitionKey> requestedRange,
+                                                                 List<Range<PartitionKey>> deferredComponents) {
+        if (requestedRange == null || deferredComponents.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        RangeSet<PartitionKey> covered = TreeRangeSet.create();
+        for (PCellWithName entry : existingMvPartitions.getPartitions()) {
+            covered.add(((PRangeCell) entry.cell()).getRange());
+        }
+        List<Range<PartitionKey>> uncovered = Lists.newArrayList();
+        for (Range<PartitionKey> component : deferredComponents) {
+            if (!intersectsRequestedRange(requestedRange, component)) {
+                continue;
+            }
+            Range<PartitionKey> requestedPart = requestedRange.intersection(component);
+            if (!covered.encloses(requestedPart)) {
+                uncovered.add(requestedPart);
+            }
+        }
+        return uncovered;
     }
 
     @Override

@@ -79,9 +79,13 @@ public class MvTaskRunContext extends TaskRunContext {
     // in this task run; otherwise the dropped partition's history would turn into an empty partition.
     private PCellSortedSet replacementAddPartitions = PCellSortedSet.of();
     // Ranges of partition shape changes this run left untouched because the requested range does not
-    // cover them. When the refresh scope ends up empty, the request must be reported as unsatisfiable
-    // instead of "already up to date".
+    // cover them. A request whose scope ends up empty, or one that no existing partition covers, must be
+    // reported as unsatisfiable instead of "already up to date".
     private List<Range<PartitionKey>> deferredShapeChangeRanges = List.of();
+    // The partition range this run was asked to refresh, recorded together with the deferred shape changes so
+    // coverage can be checked against the part of the request those untouched components take part in. Null
+    // when no deferred component overlaps the request (including whole-MV refreshes).
+    private Range<PartitionKey> requestedRefreshRange;
     // MaterializedView#getVersionMapResetEpoch as this run saw it before reading anything, -1 when not recorded.
     private long versionMapResetEpoch = -1;
     private MVRefreshPinState pinState;
@@ -193,6 +197,14 @@ public class MvTaskRunContext extends TaskRunContext {
     public void setDeferredShapeChangeRanges(List<Range<PartitionKey>> deferredShapeChangeRanges) {
         this.deferredShapeChangeRanges = deferredShapeChangeRanges == null
                 ? List.of() : List.copyOf(deferredShapeChangeRanges);
+    }
+
+    public Range<PartitionKey> getRequestedRefreshRange() {
+        return requestedRefreshRange;
+    }
+
+    public void setRequestedRefreshRange(Range<PartitionKey> requestedRefreshRange) {
+        this.requestedRefreshRange = requestedRefreshRange;
     }
 
     /**
