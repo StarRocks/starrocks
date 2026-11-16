@@ -76,6 +76,7 @@ public:
 
     std::string getName() const override = 0;
     uint64_t flush() override;
+    void suppress() override;
 
     bool isCompressed() const override { return true; }
     uint64_t getSize() const override;
@@ -133,6 +134,13 @@ uint64_t CompressionStreamBase::flush() {
     BufferedOutputStream::BackUp(outputSize - outputPosition);
     bufferSize = outputSize = outputPosition = 0;
     return BufferedOutputStream::flush();
+}
+
+void CompressionStreamBase::suppress() {
+    // A suppressed PRESENT stream is reused by the next stripe.
+    outputBuffer = nullptr;
+    bufferSize = outputPosition = outputSize = 0;
+    BufferedOutputStream::suppress();
 }
 
 uint64_t CompressionStreamBase::getSize() const {
