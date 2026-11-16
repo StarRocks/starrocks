@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
@@ -491,9 +492,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         TreeMap<ColumnRefOperator, ColumnStatistic> sortMap =
                 new TreeMap<>(Comparator.comparingInt(ColumnRefOperator::getId));
         sortMap.putAll(columnStatistics);
+        boolean hideValues = ExprToSql.isDigestingLiterals();
         sortMap.forEach((key, value) -> {
             outputBuilder.append(prefix).append("* ").append(key.getName());
-            outputBuilder.append("-->").append(value).append("\n");
+            outputBuilder.append("-->").append(hideValues ? value.toStringWithoutValues() : value).append("\n");
         });
 
         if (!multiColumnCombinedStats.isEmpty()) {
@@ -526,7 +528,15 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // Convert this plan node, including all children, to its Thrift representation.
     public TPlan treeToThrift() {
         TPlan result = new TPlan();
-        treeToThriftHelper(result);
+        if (Config.enable_sql_desensitize_in_log) {
+            // the sql_* display strings sent to BE end up in the operator profile
+            ExprToSql.withDigestedLiterals(() -> {
+                treeToThriftHelper(result);
+                return null;
+            });
+        } else {
+            treeToThriftHelper(result);
+        }
         return result;
     }
 
@@ -657,7 +667,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     protected String explainExpr(TExplainLevel level, List<? extends Expr> exprs) {
         ConnectContext context = ConnectContext.get();
         FormatOptions options = FormatOptions.allEnable();
-        if (context == null || !context.getSessionVariable().isEnableDesensitizeExplain()) {
+        if (!ExprToSql.isDigestingLiterals()
+                && (context == null || !context.getSessionVariable().isEnableDesensitizeExplain())) {
             options.setEnableDigest(false);
         }
         if (TExplainLevel.VERBOSE.equals(level)) {

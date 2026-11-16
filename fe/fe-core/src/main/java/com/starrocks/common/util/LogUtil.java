@@ -19,6 +19,8 @@ import com.google.common.base.Throwables;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.mysql.MysqlAuthPacket;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
@@ -26,17 +28,23 @@ import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.StatementBase;
 
 import java.lang.management.ThreadInfo;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class LogUtil {
+    private static final String DESENSITIZED = "<desensitized>";
+
     public static void logConnectionInfoToAuditLogAndQueryQueue(ConnectContext ctx, MysqlAuthPacket authPacket) {
         boolean enableConnectionLog = false;
         if (Config.audit_log_modules != null) {
@@ -290,5 +298,86 @@ public class LogUtil {
         }
         sb.deleteCharAt(sb.length() - 1);
         return sb.toString();
+    }
+
+    // SQL for failure logs. Off: {@code sql} with credentials masked; on: see desensitizeSql.
+    public static String redactSqlForLog(String sql, StatementBase stmt) {
+        return Config.enable_sql_desensitize_in_log ? desensitizedSql(stmt) : SqlCredentialRedactor.redact(sql);
+    }
+
+    // Like redactSqlForLog, for call sites that log {@code sql} as is when desensitize is off.
+    public static String desensitizeSql(String sql, StatementBase stmt) {
+        return Config.enable_sql_desensitize_in_log ? desensitizedSql(stmt) : sql;
+    }
+
+    // The statement with literals as `?`, or a placeholder when there is none; never throws, as it runs on
+    // failure paths.
+    private static String desensitizedSql(StatementBase stmt) {
+        if (stmt == null) {
+            return DESENSITIZED;
+        }
+        try {
+            return AstToSQLBuilder.toDesensitizedSQL(stmt);
+        } catch (Throwable t) {
+            return DESENSITIZED;
+        }
+    }
+
+    // Under enable_sql_desensitize_in_log, text that can quote SQL values (exception messages, unparsed SQL)
+    // stays out of logs.
+    public static String desensitizeText(String text) {
+        return Config.enable_sql_desensitize_in_log ? DESENSITIZED : text;
+    }
+
+    // A failure for a log line that prints only its message. Under enable_sql_desensitize_in_log, its type and error
+    // code take the place of the message, which can quote SQL values.
+    public static String desensitizeMessage(Throwable e) {
+        if (!Config.enable_sql_desensitize_in_log) {
+            return e.getMessage();
+        }
+        Enum<?> code = null;
+        if (e instanceof StarRocksException sre) {
+            code = sre.getErrorCode() != null ? sre.getErrorCode() : sre.getInternalErrorCode();
+        } else if (e instanceof ErrorReportException ere) {
+            code = ere.getErrorCode();
+        }
+        return e.getClass().getName() + (code == null ? "" : "(" + code.name() + ")") + ": " + DESENSITIZED;
+    }
+
+    // desensitizeMessage for a failure formatted into the line as a whole, which prints "type: message" when off.
+    public static String desensitizeToString(Throwable e) {
+        return Config.enable_sql_desensitize_in_log ? desensitizeMessage(e) : String.valueOf(e);
+    }
+
+    // Keeps exception types and stack frames, drops messages; returns {@code e} itself when desensitize is off.
+    public static Throwable desensitize(Throwable e) {
+        if (!Config.enable_sql_desensitize_in_log || e == null) {
+            return e;
+        }
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        seen.add(e);
+        return withoutMessage(e, 0, seen);
+    }
+
+    // Copies the cause chain and suppressed exceptions once each; they can refer back to each other.
+    private static Throwable withoutMessage(Throwable e, int depth, Set<Throwable> seen) {
+        final int maxDepth = 20;
+        Throwable cause = e.getCause() != null && depth < maxDepth && seen.add(e.getCause())
+                ? withoutMessage(e.getCause(), depth + 1, seen) : null;
+        Throwable copy = new DesensitizedThrowable(e.getClass().getName(), cause);
+        copy.setStackTrace(e.getStackTrace());
+        for (Throwable suppressed : e.getSuppressed()) {
+            if (depth < maxDepth && seen.add(suppressed)) {
+                copy.addSuppressed(withoutMessage(suppressed, depth + 1, seen));
+            }
+        }
+        return copy;
+    }
+
+    // Log4j prints getClass().getName() + message, so the original type travels as the message.
+    private static final class DesensitizedThrowable extends Throwable {
+        DesensitizedThrowable(String originalClassName, Throwable cause) {
+            super(originalClassName, cause);
+        }
     }
 }
