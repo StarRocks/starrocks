@@ -693,7 +693,7 @@ fi
 # patch jemalloc_hook
 if [[ -d $TP_SOURCE_DIR/$JEMALLOC_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
-    if [ ! -f $PATCHED_MARK ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
+    if [ ! -f $PATCHED_MARK ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.1" ]; then
         apply_patch -p0 $TP_PATCH_DIR/jemalloc_hook.patch
         apply_patch -p0 $TP_PATCH_DIR/jemalloc_nallocx.patch
         apply_patch -p0 $TP_PATCH_DIR/jemalloc_nodump.patch
@@ -704,11 +704,11 @@ if [[ -d $TP_SOURCE_DIR/$JEMALLOC_SOURCE ]] ; then
     # so the block above never runs there and the build would keep the unpatched
     # sources. Replaying that block instead is not an option, apply_patch passes
     # -N and stops on the patches which are already applied.
-    if [ ! -f $PATCHED_MARK.usable_size_minimal_tsd ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
+    if [ ! -f $PATCHED_MARK.usable_size_minimal_tsd ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.1" ]; then
         apply_patch -p0 $TP_PATCH_DIR/jemalloc_malloc_usable_size_minimal_tsd.patch
         touch $PATCHED_MARK.usable_size_minimal_tsd
     fi
-    if [ ! -f $PATCHED_MARK.metadata_breakdown ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
+    if [ ! -f $PATCHED_MARK.metadata_breakdown ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.1" ]; then
         apply_patch -p0 $TP_PATCH_DIR/jemalloc_metadata_breakdown.patch
         touch $PATCHED_MARK.metadata_breakdown
     fi
