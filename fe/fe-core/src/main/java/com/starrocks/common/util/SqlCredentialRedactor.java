@@ -121,28 +121,12 @@ public class SqlCredentialRedactor {
     // key"=value"
     // key'='value
     // key"="value
-<<<<<<< HEAD
     // Values can contain spaces and span multiple lines, separated by commas
-    private static final int MAX_KEY_LENGTH =
-            CREDENTIAL_KEYS.stream().map(String::length).max(Integer::compareTo).orElse(1);
-=======
-    // "key":"value" (a JSON pair, e.g. inside the config of ai_query or embedding())
-    // \"key\":\"value\" (the same JSON pair in a SQL string that escapes its double quotes; the parser drops the
-    // backslashes, so the function receives the same config)
-    // Values can contain spaces and span multiple lines, separated by commas.
-    // After ':' only a quoted value counts: an object or a number is skipped, so the scan continues into a nested
-    // object and never swallows the rest of the statement.
-    // A quoted value with backslash escapes.
-    private static final String SINGLE_QUOTED = "'((?:[^'\\\\]|\\\\.)*)'";
-    private static final String DOUBLE_QUOTED = "\"((?:[^\"\\\\]|\\\\.)*)\"";
-    // A value between backslash-escaped double quotes. A quote escaped inside the value ends it early.
-    private static final String ESCAPED_DOUBLE_QUOTED = "\\\\\"((?:[^\"\\\\]|\\\\[^\"])*)\\\\\"";
     // A prefixed key (PrintableMap.SENSITIVE_KEY_PREFIX) ends with a variable suffix such as a storage account
     // host name, which can be up to 253 characters.
     private static final int MAX_KEY_LENGTH = Math.max(
             CREDENTIAL_KEYS.stream().map(String::length).max(Integer::compareTo).orElse(1),
             PrintableMap.SENSITIVE_KEY_PREFIX.stream().map(p -> p.length() + 253).max(Integer::compareTo).orElse(1));
->>>>>>> e0fce297ee5... [BugFix][RB-1362] Mask catalog credentials in logs, audit and SHOW CREATE CATALOG (#69857)
     // NOTE: MAX_KEY_LENGTH is used to avoid matching too many characters of a long string
     private static final Pattern KEY_VALUE_PATTERN = Pattern.compile(
             "([\"'])" +                                    // quote
@@ -239,11 +223,7 @@ public class SqlCredentialRedactor {
             String keySuffix = matcher.group(3) != null ? matcher.group(3) : "";
 
             // Check if this key should be redacted (case-insensitive)
-<<<<<<< HEAD
-            if (CREDENTIAL_KEYS_LOWERCASE.contains(key.toLowerCase(Locale.ROOT))) {
-=======
-            if (!escapedKeyWithEquals && isCredentialKey(key)) {
->>>>>>> e0fce297ee5... [BugFix][RB-1362] Mask catalog credentials in logs, audit and SHOW CREATE CATALOG (#69857)
+            if (isCredentialKey(key)) {
                 // Append text before the match
                 result.append(sql, lastEnd, matcher.start());
 

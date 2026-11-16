@@ -21,11 +21,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import com.google.common.escape.Escaper;
 import com.google.common.escape.Escapers;
-<<<<<<< HEAD
-=======
-import com.starrocks.connector.starrocks.StarRocksConnectorConfig;
 import com.starrocks.credential.CredentialUtil;
->>>>>>> e0fce297ee5... [BugFix][RB-1362] Mask catalog credentials in logs, audit and SHOW CREATE CATALOG (#69857)
 
 import java.util.Iterator;
 import java.util.List;

@@ -39,57 +39,6 @@ public class CredentialUtil {
 
     private static final String ICEBERG_PREFIX = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
 
-<<<<<<< HEAD
-    public static void maskCredential(Map<String, String> properties) {
-        // Mask for aws's credential
-        doMask(properties, CloudConfigurationConstants.AWS_S3_ACCESS_KEY);
-        doMask(properties, CloudConfigurationConstants.AWS_S3_SECRET_KEY);
-        doMask(properties, CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY);
-        doMask(properties, CloudConfigurationConstants.AWS_GLUE_SECRET_KEY);
-
-        // Mask for azure's credential
-        doMask(properties, CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY);
-        doMask(properties, CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN);
-        doMask(properties, CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL);
-        doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY);
-        doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN);
-        doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET);
-
-        // Mask for gcs's credential
-        doMask(properties, CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY);
-
-        // Mask for aliyun's credential
-        doMask(properties, CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY);
-        doMask(properties, CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY);
-
-        // Mask for huawei obs credential
-        doMask(properties, CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY);
-        doMask(properties, CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY);
-        doMask(properties, CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY_DOT);
-        doMask(properties, CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY_DOT);
-
-        // Mask for tencent's credential
-        doMask(properties, CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY);
-        doMask(properties, CloudConfigurationConstants.TENCENT_COS_SECRET_KEY);
-
-        // Mask for iceberg rest catalog credential
-        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
-                OAuth2SecurityConfig.OAUTH2_CREDENTIAL);
-        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
-                OAuth2SecurityConfig.OAUTH2_TOKEN);
-        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
-                AwsProperties.REST_ACCESS_KEY_ID);
-        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
-                AwsProperties.REST_SECRET_ACCESS_KEY);
-
-        // Mask for iceberg jdbc catalog credential
-        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
-                IcebergCatalogProperties.ICEBERG_JDBC_PASSWORD);
-
-        // Mask for odps catalog credential
-        doMask(properties, OdpsProperties.ACCESS_ID);
-        doMask(properties, OdpsProperties.ACCESS_KEY);
-=======
     /**
      * Catalog / storage properties whose values are credentials. This is the single list that
      * SHOW CREATE CATALOG ({@link #maskCredential}), FE logs ({@link #maskedCopy}) and, through
@@ -163,14 +112,7 @@ public class CredentialUtil {
 
             // odps catalog
             OdpsProperties.ACCESS_ID,
-            OdpsProperties.ACCESS_KEY,
-
-            // databricks
-            DatabricksUnityMetastore.DATABRICKS_TOKEN,
-            DatabricksUnityMetastore.DATABRICKS_CLIENT_SECRET,
-
-            // StarRocks external catalog
-            StarRocksConnectorConfig.PASSWORD);
+            OdpsProperties.ACCESS_KEY);
 
     /**
      * Keys that carry a credential under a variable suffix, e.g. the per storage account ADLS SAS token
@@ -188,7 +130,6 @@ public class CredentialUtil {
         Map<String, String> masked = new HashMap<>(properties);
         maskCredential(masked);
         return masked;
->>>>>>> e0fce297ee5... [BugFix][RB-1362] Mask catalog credentials in logs, audit and SHOW CREATE CATALOG (#69857)
     }
 
     public static void maskCredential(Map<String, String> properties) {

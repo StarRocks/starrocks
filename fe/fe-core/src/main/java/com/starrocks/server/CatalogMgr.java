@@ -39,12 +39,7 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-<<<<<<< HEAD
-=======
-import com.starrocks.connector.starrocks.StarRocksConnectorConfig;
 import com.starrocks.credential.CredentialUtil;
-import com.starrocks.epack.security.SecurityUtils;
->>>>>>> e0fce297ee5... [BugFix][RB-1362] Mask catalog credentials in logs, audit and SHOW CREATE CATALOG (#69857)
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.ImageWriter;
