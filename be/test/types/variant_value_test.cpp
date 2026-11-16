@@ -14,10 +14,13 @@
 
 #include "types/variant_value.h"
 
+#include <arrow/util/endian.h>
 #include <gtest/gtest.h>
 
 #include <cstring>
 #include <vector>
+
+#include "base/time/timezone_utils.h"
 
 namespace starrocks {
 namespace {
@@ -231,6 +234,50 @@ TEST(VariantRowValueTest, CompareUsesSemanticJsonEqualityAcrossDifferentNumericE
     EXPECT_EQ(compare(int16_row, int8_row), 0);
     EXPECT_TRUE(int8_row == int16_row);
     EXPECT_FALSE(int8_row != int16_row);
+}
+
+TEST(VariantRowValueTest, ToJsonZonedTimestampOutsideNanosecondRange) {
+    // 2500-01-01 00:00:00.5 UTC and 1500-01-01 00:00:00 UTC are valid values, but outside of what a clock in
+    // nanoseconds holds (years 1677 to 2262).
+    const auto to_json = [](int64_t micros) {
+        std::string bytes(1 + sizeof(int64_t), '\0');
+        bytes[0] = static_cast<char>(static_cast<uint8_t>(VariantType::TIMESTAMP_TZ) << 2);
+        micros = arrow::bit_util::ToLittleEndian(micros);
+        memcpy(bytes.data() + 1, &micros, sizeof(micros));
+        VariantRowValue row(VariantMetadata::kEmptyMetadata, bytes);
+        auto json = row.to_json(cctz::utc_time_zone());
+        EXPECT_TRUE(json.ok()) << json.status();
+        return json.value_or("");
+    };
+    EXPECT_EQ(R"("2500-01-01 00:00:00.5+00:00")", to_json(16725225600LL * 1000000 + 500000));
+    EXPECT_EQ(R"("1500-01-01 00:00:00+00:00")", to_json(-14831769600LL * 1000000));
+}
+
+TEST(VariantRowValueTest, ToJsonNanosecondTimestamps) {
+    const auto primitive = [](VariantType type, int64_t nanos) {
+        std::string bytes(1 + sizeof(int64_t), '\0');
+        bytes[0] = static_cast<char>(static_cast<uint8_t>(type) << 2);
+        nanos = arrow::bit_util::ToLittleEndian(nanos);
+        memcpy(bytes.data() + 1, &nanos, sizeof(nanos));
+        return bytes;
+    };
+    cctz::time_zone shanghai;
+    ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone("Asia/Shanghai", shanghai));
+    constexpr int64_t kNanos = 1735787045LL * 1000000000 + 123456789; // 2025-01-02 03:04:05.123456789 UTC
+    const auto to_json = [&](VariantType type, int64_t nanos, const cctz::time_zone& zone) {
+        const std::string bytes = primitive(type, nanos);
+        VariantRowValue row(VariantMetadata::kEmptyMetadata, bytes);
+        auto json = row.to_json(zone);
+        EXPECT_TRUE(json.ok()) << json.status();
+        return json.value_or("");
+    };
+    EXPECT_EQ(R"("2025-01-02 03:04:05.123456789+00:00")",
+              to_json(VariantType::TIMESTAMP_TZ_NANOS, kNanos, cctz::utc_time_zone()));
+    EXPECT_EQ(R"("2025-01-02 11:04:05.123456789+08:00")", to_json(VariantType::TIMESTAMP_TZ_NANOS, kNanos, shanghai));
+    EXPECT_EQ(R"("2025-01-02 03:04:05.123456789")", to_json(VariantType::TIMESTAMP_NTZ_NANOS, kNanos, shanghai));
+    EXPECT_EQ(R"("1969-12-31 23:59:59.999999999")", to_json(VariantType::TIMESTAMP_NTZ_NANOS, -1, shanghai));
+    EXPECT_EQ(R"("2025-01-02 03:04:05+00:00")",
+              to_json(VariantType::TIMESTAMP_TZ_NANOS, 1735787045LL * 1000000000, cctz::utc_time_zone()));
 }
 
 TEST(VariantRowValueTest, CompareFallbackToRawWhenToJsonFails) {
