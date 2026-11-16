@@ -3,6 +3,7 @@ sidebar_position: 50
 displayed_sidebar: docs
 keywords: ['iceberg', 'ddl', 'create table', 'alter table', 'create database', 'drop table', 'create view', 'alter view']
 description: "StarRocks Iceberg Catalog supports a variety of Data Definition Language (DDL) operations, including creating and managing databases, tables, and views."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Iceberg DDL operations
@@ -151,7 +152,7 @@ Each `partition_expr` can be:
 - `transform_expr(column_name)`
 - `transform_expr(column_name, parameter)`
 
-StarRocks supports partition transformation expressions defined in the Apache Iceberg specification.
+StarRocks supports the following partition transforms: identity (a column name or `identity()`), `year()`, `month()`, `day()`, `hour()`, `truncate()`, `bucket()`, and `void()`. Other transforms return an error.
 
 :::note
 Partition columns support all data types except FLOAT, DOUBLE, DECIMAL, and DATETIME.

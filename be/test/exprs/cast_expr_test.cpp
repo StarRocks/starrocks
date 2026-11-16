@@ -23,6 +23,7 @@
 #include "butil/time.h"
 #include "column/array_column.h"
 #include "column/column_viewer.h"
+#include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
@@ -3050,6 +3051,37 @@ TEST_F(VectorizedCastExprTest, struct_to_struct_same_order) {
     // Fields should map to themselves (same order)
     EXPECT_EQ(indices[0], 0);
     EXPECT_EQ(indices[1], 1);
+}
+
+TEST_F(VectorizedCastExprTest, const_struct_to_struct_keeps_row_count) {
+    constexpr size_t kInputSize = 3;
+    TypeDescriptor from_type =
+            TypeDescriptor::create_struct_type({"a", "b"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
+    TypeDescriptor to_type =
+            TypeDescriptor::create_struct_type({"a", "b"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_VARCHAR)});
+
+    auto source = ColumnHelper::create_column(from_type, false);
+    source->append_datum(Datum(DatumStruct{Datum(int32_t(1)), Datum(Slice("a"))}));
+    MockExpr child(from_type, ConstColumn::create(std::move(source), kInputSize));
+
+    ObjectPool pool;
+    auto expr_result = VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false);
+    ASSERT_TRUE(expr_result.ok()) << expr_result.status();
+    Expr* expr = pool.add(expr_result.value());
+    expr->add_child(&child);
+
+    auto result = expr->evaluate_checked(nullptr, nullptr);
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_TRUE(result.value()->is_constant());
+    ASSERT_EQ(kInputSize, result.value()->size());
+    const auto* constant = down_cast<const ConstColumn*>(result.value().get());
+    ASSERT_EQ(1, constant->data_column()->size());
+    for (size_t row = 0; row < kInputSize; ++row) {
+        const auto fields = result.value()->get(row).get_struct();
+        ASSERT_EQ(2, fields.size());
+        EXPECT_EQ(1, fields[0].get_int64());
+        EXPECT_EQ("a", fields[1].get_slice().to_string());
+    }
 }
 
 // Test struct-to-struct cast with three fields in different order

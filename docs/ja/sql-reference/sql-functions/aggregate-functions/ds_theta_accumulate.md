@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "列の値から Apache DataSketches Theta スケッチを構築し、シリアライズされたコンパクトスケッチを VARBINARY として返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_accumulate

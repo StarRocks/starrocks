@@ -73,6 +73,11 @@ public class ScalarOperationToDeltaLakeExpr {
         return result.orElse(ALWAYS_TRUE);
     }
 
+    // Whether the conjunct is pushed into the kernel scan as a whole, i.e. files are pruned by it.
+    public boolean canConvert(ScalarOperator operator, DeltaLakeContext context) {
+        return operator.accept(new DeltaLakeExprVisitor(), context) != null;
+    }
+
     public static class DeltaLakeContext {
         private final io.delta.kernel.types.StructType schema;
         private final Set<String> partitionColumns;

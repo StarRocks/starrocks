@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された条件を満たすレコードの数を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # count_if

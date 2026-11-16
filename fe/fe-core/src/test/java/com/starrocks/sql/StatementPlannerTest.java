@@ -112,6 +112,34 @@ class StatementPlannerTest extends PlanTestBase {
     }
 
     @Test
+    public void testNestedGeoPublicOutput() throws Exception {
+        for (String geo : List.of("ST_GeogFromText('POINT (1 2)')",
+                "ST_GeomFromText('POINT (1 2)', 'EPSG:3857')")) {
+            for (String value : List.of("[g]", "map{'k': g}", "row([g])")) {
+                String sql = "select " + value + " from (select " + geo + " g) t";
+                getFragmentPlan("explain " + sql);
+                for (String prefix : List.of("", "explain analyze ")) {
+                    StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(prefix + sql, connectContext);
+                    try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt)) {
+                        SemanticException error = assertThrows(SemanticException.class,
+                                () -> StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+                        assertEquals("Nested GEOGRAPHY/GEOMETRY query results are not supported; "
+                                + "use ST_AsText or ST_AsBinary on geo elements", error.getDetailMsg());
+                    }
+                }
+            }
+            StatementBase consumer = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                    "with c as (select [" + geo + "] a) select ST_AsText(a[1]) from c", connectContext);
+            assertNotNull(StatementPlanner.plan(consumer, connectContext));
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                    "insert into blackhole() select [" + geo + "]", connectContext);
+            try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt)) {
+                StatementPlanner.analyzeStatement(stmt, connectContext, locker);
+            }
+        }
+    }
+
+    @Test
     public void testAuthorizationPrecedesAIProviderResolution() throws Exception {
         boolean oldBypassAuthorizerCheck = connectContext.isBypassAuthorizerCheck();
         connectContext.setBypassAuthorizerCheck(false);

@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 description: "BE 設定パラメーター：統計情報収集とストレージエンジンに関連する設定項目。"
 sidebar_label: "統計とストレージ"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -13,7 +14,6 @@ import PostBEConfig from '../../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
-import EditionSpecificBEItem from '../../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
 
 # BE 設定 - 統計とストレージ
 
@@ -89,8 +89,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 導入バージョン: -
 
 ## ストレージ
-
-<EditionSpecificBEItem />
 
 ### alter_tablet_worker_count
 
@@ -917,6 +915,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタの主キーテーブルに適用されます。ロードで生成された削除ファイルの行数がこの値以上の場合、システムはロード時にそのファイルの PK インデックスファイルも構築します。ロードの公開時には、削除された各キーをメモリ上の PK インデックスに書き込む代わりに、そのファイルを直接取り込みます。この条件は `pk_index_eager_build_threshold_bytes` と併せて機能し、削除ファイルがいずれかの条件を満たすとインデックスファイルが構築されます。`0` 以下に設定するとこの条件は無効になります。
 - 導入バージョン: -
 
+### pk_vector_chunk_size
+
+- デフォルト: 4096
+- タイプ: Int
+- 単位: 行
+- 変更可能: はい
+- 説明: 主キーテーブルが apply フェーズ（ロードまたはコンパクションの結果の適用）でセグメントからデータを読み取る際の、1 バッチあたりの行数。共有なしクラスタと共有データクラスタの両方に適用され、ロードされたデータの主キー、部分更新で読み取る列、コンパクション出力の主キーの読み取りが対象です。この項目は `vector_chunk_size` とは独立しているため、クエリ実行に影響を与えずに調整できます。値を小さくすると各バッチが保持するメモリが減り、値を大きくすると読み取り回数が減ります。`0` 以下の値は `4096` として、`65535` を超える値は `65535` として扱われます。セグメントから主キーインデックスを再構築する処理では、この項目は使用されません。
+- 導入バージョン: -
+
 ### primary_key_limit_size
 
 - デフォルト: 128
@@ -932,7 +939,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: BE ノードでのスナップショットリリースタスクの最大スレッド数。
+- 説明: BE ノードでのスナップショットリリースタスクの最大スレッド数。共有データクラスタでは、このスレッドプールは Vacuum、Full Vacuum、およびトランザクションログ削除タスクも実行します。
 - 導入バージョン: -
 
 ### repair_compaction_interval_seconds

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Shared-data, Data Lake, and Others"
 description: "FE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE Configuration - Shared-data, Data Lake, and Others
@@ -12,7 +13,6 @@ import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note
 
 import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
-import EditonSpecificFEItemSharedLakeOther from '../../../_assets/commonMarkdown/Edition_Specific_FE_Item_shared_lake_other.mdx'
 
 <FEConfigMethod />
 
@@ -520,7 +520,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Unit: -
 - Is mutable: Yes
 - Description: The table or partition list of which compaction is disabled in shared-data mode. The format is `tableId1;partitionId2`, seperated by semicolon, for example, `12345;98765`.
-- Introduced in: v3.4.4
+- Introduced in: v3.4.5, v3.5.0
 
 ### `lake_compaction_history_size`
 
@@ -563,7 +563,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Type: Long
 - Unit: -
 - Is mutable: Yes
-- Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, incoming loading tasks will be rejected. From v3.3.6 onwards, the default value is changed from `0` to `2000`.
+- Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition exceeds this upper limit, incoming loading tasks will be rejected. From v3.3.6 onwards, the default value is changed from `0` to `2000`.
 - Introduced in: v3.2.0
 
 ### `lake_compaction_interval_ms_on_success`
@@ -602,13 +602,13 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Description: The Compaction Score threshold that triggers Data Ingestion Slowdown in a shared-data cluster. This configuration only takes effect when `lake_enable_ingest_slowdown` is set to `true`.
 - Introduced in: v3.2.0
 
-### `lake_publish_version_max_threads`
+### `publish_version_max_threads`
 
 - Default: 512
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads for Version Publish tasks in a shared-data cluster.
+- Description: The maximum number of threads for Version Publish tasks in a shared-data cluster. From v4.0.5 and v4.1.0 onwards, this item is renamed from `lake_publish_version_max_threads` to `publish_version_max_threads`. The old name is still accepted as an alias.
 - Introduced in: v3.2.0
 
 ### `lake_publish_version_timeout_ms`
@@ -799,7 +799,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Type: Int
 - Unit: Count
 - Is mutable: Yes
-- Description: Sets the upper bound on how many consecutive transaction versions may be grouped together when building a publish batch for lake (cloud‑native) tables. The value is passed to the transaction graph batching routine (see getReadyToPublishTxnListBatch) and caps the candidate range size for a TransactionStateBatch. Larger values can increase publish throughput by batching more commits, but increase the scope of an atomic publish (longer visibility latency and larger rollback surface) and may be limited at runtime when versions are not consecutive. Tune according to workload and visibility/latency requirements.
+- Description: Sets the upper bound on how many consecutive transaction versions may be grouped together when building a publish batch for lake (cloud‑native) tables. The value is passed to the transaction graph batching routine (see getReadyToPublishTxnListBatch) and caps the candidate range size for a TransactionStateBatch. Larger values can increase publish throughput by batching more commits, but increase the scope of an atomic publish (longer visibility latency and larger rollback surface) and a batch can end before reaching this limit. A batch ends before a replication or DELETE transaction, which is published on its own, and before a transaction that writes multiple tables when `lake_enable_batch_publish_multi_table` is `false`. It also ends where a partition's versions are not consecutive (for example, because a schema change occupied a version) or its loaded materialized indexes change, and before a transaction on a dropped table. When `lake_enable_batch_publish_retry_freeze` is `true`, a retried batch contains only the transactions of the earlier attempt. Tune according to workload and visibility/latency requirements.
 - Introduced in: v3.2.0
 
 ### `lake_batch_publish_min_version_num`
@@ -808,7 +808,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Deprecated. This parameter no longer takes effect. It is kept only so that an existing setting in **fe.conf** or an `ADMIN SET FRONTEND CONFIG` statement on it does not fail. In shared-data mode, batch publish starts a batch in each round from every committed transaction that no longer waits for another transaction, and publishes the batch whatever its size, with at most `lake_batch_publish_max_version_num` transactions in a batch. Previously, this parameter set the minimum number of transactions in a batch, and a batch below the minimum was not published in that round. A batch that could never reach the minimum, for example the last loads into a table that receives no more loads, or loads queued behind a transaction that writes multiple tables, was skipped in every round: its committed transactions never became visible, and later loads into the same tables waited behind them.
+- Description: Deprecated. From v4.2.1 onwards, this parameter no longer takes effect. It is kept only so that an existing setting in **fe.conf** or an `ADMIN SET FRONTEND CONFIG` statement on it does not fail. In shared-data mode, batch publish starts a batch in each round from every committed transaction that no longer waits for another transaction, and publishes the batch whatever its size, with at most `lake_batch_publish_max_version_num` transactions in a batch. Previously, this parameter set the minimum number of transactions in a batch, and a batch below the minimum was not published in that round. A batch that could never reach the minimum, for example the last loads into a table that receives no more loads, or loads queued behind a transaction that writes multiple tables, was skipped in every round: its committed transactions never became visible, and later loads into the same tables waited behind them.
 - Introduced in: v3.2.0
 
 ### `lake_publish_version_retry_interval_ms`
@@ -826,7 +826,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When enabled, PublishVersionDaemon batches ready transactions for the same Lake (shared-data) table/partition and publishes their versions together instead of issuing per-transaction publishes. In RunMode shared-data, the daemon calls getReadyPublishTransactionsBatch() and uses publishVersionForLakeTableBatch(...) to perform grouped publish operations (reducing RPCs and improving throughput). When disabled, the daemon falls back to per-transaction publishing via publishVersionForLakeTable(...). The implementation coordinates in-flight work using internal sets to avoid duplicate publishes when the switch is toggled and is affected by the thread pool sizing via `lake_publish_version_max_threads`.
+- Description: When enabled, PublishVersionDaemon batches ready transactions for the same Lake (shared-data) table/partition and publishes their versions together instead of issuing per-transaction publishes. In RunMode shared-data, the daemon calls getReadyPublishTransactionsBatch() and uses publishVersionForLakeTableBatch(...) to perform grouped publish operations (reducing RPCs and improving throughput). When disabled, the daemon falls back to per-transaction publishing via publishVersionForLakeTable(...). The implementation coordinates in-flight work using internal sets to avoid duplicate publishes when the switch is toggled and is affected by the thread pool sizing via `publish_version_max_threads`.
 - Introduced in: v3.2.0
 
 ### `lake_enable_batch_publish_multi_table`
@@ -938,6 +938,51 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Description: The maximum number of pending commit operations per Iceberg table. When using the commit queue (`enable_iceberg_commit_queue=true`), this limits the number of commit operations that can be queued for a single table. When the limit is reached, additional commit operations will execute in the caller thread (blocking until capacity available). This configuration is read at FE startup and applies to newly created table executors. Requires FE restart to take effect. Increase this value if you expect many concurrent commits to the same table. If this value is too low, commits may block in the caller thread during high concurrency.
 - Introduced in: v4.1.0
 
+### `deltalake_checkpoint_meta_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one Delta Log Checkpoint file cache shared by all Delta Lake catalogs, so that its total stays within this bound however many catalogs there are. `0` (default) keeps a cache per catalog, bounded by the catalog property `deltalake_checkpoint_meta_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+### `deltalake_json_meta_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one Delta Log JSON file cache shared by all Delta Lake catalogs. `0` (default) keeps a cache per catalog, bounded by the catalog property `deltalake_json_meta_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+### `iceberg_data_file_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one data file Manifest cache shared by all Iceberg catalogs, so that its total stays within this bound however many catalogs there are. `0` (default) keeps a cache per catalog, bounded by the catalog property `iceberg_data_file_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+### `iceberg_delete_file_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one delete file Manifest cache shared by all Iceberg catalogs; the delete file indexes built from them get the same share in a cache of their own. `0` (default) keeps both caches per catalog, bounded by the catalog property `iceberg_delete_file_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+### `iceberg_partition_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one partition cache shared by all Iceberg catalogs. `0` (default) keeps a cache per catalog, bounded by the catalog property `iceberg_partition_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
 ### `iceberg_remove_orphan_files_min_retention_seconds`
 
 - Default: 86400
@@ -955,8 +1000,6 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Is mutable: Yes
 - Description: The threshold the system used to judge the tablet balance among workers in a shared-data cluster, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`. If the factor is greater than `lake_balance_tablets_threshold`, a tablet balance will be triggered. This item takes effect only when `lake_enable_balance_tablets_between_workers` is set to `true`.
 - Introduced in: v3.3.4
-
-<EditonSpecificFEItemSharedLakeOther />
 
 ## Other
 
@@ -1173,7 +1216,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to enable Backup and Restore for Colocate Tables. `true` indicates enabling Backup and Restore for Colocate Tables and `false` indicates disabling it.
-- Introduced in: v3.2.10, v3.3.3
+- Introduced in: v3.2.10, v3.3.2
 
 ### `enable_external_catalog_information_schema_tables_access_full_metadata`
 
@@ -1613,7 +1656,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Type: Long
 - Unit:
 - Is mutable: Yes
-- Description: The maximum size of materialized view plan cache (which is used for materialized view rewrite). If there are many materialized views used for transparent query rewrite, you may increase this value.
+- Description: The maximum size of materialized view plan cache (which is used for materialized view rewrite). If there are many materialized views used for transparent query rewrite, you may increase this value. The value is read only once, when the cache is created at FE startup, so a value changed at runtime takes effect only after the FE restarts.
 - Introduced in: v3.2
 
 ### `mv_plan_cache_thread_pool_size`
@@ -1622,7 +1665,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The default thread pool size of materialized view plan cache (which is used for materialized view rewrite).
+- Description: Deprecated. From v3.5.14, v4.0.7, and v4.1 onwards, this parameter no longer takes effect. The size of the thread pool that loads the materialized view plan cache (which is used for materialized view rewrite) is fixed at the larger of 2 and three quarters of the number of CPU cores.
 - Introduced in: v3.2
 
 ### `mv_refresh_default_planner_optimize_timeout`
@@ -1642,6 +1685,15 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Is mutable: Yes
 - Description: Mv refresh fails if there is filtered data in refreshing, true by default, otherwise return success by ignoring the filtered data.
 - Introduced in: -
+
+### `mv_refresh_force_partition_type`
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Forces materialized view refreshes of the specified partition types to refresh regardless of whether the base tables have changed. This is useful for materialized views on external tables, where data changes cannot be accurately detected. The value is a bitmap: `0` disables this behavior, `1` applies it to non-partitioned materialized views, `2` to range-partitioned materialized views, and `4` to list-partitioned materialized views. Add the values to combine types, for example, `7` applies to all three. It does not apply to a materialized view whose `refresh_mode` is `INCREMENTAL`.
+- Introduced in: v3.5.16, v4.0.9, v4.1
 
 ### `mv_refresh_try_lock_timeout_ms`
 

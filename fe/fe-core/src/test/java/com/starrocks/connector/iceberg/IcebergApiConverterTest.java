@@ -57,6 +57,7 @@ import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.EdgeAlgorithm;
@@ -275,6 +276,44 @@ public class IcebergApiConverterTest {
             partition.wrap(partitionData);
             String partitionName = convertIcebergPartitionToPartitionName(table, partitionSpec, partition);
             assertEquals("id=1/dt=2022-08-01", partitionName);
+        }
+    }
+
+    @Test
+    public void testPartitionNamesEscapeSlashAndPercent() throws Exception {
+        List<Types.NestedField> fields = Lists.newArrayList();
+        fields.add(Types.NestedField.optional(1, "host", new Types.StringType()));
+        fields.add(Types.NestedField.optional(2, "ts", Types.TimestampType.withoutZone()));
+
+        Schema schema = new Schema(fields);
+        PartitionSpec partitionSpec = PartitionSpec.builderFor(schema).identity("host").day("ts").build();
+        org.apache.iceberg.Table table = mock(org.apache.iceberg.Table.class);
+        when(table.spec()).thenReturn(partitionSpec);
+        when(table.schema()).thenReturn(schema);
+
+        // raw identity value -> expected partition name segment
+        String[][] cases = {
+                {"https://a.b.com", "host=https:%2F%2Fa.b.com"},
+                {"a%20b", "host=a%2520b"},
+                {"50%/x", "host=50%25%2Fx"},
+                {"10:00:00", "host=10:00:00"},
+        };
+        for (String[] c : cases) {
+            try (MockedStatic<Partitioning> mockedStatic = Mockito.mockStatic(Partitioning.class)) {
+                mockedStatic.when(() -> Partitioning.partitionType(table)).thenReturn(partitionSpec.partitionType());
+
+                // build the struct directly: a path string cannot carry a raw '/' in a value
+                org.apache.iceberg.PartitionData partitionData =
+                        new org.apache.iceberg.PartitionData(partitionSpec.partitionType());
+                partitionData.set(0, c[0]);
+                partitionData.set(1, (int) java.time.LocalDate.parse("2025-04-14").toEpochDay());
+                StructProjection partition = StructProjection.create(schema, schema);
+                partition.wrap(partitionData);
+                String partitionName = convertIcebergPartitionToPartitionName(table, partitionSpec, partition);
+                assertEquals(c[1] + "/ts_day=2025-04-14", partitionName);
+                assertEquals(List.of(c[0], "2025-04-14"),
+                        com.starrocks.connector.PartitionUtil.toPartitionValues(partitionName));
+            }
         }
     }
 
@@ -1079,6 +1118,35 @@ public class IcebergApiConverterTest {
         } finally {
             ConnectContext.remove();
         }
+    }
+
+    @Test
+    public void testSetMappedNames() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "c1_new", Types.StringType.get()),
+                Types.NestedField.optional(3, "c2", Types.IntegerType.get()));
+        // c1 was renamed to c1_new after the table was migrated; c2 has no mapping entry
+        String mapping = "[{\"field-id\": 1, \"names\": [\"id\"]}, {\"field-id\": 2, \"names\": [\"c1_new\", \"c1\"]}]";
+
+        TIcebergSchema tSchema = IcebergApiConverter.getTIcebergSchema(schema);
+        IcebergApiConverter.setMappedNames(tSchema, Map.of(TableProperties.DEFAULT_NAME_MAPPING, mapping));
+        Assertions.assertFalse(tSchema.getFields().get(0).isSetMapped_names());
+        assertEquals(List.of("c1"), tSchema.getFields().get(1).getMapped_names());
+        Assertions.assertFalse(tSchema.getFields().get(2).isSetMapped_names());
+
+        // nested entries are not read: only the top-level names are sent
+        String nested = "[{\"field-id\": 2, \"names\": [\"c1_new\", \"c1\"], \"fields\": " +
+                "[{\"field-id\": 9, \"names\": [\"x\", \"y\"]}]}]";
+        TIcebergSchema nestedSchema = IcebergApiConverter.getTIcebergSchema(schema);
+        IcebergApiConverter.setMappedNames(nestedSchema, Map.of(TableProperties.DEFAULT_NAME_MAPPING, nested));
+        assertEquals(List.of("c1"), nestedSchema.getFields().get(1).getMapped_names());
+
+        // no mapping, or one that does not parse: nothing is set
+        TIcebergSchema withoutMapping = IcebergApiConverter.getTIcebergSchema(schema);
+        IcebergApiConverter.setMappedNames(withoutMapping, Map.of());
+        IcebergApiConverter.setMappedNames(withoutMapping, Map.of(TableProperties.DEFAULT_NAME_MAPPING, "{"));
+        Assertions.assertTrue(withoutMapping.getFields().stream().noneMatch(TIcebergSchemaField::isSetMapped_names));
     }
 
     @Test

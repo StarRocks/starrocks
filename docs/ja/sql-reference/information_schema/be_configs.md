@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "be_configs テーブルは各 BE ノードの構成パラメータ情報を提供。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # be_configs

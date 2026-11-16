@@ -3,6 +3,7 @@ sidebar_position: 10
 displayed_sidebar: docs
 description: "FE configuration parameters for logging, server settings, and metadata management."
 sidebar_label: "日志、服务器和元数据"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 配置 - 日志、服务器和元数据
@@ -327,7 +328,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否启用 profile 日志。启用此功能后，FE 会将每个查询的 profile 日志（由 `ProfileManager` 生成的序列化 `queryDetail` JSON）写入 profile 日志接收器。此日志记录仅在 `enable_collect_query_detail_info` 也启用时执行；当 `enable_profile_log_compress` 启用时，JSON 可能会在日志记录前进行 gzip 压缩。Profile 日志文件由 `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` 管理，并根据 `profile_log_delete_age` 进行轮转/删除（支持 `7d`、`10h`、`60m`、`120s` 等格式）。禁用此功能会停止写入 profile 日志（减少磁盘 I/O、压缩 CPU 和存储使用）。
+- 描述: 是否启用 profile 日志。启用此功能后，FE 会将每个查询的 profile 日志（由 `ProfileManager` 生成的序列化 `queryDetail` JSON）写入 profile 日志接收器。此日志记录仅在 `enable_collect_query_detail_info` 也启用时执行。Profile 日志文件由 `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` 管理，并根据 `profile_log_delete_age` 进行轮转/删除（支持 `7d`、`10h`、`60m`、`120s` 等格式）。禁用此功能会停止写入 profile 日志（减少磁盘 I/O、压缩 CPU 和存储使用）。
 - 引入版本: v3.2.5
 
 ### `enable_qe_slow_log`
@@ -616,7 +617,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：毫秒
 - 是否动态：是
 - 描述：写入 `fe.profile.log` 的查询最小延迟（毫秒）。仅当查询执行时间大于或等于该值时才记录 profile。设为 0 表示记录所有 profile（无阈值）。设为正数可仅记录较慢的查询以降低日志量。
-- 引入版本：-
+- 引入版本：v4.2.0
 
 ### `profile_log_roll_file_index`
 
@@ -651,7 +652,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: MB
 - 是否可变: No
-- 描述: 设置触发 FE profile 日志文件基于大小轮转的大小阈值（以兆字节为单位）。此值由 Log4j RollingFile SizeBasedTriggeringPolicy 用于 `ProfileFile` appender；当 profile 日志超过 `profile_log_roll_size_mb` 时，它将被轮转。当达到 `profile_log_roll_interval` 时，也可以按时间进行轮转——任一条件都会触发轮转。结合 `profile_log_roll_num` 和 `profile_log_delete_age`，此项控制保留多少历史 profile 文件以及何时删除旧文件。轮转文件的压缩由 `enable_profile_log_compress` 控制。
+- 描述: 设置触发 FE profile 日志文件基于大小轮转的大小阈值（以兆字节为单位）。此值由 Log4j RollingFile SizeBasedTriggeringPolicy 用于 `ProfileFile` appender；当 profile 日志超过 `profile_log_roll_size_mb` 时，它将被轮转。当达到 `profile_log_roll_interval` 时，也可以按时间进行轮转——任一条件都会触发轮转。结合 `profile_log_roll_num` 和 `profile_log_delete_age`，此项控制保留多少历史 profile 文件以及何时删除旧文件。
 - 引入版本: v3.2.5
 
 ### `qe_slow_log_ms`
@@ -787,7 +788,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: No
-- 描述: 系统日志条目分类的严重性级别。有效值：`INFO`、`WARN`、`ERROR` 和 `FATAL`。
+- 描述: 系统日志条目分类的严重性级别。有效值：`DEBUG`、`INFO`、`WARN`、`ERROR` 和 `FATAL`。
 - 引入版本: -
 
 ### `sys_log_roll_file_index`
@@ -834,7 +835,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String[]
 - 单位: -
 - 是否可变: No
-- 描述: StarRocks 为其生成系统日志的模块。如果此参数设置为 `org.apache.starrocks.catalog`，则 StarRocks 仅为 catalog 模块生成系统日志。模块名称用逗号 (,) 和空格分隔。
+- 描述: 除 `sys_log_level` 指定级别的日志外，StarRocks 还为其生成 DEBUG 级别系统日志的模块。如果此参数设置为 `com.starrocks.catalog`，则 StarRocks 还会为 catalog 模块生成 DEBUG 级别的系统日志。模块名称用逗号 (,) 和空格分隔。
 - 引入版本: -
 
 ### `sys_log_warn_modules`
@@ -1009,7 +1010,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: No
-- 引入版本: v4.2.0
+- 引入版本: v4.1.3
 - 描述: 是否对大部分外部 FE HTTP 接口启用 Basic Auth。凭证通过 `AuthenticationHandler.authenticate()` 校验，因此 LDAP / security integration 在 HTTP 路径上的工作方式与 MySQL 协议一致。以下接口始终豁免:
   - 公开探针 / 可观测性: `/api/bootstrap`、`/api/oauth2`。
   - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/static`、`/api/get_small_file`。
@@ -1593,7 +1594,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 在为日志条目创建日志文件之前可以写入的元数据日志条目的最大数量。此参数用于控制日志文件的大小。新的日志文件写入 BDBJE 数据库。
+- 描述: 在为日志条目创建日志文件之前可以写入的元数据日志条目的最大数量。此参数用于控制日志文件的大小。新的日志文件写入 BDBJE 数据库。此参数同时决定生成元数据镜像（Checkpoint）的频率，因为 Checkpoint 只覆盖已经滚动完成的日志文件中的日志条目。
 - 引入版本: -
 
 ### `edit_log_type`
@@ -1855,7 +1856,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 毫秒
 - 是否可变: Yes
 - 描述: Follower 和 Observer FE 重新判断自身元数据是否仍足够新、能否继续提供读服务的时间间隔，判断标准见 `meta_delay_toleration_second`。取值会被限制在 [10, 5000] 范围内。该检查运行在独立线程上，而不是元数据回放线程上，因此当某条日志回放耗时很久时（例如回放操作正在等待数据库锁），节点仍能及时停止用陈旧的元数据提供服务。
-- 引入版本: v4.2
+- 引入版本: v4.1.6, v4.2
 
 ### `metadata_replay_stuck_warn_threshold_second`
 
@@ -1864,7 +1865,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否可变: Yes
 - 描述: 单条元数据日志的回放耗时超过该值时，会在 **fe.log** 中记录一条回放卡住的日志，并附带回放线程的堆栈，便于定位阻塞元数据回放的原因。设置为 `0` 表示关闭该日志。
-- 引入版本: v4.2
+- 引入版本: v4.1.6, v4.2
 
 ### `meta_dir`
 

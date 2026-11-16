@@ -4,6 +4,7 @@ displayed_sidebar: docs
 sidebar_label: "Feature Support"
 keywords: ['compaction']
 description: "Each of the features below lists the version number that they were added in."
+products: [oss]
 ---
 
 # Feature Support: Shared-data Clusters

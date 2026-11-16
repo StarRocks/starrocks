@@ -2,6 +2,7 @@
 sidebar_position: 40
 description: Jupyter notebooks と StarRocks
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 ---
 
 # Jupyter

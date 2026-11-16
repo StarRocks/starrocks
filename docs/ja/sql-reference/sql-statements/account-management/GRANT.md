@@ -2,14 +2,12 @@
 displayed_sidebar: docs
 description: "Grants roles or privileges on specific objects to users, roles, or external groups."
 toc_max_heading_level: 4
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # GRANT
 
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
-import MultiServiceAccess from '../../../_assets/commonMarkdown/multi-service-access.mdx'
-import GrantCreateWarehouse from '../../../_assets/commonMarkdown/grant_create_warehouse.mdx'
-import GrantWarehouse from '../../../_assets/commonMarkdown/grant_warehouse.mdx'
 
 ## 説明
 
@@ -26,7 +24,7 @@ GRANT 操作を実行する前に、関連するユーザーまたはロール�
 :::tip
 
 - `user_admin` ロールを持つユーザーのみが、他のユーザーやロールに任意の権限を付与できます。
-- ロールがユーザーに付与された後、このロールとして操作を実行する前に [SET ROLE](SET_ROLE.md) を実行してこのロールを有効化する必要があります。すべてのデフォルトロールをログイン時に有効化したい場合は、[ALTER USER](ALTER_USER.md) または [SET DEFAULT ROLE](SET_DEFAULT_ROLE.md) を実行してください。システム内のすべての権限をすべてのユーザーにログイン時に有効化したい場合は、グローバル変数 `SET GLOBAL activate_all_roles_on_login = TRUE;` を設定してください。
+- ロールがユーザーに付与された後、このロールとして操作を実行する前に [SET ROLE](SET_ROLE.md) を実行してこのロールを有効化する必要があります。すべてのデフォルトロールをログイン時に有効化したい場合は、[ALTER USER](ALTER_USER.md) または [SET DEFAULT ROLE](SET_DEFAULT_ROLE.md) を実行してください。すべてのユーザーに対して、付与されたすべてのロールをログイン時に有効化したい場合は、グローバル変数 `SET GLOBAL activate_all_roles_on_login = TRUE;` を設定してください。
 - 一般ユーザーは、`WITH GRANT OPTION` キーワードを持つ権限のみを他のユーザーやロールに付与できます。
 :::
 
@@ -36,7 +34,12 @@ GRANT 操作を実行する前に、関連するユーザーまたはロール�
 
 #### システム
 
-<GrantCreateWarehouse />
+```SQL
+GRANT
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME | SECURITY } 
+    ON SYSTEM
+    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+```
 
 #### AI 関数と Provider
 
@@ -214,8 +217,6 @@ GRANT
     TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
-<GrantWarehouse />
-
 ### ロールをロールまたはユーザーに付与
 
 ```SQL
@@ -292,4 +293,4 @@ GRANT db_admin, user_admin, cluster_admin TO EXTERNAL GROUP admin_group;
 
 <UserPrivilegeCase />
 
-<MultiServiceAccess />
+マルチサービスアクセス制御のベストプラクティスについては、[Multi-service access control](../../../administration/user_privs/authorization/User_privilege.md#multi-service-access-control) を参照してください。

@@ -1,0 +1,81 @@
+-- name: test_iceberg_bucket_aware_join_alignment
+
+-- Regressions for bucket-aware execution on Iceberg tables, single BE, pipeline_dop > 1.
+--
+-- 1. Colocate joins on the bucket column whose two inputs are partitioned across pipeline drivers
+--    differently (e.g. one side is a scan kept on its per-driver bucket assignment, the other side
+--    a semi join that re-partitions by its own keys) lost (1 - 1/dop) of their matches. Fixed in
+--    the BE by aligning the driver partitioning of both hash join inputs.
+-- 2. A required shuffle that names the bucket column twice (a.c = b.c AND a.c = b.d, or a set
+--    operation over (c, c)) failed planning with "distribution cols don't match". Fixed in the FE
+--    by deduplicating the columns of the derived lake hash distribution.
+--
+-- Each query is asserted to take the bucket-aware path, then its result is checked; the same
+-- queries with bucket-aware execution off are the reference.
+
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+
+-- every id has 3 rows, k = 1..3
+create table t1 (id bigint, k int) partition by bucket(id, 16);
+insert into t1 select a.generate_series, b.generate_series from table(generate_series(1, 1000)) a, table(generate_series(1, 3)) b;
+
+-- string bucket column plus a second partition transform, written by two inserts
+create table t2 (id varchar(64), k int, ts datetime) partition by bucket(id, 16), hour(ts);
+insert into t2 select concat('id-', a.generate_series), b.generate_series, cast('2026-01-01 00:00:00' as datetime) + interval cast(a.generate_series % 5 as int) hour from table(generate_series(1, 1000)) a, table(generate_series(1, 2)) b;
+insert into t2 select concat('id-', generate_series), 3, cast('2026-01-02 00:00:00' as datetime) + interval cast(generate_series % 5 as int) hour from table(generate_series(1, 1000));
+
+create table t3 (id bigint, k bigint, d date) partition by month(d), bucket(id, 4);
+insert into t3 select generate_series, generate_series % 7, cast('2026-01-01' as date) + interval cast(generate_series % 60 as int) day from table(generate_series(1, 40));
+
+select count(*), count(distinct id) from t1;
+select count(*), count(distinct id) from t2;
+select count(*), count(distinct id) from t3;
+
+set pipeline_dop = 4;
+set enable_bucket_aware_execution_on_lake = true;
+
+-- ############### 1. join inputs partitioned differently across drivers ###############
+function: assert_explain_contains('select count(*) from t1 a join t1 b on a.id = b.id join t1 c on b.id = c.id and b.k = c.k', 'INNER JOIN (COLOCATE)')
+function: assert_explain_contains('select count(*) from t1 a join (select id, k from t1 where id in (select id from t1)) b on a.id = b.id and a.k = b.k', 'INNER JOIN (COLOCATE)')
+function: assert_explain_contains('select count(*) from t2 a join (select id, k from t2 where id in (select id from t2)) b on a.id = b.id and a.k = b.k', 'INNER JOIN (COLOCATE)')
+-- 9000
+select count(*) from t1 a join t1 b on a.id = b.id join t1 c on b.id = c.id and b.k = c.k;
+-- 0
+select count(*) from t1 a left anti join (select id, k from t1 where id in (select id from t1)) r on a.id = r.id and a.k = r.k;
+-- 3000
+select count(*) from t1 a join (select id, k from t1 where id in (select id from t1)) b on a.id = b.id and a.k = b.k;
+-- 0
+select count(*) from t2 a left anti join (select id, k from t2 where id in (select id from t2)) r on a.id = r.id and a.k = r.k;
+-- 3000
+select count(*) from t2 a join (select id, k from t2 where id in (select id from t2)) b on a.id = b.id and a.k = b.k;
+
+-- ############### 2. bucket column named twice in the required shuffle ###############
+function: assert_explain_contains('select count(*) from t3 a join t3 b on a.id = b.id and a.id = b.k', 'INNER JOIN (COLOCATE)')
+select count(*) from t3 a join t3 b on a.id = b.id and a.id = b.k;
+select count(*) from t3 a join t3 b on a.id = b.id and a.k = b.id;
+select count(*) from (select id, id as a from t3 intersect select id, id as a from t3) t;
+select count(*) from (select id, id as a from t3 union distinct select id, id as a from t3) t;
+select count(*) from (select id, id as a from t3 except select id, id as a from t3) t;
+
+-- ############### reference: bucket-aware off ###############
+set enable_bucket_aware_execution_on_lake = false;
+select count(*) from t1 a join t1 b on a.id = b.id join t1 c on b.id = c.id and b.k = c.k;
+select count(*) from t1 a left anti join (select id, k from t1 where id in (select id from t1)) r on a.id = r.id and a.k = r.k;
+select count(*) from t1 a join (select id, k from t1 where id in (select id from t1)) b on a.id = b.id and a.k = b.k;
+select count(*) from t2 a left anti join (select id, k from t2 where id in (select id from t2)) r on a.id = r.id and a.k = r.k;
+select count(*) from t2 a join (select id, k from t2 where id in (select id from t2)) b on a.id = b.id and a.k = b.k;
+select count(*) from t3 a join t3 b on a.id = b.id and a.id = b.k;
+select count(*) from (select id, id as a from t3 intersect select id, id as a from t3) t;
+
+set pipeline_dop = 0;
+set enable_bucket_aware_execution_on_lake = true;
+
+drop table t1 force;
+drop table t2 force;
+drop table t3 force;
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+drop catalog iceberg_sql_test_${uuid0};

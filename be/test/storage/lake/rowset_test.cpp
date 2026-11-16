@@ -18,6 +18,7 @@
 #include <chrono>
 #include <future>
 #include <new>
+#include <numeric>
 #include <optional>
 #include <thread>
 #include <unordered_set>
@@ -36,6 +37,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/constexpr.h"
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
@@ -55,6 +57,7 @@
 #include "storage/rowset/options.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/sort_key_bounds.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/column_predicate_factory.h"
@@ -227,6 +230,40 @@ TEST_F(LakeRowsetTest, test_data_size_after_deletion_scales_by_live_fraction) {
 
     Rowset rs(_tablet_mgr.get(), metadata, 0, /*compaction_segment_limit=*/0);
     EXPECT_EQ(600, rs.data_size_after_deletion());
+}
+
+// A segment written by the tablet writer records its sort key bounds in the encoded form only.
+TEST_F(LakeRowsetTest, WriterStoresEncodedSortKeyBounds) {
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+    ASSERT_OK(writer->open());
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    for (int key : {3, 7, 11, 42}) {
+        c0->append(key);
+        c1->append(key * 2);
+    }
+    Chunk chunk({c0, c1}, _schema);
+    ASSERT_OK(writer->write(chunk));
+    ASSERT_OK(writer->finish());
+    ASSERT_EQ(1, writer->segments().size());
+
+    SegmentMetadataPB meta;
+    writer->segments()[0].to_proto(0, &meta);
+    writer->close();
+
+    EXPECT_FALSE(meta.has_deprecated_sort_key_min());
+    EXPECT_FALSE(meta.has_deprecated_sort_key_max());
+    EXPECT_TRUE(meta.has_sort_key_min_encoded());
+    EXPECT_TRUE(meta.has_sort_key_max_encoded());
+    EXPECT_TRUE(has_segment_sort_key_bounds(meta));
+
+    VariantTuple min, max;
+    ASSERT_OK(decode_segment_sort_key_bounds(meta, &min, &max));
+    ASSERT_EQ(1, min.size());
+    ASSERT_EQ(1, max.size());
+    EXPECT_EQ(3, min[0].value().get_int32());
+    EXPECT_EQ(42, max[0].value().get_int32());
 }
 
 TEST_F(LakeRowsetTest, test_load_segments) {
@@ -2039,6 +2076,50 @@ TEST_F(LakeRowsetTest, test_get_each_segment_iterator_with_delvec_respects_table
     ASSERT_EQ(count_rows_from_iters(seg_iters), 3 * 2);
 }
 
+// Primary key apply passes pk_vector_chunk_size to get_each_segment_iterator: a positive chunk size caps the rows
+// of every get_next(), and 0 keeps the SegmentReadOptions default.
+TEST_F(LakeRowsetTest, test_get_each_segment_iterator_chunk_size) {
+    create_rowsets_for_testing();
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    // Row counts of every get_next() over all segments, in order.
+    auto read_batches = [&](size_t chunk_size, std::vector<size_t>* batches) {
+        OlapReaderStatistics stats;
+        ASSIGN_OR_ABORT(auto iters, rowset->get_each_segment_iterator(input_schema, false, &stats, chunk_size));
+        ASSERT_EQ(3u, iters.size());
+        for (auto& it : iters) {
+            ASSERT_NE(nullptr, it);
+            ASSERT_OK(it->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+            ASSERT_OK(it->init_output_schema(std::unordered_set<uint32_t>()));
+            auto chunk = ChunkFactory::new_chunk(it->schema(), DEFAULT_CHUNK_SIZE);
+            while (true) {
+                chunk->reset();
+                auto st = it->get_next(chunk.get());
+                if (st.is_end_of_file()) {
+                    break;
+                }
+                ASSERT_OK(st);
+                batches->push_back(chunk->num_rows());
+            }
+            it->close();
+        }
+    };
+
+    // Each of the 3 segments holds 22 + 12 = 34 rows, one batch apiece by default.
+    std::vector<size_t> default_batches;
+    read_batches(0, &default_batches);
+    EXPECT_EQ((std::vector<size_t>{34, 34, 34}), default_batches);
+
+    std::vector<size_t> small_batches;
+    read_batches(16, &small_batches);
+    EXPECT_GE(small_batches.size(), 3u * 3);
+    EXPECT_EQ(3u * 34, std::accumulate(small_batches.begin(), small_batches.end(), size_t{0}));
+    for (size_t rows : small_batches) {
+        EXPECT_LE(rows, 16u);
+    }
+}
+
 TEST_F(LakeRowsetTest, test_zero_row_segment_positional_iterator_contracts) {
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     int64_t txn_id = next_id();
@@ -2211,12 +2292,12 @@ public:
         {
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(files[0].path);
-            auto* min_tuple = segment_meta->mutable_sort_key_min();
+            auto* min_tuple = segment_meta->mutable_deprecated_sort_key_min();
             auto* min_var = min_tuple->add_values();
             *min_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             min_var->set_value("0");
 
-            auto* max_tuple = segment_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_deprecated_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             max_var->set_value("10");
@@ -2228,12 +2309,12 @@ public:
         {
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(files[1].path);
-            auto* min_tuple = segment_meta->mutable_sort_key_min();
+            auto* min_tuple = segment_meta->mutable_deprecated_sort_key_min();
             auto* min_var = min_tuple->add_values();
             *min_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             min_var->set_value("20");
 
-            auto* max_tuple = segment_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_deprecated_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             max_var->set_value("30");
@@ -2245,12 +2326,12 @@ public:
         {
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(files[2].path);
-            auto* min_tuple = segment_meta->mutable_sort_key_min();
+            auto* min_tuple = segment_meta->mutable_deprecated_sort_key_min();
             auto* min_var = min_tuple->add_values();
             *min_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             min_var->set_value("40");
 
-            auto* max_tuple = segment_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_deprecated_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             max_var->set_value("50");

@@ -100,6 +100,8 @@ public:
             : _stream(std::move(stream)), _offset(offset), _size(size) {}
 
     Status init();
+    // This stream serves _size bytes starting at _offset of the physical file.
+    int64_t bundle_offset() const override { return _offset; }
     Status seek(int64_t position) override;
     StatusOr<int64_t> position() override;
     StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override;

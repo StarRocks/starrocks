@@ -22,14 +22,40 @@ import com.starrocks.sql.formatter.ExprVerboseVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 public class ExprToSql {
+    // Set while rendering plan text that must not show literal values (see withDigestedLiterals).
+    private static final ThreadLocal<Boolean> DIGEST_LITERALS = ThreadLocal.withInitial(() -> false);
+
+    /**
+     * Runs {@code render} with {@link #toSql(Expr)} and {@link #explain(Expr)} printing literals as `?` on this
+     * thread. Only for display text: results rendered inside must not be cached or used to build executable SQL.
+     */
+    public static <T> T withDigestedLiterals(Supplier<T> render) {
+        boolean prev = DIGEST_LITERALS.get();
+        DIGEST_LITERALS.set(true);
+        try {
+            return render.get();
+        } finally {
+            DIGEST_LITERALS.set(prev);
+        }
+    }
+
+    public static boolean isDigestingLiterals() {
+        return DIGEST_LITERALS.get();
+    }
+
+    private static FormatOptions explainOptions() {
+        return FormatOptions.allEnable().setEnableDigest(DIGEST_LITERALS.get());
+    }
+
     /**
      * toSql is an obsolete interface, because of historical reasons, the implementation of toSql is not rigorous enough.
      * Newly developed code should use AstToSQLBuilder::toSQL instead
      */
     public static String toSql(Expr expr) {
-        ExprExplainVisitor explain = new ExprExplainVisitor();
+        ExprExplainVisitor explain = new ExprExplainVisitor(explainOptions());
         return explain.visit(expr);
     }
 
@@ -43,7 +69,7 @@ public class ExprToSql {
     }
 
     public static String explain(Expr expr) {
-        ExprVerboseVisitor explain = new ExprVerboseVisitor();
+        ExprVerboseVisitor explain = new ExprVerboseVisitor(explainOptions());
         return explain.visit(expr);
     }
 

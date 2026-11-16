@@ -3639,6 +3639,48 @@ public class Config extends ConfigBase {
     public static long iceberg_metadata_cache_max_entry_size = 0L;
 
     /**
+     * Share of the FE heap for one cache of the data files of cached Iceberg manifests, shared by all Iceberg
+     * catalogs, so it bounds their total however many catalogs there are. 0 (the default) keeps a cache per
+     * catalog, sized by the catalog property iceberg_data_file_cache_memory_usage_ratio; above 0 that property is
+     * ignored.
+     */
+    @ConfField
+    public static double iceberg_data_file_cache_global_memory_ratio = 0;
+
+    /**
+     * Share of the FE heap for one cache of Iceberg delete files, shared by all Iceberg catalogs; the built delete
+     * file indexes get the same share in a cache of their own, as per catalog. 0 (the default) keeps both per
+     * catalog, sized by the catalog property iceberg_delete_file_cache_memory_usage_ratio; above 0 that property is
+     * ignored.
+     */
+    @ConfField
+    public static double iceberg_delete_file_cache_global_memory_ratio = 0;
+
+    /**
+     * Share of the FE heap for one cache of Iceberg partition maps, shared by all Iceberg catalogs. 0 (the default)
+     * keeps a cache per catalog, sized by the catalog property iceberg_partition_cache_memory_usage_ratio; above 0
+     * that property is ignored.
+     */
+    @ConfField
+    public static double iceberg_partition_cache_global_memory_ratio = 0;
+
+    /**
+     * Share of the FE heap for one cache of parsed Delta Lake checkpoint files, shared by all Delta Lake catalogs,
+     * so it bounds their total however many catalogs there are. 0 (the default) keeps a cache per catalog, sized by
+     * the catalog property deltalake_checkpoint_meta_cache_memory_usage_ratio; above 0 that property is ignored.
+     */
+    @ConfField
+    public static double deltalake_checkpoint_meta_cache_global_memory_ratio = 0;
+
+    /**
+     * Share of the FE heap for one cache of parsed Delta Lake log (JSON) files, shared by all Delta Lake catalogs.
+     * 0 (the default) keeps a cache per catalog, sized by the catalog property
+     * deltalake_json_meta_cache_memory_usage_ratio; above 0 that property is ignored.
+     */
+    @ConfField
+    public static double deltalake_json_meta_cache_global_memory_ratio = 0;
+
+    /**
      * Whether to enable commit queue for Iceberg tables to avoid concurrent commit conflicts.
      * <p>
      * Iceberg uses optimistic concurrency control (OCC) for metadata commits. When multiple threads
@@ -4750,6 +4792,10 @@ public class Config extends ConfigBase {
     public static int pipe_scheduler_interval_millis = 1000;
     @ConfField(mutable = true, comment = "default poll interval of pipe")
     public static int pipe_default_poll_interval_s = 60 * 5;
+    @ConfField(mutable = true, comment = "A pipe changes to ERROR and stops loading when more than this many " +
+            "task executions fail in a row. Retries of a failed task count as executions. A task that loads " +
+            "successfully, ALTER PIPE RESUME, and ALTER PIPE RETRY reset the count.")
+    public static int pipe_max_consecutive_failed_task_executions = 5;
 
     @ConfField(mutable = true)
     public static long mv_active_checker_interval_seconds = 60;
@@ -4818,7 +4864,8 @@ public class Config extends ConfigBase {
             "adaptive by default")
     public static String default_mv_partition_refresh_strategy = "adaptive";
 
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "Deprecated and has no effect: a materialized view created without "
+            + "the refresh_mode property is always PCT")
     public static String default_mv_refresh_mode = "pct";
 
     @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
@@ -5505,21 +5552,20 @@ public class Config extends ConfigBase {
      * during pre-split so that splitting a small load across many compute nodes does not
      * carve tablets smaller than this value. Should be <= tablet_reshard_target_size.
      *
-     * <p>Also the floor under the target an under-provisioned index splits at -- an index holding
-     * fewer tablets than the bound aims at one tablet per slot in it, but never at less than this --
-     * so raising this to tune pre-split also delays that split. The bound is the warehouse's
-     * compute-node count capped by tablet_reshard_max_split_count, so lowering that configuration
-     * lowers both the width this rule aims for and the tablet count at which it stops. The adaptive walk
-     * floors its child count and will not act until a tablet is worth two whole targets, so unlike
-     * the size rule it does not produce children below the target it aimed at.
+     * <p>Also the smallest tablet the adaptive split produces while it widens an under-provisioned index -- an
+     * index holding fewer tablets than the bound and less data than that many target sizes gets its free slots
+     * one child at a time, largest pieces first, among the tablets the size-based split does not already split,
+     * but never a child below this -- so raising this to tune pre-split also delays that split. The bound is the warehouse's
+     * compute-node count capped by tablet_reshard_max_split_count, so lowering that configuration lowers the
+     * tablet count at which it stops.
      *
-     * <p>That target never exceeds the table's own target size (the tablet_reshard_target_size table
-     * property of a range-distributed table that has one, else the tablet_reshard_target_size
-     * configuration), so a value at or above it turns the adaptive split off for that table.
+     * <p>A value at or above the table's own target size (the tablet_reshard_target_size table property of a
+     * range-distributed table that has one, else the tablet_reshard_target_size configuration) turns the
+     * adaptive split off for that table.
      */
-    @ConfField(mutable = true, comment = "Minimum size of a tablet produced by pre-split, and the lower "
-            + "bound on the target an under-provisioned index splits at. Should be no larger than "
-            + "tablet_reshard_target_size; setting it at or above a table's target size (its "
+    @ConfField(mutable = true, comment = "Minimum size of a tablet produced by pre-split, and the smallest "
+            + "tablet the adaptive split produces while it widens an under-provisioned index. "
+            + "Should be no larger than tablet_reshard_target_size; setting it at or above a table's target size (its "
             + "tablet_reshard_target_size table property if it has one, else the tablet_reshard_target_size "
             + "configuration) disables the adaptive split for that table.")
     public static long tablet_reshard_min_split_size = 2L * 1024L * 1024L * 1024L;

@@ -160,6 +160,7 @@ set(STORAGE_FILES
     lake_meta_reader.cpp
     olap_meta_reader.cpp
     seek_tuple.cpp
+    sort_key_bounds.cpp
     sort_key_sampler.cpp
     unique_iterator.cpp
     delta_writer.cpp
@@ -208,6 +209,7 @@ set(STORAGE_FILES
     lake/tablet_merger.cpp
     lake/tablet_virtual_merge.cpp
     lake/tablet_reshard.cpp
+    lake/replication_schema_utils.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
     lake/lake_proto_normalizer.cpp
@@ -236,6 +238,7 @@ set(STORAGE_FILES
     lake/vertical_compaction_task.cpp
     lake/cloud_native_index_compaction_task.cpp
     lake/metacache.cpp
+    lake/metacache_adjuster.cpp
     lake/lake_primary_key_recover.cpp
     lake/spill_mem_table_sink.cpp
     lake/tablet_retain_info.cpp

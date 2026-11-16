@@ -2560,6 +2560,22 @@ struct TRefreshScanCredentialsResponse {
     2: optional CloudConfiguration.TCloudConfiguration cloud_configuration;
 }
 
+// Columns of one external table whose statistics a query found missing or expired.
+struct TTriggerExternalAnalyzeTable {
+    1: optional string table_uuid;
+    2: optional list<string> columns;
+}
+
+// Sent by a follower to the leader: query-triggered external table analyze runs only on the leader, because
+// it writes the edit log. Best effort; a dropped request is raised again by the next query.
+struct TTriggerExternalAnalyzeRequest {
+    1: optional list<TTriggerExternalAnalyzeTable> tables;
+}
+
+struct TTriggerExternalAnalyzeResponse {
+    1: optional Status.TStatus status;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2726,4 +2742,6 @@ service FrontendService {
     TFeResult checkAuth(1: optional TAuthenticateParams request)
 
     TRefreshScanCredentialsResponse refreshScanCredentials(1: optional TRefreshScanCredentialsRequest request)
+
+    TTriggerExternalAnalyzeResponse triggerExternalAnalyze(1: optional TTriggerExternalAnalyzeRequest request)
 }

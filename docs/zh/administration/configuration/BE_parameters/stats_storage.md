@@ -4,6 +4,7 @@ displayed_sidebar: docs
 description: "BE configuration parameters for statistics collection and storage engine settings."
 sidebar_label: "统计报告和存储"
 keywords: ['Canshu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -12,7 +13,6 @@ import PostBEConfig from '../../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
-import EditionSpecificBEItem from '../../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
 
 # BE 配置项 - 统计报告和存储
 
@@ -113,8 +113,6 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 引入版本：-
 
 ## 存储
-
-<EditionSpecificBEItem />
 
 ### alter_tablet_worker_count
 
@@ -1051,6 +1049,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：适用于存算分离集群的主键表。导入生成的删除文件行数达到该值时，系统会在导入阶段同时构建该文件的主键索引文件，发布导入时直接挂载该文件，而不是把每个被删除的主键逐一写入内存中的主键索引。该条件与 `pk_index_eager_build_threshold_bytes` 共同生效：删除文件满足其中任一条件即会构建索引文件。设为 `0` 或负数时关闭该条件。
 - 引入版本：-
 
+### pk_vector_chunk_size
+
+- 默认值：4096
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：主键表在 apply 阶段（应用导入或 Compaction 的结果）从 Segment 读取数据时，每批读取的行数。存算一体和存算分离集群均适用，涵盖导入数据的主键、部分列更新需要读取的列，以及 Compaction 输出的主键。该参数独立于 `vector_chunk_size`，调整它不影响查询执行。调小可以减少每批数据占用的内存，调大可以减少读取次数。设为 `0` 或负数时按 `4096` 处理，大于 `65535` 时按 `65535` 处理。从 Segment 重建主键索引时不使用该参数。
+- 引入版本：-
+
 ### primary_key_limit_size
 
 - 默认值：128
@@ -1066,7 +1073,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：BE 节点释放快照任务的最大线程数。
+- 描述：BE 节点释放快照任务的最大线程数。在存算分离集群中，该线程池还用于执行 Vacuum、Full Vacuum 以及事务日志删除任务。
 - 引入版本：-
 
 ### repair_compaction_interval_seconds

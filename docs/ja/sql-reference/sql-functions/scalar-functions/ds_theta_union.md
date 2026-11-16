@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "2 つの Apache DataSketches Theta スケッチの和集合を計算し、distinct count が |A∪B| と推定されるシリアライズされたコンパクトスケッチを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_union

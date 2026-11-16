@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a date into a string according to the specified format."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # date_format

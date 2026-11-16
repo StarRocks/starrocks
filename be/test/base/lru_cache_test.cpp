@@ -218,6 +218,20 @@ TEST_F(CacheTest, EvictionPolicy) {
     ASSERT_EQ(-1, Lookup(200));
 }
 
+TEST_F(CacheTest, SetCapacityReturnsTheEvictedCharge) {
+    for (int i = 0; i < 1000; i++) {
+        Insert(1000 + i, 2000 + i, 100);
+    }
+    const size_t usage = _cache->get_memory_usage();
+    ASSERT_GT(usage, 0u);
+    // Growing evicts nothing.
+    EXPECT_EQ(0u, _cache->set_capacity(static_cast<size_t>(kCacheSize) * 2));
+    const size_t evicted = _cache->set_capacity(static_cast<size_t>(kCacheSize) / 4);
+    EXPECT_GT(evicted, 0u);
+    EXPECT_EQ(usage - evicted, _cache->get_memory_usage());
+    EXPECT_EQ(static_cast<size_t>(kCacheSize) / 4, _cache->get_capacity());
+}
+
 TEST_F(CacheTest, EvictionPolicyWithDurable) {
     Insert(100, 101, 1);
     InsertDurable(200, 201, 1);
@@ -815,4 +829,70 @@ TEST_F(CacheTest, SetCapacity) {
     ASSERT_EQ(32 + key_mem_size_2, _cache->get_memory_usage());
 }
 
+} // namespace starrocks
+
+namespace starrocks {
+namespace {
+int storage_allocations = 0;
+int storage_deallocations = 0;
+bool storage_callback_active = false;
+int storage_payload_deletes = 0;
+
+void* allocate_cache_storage(size_t bytes) {
+    storage_callback_active = true;
+    void* ptr = std::malloc(bytes);
+    if (ptr != nullptr) ++storage_allocations;
+    storage_callback_active = false;
+    return ptr;
+}
+void deallocate_cache_storage(void* ptr) {
+    storage_callback_active = true;
+    if (ptr != nullptr) ++storage_deallocations;
+    std::free(ptr);
+    storage_callback_active = false;
+}
+void delete_cache_payload(const CacheKey&, void* ptr) {
+    EXPECT_FALSE(storage_callback_active);
+    ++storage_payload_deletes;
+    delete static_cast<int*>(ptr);
+}
+} // namespace
+
+TEST(CacheStorageAllocatorTest, CoversRejectedHandlesResizesAndEvictionWithoutScopingPayloads) {
+    storage_allocations = storage_deallocations = storage_payload_deletes = 0;
+    const CacheStorageAllocator allocator{allocate_cache_storage, deallocate_cache_storage};
+    {
+        ShardedLRUCache cache(1 << 20, &allocator);
+        for (int i = 0; i < 512; ++i) {
+            auto key = std::to_string(i);
+            auto* handle = cache.insert(CacheKey(key), new int(i), sizeof(int), delete_cache_payload);
+            cache.release(handle);
+        }
+        bool inserted = true;
+        auto* duplicate = new int(999);
+        auto* handle = cache.insert_if_absent(CacheKey("1"), duplicate, sizeof(int), delete_cache_payload, &inserted);
+        EXPECT_FALSE(inserted);
+        cache.release(handle);
+        delete duplicate; // the duplicate value was never adopted
+
+        auto* rejected = new int(1000);
+        EXPECT_FALSE(
+                cache.replace_if(CacheKey("missing"), rejected, sizeof(int), delete_cache_payload, nullptr, nullptr));
+        delete rejected;
+        rejected = new int(1001);
+        EXPECT_EQ(cache.insert_no_evict(CacheKey("too-large"), rejected, 1 << 24, delete_cache_payload,
+                                        CachePriority::NORMAL),
+                  nullptr);
+        delete rejected;
+
+        auto* external = cache.lookup(CacheKey("1"));
+        ASSERT_NE(external, nullptr);
+        cache.set_capacity(0);
+        EXPECT_EQ(storage_payload_deletes, 511);
+        cache.release(external);
+        EXPECT_EQ(storage_payload_deletes, 512);
+    }
+    EXPECT_GT(storage_allocations, 512);
+    EXPECT_EQ(storage_allocations, storage_deallocations);
+}
 } // namespace starrocks

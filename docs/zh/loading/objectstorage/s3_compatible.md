@@ -2,6 +2,7 @@
 sidebar_position: 40
 displayed_sidebar: docs
 description: "从其他兼容 S3 协议的对象存储导入数据到 StarRocks，支持 Broker Load 和 INSERT 导入方式。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 从其他兼容 S3 协议的对象存储导入

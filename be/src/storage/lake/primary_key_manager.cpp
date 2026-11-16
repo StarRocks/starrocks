@@ -28,6 +28,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
@@ -1811,7 +1812,10 @@ static StatusOr<std::shared_ptr<Segment>> get_lake_dcg_segment(GetDeltaColumnCon
         const auto& column_file = column_file_result.value();
 
         if (ctx.dcg_segments.count(column_file) == 0) {
-            auto dcg_segment_result = ctx.segment->new_dcg_segment(*dcg, idx.first, read_tablet_schema);
+            // A `.cols` segment is opened again by every publish that reads it, so its footer read has to
+            // fill the local data cache, as the column reads that follow do.
+            auto dcg_segment_result = ctx.segment->new_dcg_segment(*dcg, idx.first, read_tablet_schema,
+                                                                   LakeIOOptions{.fill_data_cache = true});
             if (!dcg_segment_result.ok()) {
                 return Status::InternalError(fmt::format("Failed to create DCG segment for column {}: {}", ucid,
                                                          dcg_segment_result.status().to_string()));
@@ -1998,15 +2002,19 @@ Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& param
                                 publish_segment_count <= cache_capacity / estimated_segment_bytes;
         }
         TEST_SYNC_POINT_CALLBACK("UpdateManager::get_column_values:fill_meta_cache", &use_segment_cache);
+        // The column reads below go through the page cache, so a later publish can be served from memory
+        // without touching the file. Nothing would then bring the footer block back into the local data
+        // cache once it is evicted, so the footer read has to fill the data cache itself.
+        const LakeIOOptions segment_io_opts{.fill_data_cache = true};
         if (use_segment_cache) {
             // Reuse the metacache entry instead of re-parsing the footer and rebuilding a column
             // reader per schema column on every publish. Segment::open() is `_open_once` guarded, so
-            // a cached entry turns the open into a no-op. LakeIOOptions is left at its defaults to
-            // keep the data-cache behaviour identical to the static Segment::open below.
-            segment = tablet_mgr->load_segment(file_info, segment_id_in_rowset, LakeIOOptions{},
+            // a cached entry turns the open into a no-op.
+            segment = tablet_mgr->load_segment(file_info, segment_id_in_rowset, segment_io_opts,
                                                /*fill_meta_cache=*/true, tablet_schema);
         } else {
-            segment = Segment::open(fs, file_info, segment_id_in_rowset, tablet_schema);
+            segment = Segment::open(fs, file_info, segment_id_in_rowset, tablet_schema, nullptr, nullptr,
+                                    segment_io_opts);
         }
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open rssid: " << segment_id << " path: " << file_info.path << " : "
@@ -2025,8 +2033,12 @@ Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& param
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
+        // Publishes of a tablet keep reading the same base rows, from the base segment and from its `.cols`
+        // files alike, so keep their pages in the page cache as a scan does.
+        iter_opts.use_page_cache = !config::disable_storage_page_cache;
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file_with_bundling(opts, file_info));
         iter_opts.read_file = read_file.get();
+        TEST_SYNC_POINT_CALLBACK("UpdateManager::get_column_values:iter_opts", &iter_opts);
 
         GetDeltaColumnContext* dcg_ctx = nullptr;
         if (has_any_dcg && dcg_contexts.count(segment_id) > 0 && !dcg_contexts[segment_id].dcgs.empty()) {

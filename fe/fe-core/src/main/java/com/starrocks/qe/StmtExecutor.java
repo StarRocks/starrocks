@@ -347,13 +347,16 @@ public class StmtExecutor {
     private static final Gson GSON = new Gson();
 
     private static final AtomicLong STMT_ID_GENERATOR = new AtomicLong(0);
+    // Timers named by fixed strings in the planner and scheduler.
+    private static final List<String> PLANNER_STAGE_TIMERS = List.of(
+            "Parser", "Total", "Analyzer", "Lock", "Transformer", "Optimizer", "ExecPlanBuild", "Prepare", "Deploy");
 
     private final ConnectContext context;
     private final MysqlSerializer serializer;
     private final OriginStatement originStmt;
     private StatementBase parsedStmt;
     private RuntimeProfile profile;
-    private Coordinator coord = null;
+    private volatile Coordinator coord = null;
     private LeaderOpExecutor leaderOpExecutor = null;
     private RedirectStatus redirectStatus = null;
     /**
@@ -365,7 +368,7 @@ public class StmtExecutor {
     private ShowResultSet proxyResultSet = null;
     // Authoritative result-batch or forwarded statistics; coordinator snapshots are read on demand.
     private PQueryStatistics statisticsForAuditLog;
-    private List<StmtExecutor> subStmtExecutors;
+    private volatile List<StmtExecutor> subStmtExecutors;
     // Set as soon as a cancellation reaches this statement, by whatever route: KILL QUERY, a cancelled
     // TaskRun, a closed client. cancel() itself only reaches the coordinator, so once a statement has
     // moved past execution -- committing, for instance -- this flag is the only thing that keeps the
@@ -456,20 +459,15 @@ public class StmtExecutor {
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
-        // only print the sepecific sql in multi statement
-        String sql = !context.isMultiStmt() ? originStmt.originStmt :
-                AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt);
-        if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
+        if (Config.enable_sql_desensitize_in_log) {
+            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, AstToSQLBuilder.toDesensitizedSQL(parsedStmt));
+        } else if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT,
                     SqlCredentialRedactor.redact(AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt)));
-        } else if (Config.enable_sql_desensitize_in_log) {
-            String desensitizedSql = AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
-                            .setColumnSimplifyTableName(false)
-                            .setEnableDigest(true))
-                    .orElse("this is a desensitized sql");
-            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT,
-                    SqlCredentialRedactor.redact(desensitizedSql));
         } else {
+            // only print the sepecific sql in multi statement
+            String sql = !context.isMultiStmt() ? originStmt.originStmt :
+                    AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt);
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, SqlCredentialRedactor.redact(sql));
         }
         summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP, GlobalStateMgr.getCurrentState().getWarehouseMgr()
@@ -513,9 +511,7 @@ public class StmtExecutor {
 
         profile.addChild(summaryProfile);
 
-        RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
-        profile.addChild(plannerProfile);
-        Tracers.toRuntimeProfile(plannerProfile);
+        profile.addChild(buildPlannerProfile());
         PreSplitProfile.appendTo(profile, context);
         return profile;
     }
@@ -924,7 +920,8 @@ public class StmtExecutor {
             if (e.getType().equals(ErrorType.USER_ERROR)) {
                 throw e;
             } else {
-                LOG.warn("Planner error: {}", getRedactedOriginStmtInString(), e);
+                LOG.warn("Planner error: {}", LogUtil.redactSqlForLog(getOriginStmtInString(), parsedStmt),
+                        LogUtil.desensitize(e));
                 throw e;
             }
         } catch (Exception e) {
@@ -939,10 +936,12 @@ public class StmtExecutor {
 
     private void logOptimizerTraceOnGenerateExecPlanFailure(Throwable e) {
         String qid = DebugUtil.printId(context.getQueryId());
-        String sql = originStmt == null ? "" : SqlCredentialRedactor.redact(originStmt.originStmt);
-        String err = e == null ? "" : (e.getClass().getSimpleName() + ": " + StringUtils.defaultString(e.getMessage()));
+        String sql = LogUtil.redactSqlForLog(originStmt == null ? "" : originStmt.originStmt, parsedStmt);
+        String err = e == null ? "" :
+                (e.getClass().getSimpleName() + ": " + LogUtil.desensitizeText(StringUtils.defaultString(e.getMessage())));
 
-        if (Config.enable_dump_optimizer_trace_on_error) {
+        // the trace prints every timer name, and some quote the query; the profile below falls back to stage timings
+        if (Config.enable_dump_optimizer_trace_on_error && !Config.enable_sql_desensitize_in_log) {
             String trace = Tracers.printScopeTimer();
             if (StringUtils.isNotBlank(trace)) {
                 final int maxLen = 64 * 1024;
@@ -955,10 +954,23 @@ public class StmtExecutor {
             }
         }
 
-        RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
-        Tracers.toRuntimeProfile(plannerProfile);
         LOG.warn("Generate exec plan failed. Planner profile: query_id={}, sql={}, err={}, profile={}",
-                qid, sql, err, plannerProfile);
+                qid, sql, err, buildPlannerProfile());
+    }
+
+    // Under enable_sql_desensitize_in_log, only the timings of the fixed stages: other timer names (e.g. the Iceberg
+    // split timers), vars and reasons (e.g. MV rewrite failures) can quote the query.
+    private static RuntimeProfile buildPlannerProfile() {
+        RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
+        if (!Config.enable_sql_desensitize_in_log) {
+            Tracers.toRuntimeProfile(plannerProfile);
+            return plannerProfile;
+        }
+        for (String stage : PLANNER_STAGE_TIMERS) {
+            Tracers.getSpecifiedTimer(stage).ifPresent(timer ->
+                    plannerProfile.addInfoString(stage, DebugUtil.getPrettyStringMs(timer.getTotalTime())));
+        }
+        return plannerProfile;
     }
 
     // Execute one statement.
@@ -1072,7 +1084,7 @@ public class StmtExecutor {
                     execPlan = generateExecPlan();
                 } catch (Exception e) {
                     LOG.warn("Generate exec plan failed for explain stmt: {}",
-                            getRedactedOriginStmtInString(), e);
+                            LogUtil.redactSqlForLog(getOriginStmtInString(), parsedStmt), LogUtil.desensitize(e));
                 }
                 handleExplainExecPlan(execPlan);
                 return;
@@ -1196,7 +1208,8 @@ public class StmtExecutor {
                                 originStmt = this.originStmt.originStmt;
                             }
                             needRetry = true;
-                            LOG.warn("retry {} times. stmt: {}", (i + 1), SqlCredentialRedactor.redact(originStmt));
+                            LOG.warn("retry {} times. stmt: {}", (i + 1),
+                                    LogUtil.redactSqlForLog(originStmt, parsedStmt));
                         } else {
                             throw e;
                         }
@@ -1233,10 +1246,8 @@ public class StmtExecutor {
                             }
 
                             if (context.getState().isError()) {
-                                RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
-                                Tracers.toRuntimeProfile(plannerProfile);
                                 LOG.warn("Query {} failed. Planner profile : {}",
-                                        context.getQueryId().toString(), plannerProfile);
+                                        context.getQueryId().toString(), buildPlannerProfile());
                             }
                         } finally {
                             if (isAsync) {
@@ -1347,7 +1358,7 @@ public class StmtExecutor {
                 context.getState().setError("Do not support this query.");
             }
         } catch (IOException e) {
-            LOG.warn("execute IOException ", e);
+            LOG.warn("execute IOException ", LogUtil.desensitize(e));
             // the exception happens when interact with client
             // this exception shows the connection is gone
             context.getState().setError(e.getMessage());
@@ -1359,12 +1370,15 @@ public class StmtExecutor {
             String sql = originStmt != null ? originStmt.originStmt : "";
             String truncatedSql = sql.length() > 200 ? sql.substring(0, 200) + "..." : sql;
             LOG.error("LargeInPredicate optimization failed, sql: {}, error: {}. Will retry with" +
-                    " enable_large_in_predicate=false.", SqlCredentialRedactor.redact(truncatedSql), e.getMessage());
+                    " enable_large_in_predicate=false.", LogUtil.redactSqlForLog(truncatedSql, parsedStmt),
+                    LogUtil.desensitizeText(e.getMessage()));
             throw e;
         } catch (StarRocksException e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             // analysis exception only print message, not print the stack
-            LOG.info("execute Exception, sql: {}, error: {}", SqlCredentialRedactor.redact(sql), e.getMessage());
+            LOG.info("execute Exception, sql: {}, error: {}",
+                    LogUtil.redactSqlForLog(sql, parsedStmt),
+                    LogUtil.desensitizeMessage(e));
             context.getState().setError(LogUtil.getUnwoundExceptionMessage(e));
             if (parsedStmt instanceof KillStmt) {
                 // ignore kill stmt execute err(not monitor it)
@@ -1387,7 +1401,8 @@ public class StmtExecutor {
             }
         } catch (Throwable e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
-            LOG.warn("execute Exception, sql: {}", SqlCredentialRedactor.redact(sql), e);
+            LOG.warn("execute Exception, sql: {}", LogUtil.redactSqlForLog(sql, parsedStmt),
+                    LogUtil.desensitize(e));
             context.getState().setError(LogUtil.getUnwoundExceptionMessage(e));
             context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
@@ -1846,11 +1861,16 @@ public class StmtExecutor {
         }
     }
 
-    public void registerSubStmtExecutor(StmtExecutor subStmtExecutor) {
+    public synchronized void registerSubStmtExecutor(StmtExecutor subStmtExecutor) {
         if (subStmtExecutors == null) {
-            subStmtExecutors = Lists.newArrayList();
+            // Registration can overlap KILL QUERY on another thread.
+            subStmtExecutors = Lists.newCopyOnWriteArrayList();
         }
         subStmtExecutors.add(subStmtExecutor);
+        // cancel() may have traversed the old snapshot before this child was registered.
+        if (cancelled) {
+            subStmtExecutor.cancel("Parent query was cancelled");
+        }
     }
 
     public List<StmtExecutor> getSubStmtExecutors() {
@@ -2964,9 +2984,15 @@ public class StmtExecutor {
     }
 
     private void handleExplainStmt(String explainString) throws IOException {
-
-        if (context.getQueryDetail() != null) {
-            context.getQueryDetail().setExplain(explainString);
+        QueryDetail queryDetail = context.getQueryDetail();
+        if (queryDetail != null) {
+            if (!Config.enable_sql_desensitize_in_log) {
+                queryDetail.setExplain(explainString);
+            } else if (queryDetail.getExplain() == null) {
+                // keep the desensitized plan recorded at planning time; paths that skip planning (recursive CTE,
+                // ANALYZE PROFILE) have none, and their explain text can carry literals
+                queryDetail.setExplain("PLAN NOT AVAILABLE\n");
+            }
         }
 
         if (context instanceof HttpConnectContext) {
@@ -3171,7 +3197,9 @@ public class StmtExecutor {
                 if (sql == null) {
                     sql = originStmt.originStmt;
                 }
-                LOG.warn("DDL statement ({}) process failed.", SqlCredentialRedactor.redact(sql), e);
+                LOG.warn("DDL statement ({}) process failed.",
+                        LogUtil.redactSqlForLog(sql, parsedStmt),
+                        LogUtil.desensitize(e));
             }
             context.setState(e.getQueryState());
         } catch (DdlException | AlterJobException e) {
@@ -3184,7 +3212,8 @@ public class StmtExecutor {
             if (sql == null || sql.isEmpty()) {
                 sql = originStmt.originStmt;
             }
-            LOG.warn("DDL statement ({}) process failed.", SqlCredentialRedactor.redact(sql), e);
+            LOG.warn("DDL statement ({}) process failed.", LogUtil.redactSqlForLog(sql, parsedStmt),
+                    LogUtil.desensitize(e));
             context.getState().setError(e.getMessage());
         }
     }
@@ -3476,7 +3505,8 @@ public class StmtExecutor {
         try {
             handleDMLStmt(execPlan, stmt);
         } catch (Throwable t) {
-            LOG.warn("DML statement({}) process failed.", getRedactedOriginStmtInString(), t);
+            LOG.warn("DML statement({}) process failed.", LogUtil.redactSqlForLog(getOriginStmtInString(), parsedStmt),
+                    LogUtil.desensitize(t));
             retryPlainInsertConflict = mayRetry && shouldRetryPlainInsertOnEmptyPartitions(execPlan, t);
             throw t;
         } finally {
@@ -3793,8 +3823,8 @@ public class StmtExecutor {
                     if (Config.log_plan_cancelled_by_crash_be && context.getQueryDetail() == null) {
                         LOG.warn("Query cancelled by crash of backends [QueryId={}] [SQL={}] [Plan={}]",
                                 DebugUtil.printId(context.getExecutionId()),
-                                getRedactedOriginStmtInString(),
-                                execPlan.getExplainString(TExplainLevel.COSTS));
+                                LogUtil.redactSqlForLog(getOriginStmtInString(), parsedStmt),
+                                execPlan.getExplainStringForLog(TExplainLevel.COSTS));
                     }
 
                     coord.cancel(ErrorCode.ERR_QUERY_CANCELLED_BY_CRASH.formatErrorMsg());
@@ -4053,7 +4083,8 @@ public class StmtExecutor {
         } catch (Throwable t) {
             // if any throwable being thrown during insert operation, first we should abort this txn
             String failedSql = getRedactedOriginStmtInString();
-            LOG.warn("failed to handle stmt [{}] label: {}", failedSql, label, t);
+            LOG.warn("failed to handle stmt [{}] label: {}", LogUtil.desensitizeSql(failedSql, parsedStmt), label,
+                    LogUtil.desensitize(t));
             String errMsg = t.getMessage();
             if (errMsg == null) {
                 errMsg = "A problem occurred while executing the [ " + failedSql + "] statement with label:" + label;
@@ -4251,6 +4282,11 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
                     new QeProcessorImpl.QueryInfo(context, getRedactedOriginStmtInString(), coord));
 
+            // Cancellation may arrive before this internal query has a coordinator to cancel.
+            if (context.isStatementCancelled()) {
+                coord.cancel("User cancelled");
+                return Pair.create(sqlResult, Status.CANCELLED);
+            }
             coord.exec();
             RowBatch batch;
             do {
@@ -4275,7 +4311,7 @@ public class StmtExecutor {
             }
             if (coord == null) {
                 failedBeforeScheduling = Status.internalError(e.getMessage());
-            } else {
+            } else if (coord.getExecStatus().ok()) {
                 coord.getExecStatus().setInternalErrorStatus(e.getMessage());
             }
         } finally {
@@ -4406,13 +4442,14 @@ public class StmtExecutor {
 
         try {
             String originSql = getQueryDetailSql(parsedStmt);
-            boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
             String sql = originSql;
-            if (needEncrypt || Config.enable_sql_desensitize_in_log) {
+            if (Config.enable_sql_desensitize_in_log) {
+                sql = AstToSQLBuilder.toDesensitizedSQL(parsedStmt);
+            } else if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
                 sql = AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
                                 .setColumnSimplifyTableName(false)
-                                .setHideCredential(needEncrypt)
-                                .setEnableDigest(Config.enable_sql_desensitize_in_log))
+                                .setHideCredential(true)
+                                .setEnableDigest(false))
                         .orElse("this is a desensitized sql");
             } else if (SqlCredentialRedactor.mayNeedCredentialRedaction(originSql)) {
                 sql = SqlCredentialRedactor.redact(originSql);
@@ -4480,7 +4517,8 @@ public class StmtExecutor {
 
         if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             queryDetail.setState(QueryDetail.QueryMemState.FAILED);
-            queryDetail.setErrorMessage(ctx.getState().getErrorMessage());
+            // the message can quote literals, like the audit ErrorMessage cleared in AuditEvent
+            queryDetail.setErrorMessage(Config.enable_sql_desensitize_in_log ? "" : ctx.getState().getErrorMessage());
         } else {
             queryDetail.setState(QueryDetail.QueryMemState.FINISHED);
         }

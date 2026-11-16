@@ -14,7 +14,11 @@
 
 #include "meta_helper.h"
 
+#include <algorithm>
+#include <functional>
 #include <optional>
+#include <tuple>
+#include <utility>
 
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/metadata.h"
@@ -95,6 +99,10 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>
                 find_extended_variant_virtual_binding(column_access_paths, materialized_column.name());
 
         int32_t field_idx = find_field_idx_for_materialized_column(_file_metadata, materialized_column);
+        const TIcebergSchemaField* mapped_lake_field = nullptr;
+        if (field_idx < 0) {
+            std::tie(field_idx, mapped_lake_field) = _find_field_idx_by_mapped_names(materialized_column);
+        }
         if (field_idx < 0) continue;
 
         const ParquetField* parquet_field = _file_metadata->schema().get_stored_column_by_field_idx(field_idx);
@@ -105,8 +113,11 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>
         }
 
         auto parquet_type = parquet_field->physical_type;
-        GroupReaderParam::Column column = _build_column(field_idx, parquet_type, materialized_column.slot_desc,
-                                                        materialized_column.decode_needed);
+        // a scalar reader only uses the Iceberg field to check GEOGRAPHY metadata; a complex one would match its
+        // subfields by id, which the file does not have
+        GroupReaderParam::Column column =
+                _build_column(field_idx, parquet_type, materialized_column.slot_desc, materialized_column.decode_needed,
+                              parquet_field->is_complex_type() ? nullptr : mapped_lake_field);
         if (extended_variant_binding.has_value()) {
             column.is_extended_variant_virtual = true;
             column.source_variant_column_name = std::string(extended_variant_binding->access_path->path());
@@ -115,6 +126,67 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>
         read_cols.emplace_back(column);
         existed_column_names.emplace(Utils::format_name(materialized_column.name(), _case_sensitive));
     }
+}
+
+// A file without field ids (a migrated Hive file, or one added by add_files) stores a column renamed afterwards
+// under an older name. The table's name mapping keeps those names, as Iceberg readers resolve such files through it.
+std::pair<int32_t, const TIcebergSchemaField*> ParquetMetaHelper::_find_field_idx_by_mapped_names(
+        const FormatColumnInfo& materialized_column) const {
+    if (_lake_schema == nullptr || materialized_column.col_unique_id() != -1) {
+        return {-1, nullptr};
+    }
+    auto col_name = materialized_column.formatted_name(_case_sensitive);
+    for (const auto& field : _lake_schema->fields) {
+        if (!field.__isset.mapped_names || Utils::format_name(field.name, _case_sensitive) != col_name) {
+            continue;
+        }
+        for (const auto& mapped_name : field.mapped_names) {
+            // a name that is now another column's belongs to that column
+            auto formatted_mapped_name = Utils::format_name(mapped_name, _case_sensitive);
+            if (std::any_of(_lake_schema->fields.begin(), _lake_schema->fields.end(), [&](const auto& other) {
+                    return Utils::format_name(other.name, _case_sensitive) == formatted_mapped_name;
+                })) {
+                continue;
+            }
+            // the mapping tells fields apart by the exact name: `a` and `A` may be older names of two columns.
+            // ParquetField::name is lowercased for a case-insensitive scan, so compare the name the file stores.
+            const auto& stored_names = _stored_top_level_names();
+            for (size_t i = 0; i < stored_names.size(); i++) {
+                if (stored_names[i] == mapped_name) {
+                    return {static_cast<int32_t>(i), &field};
+                }
+            }
+        }
+        return {-1, nullptr};
+    }
+    return {-1, nullptr};
+}
+
+// The top-level column names as the file stores them, in the order of the schema's fields.
+const std::vector<std::string>& ParquetMetaHelper::_stored_top_level_names() const {
+    if (_stored_names.has_value()) {
+        return *_stored_names;
+    }
+    _stored_names.emplace();
+    const auto& elements = _file_metadata->t_metadata().schema;
+    // skips the subtree of the element at `pos`, returns the position after it
+    std::function<size_t(size_t)> skip = [&](size_t pos) {
+        size_t next = pos + 1;
+        int32_t children = elements[pos].__isset.num_children ? elements[pos].num_children : 0;
+        for (int32_t i = 0; i < children && next < elements.size(); i++) {
+            next = skip(next);
+        }
+        return next;
+    };
+    if (!elements.empty()) {
+        size_t pos = 1;
+        int32_t children = elements[0].__isset.num_children ? elements[0].num_children : 0;
+        for (int32_t i = 0; i < children && pos < elements.size(); i++) {
+            _stored_names->push_back(elements[pos].name);
+            pos = skip(pos);
+        }
+    }
+    return *_stored_names;
 }
 
 bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) const {

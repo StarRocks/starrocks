@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "analyze_status テーブルは分析ジョブのステータス情報を提供。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # analyze_status

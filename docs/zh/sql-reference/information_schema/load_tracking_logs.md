@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "load_tracking_logs 提供导入作业的错误日志。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # load_tracking_logs
@@ -18,6 +19,7 @@ description: "load_tracking_logs 提供导入作业的错误日志。"
 | LABEL         | 导入作业的 Label。               |
 | DATABASE_NAME | 导入作业所属的数据库名称。       |
 | TRACKING_LOG  | 导入作业的错误日志信息（如有）。 |
+| TYPE          | 导入作业的类型，例如 `BROKER`、`INSERT`、`ROUTINE_LOAD` 或 `STREAM_LOAD`。 |
 
 :::tip
 查询 `load_tracking_logs` 视图时，您需要根据 `JOB_ID` 或 `LABEL` 进行过滤。

@@ -78,8 +78,11 @@ import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
+import com.starrocks.thrift.TResultBatch;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.transaction.ExplicitTxnStatementValidator;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
@@ -87,6 +90,11 @@ import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -690,6 +698,51 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertEquals(2, auditedSqls.size());
         Assertions.assertFalse(auditedSqls.get(0).contains(";"));
         Assertions.assertFalse(auditedSqls.get(1).contains(";"));
+    }
+
+    @Test
+    public void testCallerBoundQueryUsesCurrentStatementResourceGroup() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1; select /*+ SET_VAR(resource_group = 'group_b') */ "
+                + "lookup_string('default_catalog.db.dict', 'key', 'value');");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        List<String> childResourceGroups = new ArrayList<>();
+        SimpleExecutor lookupExecutor = new SimpleExecutor("testLookup", TResultSinkType.MYSQL_PROTOCAL) {
+            @Override
+            public List<TResultBatch> executeDQL(String sql, ConnectContext childContext) {
+                childResourceGroups.add(childContext.getSessionVariable().getResourceGroup());
+                return List.of();
+            }
+        };
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute(Invocation invocation) throws Exception {
+                StmtExecutor stmtExecutor = invocation.getInvokedInstance();
+                if (stmtExecutor.getParsedStmt().getOrigStmt().idx == 0) {
+                    // Simulate the resource group resolved by the first statement's coordinator.
+                    ctx.setResourceGroup(new TWorkGroup().setName("group_a"));
+                    return;
+                }
+
+                SessionVariable originalVariables = ctx.getSessionVariable();
+                try {
+                    stmtExecutor.processQueryScopeHint();
+                    // Capture the internal query context without running the lookup on a BE.
+                    lookupExecutor.executeDQLAsCaller("select 1", 30, ctx);
+                } finally {
+                    ctx.setSessionVariable(originalVariables);
+                }
+            }
+
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+
+        new ConnectProcessor(ctx).processOnce();
+
+        Assertions.assertFalse(ctx.getState().isError(), ctx.getState().getErrorMessage());
+        Assertions.assertEquals(List.of("group_b"), childResourceGroups);
     }
 
     // Verify multi-statement query stops on the first failed stmt and only audits executed stmts.
@@ -2582,6 +2635,72 @@ public class ConnectProcessorTest extends DDLTestBase {
         } catch (Exception e) {
             // Return a simple mock for test purposes
             return new PrepareStmt("test_stmt", null, null);
+        }
+    }
+
+    // Runs one query with enable_sql_desensitize_in_log on and returns what the given classes logged,
+    // including the messages of any logged throwable and its causes.
+    private List<String> logsOfDesensitizedQuery(String sql, Class<?>... loggingClasses) throws Exception {
+        List<String> lines = new ArrayList<>();
+        AbstractAppender appender = new AbstractAppender("desensitize-capture-" + UUID.randomUUID(), null, null) {
+            @Override
+            public void append(LogEvent event) {
+                StringBuilder text = new StringBuilder(event.getMessage().getFormattedMessage());
+                for (Throwable t = event.getThrown(); t != null; t = t.getCause()) {
+                    text.append(' ').append(t.getMessage());
+                }
+                lines.add(text.toString());
+            }
+        };
+        appender.start();
+        List<Logger> loggers = new ArrayList<>();
+        List<Level> prevLevels = new ArrayList<>();
+        for (Class<?> c : loggingClasses) {
+            Logger logger = (Logger) LogManager.getLogger(c);
+            loggers.add(logger);
+            prevLevels.add(logger.getLevel());
+            logger.addAppender(appender);
+            logger.setLevel(Level.TRACE);
+        }
+        boolean prevDesensitize = Config.enable_sql_desensitize_in_log;
+        Config.enable_sql_desensitize_in_log = true;
+        try {
+            ConnectContext ctx = initMockContext(mockChannel(createQueryPacket(sql)), GlobalStateMgr.getCurrentState());
+            new ConnectProcessor(ctx).processOnce();
+            Assertions.assertTrue(ctx.getState().isError());
+        } finally {
+            Config.enable_sql_desensitize_in_log = prevDesensitize;
+            for (int i = 0; i < loggers.size(); i++) {
+                loggers.get(i).removeAppender(appender);
+                loggers.get(i).setLevel(prevLevels.get(i));
+            }
+        }
+        return lines;
+    }
+
+    // A parse failure has no statement to digest: neither the SQL nor the parser message (which quotes the
+    // offending token) may be logged.
+    @Test
+    public void testParseFailureLogIsDesensitized() throws Exception {
+        List<String> lines = logsOfDesensitizedQuery("select * from t where ssn 'SECRET_PARSE'", ConnectProcessor.class);
+        Assertions.assertFalse(lines.isEmpty());
+        for (String line : lines) {
+            Assertions.assertFalse(line.contains("SECRET_PARSE"), line);
+        }
+    }
+
+    // A failure after parsing logs the statement with literals digested, but not the error message,
+    // which here embeds the whole expression.
+    @Test
+    public void testStatementFailureLogsDigestedSql() throws Exception {
+        List<String> lines = logsOfDesensitizedQuery("select 'a' regexp 'SECRET_EXEC('",
+                ConnectProcessor.class, StmtExecutor.class);
+        // the failure type stays, the message does not
+        Assertions.assertTrue(lines.stream().anyMatch(l -> l.matches(
+                "(?s)execute Exception, sql: SELECT \\? REGEXP \\?.*, error: [\\w.$]+(\\(\\w+\\))?: <desensitized>")),
+                lines.toString());
+        for (String line : lines) {
+            Assertions.assertFalse(line.contains("SECRET_EXEC"), line);
         }
     }
 }

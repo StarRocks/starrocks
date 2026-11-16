@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "修改现有表，包括重命名、修改分区、修改分桶、调整 Tablet 大小和修改列。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER TABLE
@@ -487,7 +488,7 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     - Tablet 的大小**大于或等于** `tablet_reshard_target_size` 的 1.5 倍（即 `ceil(1.5 × tablet_reshard_target_size)`）。以默认值 10 GB 为例，Tablet 达到 15 GB 才会拆分。后台自动拆分和手动执行的 `ALTER TABLE ... SPLIT` 均按此阈值判断：自动拆分使用表的目标大小；手动 SPLIT 使用 `PROPERTIES` 中指定的值，未指定时同样使用表的目标大小。指定 Tablet ID 时也不例外：小于该阈值的 Tablet 不会被拆分；如果没有任何 Tablet 满足条件，语句会报错 `No tablets need to split in table ...`。
     - 当前正在执行 SPLIT 或 MERGE 的 Tablet 数量小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
 
-  - 此外，如果 Tablet 所属物化索引的 Tablet 数量少于其所属仓库的计算节点数（该数量同时受 `tablet_reshard_max_split_count` 上限约束，因此调小该配置会让此行为更早停止），且该 Tablet 的大小达到该规则目标大小的两倍，则无需达到上述阈值即可触发拆分，从而使新建分区更快获得集群级别的写入并行度。该规则的目标大小为“索引数据量按上述槽位数均分”所得的大小，不超过表的目标大小，并以 `tablet_reshard_min_split_size` 为下限；因此在其 2 GB 默认值下，数据量尚未超过该下限的索引会在单个 Tablet 达到 4 GB 时触发拆分。该规则适用于后台自动拆分，以及既未指定 Tablet ID、也未指定 `tablet_reshard_target_size` 的手动 SPLIT；指定其中任意一项都会禁用该规则，仅按上述阈值判断。将 `tablet_reshard_min_split_size` 设置为大于或等于表的目标大小，即可对该表禁用该规则；如需在整个集群范围内禁用，该值须同时大于或等于 FE 配置项 `tablet_reshard_target_size` 和各表设置的表属性 `tablet_reshard_target_size`。
+  - 此外，当 Tablet 所属物化索引的 Tablet 数量少于其所属仓库的计算节点数（该数量同时受 `tablet_reshard_max_split_count` 上限约束，因此调小该配置会让此行为更早停止），且索引数据量小于该数量与表的目标大小之积时，无需达到上述阈值即可触发拆分，从而使新建分区更快获得集群级别的写入并行度。空余的槽位会逐个分配给未被上述阈值拆分的 Tablet，每次都分给按当前拆分份数计算、每份数据量最大的那个 Tablet；拆分出的每个 Tablet 都不能小于 `tablet_reshard_min_split_size`，单个 Tablet 拆分出的数量也不能超过单次拆分的上限。以 `tablet_reshard_min_split_size` 的默认值 2 GB 为例，只有一个 Tablet 的索引会在该 Tablet 达到 4 GB 时触发拆分；在 3 个计算节点上，已有 2 个 Tablet 的索引会在其中一个 Tablet 达到 4 GB 时拆出第 3 个。该规则适用于后台自动拆分，以及既未指定 Tablet ID、也未指定 `tablet_reshard_target_size` 的手动 SPLIT；指定其中任意一项都会禁用该规则，仅按上述阈值判断。将 `tablet_reshard_min_split_size` 设置为大于或等于表的目标大小，即可对该表禁用该规则；如需在整个集群范围内禁用，该值须同时大于或等于 FE 配置项 `tablet_reshard_target_size` 和各表设置的表属性 `tablet_reshard_target_size`。
 
   - 合并（MERGE）需要将 FE 配置项 `tablet_reshard_enable_tablet_merge` 设置为 `true`（默认值：`false`），否则系统不会自动合并 Tablet，`ALTER TABLE ... MERGE` 也会被拒绝。开启后，合并规则如下：
     - 自动合并：物化索引中任意两个相邻 Tablet 的大小总和**小于** `tablet_reshard_target_size` 的 80%（即 `ceil(0.8 × tablet_reshard_target_size)`）时触发，此处使用表的目标大小。以默认值 10 GB 为例，相邻两个 Tablet 合计不足 8 GB 时即触发合并。
@@ -774,7 +775,7 @@ PROPERTIES：支持设置超时时间，默认超时时间为一天。
 - 表必须为明细表（Duplicate Key）、聚合表（Aggregate）或更新表（Unique Key），不支持主键表（Primary Key）。
 - 如果表设置了 `colocate_with`，Rollup 的 `ORDER BY` 必须以 Colocated Column 开头，列的顺序和类型均须与之一致。
 - 不能删除 Rollup 排序键中的列，也不能修改这些列的类型。唯一的例外是：可以单独增加 VARCHAR 列的长度（通过 Fast Schema Evolution 完成），但不能同时调整该列的位置或修改其他属性。此类 Rollup 不支持 `ORDER BY ... FROM <rollup>`。
-- 支持添加多个此类 Rollup。每条 `ALTER TABLE` 语句添加一个 Rollup（添加多个 Rollup 需分多条语句执行）。该 Rollup 始终基于基表索引构建，不支持 `FROM <其他 Rollup>`。表不能包含同步物化视图。
+- 支持添加多个此类 Rollup。每条 `ALTER TABLE` 语句添加一个 Rollup（添加多个 Rollup 需分多条语句执行）。该 Rollup 始终基于基表索引构建，不支持 `FROM <其他 Rollup>`。
 
 示例：
 

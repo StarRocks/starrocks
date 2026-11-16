@@ -14,6 +14,7 @@
 
 #include "storage/lake/tablet_merger.h"
 
+#include <bvar/bvar.h>
 #include <fmt/format.h>
 #include <google/protobuf/unknown_field_set.h>
 
@@ -47,6 +48,9 @@ DEFINE_FAIL_POINT(skip_lake_pk_index_merge_source_flush);
 DEFINE_FAIL_POINT(tablet_merge_after_write_delvec);
 
 namespace {
+
+// Merge computations that drop every source index SST, so the merged tablet rebuilds its index from rowsets.
+bvar::Adder<int64_t> g_tablet_reshard_merge_index_rebuild_total("tablet_reshard_merge_index_rebuild_total");
 
 // PersistentIndexSstablePB::max_rss_rowid encodes (rssid << 32) | rowid.
 constexpr int kRssRowidHighShift = 32;
@@ -138,6 +142,12 @@ public:
     }
 
     uint32_t target_end() const { return _target_end; }
+
+    // Whether this source references no RSSID at all.
+    bool empty() const { return _runs.empty(); }
+
+    // The lowest source RSSID this source references. Requires !empty().
+    uint64_t source_begin() const { return _runs.front().source_begin; }
 
     // One past the highest source RSSID this source references.
     uint64_t source_end() const { return _runs.empty() ? 0 : _runs.back().source_end; }
@@ -669,11 +679,27 @@ struct RowsetNode {
     OrderKey key;
 };
 
+// A delete-vector page of a source tablet.
+struct PageKey {
+    int64_t tablet_id;
+    std::string file;
+    uint64_t offset;
+
+    bool operator<(const PageKey& other) const {
+        return std::tie(tablet_id, file, offset) < std::tie(other.tablet_id, other.file, other.offset);
+    }
+};
+
 struct MergePlan {
     std::vector<TabletMetadataPtr> sources; // in tablet id order
     std::vector<RssidProjection> projections;
     MutableTabletMetadataPtr target;
     std::map<uint32_t, DelvecPageInfo> delvec_pages; // by target RSSID
+    // The pages carried sstables embed whose owner has no page in the merged tablet, other than the ones a live page
+    // already writes; each is copied once, as it is.
+    std::map<PageKey, DelvecPageInfo> pinned_pages;
+    // Where each source page written into the merged delete-vector file lies in it, live and pinned pages alike.
+    std::map<PageKey, uint64_t> page_offsets;
     bool rebuild_index = false; // the merged tablet drops the source sstables and rebuilds its index
 };
 
@@ -1127,42 +1153,146 @@ void merge_vector_index_built_version(MergePlan* plan) {
 // Primary-key index sstables.
 // ---------------------------------------------------------------------------------------------------------------
 
-// Whether |sst| of source |s| can be carried into the merged tablet by translating its RSSIDs. When it cannot, the
-// merged tablet drops every source sstable and rebuilds its index from the rowsets the next time it is loaded.
-std::optional<std::string> sstable_projection_problem(const MergePlan& plan, size_t s,
-                                                      const PersistentIndexSstablePB& sst) {
+// Why the merged tablet drops every source sstable and rebuilds its index instead; |filename| is empty when the reason
+// is the source as a whole.
+struct SstFallback {
+    std::string filename;
+    std::string reason;
+};
+
+// What the merge does with one source sstable: leave it out, or carry it with these coordinates of the merged tablet.
+// A carried modern sstable gets |owner| and, when it had a delete-vector page, the merged page of its owner, or a copy
+// of its own page when the owner has none in the merged tablet.
+struct ClassifiedSst {
+    const PersistentIndexSstablePB* sst;
+    bool left_out;
+    uint64_t max_rss_rowid;
+    std::optional<uint32_t> owner;
+    int32_t rssid_offset;
+    bool rehang_page;
+    std::optional<PageKey> copy_page;
+};
+
+struct ClassifiedSource {
+    std::vector<ClassifiedSst> ssts;
+    int left_out = 0;
+    int lowered = 0;
+    int reowned = 0;
+};
+
+// Sorts the sstables of source |s| by where their watermark lies against the RSSIDs the source references, [B, E),
+// or returns why the merged tablet must rebuild its index instead. An sstable inside [B, E) is carried by translating
+// its RSSIDs. One below B is left out: sstables are listed in non-decreasing watermark order, so those are the oldest,
+// and since a watermark is never below the rows its sstable points at and every live row of the source lies in
+// [B, E), each of their entries is a tombstone or names a row the source no longer has; with all of them left out, a
+// lookup that would have stopped at such an entry finds nothing, which reads the same as a tombstone. A source that
+// references no RSSID has no row, so all its sstables are left out. One at or above E is carried with its watermark
+// lowered to E - 1, translated, with every row of it covered: its entries that point at a live row lie in [B, E), the
+// others are never the latest entry of a key, and the source flush has put every live row of the source in its
+// sstables, so a cold load that skips the rows up to the lowered watermark misses none.
+//
+// Both rely on a modern sstable's owner not lying above its watermark, which every writer keeps; an sstable that
+// breaks it is a reason to rebuild. Index compaction resolves two entries of one key and one version by the watermarks
+// of their sstables, taking the tombstone when they are equal, so lowering must keep the carried sstables of a source
+// whose watermarks differ apart; when it would not, the index is rebuilt too.
+//
+// A carried modern sstable whose owner lies in [B, E) keeps it, translated, whether a live segment or a hole. One whose
+// owner lies outside gets owner 0, which no rowset of the merged tablet uses: the source has no segment at the owner,
+// so each of the sstable's entries other than tombstones is either never the latest entry of its key or masked by the
+// sstable's own delete-vector page, and only has to resolve to no row. The page is re-hung on the merged page of the
+// owner when there is one, a superset of it; otherwise it is copied as it is into the merged delete-vector file, so
+// the entries it masks stay masked.
+std::optional<SstFallback> classify_source_sstables(
+        const MergePlan& plan, size_t s, const google::protobuf::RepeatedPtrField<PersistentIndexSstablePB>& sstables,
+        ClassifiedSource* out) {
     const auto& projection = plan.projections[s];
+    // The source flush could not record a watermark for such a source; a rebuild does not flush.
+    if (projection.source_end() > kWatermarkRssidExclusiveLimit) {
+        return SstFallback{"", "references RSSIDs beyond the index watermark domain"};
+    }
     const auto delta = projection.single_delta();
-    if (!delta.has_value()) return "the source is not a single translation run";
-    if (!projection.map(extract_rss_rowid_high(sst.max_rss_rowid())).ok()) return "its watermark is outside the source";
-    if (sst.has_shared_rssid()) {
-        auto owner = effective_shared_rssid(sst);
-        if (!owner.ok()) return "its owner is outside the source";
-        auto target_owner = projection.map(owner.value());
-        if (!target_owner.ok()) return "its owner is outside the source";
-        if (sst.has_delvec() && sst.delvec().size() > 0) {
-            // Loading the sstable reads this page, so the source flush would fail on a page it cannot read.
+    for (const auto& sst : sstables) {
+        const bool has_page = sst.has_delvec() && sst.delvec().size() > 0;
+        const FileMetaPB* page_file = nullptr;
+        if (has_page) {
+            // Loading the sstable reads this page, so the source flush would fail on a page it cannot read, whether
+            // the sstable is carried or left out.
             const auto& page = sst.delvec();
             const auto& version_to_file = plan.sources[s]->delvec_meta().version_to_file();
             auto file = version_to_file.find(page.version());
-            if (file == version_to_file.end() || file->second.name().empty())
-                return "its delete vector page has no file";
+            if (file == version_to_file.end() || file->second.name().empty()) {
+                return SstFallback{sst.filename(), "its delete vector page has no file"};
+            }
             constexpr uint64_t kInt64Max = std::numeric_limits<int64_t>::max();
             if (page.size() > kInt64Max || page.offset() > kInt64Max - page.size() ||
                 (file->second.has_size() &&
                  (file->second.size() < 0 ||
                   page.offset() + page.size() > static_cast<uint64_t>(file->second.size())))) {
-                return "its delete vector page lies outside its file";
+                return SstFallback{sst.filename(), "its delete vector page lies outside its file"};
             }
-            if (!plan.delvec_pages.contains(target_owner.value())) {
-                return "its owner has no delete vector page in the merged tablet";
-            }
+            page_file = &file->second;
         }
-        return std::nullopt;
+        const uint32_t high = extract_rss_rowid_high(sst.max_rss_rowid());
+        std::optional<uint32_t> owner;
+        if (sst.has_shared_rssid()) {
+            auto effective = effective_shared_rssid(sst);
+            if (!effective.ok()) return SstFallback{sst.filename(), "its owner is outside the RSSID domain"};
+            if (effective.value() > high) return SstFallback{sst.filename(), "its owner is above its watermark"};
+            owner = effective.value();
+        }
+        ClassifiedSst classified{.sst = &sst, .max_rss_rowid = sst.max_rss_rowid(), .rssid_offset = sst.rssid_offset()};
+        if (projection.empty() || high < projection.source_begin()) {
+            classified.left_out = true;
+            ++out->left_out;
+            out->ssts.push_back(classified);
+            continue;
+        }
+        if (!delta.has_value()) return SstFallback{sst.filename(), "the source is not a single translation run"};
+        if (high >= projection.source_end()) {
+            classified.max_rss_rowid =
+                    encode_rss_rowid(projection.map(projection.source_end() - 1).value(), kRssRowidLowMask);
+            ++out->lowered;
+        } else {
+            classified.max_rss_rowid = encode_rss_rowid(projection.map(high).value(), sst.max_rss_rowid());
+        }
+        if (owner.has_value()) {
+            auto target_owner = projection.map(*owner);
+            if (target_owner.ok()) {
+                classified.owner = target_owner.value();
+            } else {
+                classified.owner = 0;
+                // Owner 0 was given by an earlier merge; keeping it is not counted.
+                if (*owner != 0) ++out->reowned;
+            }
+            classified.rssid_offset = 0;
+            if (has_page && plan.delvec_pages.contains(*classified.owner)) {
+                classified.rehang_page = true;
+            } else if (has_page) {
+                // The merged delete-vector file is written in plaintext and can only copy plaintext pages.
+                if (!page_file->encryption_meta().empty()) {
+                    return SstFallback{sst.filename(), "its delete vector page is in an encrypted file"};
+                }
+                classified.copy_page = PageKey{plan.sources[s]->id(), page_file->name(), sst.delvec().offset()};
+            }
+        } else {
+            const int64_t offset = static_cast<int64_t>(sst.rssid_offset()) + *delta;
+            if (offset < std::numeric_limits<int32_t>::min() || offset > std::numeric_limits<int32_t>::max()) {
+                return SstFallback{sst.filename(), "its translated rssid_offset exceeds int32"};
+            }
+            classified.rssid_offset = static_cast<int32_t>(offset);
+        }
+        out->ssts.push_back(classified);
     }
-    const int64_t offset = static_cast<int64_t>(sst.rssid_offset()) + *delta;
-    if (offset < std::numeric_limits<int32_t>::min() || offset > std::numeric_limits<int32_t>::max()) {
-        return "its translated rssid_offset exceeds int32";
+    // Translation and lowering never reorder watermarks, so two carried sstables made equal are next to each other.
+    const ClassifiedSst* previous = nullptr;
+    for (const auto& c : out->ssts) {
+        if (c.left_out) continue;
+        if (previous != nullptr && previous->sst->max_rss_rowid() < c.sst->max_rss_rowid() &&
+            previous->max_rss_rowid == c.max_rss_rowid) {
+            return SstFallback{c.sst->filename(),
+                               "lowering its watermark would tie it with an earlier SST of the source"};
+        }
+        previous = &c;
     }
     return std::nullopt;
 }
@@ -1175,48 +1305,112 @@ std::optional<std::string> sstable_attribution_problem(const TabletMetadataPB& s
     return std::nullopt;
 }
 
-// Modern: every value belongs to shared_rssid + rssid_offset, which becomes the translated owner with no offset.
+// Modern: every value belongs to shared_rssid + rssid_offset, which becomes the translated owner with no offset, or 0.
 // Legacy: every value carries its own RSSID, shifted by rssid_offset, so the offset absorbs the source's delta.
-// Either way the watermark moves with its RSSID. A modern sstable's embedded delete vector page is the owner's
-// page as of when the sstable was written; the merged tablet's page for the same segment is that page or a
-// superset of it (a segment's delete vector only ever grows), so pointing at the merged page loses no delete.
-// An sstable that had no page gets none.
-PersistentIndexSstablePB project_sstable(const MergePlan& plan, size_t s, const PersistentIndexSstablePB& sst) {
-    const auto& projection = plan.projections[s];
-    PersistentIndexSstablePB out(sst);
-    const uint32_t high = projection.map(extract_rss_rowid_high(sst.max_rss_rowid())).value();
-    out.set_max_rss_rowid(encode_rss_rowid(high, sst.max_rss_rowid()));
-    if (sst.has_shared_rssid()) {
-        const uint32_t owner = projection.map(effective_shared_rssid(sst).value()).value();
-        out.set_shared_rssid(owner);
-        out.set_rssid_offset(0);
-        if (sst.has_delvec() && sst.delvec().size() > 0) {
-            out.mutable_delvec()->CopyFrom(plan.target->delvec_meta().delvecs().at(owner));
+// Either way the watermark moves with its RSSID, lowered first if it lay past the source's RSSIDs. A modern
+// sstable's embedded delete vector page is the owner's page as of when the sstable was written; the merged tablet's
+// page for the same segment is that page or a superset of it (a segment's delete vector only ever grows), so pointing
+// at the merged page loses no delete. Without a merged page for the owner, the sstable points at the copy of its own
+// page in the merged file. An sstable that had no page gets none.
+PersistentIndexSstablePB materialize_sstable(const MergePlan& plan, const ClassifiedSst& c) {
+    PersistentIndexSstablePB out(*c.sst);
+    out.set_max_rss_rowid(c.max_rss_rowid);
+    out.set_rssid_offset(c.rssid_offset);
+    if (c.owner.has_value()) {
+        out.set_shared_rssid(*c.owner);
+        if (c.rehang_page) {
+            out.mutable_delvec()->CopyFrom(plan.target->delvec_meta().delvecs().at(*c.owner));
+        } else if (c.copy_page.has_value()) {
+            const auto& source = c.sst->delvec();
+            const int64_t version = plan.target->version();
+            DelvecPagePB page;
+            page.set_version(version);
+            page.set_offset(plan.page_offsets.at(*c.copy_page));
+            page.set_size(source.size());
+            page.set_crc32c_gen_version(version);
+            // As for a live page, a source checksum is carried only when it was generated for the page's own version.
+            if (source.has_crc32c() && source.crc32c_gen_version() == source.version()) {
+                page.set_crc32c(source.crc32c());
+            }
+            out.mutable_delvec()->Swap(&page);
         }
     } else {
-        out.set_rssid_offset(static_cast<int32_t>(sst.rssid_offset() + *projection.single_delta()));
         out.clear_delvec();
     }
     out.mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
     return out;
 }
 
+// An sstable the merged tablet does not carry is recorded once as its shared orphan. The sstables a source already had
+// are still referenced by the source's new metadata, so vacuum leaves them to the shared-file cleanup, which also
+// reclaims any sstable the merge's own flush wrote: nothing references those.
+void record_shared_sst_orphan(const PersistentIndexSstablePB& sst, TabletMetadataPB* target) {
+    auto* orphan = target->add_orphan_files();
+    orphan->set_name(sst.filename());
+    orphan->set_size(sst.filesize());
+    orphan->set_encryption_meta(sst.encryption_meta());
+    orphan->set_shared(true);
+    const int64_t generation = sst.generation_version();
+    orphan->set_version(generation > 0 && generation <= target->version() ? generation : 0);
+}
+
 // The fallback: no source sstable is carried over, and each one is recorded once as a shared orphan of the merged
-// tablet. The sstables a source already had are still referenced by the source's new metadata, so vacuum leaves them
-// to the shared-file cleanup, which also reclaims any sstable the merge's own flush wrote: nothing references those.
+// tablet.
 void drop_source_sstables(const std::vector<TabletMetadataPtr>& sources, TabletMetadataPB* target) {
+    g_tablet_reshard_merge_index_rebuild_total << 1;
     target->clear_sstable_meta();
     for (const auto& source : sources) {
-        for (const auto& sst : source->sstable_meta().sstables()) {
-            auto* orphan = target->add_orphan_files();
-            orphan->set_name(sst.filename());
-            orphan->set_size(sst.filesize());
-            orphan->set_encryption_meta(sst.encryption_meta());
-            orphan->set_shared(true);
-            const int64_t generation = sst.generation_version();
-            orphan->set_version(generation > 0 && generation <= target->version() ? generation : 0);
+        for (const auto& sst : source->sstable_meta().sstables()) record_shared_sst_orphan(sst, target);
+    }
+}
+
+// The INFO line of a merge that rebuilds the index: the sstable of which source, and why.
+std::string describe_index_rebuild(int64_t target_id, int64_t source_id, const SstFallback& fallback, bool flushed) {
+    const std::string sstable =
+            fallback.filename.empty() ? "" : fmt::format("{}SST {} of ", flushed ? "flushed " : "", fallback.filename);
+    return fmt::format("tablet merge into {} rebuilds the primary key index: {}source tablet {} {}", target_id, sstable,
+                       source_id, fallback.reason);
+}
+
+// Registers the pages the carried sstables copy, each once however many sstables embed it. A page a live segment
+// declares too is not registered: the merged file holds it already, and the sstables point at that copy. Every
+// declaration of a delvec file, live or embedded, must describe it the same way, and the declarations of one page must
+// agree on its size, so a conflict is a refusal before anything is written.
+Status pin_copied_pages(MergePlan* plan, const std::vector<ClassifiedSource>& classified) {
+    std::map<PageKey, const DelvecPageInfo*> live_pages;
+    std::map<std::string, const FileMetaPB*> files;
+    for (const auto& [target_rssid, info] : plan->delvec_pages) {
+        (void)target_rssid;
+        live_pages.try_emplace(PageKey{info.tablet_id, info.delvec_file.name(), info.page.offset()}, &info);
+        files.try_emplace(info.delvec_file.name(), &info.delvec_file);
+    }
+    for (size_t s = 0; s < classified.size(); ++s) {
+        const auto& version_to_file = plan->sources[s]->delvec_meta().version_to_file();
+        for (const auto& c : classified[s].ssts) {
+            if (!c.copy_page.has_value()) continue;
+            const auto& page = c.sst->delvec();
+            const FileMetaPB& file = version_to_file.at(page.version());
+            auto [known_file, new_file] = files.try_emplace(file.name(), &file);
+            if (!new_file && !delvec_file_metadata_matches(*known_file->second, file)) {
+                return Status::Corruption(fmt::format(
+                        "Delvec actual page source metadata mismatch for file {} during tablet merge preflight",
+                        file.name()));
+            }
+            const DelvecPageInfo* known = nullptr;
+            if (auto live = live_pages.find(*c.copy_page); live != live_pages.end()) {
+                known = live->second;
+            } else {
+                auto [pinned, inserted] = plan->pinned_pages.try_emplace(
+                        *c.copy_page, DelvecPageInfo{plan->sources[s]->id(), file, page});
+                if (inserted) continue;
+                known = &pinned->second;
+            }
+            if (known->page.size() != page.size()) {
+                return Status::Corruption("compacted delvec duplicate page declarations disagree on size");
+            }
         }
     }
+    return Status::OK();
 }
 
 // Everything the merge decides from metadata alone. A failure here is a refusal: nothing has been written.
@@ -1275,41 +1469,45 @@ StatusOr<MergePlan> plan_merge(const std::vector<TabletMetadataPtr>& requested, 
     merge_schemas(&plan);
 
     if (uses_cloud_native_pk_index(*target)) {
-        for (size_t s = 0; s < plan.sources.size() && !plan.rebuild_index; ++s) {
-            // The source flush could not record a watermark for such a source; a rebuild does not flush.
-            if (plan.projections[s].source_end() > kWatermarkRssidExclusiveLimit) {
-                LOG(INFO) << "tablet merge into " << target->id() << " rebuilds the primary key index: source tablet "
-                          << plan.sources[s]->id() << " references RSSIDs beyond the index watermark domain";
+        std::vector<ClassifiedSource> classified(plan.sources.size());
+        for (size_t s = 0; s < plan.sources.size(); ++s) {
+            auto fallback =
+                    classify_source_sstables(plan, s, plan.sources[s]->sstable_meta().sstables(), &classified[s]);
+            if (fallback.has_value()) {
+                LOG(INFO) << describe_index_rebuild(target->id(), plan.sources[s]->id(), *fallback, /*flushed=*/false);
                 plan.rebuild_index = true;
                 break;
             }
-            for (const auto& sst : plan.sources[s]->sstable_meta().sstables()) {
-                if (auto problem = sstable_projection_problem(plan, s, sst); problem.has_value()) {
-                    LOG(INFO) << "tablet merge into " << target->id() << " rebuilds the primary key index: SST "
-                              << sst.filename() << " of source tablet " << plan.sources[s]->id() << " " << *problem;
-                    plan.rebuild_index = true;
-                    break;
-                }
-            }
         }
+        if (!plan.rebuild_index) RETURN_IF_ERROR(pin_copied_pages(&plan, classified));
     }
     return plan;
 }
 
-// Writes the merged delete-vector file. No live page means no file and an empty delvec_meta.
+// Writes the merged delete-vector file: the live pages, then the pinned pages, and records where every source page
+// landed. Only live pages are keyed by segment in delvec_meta; a pinned page is reached through the sstables that
+// embed it. No page means no file and an empty delvec_meta.
 Status write_delvecs(TabletManager* tablet_manager, MergePlan* plan, int64_t txn_id) {
-    if (plan->delvec_pages.empty()) return Status::OK();
+    if (plan->delvec_pages.empty() && plan->pinned_pages.empty()) return Status::OK();
     std::vector<DelvecOutputPage> pages;
-    pages.reserve(plan->delvec_pages.size());
+    std::vector<PageKey> keys;
+    pages.reserve(plan->delvec_pages.size() + plan->pinned_pages.size());
+    keys.reserve(plan->delvec_pages.size() + plan->pinned_pages.size());
     for (const auto& [target_rssid, page] : plan->delvec_pages) {
         (void)target_rssid;
         pages.push_back(DelvecOutputPage{.raw_page = page});
+        keys.push_back(PageKey{page.tablet_id, page.delvec_file.name(), page.page.offset()});
+    }
+    for (const auto& [key, page] : plan->pinned_pages) {
+        pages.push_back(DelvecOutputPage{.raw_page = page});
+        keys.push_back(key);
     }
     FileMetaPB file;
     std::vector<uint64_t> offsets;
     RETURN_IF_ERROR(write_compacted_delvec_pages(tablet_manager, pages, plan->target->id(), txn_id, &file, &offsets));
     // Until the metadata below is published the file is an ordinary orphan, reclaimed by vacuum.
     FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_merge_after_write_delvec);
+    for (size_t k = 0; k < keys.size(); ++k) plan->page_offsets.try_emplace(keys[k], offsets[k]);
 
     const int64_t version = plan->target->version();
     DelvecMetadataPB delvec_meta;
@@ -1334,7 +1532,11 @@ Status write_delvecs(TabletManager* tablet_manager, MergePlan* plan, int64_t txn
 }
 
 // Flushes each source's primary-key memtable so its sstables cover all its rows (the merged tablet's cold load
-// skips rowsets below the last sstable's watermark), then carries the sstables over, or falls back to a rebuild.
+// skips rowsets below the last sstable's watermark), then carries the sstables over, leaving out the ones below their
+// source's RSSIDs, lowering the watermarks past them and giving owner 0 to the modern ones whose owner lies outside
+// them, or falls back to a rebuild. A fallback after the flush leaves the pages already copied into the merged
+// delete-vector file with nothing pointing at them, and when no live page uses that file, the next publish moves it
+// to the orphans.
 Status merge_sstables(TabletManager* tablet_manager, MergePlan* plan) {
     auto* target = plan->target.get();
     if (!uses_cloud_native_pk_index(*target)) return Status::OK();
@@ -1349,18 +1551,36 @@ Status merge_sstables(TabletManager* tablet_manager, MergePlan* plan) {
         if (skip_source_flush) continue;
         ASSIGN_OR_RETURN(source, tablet_manager->primary_key_mgr()->flush_pk_memtable(source, target->version()));
     }
+    std::vector<ClassifiedSource> classified(flushed.size());
     for (size_t s = 0; s < flushed.size(); ++s) {
         std::set<std::string> existing;
         for (const auto& sst : plan->sources[s]->sstable_meta().sstables()) existing.insert(sst.filename());
-        // Every sstable the flush returns is checked again before it is projected, the ones the source already had
-        // included; only the ones the flush wrote must also be in the form a flush writes.
+        // Every sstable the flush returns is classified again, the ones the source already had included; only the ones
+        // the flush wrote must also be in the form a flush writes.
+        std::optional<SstFallback> fallback;
         for (const auto& sst : flushed[s]->sstable_meta().sstables()) {
-            auto problem = existing.contains(sst.filename()) ? std::optional<std::string>()
-                                                             : sstable_attribution_problem(*plan->sources[s], sst);
-            if (!problem.has_value()) problem = sstable_projection_problem(*plan, s, sst);
-            if (problem.has_value()) {
-                LOG(INFO) << "tablet merge into " << target->id() << " rebuilds the primary key index: flushed SST "
-                          << sst.filename() << " of source tablet " << flushed[s]->id() << " " << *problem;
+            if (existing.contains(sst.filename())) continue;
+            if (auto problem = sstable_attribution_problem(*plan->sources[s], sst); problem.has_value()) {
+                fallback = SstFallback{sst.filename(), *problem};
+                break;
+            }
+        }
+        if (!fallback.has_value()) {
+            fallback = classify_source_sstables(*plan, s, flushed[s]->sstable_meta().sstables(), &classified[s]);
+        }
+        if (fallback.has_value()) {
+            LOG(INFO) << describe_index_rebuild(target->id(), flushed[s]->id(), *fallback, /*flushed=*/true);
+            drop_source_sstables(flushed, target);
+            return Status::OK();
+        }
+    }
+    // A flush writes no embedded page, so every page a carried sstable copies was registered before the flush and
+    // written with the merged file; one that was not leaves the sstable nothing to point at.
+    for (size_t s = 0; s < flushed.size(); ++s) {
+        for (const auto& c : classified[s].ssts) {
+            if (c.copy_page.has_value() && !plan->page_offsets.contains(*c.copy_page)) {
+                const SstFallback fallback{c.sst->filename(), "its delete vector page was not planned"};
+                LOG(INFO) << describe_index_rebuild(target->id(), flushed[s]->id(), fallback, /*flushed=*/true);
                 drop_source_sstables(flushed, target);
                 return Status::OK();
             }
@@ -1368,7 +1588,28 @@ Status merge_sstables(TabletManager* tablet_manager, MergePlan* plan) {
     }
     auto* sstables = target->mutable_sstable_meta()->mutable_sstables();
     for (size_t s = 0; s < flushed.size(); ++s) {
-        for (const auto& sst : flushed[s]->sstable_meta().sstables()) *sstables->Add() = project_sstable(*plan, s, sst);
+        const auto& source = classified[s];
+        // The pages of the source written into the merged file for its sstables alone, each counted once.
+        std::set<PageKey> copied_pages;
+        for (const auto& c : source.ssts) {
+            if (c.left_out) {
+                record_shared_sst_orphan(*c.sst, target);
+            } else {
+                *sstables->Add() = materialize_sstable(*plan, c);
+                if (c.copy_page.has_value() && plan->pinned_pages.contains(*c.copy_page)) {
+                    copied_pages.insert(*c.copy_page);
+                }
+            }
+        }
+        if (source.left_out > 0 || source.lowered > 0 || source.reowned > 0 || !copied_pages.empty()) {
+            const auto& projection = plan->projections[s];
+            LOG(INFO) << "tablet merge into " << target->id() << " carries the SSTs of source tablet "
+                      << flushed[s]->id() << ": SSTs left out below RSSID "
+                      << (projection.empty() ? std::string("none") : std::to_string(projection.source_begin())) << ": "
+                      << source.left_out << ", SST watermarks lowered: " << source.lowered
+                      << ", SSTs given owner 0: " << source.reowned
+                      << ", delete vector pages copied: " << copied_pages.size();
+        }
     }
     std::stable_sort(sstables->begin(), sstables->end(), [](const auto& a, const auto& b) {
         return static_cast<int64_t>(a.max_rss_rowid()) < static_cast<int64_t>(b.max_rss_rowid());

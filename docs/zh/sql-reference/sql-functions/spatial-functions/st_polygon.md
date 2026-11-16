@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将 WKT（Well Known Text）转换为对应的多边形内存形式。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Polygon, ST_PolyFromText, ST_PolygonFromText

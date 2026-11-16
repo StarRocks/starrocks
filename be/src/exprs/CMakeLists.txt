@@ -118,6 +118,7 @@ set(EXPR_FILES
   split_part.cpp
   str_to_map.cpp
   string_functions.cpp
+  file_functions.cpp
   struct_functions.cpp
   subfield_expr.cpp
   substring_index.cpp
