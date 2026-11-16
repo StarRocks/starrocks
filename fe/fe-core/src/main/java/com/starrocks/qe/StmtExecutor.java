@@ -458,18 +458,10 @@ public class StmtExecutor {
         summaryProfile.addInfoString(ProfileKeyDictionary.STARROCKS_VERSION,
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
-<<<<<<< HEAD
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
-        // only print the sepecific sql in multi statement
-        String sql = !context.isMultiStmt() ? originStmt.originStmt :
-                AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt);
-        if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
-=======
-        summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getCurrentScopeName());
         if (Config.enable_sql_desensitize_in_log) {
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, AstToSQLBuilder.toDesensitizedSQL(parsedStmt));
         } else if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
->>>>>>> c5f159fd30f... [BugFix][RB-1549] Fix literal values leaking past enable_sql_desensitize_in_log (#69138)
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT,
                     SqlCredentialRedactor.redact(AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt)));
         } else {

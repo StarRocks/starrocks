@@ -22,11 +22,7 @@ import com.starrocks.sql.formatter.ExprVerboseVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
 
 import java.util.List;
-<<<<<<< HEAD
-=======
-import java.util.function.Function;
 import java.util.function.Supplier;
->>>>>>> c5f159fd30f... [BugFix][RB-1549] Fix literal values leaking past enable_sql_desensitize_in_log (#69138)
 
 public class ExprToSql {
     // Set while rendering plan text that must not show literal values (see withDigestedLiterals).

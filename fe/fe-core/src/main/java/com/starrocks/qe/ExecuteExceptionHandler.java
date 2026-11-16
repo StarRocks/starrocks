@@ -25,12 +25,7 @@ import com.starrocks.common.QueryPlanLog;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
-<<<<<<< HEAD
-import com.starrocks.common.util.SqlCredentialRedactor;
-=======
 import com.starrocks.common.util.LogUtil;
-import com.starrocks.common.util.UUIDUtil;
->>>>>>> c5f159fd30f... [BugFix][RB-1549] Fix literal values leaking past enable_sql_desensitize_in_log (#69138)
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
