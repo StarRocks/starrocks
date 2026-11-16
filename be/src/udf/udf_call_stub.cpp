@@ -116,15 +116,14 @@ static Status build_arrow_to_sr_convert_tree(const arrow::DataType& arrow_type, 
 
 StatusOr<ColumnPtr> AbstractArrowFuncCallStub::evaluate(const Columns& columns, size_t row_num) {
     // convert to columns to arrow record batch
-    RETURN_IF_DCHECK_EQ_FAILED(_func_ctx->get_num_args(), columns.size());
+    RETURN_IF_DCHECK_EQ_FAILED(_arg_types.size(), columns.size());
 
     // build input schema
     SchemaNameGenerator name_generator;
     arrow::SchemaBuilder schema_builder;
 
     size_t num_columns = columns.size();
-    const auto& arg_types = _func_ctx->get_arg_types();
-    DCHECK_EQ(num_columns, arg_types.size());
+    const auto& arg_types = _arg_types;
     for (size_t i = 0; i < num_columns; ++i) {
         std::shared_ptr<arrow::Field> field;
         RETURN_IF_ERROR(
@@ -138,10 +137,14 @@ StatusOr<ColumnPtr> AbstractArrowFuncCallStub::evaluate(const Columns& columns, 
 
     // convert column to arrow array
     std::shared_ptr<arrow::RecordBatch> record_batch;
-    RETURN_IF_ERROR(convert_columns_to_arrow_batch(row_num, columns, arrow::default_memory_pool(),
-                                                   _func_ctx->get_arg_types().data(), schema, &record_batch));
+    RETURN_IF_ERROR(convert_columns_to_arrow_batch(row_num, columns, arrow::default_memory_pool(), arg_types.data(),
+                                                   schema, &record_batch));
 
-    ASSIGN_OR_RETURN(auto result_batch, do_evaluate(std::move(*record_batch)));
+    std::shared_ptr<RecordBatch> result_batch;
+    {
+        std::lock_guard<std::mutex> guard(_evaluate_lock);
+        ASSIGN_OR_RETURN(result_batch, do_evaluate(std::move(*record_batch)));
+    }
 
     // convert arrow result batch to starrocks column
     if (result_batch->num_columns() != 1) {
@@ -156,7 +159,7 @@ StatusOr<ColumnPtr> AbstractArrowFuncCallStub::evaluate(const Columns& columns, 
 StatusOr<ColumnPtr> AbstractArrowFuncCallStub::_convert_arrow_to_native(const arrowArray& result_ary,
                                                                         const arrowField& field_type) {
     size_t result_num_rows = result_ary.length();
-    const TypeDescriptor& return_type = _func_ctx->get_return_type();
+    const TypeDescriptor& return_type = _return_type;
 
     // Build a recursive converter tree so that ARRAY / MAP / STRUCT (and arbitrarily
     // nested combinations) dispatch into the correct child converters.
