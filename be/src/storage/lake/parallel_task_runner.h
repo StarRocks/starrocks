@@ -18,6 +18,7 @@
 #include <mutex>
 
 #include "common/status.h"
+#include "fs/remote_read_context.h"
 
 namespace starrocks {
 class ThreadPoolToken;
@@ -40,6 +41,9 @@ namespace starrocks::lake {
 //     inherit, so a counter incremented inside a submitted task is silently dropped (the macro is a
 //     no-op with no current trace). Only two of the nine copies adopted the caller's trace. This
 //     always does, which is why counters such as `multi_get_us` now survive a parallel PK-index read.
+//   * Remote read attribution. The caller's remote read context (a publish's LOAD scope) is just as
+//     thread-local, so each submitted task adopts it too; without it the files a task opens -- the
+//     source segments a column-mode partial update reads, say -- were read with no attribution.
 //
 // `token == nullptr` means run everything inline on the caller thread. That is how every caller
 // degrades when the work is too small to be worth a pool round-trip, so it is a first-class mode
@@ -79,6 +83,8 @@ private:
     // The caller thread's trace, re-adopted inside each submitted task. Null when the caller is not
     // tracing, which ScopedAdoptTrace handles.
     Trace* _trace;
+    // The caller thread's remote read context, likewise; unset when the caller has none.
+    RemoteReadContext _remote_read;
     std::mutex _mutex;
     Status _status;
 };

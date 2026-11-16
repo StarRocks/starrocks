@@ -274,6 +274,7 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     TRACE_COUNTER_SCOPE_LATENCY_US("ingest_sst_latency_us");
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RandomAccessFileOptions opts;
+    opts.remote_read = ScopedRemoteReadContext::current_or_load();
     if (!sst_meta.encryption_meta().empty()) {
         ASSIGN_OR_RETURN(opts.encryption_info, KeyCache::instance().unwrap_encryption_meta(sst_meta.encryption_meta()));
     }
@@ -679,6 +680,7 @@ Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* 
         return Status::InternalError("Block cache is null.");
     }
     RandomAccessFileOptions ropts;
+    ropts.remote_read = ScopedRemoteReadContext::current_or_load();
     if (!del_sst_meta.encryption_meta().empty()) {
         ASSIGN_OR_RETURN(ropts.encryption_info,
                          KeyCache::instance().unwrap_encryption_meta(del_sst_meta.encryption_meta()));
@@ -1034,6 +1036,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     auto read_one = [&](int del_idx) -> StatusOr<MutableColumnPtr> {
         const auto& del = rowset->metadata().del_files(del_idx);
         RandomAccessFileOptions ropts;
+        ropts.remote_read = ScopedRemoteReadContext::current_or_load();
         if (!del.encryption_meta().empty()) {
             ASSIGN_OR_RETURN(ropts.encryption_info, KeyCache::instance().unwrap_encryption_meta(del.encryption_meta()));
         }

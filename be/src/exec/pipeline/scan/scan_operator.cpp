@@ -23,6 +23,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "compute_env/pipeline/pipeline_timer_context.h"
+#include "compute_env/query/query_remote_read.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/exec_env.h"
@@ -605,6 +606,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             SCOPED_SET_TRACE_PLAN_NODE_ID(get_plan_node_id());
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
             DUMP_TRACE_IF_TIMEOUT(config::pipeline_scan_timeout_guard_ms);
+            // The files the scan opens here without a remote read context of their own are this query's.
+            ScopedRemoteReadContext remote_read_scope(query_remote_read_context(state));
 
             auto chunk_source = _chunk_sources[chunk_source_index];
             SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());
@@ -678,6 +681,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 
 Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index) {
     DCHECK(_morsel_queue != nullptr);
+    // A split morsel queue loads the rowsets and indexes it splits while handing out morsels, on this thread.
+    ScopedRemoteReadContext remote_read_scope(query_remote_read_context(state));
     _close_chunk_source(state, chunk_source_index);
 
     // NOTE: attach an active source before really creating it, to avoid the race condition
