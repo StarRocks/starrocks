@@ -934,6 +934,37 @@ TEST_F(ColumnConverterTest, ByteArrayDecimalVariableLength) {
         EXPECT_EQ(-123456789, data[0]);
         EXPECT_EQ(670000000, data[1]);
     }
+
+    // A bound that does not fit is not decoded as a null bound: pruning is skipped instead.
+    {
+        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 38, 0);
+        const ParquetField field = make_field(40, 0);
+        auto column = ColumnHelper::create_column(col_type, true);
+        // 1 and 2^128.
+        std::vector<std::string> stats_values = {encode(1), std::string(1, '\x01') + std::string(16, '\x00')};
+        std::vector<bool> null_pages = {false, false};
+        EXPECT_FALSE(
+                StatisticsHelper::decode_value_into_column(column, stats_values, null_pages, col_type, &field, "UTC")
+                        .ok());
+    }
+
+    // A scale reduction above 38 digits truncates every value to zero instead of using the saturated 10^38.
+    {
+        const int128_t pow38 = get_scale_factor<int128_t>(38);
+        const std::vector<int128_t> unscaled = {pow38, -pow38, 1};
+        std::vector<std::optional<std::string>> values;
+        for (auto v : unscaled) {
+            values.emplace_back(encode(v));
+        }
+        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32, 9, 0);
+        auto dst = convert(make_field(39, 39), col_type, values);
+        auto* nullable = down_cast<NullableColumn*>(dst.get());
+        auto& data = down_cast<Decimal32Column*>(nullable->data_column_raw_ptr())->get_data();
+        for (size_t i = 0; i < unscaled.size(); i++) {
+            EXPECT_FALSE(nullable->is_null(i)) << i;
+            EXPECT_EQ(0, data[i]) << i;
+        }
+    }
 }
 
 // Footer-statistics counterpart of the zero-extension fix. The converter is shared

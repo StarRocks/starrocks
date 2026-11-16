@@ -426,7 +426,12 @@ public:
             _scale_factor = get_scale_factor<DestPrimitiveType>(dst_scale - src_scale);
         } else if (src_scale > dst_scale) {
             _scale_type = DecimalScaleType::kScaleDown;
-            _scale_factor = get_scale_factor<DestPrimitiveType>(src_scale - dst_scale);
+            // get_scale_factor() saturates at 10^38. Every 128-bit value is below 10^39, so a larger
+            // reduction truncates any value to zero.
+            _scale_down_to_zero = src_scale - dst_scale > decimal_precision_limit<DestPrimitiveType>;
+            if (!_scale_down_to_zero) {
+                _scale_factor = get_scale_factor<DestPrimitiveType>(src_scale - dst_scale);
+            }
         }
     }
 
@@ -488,7 +493,7 @@ public:
                 unscale *= _scale_factor;
             }
             if constexpr (scale_type == DecimalScaleType::kScaleDown) {
-                unscale /= _scale_factor;
+                unscale = _scale_down_to_zero ? 0 : unscale / _scale_factor;
             }
             dst_data[i] = DecimalType(unscale);
         }
@@ -541,6 +546,7 @@ public:
 private:
     DecimalScaleType _scale_type = DecimalScaleType::kNoScale;
     DestPrimitiveType _scale_factor = 1;
+    bool _scale_down_to_zero = false;
 };
 
 // UUID is stored as 16 raw bytes; the canonical string form is 36 characters:
