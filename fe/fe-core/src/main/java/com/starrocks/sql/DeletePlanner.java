@@ -117,6 +117,14 @@ public class DeletePlanner {
                 }
             }
 
+            // Format version 1 has no delete files. Metadata deletes above write no files and remain supported.
+            if (icebergTable.getFormatVersion() < 2) {
+                throw new SemanticException(
+                        "DELETE on Iceberg format version 1 table %s can only remove whole partitions or data files. " +
+                                "Row-level deletes require format version 2 or later.",
+                        icebergTable.getName());
+            }
+
             // For Iceberg, create shuffled property based on partitioning
             List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
             requiredProperty = createShuffleProperty(icebergTable, outputColumns);
