@@ -29,13 +29,13 @@
 #include <benchmark/benchmark.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
 
-#include "base/base64.h"
 #include "base/string/utf8.h"
 #include "base/string/utf8_check.h"
 #include "simdutf.h"
@@ -45,6 +45,113 @@ namespace starrocks {
 namespace {
 
 constexpr size_t kNumRows = 4096;
+
+// Historical pre-simdutf scalar lookup-table Base64 implementation from
+// be/src/base/base64.cpp, preserved inline so BM_SqlBase64*_Legacy remains a
+// reproducible baseline even after base64_encode2/base64_decode2 migrate to simdutf.
+constexpr char kLegacyEncodingTable[64] = {
+        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V',
+        'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
+        's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/'};
+
+constexpr int kLegacyModTable[3] = {0, 2, 1};
+
+constexpr short kLegacyDecodingTable[256] = {
+        -2, -2, -2, -2, -2, -2, -2, -2, -2, -1, -1, -2, -2, -1, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
+        -2, -2, -2, -2, -2, -2, -1, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, 62, -2, -2, -2, 63, 52, 53, 54, 55,
+        56, 57, 58, 59, 60, 61, -2, -2, -2, -2, -2, -2, -2, 0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12,
+        13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -2, -2, -2, -2, -2, -2, 26, 27, 28, 29, 30, 31, 32,
+        33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, -2, -2, -2, -2, -2, -2, -2,
+        -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
+        -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
+        -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
+        -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
+        -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2};
+
+size_t legacy_scalar_base64_encode(const unsigned char* data, size_t length, unsigned char* encoded_data) {
+    auto output_length = static_cast<size_t>(4.0 * std::ceil(static_cast<double>(length) / 3.0));
+    if (encoded_data == nullptr) {
+        return 0;
+    }
+    for (uint32_t i = 0, j = 0; i < length;) {
+        uint32_t octet_a = i < length ? data[i++] : 0;
+        uint32_t octet_b = i < length ? data[i++] : 0;
+        uint32_t octet_c = i < length ? data[i++] : 0;
+        uint32_t triple = (octet_a << 0x10) + (octet_b << 0x08) + octet_c;
+
+        encoded_data[j++] = kLegacyEncodingTable[(triple >> 3 * 6) & 0x3F];
+        encoded_data[j++] = kLegacyEncodingTable[(triple >> 2 * 6) & 0x3F];
+        encoded_data[j++] = kLegacyEncodingTable[(triple >> 1 * 6) & 0x3F];
+        encoded_data[j++] = kLegacyEncodingTable[(triple >> 0 * 6) & 0x3F];
+    }
+    for (int i = 0; i < kLegacyModTable[length % 3]; i++) {
+        encoded_data[output_length - 1 - i] = '=';
+    }
+    return output_length;
+}
+
+int64_t legacy_scalar_base64_decode(const char* data, size_t length, char* decoded_data) {
+    const char* current = data;
+    int ch = 0;
+    int i = 0;
+    int j = 0;
+    int k = 0;
+
+    while (length-- > 0 && (ch = *current++) != '\0') {
+        if (ch < 0 || ch > 255) {
+            return -1;
+        }
+        if (ch == '=') {
+            if (length > 0 && *current != '=' && (i % 4) == 1) {
+                return -1;
+            }
+            continue;
+        }
+        ch = kLegacyDecodingTable[ch];
+        if (ch == -1) {
+            continue;
+        } else if (ch == -2) {
+            return -1;
+        }
+        switch (i % 4) {
+        case 0:
+            decoded_data[j] = static_cast<char>(ch << 2);
+            break;
+        case 1:
+            decoded_data[j++] |= static_cast<char>(ch >> 4);
+            decoded_data[j] = static_cast<char>((ch & 0x0f) << 4);
+            break;
+        case 2:
+            decoded_data[j++] |= static_cast<char>(ch >> 2);
+            decoded_data[j] = static_cast<char>((ch & 0x03) << 6);
+            break;
+        case 3:
+            decoded_data[j++] |= static_cast<char>(ch);
+            break;
+        default:
+            break;
+        }
+        i++;
+    }
+
+    k = j;
+    if (ch == '=') {
+        switch (i % 4) {
+        case 1:
+            return 0;
+        case 2:
+            k++;
+            [[fallthrough]];
+        case 3:
+            decoded_data[k] = 0;
+            break;
+        default:
+            break;
+        }
+    }
+    decoded_data[j] = '\0';
+    return j;
+}
 
 // StarRocks BinaryColumn::Bytes (raw::RawVectorPad16<uint8_t>) allocates via
 // standard 16-byte aligned allocator (typically 16 mod 64, i.e., not 64-byte
@@ -282,8 +389,8 @@ static void BM_SqlBase64Encode_Legacy(benchmark::State& state) {
         for (size_t i = 0; i < kNumRows; ++i) {
             const uint8_t* src = col.bytes + col.offsets[i];
             size_t len = col.offsets[i + 1] - col.offsets[i];
-            int64_t written = base64_encode2(src, len, out.data());
-            total_out += static_cast<size_t>(written);
+            size_t written = legacy_scalar_base64_encode(src, len, out.data());
+            total_out += written;
         }
         benchmark::DoNotOptimize(total_out);
         benchmark::DoNotOptimize(out.data());
@@ -323,7 +430,9 @@ static void BM_SqlBase64Decode_Legacy(benchmark::State& state) {
     MockBinaryColumn col;
     col.total_bytes = kNumRows * encoded.size();
     col.storage.assign(col.total_bytes + 80, 0);
-    col.bytes = col.storage.data() + 16;
+    uintptr_t base_addr = reinterpret_cast<uintptr_t>(col.storage.data());
+    uintptr_t aligned64 = (base_addr + 63) & ~uintptr_t(63);
+    col.bytes = reinterpret_cast<uint8_t*>(aligned64 + 16);
     col.offsets.resize(kNumRows + 1, 0);
     for (size_t i = 0; i < kNumRows; ++i) {
         std::memcpy(col.bytes + i * encoded.size(), encoded.data(), encoded.size());
@@ -337,7 +446,7 @@ static void BM_SqlBase64Decode_Legacy(benchmark::State& state) {
         for (size_t i = 0; i < kNumRows; ++i) {
             const char* src = base + col.offsets[i];
             size_t len = col.offsets[i + 1] - col.offsets[i];
-            total_out += base64_decode2(src, len, out.data());
+            total_out += legacy_scalar_base64_decode(src, len, out.data());
         }
         benchmark::DoNotOptimize(total_out);
         benchmark::DoNotOptimize(out.data());
@@ -356,7 +465,9 @@ static void BM_SqlBase64Decode_Simdutf(benchmark::State& state) {
     MockBinaryColumn col;
     col.total_bytes = kNumRows * encoded.size();
     col.storage.assign(col.total_bytes + 80, 0);
-    col.bytes = col.storage.data() + 16;
+    uintptr_t base_addr = reinterpret_cast<uintptr_t>(col.storage.data());
+    uintptr_t aligned64 = (base_addr + 63) & ~uintptr_t(63);
+    col.bytes = reinterpret_cast<uint8_t*>(aligned64 + 16);
     col.offsets.resize(kNumRows + 1, 0);
     for (size_t i = 0; i < kNumRows; ++i) {
         std::memcpy(col.bytes + i * encoded.size(), encoded.data(), encoded.size());

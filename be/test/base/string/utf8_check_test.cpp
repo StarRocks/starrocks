@@ -231,14 +231,17 @@ TEST_F(Utf8CheckTest, SimdutfBase64ExactBufferOverflowRegression) {
             }
         };
 
-        // Case A (simdutf #1044 & 9f87f25c): 64 Base64 chars + 64 spaces (no trailing payload -> 48 decoded bytes)
-        // and 64 Base64 chars + 64 spaces + 64 Base64 chars (-> 96 decoded bytes).
+        // Case A (simdutf #1044 & 9f87f25c):
+        //   - 64 Base64 chars + 64 spaces (no trailing payload -> 48 decoded bytes)
+        //   - 64 Base64 chars + 64 spaces + 64 Base64 chars (-> 96 decoded bytes)
+        //   - 64 Base64 chars + 1000 spaces + "AAAA" (-> 51 decoded bytes)
         check_exact(std::string(64, 'A') + std::string(64, ' '), simdutf::base64_default, 48u);
         check_exact(std::string(64, 'A') + std::string(64, ' ') + std::string(64, 'A'), simdutf::base64_default, 96u);
         check_exact(std::string(64, 'A') + std::string(1000, ' ') + "AAAA", simdutf::base64_default, 51u);
 
-        // Case B (simdutf #1044): Six 56-character runs separated by spaces/newlines + "AAAAAA==" (253 decoded bytes).
-        // Triggers the multi-block buffer flush in compress_decode_base64 where end_of_safe_64byte_zone was inflated by whitespace.
+        // Case B (simdutf #1044): Five 56-'A' runs and one 52-'A'+4-newline run separated by spaces + "AAAAAA=="
+        // (338 Base64 chars -> 253 decoded bytes). Triggers the multi-block buffer flush in compress_decode_base64
+        // where end_of_safe_64byte_zone was inflated by whitespace.
         std::string runs;
         for (int g = 0; g < 6; ++g) {
             if (g == 2) {
