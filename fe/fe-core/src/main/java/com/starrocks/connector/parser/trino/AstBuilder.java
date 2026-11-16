@@ -1713,8 +1713,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             wallClockArguments.add(node.getExpression());
         }
         Expr cast = new CastExpr(new TypeDef(getType(node.getType())), (Expr) visit(node.getExpression(), context));
-        // A cast to TIMESTAMP(p) rounds the wall-clock time in the value's zone, even onto a time the zone skips
+        // A cast to TIMESTAMP(p) rounds the wall-clock time in the value's zone, even onto a time the zone skips.
+        // A cast of a TIMESTAMP cast to TIME or TIMESTAMP WITH TIME ZONE would need other rounding, so it is rejected
         if (isWithTimezoneTimestamp(node.getExpression()) && node.getType() instanceof DateTimeDataType) {
+            if (!isWallClockType(node.getType())) {
+                throw unsupportedWithTimezone(node);
+            }
             return roundHalfUp(cast, castPrecision((DateTimeDataType) node.getType(), node));
         }
         return cast;

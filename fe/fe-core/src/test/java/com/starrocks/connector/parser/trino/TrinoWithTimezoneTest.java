@@ -162,6 +162,8 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                         "'Australia/Lord_Howe')) AS TIMESTAMP)",
                 // A precision without a matching rounding unit
                 "select cast(with_timezone(TIMESTAMP '2024-08-19 14:36:41.66', 'UTC') AS TIMESTAMP(1))",
+                // TIME rounds differently from TIMESTAMP(p)
+                "select cast(cast(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC') AS TIMESTAMP(6)) AS TIME)",
                 // Trino prints a Java-style mask as written; StarRocks formats it
                 "select date_format(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'), 'yyyy-MM-dd')",
                 // Joda masks the BE formats differently or not at all
