@@ -834,6 +834,13 @@ static std::string float_to_json_string_impl(FloatType value) {
     return result;
 }
 
+// Formats an instant given in nanoseconds since the epoch; the fraction keeps up to nine digits, without trailing zeros.
+static std::string format_timestamp_nanos(int64_t nanos, const char* format, const cctz::time_zone& zone) {
+    const std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds> instant{
+            std::chrono::nanoseconds(nanos)};
+    return cctz::format(format, instant, zone);
+}
+
 Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const VariantValue& variant,
                                     std::stringstream& json_str, cctz::time_zone timezone) {
     switch (variant.type()) {
@@ -933,6 +940,17 @@ Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const Varia
         tsv.from_unix_second(timestamp_micros / 1000000, timestamp_micros % 1000000);
         std::string timestamp_str = tsv.to_string(false);
         append_quoted_string(json_str, timestamp_str);
+        break;
+    }
+    case VariantType::TIMESTAMP_TZ_NANOS: {
+        ASSIGN_OR_RETURN(const int64_t timestamp_nanos, variant.get_timestamp_nanos_tz());
+        append_quoted_string(json_str, format_timestamp_nanos(timestamp_nanos, "%Y-%m-%d %H:%M:%E*S%Ez", timezone));
+        break;
+    }
+    case VariantType::TIMESTAMP_NTZ_NANOS: {
+        ASSIGN_OR_RETURN(const int64_t timestamp_nanos, variant.get_timestamp_nanos_ntz());
+        append_quoted_string(json_str,
+                             format_timestamp_nanos(timestamp_nanos, "%Y-%m-%d %H:%M:%E*S", cctz::utc_time_zone()));
         break;
     }
     case VariantType::OBJECT: {

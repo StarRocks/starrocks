@@ -329,6 +329,19 @@ struct ObjectPresenceSource {
     bool is_present(size_t row) const { return row < present.size() && present[row] != 0; }
 };
 
+// A typed_value that is read as the raw file value, because the variant type it becomes depends on the Parquet logical
+// type and the usual column types lose it: a timestamp is shifted to a time zone and cut to microseconds, a UUID is a
+// plain binary. The node is bound as a VARIANT and encoded as the matching variant primitive.
+enum class ShreddedRawEncoding : uint8_t {
+    NONE = 0,
+    TIMESTAMP_TZ_MICROS,
+    TIMESTAMP_NTZ_MICROS,
+    TIMESTAMP_TZ_NANOS,
+    TIMESTAMP_NTZ_NANOS,
+    TIME_NTZ_MICROS,
+    UUID,
+};
+
 struct ShreddedFieldNode {
     enum class Kind : uint8_t { NONE = 0, SCALAR = 1, ARRAY = 2 };
 
@@ -350,6 +363,7 @@ struct ShreddedFieldNode {
     // Non-empty when the typed_value type is not allowed in shredded variants. It fails the read of this node, not the
     // creation of the reader: nodes exist for every field of the schema, whether the query uses it or not.
     std::string unsupported_reason;
+    ShreddedRawEncoding raw_encoding = ShreddedRawEncoding::NONE;
 
     // batch-local columns filled during read_range, reset each call.
     ColumnPtr value_column;
@@ -410,6 +424,8 @@ private:
         std::unique_ptr<ObjectPresenceSource> root_presence;
         // Like ShreddedFieldNode::unsupported_reason, for a scalar root typed_value.
         std::string root_unsupported_reason;
+        // Like ShreddedFieldNode::raw_encoding, for a scalar root typed_value.
+        ShreddedRawEncoding root_raw_encoding = ShreddedRawEncoding::NONE;
     };
 
 public:
@@ -459,6 +475,7 @@ public:
         _top_level.root_presence = std::move(presence);
     }
     void set_root_unsupported_reason(std::string reason) { _top_level.root_unsupported_reason = std::move(reason); }
+    void set_root_raw_encoding(ShreddedRawEncoding encoding) { _top_level.root_raw_encoding = encoding; }
 
     Status prepare() override;
 

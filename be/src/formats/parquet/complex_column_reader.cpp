@@ -1018,7 +1018,8 @@ static bool _requested_paths_are_scalar_typed_leaves(const std::vector<ShreddedF
     }
     for (const auto& path : requested_paths) {
         const ShreddedFieldNode* node = find_shredded_field_node_for_path(nodes, path);
-        if (node == nullptr || node->kind != ShreddedFieldNode::Kind::SCALAR || node->typed_value_reader == nullptr) {
+        if (node == nullptr || node->kind != ShreddedFieldNode::Kind::SCALAR || node->typed_value_reader == nullptr ||
+            node->raw_encoding != ShreddedRawEncoding::NONE) {
             return false;
         }
     }
@@ -1358,6 +1359,52 @@ static Status _collect_overlays_for_array_element(size_t element_row, const std:
                                                   std::string_view metadata_raw,
                                                   std::vector<VariantBuilder::Overlay>* overlays, int depth = 0);
 
+// A typed_value read raw is written as the variant primitive of its Parquet logical type: the timestamp kinds keep the
+// value and the time zone flag as they are in the file, and a UUID keeps its identity. Anything else goes through the
+// column type.
+static StatusOr<VariantRowValue> _encode_typed_scalar(ShreddedRawEncoding encoding, const TypeDescriptor& read_type,
+                                                      const std::string& path, const Datum& datum) {
+    VariantType type = VariantType::NULL_TYPE;
+    switch (encoding) {
+    case ShreddedRawEncoding::NONE:
+        return VariantEncoder::encode_datum(datum, read_type);
+    case ShreddedRawEncoding::TIMESTAMP_TZ_MICROS:
+        type = VariantType::TIMESTAMP_TZ;
+        break;
+    case ShreddedRawEncoding::TIMESTAMP_NTZ_MICROS:
+        type = VariantType::TIMESTAMP_NTZ;
+        break;
+    case ShreddedRawEncoding::TIMESTAMP_TZ_NANOS:
+        type = VariantType::TIMESTAMP_TZ_NANOS;
+        break;
+    case ShreddedRawEncoding::TIMESTAMP_NTZ_NANOS:
+        type = VariantType::TIMESTAMP_NTZ_NANOS;
+        break;
+    case ShreddedRawEncoding::TIME_NTZ_MICROS:
+        type = VariantType::TIME_NTZ;
+        break;
+    case ShreddedRawEncoding::UUID:
+        type = VariantType::UUID;
+        break;
+    }
+    std::string value(1, static_cast<char>(static_cast<uint8_t>(type) << VariantValue::kValueHeaderBitShift));
+    if (encoding == ShreddedRawEncoding::UUID) {
+        const Slice bytes = datum.get_slice();
+        if (bytes.size != 16) {
+            return Status::Corruption(
+                    strings::Substitute("shredded UUID '$0' has $1 bytes, expected 16", path, bytes.size));
+        }
+        value.append(bytes.data, bytes.size);
+    } else {
+        const int64_t raw = datum.get_int64();
+        for (int shift = 0; shift < 64; shift += 8) {
+            value.push_back(static_cast<char>((static_cast<uint64_t>(raw) >> shift) & 0xff));
+        }
+    }
+    static constexpr char kEmptyDictionary[] = {0x01, 0x00, 0x00};
+    return VariantRowValue::create(std::string_view(kEmptyDictionary, sizeof(kEmptyDictionary)), value);
+}
+
 // Rebuild one ARRAY value for `row` by merging:
 // 1) typed array elements (and their child overlays), and
 // 2) fallback base array binary from remain column when present.
@@ -1565,7 +1612,8 @@ static Status _collect_overlays_for_array_element(size_t element_row, const std:
             size_t typed_row = 0;
             if (ParquetUtils::get_non_null_data_column_and_row(node.typed_value_column.get(), element_row, &typed_col,
                                                                &typed_row)) {
-                auto typed_value = VariantEncoder::encode_datum(typed_col->get(typed_row), *node.typed_value_read_type);
+                auto typed_value = _encode_typed_scalar(node.raw_encoding, *node.typed_value_read_type, node.full_path,
+                                                        typed_col->get(typed_row));
                 if (!typed_value.ok()) {
                     return typed_value.status().clone_and_prepend(strings::Substitute(
                             "encode shredded array element scalar failed, path=$0", node.full_path));
@@ -1719,7 +1767,7 @@ static Status _collect_element_typed_paths(const std::vector<ShreddedFieldNode>&
             typed->append_nulls(num_elements);
         } else if (node.typed_value_column == nullptr) {
             continue;
-        } else if (node.kind == ShreddedFieldNode::Kind::SCALAR) {
+        } else if (node.kind == ShreddedFieldNode::Kind::SCALAR && node.raw_encoding == ShreddedRawEncoding::NONE) {
             type = *node.typed_value_read_type;
             typed = node.typed_value_column->clone();
         } else if (_is_structured_array_node(node)) {
@@ -1727,7 +1775,8 @@ static Status _collect_element_typed_paths(const std::vector<ShreddedFieldNode>&
             ASSIGN_OR_RETURN(auto nested, build_array_variant_column(node, element_metadata, depth + 1));
             typed = nested->clone();
         } else {
-            // Unsupported nested array layout: keep it as a VARIANT path rebuilt per element.
+            // Unsupported nested array layout, or a scalar stored in a raw encoding (timestamp, TIME, UUID) that is
+            // not readable as its column type: keep it as a VARIANT path rebuilt per element.
             type = TypeDescriptor(TYPE_VARIANT);
             typed = ColumnHelper::create_column(type, true);
             for (size_t e = 0; e < num_elements; ++e) {
@@ -1978,7 +2027,8 @@ StatusOr<std::optional<VariantRowValue>> VariantColumnReader::build_variant_bind
         size_t typed_row = 0;
         if (ParquetUtils::get_non_null_data_column_and_row(node.typed_value_column.get(), row, &typed_col,
                                                            &typed_row)) {
-            auto typed_value = VariantEncoder::encode_datum(typed_col->get(typed_row), *node.typed_value_read_type);
+            auto typed_value = _encode_typed_scalar(node.raw_encoding, *node.typed_value_read_type, node.full_path,
+                                                    typed_col->get(typed_row));
             if (!typed_value.ok()) {
                 return typed_value.status().clone_and_prepend(
                         strings::Substitute("encode shredded scalar failed, path=$0", node.full_path));
@@ -2119,7 +2169,8 @@ static void collect_top_bindings(const std::vector<ShreddedFieldNode>& nodes,
                             .type = variant_type_desc(),
                             .node = node,
                             .parsed_path = path});
-        } else if (node->kind == ShreddedFieldNode::Kind::SCALAR && node->typed_value_column != nullptr) {
+        } else if (node->kind == ShreddedFieldNode::Kind::SCALAR && node->typed_value_column != nullptr &&
+                   node->raw_encoding == ShreddedRawEncoding::NONE) {
             out->push_back({.kind = TopBinding::Kind::SCALAR,
                             .path = std::move(path_str),
                             .type = *node->typed_value_read_type,
@@ -2419,8 +2470,10 @@ public:
                                  const Column* root_typed_value_column, const TypeDescriptor* root_typed_value_type,
                                  const BinaryColumn* metadata_column, const BinaryColumn* value_column,
                                  ImmutableNullData metadata_nulls, ImmutableNullData value_nulls,
-                                 const ObjectPresenceSource* root_presence = nullptr)
+                                 const ObjectPresenceSource* root_presence = nullptr,
+                                 ShreddedRawEncoding root_raw_encoding = ShreddedRawEncoding::NONE)
             : shredded_fields(&shredded_fields),
+              root_raw_encoding(root_raw_encoding),
               materialized_bindings(materialized_bindings),
               root_typed_value_column(root_typed_value_column),
               root_typed_value_type(root_typed_value_type),
@@ -2498,6 +2551,9 @@ public:
     }
 
     const std::vector<ShreddedFieldNode>* shredded_fields;
+
+    // How the scalar root typed_value is written as a variant, when it is read raw.
+    ShreddedRawEncoding root_raw_encoding;
 
     // Final output bindings after applying requested paths and per-batch materialization
     // decisions. These drive typed_paths/typed_columns layout in the result VariantColumn.
@@ -2696,8 +2752,9 @@ private:
         }
 
         DCHECK(_batch_ctx.root_typed_value_type != nullptr);
-        ASSIGN_OR_RETURN(auto encoded, VariantEncoder::encode_datum(root_typed_data->get(root_typed_row),
-                                                                    *_batch_ctx.root_typed_value_type));
+        ASSIGN_OR_RETURN(auto encoded,
+                         _encode_typed_scalar(_batch_ctx.root_raw_encoding, *_batch_ctx.root_typed_value_type, "$",
+                                              root_typed_data->get(root_typed_row)));
 
         auto metadata_raw = encoded.get_metadata().raw();
         auto value_raw = encoded.get_value().raw();
@@ -3053,10 +3110,10 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     bool has_reconstructed_null = false;
 
     // batch_ctx is built first so has_typed_value_bitmap is available for both code paths.
-    VariantReadRangeBatchContext batch_ctx(_shredded_fields, materialized_bindings,
-                                           _top_level.root_typed_value_column.get(),
-                                           _top_level.root_typed_value_type.get(), metadata_column, value_column,
-                                           metadata_nulls, value_nulls, _top_level.root_presence.get());
+    VariantReadRangeBatchContext batch_ctx(
+            _shredded_fields, materialized_bindings, _top_level.root_typed_value_column.get(),
+            _top_level.root_typed_value_type.get(), metadata_column, value_column, metadata_nulls, value_nulls,
+            _top_level.root_presence.get(), _top_level.root_raw_encoding);
     batch_ctx.array_binding_columns.resize(materialized_bindings.size());
     if (has_array_binding) {
         // Array elements are decoded with the metadata of the row they belong to.
@@ -3135,6 +3192,8 @@ const ColumnReader* VariantColumnReader::filterable_typed_value_reader_for_path(
     const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
     if (found_node == nullptr) return nullptr;
     if (found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
+    // A raw typed_value is not a column of the type the query would compare it with.
+    if (found_node->raw_encoding != ShreddedRawEncoding::NONE) return nullptr;
     if (found_node->typed_value_reader == nullptr) return nullptr;
     if (found_node->typed_value_read_type == nullptr) return nullptr;
     {
@@ -3148,13 +3207,17 @@ ColumnReader* VariantColumnReader::scalar_typed_value_reader_for_path(const Vari
     const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
     if (found_node == nullptr) return nullptr;
     if (found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
+    if (found_node->raw_encoding != ShreddedRawEncoding::NONE) return nullptr;
     if (found_node->typed_value_reader == nullptr) return nullptr;
     return found_node->typed_value_reader.get();
 }
 
 const TypeDescriptor* VariantColumnReader::typed_value_read_type_for_path(const VariantPath& path) const {
     const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
-    if (found_node == nullptr || found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
+    if (found_node == nullptr || found_node->kind != ShreddedFieldNode::Kind::SCALAR ||
+        found_node->raw_encoding != ShreddedRawEncoding::NONE) {
+        return nullptr;
+    }
     return found_node->typed_value_read_type.get();
 }
 
