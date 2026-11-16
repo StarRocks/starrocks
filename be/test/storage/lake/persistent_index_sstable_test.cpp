@@ -744,6 +744,9 @@ TEST_F(PersistentIndexSstableTest, test_sst_open_retry_after_clear_corrupted_cac
     });
     SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache",
                                           [](void* arg) { *(Status*)arg = Status::OK(); });
+    std::vector<FileInfo> reopened;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::open_sstable_file",
+                                          [&](void* arg) { reopened.push_back(*static_cast<FileInfo*>(arg)); });
     SyncPoint::GetInstance()->EnableProcessing();
 
     auto sst = std::make_unique<PersistentIndexSstable>();
@@ -755,12 +758,66 @@ TEST_F(PersistentIndexSstableTest, test_sst_open_retry_after_clear_corrupted_cac
 
     SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::init:table_open_error");
     SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
+    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::open_sstable_file");
     SyncPoint::GetInstance()->DisableProcessing();
     config::lake_clear_corrupted_cache_data = old;
 
     ASSERT_OK(st);
+    // The file opened again after the cache drop carries the recorded size too.
+    ASSERT_EQ(1, reopened.size());
+    ASSERT_EQ(path, reopened[0].path);
+    ASSERT_EQ(static_cast<int64_t>(filesize), reopened[0].size.value_or(-1));
 }
 #endif // USE_STAROS && !BUILD_FORMAT_LIB
+
+// Every open of a PK index sstable hands the size recorded in the metadata to the filesystem. Without
+// it a shared-data read looks the size up, which is a synchronous HEAD request to the object storage
+// when the star cache does not hold the size; multi_get opens the file once per call.
+TEST_F(PersistentIndexSstableTest, test_open_sstable_file_passes_recorded_size) {
+    const std::string filename = "open_passes_recorded_size.sst";
+    const std::string path = lake::join_path(kTestDir, filename);
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize);
+    ASSERT_GT(filesize, 0);
+
+    std::vector<FileInfo> opened;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::open_sstable_file",
+                                          [&](void* arg) { opened.push_back(*static_cast<FileInfo*>(arg)); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::open_sstable_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    std::unique_ptr<Cache> cache(new_lru_cache(1024));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(filesize);
+    ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(sstable_pb, path, cache.get()));
+
+    std::string key_str = fmt::format("key_{:04d}", 3);
+    Slice key(key_str);
+    KeyIndexSet key_indexes{0};
+    std::vector<IndexValue> values(1, IndexValue(NullIndexValue));
+    KeyIndexSet found;
+    ASSERT_OK(sst->multi_get(&key, key_indexes, -1, values.data(), &found));
+    ASSERT_EQ(1, found.size());
+    ASSERT_EQ(IndexValue(3), values[0]);
+
+    // One open by new_sstable and one by multi_get, both with the recorded size.
+    ASSERT_EQ(2, opened.size());
+    for (const auto& info : opened) {
+        ASSERT_EQ(path, info.path);
+        ASSERT_EQ(static_cast<int64_t>(filesize), info.size.value_or(-1));
+    }
+
+    // A size that is not positive is unknown: the file is opened without one and reads as before.
+    ASSIGN_OR_ABORT(auto rf, PersistentIndexSstable::open_sstable_file(RandomAccessFileOptions(), path, 0));
+    ASSERT_EQ(3, opened.size());
+    ASSERT_FALSE(opened.back().size.has_value());
+    ASSIGN_OR_ABORT(auto size, rf->get_size());
+    ASSERT_EQ(static_cast<int64_t>(filesize), size);
+}
 
 TEST_F(PersistentIndexSstableTest, test_metric_sst_multiget_read_error) {
     const std::string path = lake::join_path(kTestDir, "metric_multiget_error.sst");
