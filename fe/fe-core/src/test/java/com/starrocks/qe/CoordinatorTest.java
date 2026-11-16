@@ -84,6 +84,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -118,21 +119,32 @@ public class CoordinatorTest extends PlanTestBase {
     @Test
     public void testStatusOnlyReportsDoNotWaitForDeployment() throws Exception {
         for (boolean done : new boolean[] {false, true}) {
-            assertReportDuringDeployment(done, false, false);
+            assertReportDuringDeployment(done, false, false, false);
         }
     }
 
     @Test
     public void testLoadChannelReportRetainsDeploymentLock() throws Exception {
-        assertReportDuringDeployment(false, true, false);
+        assertReportDuringDeployment(false, true, false, false);
     }
 
     @Test
     public void testLoadInformationReportRetainsDeploymentLock() throws Exception {
-        assertReportDuringDeployment(true, false, true);
+        assertReportDuringDeployment(true, false, true, false);
     }
 
-    private void assertReportDuringDeployment(boolean done, boolean loadChannel, boolean loadInformation) throws Exception {
+    @Test
+    public void testLoadChannelProfileFailureStillFinishesInstance() throws Exception {
+        assertReportDuringDeployment(true, true, false, true);
+    }
+
+    @Test
+    public void testLoadInformationFailureStillFinishesInstance() throws Exception {
+        assertReportDuringDeployment(true, false, true, true);
+    }
+
+    private void assertReportDuringDeployment(boolean done, boolean loadChannel, boolean loadInformation,
+                                             boolean failLoadUpdate) throws Exception {
         ExecutionDAG dag = mock(ExecutionDAG.class);
         FragmentInstanceExecState execState = mock(FragmentInstanceExecState.class);
         QueryRuntimeProfile profile = mock(QueryRuntimeProfile.class);
@@ -151,9 +163,17 @@ public class CoordinatorTest extends PlanTestBase {
                 .setStatus(new TStatus(TStatusCode.OK)).setDone(done);
         if (loadChannel) {
             params.setLoad_channel_profile(new TRuntimeProfileTree());
+            if (failLoadUpdate) {
+                doThrow(new IllegalStateException("load channel profile update failed"))
+                        .when(profile).updateLoadChannelProfile(params);
+            }
         }
         if (loadInformation) {
             params.setLoad_counters(Collections.singletonMap("dpp.norm.ALL", "1"));
+            if (failLoadUpdate) {
+                doThrow(new IllegalStateException("load information update failed"))
+                        .when(profile).updateLoadInformation(execState, params);
+            }
         }
         ReentrantLock deploymentLock = Deencapsulation.getField(coordinator, "lock");
         ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -172,6 +192,9 @@ public class CoordinatorTest extends PlanTestBase {
                 deploymentLock.unlock();
             }
             report.get(5, TimeUnit.SECONDS);
+            if (loadChannel || loadInformation) {
+                Assertions.assertFalse(deploymentLock.isLocked(), "load updates must release the coordinator lock");
+            }
             verify(profile).updateProfile(execState, params);
             verify(execState).updateRunningProfile(params);
             if (done) {
