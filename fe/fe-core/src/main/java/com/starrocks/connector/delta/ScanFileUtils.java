@@ -30,9 +30,9 @@ import io.delta.kernel.utils.FileStatus;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.hadoop.fs.Path;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static io.delta.kernel.internal.InternalScanFileUtils.ADD_FILE_ORDINAL;
 import static io.delta.kernel.internal.InternalScanFileUtils.ADD_FILE_STATS_ORDINAL;
@@ -106,36 +106,52 @@ public class ScanFileUtils {
 
     public static Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> convertFromRowToFileScanTask(
             boolean needStats, Row file, Metadata metadata, long estimateRowSize, DeletionVectorDescriptor dv) {
-        Set<String> partitionColumns = metadata.getPartitionColNames();
-        Map<String, StructField> schema = buildCaseInsensitiveSchema(metadata.getSchema().fields());
+        return new FileScanTaskConverter(metadata, estimateRowSize).convert(needStats, file, dv);
+    }
 
-        FileStatus fileStatus = getEncodedAddFileStatus(file);
-        Map<String, String> partitionValues = InternalScanFileUtils.getPartitionValues(file);
-        Map<String, String> physicalNameToPartitionNameMap = Maps.newHashMap();
-        // partition Values use column physical name(using in column mapping) as key, we need to convert it to logical name
-        for (String partitionColumn : partitionColumns) {
-            if (schema.get(partitionColumn) == null) {
-                throw new StarRocksConnectorException("Partition column " + partitionColumn + " not found in schema");
+    // One converter belongs to one snapshot scan. Schema and column mapping never change between its files.
+    public static final class FileScanTaskConverter {
+        private final Map<String, String> physicalToLogicalPartitionNames;
+        private final long estimateRowSize;
+
+        public FileScanTaskConverter(Metadata metadata, long estimateRowSize) {
+            this.estimateRowSize = estimateRowSize;
+            Map<String, String> names = Maps.newHashMap();
+            if (!metadata.getPartitionColNames().isEmpty()) {
+                Map<String, StructField> schema = buildCaseInsensitiveSchema(metadata.getSchema().fields());
+                for (String partitionColumn : metadata.getPartitionColNames()) {
+                    StructField field = schema.get(partitionColumn);
+                    if (field == null) {
+                        throw new StarRocksConnectorException("Partition column " + partitionColumn + " not found in schema");
+                    }
+                    names.put(ColumnMapping.getPhysicalName(field), partitionColumn);
+                }
             }
-            physicalNameToPartitionNameMap.put(ColumnMapping.getPhysicalName(schema.get(partitionColumn)), partitionColumn);
-        }
-        // convert physical column name to partition logical column name
-        Map<String, String> logicalPartitionValues = Maps.newHashMap();
-        for (Map.Entry<String, String> entry : partitionValues.entrySet()) {
-            logicalPartitionValues.put(physicalNameToPartitionNameMap.get(entry.getKey()), entry.getValue());
+            physicalToLogicalPartitionNames = Collections.unmodifiableMap(names);
         }
 
-        Row addFileRow = getAddFileEntry(file);
-        FileScanTask fileScanTask;
-        if (needStats) {
-            DeltaLakeAddFileStatsSerDe stats = ScanFileUtils.getColumnStatistics(
-                    addFileRow, fileStatus, estimateRowSize);
-            fileScanTask = new FileScanTask(fileStatus, stats.numRecords, logicalPartitionValues, dv);
-            return new Pair<>(fileScanTask, stats);
-        } else {
-            long records = ScanFileUtils.getFileRows(addFileRow, fileStatus, estimateRowSize);
-            fileScanTask = new FileScanTask(fileStatus, records, logicalPartitionValues, dv);
-            return new Pair<>(fileScanTask, null);
+        public Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> convert(
+                boolean needStats, Row file, DeletionVectorDescriptor dv) {
+            FileStatus fileStatus = getEncodedAddFileStatus(file);
+            Map<String, String> partitionValues = InternalScanFileUtils.getPartitionValues(file);
+            // convert physical column name to partition logical column name
+            Map<String, String> logicalPartitionValues = Maps.newHashMap();
+            for (Map.Entry<String, String> entry : partitionValues.entrySet()) {
+                logicalPartitionValues.put(physicalToLogicalPartitionNames.get(entry.getKey()), entry.getValue());
+            }
+
+            Row addFileRow = getAddFileEntry(file);
+            FileScanTask fileScanTask;
+            if (needStats) {
+                DeltaLakeAddFileStatsSerDe stats = ScanFileUtils.getColumnStatistics(
+                        addFileRow, fileStatus, estimateRowSize);
+                fileScanTask = new FileScanTask(fileStatus, stats.numRecords, logicalPartitionValues, dv);
+                return new Pair<>(fileScanTask, stats);
+            } else {
+                long records = ScanFileUtils.getFileRows(addFileRow, fileStatus, estimateRowSize);
+                fileScanTask = new FileScanTask(fileStatus, records, logicalPartitionValues, dv);
+                return new Pair<>(fileScanTask, null);
+            }
         }
     }
 }
