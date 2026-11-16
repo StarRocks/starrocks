@@ -187,4 +187,105 @@ public class CredentialUtilTest {
         Assertions.assertEquals("", path.getContainer());
         Assertions.assertEquals("", path.getStorageAccount());
     }
+
+    @Test
+    public void testMaskedCopyDoesNotMutateSource() {
+        String key = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX + OAuth2SecurityConfig.OAUTH2_TOKEN;
+        Map<String, String> properties = new HashMap<>();
+        properties.put("type", "iceberg");
+        properties.put(key, "supersecrettoken");
+
+        Map<String, String> masked = CredentialUtil.maskedCopy(properties);
+
+        Assertions.assertEquals("su******en", masked.get(key));
+        Assertions.assertEquals("iceberg", masked.get("type"));
+        // the source map may be live configuration, so it must be left untouched
+        Assertions.assertEquals("supersecrettoken", properties.get(key));
+    }
+
+    @Test
+    public void testMaskCredentialCoversSessionTokensAndSecrets() {
+        String prefix = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
+        Map<String, String> properties = new HashMap<>();
+        for (String key : List.of(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN,
+                CloudConfigurationConstants.AWS_GLUE_SESSION_TOKEN,
+                CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET,
+                CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN,
+                CloudConfigurationConstants.HDFS_PASSWORD,
+                CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB_CONTENT,
+                CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED,
+                prefix + "s3.access-key-id",
+                prefix + "s3.secret-access-key",
+                prefix + "s3.session-token",
+                prefix + "gcs.oauth2.token",
+                prefix + "gcs.client-lib-token",
+                prefix + "gcs.encryption-key",
+                prefix + "gcs.decryption-key",
+                prefix + "adls.auth.shared-key.account.key",
+                prefix + "adls.token")) {
+            properties.put(key, "supersecretvalue");
+        }
+
+        Map<String, String> masked = CredentialUtil.maskedCopy(properties);
+
+        for (Map.Entry<String, String> entry : masked.entrySet()) {
+            Assertions.assertEquals("su******ue", entry.getValue(), "expected " + entry.getKey() + " to be masked");
+            // SHOW CREATE / AST rendering and the audit redaction read PrintableMap.SENSITIVE_KEY
+            Assertions.assertTrue(PrintableMap.SENSITIVE_KEY.contains(entry.getKey()), entry.getKey());
+        }
+    }
+
+    @Test
+    public void testMaskCredentialLeavesNonSecretKeysAlone() {
+        // Keytab / token-file keys name a file on disk rather than carrying the credential.
+        String prefix = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB, "/etc/security/a.keytab");
+        properties.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TOKEN_FILE, "/var/run/token");
+        properties.put(prefix + "uri", "https://rest.example.com/catalog");
+        properties.put(prefix + "oauth2.scope", "catalog-scope");
+
+        Map<String, String> masked = CredentialUtil.maskedCopy(properties);
+
+        Assertions.assertEquals(properties, masked);
+    }
+
+    @Test
+    public void testMaskCredentialRemovesDeprecatedBarePassword() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.HDFS_PASSWORD_DEPRECATED, "supersecretvalue");
+        properties.put("type", "hive");
+
+        Map<String, String> masked = CredentialUtil.maskedCopy(properties);
+
+        // doMask drops this key outright as JDBCResource.PASSWORD, so it never needs masking.
+        Assertions.assertFalse(masked.containsKey(CloudConfigurationConstants.HDFS_PASSWORD_DEPRECATED));
+        Assertions.assertEquals("hive", masked.get("type"));
+    }
+
+    @Test
+    public void testMaskCredentialCoversPrefixedAndPrintableMapOnlyKeys() {
+        String sasKey = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                "adls.sas-token.account.dfs.core.windows.net";
+        String sasExpiresKey = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                "adls.sas-token-expires-at-ms.account.dfs.core.windows.net";
+        Map<String, String> properties = new HashMap<>();
+        properties.put(sasKey, "supersecretvalue");
+        properties.put(sasExpiresKey, "1700000000000");
+        // only listed in PrintableMap.SENSITIVE_KEY
+        properties.put("fs.s3a.secret.key", "supersecretvalue");
+        // keys match case-insensitively, like the audit redaction
+        properties.put("AWS.S3.SECRET_KEY", "supersecretvalue");
+
+        Map<String, String> masked = CredentialUtil.maskedCopy(properties);
+
+        Assertions.assertEquals("su******ue", masked.get(sasKey));
+        Assertions.assertEquals("su******ue", masked.get("fs.s3a.secret.key"));
+        Assertions.assertEquals("su******ue", masked.get("AWS.S3.SECRET_KEY"));
+        Assertions.assertEquals("1700000000000", masked.get(sasExpiresKey));
+        Assertions.assertTrue(PrintableMap.isSensitiveKey(sasKey));
+        Assertions.assertFalse(PrintableMap.isSensitiveKey(sasExpiresKey));
+        Assertions.assertTrue(new PrintableMap<>(Map.of(sasKey, "supersecretvalue"), " = ", true, false, true)
+                .toString().contains("***"));
+    }
 }
