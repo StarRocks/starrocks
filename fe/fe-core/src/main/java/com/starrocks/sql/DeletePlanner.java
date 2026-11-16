@@ -114,12 +114,6 @@ public class DeletePlanner {
                 }
             }
 
-<<<<<<< HEAD
-            // Anything that is not a metadata delete writes Parquet position delete files, which Iceberg
-            // rejects at commit on format version 3+ (it requires deletion vectors there). Refuse now, before
-            // the BE writes files the commit would throw away. Encrypted tables are always v3.
-            if (icebergTable.getFormatVersion() >= 3) {
-=======
             // Format version 1 has no delete files. Metadata deletes above write no files and remain supported.
             if (icebergTable.getFormatVersion() < 2) {
                 throw new SemanticException(
@@ -128,11 +122,10 @@ public class DeletePlanner {
                         icebergTable.getName());
             }
 
-            // V3 DELETE uses deletion vectors in this branch, but the DV writer does not encrypt them.
-            // Refuse row-level deletes on encrypted tables before the BE can write plaintext delete files.
-            // Metadata deletes above write no files and remain supported.
-            if (IcebergEncryption.declaresEncryption(icebergTable.getNativeTable().properties())) {
->>>>>>> bcbbb1a1454... [BugFix][RB-1622] Reject row-level DELETE on Iceberg format version 1 tables (#69944)
+            // Anything that is not a metadata delete writes Parquet position delete files, which Iceberg
+            // rejects at commit on format version 3+ (it requires deletion vectors there). Refuse now, before
+            // the BE writes files the commit would throw away. Encrypted tables are always v3.
+            if (icebergTable.getFormatVersion() >= 3) {
                 throw new SemanticException(
                         "DELETE on Iceberg format version %d table %s can only remove whole partitions or data " +
                                 "files. Deleting individual rows needs deletion vectors, which StarRocks does not " +
