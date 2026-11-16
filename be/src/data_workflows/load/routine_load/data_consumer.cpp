@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/testutil/sync_point.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "common/config_ingest_fwd.h"
@@ -569,12 +570,21 @@ Status PulsarDataConsumer::assign_partition(const std::string& partition, Stream
     LOG(INFO) << ss.str();
 
     // do subscribe
-    pulsar::Result result;
-    result = _p_client->subscribe(partition, _subscription, _p_consumer);
+    std::function<pulsar::Result()> subscribe = [&] {
+        return _p_client->subscribe(partition, _subscription, _p_consumer);
+    };
+    TEST_SYNC_POINT_CALLBACK("PulsarDataConsumer::subscribe", &subscribe);
+    pulsar::Result result = subscribe();
     if (result != pulsar::ResultOk) {
-        LOG(WARNING) << "PAUSE: failed to create pulsar consumer: " << ctx->brief(true) << ", err: " << result;
-        return Status::InternalError("PAUSE: failed to create pulsar consumer: " +
-                                     std::string(pulsar::strResult(result)));
+        // FE renews retryable tasks at the scheduling interval. Initial-position assignments
+        // must still pause: a replacement task could seek an already assigned partition again.
+        const bool retryable = (result == pulsar::ResultConnectError || result == pulsar::ResultTimeout) &&
+                               ctx->pulsar_info->initial_positions.empty();
+        std::string error = retryable ? "" : "PAUSE: ";
+        error += "failed to create pulsar consumer: ";
+        error += pulsar::strResult(result);
+        LOG(WARNING) << error << ", " << ctx->brief(true);
+        return Status::InternalError(error);
     }
 
     if (initial_position == InitialPosition::LATEST || initial_position == InitialPosition::EARLIEST) {

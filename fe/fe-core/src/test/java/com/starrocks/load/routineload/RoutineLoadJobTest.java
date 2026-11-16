@@ -71,8 +71,13 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
+import com.starrocks.thrift.TLoadSourceType;
+import com.starrocks.thrift.TPulsarRLTaskProgress;
+import com.starrocks.thrift.TRLTaskTxnCommitAttachment;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -81,6 +86,7 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -206,6 +212,74 @@ public class RoutineLoadJobTest {
         routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
         Assertions.assertEquals(Long.valueOf(2), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
         Assertions.assertEquals(Long.valueOf(prevValue + 2), entity.counterRoutineLoadAbortedTasksTotal.getValue());
+    }
+
+    @Test
+    public void testPulsarConnectionFailureRenewsTask(@Mocked RoutineLoadMgr routineLoadMgr,
+                                                     @Mocked RoutineLoadTaskScheduler scheduler,
+                                                     @Injectable TransactionState transactionState)
+            throws StarRocksException {
+        TRLTaskTxnCommitAttachment thriftAttachment = new TRLTaskTxnCommitAttachment();
+        thriftAttachment.setLoadSourceType(TLoadSourceType.PULSAR);
+        thriftAttachment.setPulsarRLTaskProgress(new TPulsarRLTaskProgress(Map.of()));
+        thriftAttachment.setId(new TUniqueId(1L, 1L));
+        RLTaskTxnCommitAttachment attachment = new RLTaskTxnCommitAttachment(thriftAttachment);
+        new Expectations() {
+            {
+                transactionState.getTransactionId();
+                minTimes = 0;
+                result = 1L;
+                transactionState.getTxnCommitAttachment();
+                minTimes = 0;
+                result = attachment;
+                transactionState.getTransactionStatus();
+                minTimes = 0;
+                result = TransactionStatus.ABORTED;
+            }
+        };
+
+        for (String error : List.of("ConnectError", "Timeout")) {
+            PulsarRoutineLoadJob job = new PulsarRoutineLoadJob(1L, "recovery", 1L, 1L,
+                    "pulsar://localhost:6650", "topic", "subscription");
+            job.state = RoutineLoadJob.JobState.RUNNING;
+            job.taskSchedIntervalS = 10;
+            List<String> partitions = List.of("topic-partition-0", "topic-partition-1");
+            PulsarProgress progress = new PulsarProgress(new TPulsarRLTaskProgress(
+                    Map.of(partitions.get(0), 100L, partitions.get(1), 200L)));
+            job.progress = progress;
+            // Both partitions already use their committed subscription cursors.
+            Map<String, Long> initialPositions = progress.getPartitionToInitialPosition(partitions);
+            Assertions.assertTrue(initialPositions.isEmpty());
+            PulsarTaskInfo task = new PulsarTaskInfo(UUIDUtil.genUUID(), job, 10000, 0,
+                    partitions, initialPositions, 60000);
+            task.txnId = 1L;
+            job.routineLoadTaskInfoList.add(task);
+            String reason = "failed to create pulsar consumer: " + error;
+            long before = System.currentTimeMillis();
+
+            job.writeLock();
+            job.afterAborted(transactionState, reason);
+
+            Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, job.getState());
+            Assertions.assertEquals(TransactionStatus.ABORTED, task.getTxnStatus());
+            Assertions.assertEquals(1, job.routineLoadTaskInfoList.size());
+            PulsarTaskInfo renewed = (PulsarTaskInfo) job.routineLoadTaskInfoList.get(0);
+            Assertions.assertNotEquals(task.getId(), renewed.getId());
+            Assertions.assertTrue(renewed.getTimeToExecuteMs() >= before + 10000);
+            Assertions.assertEquals(task.getTimeoutMs(), renewed.getTimeoutMs());
+            Assertions.assertEquals(partitions, renewed.getPartitions());
+            Assertions.assertEquals(initialPositions, renewed.getInitialPositions());
+            Assertions.assertEquals(initialPositions, progress.getPartitionToInitialPosition(partitions));
+            Assertions.assertSame(progress, job.progress);
+            Assertions.assertEquals(List.of(100L, 200L), progress.getBacklogNums().stream().sorted().toList());
+            Assertions.assertTrue(job.getOtherMsg().contains(reason));
+            new Verifications() {
+                {
+                    scheduler.addTaskInQueue(renewed);
+                    times = 1;
+                }
+            };
+        }
     }
 
     @Test
