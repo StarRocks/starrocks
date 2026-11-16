@@ -961,7 +961,7 @@ public class ColumnTypeConverter {
                 return UnknownType.UNKNOWN_TYPE;
             case GEOMETRY:
                 String crs = ((Types.GeometryType) icebergType).crs();
-                GeoTypeDescriptor descriptor = GeoTypeDescriptor.geometry(crs == null ? "OGC:CRS84" : crs);
+                GeoTypeDescriptor descriptor = GeoTypeDescriptor.geometry(crs == null ? Types.GeometryType.DEFAULT_CRS : crs);
                 Integer srid = descriptor.srid();
                 return srid != null && srid > 0 ? ScalarType.createGeoType(PrimitiveType.GEOMETRY, descriptor)
                         : UnknownType.UNKNOWN_TYPE;
