@@ -435,21 +435,14 @@ public class StmtExecutor {
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
-<<<<<<< HEAD
-        // only print the sepecific sql in multi statement
-        String sql = context.isSingleStmt() ? originStmt.originStmt :
-                AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt);
-        if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
-=======
         if (Config.enable_sql_desensitize_in_log) {
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, AstToSQLBuilder.toDesensitizedSQL(parsedStmt));
         } else if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
->>>>>>> 7161133 ([BugFix][RB-1549] Fix literal values leaking past enable_sql_desensitize_in_log (#83313))
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT,
                     SqlCredentialRedactor.redact(AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt)));
         } else {
             // only print the sepecific sql in multi statement
-            String sql = !context.isMultiStmt() ? originStmt.originStmt :
+            String sql = context.isSingleStmt() ? originStmt.originStmt :
                     AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt);
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, SqlCredentialRedactor.redact(sql));
         }
@@ -493,14 +486,7 @@ public class StmtExecutor {
 
         profile.addChild(summaryProfile);
 
-<<<<<<< HEAD
-        RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
-        profile.addChild(plannerProfile);
-        Tracers.toRuntimeProfile(plannerProfile);
-=======
         profile.addChild(buildPlannerProfile());
-        PreSplitProfile.appendTo(profile, context);
->>>>>>> 7161133 ([BugFix][RB-1549] Fix literal values leaking past enable_sql_desensitize_in_log (#83313))
         return profile;
     }
 
@@ -3249,13 +3235,8 @@ public class StmtExecutor {
         try {
             handleDMLStmt(execPlan, stmt);
         } catch (Throwable t) {
-<<<<<<< HEAD
-            LOG.warn("DML statement({}) process failed.", getRedactedOriginStmtInString(), t);
-=======
             LOG.warn("DML statement({}) process failed.", LogUtil.redactSqlForLog(getOriginStmtInString(), parsedStmt),
                     LogUtil.desensitize(t));
-            retryPlainInsertConflict = mayRetry && shouldRetryPlainInsertOnEmptyPartitions(execPlan, t);
->>>>>>> 7161133 ([BugFix][RB-1549] Fix literal values leaking past enable_sql_desensitize_in_log (#83313))
             throw t;
         } finally {
             boolean isAsync = false;
@@ -4054,12 +4035,7 @@ public class StmtExecutor {
         }
 
         try {
-<<<<<<< HEAD
             String originSql = parsedStmt.getOrigStmt().originStmt;
-            boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
-=======
-            String originSql = getQueryDetailSql(parsedStmt);
->>>>>>> 7161133 ([BugFix][RB-1549] Fix literal values leaking past enable_sql_desensitize_in_log (#83313))
             String sql = originSql;
             if (Config.enable_sql_desensitize_in_log) {
                 sql = AstToSQLBuilder.toDesensitizedSQL(parsedStmt);

@@ -187,16 +187,8 @@ public class StatementPlanner {
                 return withExplainInQueryDetail(planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
                         () -> new UpdatePlanner().plan(updateStmt, session)), stmt, session);
             } else if (stmt instanceof DeleteStmt deleteStmt) {
-<<<<<<< HEAD
-                return planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
-                        () -> new DeletePlanner().plan(deleteStmt, session));
-=======
                 return withExplainInQueryDetail(planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
                         () -> new DeletePlanner().plan(deleteStmt, session)), stmt, session);
-            } else if (stmt instanceof MergeIntoStmt mergeIntoStmt) {
-                return withExplainInQueryDetail(planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
-                        () -> new MergeIntoPlanner().plan(mergeIntoStmt, session)), stmt, session);
->>>>>>> 7161133 ([BugFix][RB-1549] Fix literal values leaking past enable_sql_desensitize_in_log (#83313))
             }
         } catch (OutOfMemoryError e) {
             LOG.warn("planner out of memory, sql is:" + stmt.getOrigStmt().getOrigStmt());

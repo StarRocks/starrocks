@@ -93,11 +93,6 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.LargeInPredicateException;
-<<<<<<< HEAD
-import com.starrocks.sql.formatter.FormatOptions;
-=======
-import com.starrocks.sql.common.StarRocksPlannerException;
->>>>>>> 7161133 ([BugFix][RB-1549] Fix literal values leaking past enable_sql_desensitize_in_log (#83313))
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.staros.StarMgrServer;
@@ -476,199 +471,6 @@ public class ConnectProcessor {
         return AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(parsedStmt);
     }
 
-<<<<<<< HEAD
-=======
-    private void setStmtFailure(Throwable e, String auditSql, StatementBase parsedStmt) {
-        if (e instanceof AnalysisException || e instanceof ErrorReportException
-                || e instanceof SemanticException
-                || (e instanceof StarRocksPlannerException
-                && ((StarRocksPlannerException) e).getType() == ErrorType.USER_ERROR)) {
-            LOG.info("Process one statement failed. SQL: {}, error: {}",
-                    LogUtil.redactSqlForLog(auditSql, parsedStmt),
-                    LogUtil.desensitizeMessage(e));
-            ctx.getState().setError(e.getMessage());
-            ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
-            return;
-        }
-        LOG.warn("Process one statement failed. SQL: {}",
-                LogUtil.redactSqlForLog(auditSql, parsedStmt),
-                LogUtil.desensitize(e));
-        ctx.getState().setError(e.getMessage());
-        ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
-    }
-
-    private void auditCurrentStmt(String auditSql, StatementBase parsedStmt) {
-        auditAfterExec(auditSql, parsedStmt,
-                executor == null ? null : executor.getQueryStatisticsForAuditLog(),
-                getDigestFromLeader(executor));
-        if (executor != null) {
-            executor.addFinishedQueryDetail();
-        }
-    }
-
-    private void auditStmtFailure(Throwable e, StatementBase parsedStmt, String auditSql) {
-        setStmtFailure(e, auditSql, parsedStmt);
-        auditCurrentStmt(auditSql, parsedStmt);
-    }
-
-    private void auditStmtFailureForStmt(Throwable e, StatementBase parsedStmt, String originStmt) {
-        auditStmtFailure(e, parsedStmt, getAuditSql(parsedStmt, originStmt));
-    }
-
-    private List<StatementBase> parseStatements(String originStmt) throws AnalysisException {
-        try (Timer ignored = Tracers.watchScope(Tracers.Module.PARSER, "Parser")) {
-            return SqlParser.parse(originStmt, ctx.getSessionVariable());
-        } catch (ParsingException parsingException) {
-            throw new AnalysisException(parsingException.getMessage());
-        }
-    }
-
-    private void resetStmtExecutionContext(boolean refreshQueryId) {
-        executor = null;
-        executeInvoked = false;
-        ctx.setExecutor(null);
-        ctx.setQueryDetail(null);
-        ctx.setResourceGroup(null);
-        ctx.getState().reset();
-        ctx.resetReturnRows();
-        ctx.setStartTime();
-        ctx.setCurrentThreadAllocatedMemory(getThreadAllocatedBytes(Thread.currentThread().getId()));
-        resetAuditEventBuilder();
-        if (refreshQueryId) {
-            ctx.setQueryId(UUIDUtil.genUUID());
-            // Keep executionId aligned with the current stmt before StmtExecutor.execute():
-            // 1. StmtExecutor skips resetting executionId for cache-select.
-            // 2. A stmt can fail before entering StmtExecutor.execute(), but we still need
-            //    the current stmt's identity for the failure path and audit.
-            ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-        }
-    }
-
-    private void resetStmtRetryContext() {
-        executor = null;
-        executeInvoked = false;
-        ctx.setExecutor(null);
-        ctx.getState().reset();
-        ctx.resetReturnRows();
-        resetAuditEventBuilder();
-    }
-
-    private StatementBase prepareStmtForExecution(StatementBase parsedStmt, String originStmt,
-                                                  int stmtIdx, int stmtCount) throws AnalysisException {
-        // from jdbc no params like that. COM_STMT_PREPARE + select 1
-        if (ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE && !(parsedStmt instanceof PrepareStmt)) {
-            parsedStmt = new PrepareStmt("", parsedStmt, new ArrayList<>());
-        }
-        // only for JDBC, COM_STMT_PREPARE bundled with jdbc
-        if (ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE && (parsedStmt instanceof PrepareStmt)) {
-            ((PrepareStmt) parsedStmt).setName(String.valueOf(ctx.getStmtId()));
-            if (!(((PrepareStmt) parsedStmt).getInnerStmt() instanceof QueryStatement)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_UNSUPPORTED_PS, ErrorType.UNSUPPORTED);
-            }
-        }
-
-        parsedStmt.setOrigStmt(new OriginStatement(originStmt, stmtIdx));
-        Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
-        ctx.setIsLastStmt(stmtIdx == stmtCount - 1);
-        ctx.setMultiStmt(stmtCount > 1);
-        // auditAfterExec() reads ctx.getState().isQuery() even when the stmt fails before
-        // StmtExecutor.execute(), so we must classify the stmt here as well.
-        ctx.getState().setIsQuery(ctx.isQueryStmt(parsedStmt));
-        return parsedStmt;
-    }
-
-    // return true if validate failed, which means it should terminate
-    private boolean validateStmtBeforeExecution(StatementBase parsedStmt, String originStmt) {
-        try {
-            if (ctx.getTxnId() != 0) {
-                ExplicitTxnStatementValidator.validate(parsedStmt, ctx);
-            }
-            AuthenticationProvider authenticationProvider = ctx.getAuthenticationProvider();
-            if (authenticationProvider == null) {
-                ErrorReport.report("Unknown authentication method");
-                ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
-                recordPreExecutionFailureDiagnostics();
-                return true;
-            }
-            authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAccessControlContext());
-            return false;
-        } catch (AuthenticationException authenticationException) {
-            if (authenticationException.getErrorCode() != null) {
-                ErrorReport.report(authenticationException.getErrorCode(), authenticationException.getMessage());
-            } else {
-                ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED, authenticationException.getMessage());
-            }
-            ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
-            recordPreExecutionFailureDiagnostics();
-            return true;
-        } catch (Throwable e) {
-            auditStmtFailureForStmt(e, parsedStmt, originStmt);
-            throw e;
-        }
-    }
-
-    // execute this sql and audit current sql unless throw LargeInPredicateException
-    private void executeStmtWithAudit(StatementBase parsedStmt, String auditSql) throws Exception {
-        try {
-            executor = new StmtExecutor(ctx, parsedStmt);
-            ctx.setExecutor(executor);
-
-            SecurityPolicyRewriteRule.markRelationsForRewrite(parsedStmt);
-
-            if (ctx.getQueryDetail() == null) {
-                executor.addRunningQueryDetail(parsedStmt);
-            }
-            executeInvoked = true;
-            executor.execute();
-        } catch (LargeInPredicateException e) {
-            // we will retry this sql later, so don't audit here
-            throw e;
-        } catch (Throwable e) {
-            auditStmtFailure(e, parsedStmt, auditSql);
-            throw e;
-        }
-        auditCurrentStmt(auditSql, parsedStmt);
-    }
-
-    private StatementBase prepareRetriedStmt(StatementBase parsedStmt, String originStmt, int stmtCount)
-            throws AnalysisException {
-        // reparse the whole sql
-        StatementBase retriedStmt = parseStatements(originStmt).get(parsedStmt.getOrigStmt().idx);
-        resetStmtRetryContext();
-        return prepareStmtForExecution(retriedStmt, originStmt, parsedStmt.getOrigStmt().idx, stmtCount);
-    }
-
-    private StatementBase prepareRetriedStmtWithAudit(StatementBase parsedStmt, String originStmt, int stmtCount)
-            throws Exception {
-        try {
-            return prepareRetriedStmt(parsedStmt, originStmt, stmtCount);
-        } catch (Throwable e) {
-            // since this is the retry stmt, we have to audit
-            auditStmtFailureForStmt(e, parsedStmt, originStmt);
-            throw e;
-        }
-    }
-
-    private void runWithStmtParserStageRetry(StatementBase parsedStmt, String originStmt, int stmtCount) throws Exception {
-        try {
-            executeStmtWithAudit(parsedStmt, getAuditSql(parsedStmt, originStmt));
-        } catch (LargeInPredicateException e) {
-            boolean originalEnableLargeInPredicate = ctx.getSessionVariable().enableLargeInPredicate();
-            try {
-                ctx.getSessionVariable().setEnableLargeInPredicate(false);
-                LOG.warn("Retrying statement with enable_large_in_predicate=false, stmt idx: {}",
-                        parsedStmt.getOrigStmt().idx);
-                Tracers.record(Tracers.Module.BASE, "retry_with_large_in_predicate_exception", "true");
-                StatementBase retriedStmt = prepareRetriedStmtWithAudit(parsedStmt, originStmt, stmtCount);
-                // retry this sql, and audit
-                executeStmtWithAudit(retriedStmt, getAuditSql(retriedStmt, originStmt));
-            } finally {
-                ctx.getSessionVariable().setEnableLargeInPredicate(originalEnableLargeInPredicate);
-            }
-        }
-    }
-
->>>>>>> 7161133 ([BugFix][RB-1549] Fix literal values leaking past enable_sql_desensitize_in_log (#83313))
     // process COM_QUERY statement,
     protected void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
@@ -698,14 +500,8 @@ public class ConnectProcessor {
                 return;
             }
         } catch (AnalysisException e) {
-<<<<<<< HEAD
-            LOG.warn("Failed to parse SQL: " + SqlCredentialRedactor.redact(originStmt) + ", because.", e);
-=======
-            if (!parseSucceeded) {
-                LOG.warn("Failed to parse SQL: " + LogUtil.redactSqlForLog(originStmt, null)
-                        + ", because.", LogUtil.desensitize(e));
-            }
->>>>>>> 7161133 ([BugFix][RB-1549] Fix literal values leaking past enable_sql_desensitize_in_log (#83313))
+            LOG.warn("Failed to parse SQL: " + LogUtil.redactSqlForLog(originStmt, null)
+                    + ", because.", LogUtil.desensitize(e));
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
         } catch (Throwable e) {
