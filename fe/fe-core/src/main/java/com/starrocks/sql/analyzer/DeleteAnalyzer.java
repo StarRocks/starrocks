@@ -281,18 +281,12 @@ public class DeleteAnalyzer {
         }
 
         if (!(table instanceof OlapTable && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS)) {
-<<<<<<< HEAD
-=======
             // Such a DELETE runs as a DeleteMgr job that begins and commits a transaction of its own. Inside an
             // explicit transaction it would take effect at once, and ROLLBACK could not undo it.
             if (session.getTxnId() != 0) {
                 ErrorReport.reportSemanticException(
                         ErrorCode.ERR_EXPLICIT_TXN_DELETE_ON_NON_PRIMARY_KEY_TABLE, table.getName());
             }
-            if (table instanceof OlapTable && Config.enable_non_primary_key_delete_warning) {
-                deleteStatement.setOkInfoMessage(buildNonPrimaryKeyDeleteInfo((OlapTable) table));
-            }
->>>>>>> bbb654a ([BugFix][RB-917] Reject DELETE on a non-Primary-Key table inside an explicit transaction (#82368))
             analyzeNonPrimaryKey(deleteStatement);
             return;
         }
