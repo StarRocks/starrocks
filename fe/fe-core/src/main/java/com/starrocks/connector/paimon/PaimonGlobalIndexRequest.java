@@ -33,7 +33,7 @@ import java.util.Set;
 
 /** Versioned FE/BE request carried by the internal Paimon metadata query. */
 public final class PaimonGlobalIndexRequest {
-    public static final int CURRENT_VERSION = 4;
+    public static final int CURRENT_VERSION = 5;
     private static final Gson GSON = new Gson();
 
     private int version;

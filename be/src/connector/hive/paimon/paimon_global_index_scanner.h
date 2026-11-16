@@ -14,28 +14,23 @@
 
 #pragma once
 
+#include <paimon/global_index/global_index_reader.h>
 #include <paimon/global_index/global_index_result.h>
-#include <paimon/global_index/global_index_scan.h>
 #include <paimon/memory/memory_pool.h>
 #include <rapidjson/document.h>
 
 #include <cstdint>
 #include <memory>
 #include <string>
-
-#ifdef BE_TEST
-#include <functional>
-#endif
+#include <unordered_map>
 
 #include "connector/hive/paimon/paimon_file_system.h"
-#include "connector/hive/paimon/paimon_global_index_scan_context.h"
 #include "connector/hive/scanner/hdfs_scanner.h"
 
 namespace starrocks {
 
 class PaimonFileSystem;
-class PaimonGlobalIndexSchemaGuard;
-struct PaimonGlobalIndexSharedState;
+struct PaimonGlobalIndexOperation;
 class PaimonGlobalIndexScannerTestAccessor;
 class TPaimonGlobalIndexScanRange;
 
@@ -68,15 +63,10 @@ private:
     rapidjson::Document _request;
     std::shared_ptr<paimon::MemoryPool> _memory_pool;
     std::shared_ptr<PaimonFileSystem> _paimon_file_system;
-    std::shared_ptr<paimon::GlobalIndexScan> _global_index_scan;
-    std::shared_ptr<PaimonGlobalIndexSchemaGuard> _schema_guard;
-    std::shared_ptr<PaimonGlobalIndexScanContext> _scan_context;
-    std::shared_ptr<PaimonGlobalIndexSharedState> _shared_state;
+    std::unordered_map<int32_t, std::shared_ptr<paimon::GlobalIndexReader>> _readers;
+    std::unordered_map<int32_t, std::string> _field_types;
+    std::shared_ptr<PaimonGlobalIndexOperation> _operation;
     PaimonFileSystemStats::Snapshot _io_stats;
-#ifdef BE_TEST
-    std::function<paimon::Result<std::unique_ptr<paimon::GlobalIndexScan>>()> _scan_factory_for_test;
-    std::function<StatusOr<std::string>(std::string_view)> _field_type_getter_for_test;
-#endif
 };
 
 } // namespace starrocks

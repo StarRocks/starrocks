@@ -15,16 +15,19 @@
 #include "connector/hive/paimon/paimon_global_index_scanner.h"
 
 #include <fmt/format.h>
-#include <paimon/executor.h>
 #include <paimon/global_index/bitmap_global_index_result.h>
+#include <paimon/global_index/global_indexer.h>
+#include <paimon/global_index/global_indexer_factory.h>
+#include <paimon/global_index/io/global_index_file_reader.h>
 #include <paimon/utils/range.h>
-#include <paimon/utils/row_range_index.h>
 
 #include <algorithm>
 #include <chrono>
+#include <functional>
 #include <limits>
 #include <map>
-#include <optional>
+#include <mutex>
+#include <set>
 #include <string_view>
 #include <tuple>
 #include <utility>
@@ -33,18 +36,20 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "connector/hive/paimon/paimon_file_system.h"
 #include "connector/hive/paimon/paimon_global_index_evaluator.h"
-#include "connector/hive/paimon/paimon_global_index_schema_guard.h"
+#include "connector/hive/paimon/paimon_global_index_reader.h"
 #include "connector/hive/paimon/tracked_paimon_memory_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/datum.h"
 
 namespace starrocks {
-
 namespace {
 
-constexpr int32_t kProtocolVersion = 4;
+using paimon_global_index::arrow_key_format;
+using paimon_global_index::valid_btree_metadata;
+using paimon_global_index::SegmentedIndexReader;
+
+constexpr int32_t kProtocolVersion = 5;
 constexpr std::string_view kIndexResultColumn = "index_result";
 
 Status paimon_error(std::string_view operation, const paimon::Status& status) {
@@ -55,13 +60,6 @@ Status check_query_state(RuntimeState* runtime_state) {
     RETURN_IF_CANCELLED(runtime_state);
     RETURN_IF_ERROR(runtime_state->check_query_state("Paimon Global Index scan"));
     return runtime_state->check_mem_limit("Paimon Global Index scan");
-}
-
-Status lock_scan(RuntimeState* runtime_state, std::unique_lock<std::timed_mutex>* lock) {
-    while (!lock->try_lock_for(std::chrono::milliseconds(50))) {
-        RETURN_IF_ERROR(check_query_state(runtime_state));
-    }
-    return check_query_state(runtime_state);
 }
 
 int64_t monotonic_nanos() {
@@ -84,83 +82,54 @@ void update_paimon_io_profile(RuntimeProfile* profile, const PaimonFileSystemSta
     update("FileSystemIOTime", TUnit::TIME_NS, stats.fs_io_ns);
 }
 
-auto cache_identity(const DataCacheOptions& options) {
-    return std::make_tuple(options.enable_datacache, options.enable_cache_select, options.enable_populate_datacache,
-                           options.enable_datacache_async_populate_mode, options.enable_datacache_io_adaptor,
-                           options.modification_time, options.datacache_evict_probability, options.datacache_priority,
-                           options.datacache_ttl_seconds);
-}
+// A range-local adapter. Only files selected by FE can be opened; it never
+// discovers a snapshot, schema or manifest through the SDK.
+class IndexFileReader final : public paimon::GlobalIndexFileReader {
+public:
+    using Open = std::function<paimon::Result<std::unique_ptr<paimon::InputStream>>(const std::string&)>;
+    explicit IndexFileReader(Open open) : _open(std::move(open)) {}
+    paimon::Result<std::unique_ptr<paimon::InputStream>> GetInputStream(const std::string& path) const override {
+        return _open(path);
+    }
 
-void add_io_delta(PaimonFileSystemStats::Snapshot* total, const PaimonFileSystemStats::Snapshot& before,
-                  const PaimonFileSystemStats::Snapshot& after) {
-    total->sequential_read_count += after.sequential_read_count - before.sequential_read_count;
-    total->sequential_read_bytes += after.sequential_read_bytes - before.sequential_read_bytes;
-    total->sequential_read_ns += after.sequential_read_ns - before.sequential_read_ns;
-    total->positional_read_count += after.positional_read_count - before.positional_read_count;
-    total->positional_read_bytes += after.positional_read_bytes - before.positional_read_bytes;
-    total->positional_read_ns += after.positional_read_ns - before.positional_read_ns;
-    total->async_read_count += after.async_read_count - before.async_read_count;
-    total->async_read_bytes += after.async_read_bytes - before.async_read_bytes;
-    total->async_read_ns += after.async_read_ns - before.async_read_ns;
-    total->fs_io_count += after.fs_io_count - before.fs_io_count;
-    total->fs_io_bytes += after.fs_io_bytes - before.fs_io_bytes;
-    total->fs_io_ns += after.fs_io_ns - before.fs_io_ns;
-}
+private:
+    Open _open;
+};
 
 } // namespace
 
-// Only active operations borrow RuntimeState. Clearing the final lease waits for
-// any in-flight cancellation check; late SDK callbacks then see an inactive lease,
-// never a pointer to a destroyed scanner/fragment. Shards keep their own readers.
-struct PaimonGlobalIndexSharedState {
-    struct Operation {
-        Status start(RuntimeState* state) {
-            std::lock_guard lock(mutex);
-            if (active != 0 && runtime_state != state) {
-                return Status::InvalidArgument("Paimon Global Index operations belong to different fragments");
-            }
-            runtime_state = state;
-            ++active;
-            return Status::OK();
-        }
-        void finish() {
-            std::lock_guard lock(mutex);
-            if (--active == 0) {
-                runtime_state = nullptr;
-            }
-        }
-        paimon::Status check() {
-            std::lock_guard lock(mutex);
-            if (runtime_state == nullptr) {
-                return paimon::Status::Cancelled("Paimon Global Index operation has finished");
-            }
-            auto status = check_query_state(runtime_state);
-            return status.ok() ? paimon::Status::OK() : paimon::Status::Cancelled(status.to_string());
-        }
-        std::mutex mutex;
-        RuntimeState* runtime_state = nullptr;
-        size_t active = 0;
-    };
-    std::shared_ptr<MemTracker> tracker;
-    std::shared_ptr<FileSystem> file_system_owner;
-    TUniqueId query_id;
-    TUniqueId fragment_id;
-    std::string request;
-    DataCacheOptions options;
-    std::shared_ptr<Operation> operation;
-    std::shared_ptr<paimon::MemoryPool> memory_pool;
-    std::shared_ptr<PaimonFileSystem> file_system;
-    std::shared_ptr<PaimonGlobalIndexSchemaGuard> schema_guard;
-    std::shared_ptr<paimon::GlobalIndexScan> scan;
-    std::mutex profile_mutex;
-    PaimonFileSystemStats::Snapshot reported_io;
+// Stream callbacks may retain this lease, but never the scanner or RuntimeState.
+// File opens hold the lease until Open returns, so finishing an operation also
+// waits for in-flight opens before the range's ObjectPool can release its FS.
+// Already opened streams own their files and cancel late reads through check().
+struct PaimonGlobalIndexOperation {
+    void start(RuntimeState* state) {
+        std::lock_guard lock(mutex);
+        runtime_state = state;
+    }
+    void finish() {
+        std::lock_guard lock(mutex);
+        runtime_state = nullptr;
+    }
+    paimon::Status check() {
+        std::lock_guard lock(mutex);
+        if (runtime_state == nullptr) return paimon::Status::Cancelled("Paimon Global Index operation has finished");
+        auto status = check_query_state(runtime_state);
+        return status.ok() ? paimon::Status::OK() : paimon::Status::Cancelled(status.to_string());
+    }
+    template <class Open>
+    paimon::Result<std::unique_ptr<paimon::InputStream>> open(Open&& open_file) {
+        std::lock_guard lock(mutex);
+        if (runtime_state == nullptr) return paimon::Status::Cancelled("Paimon Global Index operation has finished");
+        return open_file();
+    }
+    // Open invokes the adapter's query-state callback on the same thread.
+    std::recursive_mutex mutex;
+    RuntimeState* runtime_state = nullptr;
 };
 
-Status PaimonGlobalIndexScanner::do_init(RuntimeState*, const HdfsScannerContext& scanner_ctx) {
+Status PaimonGlobalIndexScanner::do_init(RuntimeState*, const HdfsScannerContext&) {
     _emitted = false;
-    _scan_context = scanner_ctx.paimon_global_index_context != nullptr
-                            ? scanner_ctx.paimon_global_index_context
-                            : std::make_shared<PaimonGlobalIndexScanContext>();
     return Status::OK();
 }
 
@@ -169,98 +138,56 @@ Status PaimonGlobalIndexScanner::do_open(RuntimeState* runtime_state) {
     DeferOp record_time([&] { _open_ns += monotonic_nanos() - start_ns; });
     RETURN_IF_ERROR(check_query_state(runtime_state));
     RETURN_IF_ERROR(_parse_request());
-    if (_scanner_ctx->fs == nullptr) {
-        return Status::InternalError("Paimon Global Index scanner has no StarRocks file system");
-    }
-
-    std::unique_lock lock(_scan_context->mutex, std::defer_lock);
-    RETURN_IF_ERROR(lock_scan(runtime_state, &lock));
-    const auto& scan_range = _scanner_ctx->scan_range->paimon_global_index_scan_range;
-    auto shared = std::static_pointer_cast<PaimonGlobalIndexSharedState>(_scan_context->state);
-    if (shared != nullptr) {
-        if (shared->query_id != runtime_state->query_id() ||
-            shared->fragment_id != runtime_state->fragment_instance_id() ||
-            shared->tracker != runtime_state->query_mem_tracker_ptr() || shared->request != scan_range.query_json ||
-            cache_identity(shared->options) != cache_identity(_scanner_ctx->datacache_options)) {
-            return Status::InvalidArgument("Incompatible Paimon Global Index scan reuse identity");
-        }
-        _shared_state = shared;
-        _memory_pool = shared->memory_pool;
-        _paimon_file_system = shared->file_system;
-        _schema_guard = shared->schema_guard;
-        _global_index_scan = shared->scan;
-        return Status::OK();
-    }
-    if (_scanner_ctx->paimon_global_index_context != nullptr &&
-        _scanner_ctx->paimon_global_index_file_system == nullptr) {
-        return Status::InternalError("Shared Paimon Global Index scan requires an owned file system");
-    }
-    const auto query_tracker = runtime_state->query_mem_tracker_ptr();
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_tracker.get());
-    shared = std::allocate_shared<PaimonGlobalIndexSharedState>(
-            PaimonQueryAllocator<PaimonGlobalIndexSharedState>(query_tracker));
-    shared->tracker = query_tracker;
-    shared->operation = std::allocate_shared<PaimonGlobalIndexSharedState::Operation>(
-            PaimonQueryAllocator<PaimonGlobalIndexSharedState::Operation>(query_tracker));
-    shared->file_system_owner = _scanner_ctx->paimon_global_index_file_system;
-    shared->query_id = runtime_state->query_id();
-    shared->fragment_id = runtime_state->fragment_instance_id();
-    shared->request = scan_range.query_json;
-    shared->options = _scanner_ctx->datacache_options;
-    RETURN_IF_ERROR(shared->operation->start(runtime_state));
-    DeferOp finish_operation([&] {
-        shared->operation->finish();
-        if (_paimon_file_system != nullptr) {
-            _io_stats = _paimon_file_system->get_stats();
-        }
-    });
-    _memory_pool = std::allocate_shared<TrackedPaimonMemoryPool>(
-            PaimonQueryAllocator<TrackedPaimonMemoryPool>(query_tracker), query_tracker.get());
-    shared->memory_pool = _memory_pool;
+    if (_scanner_ctx->fs == nullptr) return Status::InternalError("Paimon Global Index scanner has no file system");
+    const auto tracker = runtime_state->query_mem_tracker_ptr();
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(tracker.get());
+    _operation =
+            std::allocate_shared<PaimonGlobalIndexOperation>(PaimonQueryAllocator<PaimonGlobalIndexOperation>(tracker));
+    _operation->start(runtime_state);
+    DeferOp finish([&] { _operation->finish(); });
+    _memory_pool = std::allocate_shared<TrackedPaimonMemoryPool>(PaimonQueryAllocator<TrackedPaimonMemoryPool>(tracker),
+                                                                 tracker.get());
     _paimon_file_system = std::allocate_shared<PaimonFileSystem>(
-            PaimonQueryAllocator<PaimonFileSystem>(query_tracker), _scanner_ctx->fs, _scanner_ctx->datacache_options,
-            [operation = shared->operation, owner = shared->file_system_owner] {
-                // Input streams retain this callback, so their underlying FS outlives
-                // both the first scanner and the provider if SDK cleanup is delayed.
-                (void)owner;
-                return operation->check();
-            },
-            query_tracker);
-    shared->file_system = _paimon_file_system;
-    auto schema_guard = std::allocate_shared<PaimonGlobalIndexSchemaGuard>(
-            PaimonQueryAllocator<PaimonGlobalIndexSchemaGuard>(query_tracker), _paimon_file_system,
-            scan_range.table_path, _request["schemaId"].GetInt64(), _request["schemaTimeMillis"].GetInt64());
-#ifdef BE_TEST
-    auto scan = _scan_factory_for_test ? _scan_factory_for_test()
-                                       : paimon::GlobalIndexScan::Create(
-                                                 scan_range.table_path, std::optional<int64_t>(scan_range.snapshot_id),
-                                                 std::optional<std::vector<std::map<std::string, std::string>>>{},
-                                                 std::map<std::string, std::string>(), schema_guard,
-                                                 paimon::GetGlobalDefaultExecutor(), _memory_pool);
-#else
-    auto scan = paimon::GlobalIndexScan::Create(scan_range.table_path, std::optional<int64_t>(scan_range.snapshot_id),
-                                                std::optional<std::vector<std::map<std::string, std::string>>>{},
-                                                std::map<std::string, std::string>(), schema_guard,
-                                                paimon::GetGlobalDefaultExecutor(), _memory_pool);
-#endif
-    RETURN_IF_ERROR(check_query_state(runtime_state));
-    if (!scan.ok()) {
-        return paimon_error("scan creation", scan.status());
+            PaimonQueryAllocator<PaimonFileSystem>(tracker), _scanner_ctx->fs, _scanner_ctx->datacache_options,
+            [operation = _operation] { return operation->check(); }, tracker);
+    auto file_reader = std::allocate_shared<IndexFileReader>(
+            PaimonQueryAllocator<IndexFileReader>(tracker),
+            [operation = _operation, fs = _paimon_file_system](const std::string& path) {
+                return operation->open([&] { return fs->Open(path); });
+            });
+    const auto& files = _scanner_ctx->scan_range->paimon_global_index_scan_range.index_files;
+    using Group = std::tuple<int32_t, int64_t, int64_t>;
+    std::map<Group, std::vector<paimon::GlobalIndexIOMeta>> groups;
+    for (const auto& file : files) {
+        auto [it, inserted] = _field_types.emplace(file.field_id, file.field_type);
+        if (!inserted && it->second != file.field_type) {
+            return Status::InvalidArgument("Inconsistent Paimon Global Index key types");
+        }
+        auto metadata = std::allocate_shared<paimon::Bytes>(PaimonQueryAllocator<paimon::Bytes>(tracker), file.metadata,
+                                                            _memory_pool.get());
+        groups[{file.field_id, file.row_range_from, file.row_range_to}].emplace_back(file.path, file.file_size,
+                                                                                     metadata);
     }
-#ifdef BE_TEST
-    if (!_scan_factory_for_test && !schema_guard->schema_validated()) {
-#else
-    if (!schema_guard->schema_validated()) {
-#endif
-        return Status::InternalError("Paimon Global Index did not validate its schema");
+    for (const auto& member : _request["indexes"].GetObject()) {
+        const int32_t field_id = member.value["fieldId"].GetInt();
+        auto composite =
+                std::allocate_shared<SegmentedIndexReader>(PaimonQueryAllocator<SegmentedIndexReader>(tracker));
+        auto indexer = paimon::GlobalIndexerFactory::Get("btree", {});
+        if (!indexer.ok()) return paimon_error("indexer creation", indexer.status());
+        if (indexer.value() == nullptr) return Status::NotSupported("Paimon BTree indexer is unavailable");
+        for (const auto& [group, metas] : groups) {
+            if (std::get<0>(group) != field_id) continue;
+            RETURN_IF_ERROR(check_query_state(runtime_state));
+            auto reader = paimon_global_index::create_segment_reader(*indexer.value(), member.name.GetString(),
+                                                                     _field_types.at(field_id), file_reader, metas,
+                                                                     _memory_pool);
+            if (!reader.ok()) return paimon_error("file reader creation", reader.status());
+            if (reader.value() == nullptr) return Status::InternalError("Paimon BTree file reader is unavailable");
+            composite->add(std::move(reader).value(), std::get<1>(group));
+        }
+        _readers.emplace(field_id, std::move(composite));
     }
-    _global_index_scan = std::move(scan).value();
-    _schema_guard = std::move(schema_guard);
-    shared->schema_guard = _schema_guard;
-    shared->scan = _global_index_scan;
-    _shared_state = shared;
-    _scan_context->state = shared;
-    return Status::OK();
+    return check_query_state(runtime_state);
 }
 
 Status PaimonGlobalIndexScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
@@ -270,14 +197,8 @@ Status PaimonGlobalIndexScanner::do_get_next(RuntimeState* runtime_state, ChunkP
 
     RETURN_IF_ERROR(check_query_state(runtime_state));
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->query_mem_tracker_ptr().get());
-    if (_shared_state != nullptr) {
-        RETURN_IF_ERROR(_shared_state->operation->start(runtime_state));
-    }
-    DeferOp finish_operation([&] {
-        if (_shared_state != nullptr) {
-            _shared_state->operation->finish();
-        }
-    });
+    _operation->start(runtime_state);
+    DeferOp finish_operation([&] { _operation->finish(); });
 
     const int64_t evaluate_start_ns = monotonic_nanos();
     auto evaluated = _evaluate(runtime_state);
@@ -320,12 +241,12 @@ Status PaimonGlobalIndexScanner::do_get_next(RuntimeState* runtime_state, ChunkP
 }
 
 void PaimonGlobalIndexScanner::do_close(RuntimeState*) noexcept {
-    _global_index_scan.reset();
+    if (_operation != nullptr) _operation->finish();
+    _readers.clear();
+    if (_paimon_file_system != nullptr) _io_stats = _paimon_file_system->get_stats();
     _paimon_file_system.reset();
     _memory_pool.reset();
-    _schema_guard.reset();
-    _shared_state.reset();
-    _scan_context.reset();
+    _operation.reset();
 }
 
 void PaimonGlobalIndexScanner::do_update_counter(HdfsScannerProfile* profile) {
@@ -343,28 +264,11 @@ void PaimonGlobalIndexScanner::do_update_counter(HdfsScannerProfile* profile) {
     update("SerializeTime", TUnit::TIME_NS, _serialize_ns);
     update("SerializedBytes", TUnit::BYTES, _serialized_bytes);
 
-    if (_shared_state != nullptr) {
-        // Shards may evaluate concurrently. Drain shared counters once, instead of
-        // attributing overlapping before/after snapshots to every scanner.
-        std::lock_guard lock(_shared_state->profile_mutex);
-        auto current = _paimon_file_system->get_stats();
-        PaimonFileSystemStats::Snapshot delta;
-        add_io_delta(&delta, _shared_state->reported_io, current);
-        _shared_state->reported_io = current;
-        update_paimon_io_profile(profile->runtime_profile, delta);
-    } else {
-        update_paimon_io_profile(profile->runtime_profile, _io_stats);
-    }
+    update_paimon_io_profile(profile->runtime_profile,
+                             _paimon_file_system != nullptr ? _paimon_file_system->get_stats() : _io_stats);
 }
 
 int64_t PaimonGlobalIndexScanner::estimated_mem_usage() const {
-    // The shared pool measures all concurrently active shards, not one source.
-    // Zero means a per-source estimate is unavailable: the adaptive I/O limiter
-    // keeps its existing estimate, while the query tracker still accounts every
-    // allocation. Reporting the shared peak here multiplies it by driver count.
-    if (_scanner_ctx != nullptr && _scanner_ctx->paimon_global_index_context != nullptr) {
-        return 0;
-    }
     return _memory_pool == nullptr ? 0 : static_cast<int64_t>(_memory_pool->MaxMemoryUsage());
 }
 
@@ -377,7 +281,7 @@ Status PaimonGlobalIndexScanner::_parse_request(const TPaimonGlobalIndexScanRang
                                                 rapidjson::Document* request) {
     if (!scan_range.__isset.protocol_version || !scan_range.__isset.shard_id || !scan_range.__isset.range_from ||
         !scan_range.__isset.range_to || !scan_range.__isset.query_json || !scan_range.__isset.table_path ||
-        !scan_range.__isset.snapshot_id) {
+        !scan_range.__isset.snapshot_id || !scan_range.__isset.index_files || scan_range.index_files.empty()) {
         return Status::InvalidArgument("Incomplete Paimon Global Index scan range");
     }
     if (scan_range.protocol_version != kProtocolVersion) {
@@ -390,6 +294,9 @@ Status PaimonGlobalIndexScanner::_parse_request(const TPaimonGlobalIndexScanRang
         scan_range.range_to == std::numeric_limits<int64_t>::max()) {
         return Status::InvalidArgument(
                 fmt::format("Invalid Paimon Global Index shard [{}, {}]", scan_range.range_from, scan_range.range_to));
+    }
+    if (scan_range.query_json.size() > 64 * 1024 || scan_range.index_files.size() > 65536) {
+        return Status::InvalidArgument("Oversized Paimon Global Index task");
     }
     if (request->Parse(scan_range.query_json.data(), scan_range.query_json.size()).HasParseError() ||
         !request->IsObject()) {
@@ -421,6 +328,28 @@ Status PaimonGlobalIndexScanner::_parse_request(const TPaimonGlobalIndexScanRang
             return Status::InvalidArgument("Invalid Paimon Global Index field binding");
         }
     }
+    size_t payload_bytes = scan_range.query_json.size() + 128;
+    std::set<int32_t> fields;
+    for (const auto& file : scan_range.index_files) {
+        if (!file.__isset.field_id || !file.__isset.field_type || !file.__isset.path || !file.__isset.file_size ||
+            !file.__isset.row_range_from || !file.__isset.row_range_to || !file.__isset.metadata || file.field_id < 0 ||
+            file.path.empty() || file.file_size <= 0 || file.row_range_from < 0 ||
+            file.row_range_to < file.row_range_from || file.row_range_to == std::numeric_limits<int64_t>::max() ||
+            file.row_range_from > scan_range.range_to || file.row_range_to < scan_range.range_from ||
+            arrow_key_format(file.field_type) == nullptr || !valid_btree_metadata(file.metadata)) {
+            return Status::InvalidArgument("Invalid Paimon Global Index file descriptor");
+        }
+        payload_bytes += file.path.size() + file.metadata.size() + file.field_type.size() + 128;
+        if (payload_bytes > 1024 * 1024) {
+            return Status::InvalidArgument("Oversized Paimon Global Index task");
+        }
+        fields.insert(file.field_id);
+    }
+    for (const auto& member : (*request)["indexes"].GetObject()) {
+        if (!fields.contains(member.value["fieldId"].GetInt())) {
+            return Status::InvalidArgument("Missing Paimon Global Index files for a predicate column");
+        }
+    }
     return Status::OK();
 }
 
@@ -428,53 +357,19 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexScanner::_
     RETURN_IF_ERROR(check_query_state(runtime_state));
     const auto& scan_range = _scanner_ctx->scan_range->paimon_global_index_scan_range;
     std::vector<paimon::Range> ranges = {paimon::Range(scan_range.range_from, scan_range.range_to)};
-    auto row_range = paimon::RowRangeIndex::Create(ranges);
-    if (!row_range.ok()) {
-        return paimon_error("row-range creation", row_range.status());
-    }
-    std::optional<paimon::RowRangeIndex> row_range_index(std::move(row_range).value());
-
     const rapidjson::Value& indexes = _request["indexes"];
     auto reader_getter = [&](std::string_view column_name) -> StatusOr<std::shared_ptr<paimon::GlobalIndexReader>> {
-        auto member = indexes.FindMember(
-                rapidjson::StringRef(column_name.data(), static_cast<rapidjson::SizeType>(column_name.size())));
-        if (member == indexes.MemberEnd()) {
-            return Status::InvalidArgument(
-                    fmt::format("No validated Paimon Global Index selected for column '{}'", column_name));
-        }
-        const int32_t field_id = member->value["fieldId"].GetInt();
+        auto member = indexes.FindMember(rapidjson::StringRef(column_name.data(), column_name.size()));
+        if (member == indexes.MemberEnd()) return Status::InvalidArgument("Missing Paimon Global Index column binding");
+        auto reader = _readers.find(member->value["fieldId"].GetInt());
+        if (reader == _readers.end()) return Status::InvalidArgument("Missing Paimon Global Index file reader");
         RETURN_IF_ERROR(check_query_state(runtime_state));
-        // GlobalIndexScan's initialization is shared; each call creates its own
-        // readers. The SDK does not promise concurrent CreateReaders calls.
-        std::unique_lock lock(_scan_context->mutex, std::defer_lock);
-        RETURN_IF_ERROR(lock_scan(runtime_state, &lock));
-        auto readers = _global_index_scan->CreateReaders(field_id, row_range_index);
-        RETURN_IF_ERROR(check_query_state(runtime_state));
-        if (!readers.ok()) {
-            return paimon_error(fmt::format("reader creation for field {}", field_id), readers.status());
-        }
-        // FE validated that BTree is the only provider for this field at this snapshot.
-        // The field-ID API wraps its files in a reader whose type is "union", not "btree".
-        if (readers.value().size() != 1 || readers.value().front() == nullptr) {
-            return Status::InternalError(
-                    fmt::format("Validated Paimon BTree index is missing or ambiguous for field {} at snapshot {}",
-                                field_id, scan_range.snapshot_id));
-        }
-        return readers.value().front();
+        return reader->second;
     };
-
     auto type_getter = [&](std::string_view column_name) -> StatusOr<std::string> {
-#ifdef BE_TEST
-        if (_field_type_getter_for_test) {
-            return _field_type_getter_for_test(column_name);
-        }
-#endif
-        auto member = indexes.FindMember(
-                rapidjson::StringRef(column_name.data(), static_cast<rapidjson::SizeType>(column_name.size())));
-        if (member == indexes.MemberEnd() || _schema_guard == nullptr) {
-            return Status::InvalidArgument("Missing Paimon Global Index schema field binding");
-        }
-        return _schema_guard->field_type(member->value["fieldId"].GetInt(), column_name);
+        auto member = indexes.FindMember(rapidjson::StringRef(column_name.data(), column_name.size()));
+        if (member == indexes.MemberEnd()) return Status::InvalidArgument("Missing Paimon Global Index column binding");
+        return _field_types.at(member->value["fieldId"].GetInt());
     };
     PaimonGlobalIndexEvaluator evaluator(std::move(reader_getter), std::move(type_getter));
     auto evaluated = evaluator.evaluate(_request["predicate"]);

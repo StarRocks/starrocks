@@ -1637,14 +1637,17 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: false
 * **Introduced in**: v3.1.10
 
-### enable_paimon_distributed_global_index
+### paimon_global_index_mode
 
-* **Description**: Evaluates eligible Paimon scalar BTree Global Index predicates on BE/CN during split planning. Applies to snapshot reads of data evolution tables on the main branch with compatible key schemas and complete index coverage. The internal metadata query inherits the caller's identity, resource policy, warehouse, cancellation and timeout budget. It does not create a persistent table or cache query bitmaps.
-* **Default**: false (uses the existing Paimon SDK planning behavior).
-* **Data type**: Boolean
+* **Description**: Controls where Paimon Global Index predicates are evaluated during scan planning. Values are case-insensitive:
+  * `off`: Disables Global Index use, including during optimizer statistics collection. Ordinary partition and file pruning remain available.
+  * `local`: Uses the Paimon Java SDK on FE, respecting the table's `global-index.enabled` setting.
+  * `distributed`: Sends eligible scalar BTree index file information to BE/CN for evaluation, then passes the returned bitmap to the Java SDK to generate data splits. Automatic SDK index evaluation is disabled, including during optimizer statistics collection. If distributed evaluation is unavailable or fails, planning falls back to data scanning without Global Index pruning.
+* **Default**: local
+* **Data type**: String
 * **Introduced in**: v4.2
-* **Limits**: At most 4096 index shards and 1 MiB of serialized bitmap per shard. FE collection sets a budget of one eighth of the query memory limit, capped at 64 MiB, with conservative bounds on serialized bytes and candidate row count. When distributed index evaluation is unavailable, fails or exceeds these limits, planning scans data without Global Index pruning. Query cancellation and an exhausted outer timeout stop planning. Row filtering or column masking policies disable this optimization.
-* **Diagnostics**: External traces include `PaimonGlobalIndex.Evaluate`, `PaimonGlobalIndex.ValidateCoverage`, `PaimonGlobalIndex.Result` and `PaimonGlobalIndex.Fallback`. With metadata profiling enabled, native scanner profiles include index open, evaluation and serialization times, serialized bytes and filesystem I/O counters.
+* **Limits**: The distributed mode applies to snapshot reads of data evolution tables on the main branch with compatible key schemas and complete index coverage. At most 4096 index shards and 1 MiB of serialized bitmap per shard. FE collection sets a budget of one eighth of the query memory limit, capped at 64 MiB, with conservative bounds on serialized bytes and candidate row count. When distributed index evaluation is unavailable, fails or exceeds these limits, planning scans data without Global Index pruning. Query cancellation and an exhausted outer timeout stop planning. Row filtering or column masking policies disable this optimization.
+* **Diagnostics**: External traces include `PaimonGlobalIndex.Mode`, `PaimonGlobalIndex.Evaluate`, `PaimonGlobalIndex.ValidateCoverage`, `PaimonGlobalIndex.Result` and `PaimonGlobalIndex.Fallback`. With metadata profiling enabled, native scanner profiles include index open, evaluation and serialization times, serialized bytes and filesystem I/O counters.
 
 ### paimon_reader_mode
 

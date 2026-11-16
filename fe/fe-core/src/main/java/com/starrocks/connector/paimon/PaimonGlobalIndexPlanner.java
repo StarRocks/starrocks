@@ -22,6 +22,7 @@ import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.thrift.TPaimonGlobalIndexFile;
 import org.apache.paimon.Snapshot;
 import org.apache.paimon.index.GlobalIndexMeta;
 import org.apache.paimon.io.DataFileMeta;
@@ -51,6 +52,8 @@ import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 /** Snapshot-bound request and shard discovery, scoped entirely to the Paimon connector. */
 public final class PaimonGlobalIndexPlanner {
     public static final int MAX_SHARDS = 4096;
+    private static final int MAX_FILES = 65536;
+    private static final int MAX_INDEX_META_BYTES = 64 * 1024;
 
     private PaimonGlobalIndexPlanner() {
     }
@@ -147,8 +150,10 @@ public final class PaimonGlobalIndexPlanner {
                 throw new IllegalArgumentException("Paimon Global Index has incompatible key schema");
             }
             Map<Integer, List<Range>> indexes = new HashMap<>();
-            long totalBytes = 0;
-            for (IndexManifestEntry entry : table.store().newIndexFileHandler().scan(snapshot, unused -> true)) {
+            List<TPaimonGlobalIndexFile> files = new ArrayList<>();
+            long fileMetadataBytes = 0;
+            var handler = table.store().newIndexFileHandler();
+            for (IndexManifestEntry entry : handler.scan(snapshot, unused -> true)) {
                 GlobalIndexMeta index = entry.indexFile().globalIndexMeta();
                 if (index == null || !fields.contains(index.indexFieldId())) {
                     continue;
@@ -157,7 +162,27 @@ public final class PaimonGlobalIndexPlanner {
                     throw new IllegalArgumentException("Paimon Global Index has mixed providers");
                 }
                 indexes.computeIfAbsent(index.indexFieldId(), unused -> new ArrayList<>()).add(index.rowRange());
-                totalBytes = Math.addExact(totalBytes, entry.indexFile().fileSize());
+                byte[] metadata = index.indexMeta();
+                if (files.size() >= MAX_FILES || metadata == null || metadata.length < 9
+                        || metadata.length > MAX_INDEX_META_BYTES || entry.indexFile().fileSize() <= 0
+                        || index.rowRangeStart() < 0 || index.rowRangeEnd() < index.rowRangeStart()
+                        || index.rowRangeEnd() == Long.MAX_VALUE) {
+                    throw new IllegalArgumentException("Invalid or oversized Paimon Global Index file metadata");
+                }
+                TPaimonGlobalIndexFile file = new TPaimonGlobalIndexFile();
+                file.setField_id(index.indexFieldId());
+                file.setField_type(keyType(table.schema().idToFieldMap().get(index.indexFieldId()).type()));
+                file.setPath(handler.filePath(entry).toString());
+                file.setFile_size(entry.indexFile().fileSize());
+                file.setRow_range_from(index.rowRangeStart());
+                file.setRow_range_to(index.rowRangeEnd());
+                file.setMetadata(metadata);
+                fileMetadataBytes = Math.addExact(fileMetadataBytes, metadata.length + 128L
+                        + file.getPath().getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
+                if (fileMetadataBytes > PaimonGlobalIndexRequest.resultBudget() / 4) {
+                    throw new IllegalArgumentException("Paimon Global Index file metadata exceeds the planning budget");
+                }
+                files.add(file);
             }
             if (!indexes.keySet().containsAll(fields)) {
                 throw new IllegalArgumentException("Paimon Global Index has no BTree index for a required field");
@@ -187,16 +212,32 @@ public final class PaimonGlobalIndexPlanner {
                 throw new IllegalArgumentException("Unsupported Paimon Global Index shard count");
             }
             long requestBytes = request.toJson().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
-            if (requestBytes > PaimonGlobalIndexRequest.resultBudget() / 4 / shards.size()) {
-                throw new IllegalArgumentException("Paimon Global Index task payload exceeds the planning budget");
-            }
+            long payloadBytes = 0;
+            long payloadBudget = PaimonGlobalIndexRequest.resultBudget() / 4;
             List<RemoteMetaSplit> splits = new ArrayList<>();
             for (int id = 0; id < shards.size(); id++) {
                 Range range = shards.get(id);
                 if (range.from < 0 || range.to == Long.MAX_VALUE) {
                     throw new IllegalArgumentException("Invalid Paimon Global Index row ID range");
                 }
-                splits.add(new Shard(id, range.from, range.to, Math.max(1, totalBytes / shards.size()), request));
+                List<TPaimonGlobalIndexFile> selected = new ArrayList<>();
+                long bytes = 0;
+                long taskBytes = requestBytes + 128;
+                for (TPaimonGlobalIndexFile file : files) {
+                    if (file.getRow_range_from() <= range.to && file.getRow_range_to() >= range.from) {
+                        selected.add(file);
+                        bytes = Math.addExact(bytes, file.getFile_size());
+                        // Include binary metadata, UTF-8 paths/types and conservative Thrift overhead.
+                        taskBytes = Math.addExact(taskBytes, file.getMetadata().length + 128L
+                                + file.getPath().getBytes(java.nio.charset.StandardCharsets.UTF_8).length
+                                + file.getField_type().length());
+                    }
+                }
+                payloadBytes = Math.addExact(payloadBytes, taskBytes);
+                if (taskBytes > 1024 * 1024 || payloadBytes > payloadBudget) {
+                    throw new IllegalArgumentException("Paimon Global Index task payload exceeds the planning budget");
+                }
+                splits.add(new Shard(id, range.from, range.to, bytes, request, List.copyOf(selected)));
             }
             return new Metadata(request, List.copyOf(splits));
         }
@@ -214,7 +255,8 @@ public final class PaimonGlobalIndexPlanner {
         }
     }
 
-    public record Shard(int id, long from, long to, long bytes, PaimonGlobalIndexRequest request) implements RemoteMetaSplit {
+    public record Shard(int id, long from, long to, long bytes, PaimonGlobalIndexRequest request,
+                        List<TPaimonGlobalIndexFile> files) implements RemoteMetaSplit {
         @Override
         public String getSerializeSplit() {
             return request.toJson();
@@ -297,6 +339,18 @@ public final class PaimonGlobalIndexPlanner {
             }
         }
         return true;
+    }
+
+    private static String keyType(DataType type) {
+        return switch (type.getTypeRoot()) {
+            case BOOLEAN -> "boolean";
+            case TINYINT -> "tinyint";
+            case SMALLINT -> "smallint";
+            case INTEGER -> "int";
+            case BIGINT -> "bigint";
+            case CHAR, VARCHAR -> "string";
+            default -> throw new IllegalArgumentException("Unsupported Paimon Global Index key type");
+        };
     }
 
     private static Set<Integer> loadStableScalarFields(FileStoreTable table, TableSchema current) {

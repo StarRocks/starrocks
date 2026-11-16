@@ -76,6 +76,7 @@ public final class PaimonGlobalIndexScanNode extends MetadataScanNode {
             task.setQuery_json(queryJson);
             task.setTable_path(binding.getTablePath());
             task.setSnapshot_id(binding.getSnapshotId());
+            task.setIndex_files(shard.files());
             THdfsScanRange hdfs = new THdfsScanRange();
             hdfs.setPaimon_global_index_scan_range(task);
             hdfs.setFull_path(shard.path());

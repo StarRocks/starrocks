@@ -141,8 +141,11 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final String catalogName;
     private final Map<Identifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
-    private final Map<PredicateSearchKey, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
+    private final Map<SplitCacheKey, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
     private final Map<ScanCacheKey, PaimonSplitsInfo> paimonScanSplits = new ConcurrentHashMap<>();
+
+    private record SplitCacheKey(PredicateSearchKey filter, PaimonGlobalIndexMode mode) {
+    }
 
     private record ScanCacheKey(UUID queryId, PredicateSearchKey filter, String tablePath, String branch,
                                 long schemaId, long schemaTimeMillis, List<String> fieldNames, long limit) {
@@ -253,15 +256,15 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         cached.stream().filter(identifier -> identifier.getDatabaseName().equals(dbName))
                 .forEach(this::invalidateTableAfterDdl);
-        paimonSplits.keySet().removeIf(key -> key.getDatabaseName().equals(dbName));
+        paimonSplits.keySet().removeIf(key -> key.filter().getDatabaseName().equals(dbName));
         paimonScanSplits.keySet().removeIf(key -> key.filter().getDatabaseName().equals(dbName));
     }
 
     private void invalidateTableAfterDdl(Identifier identifier) {
         tables.remove(identifier);
         partitionInfos.remove(identifier);
-        paimonSplits.keySet().removeIf(key -> key.getDatabaseName().equals(identifier.getDatabaseName())
-                && key.getTableName().equals(identifier.getObjectName()));
+        paimonSplits.keySet().removeIf(key -> key.filter().getDatabaseName().equals(identifier.getDatabaseName())
+                && key.filter().getTableName().equals(identifier.getObjectName()));
         paimonScanSplits.keySet().removeIf(key -> key.filter().getDatabaseName().equals(identifier.getDatabaseName())
                 && key.filter().getTableName().equals(identifier.getObjectName()));
         try {
@@ -862,11 +865,15 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
 
         ConnectContext caller = ConnectContext.get();
-        boolean distributed = caller != null && caller.getSessionVariable().isEnablePaimonDistributedGlobalIndex();
+        PaimonGlobalIndexMode mode = caller == null ? PaimonGlobalIndexMode.LOCAL
+                : caller.getSessionVariable().getPaimonGlobalIndexMode();
+        boolean distributed = mode == PaimonGlobalIndexMode.DISTRIBUTED;
+        Tracers.record(EXTERNAL, "PaimonGlobalIndex.Mode", mode.modeName());
         boolean indexEnabled = versionedPaimonTable instanceof FileStoreTable fileStore
                 && fileStore.coreOptions().globalIndexEnabled();
-        if (distributed) {
-            // A distributed failure must not repeat the bitmap lookup on FE through SDK planning.
+        if (mode != PaimonGlobalIndexMode.LOCAL) {
+            // OFF disables index lookups, including optimizer probes. DISTRIBUTED leaves
+            // evaluation to BE and must not repeat the lookup on FE after a failure.
             // Explicit withGlobalIndexResult still works when automatic SDK evaluation is disabled.
             options.put("global-index.enabled", "false");
         }
@@ -900,7 +907,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                 splitsInfo = planSplits(paimonTable, paimonNativeTable, params, evaluateIndex, snapshotId, caller);
             }
         } else {
-            splitsInfo = paimonSplits.computeIfAbsent(filter, unused ->
+            splitsInfo = paimonSplits.computeIfAbsent(new SplitCacheKey(filter, mode), unused ->
                     planSplits(paimonTable, paimonNativeTable, params, false, snapshotId, caller));
         }
         remoteFileInfo.setFiles(ImmutableList.of(PaimonRemoteFileDesc.createPaimonRemoteFileDesc(splitsInfo)));

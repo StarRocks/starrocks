@@ -413,6 +413,18 @@ struct TPaimonDeletionFile {
     3: optional i64 length
 }
 
+// Exact snapshot-bound index artifact selected by FE. row_range_from is the
+// original index segment's offset, which may differ from the task's lower bound.
+struct TPaimonGlobalIndexFile {
+    1: optional i32 field_id
+    2: optional string field_type
+    3: optional string path
+    4: optional i64 file_size
+    5: optional i64 row_range_from
+    6: optional i64 row_range_to
+    7: optional binary metadata
+}
+
 // Versioned request for one Paimon Global Index shard. Keep this typed instead
 // of adding loosely related fields directly to THdfsScanRange so FE/BE skew is
 // detected before an index reader is opened.
@@ -424,6 +436,7 @@ struct TPaimonGlobalIndexScanRange {
     5: optional string query_json
     6: optional string table_path
     7: optional i64 snapshot_id
+    8: optional list<TPaimonGlobalIndexFile> index_files
 }
 
 // refer to https://github.com/delta-io/delta/blob/master/PROTOCOL.md#deletion-vector-descriptor-schema
