@@ -179,7 +179,12 @@ void SegmentPrefetchWindow::warm_rows(const std::vector<Column>& columns, const 
     if (_disabled || n == 0) {
         return;
     }
-    for (const auto& column : columns) {
+    if (_late_first_page.size() < columns.size()) {
+        _late_first_page.resize(columns.size(), -1);
+        _late_last_page.resize(columns.size(), -1);
+    }
+    for (size_t ci = 0; ci < columns.size(); ++ci) {
+        const Column& column = columns[ci];
         // Contiguous pages holding the rows become one warm-up range.
         int64_t run_begin = -1;
         int64_t run_end = -1;
@@ -221,11 +226,21 @@ void SegmentPrefetchWindow::warm_rows(const std::vector<Column>& columns, const 
             _row_batch.push_back(std::move(handle));
         }
         if (first_page >= 0) {
-            _late_pages_spanned += last_page - first_page + 1;
+            if (_late_first_page[ci] < 0) {
+                _late_first_page[ci] = first_page;
+            }
+            _late_last_page[ci] = std::max(_late_last_page[ci], last_page);
+        }
+    }
+    // The pages from the first one each column touched to the last: what reading these columns ahead would fetch.
+    int64_t late_pages_spanned = 0;
+    for (size_t ci = 0; ci < _late_first_page.size(); ++ci) {
+        if (_late_first_page[ci] >= 0) {
+            late_pages_spanned += _late_last_page[ci] - _late_first_page[ci] + 1;
         }
     }
     if (!_late_read_ahead && ++_late_batches >= kLateReadAheadMinBatches && _late_read_ahead_ratio <= 1 &&
-        static_cast<double>(_late_pages_touched) >= _late_read_ahead_ratio * static_cast<double>(_late_pages_spanned)) {
+        static_cast<double>(_late_pages_touched) >= _late_read_ahead_ratio * static_cast<double>(late_pages_spanned)) {
         _late_read_ahead = true;
         _stats->remote_prefetch_late_read_ahead++;
         add_cursors(columns, rowids[n - 1]);

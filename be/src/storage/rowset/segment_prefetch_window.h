@@ -62,7 +62,8 @@ public:
     // read-ahead bound does not hold them back. They replace the previous such batch.
     //
     // It also measures how much of these columns the reads need. Once the rows of kLateReadAheadMinBatches
-    // batches have touched at least `late_read_ahead_ratio` of the pages they span, `columns` are read ahead
+    // batches have touched at least `late_read_ahead_ratio` of the pages from the first one they touched to the
+    // last -- the gaps between batches, batches with no row left included -- `columns` are read ahead
     // like the others from then on: nearly every page is needed anyway, and fetching only what each batch
     // turned out to need keeps few GETs in flight while the reader waits for every batch.
     void warm_rows(const std::vector<Column>& columns, const rowid_t* rowids, size_t n);
@@ -121,10 +122,11 @@ private:
     // Set when the stream cannot warm the cache at all (e.g. a non-starlet file); the window then
     // stays out of the way.
     bool _disabled = false;
-    // Pages of the late columns the batches of warm_rows() touched and spanned, the number of batches,
-    // and whether those columns are read ahead now.
+    // Pages of the late columns the batches of warm_rows() touched, the first and the last page each column touched
+    // (-1 before its first), the number of batches, and whether those columns are read ahead now.
     int64_t _late_pages_touched = 0;
-    int64_t _late_pages_spanned = 0;
+    std::vector<int32_t> _late_first_page;
+    std::vector<int32_t> _late_last_page;
     int _late_batches = 0;
     bool _late_read_ahead = false;
 };

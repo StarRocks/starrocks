@@ -325,15 +325,19 @@ TEST_F(SegmentPrefetchWindowTest, dense_late_rows_switch_to_read_ahead) {
 // Sparse late rows, or a ratio above 1, never switch.
 TEST_F(SegmentPrefetchWindowTest, sparse_late_rows_stay_on_demand) {
     SparseRange<> range(0, kRows);
-    auto sparse = make_window(&range, 0, 4, 0.5);
+    // One row on a page far from the previous batch's: each batch alone spans one page, but the batches between
+    // them (with no row left) span the gap, so 4 touched pages out of 9 stay below the ratio.
+    auto gapped = make_window(&range, 0, 4, 0.5);
+    for (int page : {0, 3, 6, 8}) {
+        rowid_t row = _pages[page].first;
+        gapped->warm_rows({{_reader, &_stream}}, &row, 1);
+    }
     auto never = make_window(&range, 0, 4, 1.5);
     for (int batch = 0; batch < 8; ++batch) {
-        std::vector<rowid_t> rows{_pages[0].first, _pages.back().first};
-        sparse->warm_rows({{_reader, &_stream}}, rows.data(), rows.size());
         std::vector<rowid_t> dense{_pages[batch].first};
         never->warm_rows({{_reader, &_stream}}, dense.data(), dense.size());
     }
-    EXPECT_FALSE(sparse->reads_ahead_late_columns());
+    EXPECT_FALSE(gapped->reads_ahead_late_columns());
     EXPECT_FALSE(never->reads_ahead_late_columns());
     EXPECT_EQ(0, _stats.remote_prefetch_late_read_ahead);
 }
