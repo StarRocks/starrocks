@@ -46,6 +46,9 @@ StatusOr<ChunkIteratorPtr> new_reusable_segment_iterator(const std::shared_ptr<S
                                                          const Schema& iterator_schema, const Schema& output_schema,
                                                          const SegmentReadOptions& options,
                                                          ChunkIteratorPtr* reusable_slot);
+// Adds to its stats what a segment iterator (a reusable slot) has read since the last flush; a no-op for any
+// other iterator.
+void flush_segment_iterator_io_stats(ChunkIterator* iter);
 StatusOr<SparseRange<>> get_prepared_pruned_row_ranges(const std::shared_ptr<Segment>& segment, const Schema& schema,
                                                        const SegmentReadOptions& options);
 
