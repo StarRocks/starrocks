@@ -21,6 +21,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.ActionStatus;
@@ -41,11 +42,14 @@ import com.starrocks.thrift.TGetLoadsParams;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TTrackingLoadInfo;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnStateCallbackFactory;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -55,8 +59,17 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class StreamLoadManagerTest {
 
@@ -414,6 +427,325 @@ public class StreamLoadManagerTest {
 
         streamLoadManager.cleanOldStreamLoadTasks(false);
         Assertions.assertNotNull(streamLoadManager.getTaskByLabel("aborting_label"));
+    }
+
+    @Test
+    public void testTheOldestFinishedSyncTasksAreEvictedFirst() {
+        int savedKeepMaxNum = Config.stream_load_task_keep_max_num;
+        Config.stream_load_task_keep_max_num = 5;
+        try {
+            StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(CatalogMocker.TEST_DB_NAME);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+            for (int i = 0; i < 8; i++) {
+                StreamLoadTask task = streamLoadManager.createLoadTaskWithoutLock(testDb, table, "rl_" + i, "", "",
+                        100000, true, WarehouseManager.DEFAULT_RESOURCE);
+                task.setTxnId(1000 + i);
+                streamLoadManager.addLoadTask(task, false);
+                // every task but rl_1 finishes
+                if (i != 1) {
+                    Deencapsulation.setField(task, "state", StreamLoadTask.State.FINISHED);
+                    Deencapsulation.setField(task, "endTimeMs", System.currentTimeMillis());
+                }
+            }
+            // each added task evicted the oldest finished one, and the running one stays
+            Assertions.assertEquals(5, streamLoadManager.getStreamLoadTaskCount());
+            for (String label : List.of("rl_1", "rl_4", "rl_5", "rl_6", "rl_7")) {
+                Assertions.assertNotNull(streamLoadManager.getTaskByLabel(label), label);
+            }
+            Assertions.assertNull(streamLoadManager.getSyncSteamLoadTaskByTxnId(1000));
+            Assertions.assertNotNull(streamLoadManager.getSyncSteamLoadTaskByTxnId(1001));
+        } finally {
+            Config.stream_load_task_keep_max_num = savedKeepMaxNum;
+        }
+    }
+
+    @Test
+    public void testASyncTaskAddedAtTheLimitKeepsItsPlaceInTheEvictionOrder() {
+        int savedKeepMaxNum = Config.stream_load_task_keep_max_num;
+        Config.stream_load_task_keep_max_num = 3;
+        try {
+            StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(CatalogMocker.TEST_DB_NAME);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+            // rl_3 and rl_4 are added at the limit while every task runs, so there is nothing to evict
+            List<StreamLoadTask> tasks = Lists.newArrayList();
+            for (int i = 0; i < 5; i++) {
+                tasks.add(addSyncTask(streamLoadManager, testDb, table, i));
+            }
+            Assertions.assertEquals(tasks, Lists.newArrayList(streamLoadManager.syncStreamLoadTaskQueue));
+
+            // once they finish, the next tasks evict the oldest finished ones first, rl_3 included
+            tasks.forEach(StreamLoadManagerTest::finishTask);
+            finishTask(addSyncTask(streamLoadManager, testDb, table, 5));
+            addSyncTask(streamLoadManager, testDb, table, 6);
+            Assertions.assertEquals(3, streamLoadManager.getStreamLoadTaskCount());
+            Assertions.assertNull(streamLoadManager.getTaskByLabel("rl_3"));
+            for (String label : List.of("rl_4", "rl_5", "rl_6")) {
+                Assertions.assertNotNull(streamLoadManager.getTaskByLabel(label), label);
+            }
+        } finally {
+            Config.stream_load_task_keep_max_num = savedKeepMaxNum;
+        }
+    }
+
+    @Test
+    public void testConcurrentSyncTasksKeepTheNewestHistoryAfterTheLimitIsLowered() throws Exception {
+        int savedKeepMaxNum = Config.stream_load_task_keep_max_num;
+        CountDownLatch waitingForLock = new CountDownLatch(2);
+        CountDownLatch takeLock = new CountDownLatch(1);
+        AtomicBoolean coordinateLock = new AtomicBoolean(false);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        Config.stream_load_task_keep_max_num = 5;
+        try {
+            StreamLoadMgr streamLoadManager = new StreamLoadMgr() {
+                private final ThreadLocal<Boolean> coordinated = ThreadLocal.withInitial(() -> false);
+
+                @Override
+                protected void writeLock() {
+                    if (coordinateLock.get() && !coordinated.get()) {
+                        coordinated.set(true);
+                        waitingForLock.countDown();
+                        try {
+                            if (!takeLock.await(10, TimeUnit.SECONDS)) {
+                                throw new AssertionError("timed out waiting to take the manager lock");
+                            }
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            throw new AssertionError(e);
+                        }
+                    }
+                    super.writeLock();
+                }
+            };
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(CatalogMocker.TEST_DB_NAME);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+            for (int i = 0; i < 5; i++) {
+                finishTask(addSyncTask(streamLoadManager, testDb, table, i));
+            }
+            Config.stream_load_task_keep_max_num = 3;
+            coordinateLock.set(true);
+            // Both registrations reach their first write-lock attempt before either one can clean up.
+            Future<?> first = executor.submit(() -> addSyncTask(streamLoadManager, testDb, table, 5));
+            Future<?> second = executor.submit(() -> addSyncTask(streamLoadManager, testDb, table, 6));
+            Assertions.assertTrue(waitingForLock.await(10, TimeUnit.SECONDS));
+            takeLock.countDown();
+            first.get(10, TimeUnit.SECONDS);
+            second.get(10, TimeUnit.SECONDS);
+
+            Assertions.assertEquals(3, streamLoadManager.getStreamLoadTaskCount());
+            for (String label : List.of("rl_4", "rl_5", "rl_6")) {
+                Assertions.assertNotNull(streamLoadManager.getTaskByLabel(label), label);
+            }
+            Assertions.assertNull(streamLoadManager.getSyncSteamLoadTaskByTxnId(1003));
+            Assertions.assertNotNull(streamLoadManager.getSyncSteamLoadTaskByTxnId(1004));
+        } finally {
+            takeLock.countDown();
+            executor.shutdownNow();
+            boolean terminated;
+            try {
+                terminated = executor.awaitTermination(10, TimeUnit.SECONDS);
+            } finally {
+                Config.stream_load_task_keep_max_num = savedKeepMaxNum;
+            }
+            Assertions.assertTrue(terminated);
+        }
+    }
+
+    @Test
+    public void testRegistrationLeavesNonFinalMultiStatementCleanupToThePeriodicSweep() {
+        int savedKeepMaxNum = Config.stream_load_task_keep_max_num;
+        Config.stream_load_task_keep_max_num = 5;
+        try {
+            StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(CatalogMocker.TEST_DB_NAME);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+            StreamLoadMultiStmtTask running = streamLoadManager.createMultiStatementLoadTask(
+                    testDb, "running", "", "", 100000, WarehouseManager.DEFAULT_RESOURCE);
+            StreamLoadMultiStmtTask aborting = streamLoadManager.createMultiStatementLoadTask(
+                    testDb, "aborting", "", "", 100000, WarehouseManager.DEFAULT_RESOURCE);
+            Deencapsulation.setField(aborting, "state", StreamLoadMultiStmtTask.State.ABORTING);
+            streamLoadManager.addLoadTask(running, false);
+            streamLoadManager.addLoadTask(aborting, false);
+
+            AtomicInteger timeoutChecks = new AtomicInteger();
+            AtomicInteger abortRetries = new AtomicInteger();
+            new MockUp<StreamLoadMultiStmtTask>() {
+                @Mock
+                public boolean checkNeedRemove(long currentMs, boolean isForce) {
+                    timeoutChecks.incrementAndGet();
+                    return false;
+                }
+
+                @Mock
+                public boolean retryAbortIfNeeded(long currentMs) {
+                    Assertions.assertFalse(streamLoadManager.lock.isWriteLockedByCurrentThread());
+                    abortRetries.incrementAndGet();
+                    return false;
+                }
+            };
+
+            Config.stream_load_task_keep_max_num = 2;
+            addSyncTask(streamLoadManager, testDb, table, 0);
+            Assertions.assertEquals(0, timeoutChecks.get());
+            Assertions.assertEquals(0, abortRetries.get());
+            Assertions.assertNotNull(streamLoadManager.getTaskByLabel("running"));
+            Assertions.assertNotNull(streamLoadManager.getTaskByLabel("aborting"));
+
+            streamLoadManager.cleanOldStreamLoadTasks(false);
+            Assertions.assertEquals(1, timeoutChecks.get());
+            Assertions.assertEquals(1, abortRetries.get());
+        } finally {
+            Config.stream_load_task_keep_max_num = savedKeepMaxNum;
+        }
+    }
+
+    @Test
+    public void testRepeatedBackendBeginFailuresKeepOnlyTheLatestSyncTask() throws StarRocksException {
+        int savedKeepMaxNum = Config.stream_load_task_keep_max_num;
+        boolean savedDisableLoadJob = Config.disable_load_job;
+        Config.stream_load_task_keep_max_num = 2;
+        try {
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(CatalogMocker.TEST_DB_NAME);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+            // The GlobalStateMgr of this class is @Mocked, so a real begin fails on its FailoverGroupMgr, a Thread that
+            // JMockit cannot mock, before it checks the label. Stand in for the label check: the first begin of a label
+            // gets a transaction that stays in PREPARE, and every later begin of it fails on the used label. A begin
+            // rejected before the label check (disable_load_job) runs the real code.
+            Set<String> preparedLabels = new HashSet<>();
+            new MockUp<GlobalTransactionMgr>() {
+                @Mock
+                public long beginTransaction(Invocation invocation, long dbId, List<Long> tableIdList, String label,
+                                             TUniqueId requestId, TransactionState.TxnCoordinator coordinator,
+                                             TransactionState.LoadJobSourceType sourceType, long listenerId,
+                                             long timeoutSecond, ComputeResource computeResource)
+                        throws LabelAlreadyUsedException {
+                    if (Config.disable_load_job) {
+                        Long txnId = invocation.proceed();
+                        return txnId;
+                    }
+                    if (!preparedLabels.add(label)) {
+                        throw new LabelAlreadyUsedException(label, TransactionStatus.PREPARE);
+                    }
+                    return 5000L;
+                }
+            };
+            for (boolean disabled : List.of(false, true)) {
+                Config.disable_load_job = false;
+                StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+                String label = disabled ? "disabled_begin" : "used_begin";
+                if (!disabled) {
+                    TransactionResult first = new TransactionResult();
+                    streamLoadManager.beginLoadTaskFromBackend(
+                            CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME, label, new TUniqueId(1, 0),
+                            "", "", 100000, first, false, WarehouseManager.DEFAULT_RESOURCE, 10001);
+                    Assertions.assertTrue(first.stateOK());
+                }
+                StreamLoadTask history = addSyncTask(streamLoadManager, testDb, table, 0);
+                finishTask(history);
+                Config.disable_load_job = disabled;
+                // The successful transaction stays in PREPARE. Each retry represents a new backend request,
+                // so its distinct request ID must fail on label reuse rather than succeed as a duplicate request.
+                for (int retry = 0; retry < 5; retry++) {
+                    AbstractStreamLoadTask previous = streamLoadManager.getTaskByLabel(label);
+                    TransactionResult response = new TransactionResult();
+                    streamLoadManager.beginLoadTaskFromBackend(
+                            CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME, label,
+                            new TUniqueId(disabled ? 2 : 1, retry + 1), "", "", 100000, response, false,
+                            WarehouseManager.DEFAULT_RESOURCE, 10001);
+                    Assertions.assertEquals(disabled ? ActionStatus.FAILED : ActionStatus.LABEL_ALREADY_EXISTS,
+                            response.status);
+                    StreamLoadTask latest = (StreamLoadTask) streamLoadManager.getTaskByLabel(label);
+                    Assertions.assertNotSame(previous, latest);
+                    Assertions.assertEquals(StreamLoadTask.State.CANCELLED, latest.getState());
+                    Assertions.assertEquals(2, streamLoadManager.getStreamLoadTaskCount());
+                    Assertions.assertEquals(List.of(history, latest),
+                            Lists.newArrayList(streamLoadManager.syncStreamLoadTaskQueue));
+                }
+            }
+        } finally {
+            Config.disable_load_job = savedDisableLoadJob;
+            Config.stream_load_task_keep_max_num = savedKeepMaxNum;
+        }
+    }
+
+    @Test
+    public void testReplacingASyncTaskAtTheLimitKeepsTheOtherHistory() {
+        int savedKeepMaxNum = Config.stream_load_task_keep_max_num;
+        Config.stream_load_task_keep_max_num = 2;
+        try {
+            StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(CatalogMocker.TEST_DB_NAME);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+            addSyncTask(streamLoadManager, testDb, table, 0);
+            StreamLoadTask history = addSyncTask(streamLoadManager, testDb, table, 1);
+            finishTask(history);
+            StreamLoadTask replacement = streamLoadManager.createLoadTaskWithoutLock(testDb, table, "rl_0", "", "",
+                    100000, true, WarehouseManager.DEFAULT_RESOURCE);
+            replacement.setTxnId(2000);
+            streamLoadManager.addLoadTask(replacement, false);
+            streamLoadManager.addLoadTask(replacement, false);
+
+            Assertions.assertEquals(2, streamLoadManager.getStreamLoadTaskCount());
+            Assertions.assertSame(replacement, streamLoadManager.getTaskByLabel("rl_0"));
+            Assertions.assertSame(replacement, streamLoadManager.getSyncSteamLoadTaskByTxnId(2000));
+            Assertions.assertEquals(List.of(history, replacement),
+                    Lists.newArrayList(streamLoadManager.syncStreamLoadTaskQueue));
+
+            StreamLoadTask next = addSyncTask(streamLoadManager, testDb, table, 2);
+            Assertions.assertNull(streamLoadManager.getTaskByLabel("rl_1"));
+            Assertions.assertEquals(List.of(replacement, next),
+                    Lists.newArrayList(streamLoadManager.syncStreamLoadTaskQueue));
+        } finally {
+            Config.stream_load_task_keep_max_num = savedKeepMaxNum;
+        }
+    }
+
+    @Test
+    public void testReplacingSyncAndNonSyncTasksKeepsOnlyTheCurrentSyncTaskQueued() {
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(CatalogMocker.TEST_DB_NAME);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        addSyncTask(streamLoadManager, testDb, table, 0);
+        StreamLoadTask other = addSyncTask(streamLoadManager, testDb, table, 1);
+        StreamLoadMultiStmtTask nonSync = streamLoadManager.createMultiStatementLoadTask(
+                testDb, "rl_0", "", "", 100000, WarehouseManager.DEFAULT_RESOURCE);
+        streamLoadManager.addLoadTask(nonSync, false);
+        streamLoadManager.addLoadTask(nonSync, false);
+        Assertions.assertEquals(List.of(other), Lists.newArrayList(streamLoadManager.syncStreamLoadTaskQueue));
+
+        StreamLoadTask sync = streamLoadManager.createLoadTaskWithoutLock(testDb, table, "rl_0", "", "",
+                100000, true, WarehouseManager.DEFAULT_RESOURCE);
+        sync.setTxnId(3000);
+        streamLoadManager.addLoadTask(sync, false);
+        Assertions.assertEquals(List.of(other, sync), Lists.newArrayList(streamLoadManager.syncStreamLoadTaskQueue));
+        sync.setIsSyncStreamLoad(false);
+        streamLoadManager.addLoadTask(sync, false);
+        Assertions.assertEquals(List.of(other), Lists.newArrayList(streamLoadManager.syncStreamLoadTaskQueue));
+        sync.setIsSyncStreamLoad(true);
+        streamLoadManager.addLoadTask(sync, false);
+        Assertions.assertEquals(List.of(other, sync), Lists.newArrayList(streamLoadManager.syncStreamLoadTaskQueue));
+        Assertions.assertEquals(2, streamLoadManager.getStreamLoadTaskCount());
+    }
+
+    private static StreamLoadTask addSyncTask(StreamLoadMgr streamLoadManager, Database db, OlapTable table, int i) {
+        StreamLoadTask task = streamLoadManager.createLoadTaskWithoutLock(db, table, "rl_" + i, "", "", 100000, true,
+                WarehouseManager.DEFAULT_RESOURCE);
+        task.setTxnId(1000 + i);
+        streamLoadManager.addLoadTask(task, false);
+        return task;
+    }
+
+    private static void finishTask(StreamLoadTask task) {
+        Deencapsulation.setField(task, "state", StreamLoadTask.State.FINISHED);
+        Deencapsulation.setField(task, "endTimeMs", System.currentTimeMillis());
     }
 
     // ---- Cover lines 538-541: cleanSyncStreamLoadTasks actually removes tasks ----
