@@ -2539,7 +2539,27 @@ public class DatabaseTransactionMgr {
     }
 
     /**
-<<<<<<< HEAD
+     * The oldest of the running transactions that {@link #isPreviousTransactionsFinished(long, List)} waits for, or
+     * null when there is none.
+     */
+    public TransactionState getOldestPreviousRunningTransaction(long endTransactionId, List<Long> tableIdList) {
+        readLock();
+        try {
+            TransactionState oldest = null;
+            for (TransactionState state : idToRunningTransactionState.values()) {
+                if (state.getDbId() == dbId && isIntersectionNotEmpty(state.getTableIdList(), tableIdList)
+                        && state.isRunning() && state.getTransactionId() <= endTransactionId
+                        && (oldest == null || state.getTransactionId() < oldest.getTransactionId())) {
+                    oldest = state;
+                }
+            }
+            return oldest;
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
      * check if there exists a intersection between the source tableId list and target tableId list
      * if one of them is null or empty, that means that we don't know related tables in tableList,
      * we think the two lists may have intersection for right ordered txns
@@ -2556,26 +2576,6 @@ public class DatabaseTransactionMgr {
             }
         }
         return false;
-=======
-     * The oldest of the running transactions that {@link #isPreviousTransactionsFinished(long, List)} waits for, or
-     * null when there is none.
-     */
-    public TransactionState getOldestPreviousRunningTransaction(long endTransactionId, List<Long> tableIdList) {
-        readLock();
-        try {
-            TransactionState oldest = null;
-            for (TransactionState state : idToRunningTransactionState.values()) {
-                if (state.getDbId() == dbId && state.intersectsTableIds(tableIdList) && state.isRunning()
-                        && state.getTransactionId() <= endTransactionId
-                        && (oldest == null || state.getTransactionId() < oldest.getTransactionId())) {
-                    oldest = state;
-                }
-            }
-            return oldest;
-        } finally {
-            readUnlock();
-        }
->>>>>>> 59b6a5f5a4b... [BugFix][RB-918] Cancel a lake alter that waits for earlier transactions once its table rejects commits (#67716)
     }
 
     public List<Long> getTimeoutTxns(long currentMillis) {

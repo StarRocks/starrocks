@@ -31,11 +31,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-<<<<<<< HEAD
-=======
-import java.util.Collection;
 import java.util.HashMap;
->>>>>>> 59b6a5f5a4b... [BugFix][RB-918] Cancel a lake alter that waits for earlier transactions once its table rejects commits (#67716)
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -69,9 +65,6 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
         super(job);
         this.watershedTxnId = job.watershedTxnId;
         this.commitGtid = job.commitGtid;
-<<<<<<< HEAD
-=======
-        this.historySchema = job.historySchema;
     }
 
     protected void pinVersionForRewrite(PhysicalPartition partition, long version) {
@@ -89,37 +82,6 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
     @Override
     public void pruneMeta() {
         rewriteVersionPins = new HashMap<>();
-    }
-
-    /**
-     * The index metas whose schemas leave the catalog at the FINISHED flip. Empty for a job that only adds an index.
-     */
-    protected Collection<Long> retiredIndexMetaIdsAtFlip() {
-        return List.of();
-    }
-
-    /**
-     * Snapshot the schemas the FINISHED flip is about to retire. Call under the flip's table WRITE lock and before
-     * persistStateChange, so the journal carries it and every load bound to them is below its threshold.
-     */
-    protected void snapshotRetiredSchemas(OlapTable table) {
-        Collection<Long> retiredIndexMetaIds = retiredIndexMetaIdsAtFlip();
-        if (!retiredIndexMetaIds.isEmpty()) {
-            this.historySchema = buildHistorySchema(table, retiredIndexMetaIds);
-        }
-    }
-
-    @Override
-    public Optional<OlapTableHistorySchema> getHistorySchema() {
-        return Optional.ofNullable(historySchema);
-    }
-
-    @Override
-    public boolean isExpire() {
-        boolean expiredByTime = super.isExpire();
-        boolean expiredByHistorySchema = expireHistorySchema(historySchema);
-        return expiredByTime && expiredByHistorySchema;
->>>>>>> 59b6a5f5a4b... [BugFix][RB-918] Cancel a lake alter that waits for earlier transactions once its table rejects commits (#67716)
     }
 
     // NOTE: Metadata access in these jobs locks only the job's own table
