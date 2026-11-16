@@ -5737,28 +5737,6 @@ TEST_F(FileReaderTest, test_read_variant_shredding_rejects_non_object_value_with
             << status.message();
 }
 
-<<<<<<< HEAD
-=======
-// A list of shredded variants whose typed_value is an object. The levels of the leaves below the variants have one entry
-// per element, so they cannot tell the presence of an object per row: the column must still read as before.
-TEST_F(FileReaderTest, test_read_variant_shredding_in_array_reads_objects_with_variant_null_rows) {
-    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding_in_array.parquet";
-    auto file_reader = _create_file_reader(variant_file_path);
-    TypeDescriptor array_of_variant = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
-    Utils::SlotDesc slot_descs[] = {{"arr", array_of_variant}, {""}};
-    auto ctx = _create_scan_context(slot_descs, variant_file_path);
-
-    Status status = file_reader->init(&ctx->format_scan_context);
-    ASSERT_TRUE(status.ok()) << status.message();
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(array_of_variant, true), chunk->num_columns());
-    status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok()) << status.message();
-    ASSERT_EQ(2, chunk->num_rows());
-    EXPECT_EQ(R"([{"x":1},{"x":2}])", chunk->get_column_by_index(0)->debug_item(0));
-    EXPECT_EQ(R"([{"x":3}])", chunk->get_column_by_index(0)->debug_item(1));
-}
-
 // A list of shredded variants whose typed_value is an object. The levels of the leaves below the variants have one entry
 // per element, so they cannot tell the presence of an object per row: the column must still read as before.
 TEST_F(FileReaderTest, test_read_variant_shredding_in_array_reads_objects_with_residual_keys) {
@@ -5779,7 +5757,6 @@ TEST_F(FileReaderTest, test_read_variant_shredding_in_array_reads_objects_with_r
     EXPECT_EQ(R"([{"x":3}])", chunk->get_column_by_index(0)->debug_item(1));
 }
 
->>>>>>> 40bb25d ([BugFix] Let a shredded VARIANT field own its key over the value residual (#83124))
 // A shredded BINARY and a shredded UUID leaf must not make the rebuild of the row drop the other fields. The exact
 // text of the binary/UUID values is not asserted; only that the fields are present and that n survives.
 TEST_F(FileReaderTest, test_read_variant_shredding_binary_uuid_keeps_other_fields) {
