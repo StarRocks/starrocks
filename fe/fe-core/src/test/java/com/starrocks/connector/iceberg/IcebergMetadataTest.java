@@ -154,11 +154,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
-<<<<<<< HEAD
-=======
-import org.apache.iceberg.DataOperations;
 import org.apache.iceberg.DataTableScan;
->>>>>>> b89f8ff ([BugFix][RB-815] Close the planFiles task iterator in Iceberg metadata delete (#83368))
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileFormat;
@@ -184,11 +180,7 @@ import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
 import org.apache.iceberg.io.CloseableIterable;
-<<<<<<< HEAD
-=======
 import org.apache.iceberg.io.CloseableIterator;
-import org.apache.iceberg.puffin.StandardBlobTypes;
->>>>>>> b89f8ff ([BugFix][RB-815] Close the planFiles task iterator in Iceberg metadata delete (#83368))
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.TableScanUtil;
