@@ -25,7 +25,7 @@ public class InsertOverwriteJob {
     private long jobId;
 
     @SerializedName(value = "jobState")
-    private InsertOverwriteJobState jobState;
+    private volatile InsertOverwriteJobState jobState;
 
     @SerializedName(value = "sourcePartitionIds")
     private List<Long> sourcePartitionIds;
@@ -51,7 +51,7 @@ public class InsertOverwriteJob {
     // Transaction ID for dynamic overwrite, used to identify temp partitions after FE restart.
     // Temp partition name prefix is "txn{txnId}_".
     @SerializedName(value = "txnId")
-    private long txnId = -1;
+    private volatile long txnId = -1;
 
     private transient InsertStmt insertStmt;
 

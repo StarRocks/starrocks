@@ -18,18 +18,31 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.reshard.presplit.Estimates;
 import com.starrocks.alter.reshard.presplit.InsertPreSplitHook;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.context.ai.AIProviderType;
+import com.starrocks.journal.JournalEntity;
+import com.starrocks.persist.AddPartitionsInfoV2;
+import com.starrocks.persist.CreateInsertOverwriteJobLog;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.EditLogDeserializer;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.RangePartitionPersistInfo;
+import com.starrocks.persist.WALApplier;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -65,6 +78,10 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
@@ -130,6 +147,132 @@ public class InsertOverwriteJobRunnerTest {
                         "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
                 .withTable("create table insert_overwrite_test.t_lambda_src2(k1 int, k2 array<int>) " +
                         "distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+    }
+
+    @Test
+    public void testReplayLegacyFailedThenAddLeavesLatePartition() throws Exception {
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        Database db = state.getLocalMetastore().getDb("insert_overwrite_test");
+        OlapTable table = (OlapTable) db.getTable("t3");
+        long jobId = state.getNextId();
+        long txnId = state.getNextId();
+        String name = "txn" + txnId + "_p1";
+        long originalId = state.getNextId();
+        long lateId = state.getNextId();
+
+        try {
+            replayRunningOverwrite(db, table, jobId, txnId);
+            replayTempRange(db, table, "p1", name, originalId);
+            replay(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, new InsertOverwriteStateChangeInfo(jobId,
+                    InsertOverwriteJobState.OVERWRITE_RUNNING, InsertOverwriteJobState.OVERWRITE_FAILED,
+                    List.of(), null, List.of(originalId), txnId));
+            Assertions.assertNull(table.getPartition(name, true));
+            Assertions.assertNull(state.getInsertOverwriteJobMgr().getInsertOverwriteJob(jobId));
+
+            // A delayed create could journal a new ID after FAILED, without a cleanup record for that ID.
+            // There is no unfinished job to clean this new partition after replay.
+            replayTempRange(db, table, "p1", name, lateId);
+            Assertions.assertEquals(lateId, table.getPartition(name, true).getId());
+            Assertions.assertNull(state.getInsertOverwriteJobMgr().getInsertOverwriteJob(jobId));
+        } finally {
+            table.dropTempPartition(name, true);
+            state.getInsertOverwriteJobMgr().deregisterOverwriteJob(jobId);
+        }
+    }
+
+    @Test
+    public void testRecoverUnregisteredTempPartitionFromAddJournal() throws Exception {
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        Database db = state.getLocalMetastore().getDb("insert_overwrite_test");
+        OlapTable table = (OlapTable) db.getTable("t4");
+        long jobId = state.getNextId();
+        long txnId = state.getNextId();
+        long partitionId = state.getNextId();
+        long otherPartitionId = state.getNextId();
+        String name = "txn" + txnId + "_p1";
+        String otherName = "txn" + (txnId * 10) + "_p2";
+        long formalPartitionId = table.getPartition("p1").getId();
+        AtomicReference<InsertOverwriteStateChangeInfo> failed = new AtomicReference<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logInsertOverwriteStateChange(Invocation invocation, InsertOverwriteStateChangeInfo info,
+                                                       WALApplier applier) {
+                if (info.getJobId() == jobId) {
+                    failed.set(info);
+                }
+                invocation.proceed(info, applier);
+            }
+        };
+
+        try {
+            replayRunningOverwrite(db, table, jobId, txnId);
+            AddPartitionsInfoV2 add = replayTempRange(db, table, "p1", name, partitionId);
+            replayTempRange(db, table, "p2", otherName, otherPartitionId);
+            InsertOverwriteJob job = state.getInsertOverwriteJobMgr().getInsertOverwriteJob(jobId);
+            Assertions.assertEquals(txnId, job.getTxnId());
+            Assertions.assertNull(job.getInsertStmt());
+            Assertions.assertTrue(job.getTmpPartitionIds().isEmpty());
+            Assertions.assertNull(state.getGlobalTransactionMgr().getTransactionState(db.getId(), txnId));
+
+            // Same cancellation and GC used for each unfinished job on Leader takeover, without
+            // submitting the asynchronous cancellation for every job in the shared test FE.
+            new InsertOverwriteJobRunner(job).cancel();
+            Assertions.assertNull(table.getPartition(name, true));
+            Assertions.assertEquals(otherPartitionId, table.getPartition(otherName, true).getId());
+            Assertions.assertEquals(formalPartitionId, table.getPartition("p1").getId());
+            Assertions.assertNotNull(failed.get());
+            Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, failed.get().getToState());
+            Assertions.assertEquals(List.of(partitionId), failed.get().getTmpPartitionIds());
+
+            // Recreate the follower's pre-FAILED catalog and replay the actual cleanup record.
+            replay(OperationType.OP_ADD_PARTITIONS_V2, add);
+            replay(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, failed.get());
+            Assertions.assertNull(table.getPartition(name, true));
+            Assertions.assertNull(state.getInsertOverwriteJobMgr().getInsertOverwriteJob(jobId));
+            Assertions.assertEquals(otherPartitionId, table.getPartition(otherName, true).getId());
+        } finally {
+            table.dropTempPartition(name, true);
+            table.dropTempPartition(otherName, true);
+            state.getInsertOverwriteJobMgr().deregisterOverwriteJob(jobId);
+        }
+    }
+
+    private static void replayRunningOverwrite(Database db, OlapTable table, long jobId, long txnId) throws Exception {
+        replay(OperationType.OP_CREATE_INSERT_OVERWRITE,
+                new CreateInsertOverwriteJobLog(jobId, db.getId(), table.getId(), List.of(), true));
+        replay(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, new InsertOverwriteStateChangeInfo(jobId,
+                InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_RUNNING,
+                List.of(), null, List.of(), txnId));
+    }
+
+    private static AddPartitionsInfoV2 replayTempRange(Database db, OlapTable table, String sourceName,
+                                                       String tempName, long partitionId) throws Exception {
+        Partition source = table.getPartition(sourceName);
+        RangePartitionInfo info = (RangePartitionInfo) table.getPartitionInfo();
+        long sourceId = source.getId();
+        long physicalId = GlobalStateMgr.getCurrentState().getNextId();
+        Partition partition = new Partition(partitionId, physicalId, tempName,
+                new MaterializedIndex(source.getDefaultPhysicalPartition().getLatestBaseIndex().getId()),
+                source.getDistributionInfo());
+        AddPartitionsInfoV2 add = new AddPartitionsInfoV2(List.of(
+                new RangePartitionPersistInfo(db.getId(), table.getId(), partition,
+                        info.getDataProperty(sourceId), info.getReplicationNum(sourceId),
+                        true, info.getRange(sourceId), info.getDataCacheInfo(sourceId))));
+        replay(OperationType.OP_ADD_PARTITIONS_V2, add);
+        return add;
+    }
+
+    private static void replay(short op, Writable data) throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (DataOutputStream output = new DataOutputStream(bytes)) {
+            output.writeShort(op);
+            Text.writeString(output, GsonUtils.GSON.toJson(data));
+        }
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))) {
+            short opcode = input.readShort();
+            state.getEditLog().loadJournal(state, new JournalEntity(opcode, EditLogDeserializer.deserialize(opcode, input)));
+        }
     }
 
     @Test

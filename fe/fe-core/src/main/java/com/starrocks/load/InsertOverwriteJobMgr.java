@@ -133,6 +133,23 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
         }
     }
 
+    /** Check the owner while the caller holds the target table lock, which also serializes failure cleanup. */
+    public boolean isDynamicOverwriteRunning(long dbId, long tableId, long txnId) {
+        lock.readLock().lock();
+        try {
+            for (long jobId : tableToOverwriteJobs.getOrDefault(tableId, List.of())) {
+                InsertOverwriteJob job = overwriteJobMap.get(jobId);
+                if (job != null && job.isDynamicOverwrite() && job.getTargetDbId() == dbId
+                        && job.getTxnId() == txnId && job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING) {
+                    return true;
+                }
+            }
+            return false;
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public boolean hasRunningOverwriteJob(long tableId) {
         lock.readLock().lock();
         try {
