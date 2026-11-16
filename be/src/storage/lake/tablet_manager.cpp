@@ -1560,8 +1560,7 @@ StatusOr<TxnLogVector> TabletManager::get_txn_vlog_group(const std::string& path
     };
     auto result = load();
     if (!result.ok() && !checksum_verified) {
-        RETURN_IF_ERROR(corrupted_txn_log_handler(result.status(), path,
-                                                  {.reason = "txn_vlog", .error = result.status().to_string()}));
+        RETURN_IF_ERROR(corrupted_txn_log_handler(result.status(), path));
         // A cached filesystem block may have been corrupt. Re-read into fresh protobufs after the
         // existing cache-corruption handler drops it, as load_txn_log does for single logs.
         result = load();
