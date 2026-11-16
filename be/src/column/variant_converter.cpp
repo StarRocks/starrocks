@@ -30,6 +30,18 @@ static inline std::pair<int64_t, int64_t> split_micros_to_seconds(int64_t micros
     return {seconds, microseconds};
 }
 
+// Floors to whole seconds and keeps the sub-second part non-negative; nanoseconds below a microsecond are truncated.
+static inline std::pair<int64_t, int64_t> split_nanos_to_seconds_and_micros(int64_t nanos) {
+    constexpr int64_t kNanosPerSecond = 1000000000;
+    int64_t seconds = nanos / kNanosPerSecond;
+    int64_t remainder = nanos % kNanosPerSecond;
+    if (remainder < 0) {
+        remainder += kNanosPerSecond;
+        --seconds;
+    }
+    return {seconds, remainder / 1000};
+}
+
 Status VariantRowConverter::cast_to_bool(const VariantRowRef& variant, ColumnBuilder<TYPE_BOOLEAN>& result) {
     const VariantValue& value = variant.get_value();
     const VariantType type = value.type();
@@ -247,6 +259,22 @@ Status VariantRowConverter::cast_to_datetime(const VariantRowRef& row, const cct
     case VariantType::TIMESTAMP_TZ: {
         ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros());
         auto [seconds, microseconds] = split_micros_to_seconds(micros);
+        TimestampValue tsv{};
+        instant_to_timestamp(&tsv, seconds, microseconds, zone, offset_cache);
+        result.append(tsv);
+        return Status::OK();
+    }
+    case VariantType::TIMESTAMP_NTZ_NANOS: {
+        ASSIGN_OR_RETURN(int64_t nanos, variant.get_timestamp_nanos_ntz());
+        auto [seconds, microseconds] = split_nanos_to_seconds_and_micros(nanos);
+        TimestampValue tsv{};
+        tsv.from_unix_second(seconds, microseconds);
+        result.append(tsv);
+        return Status::OK();
+    }
+    case VariantType::TIMESTAMP_TZ_NANOS: {
+        ASSIGN_OR_RETURN(int64_t nanos, variant.get_timestamp_nanos_tz());
+        auto [seconds, microseconds] = split_nanos_to_seconds_and_micros(nanos);
         TimestampValue tsv{};
         instant_to_timestamp(&tsv, seconds, microseconds, zone, offset_cache);
         result.append(tsv);
