@@ -541,8 +541,9 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             sb.append(AnalyzerUtils.replaceNullType2Boolean(nodeType).toString());
         } else {
             // An unanalyzed map{...} / map(k, v) only carries the ANY_MAP placeholder from the parser, whose
-            // toString() is not valid SQL. Print the untyped constructor and let analysis infer the type.
-            sb.append("map");
+            // toString() is not valid SQL. Print the untyped MAP{...} constructor (uppercase, like the other
+            // keywords and type names printed here) and let analysis infer the type.
+            sb.append("MAP");
         }
         sb.append("{");
         for (int i = 0; i < node.getChildren().size(); i = i + 2) {
