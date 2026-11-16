@@ -1223,7 +1223,9 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
     for (size_t i = 0; i < num_fields; ++i) {
         const FieldPtr& f = _schema.field(i);
         SegmentPrefetchWindow::Column c;
-        if (f->is_virtual() || !column_of(f->id(), &c)) {
+        // A column the inverted index already answered is not read at all (see read_columns()).
+        const bool pruned = _context->_prune_column_after_index_filter && _context->_prune_cols.count(f->id()) > 0;
+        if (f->is_virtual() || pruned || !column_of(f->id(), &c)) {
             continue;
         }
         (i < early ? columns : _prefetch_late_columns).push_back(c);
@@ -1968,6 +1970,10 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
                 std::swap(res, _scan_range);
                 _range_iter.set_range(&_scan_range);
                 _opts.stats->runtime_stats_filtered += (prev_size - _range_iter.remaining_rows());
+                if (_prefetch_window != nullptr) {
+                    // The window walks the scan range it was built on; restart it on the narrowed one.
+                    _init_prefetch_window(_range_iter.has_more() ? _range_iter.begin() : _scan_range.end());
+                }
                 return Status::OK();
             },
             false, _opts.stats->raw_rows_read);

@@ -200,12 +200,18 @@ TEST_F(SegmentPrefetchWindowTest, advance_releases_consumed_pages) {
     auto window = make_window(&range, 0, 4);
     window->advance(0);
     const size_t asked = _stream.warms.size();
+    ASSERT_LT(asked, _pages.size());
     ASSERT_FALSE(_stream.warms[0].handle.expired());
 
-    window->advance(_pages[2].last + 1);
-    EXPECT_TRUE(_stream.warms[0].handle.expired());
-    EXPECT_TRUE(_stream.warms[1].handle.expired());
+    // Every page asked for so far ends before the reader's new row: all of them are released, and the window asks
+    // for pages further on.
+    const rowid_t past = _pages[asked].first;
+    window->advance(past);
+    for (size_t i = 0; i < asked; ++i) {
+        EXPECT_TRUE(_stream.warms[i].handle.expired()) << i;
+    }
     EXPECT_GT(_stream.warms.size(), asked);
+    EXPECT_FALSE(_stream.warms.back().handle.expired());
 
     window->advance(kRows);
     EXPECT_TRUE(window->exhausted());
