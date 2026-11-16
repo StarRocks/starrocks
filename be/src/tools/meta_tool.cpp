@@ -82,6 +82,7 @@
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/txn_vlog_format.h"
 #include "storage/lake/vacuum.h"
 #include "storage/primary_key_dump.h"
 #include "storage/protobuf_file.h"
@@ -2158,42 +2159,22 @@ int meta_tool_main(int argc, char** argv) {
             }
             std::cout << json << '\n';
         }
-    } else if (FLAGS_operation == "print_lake_txn_log") {
+    } else if (FLAGS_operation == "print_lake_txn_log" || FLAGS_operation == "print_lake_combined_txn_log") {
         std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
-        starrocks::TxnLogPB txn_log;
-        // Handles both the checksummed header format and legacy headerless protobuf.
-        auto st = starrocks::ProtobufFileWithHeader::load_from_buffer(&txn_log, input_data,
-                                                                      starrocks::LAKE_META_HEADER_MAGIC_NUMBER,
-                                                                      /*allow_plain_protobuf_fallback=*/true);
-        if (!st.ok()) {
-            std::cerr << "Fail to parse txn log: " << st << '\n';
+        const bool combined = FLAGS_operation == "print_lake_combined_txn_log";
+        auto txn_log = starrocks::lake::decode_txn_log_for_inspection(
+                input_data, combined ? starrocks::lake::TxnLogInspectionMode::COMBINED
+                                     : starrocks::lake::TxnLogInspectionMode::SINGLE);
+        if (!txn_log.ok()) {
+            std::cerr << "Fail to parse " << (combined ? "combined txn log: " : "txn log: ") << txn_log.status()
+                      << '\n';
             return -1;
         }
         json2pb::Pb2JsonOptions options;
         options.pretty_json = true;
         std::string json;
         std::string error;
-        if (!json2pb::ProtoMessageToJson(txn_log, &json, options, &error)) {
-            std::cerr << "Fail to convert protobuf to json: " << error << '\n';
-            return -1;
-        }
-        std::cout << json << '\n';
-    } else if (FLAGS_operation == "print_lake_combined_txn_log") {
-        std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
-        starrocks::CombinedTxnLogPB combined_txn_log;
-        // Handles both the checksummed header format and legacy headerless protobuf.
-        auto st = starrocks::ProtobufFileWithHeader::load_from_buffer(&combined_txn_log, input_data,
-                                                                      starrocks::LAKE_META_HEADER_MAGIC_NUMBER,
-                                                                      /*allow_plain_protobuf_fallback=*/true);
-        if (!st.ok()) {
-            std::cerr << "Fail to parse combined txn log: " << st << '\n';
-            return -1;
-        }
-        json2pb::Pb2JsonOptions options;
-        options.pretty_json = true;
-        std::string json;
-        std::string error;
-        if (!json2pb::ProtoMessageToJson(combined_txn_log, &json, options, &error)) {
+        if (!json2pb::ProtoMessageToJson(*txn_log.value(), &json, options, &error)) {
             std::cerr << "Fail to convert protobuf to json: " << error << '\n';
             return -1;
         }

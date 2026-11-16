@@ -88,6 +88,20 @@ inline std::string txn_vlog_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.vlog", tablet_id, version);
 }
 
+<<<<<<< HEAD
+=======
+// The ordered statement group of a multi-statement version log. It is a separate file, never written over the
+// legacy version log, and keeps the ".vlog" suffix and the tablet/version prefix so that name-based cleanup and
+// parse_txn_vlog_filename() treat it as a version log.
+inline std::string txn_vlog_group_filename(int64_t tablet_id, int64_t version) {
+    return fmt::format("{:016X}_{:016X}.group.vlog", tablet_id, version);
+}
+
+inline std::string snapshot_log_filename(int64_t job_id, int64_t physical_partition_id) {
+    return fmt::format("{:016X}_{:016X}.log", job_id, physical_partition_id);
+}
+
+>>>>>>> eccaf025820... [BugFix][RB-925] Keep a lake explicit transaction's statement logs in shadow tablet replay and batch publish (#66313)
 inline std::string combined_txn_log_filename(int64_t txn_id) {
     return fmt::format("{:016X}.logs", txn_id);
 }
