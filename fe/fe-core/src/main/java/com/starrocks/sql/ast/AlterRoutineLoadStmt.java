@@ -22,6 +22,11 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.RoutineLoadDesc;
+<<<<<<< HEAD
+=======
+import com.starrocks.load.routineload.RoutineLoadPropertyNames;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> c7aacc7d95b... [Enhancement][RB-787] Accept descriptive names with units for routine load job properties (#69437)
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -56,6 +61,11 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             .add(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
+<<<<<<< HEAD
+=======
+            .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
+            .addAll(RoutineLoadPropertyNames.LEGACY_NAMES.keySet())
+>>>>>>> c7aacc7d95b... [Enhancement][RB-787] Accept descriptive names with units for routine load job properties (#69437)
             .build();
 
     private LabelName labelName;
@@ -130,6 +140,12 @@ public class AlterRoutineLoadStmt extends DdlStmt {
     }
 
     public void checkJobProperties() throws StarRocksException {
+        // The checks below read the legacy names; a descriptive name is resolved into its legacy name first.
+        Map<String, String> jobProperties = RoutineLoadPropertyNames.resolve(this.jobProperties);
+        // Kept beside the legacy values so the job reports the descriptive name. An older FE replaying this change
+        // applies the legacy values and keeps these entries as plain job properties.
+        analyzedJobProperties.putAll(RoutineLoadPropertyNames.descriptiveValues(jobProperties));
+
         Optional<String> optional = jobProperties.keySet().stream().filter(
                 entity -> !CONFIGURABLE_PROPERTIES_SET.contains(entity)).findFirst();
         if (optional.isPresent()) {

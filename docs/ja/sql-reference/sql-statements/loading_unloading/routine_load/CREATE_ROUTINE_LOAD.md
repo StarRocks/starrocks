@@ -106,6 +106,26 @@ PARTITION (p1, p2, p3)
 ```SQL
 PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 ```
+<<<<<<< StarRocks
+=======
+
+以下のプロパティは、説明的な名前でも設定できます。1 つのステートメントで同じプロパティの 2 つの名前を両方設定することはできません。SHOW CREATE ROUTINE LOAD は、プロパティを最後に設定したときの名前で返します。ジョブのプロパティを説明的な名前で設定すると、[SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md) が返す `JobProperties` フィールドには、従来のキー（`maxBatchIntervalS` など）に加えて説明的な名前のキー（`loadInterval` など）も含まれ、いずれも切り上げ後に実際に適用される値を示します。
+
+| 説明的な名前 | 従来の名前 | 説明的な名前の値 |
+| ------------ | ---------- | ---------------- |
+| `max_concurrency` | `desired_concurrent_number` | 従来の名前と同じです。 |
+| `max_error_rows` | `max_error_number` | 従来の名前と同じです。 |
+| `load_interval` | `max_batch_interval` | 単位 `ms` または `s` 付きの時間（例: `"500ms"`、`"10s"`）。最小値: `5s`。値は秒単位に切り上げられます。 |
+| `error_window_rows` | `max_batch_rows` | エラーデータ検出ウィンドウの行数、つまり `10 * max_batch_rows`。最小値: `2000000`。値は 10 で割って切り上げられます。 |
+| `max_consume_duration` | `task_consume_second` | 単位 `ms` または `s` 付きの時間。値は秒単位に切り上げられます。 |
+| `load_timeout` | `task_timeout_second` | 単位 `ms` または `s` 付きの時間。値は秒単位に切り上げられ、切り上げ後も `max_consume_duration` より大きくなければなりません。 |
+
+単位のない時間（`"10"` など）は拒否されます。
+
+説明的な名前は、それをサポートするバージョンでのみ使用できます。説明的な名前を使うステートメントは、説明的な名前で設定したプロパティを持つジョブの SHOW CREATE ROUTINE LOAD の出力も含め、それより前のバージョンでは `load_interval is invalid property` などのエラーになります。ローリングアップグレード中は、Leader FE のアップグレード後に説明的な名前を使用してください。
+
+
+>>>>>>> celerdata-enterprise
 #### `desired_concurrent_number`
 
 **必須**: いいえ\

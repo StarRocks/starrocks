@@ -107,6 +107,26 @@ Required. The properties of the load job. Syntax:
 ```SQL
 PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 ```
+<<<<<<< StarRocks
+=======
+
+The following properties can also be set by a descriptive name. A statement cannot set both names of the same property. SHOW CREATE ROUTINE LOAD returns a property under the name that it was last set with. Once a property of a job has been set by a descriptive name, the `JobProperties` field returned by [SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md) contains the descriptive keys, such as `loadInterval`, beside the legacy keys, such as `maxBatchIntervalS`. Both show the values in effect, that is, after rounding.
+
+| Descriptive name | Legacy name | Value of the descriptive name |
+| ---------------- | ----------- | ----------------------------- |
+| `max_concurrency` | `desired_concurrent_number` | The same as the legacy name. |
+| `max_error_rows` | `max_error_number` | The same as the legacy name. |
+| `load_interval` | `max_batch_interval` | A duration with the unit `ms` or `s`, such as `"500ms"` or `"10s"`. Minimum value: `5s`. The value is rounded up to whole seconds. |
+| `error_window_rows` | `max_batch_rows` | The number of rows in the error detection window, that is, `10 * max_batch_rows`. Minimum value: `2000000`. The value is divided by 10 and rounded up. |
+| `max_consume_duration` | `task_consume_second` | A duration with the unit `ms` or `s`. The value is rounded up to whole seconds. |
+| `load_timeout` | `task_timeout_second` | A duration with the unit `ms` or `s`. The value is rounded up to whole seconds and must remain larger than `max_consume_duration` after rounding. |
+
+A duration without a unit, such as `"10"`, is rejected.
+
+Only versions that support the descriptive names accept them. A statement that uses them, including the output of SHOW CREATE ROUTINE LOAD for a job with a property set by a descriptive name, fails on an earlier version with an error such as `load_interval is invalid property`. During a rolling upgrade, use the descriptive names after the Leader FE is upgraded.
+
+
+>>>>>>> celerdata-enterprise
 #### `desired_concurrent_number`
 
 **Required**: No\

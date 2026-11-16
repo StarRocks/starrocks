@@ -106,6 +106,22 @@ PARTITION (p1, p2, p3)
 ```SQL
 PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 ```
+
+以下属性也可以使用描述性名称设置。同一条语句不能同时使用一个属性的两个名称。SHOW CREATE ROUTINE LOAD 按属性最近一次设置时使用的名称返回该属性。作业有属性用描述性名称设置过之后，[SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md) 返回的 `JobProperties` 字段除了原有的键（如 `maxBatchIntervalS`），还包含描述性名称对应的键（如 `loadInterval`），两者显示的都是取整后实际生效的值。
+
+| 描述性名称 | 原名称 | 描述性名称的取值 |
+| ---------- | ------ | ---------------- |
+| `max_concurrency` | `desired_concurrent_number` | 与原名称相同。 |
+| `max_error_rows` | `max_error_number` | 与原名称相同。 |
+| `load_interval` | `max_batch_interval` | 带单位 `ms` 或 `s` 的时长，例如 `"500ms"` 或 `"10s"`。最小值：`5s`。取值向上取整到秒。 |
+| `error_window_rows` | `max_batch_rows` | 错误检测窗口的行数，即 `10 * max_batch_rows`。最小值：`2000000`。取值除以 10 后向上取整。 |
+| `max_consume_duration` | `task_consume_second` | 带单位 `ms` 或 `s` 的时长。取值向上取整到秒。 |
+| `load_timeout` | `task_timeout_second` | 带单位 `ms` 或 `s` 的时长。取值向上取整到秒，且取整后必须大于 `max_consume_duration`。 |
+
+不带单位的时长（如 `"10"`）会被拒绝。
+
+只有支持描述性名称的版本才接受这些名称。使用描述性名称的语句，包括对有属性用描述性名称设置过的作业执行 SHOW CREATE ROUTINE LOAD 得到的语句，在更早的版本上会报错，例如 `load_interval is invalid property`。滚动升级期间，请在 Leader FE 升级之后再使用描述性名称。
+
 #### `desired_concurrent_number`
 
 **必需**：否\
