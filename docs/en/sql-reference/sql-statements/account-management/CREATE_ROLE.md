@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE ROLE creates a role."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE ROLE

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "EXPLAIN は、クエリステートメントの論理または物理実行プランを表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # EXPLAIN

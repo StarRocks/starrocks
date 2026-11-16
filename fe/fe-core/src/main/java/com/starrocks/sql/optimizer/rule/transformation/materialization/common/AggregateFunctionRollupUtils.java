@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.RewriteEquivalent;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
@@ -192,6 +193,11 @@ public class AggregateFunctionRollupUtils {
         if (TO_REWRITE_ROLLUP_FUNCTION_MAP.containsKey(aggFuncName)) {
             Type[] argTypes = { targetColumn.getType() };
             Function rollupFn = findArithmeticFunction(argTypes, rollupFuncName);
+            if (rollupFn != null) {
+                // e.g. array_unique_agg is registered as ARRAY<DECIMAL128(-1, -1)>; pin the analyzed types.
+                rollupFn = ScalarOperatorUtil.withConcreteTypes(rollupFn, argTypes,
+                        aggCall.getFunction().getReturnType());
+            }
             return new CallOperator(rollupFuncName, aggCall.getFunction().getReturnType(),
                     Lists.newArrayList(targetColumn), rollupFn);
         } else {

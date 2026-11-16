@@ -514,6 +514,7 @@ set(EXEC_FILES
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
         ./udf/udf_call_stub_test.cpp
+        ./udf/python/env_test.cpp
         ./util/table_metrics_mgr_test.cpp
         ./util/jvm_metrics_test.cpp
         ./util/llm_cache_test.cpp
@@ -709,6 +710,7 @@ SET(DW_TEST_FILES
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_manager_test.cpp
     ./storage/snapshot_meta_test.cpp
+    ./storage/sort_key_bounds_test.cpp
     ./storage/sort_key_sampler_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_engine_compaction_test.cpp

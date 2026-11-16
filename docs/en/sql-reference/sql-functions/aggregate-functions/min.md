@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the minimum value of the expr expression."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # min

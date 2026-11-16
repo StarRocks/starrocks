@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 60
 description: "How to create and use vector indexes (IVFPQ, HNSW) in StarRocks for approximate nearest neighbor search (ANNS) on high-dimensional vector data, available in..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'

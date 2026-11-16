@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "16進数でエンコードされた文字列をバイナリにデコードします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hex_decode_binary

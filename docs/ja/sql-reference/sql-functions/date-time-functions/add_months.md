@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された日付に指定された月数を追加します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # add_months

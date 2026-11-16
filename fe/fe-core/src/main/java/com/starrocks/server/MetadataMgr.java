@@ -763,7 +763,6 @@ public class MetadataMgr {
         if (internalStatistics == null ||
                 internalStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
             // Get basic stats from connector metadata.
-            session.setObtainedFromInternalStatistics(false);
             // Avoid `analyze table` to collect table statistics from metadata.
             if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
                 return internalStatistics;
@@ -797,7 +796,6 @@ public class MetadataMgr {
                 }
             }
         } else {
-            session.setObtainedFromInternalStatistics(true);
             return internalStatistics;
         }
     }

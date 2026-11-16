@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the current UTC date and time as a value in 'YYYY-MM-DD HH:MM:SS' or 'YYYYMMDDHHMMSS' format depending on the usage of the function, for example, in..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # utc_timestamp

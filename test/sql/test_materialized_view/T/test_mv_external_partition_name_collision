@@ -40,12 +40,13 @@ select count(*) from information_schema.partitions_meta where db_name = 'db_${uu
 select s, v from mv_str order by v;
 
 -- The same answers through rewrite as from the base tables.
-function: print_hit_materialized_views("select k, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int")
+-- Wait for each expected rewrite: MV plan-cache loading is asynchronous after refresh.
+function: print_hit_materialized_views("select k, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int", "mv_int")
 select k, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int order by k;
 set enable_materialized_view_rewrite = false;
 select k, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int order by k;
 set enable_materialized_view_rewrite = true;
-function: print_hit_materialized_views("select s, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str")
+function: print_hit_materialized_views("select s, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str", "mv_str")
 select s, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str order by v;
 
 drop materialized view mv_int;

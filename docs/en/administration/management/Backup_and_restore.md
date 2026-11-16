@@ -1,6 +1,7 @@
 ---
 sidebar_position: 50
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 description: "StarRocks supports backing up data as snapshots into a remote storage system and restoring the data to any StarRocks clusters."
 ---
 

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Calculates the SHA-224 hash value, SHA-256 hash value, SHA-384 hash value, or SHA-512 hash value of a string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # sha2

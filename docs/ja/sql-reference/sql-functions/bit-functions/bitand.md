@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "2つの数値式のビット単位のANDを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitand

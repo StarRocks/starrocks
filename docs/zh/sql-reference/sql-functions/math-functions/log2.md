@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算以2为底的数值对数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # log2

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "日付の年の部分を1000から9999の範囲の値で返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # year

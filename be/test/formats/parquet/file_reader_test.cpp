@@ -3183,6 +3183,61 @@ TEST_F(FileReaderTest, bloom_filter_reader_test_hit) {
     EXPECT_EQ(file_reader->row_group_size(), 1);
 }
 
+/*
+    c1 = [f"a{i:04d}" for i in range(1000) if i != 500] + ["a0999"] + [f"b{i:04d}" for i in range(1000)]
+    table = pa.table({
+        "c0": pa.array(range(len(c1)), pa.int32()),
+        "c_struct": pa.StructArray.from_arrays(
+                [pa.array(range(len(c1)), pa.int32()), pa.array(c1, pa.string())], ["c0", "c1"]),
+    })
+    pq.write_table(table, path, row_group_size=1000, use_dictionary=False, write_page_index=False,
+                   bloom_filter_options={"c_struct.c1": {"ndv": 1000, "fpp": 0.01}})
+ */
+TEST_F(FileReaderTest, StructSubfieldStringBloomFilter) {
+    const std::string file_path = "./be/test/formats/parquet/test_data/struct_subfield_bloom_filter.parquet";
+    TypeDescriptor type_struct = TypeDescriptor::create_struct_type({"c0", "c1"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC});
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC}, {"c_struct", type_struct}, {""}};
+
+    auto scan = [&](const std::string& value, size_t* total_rows, int* bloom_filtered_row_groups) {
+        auto* ctx = _create_scan_context(slot_descs, file_path);
+        auto& conjunct_ctxs = ctx->conjunct_ctxs_by_slot[1];
+        _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::EQ, 1, type_struct, {"c1"}, value, &conjunct_ctxs);
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        ParquetUTBase::setup_conjuncts_manager(conjunct_ctxs, nullptr, tuple_desc, _runtime_state, ctx);
+        HdfsScannerStats stats;
+        ctx->stats = &stats;
+
+        auto file_reader = _create_file_reader(file_path);
+        Status status = file_reader->init(ctx);
+        ASSERT_OK(status);
+
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+        chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+        *total_rows = 0;
+        while (!status.is_end_of_file()) {
+            chunk->reset();
+            status = file_reader->get_next(&chunk);
+            chunk->check_or_die();
+            *total_rows += chunk->num_rows();
+        }
+        *bloom_filtered_row_groups = stats.bloom_filter_success_counter;
+    };
+
+    size_t total_rows = 0;
+    int bloom_filtered_row_groups = 0;
+
+    // Row group 0 holds 'a0400' and its bloom filter contains it, so it must not be pruned.
+    scan("a0400", &total_rows, &bloom_filtered_row_groups);
+    EXPECT_EQ(1, total_rows);
+    EXPECT_EQ(0, bloom_filtered_row_groups);
+
+    // 'a0500' is inside row group 0's min/max but absent, so only the bloom filter can prune it.
+    scan("a0500", &total_rows, &bloom_filtered_row_groups);
+    EXPECT_EQ(0, total_rows);
+    EXPECT_EQ(1, bloom_filtered_row_groups);
+}
+
 TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop) {
     Utils::SlotDesc slot_descs[] = {{"c0", TYPE_VARCHAR_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_DATETIME_DESC}, {""}};
     const std::string bloom_filter_file =
@@ -4645,6 +4700,60 @@ TEST_F(FileReaderTest, test_read_variant) {
     }
 
     ASSERT_EQ(total_rows, 24) << "Should have read all 24 rows from the variant parquet file";
+}
+
+// Boolean columns whose values are RLE-encoded: parquet-mr does this for every boolean column in
+// PARQUET_2_0 mode and pyarrow for data_page_version=2.0 (the v1-page file shows the encoding is
+// independent of the page layout). 200 rows: a run of true, a run of false, alternating literal
+// groups, then nulls interleaved with alternating values.
+TEST_F(FileReaderTest, test_rle_boolean_values) {
+    auto expected_flag = [](int i) -> int {
+        if (i < 50) return 1;
+        if (i < 100) return 0;
+        if (i < 150) return i % 2 == 0;
+        return i % 3 == 0 ? -1 : (i % 2 == 0);
+    };
+
+    for (const std::string& name :
+         {"rle_boolean_v2_parquet_mr.parquet", "rle_boolean_v2_pyarrow.parquet", "rle_boolean_v1_pyarrow.parquet"}) {
+        const std::string file_path = "./be/test/formats/parquet/test_data/" + name;
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+        chunk->append_column(ColumnHelper::create_column(TYPE_BOOLEAN_DESC, true), chunk->num_columns());
+
+        Utils::SlotDesc slot_descs[] = {{"id", TYPE_INT_DESC}, {"flag", TYPE_BOOLEAN_DESC}, {""}};
+        auto ctx = _create_file_random_read_context(file_path, slot_descs);
+        auto file_reader = _create_file_reader(file_path);
+        Status status = file_reader->init(ctx);
+        ASSERT_TRUE(status.ok()) << name << ": " << status.to_string();
+
+        size_t total_rows = 0;
+        while (!status.is_end_of_file()) {
+            chunk->reset();
+            status = file_reader->get_next(&chunk);
+            ASSERT_TRUE(status.ok() || status.is_end_of_file()) << name << ": " << status.to_string();
+            chunk->check_or_die();
+
+            const auto* id_col = down_cast<const NullableColumn*>(chunk->columns()[0].get());
+            const auto* flag_col = down_cast<const NullableColumn*>(chunk->columns()[1].get());
+            const auto& ids =
+                    down_cast<const FixedLengthColumn<int32_t>*>(id_col->data_column().get())->immutable_data();
+            const auto& flags =
+                    down_cast<const FixedLengthColumn<uint8_t>*>(flag_col->data_column().get())->immutable_data();
+            for (size_t r = 0; r < chunk->num_rows(); ++r) {
+                int id = ids[r];
+                int expected = expected_flag(id);
+                if (expected < 0) {
+                    ASSERT_TRUE(flag_col->is_null(r)) << name << " id=" << id;
+                } else {
+                    ASSERT_FALSE(flag_col->is_null(r)) << name << " id=" << id;
+                    ASSERT_EQ(expected, static_cast<int>(flags[r])) << name << " id=" << id;
+                }
+            }
+            total_rows += chunk->num_rows();
+        }
+        EXPECT_EQ(200, total_rows) << name;
+    }
 }
 
 } // namespace starrocks::parquet

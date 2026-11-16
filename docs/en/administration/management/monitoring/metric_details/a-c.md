@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical a - c"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Metrics a through c

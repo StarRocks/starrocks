@@ -224,6 +224,15 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void microsecondsAdd() {
+        assertEquals("2015-03-23T09:23:55.000010",
+                ScalarOperatorFunctions.microsecondsAdd(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
+        assertEquals("2015-03-23T09:23:54.500",
+                ScalarOperatorFunctions.microsecondsAdd(O_DT_20150323_092355, ConstantOperator.createInt(-500000))
+                        .getDatetime().toString());
+    }
+
+    @Test
     public void dateTrunc() {
         String[][] testCases = {
                 {"second", "2015-03-23 09:23:55", "2015-03-23T09:23:55"},
@@ -625,6 +634,12 @@ public class ScalarOperatorFunctionsTest {
     public void millisecondsSub() {
         assertEquals("2015-03-23T09:23:54.990",
                 ScalarOperatorFunctions.millisecondsSub(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
+    }
+
+    @Test
+    public void microsecondsSub() {
+        assertEquals("2015-03-23T09:23:54.999990",
+                ScalarOperatorFunctions.microsecondsSub(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
     }
 
     @Test

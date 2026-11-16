@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "StarRocks クラスタをアップグレード後に以前のバージョンにダウングレードして復旧する方法。"
+products: [oss]
 ---
 
 # StarRocks のダウングレード

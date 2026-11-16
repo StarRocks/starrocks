@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "根据另一个键值数组或Lambda函数的结果对数组元素进行升序排列。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_sortby

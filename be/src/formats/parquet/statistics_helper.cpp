@@ -138,6 +138,15 @@ Status StatisticsHelper::decode_value_into_column(const MutableColumnPtr& column
                 }
             }
             RETURN_IF_ERROR(converter->convert(src_column.get(), column.get()));
+            // A BYTE_ARRAY decimal that does not fit into the target type converts to null. A null
+            // bound is not a usable bound (IS NOT NULL would drop the page), so give up pruning.
+            if (field->physical_type == tparquet::Type::type::BYTE_ARRAY && type.is_decimal_type()) {
+                for (size_t i = 0; i < values.size(); i++) {
+                    if (!null_pages[i] && column->is_null(column->size() - values.size() + i)) {
+                        return Status::NotSupported("min/max value does not fit into the column type");
+                    }
+                }
+            }
         }
         break;
     }

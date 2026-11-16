@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns a random UUID of the LARGEINT type."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # uuid_numeric

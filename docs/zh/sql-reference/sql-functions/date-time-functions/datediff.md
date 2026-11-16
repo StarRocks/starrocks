@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算两个日期的差值，结果精确到天。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # datediff

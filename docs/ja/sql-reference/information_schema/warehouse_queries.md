@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "warehouse_queries は各ウェアハウスで実行されているクエリに関する情報を提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # warehouse_queries

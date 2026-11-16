@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "partitions_meta provides information about partitions of tables."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # partitions_meta

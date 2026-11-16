@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the bitwise XOR of two numeric expressions."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 

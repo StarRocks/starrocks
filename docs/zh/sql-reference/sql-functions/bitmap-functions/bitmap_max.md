@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "获取 Bitmap 中的最大值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_max

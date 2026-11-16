@@ -4,6 +4,7 @@ sidebar_position: 40
 description: "Quick start guide for querying Apache Iceberg data lakes with StarRocks."
 toc_max_heading_level: 2
 keywords: [ 'iceberg' ]
+products: [oss]
 ---
 
 import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.mdx'

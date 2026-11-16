@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the time difference between the start date and end date in milliseconds."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # milliseconds_diff

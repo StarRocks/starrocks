@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 3.4 版本发布说明：GROUP BY 下推、Iceberg Time Travel、Python UDF、向量索引近似最近邻搜索。"
+products: [oss]
 ---
 
 # StarRocks version 3.4
@@ -97,7 +98,7 @@ description: "StarRocks 3.4 版本发布说明：GROUP BY 下推、Iceberg Time 
 
 ### 功能优化
 
-- INSERT INTO FILES 导出数据到 Parquet 文件时，可以使用 [`parquet.version`](https://docs.starrocks.io/docs/zh/sql-reference/sql-functions/table-functions/files.md#parquetversion) 来指定导出 Parquet 文件的版本，以能让其他工具读取导出的 Parquet 文件更好地兼容。[#60843](https://github.com/StarRocks/starrocks/pull/60843)
+- INSERT INTO FILES 导出数据到 Parquet 文件时，可以使用 [`parquet.version`](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/table-functions/files/#parquetversion) 来指定导出 Parquet 文件的版本，以能让其他工具读取导出的 Parquet 文件更好地兼容。[#60843](https://github.com/StarRocks/starrocks/pull/60843)
 
 ### 问题修复
 

@@ -4,6 +4,7 @@ displayed_sidebar: docs
 description: "StarRocks Iceberg catalog 支持 DDL 操作，包括创建和管理数据库、表及视图。"
 toc_max_heading_level: 5
 keywords: ['iceberg', 'ddl', '创建表', '修改表', '创建数据库', '删除表', '创建视图', '修改视图']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Iceberg DDL 操作
@@ -158,7 +159,7 @@ PARTITION BY (partition_expr[, partition_expr...])
 - `transform_expr(column_name)`
 - `transform_expr(column_name, parameter)`
 
-StarRocks 支持 Apache Iceberg 规范中定义的分区转换表达式。
+StarRocks 支持以下分区转换：identity（列名或 `identity()`）、`year()`、`month()`、`day()`、`hour()`、`truncate()`、`bucket()` 和 `void()`。使用其他转换会返回错误。
 
 :::note
 分区列支持除 FLOAT、DOUBLE、DECIMAL 和 DATETIME 之外的所有数据类型。

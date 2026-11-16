@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 description: "Creates a repository in a remote storage system that is used to store data snapshots for backing up and restoring data."
 ---
 

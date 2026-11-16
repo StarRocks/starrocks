@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: StarRocks でデータをパーティション分割する
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 式パーティショニング (推奨)

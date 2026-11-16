@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "global_variables 提供全局变量的信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # global_variables

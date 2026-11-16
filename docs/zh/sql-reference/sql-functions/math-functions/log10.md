@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算以10为底的数值对数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # log10, dlog10

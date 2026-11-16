@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "任意のタイプの入力に対して32ビットのハッシュ値を計算し、ビットマップを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_hash

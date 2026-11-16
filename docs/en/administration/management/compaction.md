@@ -3,6 +3,7 @@ sidebar_position: 120
 displayed_sidebar: docs
 keywords: ['compaction']
 description: "How to manage and monitor compaction for shared-data clusters in StarRocks."
+products: [oss, enterprise, anywhere]
 ---
 
 # Compaction for Shared-data Clusters

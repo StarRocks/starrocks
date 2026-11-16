@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "获取当前的日期，以 DATE 类型返回。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # curdate,current_date

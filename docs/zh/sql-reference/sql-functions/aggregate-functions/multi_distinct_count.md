@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "multi_distinct_count 返回表达式中去除重复值后的行数，等同于 COUNT(DISTINCT expr)。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # multi_distinct_count

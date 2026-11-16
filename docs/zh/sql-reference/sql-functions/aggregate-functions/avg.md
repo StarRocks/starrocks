@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "avg 返回选中字段的平均值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # avg

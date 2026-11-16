@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the difference between two date values in the specified unit."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # date_diff

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "A function to find the intersection size (number of same elements) of two Bitmap values, without requiring the data distribution to be orthogonal."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # intersect_count

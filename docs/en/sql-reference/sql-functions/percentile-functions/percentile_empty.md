@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Constructs an empty PERCENTILE value used as a placeholder during Stream Load or INSERT INTO data loading."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_empty

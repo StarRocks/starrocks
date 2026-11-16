@@ -3,6 +3,7 @@ sidebar_position: 100
 displayed_sidebar: docs
 description: "StarRocks v3.1 以降の Paimon catalog で、Apache Paimon からデータをインジェストせずにクエリおよび変換ロード。"
 toc_max_heading_level: 5
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'

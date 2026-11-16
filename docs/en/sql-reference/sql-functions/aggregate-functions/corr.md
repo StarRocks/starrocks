@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the Pearson correlation coefficient between two expressions."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # corr

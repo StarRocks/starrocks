@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Adds a new element to the end of the array."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_append

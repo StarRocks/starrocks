@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "materialized_views provides information about all materialized views."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # materialized_views

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "2つの日付値の差を計算し、日数で結果を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # datediff

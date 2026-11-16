@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された四半期数を日付に加え、四半期単位で正確に計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # quarters_add

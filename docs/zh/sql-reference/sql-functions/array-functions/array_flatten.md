@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将嵌套数组展平一层。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_flatten

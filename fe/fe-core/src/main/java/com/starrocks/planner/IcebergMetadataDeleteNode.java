@@ -15,6 +15,7 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
@@ -58,7 +59,9 @@ public class IcebergMetadataDeleteNode extends PlanNode {
         sb.append(prefix).append("  table: ").append(table.getCatalogTableName()).append("\n");
 
         if (predicate != null) {
-            sb.append(prefix).append("  predicate: ").append(predicate.toString()).append("\n");
+            // the optimizer operator prints constants as is, outside ExprToSql's digest
+            String shown = ExprToSql.isDigestingLiterals() ? "?" : predicate.toString();
+            sb.append(prefix).append("  predicate: ").append(shown).append("\n");
         } else {
             sb.append(prefix).append("  predicate: ALL (delete all rows)\n");
         }

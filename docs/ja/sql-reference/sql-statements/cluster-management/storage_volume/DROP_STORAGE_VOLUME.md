@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP STORAGE VOLUME は、ストレージボリュームを削除します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP STORAGE VOLUME

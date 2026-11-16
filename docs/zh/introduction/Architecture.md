@@ -3,9 +3,9 @@ sidebar_position: 20
 displayed_sidebar: docs
 description: "StarRocks 架构由 FE、BE 和 CN 组件组成，支持高性能分析和水平扩展。"
 keywords: ['cun chu']
+products: [oss, enterprise, cloud]
 ---
 
-import EditionSpecificFeature from '../_assets/commonMarkdown/Edition_Specific_Feature.mdx'
 
 # 架构
 
@@ -36,11 +36,11 @@ StarRocks 支持存算一体架构 (每个 BE 节点将其数据存储在本地�
 
 ##### FE
 
-FE负责元数据管理、客户端连接管理、查询规划和查询调度。每个FE使用BDB JE （Berkeley DB Java Edition）在其内存中存储和维护元数据的完整副本，从而确保所有FE之间的服务一致。FE可以作为领导者、追随者和观察者。如果leader节点崩溃，follower根据Raft协议选举leader。
+FE负责元数据管理、客户端连接管理、查询规划和查询调度。每个FE使用BDB JE （Berkeley DB Java Edition）在其内存中存储和维护元数据的完整副本，从而确保所有FE之间的服务一致。FE可以作为领导者、追随者和观察者。如果leader节点崩溃，follower通过BDB JE的复制和选举机制选举leader。
 
 | **FE 角色** | **元数据管理**                                                                                                                                                                       | **节点选主**                |
 | ----------- |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------| ---------------------------------- |
-| Leader 节点 | Leader FE 负责读写元数据。Follower 节点和 Observer 节点只能读取元数据，并将元数据写请求路由到 Leader FE。Leader FE 更新元数据，然后使用 Raft 协议将元数据更改同步到 Follower 节点和 Observer 节点。只有在元数据更改同步到超过一半的Follower 节点后，数据写入才被认为成功。 | Leader FE 技术上也是一个 Follower 节点，是从Follower 节点中选举出来的。要执行主节点选举，集群中必须有超过一半的Follower 节点处于活动状态。当 Leader FE 发生故障时，Follower 节点将开始另一轮主节点选举。 |
+| Leader 节点 | Leader FE 负责读写元数据。Follower 节点和 Observer 节点只能读取元数据，并将元数据写请求路由到 Leader FE。Leader FE 更新元数据，然后通过 BDB JE 复制将元数据更改同步到 Follower 节点和 Observer 节点。只有在元数据更改同步到超过一半的Follower 节点后，数据写入才被认为成功。 | Leader FE 技术上也是一个 Follower 节点，是从Follower 节点中选举出来的。要执行主节点选举，集群中必须有超过一半的Follower 节点处于活动状态。当 Leader FE 发生故障时，Follower 节点将开始另一轮主节点选举。 |
 | Follower 节点 | Follower 节点只能读取元数据。它们从 Leader FE 同步和重放日志以更新元数据。                                                                                                                                 | Follower 节点参与主节点选举，这需要集群中超过一半的 Follower 节点处于活动状态。 |
 | Observer 节点 | Observer 节点从 Leader FE 同步和重放日志以更新元数据。                                                                                                                                           | Observer 节点 主要用于增加集群的查询并发性。 Observer 节点不参与主节点选举，因此不会增加集群的主节点选举压力。|
 
@@ -134,7 +134,20 @@ StarRocks 存算分离集群将数据存储与计算分离，使两方都能够�
 | 查询缓存 | v2.5+ | v3.4+ |
 | Rollup 和同步物化视图 | v1.x+ | v3.3+ |
 
-<EditionSpecificFeature />
+### 灾难恢复
+
+| 功能 | 存算一体 | 存算分离 |
+| ---------------------------------------------------- | -------------- | --------------- |
+| 备份与恢复 | v1.x+ | 不适用 |
+| BE/CN 黑名单 | v3.3+ | v4.0+ |
+| 跨集群数据迁移工具 | v3.3+ | 不适用 |
+| 集群快照 | 不适用 | v3.4.2+ |
+
+### 安全与认证
+
+| 功能 | 存算一体 | 存算分离 |
+| ---------------------------------------------------- | -------------- | --------------- |
+| HDFS 支持 Kerberos | 不适用 | v3.2+ |
 
 ## 实践学习
 

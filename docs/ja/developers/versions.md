@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "バージョン命名規則、マイナーバージョンのリリース周期・保持期間。"
 sidebar_position: 1
+products: [oss]
 ---
 
 # Version Release Guide

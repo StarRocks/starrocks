@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Obtains the current date and returns a value if the DATETIME type."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # current_timestamp

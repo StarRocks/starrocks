@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns whether all elements of an array match the given predicate."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # all_match

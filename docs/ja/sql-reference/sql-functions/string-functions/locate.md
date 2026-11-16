@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列内の部分文字列の1から始まる位置を返します。3番目の引数で開始位置を指定できます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # locate

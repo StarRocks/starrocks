@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Alias of from_base64; decodes a Base64-encoded string to its original string value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # base64_decode_string

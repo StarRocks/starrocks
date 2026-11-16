@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Template documentation for FE/BE parameters and variables in StarRocks."
 unlisted: true
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE/BE 参数和变量模板

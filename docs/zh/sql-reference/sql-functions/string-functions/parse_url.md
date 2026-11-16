@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从URL中提取指定部分，如协议、主机、路径或查询参数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # parse_url

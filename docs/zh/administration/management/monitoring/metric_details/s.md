@@ -2,9 +2,16 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical s"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 指标 s
+
+## `scheduled_tablet_num`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：Leader FE 的 Tablet 调度器正在调度的 Tablet 数量，即处于 Pending 和 Running 状态的 Tablet 总数，包括 BALANCE 和 REPAIR 类型。非 Leader FE 上该指标为 `0`。
 
 ## `schema_change_mem_bytes`
 

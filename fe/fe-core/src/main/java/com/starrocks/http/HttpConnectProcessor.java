@@ -33,8 +33,10 @@
 // under the License.
 package com.starrocks.http;
 
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
@@ -73,6 +75,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
         Tracers.init(ctx, "TIMER", null);
 
         StatementBase parsedStmt = ((HttpConnectContext) ctx).getStatement();
+        SecurityPolicyRewriteRule.markRelationsForRewrite(parsedStmt);
         String sql = parsedStmt.getOrigStmt().originStmt;
 
         executor = new StmtExecutor(ctx, parsedStmt);
@@ -98,14 +101,15 @@ public class HttpConnectProcessor extends ConnectProcessor {
             ctx.getState().setError("StarRocks process failed");
             ctx.getState().setErrType(QueryState.ErrType.IO_ERR);
         } catch (StarRocksException e) {
-            LOG.warn("Process one query failed. SQL: " + sql + ", because.", e);
+            LOG.warn("Process one query failed. SQL: " + LogUtil.desensitizeText(sql) + ", because.", LogUtil.desensitize(e));
             ctx.getState().setError(e.getMessage());
             // set is as ANALYSIS_ERR so that it won't be treated as a query failure.
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
         } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
-            LOG.warn("Process one query failed. SQL: " + sql + ", because unknown reason: ", e);
+            LOG.warn("Process one query failed. SQL: " + LogUtil.desensitizeText(sql) + ", because unknown reason: ",
+                    LogUtil.desensitize(e));
             ctx.getState().setError("Unexpected exception: " + e.getMessage());
             if (parsedStmt instanceof KillStmt) {
                 // ignore kill stmt execute err(not monitor it)

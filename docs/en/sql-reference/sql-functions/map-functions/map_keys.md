@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns an array of all the keys in the specified map."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # map_keys

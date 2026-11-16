@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "根据给定的一个或多个值来构建 STRUCT；支持自动生成字段名。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # row

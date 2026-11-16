@@ -20,11 +20,9 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.OptimizerFactory;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
@@ -372,9 +370,12 @@ public class PartitionPruneTest extends PlanTestBase {
     private void testRemovePredicate(String sql, String expected) throws Exception {
         Pair<ScalarOperator, LogicalScanOperator> pair = buildConjunctAndScan(sql);
         StatisticsCalculator calculator = new StatisticsCalculator();
-        OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
-        ScalarOperator newPredicate = calculator.removePartitionPredicate(pair.first, pair.second, context);
+        ScalarOperator newPredicate = calculator.removePartitionPredicate(pair.first, pair.second, null);
         Assertions.assertEquals(expected, newPredicate.toString());
+        // an OLAP list partition scan only reads the selected partitions, whatever the source of its statistics
+        Statistics analyzed = Statistics.builder().setStatsSource(Statistics.StatsSource.ANALYZE).build();
+        Assertions.assertEquals(expected,
+                calculator.removePartitionPredicate(pair.first, pair.second, analyzed).toString());
     }
 
     private void testAssertContains(String sql, String expected) throws Exception {

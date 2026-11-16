@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Obtains the current time and returns a value of the TIME type."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # curtime,current_time

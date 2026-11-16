@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: "docs"
 description: "mann_whitney_u_test performs the Mann-Whitney rank test on samples derived from two populations."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # mann_whitney_u_test

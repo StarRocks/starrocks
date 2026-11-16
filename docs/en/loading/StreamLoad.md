@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 keywords: ['Stream Load']
 description: "How to load data from a local file system into StarRocks using Stream Load or the curl command, supporting CSV, JSON, Parquet, and ORC formats."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Load data from a local file system

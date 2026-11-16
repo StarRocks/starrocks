@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列の SHA-224、SHA-256、SHA-384、または SHA-512 ハッシュ値を計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # sha2

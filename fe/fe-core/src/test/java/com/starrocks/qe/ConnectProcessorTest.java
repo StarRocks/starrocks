@@ -82,6 +82,11 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -1470,5 +1475,71 @@ public class ConnectProcessorTest extends DDLTestBase {
         serializer.writeInt1(3);
         serializer.writeEofString(sql);
         return serializer.toByteBuffer();
+    }
+
+    // Runs one query with enable_sql_desensitize_in_log on and returns what the given classes logged,
+    // including the messages of any logged throwable and its causes.
+    private List<String> logsOfDesensitizedQuery(String sql, Class<?>... loggingClasses) throws Exception {
+        List<String> lines = new ArrayList<>();
+        AbstractAppender appender = new AbstractAppender("desensitize-capture-" + UUID.randomUUID(), null, null) {
+            @Override
+            public void append(LogEvent event) {
+                StringBuilder text = new StringBuilder(event.getMessage().getFormattedMessage());
+                for (Throwable t = event.getThrown(); t != null; t = t.getCause()) {
+                    text.append(' ').append(t.getMessage());
+                }
+                lines.add(text.toString());
+            }
+        };
+        appender.start();
+        List<Logger> loggers = new ArrayList<>();
+        List<Level> prevLevels = new ArrayList<>();
+        for (Class<?> c : loggingClasses) {
+            Logger logger = (Logger) LogManager.getLogger(c);
+            loggers.add(logger);
+            prevLevels.add(logger.getLevel());
+            logger.addAppender(appender);
+            logger.setLevel(Level.TRACE);
+        }
+        boolean prevDesensitize = Config.enable_sql_desensitize_in_log;
+        Config.enable_sql_desensitize_in_log = true;
+        try {
+            ConnectContext ctx = initMockContext(mockChannel(createQueryPacket(sql)), GlobalStateMgr.getCurrentState());
+            new ConnectProcessor(ctx).processOnce();
+            Assertions.assertTrue(ctx.getState().isError());
+        } finally {
+            Config.enable_sql_desensitize_in_log = prevDesensitize;
+            for (int i = 0; i < loggers.size(); i++) {
+                loggers.get(i).removeAppender(appender);
+                loggers.get(i).setLevel(prevLevels.get(i));
+            }
+        }
+        return lines;
+    }
+
+    // A parse failure has no statement to digest: neither the SQL nor the parser message (which quotes the
+    // offending token) may be logged.
+    @Test
+    public void testParseFailureLogIsDesensitized() throws Exception {
+        List<String> lines = logsOfDesensitizedQuery("select * from t where ssn 'SECRET_PARSE'", ConnectProcessor.class);
+        Assertions.assertFalse(lines.isEmpty());
+        for (String line : lines) {
+            Assertions.assertFalse(line.contains("SECRET_PARSE"), line);
+        }
+    }
+
+    // A failure after parsing logs the statement with literals digested, but not the error message,
+    // which here embeds the whole expression.
+    @Test
+    public void testStatementFailureLogsDigestedSql() throws Exception {
+        List<String> lines = logsOfDesensitizedQuery("select 'a' regexp 'SECRET_EXEC('",
+                ConnectProcessor.class, StmtExecutor.class);
+        // the failure type stays, the message does not
+        Assertions.assertTrue(lines.stream().anyMatch(l -> l.matches(
+                "(?s)execute Exception, sql: SELECT \\? REGEXP \\?.*, error: [\\w.$]+(\\(\\w+\\))?: <desensitized>")),
+                lines.toString());
+        for (String line : lines) {
+            Assertions.assertFalse(line.contains("SECRET_EXEC"), line);
+        }
     }
 }

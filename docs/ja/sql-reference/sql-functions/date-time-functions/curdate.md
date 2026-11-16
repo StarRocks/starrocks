@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DATE または DATETIME の値をあるタイムゾーンから別のタイムゾーンに変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # curdate,current_date

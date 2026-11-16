@@ -3,6 +3,7 @@ sidebar_position: 120
 displayed_sidebar: docs
 toc_max_heading_level: 5
 description: "A unified catalog in StarRocks handles tables from Hive, Iceberg, Hudi, Delta Lake, and Kudu in a single catalog."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'

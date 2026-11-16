@@ -2,9 +2,16 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical s"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Metrics s
+
+## `scheduled_tablet_num`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tablets that are being scheduled by the tablet scheduler of the Leader FE, that is, the total of the tablets in Pending and Running states, including both BALANCE and REPAIR types. Non-Leader FEs report `0`.
 
 ## `schema_change_mem_bytes`
 

@@ -247,7 +247,12 @@ public:
                 offsets[prev_offsets + i] = offset;
             }
 
-            binary_column->get_bytes().reserve(offset);
+            // This runs once per page into the same column. An exact reserve(offset) would
+            // reallocate and copy the whole column on every page (quadratic for large values),
+            // so grow geometrically like the vector itself would.
+            if (bytes.capacity() < offset) {
+                bytes.reserve(std::max(offset, 2 * bytes.capacity()));
+            }
         }
 
         if (read_count == 0) {

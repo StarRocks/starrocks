@@ -4,6 +4,7 @@ keywords: ['fenqu','fentong', 'lengre']
 toc_max_heading_level: 4
 description: 分区与分桶
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 数据分布

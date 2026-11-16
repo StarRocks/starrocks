@@ -3,6 +3,7 @@ displayed_sidebar: docs
 toc_max_heading_level: 4
 description: "How to configure partitioning and bucketing in StarRocks for even data distribution and optimal query performance."
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Data distribution

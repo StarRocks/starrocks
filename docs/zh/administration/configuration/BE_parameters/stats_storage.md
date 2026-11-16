@@ -4,6 +4,7 @@ displayed_sidebar: docs
 description: "BE configuration parameters for statistics collection and storage engine settings."
 sidebar_label: "统计报告和存储"
 keywords: ['Canshu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -12,7 +13,6 @@ import PostBEConfig from '../../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
-import EditionSpecificBEItem from '../../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
 
 # BE 配置项 - 统计报告和存储
 
@@ -113,8 +113,6 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 引入版本：-
 
 ## 存储
-
-<EditionSpecificBEItem />
 
 ### alter_tablet_worker_count
 

@@ -37,6 +37,7 @@
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/rowset/rowset_options.h"
+#include "storage/sort_key_bounds.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "testutil/assert.h"
@@ -207,6 +208,40 @@ TEST_F(LakeRowsetTest, test_data_size_after_deletion_scales_by_live_fraction) {
 
     Rowset rs(_tablet_mgr.get(), metadata, 0, /*compaction_segment_limit=*/0);
     EXPECT_EQ(600, rs.data_size_after_deletion());
+}
+
+// A segment written by the tablet writer records its sort key bounds in the encoded form only.
+TEST_F(LakeRowsetTest, WriterStoresEncodedSortKeyBounds) {
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+    ASSERT_OK(writer->open());
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    for (int key : {3, 7, 11, 42}) {
+        c0->append(key);
+        c1->append(key * 2);
+    }
+    Chunk chunk({c0, c1}, _schema);
+    ASSERT_OK(writer->write(chunk));
+    ASSERT_OK(writer->finish());
+    ASSERT_EQ(1, writer->segments().size());
+
+    SegmentMetadataPB meta;
+    writer->segments()[0].to_proto(0, &meta);
+    writer->close();
+
+    EXPECT_FALSE(meta.has_deprecated_sort_key_min());
+    EXPECT_FALSE(meta.has_deprecated_sort_key_max());
+    EXPECT_TRUE(meta.has_sort_key_min_encoded());
+    EXPECT_TRUE(meta.has_sort_key_max_encoded());
+    EXPECT_TRUE(has_segment_sort_key_bounds(meta));
+
+    VariantTuple min, max;
+    ASSERT_OK(decode_segment_sort_key_bounds(meta, &min, &max));
+    ASSERT_EQ(1, min.size());
+    ASSERT_EQ(1, max.size());
+    EXPECT_EQ(3, min[0].value().get_int32());
+    EXPECT_EQ(42, max[0].value().get_int32());
 }
 
 TEST_F(LakeRowsetTest, test_load_segments) {
@@ -1009,13 +1044,13 @@ public:
         {
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(files[0].path);
-            auto* min_tuple = segment_meta->mutable_sort_key_min();
+            auto* min_tuple = segment_meta->mutable_deprecated_sort_key_min();
             auto* min_var = min_tuple->add_values();
             TypeDescriptor td(TYPE_INT);
             *min_var->mutable_type() = td.to_protobuf();
             min_var->set_value("0");
 
-            auto* max_tuple = segment_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_deprecated_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = td.to_protobuf();
             max_var->set_value("10");
@@ -1027,13 +1062,13 @@ public:
         {
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(files[1].path);
-            auto* min_tuple = segment_meta->mutable_sort_key_min();
+            auto* min_tuple = segment_meta->mutable_deprecated_sort_key_min();
             auto* min_var = min_tuple->add_values();
             TypeDescriptor td(TYPE_INT);
             *min_var->mutable_type() = td.to_protobuf();
             min_var->set_value("20");
 
-            auto* max_tuple = segment_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_deprecated_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = td.to_protobuf();
             max_var->set_value("30");
@@ -1045,13 +1080,13 @@ public:
         {
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(files[2].path);
-            auto* min_tuple = segment_meta->mutable_sort_key_min();
+            auto* min_tuple = segment_meta->mutable_deprecated_sort_key_min();
             auto* min_var = min_tuple->add_values();
             TypeDescriptor td(TYPE_INT);
             *min_var->mutable_type() = td.to_protobuf();
             min_var->set_value("40");
 
-            auto* max_tuple = segment_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_deprecated_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = td.to_protobuf();
             max_var->set_value("50");

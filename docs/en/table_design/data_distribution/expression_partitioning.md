@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "How to use expression partitioning in StarRocks to automatically create partitions based on data values."
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Expression partitioning (recommended)

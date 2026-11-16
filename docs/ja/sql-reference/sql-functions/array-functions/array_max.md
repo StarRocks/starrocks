@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ARRAY_MAX関数はARRAY内のすべてのデータの最大値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_max

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "如果字符串为NULL或空字符串则返回true，否则返回false。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # null_or_empty

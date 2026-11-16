@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "HLL 用于近似计数去重。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # HLL (HyperLogLog)

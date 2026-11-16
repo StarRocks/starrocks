@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将数字四舍五入到指定的位数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # round, dround

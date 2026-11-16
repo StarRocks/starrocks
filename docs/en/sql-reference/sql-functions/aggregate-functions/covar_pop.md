@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the population covariance of two expressions."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # covar_pop

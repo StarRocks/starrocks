@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Creates resources for managing Spark load configurations and external data source access."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE RESOURCE

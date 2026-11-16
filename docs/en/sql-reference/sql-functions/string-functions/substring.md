@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Extracts characters staring from the specified position and returns a substring of specified length."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # substring, substr

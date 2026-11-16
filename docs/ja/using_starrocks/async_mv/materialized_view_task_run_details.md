@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks のマテリアライズドビューのリフレッシュタスク実行の詳細を確認・解釈し、リフレッシュ動作の理解、失敗のトラブルシュート、性能の監視に役立てる方法。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # マテリアライズドビュータスク実行の理解
@@ -118,11 +119,12 @@ description: "StarRocks のマテリアライズドビューのリフレッシ�
 - **Default**: `Priority` = `LOWEST`, `isMergeRedundant` = `false`
 - **Fields**:
   - `priority`: タスク実行の優先度（`Constants.TaskRunPriority` の値）
-    - `HIGHEST`: 0
-    - `HIGH`: 32
-    - `NORMAL`: 64
-    - `LOW`: 96
-    - `LOWEST`: 127
+    - `LOWEST`: 0
+    - `LOW`: 20
+    - `NORMAL`: 50
+    - `HIGH`: 80
+    - `HIGHER`: 90
+    - `HIGHEST`: 100
   - `isMergeRedundant`: 冗長なリフレッシュ操作をマージするかどうか。
   - `properties`: 追加の実行プロパティ（`Map<String, String>` の形式）。
 

@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "How to upgrade a StarRocks cluster to a newer version."
+products: [oss]
 ---
 
 # Upgrade StarRocks

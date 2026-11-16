@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "How to compile StarRocks from source on Ubuntu."
+products: [oss]
 ---
 
 # Compile StarRocks on Ubuntu

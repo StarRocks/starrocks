@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a numeric or string value to its hexadecimal representation."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hex

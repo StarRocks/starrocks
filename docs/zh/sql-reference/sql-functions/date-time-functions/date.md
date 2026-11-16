@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从日期或时间日期表达式中截取日期部分。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # date

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks SQL の予約キーワードと非予約キーワードのリファレンス。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # キーワード

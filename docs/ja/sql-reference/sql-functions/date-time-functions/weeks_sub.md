@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "datetime値または日付値から指定された週数を減算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # weeks_sub

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Base64文字列をビットマップデータに変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # base64_to_bitmap

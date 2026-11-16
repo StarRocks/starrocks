@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts all strings in an argument to lower-case."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # lower

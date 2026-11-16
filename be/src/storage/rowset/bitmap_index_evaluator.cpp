@@ -425,7 +425,14 @@ struct BitmapIndexPredicateEraser {
         }
 
         if (!new_node.empty()) {
-            parent_node.add_child(new_node);
+            // Erase an OR all or nothing. If only some children were erased, the remaining ones would reject
+            // the erased children's rows. E.g. in (a = 1 AND (b = 2 OR b = 3)) OR c = 4, if the inner OR can't
+            // use the bitmap index, only (b = 2 OR b = 3) would remain and rows matching c = 4 would be lost.
+            if constexpr (Type == CompoundNodeType::OR) {
+                parent_node.add_child(node);
+            } else {
+                parent_node.add_child(new_node);
+            }
         }
     }
 

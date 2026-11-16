@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE RESOURCE GROUP creates a resource group."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE RESOURCE GROUP

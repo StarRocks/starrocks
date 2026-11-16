@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "How to configure StarRocks CBO (Cost-based Optimizer) with statistics collection and histograms to optimize query execution plans."
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CBO 统计信息

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从DATETIME类型值中提取日期部分。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # to_date

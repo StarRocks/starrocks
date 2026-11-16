@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算两个参数的乘积。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # multiply

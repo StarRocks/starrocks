@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定されたJSONパスからデータを削除し、修正されたJSONドキュメントを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # json_remove

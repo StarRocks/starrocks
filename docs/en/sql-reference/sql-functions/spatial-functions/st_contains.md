@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Checks whether the geometric figure shape1 can fully contain shape2."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Contains

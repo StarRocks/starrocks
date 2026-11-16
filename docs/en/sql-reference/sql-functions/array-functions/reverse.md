@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Reverses a string or array."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # reverse

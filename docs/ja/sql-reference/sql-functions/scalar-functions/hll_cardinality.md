@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "単一のHLL型の値の基数を計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hll_cardinality

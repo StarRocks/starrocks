@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Statistics and Storage"
 description: "BE configuration parameters for statistics collection and storage engine settings."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -12,7 +13,6 @@ import PostBEConfig from '../../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
-import EditionSpecificBEItem from '../../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
 
 # BE Configuration - Statistics and Storage
 
@@ -115,8 +115,6 @@ This topic introduces the following types of BE configurations:
 - Introduced in: -
 
 ## Storage
-
-<EditionSpecificBEItem />
 
 ### alter_tablet_worker_count
 
