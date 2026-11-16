@@ -28,6 +28,7 @@ set(FS_TEST_FILES
     fs_test.cpp
     fs_registry_test.cpp
     output_stream_wrapper_test.cpp
+    remote_read_context_test.cpp
 )
 
 if (NOT APPLE)

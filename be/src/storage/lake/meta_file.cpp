@@ -1469,7 +1469,8 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, co
         return Status::InternalError("Can't find delvec file name");
     }
     const auto& delvec_name = iter->second.name();
-    RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache};
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
+                                 .remote_read = lake_io_opts.remote_read};
     const std::string delvec_path =
             (lake_io_opts.fs && lake_io_opts.location_provider)
                     ? lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)
@@ -1551,6 +1552,15 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
     VLOG(2) << fmt::format("get_del_vec not found, segmentid {} tablet_meta {}", segment_id,
                            metadata.delvec_meta().ShortDebugString());
     return Status::OK();
+}
+
+bool del_vec_cached(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id) {
+    auto iter = metadata.delvec_meta().delvecs().find(segment_id);
+    if (iter == metadata.delvec_meta().delvecs().end()) {
+        return true;
+    }
+    return tablet_mgr->metacache()->lookup_delvec(MetacacheKey::delvec(metadata.id(), iter->second),
+                                                  false /* count_stats */) != nullptr;
 }
 
 namespace {

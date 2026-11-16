@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include <fstream>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
@@ -695,6 +696,46 @@ TEST_F(NewFsStarletTest, test_starlet_input_stream_get_io_stats_snapshot_stream_
     EXPECT_EQ(0, snap.bytes_read_remote);
     EXPECT_EQ(0, snap.io_count_local_disk);
     EXPECT_EQ(0, snap.io_count_remote);
+}
+
+// Records the read options of every open, so a test can see what reached starlet.
+class ReadOptionsRecordingFileSystem : public SnapshotMockFileSystem {
+public:
+    absl::StatusOr<std::unique_ptr<staros::starlet::fslib::ReadOnlyFile>> open(
+            std::string_view path, const staros::starlet::fslib::ReadOptions& opts) override {
+        opened.push_back(opts);
+        return SnapshotMockFileSystem::open(path, opts);
+    }
+
+    std::vector<staros::starlet::fslib::ReadOptions> opened;
+};
+
+// Starlet may keep blocks of a file in memory only when the caller vouches the path is never rewritten: the flag
+// passes through for random access files, opened by path or by file info, and stays off by default and for
+// sequential files.
+TEST_F(NewFsStarletTest, test_remote_read_retainable_reaches_starlet) {
+    auto mock_fs = std::make_shared<ReadOptionsRecordingFileSystem>();
+    int64_t test_shard_id = 99997;
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+    auto fs = new_fs_starlet(test_shard_id, false);
+    const auto path = fmt::format("staros://{}/anyfile", test_shard_id);
+
+    ASSIGN_OR_ABORT(auto plain, fs->new_random_access_file(path));
+    RandomAccessFileOptions retainable_opts;
+    retainable_opts.remote_read_retainable = true;
+    ASSIGN_OR_ABORT(auto retainable, fs->new_random_access_file(retainable_opts, path));
+    FileInfo whole{.path = path};
+    ASSIGN_OR_ABORT(auto retainable_info, fs->new_random_access_file_with_bundling(retainable_opts, whole));
+    ASSIGN_OR_ABORT(auto sequential, fs->new_sequential_file(path));
+
+    ASSERT_EQ(4, mock_fs->opened.size());
+    EXPECT_FALSE(mock_fs->opened[0].remote_read_retainable);
+    EXPECT_TRUE(mock_fs->opened[1].remote_read_retainable);
+    EXPECT_TRUE(mock_fs->opened[2].remote_read_retainable);
+    EXPECT_FALSE(mock_fs->opened[3].remote_read_retainable);
 }
 
 TEST_F(NewFsStarletTest, test_new_fs_starlet_with_s3_raw_path_mode_true) {

@@ -22,6 +22,7 @@
 #include "common/statusor.h"
 #include "fs/encryption.h"
 #include "fs/fs_options.h"
+#include "fs/remote_read_context.h"
 #include "io/input_stream.h"
 #include "io/seekable_input_stream.h"
 
@@ -50,6 +51,8 @@ struct SequentialFileOptions {
     int64_t buffer_size = -1;
     FileEncryptionInfo encryption_info;
     bool skip_disk_cache = false;
+    // Who the remote reads of this file are for; only the starlet filesystem uses it.
+    RemoteReadContext remote_read;
 };
 
 struct RandomAccessFileOptions {
@@ -60,6 +63,12 @@ struct RandomAccessFileOptions {
     int64_t buffer_size = -1;
     FileEncryptionInfo encryption_info;
     bool skip_disk_cache = false;
+    // Who the remote reads of this file are for; only the starlet filesystem uses it.
+    RemoteReadContext remote_read;
+    // The object at this path is never rewritten in place, as with a uniquely named segment file, so a filesystem
+    // may keep blocks of it in memory beyond its own cache (see remote_read_retain_prefetched_bytes) without them
+    // going stale. Leave it false for anything that can be overwritten, such as metadata.
+    bool remote_read_retainable = false;
 };
 
 struct DirEntry {

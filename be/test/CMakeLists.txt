@@ -400,6 +400,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/rle_page_test.cpp
     ./storage/rowset/rowset_test.cpp
     ./storage/rowset/segment_iterator_test.cpp
+    ./storage/rowset/segment_prefetch_window_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
     ./storage/rowset/segment_tail_index_region_test.cpp
     ./storage/rowset/segment_test.cpp
