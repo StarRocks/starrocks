@@ -38,6 +38,7 @@
 
 #include "base/string/utf8.h"
 #include "base/string/utf8_check.h"
+#include "base/string/volnitsky.h"
 #include "simdutf.h"
 
 namespace starrocks {
@@ -329,14 +330,62 @@ static void BM_SqlLocate_Utf8(benchmark::State& state) {
     std::vector<int32_t> result(kNumRows, 0);
 
     for (auto _ : state) {
+        const char* begin = reinterpret_cast<const char*>(col.bytes);
+        const char* end = begin + col.total_bytes;
+        const char* pos = begin;
+        size_t i = 0;
+
+        VolnitskyUTF8 searcher(needle.data(), needle.size(), end - pos);
+
+        while (pos < end && end != (pos = searcher.search(pos, end - pos))) {
+            while (begin + col.offsets[i + 1] <= pos) {
+                result[i] = 0;
+                ++i;
+            }
+            const char* row_begin = begin + col.offsets[i];
+            const char* row_end = begin + col.offsets[i + 1];
+            if (pos + needle.size() > row_end) {
+                result[i] = 0;
+            } else {
+                result[i] = static_cast<int32_t>(1 + utf8_len(row_begin, pos));
+            }
+            pos = row_end;
+            ++i;
+        }
+        if (i < kNumRows) {
+            std::memset(result.data() + i, 0, (kNumRows - i) * sizeof(int32_t));
+        }
+        benchmark::DoNotOptimize(result.data());
+    }
+    state.SetBytesProcessed(static_cast<int64_t>(state.iterations()) * static_cast<int64_t>(col.total_bytes));
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * static_cast<int64_t>(kNumRows));
+}
+
+// Non-constant needle path: haystack_vector_and_needle_vector (be/src/exprs/locate.cpp:182-235)
+static void BM_SqlLocate_VectorNeedle_Utf8(benchmark::State& state) {
+    const size_t row_len = static_cast<size_t>(state.range(0));
+    MockBinaryColumn col;
+    col.init_utf8(kNumRows, row_len);
+    const std::string needle = "TARGET";
+    for (size_t i = 0; i < kNumRows; ++i) {
+        uint8_t* row_ptr = col.bytes + col.offsets[i];
+        size_t len = col.offsets[i + 1] - col.offsets[i];
+        size_t target_pos = ((len * 3) / 4) & ~size_t(3);
+        if (target_pos + needle.size() <= len) {
+            std::memcpy(row_ptr + target_pos, needle.data(), needle.size());
+        }
+    }
+    std::vector<int32_t> result(kNumRows, 0);
+
+    for (auto _ : state) {
         const char* base = reinterpret_cast<const char*>(col.bytes);
         for (size_t i = 0; i < kNumRows; ++i) {
             const char* hay = base + col.offsets[i];
             size_t hay_len = col.offsets[i + 1] - col.offsets[i];
-            const void* match = memmem(hay, hay_len, needle.data(), needle.size());
-            if (match != nullptr) {
-                const char* match_ptr = static_cast<const char*>(match);
-                result[i] = utf8_len(hay, match_ptr) + 1;
+            LibcASCIICaseSensitiveStringSearcher searcher(needle.data(), needle.size());
+            const char* match_ptr = searcher.search(hay, hay_len);
+            if (match_ptr != nullptr) {
+                result[i] = static_cast<int32_t>(1 + utf8_len(hay, match_ptr));
             } else {
                 result[i] = 0;
             }
@@ -496,6 +545,7 @@ BENCHMARK(BM_SqlUtf8Length_Utf8)->Arg(16)->Arg(48)->Arg(100)->Arg(256);
 BENCHMARK(BM_SqlSubstr_Ascii)->Arg(24)->Arg(64)->Arg(192);
 BENCHMARK(BM_SqlReverse_Ascii)->Arg(24)->Arg(64)->Arg(192);
 BENCHMARK(BM_SqlLocate_Utf8)->Arg(32)->Arg(48)->Arg(96);
+BENCHMARK(BM_SqlLocate_VectorNeedle_Utf8)->Arg(32)->Arg(48)->Arg(96);
 BENCHMARK(BM_ScannerValidateUtf8_PerRecord)
         ->Args({32, 0})
         ->Args({96, 0})
@@ -534,9 +584,9 @@ BENCHMARK_MAIN();
 // BM_SqlSubstr_Ascii/192                    16,322 ns        16,342 ns      12,981 ns     1.26x (56.42 GiB/s)
 // BM_SqlReverse_Ascii/64                    14,494 ns        14,355 ns      12,856 ns     1.12x (18.99 GiB/s)
 // BM_SqlReverse_Ascii/192                   41,335 ns        40,605 ns      33,374 ns     1.22x (21.95 GiB/s)
-// BM_SqlLocate_Utf8/32                     154,541 ns       154,954 ns     107,469 ns     1.44x (1.14 GiB/s)
-// BM_SqlLocate_Utf8/48                     219,663 ns       219,649 ns     112,525 ns     1.95x (1.63 GiB/s)
-// BM_SqlLocate_Utf8/96                     153,685 ns       148,768 ns     137,274 ns     1.08x (2.67 GiB/s)
+// BM_SqlLocate_VectorNeedle_Utf8/32        154,541 ns       154,954 ns     107,469 ns     1.44x (1.14 GiB/s)
+// BM_SqlLocate_VectorNeedle_Utf8/48        219,663 ns       219,649 ns     112,525 ns     1.95x (1.63 GiB/s)
+// BM_SqlLocate_VectorNeedle_Utf8/96        153,685 ns       148,768 ns     137,274 ns     1.08x (2.67 GiB/s)
 //
 // Benchmark (AVX2 haswell)               5.2.8 (4.1.7)    9.1.0 (HEAD)     9.4.0 (PR)   Speedup (vs 9.1.0)
 // --------------------------------------------------------------------------------------------------------
