@@ -34,13 +34,8 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
-#include <algorithm>
-#include <limits>
 #include <numeric>
 #include <optional>
->>>>>>> 55bc3b1b81e... [BugFix][RB-439] Fix failover, mixed-version and downgrade issues in the lake IDG index fast path (#65414)
 #include <string>
 #include <thread>
 

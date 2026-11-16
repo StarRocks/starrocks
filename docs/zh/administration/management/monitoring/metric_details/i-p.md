@@ -383,33 +383,12 @@ products: [oss, enterprise, cloud, anywhere]
 - 单位：计数
 - 描述：成功的存算分离（lake）压缩任务计数。
 
-<<<<<<< StarRocks
-=======
 ## `lake_idg_files_missing_total`
 
 - 单位：操作次数
 - 类型：Counter
 - 描述：在存算分离模式下，统计索引增量组（Index Delta Group，IDG）`.idx` 初始化期间因文件缺失而降级的次数，以及每个位图索引迭代器首次在延迟页面读取时遇到文件缺失的次数。布隆过滤器页的延迟读取失败不计入。重新打开同一缺失文件可以再次计数，因此该指标不是缺失文件的去重数量。指标增长表示索引过滤能力下降，例如 Vacuum 与查询并发，或降级后再次升级时可能出现这种情况。
 
-## `lake_ingest_slowdown_delayed`
-
-- 单位：计数
-- 类型：Counter
-- 描述：仅存算分离。因所写分区的 Compaction Score 超过 `lake_ingest_slowdown_threshold`，被数据摄取减速推迟提交的导入事务数。每个事务只计一次，推迟期间提交重试多少次都不会重复计数。计入该指标的事务不会计入 `lake_ingest_slowdown_timeout`；如果推迟结束后提交被拒绝，还会同时计入 `lake_ingest_slowdown_rejected`。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出该指标且取值为 0，因此面板应通过 `is_leader="true"` 进行筛选。
-
-## `lake_ingest_slowdown_rejected`
-
-- 单位：计数
-- 类型：Counter
-- 描述：仅存算分离。因所写分区的 Compaction Score 超过 `lake_compaction_score_upper_bound` 而被拒绝提交的导入事务数，提交时报错 "too large compaction score"。被拒后即使同一事务再次提交，每个事务也只计一次。再次提交可能成功，因此计入该指标不代表导入一定失败。先被推迟、推迟结束后又被拒绝的事务，会同时计入该指标和 `lake_ingest_slowdown_delayed`。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出该指标且取值为 0，因此面板应通过 `is_leader="true"` 进行筛选。
-
-## `lake_ingest_slowdown_timeout`
-
-- 单位：计数
-- 类型：Counter
-- 描述：仅存算分离。数据摄取减速推迟提交后，最早提交时间晚于事务超时时间，因而失败的导入事务数。这类事务第一次提交时就会失败，报错 "timed out due to ingestion slowdown"，不计入 `lake_ingest_slowdown_delayed`。写入结束时就已超时的事务也会报同样的错，但超时不是推迟造成的，不计入该指标。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出该指标且取值为 0，因此面板应通过 `is_leader="true"` 进行筛选。
-
->>>>>>> celerdata-enterprise
 ## `lake_pk_index_cache_delvec_bytes`
 
 - 单位：字节
