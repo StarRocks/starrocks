@@ -1111,4 +1111,99 @@ TEST_F(OrcFileWriterTest, TestOrcPatchedBaseWrongBaseWidth) {
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
+namespace {
+
+class GrowingOrcOutputStream : public orc::OutputStream {
+public:
+    uint64_t getLength() const override { return _data.size(); }
+    uint64_t getNaturalWriteSize() const override { return 128 * 1024; }
+    void write(const void* buf, size_t length) override { _data.append(static_cast<const char*>(buf), length); }
+    const std::string& getName() const override { return _name; }
+    void close() override {}
+    const std::string& data() const { return _data; }
+
+private:
+    std::string _data;
+    std::string _name{"GrowingOrcOutputStream"};
+};
+
+class StringOrcInputStream : public orc::InputStream {
+public:
+    explicit StringOrcInputStream(const std::string& data) : _data(data) {}
+    uint64_t getLength() const override { return _data.size(); }
+    uint64_t getNaturalReadSize() const override { return 128 * 1024; }
+    void read(void* buf, uint64_t length, uint64_t offset) override { memcpy(buf, _data.data() + offset, length); }
+    const std::string& getName() const override { return _name; }
+
+private:
+    const std::string& _data;
+    std::string _name{"StringOrcInputStream"};
+};
+
+// Port of ORC-1288: once the PRESENT stream of a column is suppressed in a stripe without nulls, the compression
+// stream state must be reset, otherwise a later stripe that has nulls fails with "Can't backup that much!".
+void write_and_check_suppressed_present_stream(orc::CompressionKind kind) {
+    GrowingOrcOutputStream out;
+    auto type = orc::Type::buildTypeFromString("struct<c0:int>");
+    orc::WriterOptions options;
+    options.setStripeSize(1024).setCompressionBlockSize(1024).setCompression(kind);
+
+    const uint64_t batch_size = 10000;
+    const uint64_t num_batches = 40;
+    uint64_t expected_nulls = 0;
+    {
+        auto writer = orc::createWriter(*type, &out, options);
+        auto batch = writer->createRowBatch(batch_size);
+        auto& struct_batch = dynamic_cast<orc::StructVectorBatch&>(*batch);
+        auto& long_batch = dynamic_cast<orc::LongVectorBatch&>(*struct_batch.fields[0]);
+        for (uint64_t b = 0; b < num_batches; ++b) {
+            // The first half of the stripes have no nulls, so their PRESENT streams are suppressed.
+            bool with_nulls = b >= num_batches / 2;
+            long_batch.hasNulls = with_nulls;
+            for (uint64_t i = 0; i < batch_size; ++i) {
+                long_batch.data[i] = static_cast<int64_t>(b * batch_size + i);
+                bool is_null = with_nulls && i % 7 == 0;
+                long_batch.notNull[i] = is_null ? 0 : 1;
+                expected_nulls += is_null;
+            }
+            struct_batch.numElements = batch_size;
+            long_batch.numElements = batch_size;
+            ASSERT_NO_THROW(writer->add(*batch));
+        }
+        ASSERT_NO_THROW(writer->close());
+    }
+
+    auto reader = orc::createReader(std::make_unique<StringOrcInputStream>(out.data()), orc::ReaderOptions());
+    ASSERT_EQ(batch_size * num_batches, reader->getNumberOfRows());
+    ASSERT_GT(reader->getNumberOfStripes(), 1);
+    auto row_reader = reader->createRowReader();
+    auto batch = row_reader->createRowBatch(batch_size);
+    uint64_t rows = 0;
+    uint64_t nulls = 0;
+    while (row_reader->next(*batch)) {
+        auto& struct_batch = dynamic_cast<orc::StructVectorBatch&>(*batch);
+        auto& long_batch = dynamic_cast<orc::LongVectorBatch&>(*struct_batch.fields[0]);
+        for (uint64_t i = 0; i < long_batch.numElements; ++i) {
+            if (long_batch.hasNulls && !long_batch.notNull[i]) {
+                ++nulls;
+            } else {
+                ASSERT_EQ(static_cast<int64_t>(rows + i), long_batch.data[i]);
+            }
+        }
+        rows += long_batch.numElements;
+    }
+    ASSERT_EQ(batch_size * num_batches, rows);
+    ASSERT_EQ(expected_nulls, nulls);
+}
+
+} // namespace
+
+TEST(OrcSuppressPresentStreamTest, TestSuppressPresentStreamWithCompressionKinds) {
+    for (auto kind : {orc::CompressionKind_ZLIB, orc::CompressionKind_ZSTD, orc::CompressionKind_LZ4,
+                      orc::CompressionKind_SNAPPY}) {
+        SCOPED_TRACE(orc::compressionKindToString(kind));
+        write_and_check_suppressed_present_stream(kind);
+    }
+}
+
 } // namespace starrocks::formats
