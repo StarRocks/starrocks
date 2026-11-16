@@ -117,13 +117,14 @@ TEST_F(VarBinaryConverterTest, test_read_large_binary02) {
 TEST_F(VarBinaryConverterTest, test_write_string) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
-    (void)col->append_strings(std::vector<Slice>{"aaaaaaaaaaaa", "bbbbbbbb", "", "ccccc"});
+    (void)col->append_strings(std::vector<Slice>{"aaaaaaaaaaaa", "bbbbbbbb", "", "ccccc", ""});
 
     formats::FormattedOutputStreamString buff;
     EXPECT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
     EXPECT_TRUE(conv->write_string(&buff, *col, 1, Converter::Options()).ok());
     EXPECT_TRUE(conv->write_string(&buff, *col, 2, Converter::Options()).ok());
     EXPECT_TRUE(conv->write_string(&buff, *col, 3, Converter::Options()).ok());
+    EXPECT_TRUE(conv->write_string(&buff, *col, 4, Converter::Options()).ok());
     EXPECT_TRUE(buff.finalize().ok());
     EXPECT_EQ("YWFhYWFhYWFhYWFhYmJiYmJiYmI=Y2NjY2M=", buff.as_string());
 
@@ -132,9 +133,18 @@ TEST_F(VarBinaryConverterTest, test_write_string) {
     EXPECT_TRUE(conv->write_quoted_string(&buff2, *col, 1, Converter::Options()).ok());
     EXPECT_TRUE(conv->write_quoted_string(&buff2, *col, 2, Converter::Options()).ok());
     EXPECT_TRUE(conv->write_quoted_string(&buff2, *col, 3, Converter::Options()).ok());
+    EXPECT_TRUE(conv->write_quoted_string(&buff2, *col, 4, Converter::Options()).ok());
 
     EXPECT_TRUE(buff2.finalize().ok());
-    EXPECT_EQ("\"YWFhYWFhYWFhYWFh\"\"YmJiYmJiYmI=\"\"\"\"Y2NjY2M=\"", buff2.as_string());
+    EXPECT_EQ("\"YWFhYWFhYWFhYWFh\"\"YmJiYmJiYmI=\"\"\"\"Y2NjY2M=\"\"\"", buff2.as_string());
+
+    // All-empty column where BinaryColumn's byte buffer is empty (offsets[row] == bytes.size() == 0).
+    auto empty_col = ColumnHelper::create_column(_type, false);
+    empty_col->append_default();
+    formats::FormattedOutputStreamString buff3;
+    EXPECT_TRUE(conv->write_string(&buff3, *empty_col, 0, Converter::Options()).ok());
+    EXPECT_TRUE(buff3.finalize().ok());
+    EXPECT_EQ("", buff3.as_string());
 }
 
 } // namespace starrocks::csv

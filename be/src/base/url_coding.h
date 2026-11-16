@@ -26,8 +26,7 @@
 namespace starrocks {
 void base64_encode(const std::string& in, std::string* out);
 
-// Utility method to decode base64 encoded strings.  Also not extremely
-// performant.
+// Utility method to decode base64 encoded strings.
 // Returns true unless the string could not be correctly decoded.
 bool base64_decode(const std::string& in, std::string* out);
 

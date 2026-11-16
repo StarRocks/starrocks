@@ -30,12 +30,10 @@ namespace starrocks::csv {
 Status VarBinaryConverter::write_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                                         const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
-    auto& bytes = binary->get_immutable_bytes();
-    auto& offsets = binary->get_offset();
     // TODO: support binary type config later
 
-    size_t byte_length = offsets[row_num + 1] - offsets[row_num];
-    Slice str(&bytes[offsets[row_num]], byte_length);
+    Slice str = binary->get_slice(row_num);
+    size_t byte_length = str.size;
 
     size_t buf_size = ((byte_length + 2) / 3) * 4;
     std::string buf;

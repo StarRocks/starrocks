@@ -41,7 +41,7 @@
 namespace starrocks {
 
 size_t base64_encode2(const unsigned char* data, size_t length, unsigned char* encoded_data) {
-    if (encoded_data == nullptr || data == nullptr) {
+    if (encoded_data == nullptr || length == 0 || data == nullptr) {
         return 0;
     }
     return simdutf::binary_to_base64(reinterpret_cast<const char*>(data), length, reinterpret_cast<char*>(encoded_data),
@@ -49,7 +49,13 @@ size_t base64_encode2(const unsigned char* data, size_t length, unsigned char* e
 }
 
 int64_t base64_decode2(const char* data, size_t length, char* decoded_data) {
-    if (decoded_data == nullptr || data == nullptr) {
+    if (decoded_data == nullptr) {
+        return -1;
+    }
+    if (length == 0) {
+        return 0;
+    }
+    if (data == nullptr) {
         return -1;
     }
     simdutf::result r = simdutf::base64_to_binary(data, length, decoded_data, simdutf::base64_default,
