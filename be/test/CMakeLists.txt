@@ -167,6 +167,7 @@ set(EXEC_FILES
         ./service/daemon_test.cpp
         ./service/mem_hook_test.cpp
         ./service/service_metrics_test.cpp
+        ./service/service_be/arrow_flight_auth_server_middleware_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/backend_service_test.cpp
         ./base/auth/auth_info_test.cpp
