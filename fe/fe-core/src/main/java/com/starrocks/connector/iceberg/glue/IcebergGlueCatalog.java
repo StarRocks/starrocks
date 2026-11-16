@@ -24,6 +24,7 @@ import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
 import com.starrocks.qe.ConnectContext;
 import org.apache.hadoop.conf.Configuration;
@@ -66,6 +67,19 @@ public class IcebergGlueCatalog implements IcebergCatalog {
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
         copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
         copiedProperties.put(AwsProperties.GLUE_CATALOG_SKIP_NAME_VALIDATION, "true");
+<<<<<<< HEAD
+=======
+        // Iceberg's GlueCatalog only reads "glue.id" for the catalog id; an explicit "glue.id" wins.
+        String glueCatalogId = properties.get(CloudConfigurationConstants.AWS_GLUE_CATALOG_ID);
+        if (!Strings.isNullOrEmpty(glueCatalogId)) {
+            copiedProperties.putIfAbsent(AwsProperties.GLUE_CATALOG_ID, glueCatalogId);
+        }
+        // No door on construction, unlike the jdbc catalog (which opens its connection here) and the REST
+        // one (which fetches /v1/config). Building the Glue client goes remote only when the credential
+        // provider has to look something up -- an instance profile queries IMDS, static credentials with
+        // an explicit region contact nothing -- and this guard reports a wait that is happening, never one
+        // that might. Every actual Glue request is covered per method below.
+>>>>>>> 3095ee1 ([BugFix][RB-1334] Honor aws.glue.catalog_id for Iceberg Glue catalogs (#83312))
         delegate = (GlueCatalog) CatalogUtil.loadCatalog(GlueCatalog.class.getName(), name, copiedProperties, conf);
     }
 
