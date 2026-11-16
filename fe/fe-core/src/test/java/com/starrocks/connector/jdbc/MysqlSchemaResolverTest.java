@@ -23,12 +23,16 @@ import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Delegate;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -161,6 +165,34 @@ public class MysqlSchemaResolverTest {
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }
+    }
+
+    @Test
+    public void testListPartitionNamesForCatalogTable() throws Exception {
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        List<Column> columns = Arrays.asList(new Column("d", VarcharType.VARCHAR));
+        JDBCTable jdbcTable = (JDBCTable) new MysqlSchemaResolver().getTable(
+                100000, "tbl1", columns, columns, "test", "catalog", properties);
+        Assertions.assertEquals("`test`.`tbl1`", jdbcTable.getCatalogTableName());
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
+                                                   ConnectorMetadataRequestContext requestContext) {
+                Assertions.assertEquals("catalog", catalogName);
+                return jdbcMetadata.listPartitionNames(dbName, tableName, requestContext);
+            }
+        };
+
+        Assertions.assertEquals(Arrays.asList("20230810"), PartitionUtil.getPartitionNames(jdbcTable));
+        new Verifications() {
+            {
+                preparedStatement.setString(1, "test");
+                times = 1;
+                preparedStatement.setString(2, "tbl1");
+                times = 1;
+            }
+        };
     }
 
     @Test
