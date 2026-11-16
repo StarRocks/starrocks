@@ -28,6 +28,7 @@ Currently, the SQL transaction in StarRocks supports the following operations:
 - INSERT OVERWRITE is not supported currently.
 - Multiple INSERT statements against the same table within a transaction are supported only in shared-data clusters from v4.0 onwards.
 - UPDATE and DELETE are supported only in shared-data clusters from v4.0 onwards.
+- Within a transaction, DELETE is supported only on Primary Key tables. A DELETE on a Duplicate Key, Unique Key, or Aggregate Key table returns an error.
 
 :::
 
@@ -149,6 +150,7 @@ A transaction is associated with a single session. Multiple sessions cannot shar
 - SELECT statements against the tables whose data have been changed in the same transaction are not allowed.
 - Multiple INSERT statements against the same table within a transaction are supported only in shared-data clusters from v4.0 onwards.
 - Within a transaction, you can only define one UPDATE or DELETE statement against each table, and it must precede the INSERT statements.
+- DELETE in a transaction is supported only on Primary Key tables. A DELETE on a Duplicate Key, Unique Key, or Aggregate Key table runs as a separate delete job that commits on its own and cannot be rolled back with the transaction, so the system returns an error. Run such a DELETE outside the transaction.
 - Subsequent DML statements cannot read the uncommitted changes brought by preceding statements within the same transaction. For example, the target table of the preceding INSERT statement cannot be the source table of subsequent statements. Otherwise, the system returns an error.
 - For the same reason, a partial column update (an INSERT that writes only a subset of a Primary Key table's columns) against a table that was already modified earlier in the same transaction is not allowed. A partial update must implicitly read the table's other columns to complete each row, which would read the preceding statements' uncommitted changes. Otherwise, the system returns an error.
 - All target tables of the DML statements in a transaction must be within the same database. Cross-database operations are not allowed.
