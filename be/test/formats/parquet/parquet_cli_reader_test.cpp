@@ -79,13 +79,10 @@ GROUP_SLOW_TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
         // parquet column reader: not supported convert from parquet `FIXED_LEN_BYTE_ARRAY` to `TIME`
         unsupported_paths_init.emplace(
                 "./be/test/formats/parquet/test_data/column_converter/fixed_len_byte_array.parquet");
-        // parquet column reader: not supported convert from parquet `BYTE_ARRAY` to `DECIMAL128`
+        // parquet column reader: not supported convert from parquet `BYTE_ARRAY` to `JSON`
         unsupported_paths_init.emplace("./be/test/formats/parquet/test_data/column_converter/byte_array.parquet");
         // Invalid argument: Duplicate field name: col1
         unsupported_paths_init.emplace("./be/test/exec/test_data/parquet_data/schema4.parquet");
-        // Not supported: parquet column reader: not supported convert from parquet `BYTE_ARRAY` to `DECIMAL128`
-        unsupported_paths_init.emplace(
-                "./be/test/formats/parquet/test_data/data_with_page_index_and_bloom_filter.parquet");
     }
     // We don't support below files in get_next phase, it's illegal parquet files
     std::set<std::string> unsupported_paths_get_next;
