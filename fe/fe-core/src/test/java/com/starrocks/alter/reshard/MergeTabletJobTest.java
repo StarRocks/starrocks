@@ -358,8 +358,6 @@ public class MergeTabletJobTest {
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, mergeJob.getJobState());
     }
 
-<<<<<<< HEAD
-=======
     /**
      * A load committed right above the merge's version finishes as soon as the merge makes its version visible, so the
      * merge's CLEANING record, which makes that version visible on replay, has to be journaled first. Otherwise every FE
@@ -378,7 +376,7 @@ public class MergeTabletJobTest {
         ReshardJournalReplay.checkFailedCleaningJournalLeavesLayoutUnchanged(mergeJob,
                 table.getAllPhysicalPartitions().iterator().next());
     }
->>>>>>> c45e0f6fb91... [BugFix][RB-96] Journal a reshard job's CLEANING record before its version becomes visible (#70063)
+
 
     @Test
     public void testRunMergeBumpsOptimisticVersion() throws Exception {

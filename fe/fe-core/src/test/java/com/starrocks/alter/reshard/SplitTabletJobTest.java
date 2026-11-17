@@ -33,11 +33,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.epack.warehouse.WarehouseManagerEPack;
->>>>>>> c45e0f6fb91... [BugFix][RB-96] Journal a reshard job's CLEANING record before its version becomes visible (#70063)
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
@@ -308,7 +304,6 @@ public class SplitTabletJobTest {
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
     }
 
-
     /**
      * A load committed right above the split's version finishes as soon as the split makes its version visible, so the
      * split's CLEANING record, which makes that version visible on replay, has to be journaled first. Otherwise every FE
@@ -396,6 +391,7 @@ public class SplitTabletJobTest {
         Assertions.assertEquals(firstVisibleVersion, first.getVisibleVersion());
         Assertions.assertSame(firstOldIndex, first.getLatestBaseIndex());
     }
+
 
     /**
      * Records the transactions and the version of each reshard publish, and answers it the way a BE splits the
