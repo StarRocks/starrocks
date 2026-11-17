@@ -39,6 +39,14 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/sort_key_bounds.h"
 #include "storage/tablet_schema.h"
+<<<<<<< HEAD
+=======
+#include "storage/tablet_schema_map.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/disjunctive_predicates.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
+#include "storage_primitive/primary_key_encoding_types.h"
+>>>>>>> 53b21e7 ([BugFix][RB-1307] Keep the tablet schema map lock short on lake scans of wide tables (#83415))
 #include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
@@ -1646,4 +1654,727 @@ TEST_F(LakeRowsetTest, test_read_with_runtime_state_not_cancelled) {
     ASSERT_EQ(count_rows_from_iters(iters), 3 * (22 + 12));
 }
 
+<<<<<<< HEAD
+=======
+// Test: collect_files_in_log collects .vi files for op_write abort
+TEST_F(LakeRowsetTest, test_collect_files_in_log_op_write_vi_files) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_write = txn_log.mutable_op_write();
+    op_write->add_dels_meta()->set_name("del1.del");
+
+    // seg1 has two vector indexes, seg2 has one
+    auto* meta_seg1 = op_write->mutable_rowset()->add_segment_metas();
+    meta_seg1->set_filename("seg1.dat");
+    meta_seg1->add_vector_index_ids(100);
+    meta_seg1->add_vector_index_ids(200);
+    meta_seg1->set_segment_vector_index_uid(_tablet_metadata->id());
+    auto* meta_seg2 = op_write->mutable_rowset()->add_segment_metas();
+    meta_seg2->set_filename("seg2.dat");
+    meta_seg2->add_vector_index_ids(100);
+    meta_seg2->set_segment_vector_index_uid(_tablet_metadata->id());
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // Expected: 2 segments + 1 del + 3 vi files = 6
+    EXPECT_EQ(files_to_delete.size(), 6);
+
+    // Check .vi files are included
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("seg1.dat"));
+    EXPECT_TRUE(contains("seg2.dat"));
+    EXPECT_TRUE(contains("del1.del"));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg1.dat", _tablet_metadata->id(), 100)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg1.dat", _tablet_metadata->id(), 200)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg2.dat", _tablet_metadata->id(), 100)));
+}
+
+// Test: collect_files_in_log collects .vi files only for new segments in op_compaction abort
+TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_vi_files) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_compaction = txn_log.mutable_op_compaction();
+    auto* output_rowset = op_compaction->mutable_output_rowset();
+    // Partial compaction: segments [reused_a, new_x, new_y, reused_b]
+    op_compaction->set_new_segment_offset(1);
+    op_compaction->set_new_segment_count(2);
+
+    // All segments have vi tracking via segment_metas
+    auto* meta_a = output_rowset->add_segment_metas();
+    meta_a->set_filename("reused_a.dat");
+    meta_a->add_vector_index_ids(100);
+    meta_a->set_segment_vector_index_uid(_tablet_metadata->id());
+    auto* meta_x = output_rowset->add_segment_metas();
+    meta_x->set_filename("new_x.dat");
+    meta_x->add_vector_index_ids(100);
+    meta_x->add_vector_index_ids(200);
+    meta_x->set_segment_vector_index_uid(_tablet_metadata->id());
+    auto* meta_y = output_rowset->add_segment_metas();
+    meta_y->set_filename("new_y.dat");
+    meta_y->add_vector_index_ids(100);
+    meta_y->set_segment_vector_index_uid(_tablet_metadata->id());
+    auto* meta_b = output_rowset->add_segment_metas();
+    meta_b->set_filename("reused_b.dat");
+    meta_b->add_vector_index_ids(100);
+    meta_b->set_segment_vector_index_uid(_tablet_metadata->id());
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // Should only delete new segments and their vi files:
+    // new_x.dat, new_y.dat, new_x_100.vi, new_x_200.vi, new_y_100.vi = 5
+    EXPECT_EQ(files_to_delete.size(), 5);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    // New segments and their vi files should be collected
+    EXPECT_TRUE(contains("new_x.dat"));
+    EXPECT_TRUE(contains("new_y.dat"));
+    EXPECT_TRUE(contains(gen_vector_index_filename("new_x.dat", _tablet_metadata->id(), 100)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("new_x.dat", _tablet_metadata->id(), 200)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("new_y.dat", _tablet_metadata->id(), 100)));
+
+    // Reused segments and their vi files must NOT be collected
+    EXPECT_FALSE(contains("reused_a.dat"));
+    EXPECT_FALSE(contains("reused_b.dat"));
+    EXPECT_FALSE(contains(gen_vector_index_filename("reused_a.dat", _tablet_metadata->id(), 100)));
+    EXPECT_FALSE(contains(gen_vector_index_filename("reused_b.dat", _tablet_metadata->id(), 100)));
+}
+
+// Test: collect_files_in_log collects .vi files for op_schema_change abort
+TEST_F(LakeRowsetTest, test_collect_files_in_log_op_schema_change_vi_files) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_sc = txn_log.mutable_op_schema_change();
+    op_sc->set_linked_segment(false);
+    auto* rowset = op_sc->add_rowsets();
+
+    auto* meta_sc1 = rowset->add_segment_metas();
+    meta_sc1->set_filename("sc_seg1.dat");
+    meta_sc1->add_vector_index_ids(300);
+    meta_sc1->set_segment_vector_index_uid(_tablet_metadata->id());
+    auto* meta_sc2 = rowset->add_segment_metas();
+    meta_sc2->set_filename("sc_seg2.dat");
+    meta_sc2->add_vector_index_ids(300);
+    meta_sc2->add_vector_index_ids(400);
+    meta_sc2->set_segment_vector_index_uid(_tablet_metadata->id());
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // 2 segments + 3 vi files = 5
+    EXPECT_EQ(files_to_delete.size(), 5);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("sc_seg1.dat"));
+    EXPECT_TRUE(contains("sc_seg2.dat"));
+    EXPECT_TRUE(contains(gen_vector_index_filename("sc_seg1.dat", _tablet_metadata->id(), 300)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("sc_seg2.dat", _tablet_metadata->id(), 300)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("sc_seg2.dat", _tablet_metadata->id(), 400)));
+}
+
+// Test: collect_files_in_log collects .vi files for op_replication abort
+TEST_F(LakeRowsetTest, test_collect_files_in_log_op_replication_vi_files) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_repl = txn_log.mutable_op_replication();
+    auto* op_write = op_repl->add_op_writes();
+    op_write->add_dels_meta()->set_name("repl_del1.del");
+
+    auto* meta_repl = op_write->mutable_rowset()->add_segment_metas();
+    meta_repl->set_filename("repl_seg1.dat");
+    meta_repl->add_vector_index_ids(500);
+    meta_repl->set_segment_vector_index_uid(_tablet_metadata->id());
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // 1 segment + 1 del + 1 vi file = 3
+    EXPECT_EQ(files_to_delete.size(), 3);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("repl_seg1.dat"));
+    EXPECT_TRUE(contains("repl_del1.del"));
+    EXPECT_TRUE(contains(gen_vector_index_filename("repl_seg1.dat", _tablet_metadata->id(), 500)));
+}
+
+// Test: collect_files_in_log handles empty vector_index_ids gracefully
+TEST_F(LakeRowsetTest, test_collect_files_in_log_no_vi_files) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_write = txn_log.mutable_op_write();
+    op_write->mutable_rowset()->add_segment_metas()->set_filename("seg_no_vi.dat");
+    // No vector_index_ids in segment_metas
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // Only the segment file, no vi files
+    EXPECT_EQ(files_to_delete.size(), 1);
+    EXPECT_TRUE(files_to_delete[0].find("seg_no_vi.dat") != std::string::npos);
+}
+
+// Test: collect_files_in_log honours the `i < segment_metas_size()` defensive
+// guard when segment_metas is partially populated. This can happen during
+// rolling upgrade or for rowsets that pre-date precise-vacuum tracking — the
+// loop must not walk past the end of the segment_metas array.
+TEST_F(LakeRowsetTest, test_collect_files_in_log_partial_segment_metas) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_write = txn_log.mutable_op_write();
+
+    // Only seg_a has vector_index_ids; seg_b and seg_c do not (e.g., pre-VI rowset).
+    auto* meta_a = op_write->mutable_rowset()->add_segment_metas();
+    meta_a->set_filename("seg_a.dat");
+    meta_a->add_vector_index_ids(100);
+    meta_a->add_vector_index_ids(200);
+    meta_a->set_segment_vector_index_uid(_tablet_metadata->id());
+    op_write->mutable_rowset()->add_segment_metas()->set_filename("seg_b.dat");
+    op_write->mutable_rowset()->add_segment_metas()->set_filename("seg_c.dat");
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // 3 segments + 2 vi files (only seg_a has VI tracking) = 5
+    EXPECT_EQ(files_to_delete.size(), 5);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("seg_a.dat"));
+    EXPECT_TRUE(contains("seg_b.dat"));
+    EXPECT_TRUE(contains("seg_c.dat"));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg_a.dat", _tablet_metadata->id(), 100)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg_a.dat", _tablet_metadata->id(), 200)));
+    // No phantom .vi entries fabricated for seg_b / seg_c which lack metas.
+    EXPECT_FALSE(contains("seg_b.dat_"));
+    EXPECT_FALSE(contains("seg_c.dat_"));
+}
+
+// Test: collect_files_in_log for op_compaction with new_segment_offset / count
+// pointing past the segment_metas array. The combined `idx < segments.size()
+// && cnt < new_segment_count && idx < segment_metas_size()` guard must not crash
+// or fabricate VI filenames for indices without a corresponding segment_meta.
+TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_partial_segment_metas) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_compaction = txn_log.mutable_op_compaction();
+    auto* output_rowset = op_compaction->mutable_output_rowset();
+    op_compaction->set_new_segment_offset(1);
+    op_compaction->set_new_segment_count(2);
+
+    // Only reused.dat has vector_index_ids. new_a.dat and new_b.dat have
+    // segment_metas with no vector_index_ids. The op_compaction loop iterates
+    // idx=1 (new_a) and idx=2 (new_b) — no .vi filenames should be emitted for
+    // either.
+    auto* meta_reused = output_rowset->add_segment_metas();
+    meta_reused->set_filename("reused.dat");
+    meta_reused->add_vector_index_ids(100);
+    meta_reused->set_segment_vector_index_uid(_tablet_metadata->id());
+    output_rowset->add_segment_metas()->set_filename("new_a.dat");
+    output_rowset->add_segment_metas()->set_filename("new_b.dat");
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // Only the two new segments (reused is not part of new_segment_count window).
+    // No .vi entries since the new segments don't have segment_metas.
+    EXPECT_EQ(files_to_delete.size(), 2);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("new_a.dat"));
+    EXPECT_TRUE(contains("new_b.dat"));
+    EXPECT_FALSE(contains("reused.dat"));
+    // The one segment_meta entry sits at index 0; the new-segment window starts
+    // at idx=1 and never reads segment_metas(0), so no spurious .vi paths.
+    EXPECT_FALSE(contains(gen_vector_index_filename("reused.dat", _tablet_metadata->id(), 100)));
+}
+
+// Regression: the lake read-options propagation chain must carry has_predicate_above_iterator
+// from RowsetReadOptions into SegmentReadOptions. Before the fix, Rowset::read copied ~28 option
+// fields but skipped this one, so a shared-data ANN scan with an above-iterator residual saw the
+// default (false) and could not apply the configured top-k underfill fallback policy. The non-lake
+// Rowset path already copies it (storage/rowset/rowset.cpp).
+TEST_F(LakeRowsetTest, test_propagate_has_predicate_above_iterator) {
+    create_rowsets_for_testing();
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+    rs_opts.has_predicate_above_iterator = true;
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+
+    bool seen = false;
+    bool propagated = false;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("Rowset::read::seg_options", [&](void* arg) {
+        auto* seg_options = static_cast<SegmentReadOptions*>(arg);
+        seen = true;
+        propagated = seg_options->has_predicate_above_iterator;
+    });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("Rowset::read::seg_options");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+    ASSERT_TRUE(seen);
+    EXPECT_TRUE(propagated);
+}
+
+namespace {
+
+// Build a DUP_KEYS schema over two INT columns c0,c1. `num_key_columns` sets the sort-key
+// arity (when the PB's sort_key_idxes is empty, TabletSchema falls the sort key back to the
+// key columns): 1 -> sort key (c0); 2 -> sort key (c0,c1). The column unique_ids are passed
+// in so the archived and current schemas keep the same column identity across the
+// metadata-only change.
+static TabletSchemaPB make_two_int_dup_schema(int64_t schema_id, int32_t schema_version, int num_key_columns,
+                                              int64_t c0_uid, int64_t c1_uid) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_id(schema_id);
+    schema_pb.set_schema_version(schema_version);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_num_rows_per_row_block(65535);
+    const int64_t uids[2] = {c0_uid, c1_uid};
+    for (int i = 0; i < 2; i++) {
+        auto* c = schema_pb.add_column();
+        c->set_unique_id(uids[i]);
+        c->set_name("c" + std::to_string(i));
+        c->set_type("INT");
+        c->set_is_nullable(false);
+        const bool is_key = i < num_key_columns;
+        c->set_is_key(is_key);
+        if (!is_key) {
+            c->set_aggregation("NONE");
+        }
+    }
+    return schema_pb;
+}
+
+// Build the current schema after a metadata-only trailing key ADD: [c0 key, c_new key(const default),
+// c1 value] with sort key (c0, c_new). c_new is a brand-new column not physically present in the old
+// segment, so its rows read as `cnew_default`; c1 keeps its unique_id and shifts one position right.
+static TabletSchemaPB make_trailing_key_add_schema(int64_t schema_id, int32_t schema_version, int64_t c0_uid,
+                                                   int64_t cnew_uid, int64_t c1_uid, const std::string& cnew_default) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_id(schema_id);
+    schema_pb.set_schema_version(schema_version);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_num_rows_per_row_block(65535);
+    auto* c0 = schema_pb.add_column();
+    c0->set_unique_id(c0_uid);
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_nullable(false);
+    c0->set_is_key(true);
+    auto* cnew = schema_pb.add_column();
+    cnew->set_unique_id(cnew_uid);
+    cnew->set_name("c_new");
+    cnew->set_type("INT");
+    cnew->set_is_nullable(false);
+    cnew->set_is_key(true);
+    cnew->set_default_value(cnew_default);
+    auto* c1 = schema_pb.add_column();
+    c1->set_unique_id(c1_uid);
+    c1->set_name("c1");
+    c1->set_type("INT");
+    c1->set_is_nullable(false);
+    c1->set_is_key(false);
+    c1->set_aggregation("NONE");
+    schema_pb.add_sort_key_idxes(0);
+    schema_pb.add_sort_key_idxes(1);
+    return schema_pb;
+}
+
+// Set a two-column INT tablet range [ (lo0,lo1), (hi0,hi1) ) (closed-open).
+static void set_tablet_range_two_int(TabletMetadata* tablet_meta, int32_t lo0, int32_t lo1, int32_t hi0, int32_t hi1) {
+    auto* range = tablet_meta->mutable_range();
+    range->Clear();
+    auto* lb = range->mutable_lower_bound();
+    *lb->add_values() = make_int_variant_pb(lo0);
+    *lb->add_values() = make_int_variant_pb(lo1);
+    range->set_lower_bound_included(true);
+    auto* ub = range->mutable_upper_bound();
+    *ub->add_values() = make_int_variant_pb(hi0);
+    *ub->add_values() = make_int_variant_pb(hi1);
+    range->set_upper_bound_included(false);
+}
+
+// Write one rowset (a single segment) with rows {(10,100),(20,100),(30,100),(40,100),(50,100)}
+// under `write_metadata`'s current schema. c0 is distinct and c1 is constant, so the row order
+// is identical whether the segment is sorted by (c0) or (c0,c1); the two-column boundary is
+// unambiguous. Appends the rowset (id=1, num_rows=5) to `metadata` but does not persist it.
+static void write_single_segment_rowset(TabletManager* tablet_mgr, TabletMetadata* metadata,
+                                        const std::shared_ptr<Schema>& write_schema) {
+    ASSIGN_OR_ABORT(auto tablet, tablet_mgr->get_tablet(metadata->id()));
+    int64_t write_txn = next_id();
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, write_txn));
+    ASSERT_OK(writer->open());
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    for (int k : {10, 20, 30, 40, 50}) {
+        c0->append(k);
+        c1->append(100);
+    }
+    Chunk chunk({c0, c1}, write_schema);
+    ASSERT_OK(writer->write(chunk));
+    ASSERT_OK(writer->finish());
+    ASSERT_EQ(1, writer->segments().size());
+
+    auto* rowset_meta = metadata->add_rowsets();
+    rowset_meta->set_overlapped(false);
+    rowset_meta->set_id(1);
+    rowset_meta->set_num_rows(5);
+    for (const auto& file : writer->segments()) {
+        rowset_meta->add_segment_metas()->set_filename(file.path);
+    }
+    writer->close();
+}
+
+} // namespace
+
+// Trailing sort-key ADD (N -> N+1): an old rowset archived under the previous N-sort-key schema must
+// stay readable after a metadata-only change that appends a BRAND-NEW trailing sort-key column. The
+// added column is not physically present in the old segment, so its rows read as the column default; a
+// later reshard stamps a per-rowset/tablet range in the (N+1)-value sort key onto the old rowset.
+// Rowset::get_seek_range() must decode that wider range with the rowset's own (archived) schema for
+// positional alignment, and PROJECT the trailing bound value against the added column's default to fix
+// each bound's inclusivity -- not merely truncate it. The boundary here (trailing 5 on the lower bound,
+// -5 on the upper) is chosen so correct projection and naive truncation disagree on the count: with
+// default D=0, the lower's 0<5 excludes the c0==20 rows and the upper's 0>-5 excludes the c0==40 rows,
+// leaving only c0==30 (1 row); truncation to [20,40) would keep {20,30} (2 rows). Segments are marked
+// shared() so Rowset::read installs the tablet seek range (applied only to shared segments).
+TEST_F(LakeRowsetTest, test_seek_range_trailing_key_add_projects_and_compacts) {
+    const int64_t c0_uid = next_id();
+    const int64_t c1_uid = next_id();
+    const int64_t cnew_uid = next_id();
+    const int64_t archived_schema_id = next_id();
+    const int64_t current_schema_id = next_id();
+
+    // The physical rowset is written under the archived 1-sort-key schema (c0 key, c1 value).
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    metadata->set_cumulative_point(0);
+    metadata->set_next_rowset_id(2);
+    *metadata->mutable_schema() =
+            make_two_int_dup_schema(archived_schema_id, /*schema_version=*/1, /*num_key_columns=*/1, c0_uid, c1_uid);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    auto archived_schema = TabletSchema::create(metadata->schema());
+    auto write_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(archived_schema));
+    write_single_segment_rowset(_tablet_mgr.get(), metadata.get(), write_schema);
+
+    // Apply the metadata-only trailing key add: archive the old schema, install the current schema
+    // [c0 key, c_new key(default 0), c1 value] with sort key (c0, c_new), map the old rowset to the
+    // archived schema, stamp a 2-value tablet range as a later reshard would, and mark segments shared.
+    metadata->mutable_historical_schemas()->insert({archived_schema_id, metadata->schema()});
+    *metadata->mutable_schema() = make_trailing_key_add_schema(current_schema_id, /*schema_version=*/2, c0_uid,
+                                                               cnew_uid, c1_uid, /*cnew_default=*/"0");
+    metadata->mutable_rowset_to_schema()->insert({1, archived_schema_id});
+    set_tablet_range_two_int(metadata.get(), 20, 5, 40, -5); // [ (20,5), (40,-5) )
+    set_rowset_shared_segments(metadata->mutable_rowsets(0), true);
+    metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    auto current_schema = TabletSchema::create(metadata->schema());
+    auto input_schema = ChunkHelper::convert_schema(current_schema, std::vector<ColumnId>{0});
+
+    // BEFORE the fix, get_seek_range decodes the 2-value fallback range with the archived 1-sort-key
+    // schema and read() fails with Status::Corruption. AFTER the fix it projects to c0 in (20, 40)
+    // (both boundaries exclusive), leaving only c0==30.
+    {
+        OlapReaderStatistics stats;
+        RowsetReadOptions rs_opts;
+        rs_opts.stats = &stats;
+        rs_opts.tablet_schema = std::make_shared<const TabletSchema>(metadata->schema());
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), metadata, 0, 0 /* compaction_segment_limit */);
+        auto read_res = rowset->read(input_schema, rs_opts);
+        ASSERT_TRUE(read_res.ok()) << "get_seek_range must project the wider tablet range onto the rowset's "
+                                      "archived sort key, not corrupt on arity mismatch: "
+                                   << read_res.status();
+        EXPECT_EQ(1, count_rows_from_iters(read_res.value()));
+    }
+
+    // Force a compaction of the archived rowset. The compaction reads the shared segment through
+    // get_seek_range (so it also exercises the projection) and, because the segment is shared, applies
+    // the tablet range while merging, yielding a private output rowset with the single in-range row.
+    int64_t compact_txn = next_id();
+    auto input_rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), metadata, 0, 0 /* compaction_segment_limit */);
+    auto ctx = std::make_unique<CompactionTaskContext>(compact_txn, metadata->id(), metadata->version(),
+                                                       /*force_base_compaction=*/false,
+                                                       /*skip_write_txnlog=*/false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(ctx.get(), {input_rowset}));
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    ASSIGN_OR_ABORT(auto new_metadata, publish_single_version(metadata->id(), metadata->version() + 1, compact_txn));
+
+    ASSERT_EQ(1, new_metadata->rowsets_size());
+    OlapReaderStatistics stats2;
+    RowsetReadOptions rs_opts2;
+    rs_opts2.stats = &stats2;
+    rs_opts2.tablet_schema = std::make_shared<const TabletSchema>(new_metadata->schema());
+    auto compacted =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), new_metadata, 0, 0 /* compaction_segment_limit */);
+    ASSIGN_OR_ABORT(auto iters2, compacted->read(input_schema, rs_opts2));
+    EXPECT_EQ(1, count_rows_from_iters(iters2));
+}
+
+// Regression: when the sort-key arity is unchanged, decoding the tablet fallback range with the
+// current schema is identical to decoding it with the rowset's (same-arity) archived schema. An
+// old rowset mapped to a same-arity historical schema still prunes correctly, with no behavior
+// change relative to before the fix.
+TEST_F(LakeRowsetTest, test_seek_range_same_arity_historical_schema_unchanged) {
+    const int64_t c0_uid = next_id();
+    const int64_t c1_uid = next_id();
+    const int64_t archived_schema_id = next_id();
+    const int64_t current_schema_id = next_id();
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    metadata->set_cumulative_point(0);
+    metadata->set_next_rowset_id(2);
+    *metadata->mutable_schema() =
+            make_two_int_dup_schema(archived_schema_id, /*schema_version=*/1, /*num_key_columns=*/1, c0_uid, c1_uid);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    auto archived_schema = TabletSchema::create(metadata->schema());
+    auto write_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(archived_schema));
+    write_single_segment_rowset(_tablet_mgr.get(), metadata.get(), write_schema);
+
+    // Keep the same 1-sort-key arity as the "current" schema (only the schema id/version change),
+    // and map the rowset to the archived (same-arity) schema. Use a single-value tablet range.
+    metadata->mutable_historical_schemas()->insert({archived_schema_id, metadata->schema()});
+    *metadata->mutable_schema() =
+            make_two_int_dup_schema(current_schema_id, /*schema_version=*/2, /*num_key_columns=*/1, c0_uid, c1_uid);
+    metadata->mutable_rowset_to_schema()->insert({1, archived_schema_id});
+    set_tablet_range_int(metadata.get(), 20, true, 40, false); // [20, 40)
+    set_rowset_shared_segments(metadata->mutable_rowsets(0), true);
+    metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    auto current_schema = TabletSchema::create(metadata->schema());
+    auto input_schema = ChunkHelper::convert_schema(current_schema, std::vector<ColumnId>{0});
+    OlapReaderStatistics stats;
+    RowsetReadOptions rs_opts;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(metadata->schema());
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), metadata, 0, 0 /* compaction_segment_limit */);
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+    // Range [20, 40) keeps 20 and 30 => 2 rows, identical whether decoded with the archived or the
+    // current schema.
+    EXPECT_EQ(2, count_rows_from_iters(iters));
+}
+
+// The checked memo is shared with ordinary physical split planning. A query prepass must
+// populate that same memo with its cache policy and account for the actual footer reads.
+TEST_F(LakeRowsetTest, test_checked_segments_preserves_query_options_stats_and_memo) {
+    create_rowsets_for_testing();
+    _tablet_mgr->prune_metacache();
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    LakeIOOptions opts{.fill_data_cache = false, .fill_metadata_cache = false};
+    OlapReaderStatistics stats;
+    std::atomic<bool> cancelled{false};
+    ASSIGN_OR_ABORT(auto segments, rowset->get_segments_checked(opts, &stats, &cancelled));
+    ASSERT_EQ(3, segments.size());
+    EXPECT_EQ(3, stats.segments_opened);
+    EXPECT_GT(stats.io_ns, 0);
+    for (const auto& sm : _tablet_metadata->rowsets(0).segment_metas()) {
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(MetacacheKey::segment(FileInfo{
+                                   .path = _tablet_mgr->segment_location(_tablet_metadata->id(), sm.filename())})));
+    }
+    ASSIGN_OR_ABORT(auto planned_segments, rowset->get_segments_checked());
+    EXPECT_EQ(segments, planned_segments);
+    OlapReaderStatistics reused;
+    ASSIGN_OR_ABORT(auto repeated, rowset->get_segments_checked(opts, &reused, &cancelled));
+    EXPECT_EQ(segments, repeated);
+    EXPECT_EQ(0, reused.segments_opened);
+    EXPECT_EQ(0, reused.io_count);
+}
+
+TEST_F(LakeRowsetTest, test_checked_segments_cancels_cold_and_prewarmed_memo) {
+    create_rowsets_for_testing();
+    _tablet_mgr->prune_metacache();
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    LakeIOOptions opts{.fill_data_cache = false, .fill_metadata_cache = false};
+    OlapReaderStatistics stats;
+    std::atomic<bool> cancelled{true};
+    auto cold = rowset->get_segments_checked(opts, &stats, &cancelled);
+    ASSERT_TRUE(cold.status().is_cancelled()) << cold.status();
+    EXPECT_EQ(0, stats.segments_opened);
+    cancelled.store(false);
+    ASSIGN_OR_ABORT(auto segments, rowset->get_segments_checked(opts, &stats, &cancelled));
+    ASSERT_EQ(3, segments.size());
+    cancelled.store(true);
+    auto warm = rowset->get_segments_checked(opts, &stats, &cancelled);
+    EXPECT_TRUE(warm.status().is_cancelled()) << warm.status();
+    ASSIGN_OR_ABORT(auto legacy, rowset->get_segments_checked());
+    EXPECT_EQ(segments, legacy);
+}
+
+TEST_F(LakeRowsetTest, test_checked_segments_cancel_during_final_footer_does_not_publish_memo) {
+    create_rowsets_for_testing();
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    _tablet_mgr->prune_metacache();
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    std::atomic<bool> cancelled{false};
+    int loaded = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::serial_loaded", [&](void*) {
+        if (++loaded == 3) cancelled.store(true);
+    });
+    LakeIOOptions opts{.fill_data_cache = false, .fill_metadata_cache = false};
+    OlapReaderStatistics stats;
+    auto result = rowset->get_segments_checked(opts, &stats, &cancelled);
+    EXPECT_TRUE(result.status().is_cancelled()) << result.status();
+    EXPECT_EQ(3, stats.segments_opened);
+    EXPECT_FALSE(rowset->_segments_loaded);
+    cancelled.store(false);
+    ASSIGN_OR_ABORT(auto retried, rowset->get_segments_checked(opts, &stats, &cancelled));
+    EXPECT_EQ(3, retried.size());
+    EXPECT_EQ(6, stats.segments_opened);
+}
+
+TEST_F(LakeRowsetTest, test_checked_segments_cancel_after_first_footer_stops_fanout) {
+    create_rowsets_for_testing();
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    _tablet_mgr->prune_metacache();
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    std::atomic<bool> cancelled{false};
+    int loaded = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::serial_loaded", [&](void*) {
+        ++loaded;
+        cancelled.store(true);
+    });
+    LakeIOOptions opts{.fill_data_cache = false, .fill_metadata_cache = false};
+    OlapReaderStatistics stats;
+    auto result = rowset->get_segments_checked(opts, &stats, &cancelled);
+    ASSERT_TRUE(result.status().is_cancelled()) << result.status();
+    EXPECT_EQ(1, loaded);
+    EXPECT_EQ(1, stats.segments_opened);
+    EXPECT_FALSE(rowset->_segments_loaded);
+    SyncPoint::GetInstance()->ClearCallBack("Rowset::load_segments::serial_loaded");
+    cancelled.store(false);
+    ASSIGN_OR_ABORT(auto retried, rowset->get_segments_checked(opts, &stats, &cancelled));
+    EXPECT_EQ(3, retried.size());
+    EXPECT_EQ(4, stats.segments_opened);
+}
+
+// get_rowsets() looks each schema up in GlobalTabletSchemaMap once, not once per rowset: the map takes one lock per
+// schema id, which every tablet of a table shares, so per-rowset lookups made scans of tablets with many rowsets
+// queue up on it. A conflicting cache entry for each schema makes every lookup build a new TabletSchema,
+// so rowsets share one schema object only if it was looked up once.
+TEST_F(LakeRowsetTest, test_get_rowsets_looks_up_each_schema_once) {
+    auto init_schema = [](TabletSchemaPB* schema, int64_t schema_id) {
+        schema->set_id(schema_id);
+        schema->set_keys_type(DUP_KEYS);
+        schema->set_num_short_key_columns(1);
+        schema->set_num_rows_per_row_block(65535);
+        auto* k = schema->add_column();
+        k->set_unique_id(1);
+        k->set_name("k");
+        k->set_type("INT");
+        k->set_is_key(true);
+        k->set_is_nullable(false);
+        auto* v = schema->add_column();
+        v->set_unique_id(2);
+        v->set_name("v");
+        v->set_type("INT");
+        v->set_is_key(false);
+        v->set_is_nullable(true);
+        v->set_aggregation("NONE");
+    };
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    metadata->set_next_rowset_id(5);
+    init_schema(metadata->mutable_schema(), next_id());
+    const int64_t archived_id = next_id();
+    auto& archived_pb = (*metadata->mutable_historical_schemas())[archived_id];
+    init_schema(&archived_pb, archived_id);
+    archived_pb.mutable_column(1)->set_unique_id(4);
+    for (uint32_t id = 1; id <= 4; ++id) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(id);
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(0);
+        rowset->set_data_size(0);
+    }
+    // Rowsets 1 and 3 were written with the tablet schema, rowsets 2 and 4 with the archived one.
+    (*metadata->mutable_rowset_to_schema())[2] = archived_id;
+    (*metadata->mutable_rowset_to_schema())[4] = archived_id;
+
+    auto conflicting_pb = metadata->schema();
+    conflicting_pb.mutable_column(1)->set_unique_id(3);
+    auto [conflicting, inserted] = GlobalTabletSchemaMap::Instance()->emplace(conflicting_pb);
+    ASSERT_TRUE(inserted);
+    auto conflicting_archived_pb = archived_pb;
+    conflicting_archived_pb.mutable_column(1)->set_unique_id(5);
+    auto [conflicting_archived, archived_inserted] =
+            GlobalTabletSchemaMap::Instance()->emplace(conflicting_archived_pb);
+    ASSERT_TRUE(archived_inserted);
+    auto lookup_1 = GlobalTabletSchemaMap::Instance()->emplace(metadata->schema()).first;
+    auto lookup_2 = GlobalTabletSchemaMap::Instance()->emplace(metadata->schema()).first;
+    ASSERT_NE(lookup_1.get(), lookup_2.get());
+
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), metadata);
+    ASSERT_EQ(4, rowsets.size());
+    auto current = rowsets[0]->tablet_schema();
+    auto archived = rowsets[1]->tablet_schema();
+    EXPECT_EQ(metadata->schema().id(), current->id());
+    EXPECT_EQ(2, current->column(1).unique_id());
+    EXPECT_EQ(archived_id, archived->id());
+    EXPECT_EQ(4, archived->column(1).unique_id());
+    EXPECT_EQ(current.get(), rowsets[2]->tablet_schema().get());
+    EXPECT_EQ(archived.get(), rowsets[3]->tablet_schema().get());
+}
+
+>>>>>>> 53b21e7 ([BugFix][RB-1307] Keep the tablet schema map lock short on lake scans of wide tables (#83415))
 } // namespace starrocks::lake
