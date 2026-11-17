@@ -476,10 +476,33 @@ cd -
 echo "Finished patching $HYPERSCAN_SOURCE"
 
 # patch vpack
+<<<<<<< HEAD
 cd $TP_SOURCE_DIR/$VPACK_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
     patch -p1 < $TP_PATCH_DIR/velocypack-XYZ1.0.patch
     touch $PATCHED_MARK
+=======
+if [[ -d $TP_SOURCE_DIR/$VPACK_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$VPACK_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0.patch
+        # non-throwing Parser::tryParse()/tryFromJson() for invalid JSON input
+        apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-tryparse.patch
+        # cap parser nesting depth so deeply nested JSON fails instead of overflowing the stack
+        apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-nesting-depth.patch
+        touch $PATCHED_MARK
+    fi
+    # Keep this fix independent of the mark on previously patched sources.
+    if [ ! -f $PATCHED_MARK.append_double_buffer ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
+        # Earlier revisions included this fix in velocypack-XYZ1.0.patch.
+        if ! patch --dry-run --force --reverse -p1 < "$TP_PATCH_DIR/velocypack-XYZ1.0-append-double-buffer.patch" >/dev/null 2>&1; then
+            apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-append-double-buffer.patch
+        fi
+        touch $PATCHED_MARK.append_double_buffer
+    fi
+    cd -
+    echo "Finished patching $VPACK_SOURCE"
+>>>>>>> df88313 ([BugFix] Prevent VelocyPack double formatting buffer overflow (#83195))
 fi
 cd -
 echo "Finished patching $VPACK_SOURCE"
