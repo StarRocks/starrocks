@@ -43,7 +43,7 @@ public class AfBench {
     public static void main(String[] args) throws Exception {
         String host = args.length > 0 ? args[0] : "127.0.0.1";
         int port = args.length > 1 ? Integer.parseInt(args[1]) : 9408;
-        String table = args.length > 2 ? args[2] : "afme.big";
+        String table = args.length > 2 ? args[2] : "db.table";
 
         String user = System.getenv().getOrDefault("SR_USER", "root");
         String jwt = System.getenv("SR_JWT");
