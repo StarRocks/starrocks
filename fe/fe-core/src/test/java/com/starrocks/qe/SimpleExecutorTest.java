@@ -172,6 +172,7 @@ public class SimpleExecutorTest {
         parent.setRemoteIP("192.0.2.1");
         parent.setBypassAuthorizerCheck(true);
         parent.setDatabase("caller_db");
+        parent.setInternalQueryPurpose(ConnectContext.InternalQueryPurpose.PAIMON_GLOBAL_INDEX);
         parent.getSessionVariable().setResourceGroup("user_group");
         GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(parent.getSessionVariable(),
                 new SystemVariable(SessionVariable.QUERY_MEM_LIMIT, new IntLiteral(123456789L)), false);
@@ -197,6 +198,7 @@ public class SimpleExecutorTest {
                 assertFalse(context.isStatisticsJob());
                 assertFalse(context.isOnlyReadIcebergCache());
                 assertSame(context, ConnectContext.get());
+                assertEquals(ConnectContext.InternalQueryPurpose.NONE, context.getInternalQueryPurpose());
                 assertNotSame(parent.getSessionVariable(), context.getSessionVariable());
                 assertEquals("caller_db", context.getDatabase());
                 assertEquals("caller_catalog", context.getCurrentCatalog());
@@ -216,6 +218,7 @@ public class SimpleExecutorTest {
         try {
             executor.executeDQLAsCaller("select 1", 30, parent);
             assertSame(parent, ConnectContext.get());
+            assertEquals(ConnectContext.InternalQueryPurpose.PAIMON_GLOBAL_INDEX, parent.getInternalQueryPurpose());
             assertEquals(7, parent.getSessionVariable().getSqlSelectLimit());
             assertEquals(120, parent.getSessionVariable().getQueryTimeoutS());
             assertEquals("user_group", parent.getSessionVariable().getResourceGroup());
@@ -314,6 +317,34 @@ public class SimpleExecutorTest {
             assertThrows(SemanticException.class, () -> executor.executeDQLAsCaller(
                     "select 1", 30, caller));
             assertSame(previous, ConnectContext.get());
+            assertEquals(0, caller.getSessionVariable().getSqlSelectLimit());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testCompleteResultsOverrideOnlyChildSelectLimit() {
+        ConnectContext caller = UtFrameUtils.createDefaultCtx();
+        caller.getSessionVariable().setSqlSelectLimit(0);
+        ConnectContext previous = UtFrameUtils.createDefaultCtx();
+        previous.setThreadLocalInfo();
+        SimpleExecutor executor = new SimpleExecutor("testExecutor", TResultSinkType.HTTP_PROTOCAL) {
+            @Override
+            public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                assertSame(caller, context.getParent());
+                assertSame(context, ConnectContext.get());
+                assertEquals(ConnectContext.InternalQueryPurpose.PAIMON_GLOBAL_INDEX, context.getInternalQueryPurpose());
+                assertEquals(SessionVariable.DEFAULT_SELECT_LIMIT, context.getSessionVariable().getSqlSelectLimit());
+                throw new SemanticException("test failure");
+            }
+        };
+        try {
+            assertThrows(SemanticException.class, () -> executor.executeDQLAsCaller(
+                    "select 1", 30, caller, SessionVariable.DEFAULT_SELECT_LIMIT,
+                    ConnectContext.InternalQueryPurpose.PAIMON_GLOBAL_INDEX));
+            assertSame(previous, ConnectContext.get());
+            assertEquals(ConnectContext.InternalQueryPurpose.NONE, caller.getInternalQueryPurpose());
             assertEquals(0, caller.getSessionVariable().getSqlSelectLimit());
         } finally {
             ConnectContext.remove();

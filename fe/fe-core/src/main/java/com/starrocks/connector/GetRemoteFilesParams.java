@@ -89,8 +89,13 @@ public class GetRemoteFilesParams {
     }
 
     public GetRemoteFilesParams copy() {
-        Builder paramsBuilder = GetRemoteFilesParams.newBuilder()
-                .setPartitionKeys(partitionKeys)
+        Builder builder = newBuilder();
+        copyTo(builder);
+        return builder.build();
+    }
+
+    protected void copyTo(Builder builder) {
+        builder.setPartitionKeys(partitionKeys)
                 .setPartitionNames(partitionNames)
                 .setPartitionAttachments(partitionAttachments)
                 .setTableVersionRange(tableVersionRange)
@@ -108,9 +113,8 @@ public class GetRemoteFilesParams {
                 .setScanRowsCap(scanRowsCap)
                 .setScanNodeId(scanNodeId);
         if (isRecursive.isPresent()) {
-            paramsBuilder.setIsRecursive(isRecursive.get());
+            builder.setIsRecursive(isRecursive.get());
         }
-        return paramsBuilder.build();
     }
 
     public GetRemoteFilesParams sub(int start, int end) {

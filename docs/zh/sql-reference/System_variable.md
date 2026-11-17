@@ -1417,6 +1417,25 @@ FROM test;
 * 类型：String
 * 引入版本：v4.2
 
+### paimon_global_index_scan_stage
+
+* 描述：控制当前查询使用 Paimon Global Index 的方式。通过 `SET` 修改，无需重启。
+* 默认值：1
+* 类型：Integer
+* 引入版本：v4.2
+
+| 值 | 行为 |
+| --- | --- |
+| `0` | 关闭 Paimon Global Index 计算。 |
+| `1` | 在扫描规划时使用 Paimon SDK 计算索引。 |
+| `2` | 尝试分布式计算符合条件的标量 BTree 索引，必要时回退到 SDK 规划。 |
+
+```sql
+SET paimon_global_index_scan_stage = 2;
+```
+
+阶段 `2` 适用于 main 分支上的 data-evolution 表，且所需索引必须完整覆盖查询快照。索引不兼容，或者查询用户的权限或访问策略不允许分布式计算时，查询可能回退到 SDK 规划。可通过 `EXPLAIN` 查看计划是否显示 `DISTRIBUTED INDEX: applied`。
+
 ### parallel_exchange_instance_num
 
 用于设置执行计划中，一个上层节点接收下层节点数据所使用的 exchange node 数量。默认为 -1，即表示 exchange node 数量等于下层节点执行实例的个数（默认行为）。当设置大于 0，并且小于下层节点执行实例的个数，则 exchange node 数量等于设置值。

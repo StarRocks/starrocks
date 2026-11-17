@@ -25,6 +25,7 @@ import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.paimon.index.PaimonIndexMetadataCache;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
@@ -49,6 +50,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.paimon.index.PaimonIndexMetadataCache.DEFAULT_INDEX_META_CACHE_MAX_ENTRIES;
 import static org.apache.paimon.options.CatalogOptions.METASTORE;
 import static org.apache.paimon.options.CatalogOptions.URI;
 import static org.apache.paimon.options.CatalogOptions.WAREHOUSE;
@@ -61,6 +63,8 @@ public class PaimonConnector implements Connector {
     // implicit for user, mirrors iceberg_meta_cache_ttl_sec
     public static final String PAIMON_META_CACHE_TTL = "paimon_meta_cache_ttl_sec";
     private static final long DEFAULT_META_CACHE_TTL_SEC = 24L * 60 * 60;
+    public static final String PAIMON_INDEX_META_CACHE_MAX_ENTRIES =
+            "paimon_index_metadata_cache_max_entries";
     // mirrors iceberg_table_cache_refresh_interval_sec, which feeds Caffeine's refreshAfterWrite
     public static final String PAIMON_TABLE_CACHE_REFRESH_INTERVAL =
             "paimon_table_cache_refresh_interval_sec";
@@ -77,6 +81,7 @@ public class PaimonConnector implements Connector {
     private final String catalogName;
     private final Options paimonOptions;
     private final ConnectorProperties connectorProperties;
+    private final PaimonIndexMetadataCache indexMetadataCache;
 
     public PaimonConnector(ConnectorContext context) {
         Map<String, String> properties = context.getProperties();
@@ -120,6 +125,9 @@ public class PaimonConnector implements Connector {
         // With equal values expire-after-write binds, which is Iceberg's write-only TTL semantics.
         Duration metaCacheTtl = Duration.ofSeconds(
                 PropertyUtil.propertyAsLong(properties, PAIMON_META_CACHE_TTL, DEFAULT_META_CACHE_TTL_SEC));
+        long indexMetadataCacheMaxEntries = PropertyUtil.propertyAsLong(
+                properties, PAIMON_INDEX_META_CACHE_MAX_ENTRIES, DEFAULT_INDEX_META_CACHE_MAX_ENTRIES);
+        this.indexMetadataCache = new PaimonIndexMetadataCache(metaCacheTtl, indexMetadataCacheMaxEntries);
         this.tableCacheRefreshIntervalSec = PropertyUtil.propertyAsLong(properties, PAIMON_TABLE_CACHE_REFRESH_INTERVAL,
                 DEFAULT_TABLE_CACHE_REFRESH_INTERVAL_SEC);
         // built here, not on the lazy catalog path: two concurrent first queries would otherwise
@@ -215,12 +223,14 @@ public class PaimonConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return new PaimonMetadata(catalogName, hdfsEnvironment, getPaimonNativeCatalog(), connectorProperties);
+        return new PaimonMetadata(catalogName, hdfsEnvironment, getPaimonNativeCatalog(), connectorProperties,
+                indexMetadataCache);
     }
 
     @Override
     public void shutdown() {
         GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterPaimonCatalog(catalogName);
+        indexMetadataCache.invalidateAll();
         refreshExecutor.shutdown();
     }
 }

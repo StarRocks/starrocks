@@ -17,6 +17,7 @@ package com.starrocks.connector;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.StarRocksException;
@@ -24,6 +25,7 @@ import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
+import com.starrocks.connector.paimon.index.PaimonIndexTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
@@ -39,6 +41,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class CatalogConnectorMetadataTest {
@@ -163,6 +166,27 @@ public class CatalogConnectorMetadataTest {
         Table table = catalogConnectorMetadata.getTable(new ConnectContext(), "test_db", "test_tbl");
         assertNull(table);
         assertNotNull(catalogConnectorMetadata.getTable(new ConnectContext(), InfoSchemaDb.DATABASE_NAME, "tables"));
+    }
+
+    @Test
+    void testVirtualIndexTableLookupDelegatesToNormalMetadata(@Mocked ConnectorMetadata connectorMetadata) {
+        PaimonTable table = new PaimonTable();
+        PaimonIndexTable virtual = new PaimonIndexTable(table);
+        TvrTableSnapshot version = TvrTableSnapshot.of(7L);
+        new Expectations() {{
+                connectorMetadata.getTable((ConnectContext) any, "db", "orders$global_index");
+                result = virtual;
+                connectorMetadata.tableExists((ConnectContext) any, "db", "orders$global_index");
+                result = true;
+                connectorMetadata.getTableVersionRange("db", virtual, Optional.empty(), Optional.empty());
+                result = version;
+            }};
+        CatalogConnectorMetadata metadata = new CatalogConnectorMetadata(
+                connectorMetadata, informationSchemaMetadata, metaMetadata);
+        assertSame(virtual, metadata.getTable(null, "db", "orders$global_index"));
+        assertSame(table, virtual.getInnerTable());
+        assertTrue(metadata.tableExists(null, "db", "orders$global_index"));
+        assertSame(version, metadata.getTableVersionRange("db", virtual, Optional.empty(), Optional.empty()));
     }
 
     @Test

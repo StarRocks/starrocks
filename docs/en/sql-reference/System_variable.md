@@ -1649,6 +1649,25 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v4.2
 
+### paimon_global_index_scan_stage
+
+* **Description**: Controls Paimon Global Index evaluation for the current query. Use `SET` to change the value without a restart.
+* **Default**: 1
+* **Data type**: Integer
+* **Introduced in**: v4.2
+
+| Value | Behavior |
+| --- | --- |
+| `0` | Disables Paimon Global Index evaluation. |
+| `1` | Uses the Paimon SDK for index evaluation during scan planning. |
+| `2` | Tries distributed evaluation for eligible scalar BTree indexes and falls back to SDK planning when needed. |
+
+```sql
+SET paimon_global_index_scan_stage = 2;
+```
+
+Stage `2` applies to data-evolution tables on the main branch when the required indexes cover the entire query snapshot. Queries can fall back to SDK planning if the index is incompatible or the caller's permissions or access policies prevent distributed evaluation. Use `EXPLAIN` to check whether the plan reports `DISTRIBUTED INDEX: applied`.
+
 ### parallel_exchange_instance_num
 
 Used to set the number of exchange nodes that an upper-level node uses to receive data from a lower-level node in the execution plan. The default value is -1, meaning the number of exchange nodes is equal to the number of execution instances of the lower-level node. When  this variable is set to be greater than 0 but smaller than the number of execution instances of the lower-level node, the number of exchange nodes equals the set value.

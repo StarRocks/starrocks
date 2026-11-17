@@ -27,7 +27,9 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.SqlParser;
@@ -40,6 +42,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.OptionalLong;
 
 /**
  * Execute SQL
@@ -171,7 +174,34 @@ public class SimpleExecutor {
      * remaining timeout. It has its own query ID: inheriting a memory limit does not share a memory budget.
      */
     public List<TResultBatch> executeDQLAsCaller(String sql, int queryTimeoutSeconds, ConnectContext caller) {
+        return executeDQLAsCaller(sql, queryTimeoutSeconds, caller, OptionalLong.empty(),
+                ConnectContext.InternalQueryPurpose.NONE);
+    }
+
+    /**
+     * Overrides only the child's implicit SELECT limit. Callers consuming complete internal results
+     * must explicitly request {@link SessionVariable#DEFAULT_SELECT_LIMIT}; SQL LIMIT clauses still apply.
+     */
+    public List<TResultBatch> executeDQLAsCaller(
+            String sql, int queryTimeoutSeconds, ConnectContext caller, long sqlSelectLimit) {
+        return executeDQLAsCaller(sql, queryTimeoutSeconds, caller, sqlSelectLimit,
+                ConnectContext.InternalQueryPurpose.NONE);
+    }
+
+    /**
+     * Sets a purpose on the child before planning while retaining caller authorization.
+     */
+    public List<TResultBatch> executeDQLAsCaller(
+            String sql, int queryTimeoutSeconds, ConnectContext caller, long sqlSelectLimit,
+            ConnectContext.InternalQueryPurpose purpose) {
+        return executeDQLAsCaller(sql, queryTimeoutSeconds, caller, OptionalLong.of(sqlSelectLimit), purpose);
+    }
+
+    private List<TResultBatch> executeDQLAsCaller(
+            String sql, int queryTimeoutSeconds, ConnectContext caller, OptionalLong sqlSelectLimitOverride,
+            ConnectContext.InternalQueryPurpose purpose) {
         Preconditions.checkNotNull(caller, "caller context is required");
+        Preconditions.checkNotNull(purpose, "internal query purpose is required");
         ConnectContext prev = ConnectContext.get();
         try {
             if (caller.isStatementCancelled()) {
@@ -182,6 +212,8 @@ public class SimpleExecutor {
                 throw new SemanticException(name + " query timed out before execution");
             }
             ConnectContext context = createCallerQueryContext(caller, timeout);
+            context.setInternalQueryPurpose(purpose);
+            sqlSelectLimitOverride.ifPresent(context.getSessionVariable()::setSqlSelectLimit);
             context.setThreadLocalInfo();
             return executeDQL(sql, context);
         } finally {
@@ -273,6 +305,16 @@ public class SimpleExecutor {
                 throw new SemanticException(name + " query was cancelled");
             }
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+            if (context.getInternalQueryPurpose() == ConnectContext.InternalQueryPurpose.PAIMON_GLOBAL_INDEX) {
+                // Mark the child before planning so the policy pre-pass and analyzer both see it.
+                new AstTraverser<Void, Void>() {
+                    @Override
+                    public Void visitRelation(Relation relation, Void ignored) {
+                        relation.setNeedRewrittenByPolicy(true);
+                        return null;
+                    }
+                }.visit(parsedStmt);
+            }
             sql = formatSQL(sql, parsedStmt);
             ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, queryResultProtocol);
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);

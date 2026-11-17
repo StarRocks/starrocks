@@ -181,8 +181,20 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         // create unpartitioned table
         createPaimonUnpartitionedTable(catalog, db);
 
+        // create a table used to verify ordinary vector expressions with scalar index planning
+        createPaimonVectorTable(catalog, db);
+
         // create partitioned table
         createPaimonParitionedTable(catalog, db);
+    }
+
+    private static void createPaimonVectorTable(Catalog catalog, String db) throws Exception {
+        Identifier identifier = Identifier.create(db, "vector_table");
+        Schema schema = Schema.newBuilder()
+                .column("pk", DataTypes.INT())
+                .column("embedding", DataTypes.ARRAY(DataTypes.FLOAT()))
+                .build();
+        catalog.createTable(identifier, schema, false);
     }
 
     private static void createPaimonUnpartitionedTable(Catalog catalog, String db) throws Exception {

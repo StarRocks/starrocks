@@ -25,11 +25,15 @@ import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.paimon.PaimonGetRemoteFilesParams;
+import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.connector.paimon.PaimonReaderSelector;
 import com.starrocks.connector.paimon.PaimonReaderSelector.Reader;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonSplitUtils;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
+import com.starrocks.connector.paimon.index.PaimonIndexCondition;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -79,10 +83,12 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 public class PaimonScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(PaimonScanNode.class);
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
-    private final PaimonTable paimonTable;
+    private PaimonTable paimonTable;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private CloudConfiguration cloudConfiguration = null;
+    private PaimonIndexCondition recognizedIndexCondition;
+    private String distributedIndexStatus = "not attempted";
 
     public PaimonScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -133,21 +139,74 @@ public class PaimonScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, long limit) {
+        setupScanRangeLocations(tupleDescriptor, predicate, limit, null);
+    }
+
+    public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, long limit,
+                                        @Nullable PaimonIndexCondition indexCondition) {
+        recognizedIndexCondition = indexCondition;
+        distributedIndexStatus = "not attempted";
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
-        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
-                .setPredicate(predicate)
+        int globalIndexScanStage = ConnectContext.get().getSessionVariable().getPaimonGlobalIndexScanStage();
+        boolean disableGlobalIndex = globalIndexScanStage == 0;
+        PaimonGetRemoteFilesParams.Builder paramsBuilder = PaimonGetRemoteFilesParams.newBuilder()
+                .setDisableGlobalIndex(disableGlobalIndex);
+        paramsBuilder.setPredicate(predicate)
                 .setFieldNames(fieldNames)
                 .setTableVersionRange(tvrVersionRange)
-                .setLimit(limit)
-                .build();
+                .setLimit(limit);
+        PaimonGetRemoteFilesParams params = paramsBuilder.build();
+        long snapshotId = tvrVersionRange == null ? -1L : tvrVersionRange.end().orElse(-1L);
+        if (globalIndexScanStage == 2 && indexCondition != null
+                && !indexCondition.columnRefToFieldId().isEmpty() && snapshotId >= 0) {
+            distributedIndexStatus = "SDK fallback";
+            try {
+                PaimonMetadata.resolve(paimonTable)
+                        .flatMap(metadata -> metadata.evaluateIndex(paimonTable, indexCondition, tvrVersionRange))
+                        .ifPresent(params::setIndexResult);
+            } catch (RuntimeException e) {
+                if (ConnectContext.get().isStatementCancelled()) {
+                    throw e;
+                }
+                // Index execution is an optimization. The original predicate is still attached to
+                // the normal scan, so failure safely falls back to Paimon's regular split planning.
+                LOG.warn("Failed to evaluate Paimon Global Index at snapshot {}; falling back to a normal scan",
+                        snapshotId, e);
+            }
+        }
+        if (ConnectContext.get().isStatementCancelled()) {
+            throw new StarRocksConnectorException("Paimon scan planning was cancelled");
+        }
         List<RemoteFileInfo> fileInfos;
-        try (Timer ignored = Tracers.watchScope(EXTERNAL, paimonTable.getCatalogTableName() + ".getPaimonRemoteFileInfos")) {
-            fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(paimonTable, params);
+        try {
+            fileInfos = getRemoteFiles(params);
+        } catch (RuntimeException e) {
+            if (params.getIndexResult() == null || ConnectContext.get().isStatementCancelled()) {
+                throw e;
+            }
+            // Applying the row-id result is part of the optional index path too. Retry without it
+            // if Paimon rejects the result or an IndexedSplit cannot be planned.
+            LOG.warn("Failed to apply Paimon Global Index result at snapshot {}; "
+                    + "falling back to a normal scan", snapshotId, e);
+            PaimonGetRemoteFilesParams fallbackParams = params.copy();
+            fallbackParams.setIndexResult(null);
+            distributedIndexStatus = "SDK fallback";
+            fileInfos = getRemoteFiles(fallbackParams);
         }
 
-        PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
-        PaimonSplitsInfo splitsInfo = remoteFileDesc.getPaimonSplitsInfo();
+        PaimonSplitsInfo splitsInfo = getSplitsInfo(fileInfos);
+        if (splitsInfo.isDistributedIndexApplied()) {
+            distributedIndexStatus = "applied";
+        }
+        if (splitsInfo.getNativeTable() != null) {
+            // Serialize the same branch/schema/options that produced these splits.
+            // Never mutate the catalog table: aliases may read main and a branch
+            // together, and DescriptorTable deduplicates tables by their ID.
+            paimonTable = new PaimonTable(paimonTable.getCatalogName(), paimonTable.getCatalogDBName(),
+                    paimonTable.getCatalogTableName(), paimonTable.getFullSchema(), splitsInfo.getNativeTable());
+            tupleDescriptor.setTable(paimonTable);
+        }
         String predicateInfo = encodeObjectToString(splitsInfo.getPredicate());
         List<Split> splits = splitsInfo.getPaimonSplits();
 
@@ -190,6 +249,21 @@ public class PaimonScanNode extends ScanNode {
                 addSDKSplitScanRangeLocations(reader, split, predicateInfo, length);
             }
         }
+    }
+
+    private List<RemoteFileInfo> getRemoteFiles(GetRemoteFilesParams params) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL,
+                paimonTable.getCatalogTableName() + ".getPaimonRemoteFileInfos")) {
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(paimonTable, params);
+        }
+    }
+
+    private static PaimonSplitsInfo getSplitsInfo(List<RemoteFileInfo> fileInfos) {
+        if (fileInfos.isEmpty() || fileInfos.get(0).getFiles().isEmpty()) {
+            throw new StarRocksConnectorException("Paimon metadata returned no RemoteFileInfo descriptor");
+        }
+        PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
+        return remoteFileDesc.getPaimonSplitsInfo();
     }
 
     private void traceReaderMetrics() {
@@ -385,6 +459,11 @@ public class PaimonScanNode extends ScanNode {
         StringBuilder output = new StringBuilder();
 
         output.append(prefix).append("TABLE: ").append(paimonTable.getName()).append("\n");
+        if (recognizedIndexCondition != null) {
+            output.append(prefix).append("RECOGNIZED INDEX CONDITION: ")
+                    .append(recognizedIndexCondition.predicate()).append("\n");
+            output.append(prefix).append("DISTRIBUTED INDEX: ").append(distributedIndexStatus).append("\n");
+        }
 
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
