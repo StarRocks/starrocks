@@ -23,6 +23,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TTabletReshardJobsItem;
@@ -149,43 +150,6 @@ public abstract class TabletReshardJob implements Writable {
     // volatile + concurrent set: written by the submitting session thread, read by the reshard daemon.
     protected volatile Set<Long> cleanupExcludedTransactionIds;
 
-<<<<<<< HEAD
-=======
-    // Only registered, durable PENDING jobs may be scheduled. Recovery initializes this explicitly.
-    private transient volatile boolean admissionReady;
-    private transient LeaderLease admissionLease;
-    // Published only after the installed replacement layout's CLEANING record is durable.
-    private transient volatile boolean layoutReady;
-
-    public boolean isLayoutReady() {
-        return layoutReady && (jobState == JobState.CLEANING || jobState == JobState.FINISHED);
-    }
-
-    public boolean isAdmissionReady() {
-        return admissionReady;
-    }
-
-    void markAdmissionReady() {
-        admissionReady = true;
-    }
-
-    void initializeAfterRecovery() {
-        admissionReady = true;
-        layoutReady = jobState == JobState.CLEANING || jobState == JobState.FINISHED;
-    }
-
-    public LeaderLease getAdmissionLease() {
-        return admissionLease;
-    }
-
-    void captureAdmissionLease(LeaderLease lease) {
-        if (admissionLease != null) {
-            throw new IllegalStateException("Reshard job already captured its admission lease");
-        }
-        admissionLease = lease;
-    }
-
->>>>>>> ddf4d34 ([BugFix][RB-96] Journal a reshard job's CLEANING record before its version becomes visible (#83525))
     public TabletReshardJob(long jobId, JobType jobType) {
         this.jobId = jobId;
         this.jobType = jobType;
@@ -257,19 +221,12 @@ public abstract class TabletReshardJob implements Writable {
     }
 
     protected void setJobState(JobState jobState) {
-<<<<<<< HEAD
-=======
-        if (jobState.isFinalState()) {
-            publishFinalState(jobState);
-            return;
-        }
         if (jobState == JobState.CLEANING) {
             // A job with no layout to install; split and merge install theirs through journalCleaningThenInstall.
             journalCleaningThenInstall(newCleaningRecord(), () -> {
             });
             return;
         }
->>>>>>> ddf4d34 ([BugFix][RB-96] Journal a reshard job's CLEANING record before its version becomes visible (#83525))
         long currentTimeMs = System.currentTimeMillis();
 
         if (jobState.isFinalState()) {
@@ -285,8 +242,6 @@ public abstract class TabletReshardJob implements Writable {
         LOG.info("Tablet reshard job set job state. {}", this);
     }
 
-<<<<<<< HEAD
-=======
     /**
      * Moves the job to CLEANING, the state in which its new layout -- the replacement indexes, and the commit version
      * they make visible -- is in place. The CLEANING record is journaled first; only once it is durable does the
@@ -299,13 +254,10 @@ public abstract class TabletReshardJob implements Writable {
      * lock, so with the caller holding the WRITE lock, no load can do either before the CLEANING record is in the
      * journal and the layout is installed.
      *
-     * <p>If the record cannot be journaled, which short of a programming error happens only while this FE is giving up
-     * leadership (a failed commit on a serving leader exits the process), nothing has changed: the job is still
-     * RUNNING on the old layout, and whichever leader runs it next repeats the RUNNING step. The caller changes the
-     * job only from installNewLayout, which runs once the record is durable.
-     * The install cannot fail once the record is durable, because the caller checked it under the same lock: an
-     * install stopping halfway would leave this FE's catalog different from the one every replay of the record builds,
-     * and nothing would ever reconcile them.
+     * <p>If the record cannot be journaled, nothing has changed: the caller changes the job only from
+     * installNewLayout, which runs once the record is durable. The install cannot fail then, because the caller
+     * checked it under the same lock: an install stopping halfway would leave this FE's catalog different from the
+     * one every replay of the record builds.
      *
      * @param record the job's CLEANING record, from {@link #newCleaningRecord}
      */
@@ -316,7 +268,6 @@ public abstract class TabletReshardJob implements Writable {
             stateStartedTimeMs = record.stateStartedTimeMs;
             installNewLayout.run();
             jobState = JobState.CLEANING;
-            layoutReady = true;
         });
         LOG.info("Tablet reshard job set job state. {}", this);
     }
@@ -332,52 +283,32 @@ public abstract class TabletReshardJob implements Writable {
         return record;
     }
 
-    private void publishFinalState(JobState desiredState) {
-        if (isDone()) {
-            return;
-        }
-        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-        try (EditLog.WalScope ignored = editLog.openWalScope()) {
-            // Use the existing type adapter without ever exposing an uncommitted terminal enum.
-            TabletReshardJob snapshot = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(this), getClass());
-            snapshot.jobState = desiredState;
-            snapshot.finishedTimeMs = System.currentTimeMillis();
-            snapshot.stateStartedTimeMs = snapshot.finishedTimeMs;
-            editLog.logUpdateTabletReshardJob(snapshot, wal ->
-                    ReshardTableFinalizer.withTableWrite(getDbId(), getTableId(), table -> {
-                        if (isDone()) {
-                            return;
-                        }
-                        finishedTimeMs = snapshot.finishedTimeMs;
-                        stateStartedTimeMs = snapshot.stateStartedTimeMs;
-                        jobState = desiredState;
-                        GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
-                                .refreshTableStateLocked(table, jobId);
-                        recordTerminalMetrics(desiredState);
-                    }));
-        }
-        LOG.info("Tablet reshard job set job state. {}", this);
-    }
-
-    private void recordTerminalMetrics(JobState state) {
-        if (!MetricRepo.hasInit) {
-            return;
-        }
-        if (state == JobState.FINISHED) {
-            if (jobType == JobType.SPLIT_TABLET) {
-                MetricRepo.COUNTER_TABLET_RESHARD_SPLIT_JOB_FINISHED.increase(1L);
-            } else if (jobType == JobType.MERGE_TABLET) {
-                MetricRepo.COUNTER_TABLET_RESHARD_MERGE_JOB_FINISHED.increase(1L);
+    /**
+     * Checks, under the caller's table WRITE lock, what installing the replacement indexes requires, so that a layout
+     * that cannot be installed is found before anything of it is journaled or changed: every partition still there is
+     * at the version right below the job's, and every replacement index can be added to its partition.
+     */
+    protected static void checkNewIndexesInstallable(OlapTable olapTable,
+            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            PhysicalPartition physicalPartition = olapTable
+                    .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                continue;
             }
-            MetricRepo.HISTO_TABLET_RESHARD_JOB_DURATION.update(finishedTimeMs - createdTimeMs);
-        } else if (jobType == JobType.SPLIT_TABLET) {
-            MetricRepo.COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED.increase(1L);
-        } else if (jobType == JobType.MERGE_TABLET) {
-            MetricRepo.COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED.increase(1L);
+            long commitVersion = reshardingPhysicalPartition.getCommitVersion();
+            Preconditions.checkState(commitVersion == physicalPartition.getVisibleVersion() + 1,
+                    "partition: " + physicalPartition.getId() + ", commit version: " + commitVersion
+                            + ", visible version: " + physicalPartition.getVisibleVersion());
+            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
+                    .getReshardingIndexes().values()) {
+                MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
+                physicalPartition.checkMaterializedIndexAddable(newIndex,
+                        newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
+            }
         }
     }
 
->>>>>>> ddf4d34 ([BugFix][RB-96] Journal a reshard job's CLEANING record before its version becomes visible (#83525))
     public long getCreatedTimeMs() {
         return createdTimeMs;
     }
@@ -582,80 +513,6 @@ public abstract class TabletReshardJob implements Writable {
     }
 
     /**
-<<<<<<< HEAD
-=======
-     * Checks, under the caller's table WRITE lock, what installing the replacement indexes requires, so that a layout
-     * that cannot be installed is found before anything of it is journaled or changed: every partition still there is
-     * at the version right below the job's, and every replacement index can be added to its partition.
-     */
-    protected static void checkNewIndexesInstallable(OlapTable olapTable,
-            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
-        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
-            PhysicalPartition physicalPartition = olapTable
-                    .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
-            if (physicalPartition == null) {
-                continue;
-            }
-            long commitVersion = reshardingPhysicalPartition.getCommitVersion();
-            Preconditions.checkState(commitVersion == physicalPartition.getVisibleVersion() + 1,
-                    "partition: " + physicalPartition.getId() + ", commit version: " + commitVersion
-                            + ", visible version: " + physicalPartition.getVisibleVersion());
-            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
-                    .getReshardingIndexes().values()) {
-                MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
-                physicalPartition.checkMaterializedIndexAddable(newIndex,
-                        newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
-            }
-        }
-    }
-
-    /**
-     * Shared reshard-cleanup step for split and merge: for every superseded (old) materialized index,
-     * schedule its removal in the {@code CatalogRecycleBin} at index granularity, so an in-flight query
-     * planned against it can keep reading until the retention (partition_recycle_retention_period_secs)
-     * expires (issue #75993).
-     *
-     * <p>Crucially, the old index is <b>left installed</b> on its live partition; only a retention
-     * record is parked. A split reuses the parent's shard group for the child, so the group is never
-     * orphaned; keeping the old index installed is what protects its shards, because
-     * {@code StarMgrMetaSyncer.syncTableMetaInternal} reaps a group's shards per-shard by subtracting
-     * the tablets of every index still on the partition. New writes resolve through the writable APIs
-     * and use only the child layout. Queries resolve through the queryable APIs: an ORDER BY != PK split
-     * deliberately pins them to the old parent until UNSHARE finishes, while other reshard operations
-     * switch immediately. On erase, the recycle bin detaches the old index and drops its tablets, and
-     * {@code StarMgrMetaSyncer} then reclaims the now-unreferenced shards per-shard --
-     * never a partition-directory delete, which for a split would destroy the live child tablets that
-     * share the parent's object-storage directory.
-     *
-     * <p>Runs on both the leader (runCleaningJob) and the replay path (replayFinishedJob); it is
-     * deterministic (the index keeps its own id, no id allocation) and
-     * {@code recycleMaterializedIndex} is idempotent, so a re-run is safe. The caller holds the table
-     * WRITE lock and passes the locked table.
-     */
-    protected static void recycleOldMaterializedIndexes(long dbId, OlapTable olapTable,
-            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
-        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
-            long physicalPartitionId = reshardingPhysicalPartition.getPhysicalPartitionId();
-            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
-            if (physicalPartition == null) {
-                continue;
-            }
-            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
-                    .getReshardingIndexes().values()) {
-                long oldIndexId = reshardingIndex.getMaterializedIndexId();
-                // Idempotency guard: if the old index has already been erased (detached by a prior
-                // retention cycle), there is nothing to schedule.
-                if (physicalPartition.getIndex(oldIndexId) == null) {
-                    continue;
-                }
-                GlobalStateMgr.getCurrentState().getRecycleBin().recycleMaterializedIndex(
-                        new RecycleMaterializedIndexInfo(dbId, olapTable.getId(), physicalPartitionId, oldIndexId));
-            }
-        }
-    }
-
-    /**
->>>>>>> ddf4d34 ([BugFix][RB-96] Journal a reshard job's CLEANING record before its version becomes visible (#83525))
      * Shared reshard-completion step for split and merge: drop the creation-time placement pin on
      * every new shard, so the background balancer can spread them right away. StarOS only drops the
      * pin on its own once the superseded (old / source) shards are reclaimed, which happens a

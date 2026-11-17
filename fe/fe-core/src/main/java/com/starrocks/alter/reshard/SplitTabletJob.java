@@ -351,7 +351,7 @@ public class SplitTabletJob extends TabletReshardJob {
         SplitTabletJob cleaningRecord = (SplitTabletJob) newCleaningRecord();
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
             OlapTable olapTable = lockedTable.get();
-            checkNewLayoutInstallable(olapTable);
+            checkNewIndexesInstallable(olapTable, reshardingPhysicalPartitions);
             // Taken under this lock, before the install: a writer gets its transaction id before it resolves the
             // tablets to write under the table READ lock, so a writer whose id is at or above this one sees the new
             // layout.
@@ -362,27 +362,6 @@ public class SplitTabletJob extends TabletReshardJob {
                 addNewMaterializedIndexes(olapTable);
             });
         }
-
-<<<<<<< HEAD
-        // 3. Get end transaction id
-        endTransactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
-                .peekNextTransactionId();
-
-        // 4. Set job state to CLEANING
-        setJobState(JobState.CLEANING);
-=======
-        // Now that the reshard output tablets are visible, proactively enqueue them for async
-        // vector-index build (leader-only path; no-op for non-async-vector-index tables).
-        VectorIndexBuildScheduler.onReshardComplete(dbId, tableId, reshardingPhysicalPartitions.keySet());
-
-        // Said here, once per job, rather than in cleaning, which reruns every few milliseconds while it waits.
-        Set<Long> keptPartitionIds = new HashSet<>(reshardingPhysicalPartitions.keySet());
-        keptPartitionIds.removeAll(getPartitionsWithRealSplit());
-        if (!keptPartitionIds.isEmpty()) {
-            LOG.info("No tablet was split in physical partitions {}, so cleaning leaves their in-flight compactions "
-                    + "to finish and waits for them. {}", keptPartitionIds, this);
-        }
->>>>>>> ddf4d34 ([BugFix][RB-96] Journal a reshard job's CLEANING record before its version becomes visible (#83525))
     }
 
     /*
@@ -967,41 +946,12 @@ public class SplitTabletJob extends TabletReshardJob {
     private void addNewMaterializedIndexes() {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
             OlapTable olapTable = lockedTable.get();
-            checkNewLayoutInstallable(olapTable);
+            checkNewIndexesInstallable(olapTable, reshardingPhysicalPartitions);
             addNewMaterializedIndexes(olapTable);
         }
     }
 
-<<<<<<< HEAD
-                long commitVersion = reshardingPhysicalPartition.getCommitVersion();
-                Preconditions.checkState(commitVersion == physicalPartition.getVisibleVersion() + 1,
-                        "commit version: " + commitVersion + ", visible version: "
-                                + physicalPartition.getVisibleVersion());
-
-                physicalPartition.setVisibleVersion(commitVersion, stateStartedTimeMs);
-
-                for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
-                        .getReshardingIndexes().values()) {
-                    MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
-                    newIndex.setTakeoverVersion(commitVersion);
-                    physicalPartition.addMaterializedIndex(newIndex,
-                            newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
-                }
-            }
-
-            // Installing the new materialized indexes changes the partition's tablet layout:
-            // PhysicalPartition.getLatestIndex() now returns a different tablet set. A query that
-            // captured the old layout during planning (OlapScanNode fills scanTabletIds from
-            // getLatestIndex(), then mapTabletsToPartitions() re-reads it) would otherwise hard-fail
-            // at plan build ("Invalid tablet id ... may have been dropped") or hand a CN a stale
-            // tablet/version whose metadata object no longer exists. Bump the table's optimistic
-            // version so StatementPlanner's retry loop (OptimisticVersion.validateTableUpdate) detects
-            // the change and re-plans against the new layout. Mirrors MergePartitionJob's bump at its
-            // partition-replace commit point. This runs on both the leader (runRunningJob) and the
-            // replay path (replayCleaningJob), so followers re-plan too.
-            olapTable.lastSchemaUpdateTime.set(System.nanoTime());
-=======
-    // The caller holds the table WRITE lock and has run checkNewLayoutInstallable under it.
+    // The caller holds the table WRITE lock and has run checkNewIndexesInstallable under it.
     private void addNewMaterializedIndexes(OlapTable olapTable) {
         for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
             PhysicalPartition physicalPartition = olapTable
@@ -1016,44 +966,23 @@ public class SplitTabletJob extends TabletReshardJob {
             for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                     .getReshardingIndexes().values()) {
                 MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
-                if (MetaUtils.hasSeparateSortKey(olapTable, newIndex.getMetaId())) {
-                    physicalPartition.pinQueryableIndex(
-                            newIndex.getMetaId(), reshardingIndex.getMaterializedIndexId());
-                }
                 newIndex.setTakeoverVersion(commitVersion);
                 physicalPartition.addMaterializedIndex(newIndex,
                         newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
             }
         }
 
-        // Installing the new materialized indexes changes the writable layout immediately. For an
-        // ordinary split the queryable layout changes too; ORDER BY != PK instead keeps it pinned
-        // until UNSHARE finishes. Bump the table's optimistic version so any plan racing either
-        // catalog transition is retried against a self-consistent layout. Mirrors
-        // MergePartitionJob's bump at its partition-replace commit point. This runs on both the
-        // leader (runRunningJob) and replay path (replayCleaningJob), so followers re-plan too.
+        // Installing the new materialized indexes changes the partition's tablet layout:
+        // PhysicalPartition.getLatestIndex() now returns a different tablet set. A query that
+        // captured the old layout during planning (OlapScanNode fills scanTabletIds from
+        // getLatestIndex(), then mapTabletsToPartitions() re-reads it) would otherwise hard-fail
+        // at plan build ("Invalid tablet id ... may have been dropped") or hand a CN a stale
+        // tablet/version whose metadata object no longer exists. Bump the table's optimistic
+        // version so StatementPlanner's retry loop (OptimisticVersion.validateTableUpdate) detects
+        // the change and re-plans against the new layout. Mirrors MergePartitionJob's bump at its
+        // partition-replace commit point. This runs on both the leader (runRunningJob) and the
+        // replay path (replayCleaningJob), so followers re-plan too.
         olapTable.lastSchemaUpdateTime.set(System.nanoTime());
-    }
-
-    // The caller holds the table WRITE lock. What addNewMaterializedIndexes(OlapTable) requires: on top of what every
-    // reshard install needs, an ORDER BY != PK split keeps queries on the predecessor index, which must still be there.
-    private void checkNewLayoutInstallable(OlapTable olapTable) {
-        checkNewIndexesInstallable(olapTable, reshardingPhysicalPartitions);
-        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
-            PhysicalPartition physicalPartition = olapTable
-                    .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
-            if (physicalPartition == null) {
-                continue;
-            }
-            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
-                    .getReshardingIndexes().values()) {
-                long metaId = reshardingIndex.getMaterializedIndex().getMetaId();
-                if (MetaUtils.hasSeparateSortKey(olapTable, metaId)) {
-                    physicalPartition.checkQueryableIndexPinnable(metaId, reshardingIndex.getMaterializedIndexId());
-                }
-            }
->>>>>>> ddf4d34 ([BugFix][RB-96] Journal a reshard job's CLEANING record before its version becomes visible (#83525))
-        }
     }
 
     private void removeOldMaterializedIndexes() {

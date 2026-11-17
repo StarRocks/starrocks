@@ -17,10 +17,8 @@ package com.starrocks.alter.reshard;
 import com.google.common.collect.Iterables;
 import com.starrocks.alter.ConcurrentLoad;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.journal.JournalEntity;
@@ -44,10 +42,10 @@ import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 /**
  * Checks, for split and merge alike, what a reshard job journals when it makes its new layout visible.
@@ -82,7 +80,7 @@ final class ReshardJournalReplay {
             }
 
             @Mock
-            public void logInsertTransactionState(Invocation invocation, TransactionState state, WALApplier applier) {
+            public void logInsertTransactionState(Invocation invocation, TransactionState state) {
                 record(invocation, OperationType.OP_UPSERT_TRANSACTION_STATE_V2, state);
             }
 
@@ -117,7 +115,7 @@ final class ReshardJournalReplay {
         // Replaying puts the job's records into TabletReshardJobMgr, whose daemon would run them as the leader's.
         new MockUp<TabletReshardJobMgr>() {
             @Mock
-            protected void runAfterLeaseValid() {
+            protected void runAfterCatalogReady() {
             }
         };
         ConcurrentLoad.holdPublishDaemon();
@@ -128,7 +126,7 @@ final class ReshardJournalReplay {
         job.init();
         job.run();
         Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
-        ReshardingPhysicalPartition reshardingPartition = job.getReshardingPhysicalPartitions().get(partitionId);
+        ReshardingPhysicalPartition reshardingPartition = reshardingPartitions(job).get(partitionId);
         Assertions.assertEquals(commitVersion, reshardingPartition.getCommitVersion());
         long newBaseIndexId = reshardingPartition.getReshardingIndexes().values().iterator().next()
                 .getMaterializedIndex().getId();
@@ -187,66 +185,20 @@ final class ReshardJournalReplay {
                 "the CLEANING record must precede the load's VISIBLE record: " + records);
     }
 
-    /**
-     * A CLEANING record that cannot be journaled -- the FE is giving up leadership and has closed its journal -- must
-     * leave the catalog as it was and the job in RUNNING, so that the leader that runs the job next, which may be this
-     * FE again, repeats the step from there and makes the commit version visible exactly once.
-     *
-     * <p>Runs the job (not yet admitted) on the given physical partition, the only one it reshards, to FINISHED.
-     */
-    static void checkFailedCleaningJournalLeavesLayoutUnchanged(TabletReshardJob job, PhysicalPartition partition)
-            throws Exception {
-        MaterializedIndex oldIndex = partition.getLatestBaseIndex();
-        long visibleVersion = partition.getVisibleVersion();
-        MaterializedIndex newIndex = job.getReshardingPhysicalPartitions().get(partition.getId())
-                .getReshardingIndexes().get(oldIndex.getId()).getMaterializedIndex();
-        AtomicInteger cleaningRecords = countCleaningRecords(true);
-
-        job.init();
-        job.run();
-        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
-        try {
-            job.run();
-        } finally {
-            GlobalStateMgr.getCurrentState().getEditLog().openWalGate();
-        }
-
-        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
-        Assertions.assertFalse(job.isLayoutReady());
-        Assertions.assertEquals(0, cleaningRecords.get());
-        Assertions.assertEquals(visibleVersion, partition.getVisibleVersion());
-        Assertions.assertSame(oldIndex, partition.getLatestBaseIndex());
-        Assertions.assertNull(partition.getIndex(newIndex.getId()));
-        List<Long> newTabletIds = tabletIds(newIndex);
-
-        for (int i = 0; i < 10 && !job.isDone(); i++) {
-            job.run();
-        }
-        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
-        Assertions.assertEquals(1, cleaningRecords.get());
-        Assertions.assertEquals(visibleVersion + 1, partition.getVisibleVersion());
-        Assertions.assertSame(newIndex, partition.getLatestBaseIndex());
-        Assertions.assertEquals(newTabletIds, tabletIds(newIndex));
+    // On this branch each job type, not TabletReshardJob, exposes its resharding partitions.
+    private static Map<Long, ReshardingPhysicalPartition> reshardingPartitions(TabletReshardJob job) {
+        return job instanceof SplitTabletJob splitJob ? splitJob.getReshardingPhysicalPartitions()
+                : ((MergeTabletJob) job).getReshardingPhysicalPartitions();
     }
 
-    /**
-     * Counts the CLEANING records of reshard jobs journaled from now on. With closeJournalFirst, the leader's journal is
-     * closed, as giving up leadership closes it, just before the first one is written, so that write fails; the caller
-     * reopens the journal.
-     */
-    static AtomicInteger countCleaningRecords(boolean closeJournalFirst) {
-        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-        AtomicBoolean close = new AtomicBoolean(closeJournalFirst);
+    /** Counts the CLEANING records of reshard jobs journaled from now on. */
+    static AtomicInteger countCleaningRecords() {
         AtomicInteger written = new AtomicInteger();
         new MockUp<EditLog>() {
             @Mock
             public void logUpdateTabletReshardJob(Invocation invocation, TabletReshardJob job, WALApplier applier) {
-                boolean cleaning = job.getJobState() == TabletReshardJob.JobState.CLEANING;
-                if (cleaning && close.getAndSet(false)) {
-                    editLog.closeWalGate();
-                }
                 invocation.proceed();
-                if (cleaning) {
+                if (job.getJobState() == TabletReshardJob.JobState.CLEANING) {
                     written.incrementAndGet();
                 }
             }
@@ -295,10 +247,6 @@ final class ReshardJournalReplay {
 
     private static TransactionState transactionState(Database db, long txnId) {
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
-    }
-
-    private static List<Long> tabletIds(MaterializedIndex index) {
-        return index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList());
     }
 
     private static boolean isJobRecord(JournalEntity entity, TabletReshardJob.JobState state) {

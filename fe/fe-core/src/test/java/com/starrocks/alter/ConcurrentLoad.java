@@ -38,11 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-<<<<<<< HEAD
-=======
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
->>>>>>> ddf4d34 ([BugFix][RB-96] Journal a reshard job's CLEANING record before its version becomes visible (#83525))
 
 /**
  * A load that commits on a table while an alter or reshard job on that table is under way, as a stream load
