@@ -34,6 +34,8 @@ CONF_Int32(be_http_port, "8040");
 
 CONF_Alias(be_http_port, webserver_port);
 
+CONF_mDouble(pipeline_connector_scan_thread_num_per_cpu, "8");
+
 CONF_Int64(object_storage_max_connection, "102400");
 
 // Request timeout for object storage.
@@ -64,6 +66,9 @@ CONF_mBool(s3_use_list_objects_v1, "false");
 // started afterwards. S3 allows at most 10,000 parts per upload, so an object is limited to
 // 10,000 times the part size; raise the part size for larger objects.
 CONF_mBool(s3_multipart_equal_part_size, "false");
+
+// Lake
+CONF_mBool(io_coalesce_lake_read_enable, "false");
 
 // use poco client to replace default curl client
 CONF_Bool(enable_poco_client_for_aws_sdk, "false");
@@ -118,6 +123,59 @@ CONF_mBool(starlet_fs_read_prefetch_enable, "false");
 
 // prefetch threadpool size
 CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
+
+// Remote I/O scheduler for shared-data reads (off by default). When enabled, every GET that a lake read issues to the
+// object store after a local cache miss is queued in one process-wide scheduler, which hands out the IOs -- one IO is a
+// GET of a cache block -- by weight: queries, loads, compaction and other background work share by
+// remote_read_*_weight, the resource groups of the queries share by their cpu_weight, and the queries of a group share
+// by a weight that decays with the blocks they have read, so that a big scan yields to newer, smaller ones. Inside a query the reads it waits for go
+// before its read-ahead. Query scans also read ahead the cache blocks of the pages they will read
+// (remote_prefetch_window_blocks). Needs datacache_enable=true and starlet_use_star_cache=true; without them the node
+// logs a warning and the remote reads keep their old paths. While enabled, io_coalesce_lake_read_enable is set to false
+// at startup and starlet_fs_read_prefetch_enable is forced off without changing its value; be.conf is not changed, so
+// a restart with the scheduler disabled restores both. Read once at startup.
+CONF_Bool(remote_io_scheduler_enable, "false");
+
+// Threads that run the scheduled remote GETs. The pool size caps how many GETs are in flight on the node. 0 (the
+// default) means as many as the lake scan threads (pipeline_connector_scan_thread_num_per_cpu x cores). Read once at
+// startup; only used when remote_io_scheduler_enable is true.
+CONF_Int32(remote_read_io_threads, "0");
+
+// Whether the scheduler holds the GETs in flight, below the pool size, to what the path to the object store delivers:
+// what does not fit waits in the scheduler, where the weights decide who goes next, instead of in the network. Off
+// means up to remote_read_io_threads GETs in flight. Read once at startup; only used when remote_io_scheduler_enable
+// is true.
+CONF_Bool(remote_read_adaptive_limit, "true");
+
+// The fewest GETs in flight the adaptive limit holds, and the limit it uses to measure the unloaded latency of a GET.
+// Must be positive. Read once at startup; only used when remote_io_scheduler_enable and remote_read_adaptive_limit
+// are true.
+CONF_Int32(remote_read_adaptive_min_inflight, "16");
+
+// The n-th cache block a query (or a background task) reads weighs max(remote_read_weight_decay_min,
+// 2^(-n / remote_read_weight_decay_ios)) of it, so that a big scan yields more and more to newer queries of its
+// resource group. remote_read_weight_decay_ios = 0 turns the decay off; remote_read_weight_decay_min must be in
+// (0, 1]. Read once at startup; only used when remote_io_scheduler_enable is true.
+CONF_Int64(remote_read_weight_decay_ios, "1024");
+
+CONF_Double(remote_read_weight_decay_min, "0.03125");
+
+// Shares of the remote reads of queries, of loads (publish, primary key indexes, delete files and the spill of a
+// load), of compaction and of the other background work while all of them wait: 9:5:1:1 by default. Each must be
+// positive. Read once at startup; only used when remote_io_scheduler_enable is true.
+CONF_Int32(remote_read_query_weight, "9");
+
+CONF_Int32(remote_read_load_weight, "5");
+
+CONF_Int32(remote_read_compaction_weight, "1");
+
+CONF_Int32(remote_read_background_weight, "1");
+
+// Cache blocks a query's segment reader keeps asked for ahead of what it is consuming -- queued, in flight, or filled
+// and not read yet -- while the remote I/O scheduler is enabled. It bounds how far a reader runs ahead of itself;
+// when the blocks are fetched is the scheduler's decision. Loads, compaction and other background reads do not read
+// ahead. 0 turns the read-ahead off. Applies to the segment readers opened afterwards.
+CONF_mInt32(remote_prefetch_window_blocks, "128");
 
 CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");
 
@@ -175,6 +233,9 @@ CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
 CONF_mString_enum_or_default(starlet_starmgr_client_compression_type, "none", "none,zstd");
 
 #endif
+// Configuration items for datacache
+CONF_Bool(datacache_enable, "true");
+
 // Shared-data only. Seconds a node keeps the shard info of a tablet it does not own, so that touching
 // the tablet again within this time does not ask starmgr for it (GetShard RPC). It keeps what it had
 // to ask starmgr for, and what the tablet's owners hand over to the load coordinator along with the
