@@ -191,8 +191,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，主键表 Tablet 的删除量达到 `lake_pk_compaction_base_delete_ratio_threshold` 或 `lake_pk_compaction_base_delete_rows_threshold` 时，是否自动从 Cumulative Compaction 切换到 Base Compaction。默认关闭，因为 `lake_pk_compaction_base_delete_rows_threshold` 是绝对行数：在已有数据持续被更新或删除的大表上，Tablet 每次 Base Compaction 之后很快又会达到该值，而每次 Base Compaction 最多重写 Tablet 中 `update_compaction_ratio_threshold`（默认 0.5）比例的数据。手动执行 `ALTER TABLE ... COMPACT` 时，无论该参数如何设置都会执行 Base Compaction。
-- 引入版本：v4.1.6, v26.2.1
+- 描述：是否允许存算分离主键表的自动 Compaction 在删除比例或删除行数达到阈值时选择 Base Compaction。此项只控制按删除量自动触发 Base Compaction，不影响普通 Cumulative Compaction。默认关闭，因为持续更新或删除的大 Tablet 可能频繁达到绝对删除行数阈值，导致反复重写数据。手动 `ALTER TABLE ... COMPACT` 不受此开关和两个删除阈值限制；没有删除行时回退到普通 Compaction 选取。自动和手动请求都不保证一次合完整个 Tablet。详见[主键表 Base Compaction](../../management/compaction.md#primary-key-base-compaction)。
+- 引入版本：v4.1.7, v26.2.1
 
 ### lake_pk_compaction_base_delete_ratio_threshold
 
@@ -200,8 +200,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Double
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，将主键表 Tablet 从 Cumulative Compaction（Size-tiered 小文件合并）切换到 Base Compaction 的两个触发条件之一。Base Compaction 会重写带删除的 Rowset（删除行数多的优先），物理清除被删除的行并缩小其 Delete Vector。`lake_pk_compaction_base_enable_delete_trigger` 为 `true` 时，当 Tablet 的整体删除比例（各 Rowset 的 `sum(num_dels) / sum(num_rows)`）达到该值、或其累计删除行数达到 `lake_pk_compaction_base_delete_rows_threshold` 时触发。手动执行 `ALTER TABLE ... COMPACT` 时，无论这些参数如何设置都会强制执行 Base Compaction。
-- 引入版本：v4.2
+- 描述：存算分离主键表按删除量自动选择 Base Compaction 的两个阈值之一。Tablet 当前所有 Rowset 的整体删除比例 `sum(num_dels) / sum(num_rows)` 达到此值，或累计删除行数达到 `lake_pk_compaction_base_delete_rows_threshold`，即可进入 Base Compaction 选取。v4.1.4～v4.1.6 直接检查这两个阈值；从 v4.1.7 开始，还需要 `lake_pk_compaction_base_enable_delete_trigger = true`。手动 `ALTER TABLE ... COMPACT` 不受这两个阈值限制。达到阈值不保证立即获得 FE 调度。详见[自动触发](../../management/compaction.md#automatic-base-compaction)。
+- 引入版本：v4.1.4
 
 ### lake_pk_compaction_base_delete_rows_threshold
 
@@ -209,8 +209,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下主键表 Base Compaction 的两个触发条件之一（参见 `lake_pk_compaction_base_delete_ratio_threshold`）。`lake_pk_compaction_base_enable_delete_trigger` 为 `true` 时，当 Tablet 的累计删除行数（各 Rowset 的 `sum(num_dels)`）达到该值时触发 Base Compaction。该绝对数量触发条件是对比例触发条件的补充：在高频更新/删除的表上，Delete Vector 会膨胀、空间被浪费，但整体删除比例可能因大量存活行的稀释而偏低，仅靠比例触发条件不会触发。调大该值可降低 Base Compaction 频率，调小则可更早回收 Delete Vector。
-- 引入版本：v4.2
+- 描述：存算分离主键表按删除量自动选择 Base Compaction 的绝对行数阈值，与 `lake_pk_compaction_base_delete_ratio_threshold` 为 OR 关系。累计删除行数为 Tablet 当前所有 Rowset 的 `sum(num_dels)`。v4.1.4～v4.1.6 直接检查此阈值；从 v4.1.7 开始，还需要 `lake_pk_compaction_base_enable_delete_trigger = true`。手动请求不受此阈值限制。该条件补充了整体删除比例较低、但 Delete Vector 中删除标记较多的场景。调大该值可降低自动 Base Compaction 的频率，调小可更早进入删除回收选取。详见[自动触发](../../management/compaction.md#automatic-base-compaction)。
+- 引入版本：v4.1.4
 
 ### enable_lake_pk_compaction_score_gate
 
@@ -432,6 +432,114 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态配置: 是
 - 描述: 存算分离集群中主键索引缓存的占用上限，以缓存容量的百分比表示。每次 Publish 结束后（因超出内存限制而失败的除外）都会检查一次：占用超过该比例时，按最近最少使用的顺序淘汰未在使用的主键索引，直至占用回落到该比例以内。缓存增长快于后台线程将其回收到 `primary_key_index_memory_high_percent` 的速度时，由该配置项兜底，因此应设置为大于该配置项的值。
 - 引入版本: -
+
+### remote_io_scheduler_enable
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：存算分离集群中是否启用远程 I/O 调度器。启用后，读请求未命中 Data Cache 而向对象存储发出的 GET 请求，都在每个 CN 上唯一的调度器中排队，由调度器按权重放行：查询、导入、Compaction 和其他后台任务按 `remote_read_query_weight`、`remote_read_load_weight`、`remote_read_compaction_weight` 和 `remote_read_background_weight` 分配对象存储的读取能力；查询之间先按资源组的 `cpu_weight` 分配，同一资源组内，查询读得越多份额越低，大查询因此会让位于新来的小查询。查询扫描还会预读即将读取的页面所在的缓存块（见 `remote_prefetch_window_blocks`）。调度器要求 `datacache_enable` 和 `starlet_use_star_cache` 均为 `true`，否则 CN 打印告警日志，按未启用调度器的方式读取。启用期间，`io_coalesce_lake_read_enable` 在启动时被设为 `false`，`starlet_fs_read_prefetch_enable` 不改配置值但强制不生效，动态开启这两项都会被拒绝。配置文件不会被修改，关闭调度器并重启 CN 后两项即恢复。调度器参数取值非法时，CN 拒绝启动。
+- 引入版本：-
+
+### remote_prefetch_late_read_ahead_ratio
+
+- 默认值：0.5
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：启用延迟物化时，只为通过谓词的行读取的列，会在这些行确定后按 Chunk 逐批读取。从 Segment Reader 的第四个 Chunk 起，如果这些行已经触及其所跨页面的比例达到该值，这些列改为与谓词列一样预读。取值大于 1 时从不切换。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_prefetch_window_blocks
+
+- 默认值：128
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：查询的 Segment Reader 最多提前请求多少个 Data Cache 缓存块，包括排队中、读取中以及已读取但尚未消费的缓存块。该参数限制 Reader 超前的距离，缓存块何时读取由调度器决定。导入、Compaction 等后台读取不预读。设为 `0` 关闭预读。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_adaptive_limit
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：远程 I/O 调度器是否根据通往对象存储的链路实际能承载的并发，在 `remote_read_io_threads` 以内控制在途 GET 请求数。超出部分在调度器中等待并按权重决定先后，而不是堵在网络上。设为 `false` 时，在途请求最多为 `remote_read_io_threads` 个。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_adaptive_min_inflight
+
+- 默认值：16
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：自适应并发上限的下限，也是调度器测量空载请求延迟时短暂保持的并发数。必须为正数。仅当 `remote_io_scheduler_enable` 和 `remote_read_adaptive_limit` 均为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_background_weight
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：多方同时等待时，Compaction 以外的后台任务读取对象存储的份额，与 `remote_read_query_weight`、`remote_read_load_weight`、`remote_read_compaction_weight` 相对。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_compaction_weight
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：多方同时等待时，Compaction 读取对象存储的份额，与 `remote_read_query_weight`、`remote_read_load_weight`、`remote_read_background_weight` 相对。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_io_threads
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：发出调度后 GET 请求的线程数，即 CN 上在途 GET 请求数的上限。设为 `0` 时取存算分离扫描线程数，即 `pipeline_connector_scan_thread_num_per_cpu` 乘以 CPU 核数。不能为负数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_load_weight
+
+- 默认值：5
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：多方同时等待时，导入读取对象存储的份额，与 `remote_read_query_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` 相对。导入的读取包括 Publish、主键索引、删除文件以及导入的落盘。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_query_weight
+
+- 默认值：9
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：多方同时等待时，查询读取对象存储的份额，与 `remote_read_load_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` 相对。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_weight_decay_ios
+
+- 默认值：1024
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：查询在资源组内的份额随读取量下降的速度。查询或后台任务读取的第 n 个缓存块，权重为 `max(remote_read_weight_decay_min, 2^(-n / remote_read_weight_decay_ios))`，大查询因此越来越多地让位于同一资源组中新来的查询。设为 `0` 关闭衰减。不能为负数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_weight_decay_min
+
+- 默认值：0.03125
+- 类型：Double
+- 单位：-
+- 是否动态：否
+- 描述：`remote_read_weight_decay_ios` 衰减后的最低权重。取值范围为 (0, 1]。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
 
 ### s3_multipart_equal_part_size
 

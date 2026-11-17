@@ -27,8 +27,8 @@ SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | chat } ]
 | Column         | Description                                                          |
 | -------------- | -------------------------------------------------------------------- |
 | `Name`         | Provider name.                                                       |
-| `Type`         | Provider type (`embedding` / `rerank` / `chat`).                     |
-| `Protocol`     | Wire protocol of the endpoint (`openai` / `anthropic` / `cohere`).   |
+| `Type`         | Provider type.                                                       |
+| `Protocol`     | Wire protocol of the endpoint.                                       |
 | `IsDefault`    | Whether this provider is the default for its type (`true`/`false`).  |
 | `Endpoint`     | Endpoint URL.                                                        |
 | `Model`        | Model name.                                                          |

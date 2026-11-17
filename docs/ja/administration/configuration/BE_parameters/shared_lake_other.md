@@ -194,8 +194,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタで、主キーテーブルの tablet の削除量が `lake_pk_compaction_base_delete_ratio_threshold` または `lake_pk_compaction_base_delete_rows_threshold` に達したときに、累積コンパクションからベースコンパクションへ自動的に切り替えるかどうか。`lake_pk_compaction_base_delete_rows_threshold` は絶対行数であるため、デフォルトでは無効です。既存の行が継続的に更新または削除される大きなテーブルでは、tablet はベースコンパクションのたびにすぐ再びこの値に達し、各ベースコンパクションは tablet のデータのうち最大 `update_compaction_ratio_threshold` (デフォルト 0.5) の割合を書き換えます。手動の `ALTER TABLE ... COMPACT` は、この項目の設定に関係なくベースコンパクションを実行します。
-- 導入バージョン: v4.1.6, v26.2.1
+- 説明: 共有データの主キータブレットに対する自動 Compaction で、削除率または削除行数がしきい値に達したときに Base Compaction を選択できるかどうか。このスイッチは削除量による自動 Base Compaction だけを制御し、通常の Cumulative Compaction には影響しません。継続的な更新や削除がある大きなタブレットでは、絶対削除行数のしきい値に頻繁に達し、データが繰り返し書き換えられる可能性があるため、デフォルトでは無効です。手動の `ALTER TABLE ... COMPACT` はこのスイッチと 2 つの削除しきい値を回避します。削除行がなければ通常の Compaction 選択にフォールバックします。自動と手動のいずれも、1 回でタブレット全体がマージされるとは限りません。[主キーテーブルの Base Compaction](../../management/compaction.md#primary-key-base-compaction)を参照してください。
+- 導入バージョン: v4.1.7, v26.2.1
 
 ### lake_pk_compaction_base_delete_ratio_threshold
 
@@ -203,8 +203,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Double
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタで、主キーテーブルの tablet を累積コンパクション (サイズ階層型の小ファイルマージ) からベースコンパクションに切り替える 2 つのトリガーの 1 つ。ベースコンパクションは削除を含む rowset を (削除行数の多いものから優先して) 書き換え、削除された行を物理的に除去して delete vector を縮小します。`lake_pk_compaction_base_enable_delete_trigger` が `true` の場合、tablet の集約削除率 (各 rowset の `sum(num_dels) / sum(num_rows)`) がこの値に達したとき、または絶対削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達したときに実行されます。手動の `ALTER TABLE ... COMPACT` は、これらの設定に関係なくベースコンパクションを強制します。
-- 導入バージョン: v4.2
+- 説明: 共有データの主キータブレットで、削除量による自動 Base Compaction の選択を判定する 2 つのしきい値の一方です。現在のすべての Rowset の合計削除率 `sum(num_dels) / sum(num_rows)` がこの値に達するか、合計削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達すると選択対象になります。v4.1.4～v4.1.6 は両方のしきい値を直接確認します。v4.1.7 以降は `lake_pk_compaction_base_enable_delete_trigger = true` も必要です。手動の `ALTER TABLE ... COMPACT` は両方のしきい値を回避します。しきい値に達しても FE による即時スケジュールは保証されません。[自動トリガー](../../management/compaction.md#automatic-base-compaction)を参照してください。
+- 導入バージョン: v4.1.4
 
 ### lake_pk_compaction_base_delete_rows_threshold
 
@@ -212,8 +212,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタでの主キーテーブルのベースコンパクションの 2 つのトリガーの 1 つ (`lake_pk_compaction_base_delete_ratio_threshold` を参照)。`lake_pk_compaction_base_enable_delete_trigger` が `true` の場合、tablet の絶対削除行数 (各 rowset の `sum(num_dels)`) がこの値に達したときにベースコンパクションが実行されます。この絶対数トリガーは比率トリガーを補完します。高頻度の更新/削除テーブルでは、delete vector が肥大化して領域が無駄になる一方、集約削除率は多数のほぼ生存している rowset によって希釈されて低いままになるため、比率トリガーだけでは発火しません。この値を大きくするとベースコンパクションの頻度が下がり、小さくすると delete vector をより早く回収できます。
-- 導入バージョン: v4.2
+- 説明: 共有データの主キータブレットで、削除量による自動 Base Compaction を選択する絶対行数のしきい値です。`lake_pk_compaction_base_delete_ratio_threshold` と OR 条件で組み合わせます。削除行数はタブレット内の現在のすべての Rowset の `sum(num_dels)` です。v4.1.4～v4.1.6 はこのしきい値を直接確認します。v4.1.7 以降は `lake_pk_compaction_base_enable_delete_trigger = true` も必要です。手動要求はこのしきい値を回避します。全体の削除率が低くても Delete Vector の削除マークが多い場合を補います。値を大きくすると自動 Base Compaction の頻度が下がり、小さくすると削除データ回収の選択対象に早くなります。[自動トリガー](../../management/compaction.md#automatic-base-compaction)を参照してください。
+- 導入バージョン: v4.1.4
 
 ### enable_lake_pk_compaction_score_gate
 
@@ -425,6 +425,114 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: -
 - 変更可能: Yes
 - 説明: 共有データクラスタにおける主キーインデックスキャッシュの使用量の上限で、キャッシュ容量に対するパーセンテージで指定します。各 Publish の終了時（メモリ制限超過で失敗した場合を除く）に確認され、使用量がこの割合を超えている場合は、使用中でない主キーインデックスを最も長く使われていないものから順に追い出し、この割合以内に収めます。バックグラウンドスレッドが `primary_key_index_memory_high_percent` まで縮小するよりも速くキャッシュが増えた場合の歯止めとなるため、その値より大きい値を設定してください。
+- 導入バージョン: -
+
+### remote_io_scheduler_enable
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: 共有データクラスタでリモート I/O スケジューラを有効にするかどうか。有効にすると、Data Cache にヒットせずにオブジェクトストレージへ発行される GET リクエストは、CN ごとに 1 つのスケジューラで待機し、重みに従って許可されます。クエリ、ロード、Compaction、その他のバックグラウンドタスクは `remote_read_query_weight`、`remote_read_load_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` に従ってオブジェクトストレージの読み取り能力を分け合います。クエリ同士はリソースグループの `cpu_weight` に従って分け合い、同じリソースグループ内では読み取り量が多いクエリほど割り当てが減るため、大きなスキャンは新しい小さなクエリに譲ります。クエリのスキャンは、これから読むページのキャッシュブロックも先読みします（`remote_prefetch_window_blocks` を参照）。スケジューラには `datacache_enable` と `starlet_use_star_cache` の両方が `true` である必要があります。そうでない場合、CN は警告ログを出力し、スケジューラが無効な場合と同じように読み取ります。有効な間は、`io_coalesce_lake_read_enable` が起動時に `false` に設定され、`starlet_fs_read_prefetch_enable` は設定値を変えずに強制的に無効になります。これらを動的に有効にする操作は拒否されます。設定ファイルは変更されないため、スケジューラを無効にして CN を再起動すると両方とも元に戻ります。スケジューラのパラメータに不正な値がある場合、CN は起動を拒否します。
+- 導入バージョン: -
+
+### remote_prefetch_late_read_ahead_ratio
+
+- デフォルト: 0.5
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: 遅延マテリアライゼーションでは、述語を満たす行のためだけに読む列は、それらの行が確定した後にチャンクごとに取得されます。Segment Reader の 4 番目のチャンク以降、それらの行が範囲内のページのうちこの割合以上に触れた場合、これらの列は述語列と同様に先読みされるようになります。1 より大きい値では切り替わりません。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_prefetch_window_blocks
+
+- デフォルト: 128
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: クエリの Segment Reader が、消費中の位置より先に要求する Data Cache ブロックの最大数。キュー中、取得中、取得済みで未読のブロックを含みます。Reader がどこまで先行するかを制限するもので、ブロックをいつ取得するかはスケジューラが決めます。ロード、Compaction などのバックグラウンド読み取りは先読みしません。`0` で先読みを無効にします。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_adaptive_limit
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: リモート I/O スケジューラが、実行中の GET リクエスト数を `remote_read_io_threads` 以下で、オブジェクトストレージへの経路が処理できる量に合わせるかどうか。収まらないリクエストはネットワークではなくスケジューラで待機し、重みに従って次に実行するものが決まります。`false` の場合、実行中のリクエストは最大 `remote_read_io_threads` 個です。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_adaptive_min_inflight
+
+- デフォルト: 16
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: 適応的な上限の最小値で、スケジューラが負荷のないリクエストのレイテンシを測定する際に一時的に保持する同時実行数でもあります。正の値である必要があります。`remote_io_scheduler_enable` と `remote_read_adaptive_limit` の両方が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_background_weight
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: すべてが待機している場合の、Compaction 以外のバックグラウンドタスクによるオブジェクトストレージ読み取りの割り当て。`remote_read_query_weight`、`remote_read_load_weight`、`remote_read_compaction_weight` に対する相対値です。正の値である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_compaction_weight
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: すべてが待機している場合の、Compaction によるオブジェクトストレージ読み取りの割り当て。`remote_read_query_weight`、`remote_read_load_weight`、`remote_read_background_weight` に対する相対値です。正の値である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_io_threads
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: スケジュールされた GET リクエストを発行するスレッド数。CN 上で実行中の GET リクエスト数の上限になります。`0` の場合、共有データのスキャンスレッド数、つまり `pipeline_connector_scan_thread_num_per_cpu` と CPU コア数の積になります。負の値は指定できません。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_load_weight
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: すべてが待機している場合の、ロードによるオブジェクトストレージ読み取りの割り当て。Publish、主キーインデックス、削除ファイル、ロードのスピルを含みます。`remote_read_query_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` に対する相対値です。正の値である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_query_weight
+
+- デフォルト: 9
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: すべてが待機している場合の、クエリによるオブジェクトストレージ読み取りの割り当て。`remote_read_load_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` に対する相対値です。正の値である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_weight_decay_ios
+
+- デフォルト: 1024
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: 読み取りに応じてクエリのリソースグループ内の割り当てが減る速さ。クエリまたはバックグラウンドタスクが読む n 番目のキャッシュブロックの重みは `max(remote_read_weight_decay_min, 2^(-n / remote_read_weight_decay_ios))` で、大きなスキャンは同じリソースグループの新しいクエリにますます譲ります。`0` で減衰を無効にします。負の値は指定できません。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_weight_decay_min
+
+- デフォルト: 0.03125
+- タイプ: Double
+- 単位: -
+- 変更可能: いいえ
+- 説明: `remote_read_weight_decay_ios` によって下がる重みの最小値。0 より大きく 1 以下である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
 - 導入バージョン: -
 
 ### s3_multipart_equal_part_size

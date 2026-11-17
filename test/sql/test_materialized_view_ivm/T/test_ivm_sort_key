@@ -40,7 +40,15 @@ PROPERTIES ("refresh_mode" = "INCREMENTAL")
 AS SELECT region, dt, amount FROM ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base;
 set enable_range_distribution = false;
 drop materialized view mv_sort_key;
-drop table ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base;
+drop table ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base force;
 drop database ivm_ice_${uuid0}.ivm_ice_db_${uuid0};
 drop catalog ivm_ice_${uuid0};
 drop database db_${uuid0};
+
+CLEANUP {
+drop database if exists default_catalog.db_${uuid0} force;
+drop table if exists ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base force;
+drop database if exists ivm_ice_${uuid0}.ivm_ice_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists ivm_ice_${uuid0};
+} END CLEANUP

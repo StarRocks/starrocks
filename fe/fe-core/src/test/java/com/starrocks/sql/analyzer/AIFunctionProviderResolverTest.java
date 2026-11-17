@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.common;
+package com.starrocks.sql.analyzer;
 
 import com.starrocks.context.ai.AIProvider;
 import com.starrocks.context.ai.AIProviderProtocol;
 import com.starrocks.context.ai.AIProviderType;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TAIProvider;
 import com.starrocks.thrift.TAIProviderProtocol;
 import com.starrocks.thrift.TAIProviderType;
@@ -27,7 +26,7 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
 
-public class AIModelConfigsTest {
+public class AIFunctionProviderResolverTest {
     @Test
     public void testProviderTypeMappingAndProtocolNormalization() {
         Map<AIProviderType, TAIProviderType> types = Map.of(
@@ -55,7 +54,8 @@ public class AIModelConfigsTest {
         Map<AIProviderProtocol, TAIProviderProtocol> protocols = Map.of(
                 AIProviderProtocol.OPENAI, TAIProviderProtocol.OPENAI,
                 AIProviderProtocol.ANTHROPIC, TAIProviderProtocol.ANTHROPIC,
-                AIProviderProtocol.COHERE, TAIProviderProtocol.COHERE);
+                AIProviderProtocol.COHERE, TAIProviderProtocol.COHERE,
+                AIProviderProtocol.DASHSCOPE, TAIProviderProtocol.DASHSCOPE);
         protocols.forEach((protocol, wireProtocol) -> {
             AIProvider provider = provider(AIProviderType.CHAT);
             provider.mergeParams(Map.of("protocol", protocol.lower()));
@@ -88,49 +88,6 @@ public class AIModelConfigsTest {
         Assertions.assertFalse(wire.getParams().containsKey("api_key"));
         Assertions.assertFalse(wire.getParams().containsKey("dimensions"));
         Assertions.assertFalse(wire.getParams().containsKey("timeout_ms"));
-    }
-
-    @Test
-    public void testUnsupportedTypesAndProtocolsFailBeforeExecution() {
-        Assertions.assertThrows(SemanticException.class,
-                () -> AIModelConfigs.validateProvider(provider(AIProviderType.RERANK)));
-        for (AIProviderType type : new AIProviderType[] {AIProviderType.CHAT, AIProviderType.EMBEDDING}) {
-            AIProvider provider = provider(type);
-            for (String protocol : new String[] {"anthropic", "cohere"}) {
-                provider.mergeParams(Map.of("protocol", protocol, "api_key", "secret-test-key"));
-                SemanticException error = Assertions.assertThrows(SemanticException.class,
-                        () -> AIModelConfigs.validateProvider(provider));
-                Assertions.assertTrue(error.getMessage().contains("OPENAI"));
-                Assertions.assertFalse(error.getMessage().contains("secret-test-key"));
-            }
-        }
-    }
-
-    @Test
-    public void testPositiveIntegerValidationAndEmptyDefaults() {
-        for (String key : new String[] {"timeout_ms", "dimensions"}) {
-            for (String value : new String[] {"0", "-1", "2147483648", "12junk"}) {
-                AIProvider provider = provider(AIProviderType.EMBEDDING);
-                provider.mergeParams(Map.of(key, value));
-                Assertions.assertThrows(SemanticException.class, () -> AIModelConfigs.validateProvider(provider));
-            }
-            for (String value : new String[] {"", "1", "+123", "2147483647"}) {
-                AIProvider provider = provider(AIProviderType.EMBEDDING);
-                provider.mergeParams(Map.of(key, value));
-                Assertions.assertDoesNotThrow(() -> AIModelConfigs.validateProvider(provider));
-            }
-        }
-    }
-
-    @Test
-    public void testHttpAndHttpsWithOptionalKey() {
-        for (String scheme : new String[] {"http", "https"}) {
-            AIProvider provider = provider(AIProviderType.CHAT);
-            provider.mergeParams(Map.of("endpoint", scheme + "://models.example.test/v1/inference"));
-            Assertions.assertDoesNotThrow(() -> AIModelConfigs.validateProvider(provider));
-            provider.mergeParams(Map.of("api_key", "test-key"));
-            Assertions.assertDoesNotThrow(() -> AIModelConfigs.validateProvider(provider));
-        }
     }
 
     private static AIProvider provider(AIProviderType type) {

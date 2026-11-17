@@ -3548,6 +3548,13 @@ public class Config extends ConfigBase {
     public static int refresh_other_fe_rpc_executor_thread_num = 4;
 
     /**
+     * Max time a commit to an Iceberg table waits for the other FEs to drop their cached copy of the table,
+     * so that a query on any FE sees the commit once the statement returns. 0 or less disables the wait.
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_commit_invalidate_other_fe_timeout_ms = 3000;
+
+    /**
      * Background refresh external table metadata interval in milliseconds.
      */
     @ConfField(mutable = true)
@@ -3713,6 +3720,15 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int iceberg_commit_queue_timeout_seconds = 300;
+
+    /**
+     * How many more times an Iceberg rewrite (rewrite_data_files) commit is retried, each time on a freshly
+     * loaded table, after Iceberg's own commit retries (table property commit.retry.num-retries) all lost to
+     * concurrent commits from other writers. Rounds back off exponentially from 1 second up to 30 seconds.
+     * 0 disables the extra retries.
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_rewrite_commit_max_retries = 5;
 
     /**
      * The maximum number of pending commit operations per Iceberg table.
