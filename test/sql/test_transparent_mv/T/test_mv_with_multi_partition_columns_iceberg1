@@ -141,9 +141,19 @@ SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours where l_sh
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours order by l_orderkey;
 DROP MATERIALIZED VIEW test_hours;
 
-drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours;
-drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date;
-drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t1;
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours force;
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date force;
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t1 force;
 drop database mv_iceberg_${uuid0}.sql_test_db_${uuid0} force;
 
 drop database db_${uuid0} force;
+
+CLEANUP {
+drop database if exists default_catalog.db_${uuid0} force;
+drop table if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours force;
+drop table if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date force;
+drop table if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t1 force;
+drop database if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists mv_iceberg_${uuid0};
+} END CLEANUP
