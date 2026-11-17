@@ -20,6 +20,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.MapExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.type.AnyMapType;
 import com.starrocks.type.ArrayType;
@@ -27,6 +28,7 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -93,6 +95,26 @@ public class ColumnIdExprTest {
         ColumnIdExpr expr = ColumnIdExpr.create(SqlParser.parseSqlToExpr(sql, SqlModeHelper.MODE_DEFAULT));
         Assertions.assertTrue(expr.toSql().startsWith("map_keys(map{1:'2020-01-01'}"), expr.toSql());
         Assertions.assertEquals(AnyMapType.ANY_MAP, firstArgType(roundTrip(sql)));
+    }
+
+    @Test
+    public void testNullTypeLiteralHasNoPrefix() {
+        // An analyzed [] / [NULL] carries an inferred ARRAY<NULL_TYPE>, which has no SQL spelling and must not be
+        // frozen into another type; the bare literal is printed and re-infers the same type.
+        ColumnIdExpr emptyArray = ColumnIdExpr.create(new ArrayExpr(ArrayType.ARRAY_NULL, new ArrayList<>()));
+        Assertions.assertEquals("[]", emptyArray.toSql());
+
+        List<Expr> nulls = new ArrayList<>();
+        nulls.add(new NullLiteral());
+        ColumnIdExpr nestedNull = ColumnIdExpr.create(
+                new ArrayExpr(new ArrayType(ArrayType.ARRAY_NULL), List.of(new ArrayExpr(ArrayType.ARRAY_NULL, nulls))));
+        Assertions.assertEquals("[[NULL]]", nestedNull.toSql());
+
+        List<Expr> kv = new ArrayList<>();
+        kv.add(SqlParser.parseSqlToExpr("1", SqlModeHelper.MODE_DEFAULT));
+        kv.add(new NullLiteral());
+        ColumnIdExpr nullValueMap = ColumnIdExpr.create(new MapExpr(new MapType(IntegerType.TINYINT, NullType.NULL), kv));
+        Assertions.assertEquals("map{1:NULL}", nullValueMap.toSql());
     }
 
     @Test

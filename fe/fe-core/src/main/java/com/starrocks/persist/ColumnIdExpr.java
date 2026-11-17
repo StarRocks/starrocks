@@ -18,7 +18,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.qe.SqlModeHelper;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -27,6 +26,10 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.formatter.AST2StringVisitor;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 
 import java.util.List;
@@ -160,7 +163,7 @@ public class ColumnIdExpr {
             if (!hasConcreteType(type)) {
                 return literal;
             }
-            return AnalyzerUtils.replaceNullType2Boolean(type).toString() + literal;
+            return type.toString() + literal;
         }
 
         @Override
@@ -171,11 +174,32 @@ public class ColumnIdExpr {
                 return literal;
             }
             // super returns "map{...}", the typed form is "MAP<K,V>{...}"
-            return AnalyzerUtils.replaceNullType2Boolean(type).toString() + literal.substring("map".length());
+            return type.toString() + literal.substring("map".length());
         }
 
+        // Only a type that can be written in SQL and reproduces itself on re-parse is kept. A NULL_TYPE element
+        // (e.g. an analyzed [NULL] or []) is inferred, not declared, and has no SQL spelling; the bare literal
+        // re-infers the same type, so no prefix is printed for it.
         private static boolean hasConcreteType(Type type) {
-            return type != null && !type.isPseudoType() && !type.isInvalid();
+            return type != null && !type.isPseudoType() && !type.isInvalid() && !containsNullType(type);
+        }
+
+        private static boolean containsNullType(Type type) {
+            if (type.isNull()) {
+                return true;
+            } else if (type.isArrayType()) {
+                return containsNullType(((ArrayType) type).getItemType());
+            } else if (type.isMapType()) {
+                MapType mapType = (MapType) type;
+                return containsNullType(mapType.getKeyType()) || containsNullType(mapType.getValueType());
+            } else if (type.isStructType()) {
+                for (StructField field : ((StructType) type).getFields()) {
+                    if (containsNullType(field.getType())) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
     }
 }
