@@ -938,7 +938,7 @@ Base Compaction for shared-data Primary Key tables is supported from v4.1.4. Use
 
 > **NOTE**
 >
-> The v3.2.13 support for [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#forbid-base-compaction) applies to shared-nothing non-Primary Key tables. The 4.1 series, including the current v4.1.8 branch, does not support setting this property on shared-data tables. Time windows and minimum intervals for automatic shared-data Base Compaction are supported from v4.2; manual `ALTER TABLE ... COMPACT` requests bypass these restrictions.
+> The v3.2.13 support for [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#forbid-base-compaction) applies to shared-nothing non-Primary Key tables. The 4.1 series does not support setting this property on shared-data tables. Time windows and minimum intervals for automatic shared-data Base Compaction are supported from v4.2; manual `ALTER TABLE ... COMPACT` requests bypass these restrictions.
 
 Syntax:
 

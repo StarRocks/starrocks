@@ -51,7 +51,7 @@ This section describes Base Compaction for Primary Key tables in shared-data clu
 | --- | --- | --- | --- |
 | v4.1.0–v4.1.3 | Not supported. | PK Base Compaction is not supported; ordinary compaction can still be triggered manually. | Not supported. |
 | v4.1.4–v4.1.6 | Checks the delete ratio or delete-row count after dispatch, without a separate automatic-trigger switch. | Supported without meeting the automatic delete thresholds. | Not supported. |
-| v4.1.7–v4.1.8 | Controlled by `lake_pk_compaction_base_enable_delete_trigger`, which defaults to `false`. | Supported regardless of that switch and the delete thresholds. | Not supported. |
+| v4.1.7 and later 4.1 releases | Controlled by `lake_pk_compaction_base_enable_delete_trigger`, which defaults to `false`. | Supported regardless of that switch and the delete thresholds. | Not supported. |
 | v4.2 | Controlled by the same switch, which defaults to `false`. | Supported, and bypasses automatic Base Compaction time windows and minimum intervals. | Supported; see [Time controls](#base-compaction-time-controls). |
 
 PK Base Compaction is supported from v4.1.4. The `lake_pk_compaction_base_enable_delete_trigger` switch added in v4.1.7 **only controls automatic Base Compaction triggered by deletes**. It does not disable manual Base Compaction or ordinary Cumulative Compaction.
@@ -96,10 +96,10 @@ A selection is limited by `lake_pk_compaction_max_input_rowsets` (default: `500`
 
 ### Time controls {/* #base-compaction-time-controls */}
 
-The following controls are supported from v4.2. **The 4.1 series, including the current v4.1.8 branch, does not support these restrictions for shared-data tables**:
+The following controls are supported from v4.2. **The 4.1 series does not support these restrictions for shared-data tables**:
 
-- The table property [`base_compaction_forbidden_time_ranges`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#forbid-base-compaction) specifies when **automatic Base Compaction is forbidden**; other times are allowed. In v4.1.6, v4.1.7, and the current v4.1.8 branch, FE rejects this property for shared-data tables.
-- The CN parameter [`base_compaction_interval_seconds_since_last_operation`](../configuration/BE_parameters/stats_storage.md#base_compaction_interval_seconds_since_last_operation), default `86400` seconds, sets the minimum interval for selecting another automatic Base Compaction after a successful Base Compaction on the same tablet. It is not a daily schedule. No interval is enforced when there is no recorded Base Compaction time or the value is less than or equal to `0`. This parameter predates v4.1, but does not limit shared-data PK Base Compaction in the 4.1 series, including the current v4.1.8 branch.
+- The table property [`base_compaction_forbidden_time_ranges`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#forbid-base-compaction) specifies when **automatic Base Compaction is forbidden**; other times are allowed. In the 4.1 series, FE rejects this property for shared-data tables.
+- The CN parameter [`base_compaction_interval_seconds_since_last_operation`](../configuration/BE_parameters/stats_storage.md#base_compaction_interval_seconds_since_last_operation), default `86400` seconds, sets the minimum interval for selecting another automatic Base Compaction after a successful Base Compaction on the same tablet. It is not a daily schedule. No interval is enforced when there is no recorded Base Compaction time or the value is less than or equal to `0`. This parameter predates v4.1, but does not limit shared-data PK Base Compaction in the 4.1 series.
 
 For example, only in versions that support these controls, you can forbid automatic Base Compaction every day from 08:00 (inclusive) to 21:00 (exclusive):
 

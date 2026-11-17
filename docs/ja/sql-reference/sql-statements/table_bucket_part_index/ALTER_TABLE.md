@@ -939,7 +939,7 @@ v3.1 以降、StarRocks はユーザーが SQL コマンドを実行して手動
 
 > **注意**
 >
-> [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#ベースコンパクションの禁止) の v3.2.13 での対応は、共有なしの非主キーテーブルが対象です。現在の v4.1.8 ブランチを含む 4.1 系列では、共有データテーブルにこのプロパティを設定できません。共有データの自動 Base Compaction の時間帯と最小間隔の制限は v4.2 からサポートされています。手動の `ALTER TABLE ... COMPACT` はこれらの制限を回避します。
+> [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#ベースコンパクションの禁止) の v3.2.13 での対応は、共有なしの非主キーテーブルが対象です。4.1 系列では、共有データテーブルにこのプロパティを設定できません。共有データの自動 Base Compaction の時間帯と最小間隔の制限は v4.2 からサポートされています。手動の `ALTER TABLE ... COMPACT` はこれらの制限を回避します。
 
 構文:
 

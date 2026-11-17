@@ -938,7 +938,7 @@ StarRocks使用 Compaction 机制来合并已加载数据的不同版本。此�
 
 > **注意**
 >
-> [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#禁止-base-compaction) 的 v3.2.13 支持起点适用于存算一体非主键表。4.1 系列（包括当前 v4.1.8 分支）不支持给存算分离表设置此属性。存算分离的自动 Base Compaction 时段和最小间隔限制从 v4.2 开始支持；手动 `ALTER TABLE ... COMPACT` 可绕过这些限制。
+> [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#禁止-base-compaction) 的 v3.2.13 支持起点适用于存算一体非主键表。4.1 系列不支持给存算分离表设置此属性。存算分离的自动 Base Compaction 时段和最小间隔限制从 v4.2 开始支持；手动 `ALTER TABLE ... COMPACT` 可绕过这些限制。
 
 语法：
 

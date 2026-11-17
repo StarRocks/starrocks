@@ -50,7 +50,7 @@ StarRocks の各データロード操作は、新しいバージョンのデー�
 | --- | --- | --- | --- |
 | v4.1.0～v4.1.3 | 非対応。 | PK Base Compaction は非対応。通常の Compaction は手動で実行できます。 | 非対応。 |
 | v4.1.4～v4.1.6 | タスク配布後に削除率または削除行数を確認します。自動トリガー専用のスイッチはありません。 | 自動トリガーの削除しきい値に達していなくても実行できます。 | 非対応。 |
-| v4.1.7～v4.1.8 | `lake_pk_compaction_base_enable_delete_trigger` で制御します。デフォルトは `false` です。 | スイッチと削除しきい値に関係なく実行できます。 | 非対応。 |
+| v4.1.7 以降の 4.1 リリース | `lake_pk_compaction_base_enable_delete_trigger` で制御します。デフォルトは `false` です。 | スイッチと削除しきい値に関係なく実行できます。 | 非対応。 |
 | v4.2 | 同じスイッチで制御します。デフォルトは `false` です。 | 実行可能。自動 Base Compaction の時間帯と最小間隔の制限も回避します。 | 対応。[実行時間の制御](#base-compaction-time-controls)を参照してください。 |
 
 PK Base Compaction は v4.1.4 からサポートされています。v4.1.7 で追加された `lake_pk_compaction_base_enable_delete_trigger` は、**削除量による自動 Base Compaction だけを制御します**。手動 Base Compaction や通常の Cumulative Compaction を無効にするものではありません。
@@ -95,10 +95,10 @@ Base Compaction は削除率ではなく、Rowset の**絶対削除行数の降�
 
 ### 実行時間の制御 {/* #base-compaction-time-controls */}
 
-以下の制御は v4.2 からサポートされています。**現在の v4.1.8 ブランチを含む 4.1 系列では、共有データテーブルに対するこれらの制限はサポートされていません**。
+以下の制御は v4.2 からサポートされています。**4.1 系列では、共有データテーブルに対するこれらの制限はサポートされていません**。
 
-- テーブルプロパティ [`base_compaction_forbidden_time_ranges`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#ベースコンパクションの禁止) は、**自動 Base Compaction を禁止する時間帯**を指定します。それ以外の時間帯は許可されます。v4.1.6、v4.1.7、および現在の v4.1.8 ブランチの FE は、共有データテーブルへのこのプロパティの設定を拒否します。
-- CN パラメータ [`base_compaction_interval_seconds_since_last_operation`](../configuration/BE_parameters/stats_storage.md#base_compaction_interval_seconds_since_last_operation) は、同じタブレットで Base Compaction が成功した後、次の自動 Base Compaction を選択するまでの最小間隔を指定します。デフォルトは `86400` 秒です。毎日定時に実行する周期ではありません。過去の Base Compaction 時刻が記録されていない場合、または値が `0` 以下の場合は、間隔を制限しません。このパラメータは v4.1 より前から存在しますが、現在の v4.1.8 ブランチを含む 4.1 系列の共有データ PK Base Compaction は制限しません。
+- テーブルプロパティ [`base_compaction_forbidden_time_ranges`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#ベースコンパクションの禁止) は、**自動 Base Compaction を禁止する時間帯**を指定します。それ以外の時間帯は許可されます。4.1 系列の FE は、共有データテーブルへのこのプロパティの設定を拒否します。
+- CN パラメータ [`base_compaction_interval_seconds_since_last_operation`](../configuration/BE_parameters/stats_storage.md#base_compaction_interval_seconds_since_last_operation) は、同じタブレットで Base Compaction が成功した後、次の自動 Base Compaction を選択するまでの最小間隔を指定します。デフォルトは `86400` 秒です。毎日定時に実行する周期ではありません。過去の Base Compaction 時刻が記録されていない場合、または値が `0` 以下の場合は、間隔を制限しません。このパラメータは v4.1 より前から存在しますが、4.1 系列の共有データ PK Base Compaction は制限しません。
 
 例えば、これらの制御をサポートするバージョンでのみ、毎日 08:00 以上 21:00 未満の自動 Base Compaction を禁止できます。
 

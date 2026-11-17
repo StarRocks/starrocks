@@ -48,7 +48,7 @@ Compaction Score 反映了分区的数据文件合并状态。分数越高，表
 | --- | --- | --- | --- |
 | v4.1.0～v4.1.3 | 不支持。 | 不支持 PK Base Compaction；仍可手动触发普通 Compaction。 | 不支持。 |
 | v4.1.4～v4.1.6 | 调度后按删除比例或删除行数判断，没有独立的自动触发开关。 | 支持，不要求达到自动触发阈值。 | 不支持。 |
-| v4.1.7～v4.1.8 | 由 `lake_pk_compaction_base_enable_delete_trigger` 控制，默认 `false`。 | 支持，不受该开关和删除阈值限制。 | 不支持。 |
+| v4.1.7 及后续 4.1 版本 | 由 `lake_pk_compaction_base_enable_delete_trigger` 控制，默认 `false`。 | 支持，不受该开关和删除阈值限制。 | 不支持。 |
 | v4.2 | 由上述开关控制，默认 `false`。 | 支持，并可绕过自动 Base Compaction 的时段和最小间隔限制。 | 支持，详见[执行时间控制](#base-compaction-time-controls)。 |
 
 PK Base Compaction 从 v4.1.4 开始支持。v4.1.7 新增的 `lake_pk_compaction_base_enable_delete_trigger` **只控制按删除量自动触发 Base Compaction**，不会禁止手动 Base Compaction，也不会关闭普通 Cumulative Compaction。
@@ -93,10 +93,10 @@ Base Compaction 按各 Rowset 的**删除行数绝对值降序**选取输入，�
 
 ### 执行时间控制 {/* #base-compaction-time-controls */}
 
-以下能力从 v4.2 开始支持；**4.1 系列（包括当前 v4.1.8 分支）不支持这些存算分离限制**：
+以下能力从 v4.2 开始支持；**4.1 系列不支持这些存算分离限制**：
 
-- 表属性 [`base_compaction_forbidden_time_ranges`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#禁止-base-compaction) 指定的是**禁止自动 Base Compaction** 的时段，其余时段允许。v4.1.6、v4.1.7 和当前 v4.1.8 分支的 FE 会拒绝为存算分离表设置此属性。
-- CN 参数 [`base_compaction_interval_seconds_since_last_operation`](../configuration/BE_parameters/stats_storage.md#base_compaction_interval_seconds_since_last_operation) 默认 `86400` 秒，表示同一 Tablet 两次成功 Base Compaction 之间的自动选取最小间隔。它不是每天定时触发的周期；没有历史 Base Compaction 时间记录或该值小于等于 `0` 时，不施加间隔限制。此参数早于 v4.1 已存在，但在 4.1 系列（包括当前 v4.1.8 分支）中不用于限制存算分离 PK Base Compaction。
+- 表属性 [`base_compaction_forbidden_time_ranges`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#禁止-base-compaction) 指定的是**禁止自动 Base Compaction** 的时段，其余时段允许。4.1 系列的 FE 会拒绝为存算分离表设置此属性。
+- CN 参数 [`base_compaction_interval_seconds_since_last_operation`](../configuration/BE_parameters/stats_storage.md#base_compaction_interval_seconds_since_last_operation) 默认 `86400` 秒，表示同一 Tablet 两次成功 Base Compaction 之间的自动选取最小间隔。它不是每天定时触发的周期；没有历史 Base Compaction 时间记录或该值小于等于 `0` 时，不施加间隔限制。此参数早于 v4.1 已存在，但在 4.1 系列中不用于限制存算分离 PK Base Compaction。
 
 例如，仅在支持上述能力的版本中，可以禁止每天 08:00（含）到 21:00（不含）的自动 Base Compaction：
 
