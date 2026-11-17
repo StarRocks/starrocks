@@ -49,6 +49,7 @@
 #include "storage/lake/primary_key_compaction_policy.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_reshard.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/rows_mapper.h"
@@ -231,6 +232,185 @@ protected:
         }
     }
 
+<<<<<<< HEAD
+=======
+    Chunk single_row(int key, int value) {
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append(key);
+        c1->append(value);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
+    }
+
+    // Writes |chunk| as one load into the fixture's tablet and returns the txn id, unpublished.
+    int64_t write_txn(const Chunk& chunk) { return write_txn(chunk, _tablet_metadata->id()); }
+
+    // Writes |chunk| as one load into |tablet_id| and returns the txn id, unpublished.
+    int64_t write_txn(const Chunk& chunk, int64_t tablet_id) {
+        std::vector<uint32_t> indexes(chunk.num_rows());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        const int64_t txn_id = next_id();
+        auto delta_writer = DeltaWriterBuilder()
+                                    .set_tablet_manager(_tablet_mgr.get())
+                                    .set_tablet_id(tablet_id)
+                                    .set_txn_id(txn_id)
+                                    .set_partition_id(_partition_id)
+                                    .set_mem_tracker(_mem_tracker.get())
+                                    .set_schema_id(_tablet_schema->id())
+                                    .set_profile(&_dummy_runtime_profile)
+                                    .build();
+        CHECK_OK(delta_writer.status());
+        CHECK_OK((*delta_writer)->open());
+        CHECK_OK((*delta_writer)->write(chunk, indexes.data(), indexes.size()));
+        CHECK_OK((*delta_writer)->finish_with_txnlog());
+        (*delta_writer)->close();
+        return txn_id;
+    }
+
+    // Writes |chunk| as one load and publishes it as |version| while forcing a primary key recovery: the
+    // index load reports a duplicate key once, so the publish recovers the tablet and then publishes again.
+    Status publish_forcing_recovery(const Chunk& chunk, int64_t version) {
+        ConfigResetGuard<bool> recover_guard(&config::enable_primary_key_recover, true);
+        bool report_duplicate = true;
+        SyncPoint::GetInstance()->SetCallBack("lake_index_load.1", [&](void* arg) {
+            if (report_duplicate) {
+                *static_cast<Status*>(arg) = Status::AlreadyExist("forced primary key recovery");
+                report_duplicate = false;
+            }
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp clear_sync_point([] {
+            SyncPoint::GetInstance()->ClearCallBack("lake_index_load.1");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        // Only an index that is not cached gets loaded, and the load is where the duplicate is reported.
+        _primary_key_mgr->try_remove_primary_index_cache(_tablet_metadata->id());
+        const int64_t txn_id = write_txn(chunk);
+        auto st = publish_single_version(_tablet_metadata->id(), version, txn_id).status();
+        CHECK(!report_duplicate) << "the publish did not load the index";
+        return st;
+    }
+
+    std::map<int, int> read_key_values(int64_t version) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        return read_key_values(metadata);
+    }
+
+    // The rows of |metadata| by key. A primary key table holds each key once, so a key read twice fails the test.
+    std::map<int, int> read_key_values(const TabletMetadataPtr& metadata) {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        std::map<int, int> rows;
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                const int key = chunk->columns()[0]->get(i).get_int32();
+                EXPECT_TRUE(rows.emplace(key, chunk->columns()[1]->get(i).get_int32()).second) << key;
+            }
+            chunk->reset();
+        }
+        return rows;
+    }
+
+    // Writes a load that deletes |keys| from the fixture's tablet and returns the txn id, unpublished.
+    int64_t write_delete_txn(const std::vector<int>& keys) {
+        std::vector<SlotDescriptor> slots;
+        slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+        slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        std::vector<SlotDescriptor*> slot_pointers{&slots[0], &slots[1], &slots[2]};
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto ops = Int8Column::create();
+        for (int key : keys) {
+            c0->append(key);
+            c1->append(0);
+            ops->append(TOpType::DELETE);
+        }
+        Chunk chunk(Columns{std::move(c0), std::move(c1), std::move(ops)}, Chunk::SlotHashMap{{0, 0}, {1, 1}, {2, 2}});
+        std::vector<uint32_t> indexes(keys.size());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        const int64_t txn_id = next_id();
+        auto delta_writer = DeltaWriterBuilder()
+                                    .set_tablet_manager(_tablet_mgr.get())
+                                    .set_tablet_id(_tablet_metadata->id())
+                                    .set_txn_id(txn_id)
+                                    .set_partition_id(_partition_id)
+                                    .set_mem_tracker(_mem_tracker.get())
+                                    .set_schema_id(_tablet_schema->id())
+                                    .set_slot_descriptors(&slot_pointers)
+                                    .set_profile(&_dummy_runtime_profile)
+                                    .build();
+        CHECK_OK(delta_writer.status());
+        CHECK_OK((*delta_writer)->open());
+        CHECK_OK((*delta_writer)->write(chunk, indexes.data(), indexes.size()));
+        CHECK_OK((*delta_writer)->finish_with_txnlog());
+        (*delta_writer)->close();
+        return txn_id;
+    }
+
+    // Keys 0..11 and 12..23 are written as versions 2 and 3, one rowset each, key k at rowid k % 12; version
+    // 3 is the snapshot a delete of keys 2, 3 and 12 is decided on. A compaction reads both rowsets right then
+    // and commits only after the delete. Key 3 is upserted as version 4, after the snapshot, and
+    // |publish_delete|, given the snapshot, publishes the delete as version 5. The compaction commits as
+    // version 6: its output carries copies of the old rows of keys 2, 3 and 12 under an rssid newer than the
+    // delete's rowset, but replays in place of its newest input, before it. Version 7 is published while a
+    // primary key recovery is forced, so it holds what recovery derives from all of the above.
+    void recover_after_concurrent_compaction(const std::function<void(const TabletMetadataPtr&)>& publish_delete) {
+        const int64_t tablet_id = _tablet_metadata->id();
+        ASSERT_OK(publish_single_version(tablet_id, 2, write_txn(generate_data(kChunkSize, 0))).status());
+        ASSERT_OK(publish_single_version(tablet_id, 3, write_txn(generate_data(kChunkSize, 1))).status());
+        ASSIGN_OR_ABORT(auto snapshot, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+
+        const int64_t compaction_txn_id = next_id();
+        auto task_context =
+                std::make_unique<CompactionTaskContext>(compaction_txn_id, tablet_id, 3, false, false, nullptr);
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+        check_task(task);
+        ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+        ASSIGN_OR_ABORT(auto compaction_log, _tablet_mgr->get_txn_log(tablet_id, compaction_txn_id));
+        ASSERT_EQ(2, compaction_log->op_compaction().input_rowsets_size());
+
+        ASSERT_OK(publish_single_version(tablet_id, 4, write_txn(single_row(3, 333))).status());
+        publish_delete(snapshot);
+        ASSIGN_OR_ABORT(auto deleted, _tablet_mgr->get_tablet_metadata(tablet_id, 5));
+        const uint32_t delete_rowset_id = deleted->rowsets(deleted->rowsets_size() - 1).id();
+        ASSERT_OK(publish_single_version(tablet_id, 6, compaction_txn_id).status());
+        ASSIGN_OR_ABORT(auto compacted, _tablet_mgr->get_tablet_metadata(tablet_id, 6));
+        const auto& output = compacted->rowsets(compacted->rowsets_size() - 1);
+        ASSERT_TRUE(output.has_max_compact_input_rowset_id());
+        ASSERT_GT(output.id(), delete_rowset_id);
+        ASSERT_LT(output.max_compact_input_rowset_id(), delete_rowset_id);
+
+        ASSERT_OK(publish_forcing_recovery(single_row(100, 300), 7));
+    }
+
+    // The rows version 7 of that case holds: keys 0..23 at their loaded values, less keys 2 and 12, which the
+    // delete removes, with key 3 at the value it was upserted with, or removed too when |key3_deleted|, and
+    // key 100 from version 7 itself.
+    std::map<int, int> rows_after_recovery(bool key3_deleted) {
+        std::map<int, int> rows;
+        for (int key = 0; key < 2 * kChunkSize; key++) {
+            rows[key] = key * 3;
+        }
+        rows.erase(2);
+        rows.erase(12);
+        if (key3_deleted) {
+            rows.erase(3);
+        } else {
+            rows[3] = 333;
+        }
+        rows[100] = 300;
+        return rows;
+    }
+
+>>>>>>> 07da8c282ff... [BugFix][RB-96] Stop the no-op auto split loop on tablets holding a cross-published off-range rowset (#69964)
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
@@ -303,6 +483,68 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     EXPECT_EQ(3, new_tablet_metadata2->compaction_inputs_size());
     EXPECT_FALSE(new_tablet_metadata2->has_prev_garbage_version());
     EXPECT_EQ(new_tablet_metadata2->rowsets(0).num_dels(), 0);
+}
+
+// A compaction that was running when a tablet split left its tablet in place -- an identical tablet, the same
+// rowsets under a new id -- still publishes: the cross-publish keeps the op_compaction, applies it to the new
+// tablet and resolves the compaction's rows mapper there. Tablet reshard cleaning relies on this to let such a
+// compaction finish rather than abort it.
+TEST_P(LakePrimaryKeyCompactionTest, test_compaction_publishes_through_identical_tablet) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    for (int i = 0; i < 3; i++) {
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, write_txn(generate_data(kChunkSize, i))).status());
+        version++;
+    }
+    // Overwrite some keys so the compaction has deleted rows to drop and a rows mapper to resolve.
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, write_txn(single_row(0, 1000))).status());
+    version++;
+    const std::map<int, int> expected = read_key_values(version);
+    ASSERT_EQ(3 * kChunkSize, expected.size());
+
+    const int64_t compaction_txn_id = next_id();
+    auto task_context =
+            std::make_unique<CompactionTaskContext>(compaction_txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    ASSIGN_OR_ABORT(auto compaction_log, _tablet_mgr->get_txn_log(tablet_id, compaction_txn_id));
+    const int input_rowsets = compaction_log->op_compaction().input_rowsets_size();
+    ASSERT_GT(input_rowsets, 1);
+
+    // The split leaves the tablet as it is, under a new id.
+    const int64_t new_tablet_id = next_id();
+    ReshardingTabletInfoPB identical;
+    identical.mutable_identical_tablet_info()->set_old_tablet_id(tablet_id);
+    identical.mutable_identical_tablet_info()->set_new_tablet_id(new_tablet_id);
+    TxnInfoPB reshard_txn;
+    reshard_txn.set_txn_id(next_id());
+    reshard_txn.set_commit_time(1);
+    reshard_txn.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> published;
+    std::unordered_map<int64_t, TabletRangePB> ranges;
+    ASSERT_OK(publish_resharding_tablet(_tablet_mgr.get(), identical, version, version + 1, reshard_txn, false,
+                                        published, ranges));
+    ASSERT_TRUE(published.contains(new_tablet_id));
+    version++;
+
+    // The compaction's txn log names the old tablet; it is published onto the new one.
+    auto compaction_txns = std::vector<TxnInfoPB>{TEST_txn_info(compaction_txn_id, time(nullptr), false)};
+    ASSIGN_OR_ABORT(auto compacted,
+                    publish_version(_tablet_mgr.get(),
+                                    PublishTabletInfo(PublishTabletInfo::IDENTICAL_TABLET, tablet_id, new_tablet_id),
+                                    version, version + 1, compaction_txns, false, std::nullopt));
+    version++;
+    EXPECT_EQ(new_tablet_id, compacted->id());
+    EXPECT_EQ(input_rowsets, compacted->compaction_inputs_size());
+    EXPECT_EQ(expected, read_key_values(compacted));
+
+    // The new tablet keeps taking loads on top of the compacted output: key 1 is overwritten, not duplicated.
+    ASSIGN_OR_ABORT(auto after_load,
+                    publish_single_version(new_tablet_id, version + 1, write_txn(single_row(1, 2000), new_tablet_id)));
+    auto expected_after_load = expected;
+    expected_after_load[1] = 2000;
+    EXPECT_EQ(expected_after_load, read_key_values(after_load));
 }
 
 // test write 3 diff chunk
