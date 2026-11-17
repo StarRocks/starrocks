@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "stream_loads 提供 Stream Load 作业的信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # stream_loads

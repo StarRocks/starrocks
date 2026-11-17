@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "routine_load_jobsはRoutine Loadジョブに関する情報を提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # routine_load_jobs

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "grouping 判断列是否为聚合列，是则返回 0，否则返回 1。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # grouping

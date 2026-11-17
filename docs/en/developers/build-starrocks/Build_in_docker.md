@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "How to compile StarRocks from source using a Docker development image."
+products: [oss]
 ---
 
 # Compile StarRocks with Docker

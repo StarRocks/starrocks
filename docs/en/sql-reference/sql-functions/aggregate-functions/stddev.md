@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the population standard deviation of the expr expression."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 4.0 release notes: DECIMAL256 type, File Bundling for shared-data clusters, Multi-Table Write-Write Transactions, Iceberg compaction and hidden..."
+products: [oss]
 ---
 
 # StarRocks version 4.0

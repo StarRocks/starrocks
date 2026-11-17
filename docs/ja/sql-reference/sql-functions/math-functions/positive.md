@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "x をそのままの値として返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # positive

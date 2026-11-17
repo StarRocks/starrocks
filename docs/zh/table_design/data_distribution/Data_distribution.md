@@ -4,6 +4,7 @@ keywords: ['fenqu','fentong', 'lengre']
 toc_max_heading_level: 4
 description: 分区与分桶
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 数据分布
@@ -861,6 +862,7 @@ PRIMARY KEY (tenant_id, created_time, id);
 | `ALTER TABLE ... DROP COLUMN <col>`，且 `<col>` 是范围排序键的一部分 | 删除排序键列会使已存储的 tablet 范围边界值失效。 |
 | `ALTER TABLE ... MODIFY COLUMN <col> ...`，且 `<col>` 是范围排序键的一部分 | 修改列类型/语义会破坏已存储的 tablet 范围边界值。 |
 | `ALTER TABLE ... MODIFY COLUMN <col> ... KEY`（或任意键类型下将值列提升为键列）触发 keyness 翻转 | 在聚合表/更新表，或未显式指定 `ORDER BY` 的表上，keyness 翻转会改变由键列推导出的范围排序键。 |
+| 在设置了 `colocate_with` 的表上使用 `CREATE TABLE ... ROLLUP (...)` | Rollup 的 tablet 按基表的排序键切分，数据却按 Rollup 自己的排序键分布，读取该 Rollup 的 Colocate Join 可能返回错误结果。 |
 
 对于类似 Rollup 的聚合场景，请使用**异步物化视图**，并显式指定 `REFRESH` 子句或 `DISTRIBUTED BY` 子句，例如：
 
@@ -947,7 +949,7 @@ AS SELECT ... FROM range_table;
 
 - 手动设置
 
-  自 2.4 版本起，StarRocks 提供了自适应的 Tablet 并行扫描能力，即一个查询中涉及到的任意一个 Tablet 可能是由多个线程并行地分段扫描，减少了 Tablet 数量对查询能力的限制，从而可以简化对分区中分桶数量的设置。简化后，确定分区中分桶数量方式可以是：首先预估每个分区的数据量，然后按照每 10 GB 原始数据一个 Tablet 计算，从而确定分区中分桶数量。
+  自 2.4 版本起，StarRocks 提供了自适应的 Tablet 并行扫描能力，即一个查询中涉及到的任意一个 Tablet 可能是由多个线程并行地分段扫描，减少了 Tablet 数量对查询能力的限制，从而可以简化对分区中分桶数量的设置。简化后，确定分区中分桶数量方式可以是：首先预估每个分区的数据量，然后按照每 10 GB 原始数据一个 Tablet 计算，从而确定分区中分桶数量。v4.1 及以后版本的存算分离集群已支持大容量 Tablet，可以改为按照每个 Tablet 10 GB ~ 50 GB 数据计算，单个 Tablet 不超过 100 GB。
 
   如果需要开启并行扫描 Tablet，则您需要确保系统变量 `enable_tablet_internal_parallel` 全局生效 `SET GLOBAL enable_tablet_internal_parallel = true;`。
 

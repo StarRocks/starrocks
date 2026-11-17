@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 30
 description: "Configure per-user query properties in StarRocks: connection limits, query timeouts, and resource allocation using ALTER USER SET PROPERTIES."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Query Management

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "grouping_id 用于区分相同分组标准的分组统计结果。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 

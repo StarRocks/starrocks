@@ -3,6 +3,7 @@ displayed_sidebar: docs
 toc_max_heading_level: 4
 description: "How to configure partitioning and bucketing in StarRocks for even data distribution and optimal query performance."
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Data distribution
@@ -872,6 +873,7 @@ The following operations are not supported on tables with range distribution:
 | `ALTER TABLE ... DROP COLUMN <col>` where `<col>` is in the range sort key | Removing a sort-key column invalidates the stored 1:1-copied range tablet boundary values. |
 | `ALTER TABLE ... MODIFY COLUMN <col> ...` where `<col>` is in the range sort key | Changes the type/semantics under which the stored range tablet boundary values were recorded. |
 | `ALTER TABLE ... MODIFY COLUMN <col> ... KEY` (or value-column promotion in any keys-type) that flips keyness | A keyness flip shifts the key-derived range sort key on AGG/UNIQUE / no-explicit-ORDER-BY tables. |
+| `CREATE TABLE ... ROLLUP (...)` on a table with `colocate_with` | The rollup's tablets are cut on the base table's sort key while its rows are placed by the rollup's own sort key, so a Colocate Join that reads the rollup could return wrong results. |
 
 For rollup-like aggregation use cases, use an **asynchronous materialized view** with an explicit `REFRESH` clause or a `DISTRIBUTED BY` clause, e.g.:
 
@@ -957,7 +959,7 @@ Buckets reflect how data files are actually organized in StarRocks.
 
 - Manually set the number of buckets
 
-  Since v2.4.0, StarRocks supports using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contain about 10 GB of raw data. If you intend to manually set the number of buckets, you can estimate the amount of data in each partition of a table and then decide the number of tablets.
+  Since v2.4.0, StarRocks supports using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contain about 10 GB of raw data. For shared-data clusters of v4.1 or later, which support large-capacity tablets, we recommend that each tablet contain 10 GB to 50 GB of data, and no more than 100 GB. If you intend to manually set the number of buckets, you can estimate the amount of data in each partition of a table and then decide the number of tablets.
 
   To enable parallel scanning on tablets, make sure the `enable_tablet_internal_parallel` parameter is set to `TRUE` globally for the entire system (`SET GLOBAL enable_tablet_internal_parallel = true;`).
 

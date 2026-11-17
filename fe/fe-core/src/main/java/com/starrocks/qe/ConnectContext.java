@@ -229,6 +229,10 @@ public class ConnectContext {
 
     protected StatementBase.ExplainLevel explainLevel;
 
+    // Set while the finished query's plan is rendered into its profile; scan nodes skip explain lines that read
+    // remote metadata, since nothing bounds that read after the query has ended.
+    protected boolean explainForProfile = false;
+
     protected TWorkGroup resourceGroup;
 
     protected volatile boolean isPending = false;
@@ -237,6 +241,9 @@ public class ConnectContext {
     private ConnectContext parent;
 
     private boolean relationAliasCaseInsensitive = false;
+    // Alias mode of the query outside the outermost connector view being expanded; null when no connector
+    // view is being expanded. A native view nested in a connector view switches back to it.
+    private Boolean relationAliasCaseInsensitiveOutsideConnectorView = null;
 
     // Keys of the views currently being expanded on the analysis path, used to detect cyclic view
     // definitions. It lives on the session (not on a single QueryAnalyzer.Visitor) so the path is
@@ -1037,6 +1044,14 @@ public class ConnectContext {
         this.explainLevel = explainLevel;
     }
 
+    public boolean isExplainForProfile() {
+        return explainForProfile;
+    }
+
+    public void setExplainForProfile(boolean explainForProfile) {
+        this.explainForProfile = explainForProfile;
+    }
+
     public TWorkGroup getResourceGroup() {
         return resourceGroup;
     }
@@ -1299,6 +1314,14 @@ public class ConnectContext {
 
     public boolean isRelationAliasCaseInsensitive() {
         return relationAliasCaseInsensitive;
+    }
+
+    public Boolean getRelationAliasCaseInsensitiveOutsideConnectorView() {
+        return relationAliasCaseInsensitiveOutsideConnectorView;
+    }
+
+    public void setRelationAliasCaseInsensitiveOutsideConnectorView(Boolean value) {
+        this.relationAliasCaseInsensitiveOutsideConnectorView = value;
     }
 
     public Set<String> getViewExpansionPath() {

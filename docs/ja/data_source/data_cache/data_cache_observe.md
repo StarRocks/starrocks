@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "Data Cache のパフォーマンス、使用状況、健全性を監視するための StarRocks 組み込みメトリクス。"
+products: [oss, enterprise, anywhere]
 ---
 
 # Data Cache の可観測性
@@ -124,7 +125,7 @@ http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/app_stat
 | block_cache_hit_rate_last_minute   | 最後の 1 分間の Block Cache のヒット率。                                                              |
 | page_cache_hit_count               | Page Cache から読み取られたページ数。                                                                 |
 | page_cache_miss_count              | Page Cache でミスしたページ数。                                                                       |
-| block_cache_hit_rate               | Page Cache のヒット率: `(page_cache_hit_count / (page_cache_hit_count + page_cache_miss_count))`。     |
+| page_cache_hit_rate                | Page Cache のヒット率: `(page_cache_hit_count / (page_cache_hit_count + page_cache_miss_count))`。     |
 | page_cache_hit_count_last_minute   | 最後の 1 分間に Page Cache から読み取られたページ数。                                                  |
 | page_cache_miss_count_last_minute  | 最後の 1 分間に Page Cache でミスしたページ数。                                                        |
 | page_cache_hit_rate_last_minute    | 最後の 1 分間の Page Cache のヒット率。                                                               |

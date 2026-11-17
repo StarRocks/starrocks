@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "How to monitor Data Cache performance, usage, and health in StarRocks using built-in observability metrics."
+products: [oss, enterprise, anywhere]
 ---
 
 # Data Cache observability
@@ -124,7 +125,7 @@ Return:
 | block_cache_hit_rate_last_minute   | Block Cache hit rate in the last minute.                                                            |
 | page_cache_hit_count               | Number of pages read from the Page Cache.                                                           |
 | page_cache_miss_count              | Number of pages missed in the Page Cache.                                                           |
-| block_cache_hit_rate               | Page Cache hit rate: `(page_cache_hit_count / (page_cache_hit_count + page_cache_miss_count))`.     |
+| page_cache_hit_rate                | Page Cache hit rate: `(page_cache_hit_count / (page_cache_hit_count + page_cache_miss_count))`.     |
 | page_cache_hit_count_last_minute   | Number of pages read from the Page Cache in the last minute.                                        |
 | page_cache_miss_count_last_minute  | Number of pages missed in the Page Cache in the last minute.                                        |
 | page_cache_hit_rate_last_minute    | Page Cache hit rate in the last minute.                                                             |

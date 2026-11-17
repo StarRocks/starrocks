@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "load_tracking_logsはロードジョブのエラーログを提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # load_tracking_logs

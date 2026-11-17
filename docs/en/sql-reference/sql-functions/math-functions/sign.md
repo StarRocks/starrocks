@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the sign of x."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # sign

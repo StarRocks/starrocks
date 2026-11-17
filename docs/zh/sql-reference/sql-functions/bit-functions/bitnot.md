@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回数值的按位取反结果。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitnot

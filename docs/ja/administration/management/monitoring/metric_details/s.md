@@ -2,9 +2,16 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical s"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # メトリクス s
+
+## `scheduled_tablet_num`
+
+- 単位: カウント
+- タイプ: 瞬間
+- 説明: リーダー FE の tablet スケジューラーがスケジュール中の tablet の数。つまり、Pending 状態と Running 状態の tablet の合計で、BALANCE タイプと REPAIR タイプの両方を含みます。リーダー以外の FE では `0` になります。
 
 ## `schema_change_mem_bytes`
 
@@ -151,6 +158,24 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - 説明: 読み取られた有効な行数（無効な形式の行を除く）。ラベル: `file_format`, `scan_type`。
+
+## `starrocks_be_flat_json_compaction_mixed_inputs_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: 入力セグメントの一部がフラット JSON、残りが完全な JSON である JSON 列を、コンパクションがフラット JSON セグメントのレイアウト（すべてのサブカラムを JSON 型）で読み取った回数。`enable_compaction_flat_json_mixed_inputs` を参照してください。
+
+## `starrocks_be_flat_json_compaction_plain_fallback_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: バッファ済みの入力が `compaction_memory_limit_per_worker` の 8 分の 1（同時に書き込まれる JSON 列で等分）を超えたが、書き出しに使える単一のフラットレイアウトがなかったため、出力を完全な JSON として書き出したフラット JSON コンパクションの回数。
+
+## `starrocks_be_flat_json_compaction_streaming_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: 出力セグメント全体をバッファせず、入力を受け取り次第書き出したフラット JSON コンパクションの回数。バッファ済みの入力が `compaction_memory_limit_per_worker` の 8 分の 1 を超え、そのすべてが同じフラットレイアウトを持つ場合に発生します。
 
 ## `starrocks_be_lake_tablet_metadata_get_not_found_total`
 

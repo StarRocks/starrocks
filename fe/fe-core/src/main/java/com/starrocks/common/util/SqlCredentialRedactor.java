@@ -121,8 +121,11 @@ public class SqlCredentialRedactor {
     // key'='value
     // key"="value
     // Values can contain spaces and span multiple lines, separated by commas
-    private static final int MAX_KEY_LENGTH =
-            CREDENTIAL_KEYS.stream().map(String::length).max(Integer::compareTo).orElse(1);
+    // A prefixed key (PrintableMap.SENSITIVE_KEY_PREFIX) ends with a variable suffix such as a storage account
+    // host name, which can be up to 253 characters.
+    private static final int MAX_KEY_LENGTH = Math.max(
+            CREDENTIAL_KEYS.stream().map(String::length).max(Integer::compareTo).orElse(1),
+            PrintableMap.SENSITIVE_KEY_PREFIX.stream().map(p -> p.length() + 253).max(Integer::compareTo).orElse(1));
     // NOTE: MAX_KEY_LENGTH is used to avoid matching too many characters of a long string
     private static final Pattern KEY_VALUE_PATTERN = Pattern.compile(
             "([\"'])" +                                    // quote
@@ -170,6 +173,11 @@ public class SqlCredentialRedactor {
                 return true;
             }
         }
+        for (String prefix : PrintableMap.SENSITIVE_KEY_PREFIX) {
+            if (lower.indexOf(prefix) >= 0) {
+                return true;
+            }
+        }
         // "password" is already in CREDENTIAL_KEYS_LOWERCASE, so "set password"
         // (with any whitespace) is caught by the loop above. Only "identified"
         // needs a separate check — a single keyword avoids false negatives from
@@ -214,7 +222,7 @@ public class SqlCredentialRedactor {
             String keySuffix = matcher.group(3) != null ? matcher.group(3) : "";
 
             // Check if this key should be redacted (case-insensitive)
-            if (CREDENTIAL_KEYS_LOWERCASE.contains(key.toLowerCase(Locale.ROOT))) {
+            if (isCredentialKey(key)) {
                 // Append text before the match
                 result.append(sql, lastEnd, matcher.start());
 
@@ -239,6 +247,19 @@ public class SqlCredentialRedactor {
         // Append remaining text
         result.append(sql, lastEnd, sql.length());
         return result.toString();
+    }
+
+    private static boolean isCredentialKey(String key) {
+        String lower = key.toLowerCase(Locale.ROOT);
+        if (CREDENTIAL_KEYS_LOWERCASE.contains(lower)) {
+            return true;
+        }
+        for (String prefix : PrintableMap.SENSITIVE_KEY_PREFIX) {
+            if (lower.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String redactIdentifiedWithClause(String sql) {

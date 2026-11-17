@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列を Base64 エンコードされた文字列に変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # to_base64

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 3.4 release notes: Iceberg Time Travel, Python UDFs, vector indexes (IVFPQ/HNSW) for approximate nearest neighbor search, unified expression..."
+products: [oss]
 ---
 
 # StarRocks version 3.4

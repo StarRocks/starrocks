@@ -2,9 +2,16 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical s"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Metrics s
+
+## `scheduled_tablet_num`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tablets that are being scheduled by the tablet scheduler of the Leader FE, that is, the total of the tablets in Pending and Running states, including both BALANCE and REPAIR types. Non-Leader FEs report `0`.
 
 ## `schema_change_mem_bytes`
 
@@ -157,6 +164,24 @@ description: "Alphabetical s"
 
 - Unit: Count
 - Description: Number of valid rows read (excluding rows with invalid format). Labels: `file_format`, `scan_type`.
+
+## `starrocks_be_flat_json_compaction_mixed_inputs_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of times a compaction read a JSON column whose input segments are partly Flat JSON and partly whole JSON with the Flat JSON layout of the flat segments, every sub-column typed JSON. See `enable_compaction_flat_json_mixed_inputs`.
+
+## `starrocks_be_flat_json_compaction_plain_fallback_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of flat JSON compaction outputs written as whole JSON because the buffered input exceeded one eighth of `compaction_memory_limit_per_worker`, divided among the JSON columns written together, without one flat layout to write it with.
+
+## `starrocks_be_flat_json_compaction_streaming_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of flat JSON compactions that wrote their output as it arrived instead of buffering the whole output segment. It happens when the buffered input exceeds one eighth of `compaction_memory_limit_per_worker` and all of it shares one flat layout.
 
 ## `starrocks_be_lake_tablet_metadata_get_not_found_total`
 

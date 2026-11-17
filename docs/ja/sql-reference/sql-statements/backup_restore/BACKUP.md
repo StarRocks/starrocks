@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks は、内部データベース、テーブル、パーティション、外部カタログのメタデータ、マテリアライズドビュー、ビュー、ユーザー定義関数のバックアップと復元をサポートしています。"
+products: [oss, enterprise, anywhere]
 ---
 
 # BACKUP

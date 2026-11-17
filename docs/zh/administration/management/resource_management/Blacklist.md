@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "在 StarRocks 中维护 SQL 黑名单，禁止特定类型的 SQL 避免资源耗尽。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 管理黑名单

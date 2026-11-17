@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the number of days between a date and 0000-01-01."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # to_days

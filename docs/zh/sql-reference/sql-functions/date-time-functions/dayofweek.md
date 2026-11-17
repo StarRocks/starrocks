@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回指定日期的工作日索引值，星期日为 1，星期一为 2，星期六为 7。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # dayofweek

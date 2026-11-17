@@ -470,9 +470,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
                             txnState.getTransactionId());
                     continue;
                 }
-                publishingTransactions.add(txnId);
-                CompletableFuture<Void> future = publishLakeTransactionAsync(txnState);
-                future.thenRun(() -> publishingTransactions.remove(txnId));
+                // Skip backed-off transactions before logging a publish start or creating futures.
+                if (batchHasPublishablePartition(List.of(txnState), System.currentTimeMillis())) {
+                    publishingTransactions.add(txnId);
+                    CompletableFuture<Void> future = publishLakeTransactionAsync(txnState);
+                    future.thenRun(() -> publishingTransactions.remove(txnId));
+                }
             }
         }
     }
@@ -506,6 +509,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 }
                 List<Long> tableIdList = state.getTableIdList();
                 if (tableIdList.stream().noneMatch(publishingLakeTransactionsBatchTableId::contains)) {
+                    // Skip backed-off transactions before logging a publish start or creating futures.
+                    if (!batchHasPublishablePartition(txnStateBatch.transactionStates,
+                            System.currentTimeMillis())) {
+                        continue;
+                    }
                     publishingLakeTransactionsBatchTableId.addAll(tableIdList);
                     CompletableFuture<Void> future = publishLakeTransactionAsync(state);
                     future.thenRun(() -> tableIdList.forEach(publishingLakeTransactionsBatchTableId::remove));
@@ -553,7 +561,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         }
     }
 
-    private CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
+    @VisibleForTesting
+    CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = txnState.getTransactionId();
         long dbId = txnState.getDbId();

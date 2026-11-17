@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the year difference between two date expressions (expr1 − expr2), accurate to the year."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # years_diff

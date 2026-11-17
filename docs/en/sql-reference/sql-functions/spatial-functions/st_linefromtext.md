@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a WKT (Well Known Text) to a memory representation in the form of Line."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_LineFromText,ST_LineStringFromText

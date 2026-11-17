@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Adds a specified time interval to a date."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # date_add,adddate

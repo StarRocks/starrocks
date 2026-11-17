@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "获取当前时间，以 DATETIME 类型返回。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # current_timestamp

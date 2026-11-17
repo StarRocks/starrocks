@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回字符串的字节长度。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # length

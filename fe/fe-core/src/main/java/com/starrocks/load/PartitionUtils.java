@@ -15,7 +15,9 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -44,19 +46,101 @@ import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class PartitionUtils {
     private static final Logger LOG = LogManager.getLogger(PartitionUtils.class);
+
+    // Keep a job error message bounded when many loads are running concurrently.
+    private static final int MAX_REPORTED_CONFLICTING_TXNS = 5;
+
+    /**
+     * Find, for each of the given partitions, the running transactions that may write to it.
+     * <p>
+     * Jobs that replace partitions with rewritten ones (optimize, merge partition) must call this while
+     * holding the table write lock, right before the replacement: replacing a partition that has concurrent
+     * ingestion silently discards the loaded rows, because the tablets of the source partition are force
+     * deleted while the load transaction still reports success. All the partitions are checked in one pass
+     * over the running transactions, see {@link GlobalTransactionMgr#getConflictingTxnIdsByPartition}.
+     *
+     * @return partition id -> ids of the conflicting transactions, empty for a partition without concurrent
+     *         ingestion
+     */
+    public static Map<Long, List<Long>> getConflictingIngestionTxnIds(long dbId, long tableId,
+                                                                      Collection<Partition> partitions) {
+        Set<Long> physicalPartitionIds = partitions.stream()
+                .flatMap(partition -> partition.getSubPartitions().stream())
+                .map(PhysicalPartition::getId).collect(Collectors.toSet());
+        Map<Long, List<Long>> txnIdsByPhysicalPartition = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getConflictingTxnIdsByPartition(dbId, tableId, physicalPartitionIds);
+        Map<Long, List<Long>> txnIdsByPartition = Maps.newHashMap();
+        for (Partition partition : partitions) {
+            // a transaction that writes into several sub partitions of the partition is reported once
+            Set<Long> txnIds = Sets.newLinkedHashSet();
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                txnIds.addAll(txnIdsByPhysicalPartition.getOrDefault(physicalPartition.getId(),
+                        Collections.emptyList()));
+            }
+            txnIdsByPartition.put(partition.getId(), Lists.newArrayList(txnIds));
+        }
+        return txnIdsByPartition;
+    }
+
+    /**
+     * The given partitions that have a transaction committed but not published yet, all looked up in one pass
+     * over the transactions of the table, since callers check every temp partition of a job under the table lock.
+     * <p>
+     * Used to gate the rewritten temp partitions before they take over: swapping one in while its own rewrite
+     * is not published yet would briefly expose a partition without the rewritten rows. Unlike a source
+     * partition, a temp partition survives the swap, so a pending publish still lands on it and no row is
+     * lost, which is why in flight transactions are not considered here.
+     *
+     * @return ids of those partitions
+     */
+    public static Set<Long> getPartitionsWithCommittedNotVisibleTxn(long dbId, long tableId,
+                                                                   Collection<Partition> partitions) {
+        Map<Long, Long> physicalToLogicalPartitionId = Maps.newHashMap();
+        for (Partition partition : partitions) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                physicalToLogicalPartitionId.put(physicalPartition.getId(), partition.getId());
+            }
+        }
+        if (physicalToLogicalPartitionId.isEmpty()) {
+            return Collections.emptySet();
+        }
+        Set<Long> physicalPartitionIds = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getPhysicalPartitionsWithCommittedTxns(dbId, tableId, physicalToLogicalPartitionId.keySet());
+        return physicalPartitionIds.stream().map(physicalToLogicalPartitionId::get).collect(Collectors.toSet());
+    }
+
+    /**
+     * Render conflicting transaction ids for a job error message, so that the blocking loads are visible
+     * in `SHOW ALTER TABLE OPTIMIZE` without having to dig through the FE log. The list is truncated to
+     * keep the persisted error message bounded when many loads run concurrently.
+     */
+    public static String formatConflictingTxnIds(List<Long> conflictingTxnIds) {
+        if (conflictingTxnIds.isEmpty()) {
+            return "";
+        }
+        String txnIds = conflictingTxnIds.stream().limit(MAX_REPORTED_CONFLICTING_TXNS)
+                .map(String::valueOf).collect(Collectors.joining(", "));
+        String suffix = conflictingTxnIds.size() > MAX_REPORTED_CONFLICTING_TXNS
+                ? ", ... " + conflictingTxnIds.size() + " in total" : "";
+        return " (txn: " + txnIds + suffix + ")";
+    }
 
     public static void createAndAddTempPartitionsForTable(Database db, OlapTable targetTable,
                                                           String postfix, List<Long> sourcePartitionIds,

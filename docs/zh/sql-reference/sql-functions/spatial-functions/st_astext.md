@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将几何图形转换为 WKT（Well Known Text）格式。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_AsText, ST_AsWKT

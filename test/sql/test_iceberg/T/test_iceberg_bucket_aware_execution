@@ -20,6 +20,8 @@ function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.i
 -- #### colocate/bucket shuffle join for multi bucket columns
 function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_2 b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
 function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_2 b on a.trip_id = b.trip_id and a.vendor_id = b.vendor_id', 'INNER JOIN (COLOCATE)')
+-- join keys in an order other than the column order
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b on a.vendor_id = b.vendor_id and a.trip_id = b.trip_id', 'INNER JOIN (BUCKET_SHUFFLE)')
 
 -- #### aggregation without shuffle
 function: assert_explain_contains('select sum(trip_distance), trip_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 group by trip_id', 'update finalize')
@@ -53,7 +55,8 @@ function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.icebe
 function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_string_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_string_2 b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
 
 -- #### uuid type
-function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_2 b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
+-- Iceberg buckets a uuid by its 16 bytes but StarRocks reads it as a string, so a uuid bucket column is not used
+function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_2 b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
 
 -- #### functional boundary
 function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
@@ -80,6 +83,8 @@ select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_t
 -- #### colocate/bucket shuffle join for multi bucket columns
 select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_2 b on a.trip_id = b.trip_id;
 select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 a join iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_2 b on a.trip_id = b.trip_id and a.vendor_id = b.vendor_id;
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b on a.trip_id = b.trip_id and a.vendor_id = b.vendor_id;
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 a join [BUCKET] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket b on a.vendor_id = b.vendor_id and a.trip_id = b.trip_id;
 
 -- #### aggregation without shuffle
 select sum(trip_distance), trip_id from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_2bucket_1 group by trip_id order by 1 desc, 2 limit 3;

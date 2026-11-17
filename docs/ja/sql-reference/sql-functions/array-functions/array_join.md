@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ARRAY_JOIN関数は配列の要素を連結して文字列にします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_join

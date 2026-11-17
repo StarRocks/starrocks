@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Subtracts the specified time interval from a date."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # date_sub,subdate

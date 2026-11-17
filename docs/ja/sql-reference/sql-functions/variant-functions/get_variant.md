@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "VARIANT オブジェクト内の指定パスから型付きの値を抽出して返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # get_variant

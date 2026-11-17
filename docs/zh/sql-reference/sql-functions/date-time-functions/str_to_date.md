@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "按照指定格式将字符串转换为 DATETIME 类型的值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # str_to_date

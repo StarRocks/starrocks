@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从日期中减去指定的月数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # months_sub

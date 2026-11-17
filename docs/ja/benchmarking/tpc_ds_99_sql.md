@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "TPC-DS ベンチマークの 99 個全 SQL クエリテキストを完全に記載しています。"
+products: [oss, enterprise]
 ---
 
 # TPC-DS test SQL

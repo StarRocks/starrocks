@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Concatenates the elements of an array into a string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_join

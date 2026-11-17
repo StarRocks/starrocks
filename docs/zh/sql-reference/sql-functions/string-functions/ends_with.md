@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "判断字符串是否以指定后缀结尾。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ends_with

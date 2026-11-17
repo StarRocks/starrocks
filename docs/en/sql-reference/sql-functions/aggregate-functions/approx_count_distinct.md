@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the approximate value of aggregate function similar to the result of COUNT(DISTINCT col)."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # approx_count_distinct

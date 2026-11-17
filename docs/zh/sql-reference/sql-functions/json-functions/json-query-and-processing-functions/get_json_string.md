@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从 JSON 字符串中指定路径解析并获取字符串。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # get_json_string,get_json_object

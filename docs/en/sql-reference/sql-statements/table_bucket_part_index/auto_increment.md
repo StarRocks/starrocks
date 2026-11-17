@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Since version 3.0, StarRocks supports the AUTO_INCREMENT column attribute, which can simplify data management."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # AUTO_INCREMENT

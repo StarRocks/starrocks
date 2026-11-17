@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <functional>
 #include <limits>
+#include <map>
 #include <set>
 
 #include "column/column_helper.h"
@@ -37,10 +38,12 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/sort_key_bounds_test_util.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_merger_split_family.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/lake/tablet_splitter.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/rowset/segment.h"
@@ -684,8 +687,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting) {
         auto* sm = rowset_meta_pb->add_segment_metas();
         sm->set_filename("test_0.dat");
         sm->set_size(512);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         sm->set_num_rows(3);
     }
 
@@ -693,8 +696,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting) {
         auto* sm = rowset_meta_pb->add_segment_metas();
         sm->set_filename("test_1.dat");
         sm->set_size(512);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(100));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(100));
         sm->set_num_rows(2);
     }
     rowset_meta_pb->add_del_files()->set_name("test.del");
@@ -817,16 +820,16 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_per_segment_shared_invariants) {
         auto* m0 = rs->add_segment_metas();
         m0->set_filename("seg_lo.dat");
         m0->set_size(512);
-        m0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        m0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        m0->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        m0->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         m0->set_num_rows(50);
     }
     {
         auto* m1 = rs->add_segment_metas();
         m1->set_filename("seg_hi.dat");
         m1->set_size(512);
-        m1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        m1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        m1->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        m1->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         m1->set_num_rows(50);
     }
     rs->set_overlapped(true);
@@ -962,8 +965,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_keeps_pre_trailing_key_add_segme
         sm->set_size(5000);
         sm->set_num_rows(500);
         // Arity 1: written before the trailing `ADD COLUMN k2`.
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(lo));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(hi));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(lo));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(hi));
     };
     add_pre_add_rowset(2, 0, 400, "seg_lo.dat");
     add_pre_add_rowset(3, 600, 999, "seg_hi.dat");
@@ -1026,16 +1029,16 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_propagates_ownership_to_delvec_d
         auto* m0 = rs->add_segment_metas();
         m0->set_filename("seg_lo.dat");
         m0->set_size(512);
-        m0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        m0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        m0->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        m0->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         m0->set_num_rows(50);
     }
     {
         auto* m1 = rs->add_segment_metas();
         m1->set_filename("seg_hi.dat");
         m1->set_size(512);
-        m1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        m1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        m1->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        m1->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         m1->set_num_rows(50);
     }
     rs->set_overlapped(true);
@@ -1116,8 +1119,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_removes_fully_pruned_rowset) {
         auto* ma = rs_a->add_segment_metas();
         ma->set_filename("a_seg.dat");
         ma->set_size(512);
-        ma->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        ma->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        ma->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        ma->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         ma->set_num_rows(50);
     }
     rs_a->set_data_size(512);
@@ -1130,8 +1133,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_removes_fully_pruned_rowset) {
         auto* mb = rs_b->add_segment_metas();
         mb->set_filename("b_seg.dat");
         mb->set_size(512);
-        mb->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        mb->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        mb->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        mb->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         mb->set_num_rows(50);
     }
     rs_b->set_data_size(512);
@@ -1205,8 +1208,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_keeps_del_files_rowset) {
         auto* ma = rs_a->add_segment_metas();
         ma->set_filename("a_seg.dat");
         ma->set_size(512);
-        ma->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        ma->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        ma->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        ma->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         ma->set_num_rows(50);
     }
     rs_a->set_data_size(512);
@@ -1220,8 +1223,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_keeps_del_files_rowset) {
         auto* mb = rs_b->add_segment_metas();
         mb->set_filename("b_seg.dat");
         mb->set_size(512);
-        mb->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        mb->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        mb->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        mb->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         mb->set_num_rows(50);
     }
     rs_b->set_data_size(512);
@@ -1282,16 +1285,16 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_keeps_delete_predicate_rowset) {
         auto* dm0 = data_lo->add_segment_metas();
         dm0->set_filename("lo.dat");
         dm0->set_size(512);
-        dm0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        dm0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        dm0->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        dm0->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         dm0->set_num_rows(50);
     }
     {
         auto* dm1 = data_lo->add_segment_metas();
         dm1->set_filename("hi.dat");
         dm1->set_size(512);
-        dm1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        dm1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        dm1->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        dm1->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         dm1->set_num_rows(50);
     }
     data_lo->set_overlapped(true);
@@ -1352,8 +1355,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_protected_rssid_keeps_delvec_blo
         auto* ma = rs_a->add_segment_metas();
         ma->set_filename("a_seg.dat");
         ma->set_size(512);
-        ma->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        ma->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        ma->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        ma->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         ma->set_num_rows(50);
     }
     rs_a->set_data_size(512);
@@ -1365,8 +1368,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_protected_rssid_keeps_delvec_blo
         auto* mb = rs_b->add_segment_metas();
         mb->set_filename("b_seg.dat");
         mb->set_size(512);
-        mb->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        mb->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        mb->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        mb->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         mb->set_num_rows(50);
     }
     rs_b->set_data_size(512);
@@ -1449,8 +1452,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_fewer_ranges_than_requested_
         auto* sm = rowset_meta_pb->add_segment_metas();
         sm->set_filename("seg_0.dat");
         sm->set_size(1024);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(300));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(300));
         sm->set_num_rows(300);
     }
     rowset_meta_pb->set_num_rows(300);
@@ -1487,6 +1490,279 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_fewer_ranges_than_requested_
     }
 }
 
+namespace {
+// Ways a segment's sort key bounds can be missing or unreadable.
+enum class BoundDamage {
+    kBothAbsent,
+    kBothEmpty,
+    kMinAbsent,
+    kMaxAbsent,
+    kMinEmpty,
+    kMaxEmpty,
+    // The bounds rewritten into the encoded pair, then one bound in a format version this binary does not know.
+    kMinUnknownVersion,
+    kMaxUnknownVersion,
+    // The bounds rewritten into the encoded pair, then one bound in format version 1 with a damaged header.
+    kMinBadHeader,
+    kMaxBadHeader,
+    // The bounds rewritten into the encoded pair, then one bound with a valid header and a damaged value.
+    kMinBadValue,
+    kMaxBadValue,
+};
+constexpr BoundDamage kAllBoundDamages[] = {
+        BoundDamage::kBothAbsent,        BoundDamage::kBothEmpty,         BoundDamage::kMinAbsent,
+        BoundDamage::kMaxAbsent,         BoundDamage::kMinEmpty,          BoundDamage::kMaxEmpty,
+        BoundDamage::kMinUnknownVersion, BoundDamage::kMaxUnknownVersion, BoundDamage::kMinBadHeader,
+        BoundDamage::kMaxBadHeader,      BoundDamage::kMinBadValue,       BoundDamage::kMaxBadValue};
+
+// True for the damage that leaves the segment with bounds that do not decode, rather than with no bounds.
+bool leaves_unreadable_bounds(BoundDamage damage) {
+    return damage == BoundDamage::kMinBadHeader || damage == BoundDamage::kMaxBadHeader ||
+           damage == BoundDamage::kMinBadValue || damage == BoundDamage::kMaxBadValue;
+}
+
+// Rewrites the segment's bounds into the encoded pair, as the current writer stores them, and sets byte `pos` of one
+// bound to `value`. The fixture's single INT sort key column encodes as the format version (byte 0), the column count
+// (bytes 1-2), the type byte (byte 3), the value marker (byte 4) and the 4-byte payload.
+void damage_encoded_bound(SegmentMetadataPB* sm, bool min, size_t pos, uint8_t value) {
+    VariantTuple lo;
+    VariantTuple hi;
+    CHECK_OK(decode_segment_sort_key_bounds(*sm, &lo, &hi));
+    set_segment_sort_key_bounds(lo, hi, sm);
+    CHECK(sm->has_sort_key_min_encoded() && sm->has_sort_key_max_encoded());
+    CHECK(!sm->has_deprecated_sort_key_min() && !sm->has_deprecated_sort_key_max());
+    auto* bytes = min ? sm->mutable_sort_key_min_encoded() : sm->mutable_sort_key_max_encoded();
+    CHECK_EQ(9u, bytes->size());
+    (*bytes)[pos] = static_cast<char>(value);
+}
+
+void strip_segment_bounds(SegmentMetadataPB* sm, BoundDamage damage) {
+    switch (damage) {
+    case BoundDamage::kBothAbsent:
+        sm->clear_deprecated_sort_key_min();
+        sm->clear_deprecated_sort_key_max();
+        break;
+    case BoundDamage::kBothEmpty:
+        sm->mutable_deprecated_sort_key_min()->clear_values();
+        sm->mutable_deprecated_sort_key_max()->clear_values();
+        break;
+    case BoundDamage::kMinAbsent:
+        sm->clear_deprecated_sort_key_min();
+        break;
+    case BoundDamage::kMaxAbsent:
+        sm->clear_deprecated_sort_key_max();
+        break;
+    case BoundDamage::kMinEmpty:
+        sm->mutable_deprecated_sort_key_min()->clear_values();
+        break;
+    case BoundDamage::kMaxEmpty:
+        sm->mutable_deprecated_sort_key_max()->clear_values();
+        break;
+    case BoundDamage::kMinUnknownVersion:
+        damage_encoded_bound(sm, /*min=*/true, 0, 0x02);
+        break;
+    case BoundDamage::kMaxUnknownVersion:
+        damage_encoded_bound(sm, /*min=*/false, 0, 0x02);
+        break;
+    case BoundDamage::kMinBadHeader:
+        damage_encoded_bound(sm, /*min=*/true, 3, 0xFF);
+        break;
+    case BoundDamage::kMaxBadHeader:
+        damage_encoded_bound(sm, /*min=*/false, 3, 0xFF);
+        break;
+    case BoundDamage::kMinBadValue:
+        damage_encoded_bound(sm, /*min=*/true, 4, 0x02);
+        break;
+    case BoundDamage::kMaxBadValue:
+        damage_encoded_bound(sm, /*min=*/false, 4, 0x02);
+        break;
+    }
+}
+
+// A primary-key tablet keyed on one INT column with one rowset of two 50-row segments at keys [0, 49] and
+// [50, 99]. It has no persistent index, so the split's PK memtable flush leaves it as is.
+std::shared_ptr<TabletMetadataPB> make_split_source() {
+    auto m = std::make_shared<TabletMetadataPB>();
+    m->set_id(next_id());
+    m->set_version(1);
+    m->set_next_rowset_id(30);
+    auto* schema = m->mutable_schema();
+    schema->set_keys_type(PRIMARY_KEYS);
+    schema->set_id(next_id());
+    auto* c0 = schema->add_column();
+    c0->set_unique_id(0);
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+    auto* r = m->add_rowsets();
+    r->set_id(2);
+    lake::tablet_reshard_helper::set_rowset_uid(r);
+    r->set_num_rows(100);
+    r->set_data_size(1000);
+    r->set_num_dels(10);
+    for (int i = 0; i < 2; ++i) {
+        auto* sm = r->add_segment_metas();
+        sm->set_filename(fmt::format("split-{}.dat", i));
+        sm->set_segment_idx(i);
+        sm->set_num_rows(50);
+        sm->set_size(500);
+        *sm->mutable_deprecated_sort_key_min() = LakeTabletReshardTest::generate_sort_key(i * 50);
+        *sm->mutable_deprecated_sort_key_max() = LakeTabletReshardTest::generate_sort_key(i * 50 + 49);
+    }
+    return m;
+}
+
+// Splits |m| in two: at key 50 through FE-supplied boundaries when |external|, by data-driven planning otherwise.
+StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_in_two(lake::TabletManager* tablet_manager,
+                                                                             const TabletMetadataPtr& m, bool external,
+                                                                             const TxnInfoPB& txn_info = TxnInfoPB()) {
+    CHECK_OK(tablet_manager->put_tablet_metadata(m));
+    SplittingTabletInfoPB splitting;
+    splitting.set_old_tablet_id(m->id());
+    splitting.add_new_tablet_ids(m->id() + 100000);
+    splitting.add_new_tablet_ids(m->id() + 200000);
+    if (external) {
+        auto* first = splitting.add_new_tablet_ranges();
+        if (m->range().has_lower_bound()) {
+            *first->mutable_lower_bound() = m->range().lower_bound();
+            first->set_lower_bound_included(m->range().lower_bound_included());
+        }
+        *first->mutable_upper_bound() = LakeTabletReshardTest::generate_sort_key(50);
+        first->set_upper_bound_included(false);
+        auto* second = splitting.add_new_tablet_ranges();
+        *second->mutable_lower_bound() = LakeTabletReshardTest::generate_sort_key(50);
+        second->set_lower_bound_included(true);
+        if (m->range().has_upper_bound()) {
+            *second->mutable_upper_bound() = m->range().upper_bound();
+            second->set_upper_bound_included(m->range().upper_bound_included());
+        }
+    }
+    return lake::split_tablet(tablet_manager, m, splitting, m->version() + 1, txn_info);
+}
+} // namespace
+
+// A segment with rows but without bounds, or with bounds that do not decode, cannot be placed in a child range: the
+// FE-supplied and the data-driven split both fall back to an identical child instead of failing.
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_boundless_segment_uses_identical_fallback) {
+    for (bool external : {true, false}) {
+        // The intact source splits on both paths, so the fallbacks below come from the missing bounds.
+        ASSIGN_OR_ABORT(auto intact_children, split_in_two(_tablet_manager.get(), make_split_source(), external));
+        ASSERT_EQ(2, intact_children.size()) << external;
+
+        for (BoundDamage damage : kAllBoundDamages) {
+            const int mode = static_cast<int>(damage);
+            auto m = make_split_source();
+            strip_segment_bounds(m->mutable_rowsets(0)->mutable_segment_metas(1), damage);
+            EXPECT_EQ(leaves_unreadable_bounds(damage), has_segment_sort_key_bounds(m->rowsets(0).segment_metas(1)))
+                    << mode;
+            ASSIGN_OR_ABORT(auto children, split_in_two(_tablet_manager.get(), m, external));
+            ASSERT_EQ(1, children.size()) << external << " " << mode;
+            EXPECT_EQ(m->rowsets(0).SerializeAsString(), children.begin()->second->rowsets(0).SerializeAsString())
+                    << external << " " << mode;
+        }
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_boundless_segment_colocate_uses_identical_fallback) {
+    auto m = make_split_source();
+    strip_segment_bounds(m->mutable_rowsets(0)->mutable_segment_metas(1), BoundDamage::kBothAbsent);
+    TxnInfoPB txn_info;
+    txn_info.set_colocate_column_count(1);
+    ASSIGN_OR_ABORT(auto children, split_in_two(_tablet_manager.get(), m, /*external=*/false, txn_info));
+    ASSERT_EQ(1, children.size());
+    EXPECT_EQ(m->rowsets(0).SerializeAsString(), children.begin()->second->rowsets(0).SerializeAsString());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_boundless_rowset_beside_bounded_uses_identical_fallback) {
+    auto m = make_split_source();
+    *m->mutable_range()->mutable_lower_bound() = generate_sort_key(0);
+    m->mutable_range()->set_lower_bound_included(true);
+    *m->mutable_range()->mutable_upper_bound() = generate_sort_key(1000);
+    m->mutable_range()->set_upper_bound_included(false);
+    auto* r = m->add_rowsets();
+    r->set_id(10);
+    lake::tablet_reshard_helper::set_rowset_uid(r);
+    r->set_num_rows(30);
+    r->set_data_size(300);
+    auto* sm = r->add_segment_metas();
+    sm->set_filename("boundless.dat");
+    sm->set_segment_idx(0);
+    sm->set_num_rows(30);
+    sm->set_size(300);
+
+    for (bool external : {true, false}) {
+        ASSIGN_OR_ABORT(auto children, split_in_two(_tablet_manager.get(), m, external));
+        ASSERT_EQ(1, children.size()) << external;
+        const auto& child = children.begin()->second;
+        ASSERT_EQ(2, child->rowsets_size()) << external;
+        EXPECT_EQ(m->rowsets(0).SerializeAsString(), child->rowsets(0).SerializeAsString()) << external;
+        EXPECT_EQ(m->rowsets(1).SerializeAsString(), child->rowsets(1).SerializeAsString()) << external;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_zero_row_boundless_segment_still_splits) {
+    auto m = make_split_source();
+    auto* r = m->mutable_rowsets(0);
+    // Only segment 0 (50 rows, 500 bytes) keeps rows, so the rowset totals shrink to match it.
+    r->set_num_rows(50);
+    r->set_data_size(500);
+    auto* sm = r->mutable_segment_metas(1);
+    sm->set_num_rows(0);
+    strip_segment_bounds(sm, BoundDamage::kBothAbsent);
+    ASSIGN_OR_ABORT(auto children, split_in_two(_tablet_manager.get(), m, /*external=*/true));
+    EXPECT_EQ(2, children.size());
+}
+
+// Segments that carry their bounds in the encoded pair, as the current writer stores them, or in a mix of both pairs
+// are not bound-less: the source splits into the same two children as with the deprecated pair, each child owning
+// one of the two segments.
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_encoded_bounds_are_not_boundless) {
+    const auto base = make_split_source();
+    for (const bool external : {true, false}) {
+        SCOPED_TRACE(external ? "FE-supplied boundaries" : "data-driven boundaries");
+        std::map<int64_t, std::string> expected;
+        for (const auto repr :
+             {SortKeyBoundsRepr::kDeprecated, SortKeyBoundsRepr::kEncoded, SortKeyBoundsRepr::kMixed}) {
+            SCOPED_TRACE(fmt::format("representation {}", static_cast<int>(repr)));
+            auto m = std::make_shared<TabletMetadataPB>(*base);
+            convert_sort_key_bounds(m.get(), repr);
+            ASSIGN_OR_ABORT(auto children, split_in_two(_tablet_manager.get(), m, external));
+            ASSERT_EQ(2, children.size());
+            std::map<int64_t, std::string> normalized;
+            for (const auto& [id, child] : children) {
+                ASSERT_EQ(1, child->rowsets_size());
+                ASSERT_EQ(1, child->rowsets(0).segment_metas_size());
+                EXPECT_FALSE(child->rowsets(0).segment_metas(0).shared());
+                TabletMetadataPB copy(*child);
+                normalize_sort_key_bounds(&copy);
+                normalized.emplace(id, copy.SerializeAsString());
+            }
+            if (repr == SortKeyBoundsRepr::kDeprecated) {
+                expected = std::move(normalized);
+            } else {
+                EXPECT_EQ(expected, normalized);
+            }
+        }
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_segment_without_row_count_or_bounds_uses_identical_fallback) {
+    for (bool external : {true, false}) {
+        auto m = make_split_source();
+        // Beside the two intact segments, which alone split on both paths, a segment that records neither its
+        // row count nor its sort key bounds. Its rows are unknown, so it cannot be treated as empty.
+        auto* sm = m->mutable_rowsets(0)->add_segment_metas();
+        sm->set_filename("split-2.dat");
+        sm->set_segment_idx(2);
+        sm->set_size(300);
+        ASSIGN_OR_ABORT(auto children, split_in_two(_tablet_manager.get(), m, external));
+        ASSERT_EQ(1, children.size()) << external;
+        EXPECT_EQ(m->rowsets(0).SerializeAsString(), children.begin()->second->rowsets(0).SerializeAsString())
+                << external;
+    }
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_splitting_with_gap_boundary) {
     starrocks::TabletMetadata metadata;
     auto tablet_id = next_id();
@@ -1499,8 +1775,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_with_gap_boundary) {
         auto* sm = rowset_meta_pb->add_segment_metas();
         sm->set_filename("test_0.dat");
         sm->set_size(512);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(299999));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(299999));
         sm->set_num_rows(100);
     }
 
@@ -1508,8 +1784,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_with_gap_boundary) {
         auto* sm = rowset_meta_pb->add_segment_metas();
         sm->set_filename("test_1.dat");
         sm->set_size(512);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(300000));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(599999));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(300000));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(599999));
         sm->set_num_rows(100);
     }
 
@@ -1603,8 +1879,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_keeps_raw_rowset_stats) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("segment_0.dat");
         sm->set_size(400);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         sm->set_num_rows(4);
     }
 
@@ -1612,8 +1888,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_keeps_raw_rowset_stats) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("segment_1.dat");
         sm->set_size(400);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         sm->set_num_rows(4);
     }
 
@@ -1682,8 +1958,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_scales_num_dels) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("segment_0.dat");
         sm->set_size(500);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         sm->set_num_rows(5);
     }
 
@@ -1691,8 +1967,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_scales_num_dels) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("segment_1.dat");
         sm->set_size(500);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         sm->set_num_rows(5);
     }
 
@@ -1761,8 +2037,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_fallback_reads_delvec_for
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("segment_0.dat");
         sm->set_size(400);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         sm->set_num_rows(4);
     }
 
@@ -1770,8 +2046,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_fallback_reads_delvec_for
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("segment_1.dat");
         sm->set_size(400);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         sm->set_num_rows(4);
     }
 
@@ -1842,8 +2118,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_per_rowset_conserv
         auto* sm = rs_a->add_segment_metas();
         sm->set_filename("rs_a_0.dat");
         sm->set_size(10000);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         sm->set_num_rows(100);
     }
 
@@ -1858,8 +2134,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_per_rowset_conserv
         auto* sm = rs_b->add_segment_metas();
         sm->set_filename("rs_b_0.dat");
         sm->set_size(6000);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(199));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(199));
         sm->set_num_rows(60);
     }
 
@@ -1874,8 +2150,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_per_rowset_conserv
         auto* sm = rs_c->add_segment_metas();
         sm->set_filename("rs_c_0.dat");
         sm->set_size(3000);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(100));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(199));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(100));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(199));
         sm->set_num_rows(30);
     }
 
@@ -1963,8 +2239,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_clamps_invalid_par
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg_0.dat");
         sm->set_size(500);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         sm->set_num_rows(5);
     }
 
@@ -1972,8 +2248,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_clamps_invalid_par
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg_1.dat");
         sm->set_size(500);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         sm->set_num_rows(5);
     }
 
@@ -2046,8 +2322,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_falls_back_to_segm
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg_0.dat");
         sm->set_size(400);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         sm->set_num_rows(4);
     }
 
@@ -2055,8 +2331,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_falls_back_to_segm
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg_1.dat");
         sm->set_size(400);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         sm->set_num_rows(4);
     }
 
@@ -2123,8 +2399,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_three_level_chain_
         // conservation of the numbers the parent metadata records, and keeping them makes the
         // arithmetic below unchanged by this fixture switching to real segments.
         sm->set_size(data_size);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(min_v));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(max_v));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(min_v));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(max_v));
         sm->set_num_rows(num_rows);
     };
 
@@ -6106,8 +6382,8 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_shares_disjoint_sibling_and_c
     auto* segment = rowset->add_segment_metas();
     segment->set_filename("right_child_segment.dat");
     segment->set_size(10000);
-    segment->mutable_sort_key_min()->CopyFrom(generate_sort_key(70));
-    segment->mutable_sort_key_max()->CopyFrom(generate_sort_key(80));
+    segment->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(70));
+    segment->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(80));
 
     auto make_child_metadata = [&](int lower, int upper) {
         auto metadata = std::make_shared<TabletMetadataPB>();

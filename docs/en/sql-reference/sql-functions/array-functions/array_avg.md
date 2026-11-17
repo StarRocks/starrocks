@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the average of all elements in an ARRAY, ignoring NULL values."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_avg

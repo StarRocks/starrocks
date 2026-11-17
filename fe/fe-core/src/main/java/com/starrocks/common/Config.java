@@ -3193,31 +3193,31 @@ public class Config extends ConfigBase {
     /**
      * iceberg metadata cache dir
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static String iceberg_metadata_cache_disk_path = Config.STARROCKS_HOME_DIR + "/caches/iceberg";
 
     /**
      * iceberg metadata memory cache total size, default 0MB (turn off)
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_memory_cache_capacity = 0L;
 
     /**
      * iceberg metadata memory cache expiration time, default 86500s
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_memory_cache_expiration_seconds = 86500;
 
     /**
      * enable iceberg metadata disk cache, default false
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static boolean enable_iceberg_metadata_disk_cache = false;
 
     /**
      * iceberg metadata disk cache total size, default 2GB
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_disk_cache_capacity = 2147483648L;
 
     /**
@@ -3229,7 +3229,7 @@ public class Config extends ConfigBase {
     /**
      * iceberg metadata cache max entry size, default 0L (turn off)
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_cache_max_entry_size = 0L;
 
     /**
@@ -3265,6 +3265,15 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int iceberg_commit_queue_timeout_seconds = 300;
+
+    /**
+     * How many more times an Iceberg rewrite (rewrite_data_files) commit is retried, each time on a freshly
+     * loaded table, after Iceberg's own commit retries (table property commit.retry.num-retries) all lost to
+     * concurrent commits from other writers. Rounds back off exponentially from 1 second up to 30 seconds.
+     * 0 disables the extra retries.
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_rewrite_commit_max_retries = 5;
 
     /**
      * The maximum number of pending commit operations per Iceberg table.
@@ -3770,6 +3779,12 @@ public class Config extends ConfigBase {
             aliases = {"lake_publish_version_max_threads"})
     public static int publish_version_max_threads = 512;
 
+    @ConfField(mutable = true, comment = "Timeout (ms) of the publish version RPC of a shared-data transaction. " +
+            "It bounds both how long FE waits for the compute node to answer and the deadline the compute node " +
+            "applies to the publish task itself. Raise it when publishing a large batch of tablets legitimately " +
+            "takes longer than the default.")
+    public static int lake_publish_version_timeout_ms = 60000;
+
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
 
@@ -4191,6 +4206,10 @@ public class Config extends ConfigBase {
     public static int pipe_scheduler_interval_millis = 1000;
     @ConfField(mutable = true, comment = "default poll interval of pipe")
     public static int pipe_default_poll_interval_s = 60 * 5;
+    @ConfField(mutable = true, comment = "A pipe changes to ERROR and stops loading when more than this many " +
+            "task executions fail in a row. Retries of a failed task count as executions. A task that loads " +
+            "successfully, ALTER PIPE RESUME, and ALTER PIPE RETRY reset the count.")
+    public static int pipe_max_consecutive_failed_task_executions = 5;
 
     @ConfField(mutable = true)
     public static long mv_active_checker_interval_seconds = 60;

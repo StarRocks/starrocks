@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
@@ -29,6 +30,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -192,6 +194,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -574,11 +577,15 @@ public class IcebergMetadata implements ConnectorMetadata {
                 .includeColumnStats()   // Must include column statistics for evaluation
                 .ignoreResiduals();
 
-        try (CloseableIterable<FileScanTask> tasks = scan.planFiles()) {
+        // Close the iterator too: closing only the iterable does not stop the planning workers of some scans
+        // (e.g. REST server-side planning) when the loop exits early.
+        try (CloseableIterable<FileScanTask> tasks = scan.planFiles();
+                CloseableIterator<FileScanTask> taskIterator = tasks.iterator()) {
             StrictMetricsEvaluator metricsEvaluator =
                     new StrictMetricsEvaluator(nativeTable.schema(), deleteExpr, caseSensitive);
 
-            for (FileScanTask task : tasks) {
+            while (taskIterator.hasNext()) {
+                FileScanTask task = taskIterator.next();
                 DataFile file = task.file();
                 PartitionSpec spec = task.spec();
 
@@ -673,8 +680,10 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             int matchedFiles = 0;
             try (CloseableIterable<FileScanTask> tasks = nativeTbl.newScan()
-                    .filter(pushableExpr).caseSensitive(false).ignoreResiduals().planFiles()) {
-                for (FileScanTask task : tasks) {
+                    .filter(pushableExpr).caseSensitive(false).ignoreResiduals().planFiles();
+                    CloseableIterator<FileScanTask> taskIterator = tasks.iterator()) {
+                while (taskIterator.hasNext()) {
+                    FileScanTask task = taskIterator.next();
                     if (PartitionCastPredicatePruner.partitionDefinitelyMatches(residual.residual,
                             icebergPartitionValues(task, icebergTable, false))) {
                         deleteFiles.deleteFile(task.file());
@@ -767,7 +776,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         try {
             icebergTable = getTable(new ConnectContext(), stmt.getDbName(), stmt.getTableName());
         } catch (StarRocksConnectorException | NotFoundException e) {
-            if (!isMetadataFileMissing(e) || !isTableMetadataMissing(stmt.getDbName(), stmt.getTableName())) {
+            // DROP VIEW must not remove a table's entry; it is also authorized against views, not tables.
+            if (stmt.isView() || !isMetadataFileMissing(e)
+                    || !isTableMetadataMissing(stmt.getDbName(), stmt.getTableName())) {
                 throw e;
             }
             // Iceberg tolerates this on drop: HiveCatalog#dropTable still removes the catalog entry when the
@@ -1684,12 +1695,14 @@ public class IcebergMetadata implements ConnectorMetadata {
     // Raw string partition values for the file, keyed by (identity) partition column name. Returns an empty map
     // under partition-transform evolution, where getIcebergPartitionValues drops non-identity fields and would
     // misalign the value-to-column mapping (residual pruning then conservatively keeps every file).
-    private static Map<String, String> icebergPartitionValues(FileScanTask task, IcebergTable table,
-                                                              boolean existPartitionTransformedEvolution) {
+    @VisibleForTesting
+    static Map<String, String> icebergPartitionValues(FileScanTask task, IcebergTable table,
+                                                      boolean existPartitionTransformedEvolution) {
         if (existPartitionTransformedEvolution) {
             return Collections.emptyMap();
         }
-        PartitionSpec spec = table.getNativeTable().spec();
+        // A partition tuple lines up positionally with the spec its file was written under, not the current one.
+        PartitionSpec spec = task.spec();
         org.apache.iceberg.PartitionData partitionData =
                 (org.apache.iceberg.PartitionData) task.file().partition();
         List<String> values = PartitionUtil.getIcebergPartitionValues(spec, partitionData, false);
@@ -1706,8 +1719,9 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (!field.transform().isIdentity()) {
                 continue;
             }
+            // An older spec can reference a since-dropped column; a null key would NPE in partitionMayMatch.
             String name = table.getPartitionSourceName(table.getNativeTable().schema(), field);
-            if (value != null) {
+            if (name != null && value != null) {
                 result.put(name, value);
             }
         }
@@ -2541,6 +2555,25 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
+    /**
+     * Drop only the cached table object, with no remote I/O and without the catalog's per-table refresh lock: the
+     * planner's next getTable then loads the table as it is now. A refresh would load it remotely under that lock,
+     * so concurrent INSERTs reading the same source queue behind each other's remote load. The partition and
+     * manifest caches are keyed by snapshot and file path, so they stay valid for whatever snapshot is loaded.
+     */
+    @Override
+    public void invalidateTableForRead(String srDbName, Table table) {
+        if (isResourceMappingCatalog(catalogName)) {
+            refreshTable(srDbName, table, new ArrayList<>(), false);
+            return;
+        }
+        IcebergTable icebergTable = (IcebergTable) table;
+        String dbName = icebergTable.getCatalogDBName();
+        String tableName = icebergTable.getCatalogTableName();
+        tables.remove(TableIdentifier.of(dbName, tableName));
+        icebergCatalog.invalidateTableCache(dbName, tableName);
+    }
+
     private void refreshTableWithResource(Table table) {
         IcebergTable icebergTable = (IcebergTable) table;
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
@@ -2947,13 +2980,10 @@ public class IcebergMetadata implements ConnectorMetadata {
             writeType = "insert";
         }
 
-        BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite, isRewrite);
-
-        if (branch != null) {
-            batchWrite.toBranch(branch);
-        }
-
+        // Built once and reused by every retry of a rewrite commit: the BE wrote these files under the
+        // spec current now, which a refresh between retries could replace.
         PartitionSpec partitionSpec = nativeTbl.spec();
+        List<org.apache.iceberg.DataFile> icebergDataFiles = new ArrayList<>(dataFiles.size());
         for (TIcebergDataFile dataFile : dataFiles) {
             Metrics metrics = IcebergApiConverter.buildDataFileMetrics(dataFile, nativeTbl);
             DataFiles.Builder builder =
@@ -2977,41 +3007,62 @@ public class IcebergMetadata implements ConnectorMetadata {
                         relativePartitionLocation, nullFingerprint, partitionSpec);
                 builder.withPartition(partitionData);
             }
-            batchWrite.addFile(builder.build());
+            icebergDataFiles.add(builder.build());
         }
 
+        // Validate a rewrite from the snapshot it planned against, not the one current at
+        // commit time. RewriteFiles checks for row-level deletes added to the files being
+        // replaced over the range (startingSnapshot, current]; passing the commit-time
+        // snapshot makes that range empty, so a DELETE/UPDATE that landed while the rewrite
+        // was running is never seen. Replacing its data files then strands the position
+        // deletes on paths no longer in the table, silently resurrecting deleted rows.
+        // Resolved once, so a retried rewrite commit keeps validating from the same snapshot.
+        Long baseSnapshotId = null;
         if (isRewrite && extra != null) {
-            ((IcebergSinkExtra) extra).getScannedDataFiles().forEach(batchWrite::deleteFile);
-            ((IcebergSinkExtra) extra).getAppliedDeleteFiles().forEach(batchWrite::deleteFile);
-            // Validate from the snapshot the rewrite planned against, not the one current at
-            // commit time. RewriteFiles checks for row-level deletes added to the files being
-            // replaced over the range (startingSnapshot, current]; passing the commit-time
-            // snapshot makes that range empty, so a DELETE/UPDATE that landed while the rewrite
-            // was running is never seen. Replacing its data files then strands the position
-            // deletes on paths no longer in the table, silently resurrecting deleted rows.
-            Long baseSnapshotId = ((IcebergSinkExtra) extra).getBaseSnapshotId();
+            baseSnapshotId = ((IcebergSinkExtra) extra).getBaseSnapshotId();
             if (baseSnapshotId == null) {
                 Snapshot currentSnapshot = nativeTbl.currentSnapshot();
                 if (currentSnapshot != null) {
                     baseSnapshotId = currentSnapshot.snapshotId();
                 }
             }
-            if (baseSnapshotId != null) {
-                ((RewriteData) batchWrite).setSnapshotId(baseSnapshotId);
-            }
         }
-
-        // Set audit info for the commit
-        if (context != null) {
-            batchWrite.setAuditInfo("StarRocks",
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion(),
-                    context.getCurrentUserIdentity() != null ? context.getCurrentUserIdentity().getUser() : "None");
-        }
+        final Long rewriteBaseSnapshotId = baseSnapshotId;
 
         try {
             commitWithCleanup(() -> {
-                batchWrite.commit();
-                transaction.commitTransaction();
+                Transaction txn = transaction;
+                for (int retry = 0; ; retry++) {
+                    BatchWrite batchWrite = newBatchWrite(txn, isOverwrite, isRewrite, branch, extra,
+                            rewriteBaseSnapshotId, context);
+                    try {
+                        icebergDataFiles.forEach(batchWrite::addFile);
+                        batchWrite.commit();
+                        txn.commitTransaction();
+                        return;
+                    } catch (CommitFailedException e) {
+                        // A rewrite's commit only fails here after Iceberg's own retries all lost the
+                        // metadata swap to other writers; a rewrite does not conflict with their appends,
+                        // so try again on the latest table. Conflicts (ValidationException) and an unknown
+                        // commit state are not CommitFailedException and are never retried.
+                        if (!isRewrite || retry >= Config.iceberg_rewrite_commit_max_retries) {
+                            throw e;
+                        }
+                        long sleepMs = Math.min(30_000L, 1000L << Math.min(retry, 5));
+                        sleepMs += ThreadLocalRandom.current().nextLong(sleepMs / 5 + 1);
+                        LOG.warn("Iceberg rewrite commit on {}.{}.{} lost to concurrent commits, retry {}/{} in {} ms",
+                                catalogName, dbName, tableName, retry + 1, Config.iceberg_rewrite_commit_max_retries,
+                                sleepMs, e);
+                        try {
+                            Thread.sleep(sleepMs);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            throw e;
+                        }
+                        nativeTbl.refresh();
+                        txn = nativeTbl.newTransaction();
+                    }
+                }
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
 
             // Record metrics after successful commit
@@ -3045,6 +3096,31 @@ public class IcebergMetadata implements ConnectorMetadata {
         LOG.info("Submit async refresh others fe iceberg metadata cache on {}.{}.{}", catalogName, dbName, tableName);
         GlobalStateMgr.getCurrentState().refreshOthersFeTableAsync(
                 new TableName(catalogName, dbName, tableName), new ArrayList<>());
+    }
+
+    private BatchWrite newBatchWrite(Transaction transaction, boolean isOverwrite, boolean isRewrite, String branch,
+                                     Object extra, Long rewriteBaseSnapshotId, ConnectContext context) {
+        BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite, isRewrite);
+
+        if (branch != null) {
+            batchWrite.toBranch(branch);
+        }
+
+        if (isRewrite && extra != null) {
+            ((IcebergSinkExtra) extra).getScannedDataFiles().forEach(batchWrite::deleteFile);
+            ((IcebergSinkExtra) extra).getAppliedDeleteFiles().forEach(batchWrite::deleteFile);
+            if (rewriteBaseSnapshotId != null) {
+                ((RewriteData) batchWrite).setSnapshotId(rewriteBaseSnapshotId);
+            }
+        }
+
+        // Set audit info for the commit
+        if (context != null) {
+            batchWrite.setAuditInfo("StarRocks",
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion(),
+                    context.getCurrentUserIdentity() != null ? context.getCurrentUserIdentity().getUser() : "None");
+        }
+        return batchWrite;
     }
 
     public BatchWrite getBatchWrite(Transaction transaction, boolean isOverwrite, boolean isRewrite) {

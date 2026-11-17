@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW LOAD displays information of all load jobs or given load jobs in a database."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW LOAD

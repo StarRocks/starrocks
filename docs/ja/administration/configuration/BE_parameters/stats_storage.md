@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 description: "BE 設定パラメーター：統計情報収集とストレージエンジンに関連する設定項目。"
 sidebar_label: "統計とストレージ"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -13,7 +14,6 @@ import PostBEConfig from '../../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
-import EditionSpecificBEItem from '../../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
 
 # BE 設定 - 統計とストレージ
 
@@ -90,8 +90,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## ストレージ
 
-<EditionSpecificBEItem />
-
 ### alter_tablet_worker_count
 
 - デフォルト: 3
@@ -136,6 +134,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 最後のベースコンパクションからの時間間隔。この設定項目はベースコンパクションをトリガーする条件の一つです。
 - 導入バージョン: -
+
+このパラメータは v4.1 より前から存在しますが、その時点で共有データの間隔制御に対応していたことを意味しません。4.1 系列では、共有データ Base Compaction の制限には使用しません。共有データの間隔制御は v4.2 からサポートされています。対応バージョンでは自動 Base Compaction の最小間隔を指定し、毎日定時に実行する周期ではありません。手動要求はこの制限を回避します。[バージョン別のサポート](../../management/compaction.md#primary-key-base-compaction-versions)と[実行時間の制御](../../management/compaction.md#base-compaction-time-controls)を参照してください。
 
 ### base_compaction_num_threads_per_disk
 

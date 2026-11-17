@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "Query Profile records execution information for all working nodes in a query, helping identify bottlenecks affecting query performance."
 sidebar_position: 30
 keywords: ['profile', 'query', '慢查询']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Query Profile 概述

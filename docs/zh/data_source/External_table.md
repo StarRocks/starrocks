@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "External tables are no longer recommended in StarRocks; use External Catalog instead for querying Hive, Iceberg, and Hudi data sources."
+products: [oss, enterprise, anywhere]
 ---
 
 # 外部表

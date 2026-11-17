@@ -3,6 +3,7 @@ sidebar_position: 20
 displayed_sidebar: docs
 sidebar_label: "Authentication, Query, and Loading"
 description: "FE configuration parameters for authentication, query execution, and data loading."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE Configuration - Authentication, Query, and Loading
@@ -794,7 +795,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The end time of automatic collection. Value range: `00:00:00` - `23:59:59`.
+- Description: The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. Both the start time and the end time are inclusive at second granularity. For example, if the end time is `17:00:00`, collection is allowed until `17:00:00` ends. If the start time is later than the end time, the period spans midnight.
 - Introduced in: -
 
 ### `statistic_auto_analyze_start_time`
@@ -803,7 +804,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The start time of automatic collection. Value range: `00:00:00` - `23:59:59`.
+- Description: The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. Both the start time and the end time are inclusive at second granularity. For example, if the end time is `17:00:00`, collection is allowed until `17:00:00` ends. If the start time is later than the end time, the period spans midnight.
 - Introduced in: -
 
 ### `statistic_auto_collect_ratio`
@@ -1079,7 +1080,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The timeout duration for the INSERT INTO statement that is used to load data.
+- Description: Deprecated. This item does not control the timeout of INSERT statements. Use the session variable `insert_timeout` instead.
 - Introduced in: -
 
 ### `label_clean_interval_second`
@@ -1279,6 +1280,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: Minutes
 - Is mutable: Yes
 - Description: The interval at which Routine Load jobs are automatically recovered.
+- Introduced in: -
+
+### `pipe_max_consecutive_failed_task_executions`
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of task executions in a row that can fail in a pipe. When more task executions than this fail in a row, the pipe changes to the `ERROR` state and stops loading data until you resume it. Each retry of a failed task counts as one execution. The count is reset when a task loads its files successfully, and when you run `ALTER PIPE <pipe_name> RESUME` or `ALTER PIPE <pipe_name> { RETRY ALL | RETRY FILE '<file_name>' }`. A failed task is retried up to 5 times. If you set this item to a value greater than 5, a task that still fails after its retries is given up: its files are marked as `ERROR`, you can load them again with `RETRY`, and the pipe goes on to the next files.
 - Introduced in: -
 
 ### `prepared_transaction_default_timeout_second`

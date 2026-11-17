@@ -3,6 +3,7 @@ displayed_sidebar: docs
 sidebar_position: 40
 keywords: ['ssl', 'tls']
 description: "From v3.4.1 onwards, StarRocks supports secure connections encrypted by SSL."
+products: [oss, enterprise, anywhere]
 ---
 
 # SSL Authentication

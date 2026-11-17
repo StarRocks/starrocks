@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "ビットマップインデックスを StarRocks で作成・管理して低カーディナリティ列の等値・範囲クエリを高速化します。"
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ビットマップインデックス

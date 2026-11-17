@@ -3,6 +3,7 @@ sidebar_position: 60
 displayed_sidebar: docs
 sidebar_label: "Feature Support"
 description: "From v2.3 onwards, StarRocks supports managing external data sources and analyzing data in data lakes via external catalogs."
+products: [oss, enterprise, anywhere]
 ---
 
 # Feature Support: Data Lake Analytics

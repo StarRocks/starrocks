@@ -47,11 +47,7 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
     };
 
     auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
-        auto cache = tablet_mgr->metacache();
-        DCHECK(cache != nullptr);
-        for (const auto& path : files) {
-            cache->erase(path);
-        }
+        erase_tablet_metadata_from_metacache(tablet_mgr, files);
     };
     AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
     std::vector<std::string> expired_metas;
@@ -106,6 +102,9 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
         if (need_clear) {
             LOG(INFO) << "Try delete for full vacuum: " << path;
             RETURN_IF_ERROR(metafile_deleter.delete_file(path));
+            for (const auto& metadata : metadatas) {
+                tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(metadata->id(), version));
+            }
             bundle_expired_metas.push_back(name);
         }
     }

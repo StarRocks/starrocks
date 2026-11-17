@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回两个数值的按位 AND 运算结果。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitand

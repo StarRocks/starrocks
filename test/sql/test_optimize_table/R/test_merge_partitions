@@ -245,3 +245,63 @@ alter table t partition by date_trunc('month',k) distributed by random between '
 -- result:
 E: (5064, 'Getting analyzing error. Detail message: Unsupported change distribution type when merge partitions.')
 -- !result
+
+-- name: test_merge_partitions_again
+create table t(k datetime, v int) partition by date_trunc('hour', k) distributed by hash(k) buckets 3;
+-- result:
+-- !result
+insert into t values ('2020-01-01 00:00:00', 1), ('2020-01-01 01:00:00', 2), ('2020-01-01 02:00:00', 3);
+-- result:
+-- !result
+alter table t partition by date_trunc('day', k);
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+function: print_query_columns("show partitions from t order by PartitionName", "PartitionName")
+-- result:
+p20200101
+-- !result
+insert into t values ('2020-01-03 02:00:00', 4), ('2020-01-03 03:00:00', 5);
+-- result:
+-- !result
+function: print_query_columns("show partitions from t order by PartitionName", "PartitionName")
+-- result:
+p20200101
+p2020010302
+p2020010303
+-- !result
+alter table t partition by date_trunc('day', k);
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+function: print_query_columns("show partitions from t order by PartitionName", "PartitionName")
+-- result:
+p20200101
+p20200103
+-- !result
+alter table t partition by date_trunc('day', k);
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+function: print_query_columns("show partitions from t order by PartitionName", "PartitionName")
+-- result:
+p20200101
+p20200103
+-- !result
+select * from t order by k;
+-- result:
+2020-01-01 00:00:00	1
+2020-01-01 01:00:00	2
+2020-01-01 02:00:00	3
+2020-01-03 02:00:00	4
+2020-01-03 03:00:00	5
+-- !result

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the 1-bit count for the input bitmap."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_count

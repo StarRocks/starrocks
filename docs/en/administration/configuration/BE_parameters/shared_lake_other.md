@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Shared-data, Data Lake, and Others"
 description: "BE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -149,13 +150,22 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
 
+### lake_pk_compaction_max_rowsets_per_level
+
+- Default: 20
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of rowsets that still need compaction at which a size level of a Primary Key table in a shared-data cluster is merged even if it does not have the highest score. The Size-tiered Compaction policy merges only the level with the highest score in each round. While loads keep arriving, the level of the newest and smallest rowsets has the highest score in every round, so a level of larger rowsets (outputs of earlier compactions and medium-sized loads) keeps growing. This increases the number of segments that queries read, and shows up as a spike in the compaction score right after a compaction finishes. When a level that is not picked holds this many rowsets that still need compaction, and these rowsets fit in the same compaction task as the picked ones, the level is merged in that compaction task. Set it to `0` to disable this behavior.
+- Introduced in: -
+
 ### lake_pk_compaction_base_enable_delete_trigger
 
 - Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether a Primary Key tablet in a shared-data cluster switches from cumulative compaction to base compaction on its own when its deletes reach `lake_pk_compaction_base_delete_ratio_threshold` or `lake_pk_compaction_base_delete_rows_threshold`. It is disabled by default because `lake_pk_compaction_base_delete_rows_threshold` is an absolute count: on a large table whose existing rows keep being updated or deleted, a tablet reaches it again soon after each base compaction, and each base compaction rewrites up to `update_compaction_ratio_threshold` (0.5 by default) of the tablet's data. A manual `ALTER TABLE ... COMPACT` runs base compaction regardless of this item.
+- Description: Whether automatic compaction of a shared-data Primary Key tablet can select Base Compaction when its delete ratio or delete-row count reaches a threshold. This switch only controls automatic Base Compaction triggered by deletes and does not affect ordinary Cumulative Compaction. It is disabled by default because large tablets under continuous updates or deletes can frequently reach the absolute delete-row threshold and repeatedly rewrite data. Manual `ALTER TABLE ... COMPACT` requests bypass this switch and both delete thresholds; tablets without deleted rows fall back to ordinary compaction selection. Neither automatic nor manual requests guarantee a full-tablet merge in one execution. See [Base Compaction for Primary Key tables](../../management/compaction.md#primary-key-base-compaction).
 - Introduced in: v4.1.7
 
 ### lake_pk_compaction_base_delete_ratio_threshold
@@ -164,7 +174,7 @@ This topic introduces the following types of BE configurations:
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: One of two triggers that switch a Primary Key tablet in a shared-data cluster from cumulative compaction (size-tiered small-file merges) to base compaction, which rewrites the delete-bearing rowsets (the ones with the most deleted rows first) to drop deleted rows and shrink their delete vectors. When `lake_pk_compaction_base_enable_delete_trigger` is `true`, base compaction runs when the tablet's aggregate delete ratio (`sum(num_dels) / sum(num_rows)` across rowsets) reaches this value or when its absolute delete-row count reaches `lake_pk_compaction_base_delete_rows_threshold`. A manual `ALTER TABLE ... COMPACT` forces a base compaction regardless of these items.
+- Description: One of the two thresholds for automatically selecting Base Compaction by deletes for a shared-data Primary Key tablet. Base Compaction can be selected when the aggregate delete ratio across all current Rowsets, `sum(num_dels) / sum(num_rows)`, reaches this value, or when the total delete-row count reaches `lake_pk_compaction_base_delete_rows_threshold`. In v4.1.4–v4.1.6, both thresholds are checked directly. From v4.1.7, `lake_pk_compaction_base_enable_delete_trigger = true` is also required. Manual `ALTER TABLE ... COMPACT` requests bypass both thresholds. Reaching a threshold does not guarantee immediate FE scheduling. See [Automatic triggering](../../management/compaction.md#automatic-base-compaction).
 - Introduced in: v4.1.4
 
 ### lake_pk_compaction_base_delete_rows_threshold
@@ -173,7 +183,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: One of two triggers for Primary Key base compaction in a shared-data cluster (see `lake_pk_compaction_base_delete_ratio_threshold`). When `lake_pk_compaction_base_enable_delete_trigger` is `true`, base compaction runs when a tablet's absolute delete-row count (`sum(num_dels)` across rowsets) reaches this value. This absolute-count trigger complements the ratio trigger: on hot update/delete tables the delete vectors bloat and space is wasted while the aggregate delete ratio stays low (diluted by many mostly-live rowsets), so the ratio trigger alone would not fire. Raise it to make base compaction less frequent, or lower it to reclaim delete vectors sooner.
+- Description: The absolute delete-row threshold for automatically selecting Base Compaction by deletes for a shared-data Primary Key tablet. It is combined with `lake_pk_compaction_base_delete_ratio_threshold` using OR. The delete-row count is `sum(num_dels)` across all current Rowsets in the tablet. In v4.1.4–v4.1.6, this threshold is checked directly. From v4.1.7, `lake_pk_compaction_base_enable_delete_trigger = true` is also required. Manual requests bypass this threshold. This condition covers tablets with a low aggregate delete ratio but many delete marks in delete vectors. Raise it to make automatic Base Compaction less frequent, or lower it to select delete reclamation sooner. See [Automatic triggering](../../management/compaction.md#automatic-base-compaction).
 - Introduced in: v4.1.4
 
 ### lake_put_txn_log_timeout_guard_ms
@@ -392,7 +402,7 @@ This topic introduces the following types of BE configurations:
 
 ### datacache_disk_idle_seconds_for_expansion
 
-- Default: 7200
+- Default: 180
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
@@ -405,7 +415,7 @@ This topic introduces the following types of BE configurations:
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you use two disks and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is `0`, which indicates that only memory is used to cache data.
+- Description: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you use two disks and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. A percentage is relative to the capacity of the disk that holds each `storage_root_path`. The default value is `100%`. When `enable_datacache_disk_auto_adjust` is `true` (default), the system adjusts the actual disk cache quota based on disk usage, and this item only sets the upper limit of that quota. `0` disables the disk cache.
 - Introduced in: -
 
 ### datacache_enable
@@ -513,7 +523,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: No
-- Description: The length of time after which an idle connection in the JDBC connection pool expires. If the connection idle time in the JDBC connection pool exceeds this value, the connection pool closes idle connections beyond the number specified in the configuration item `jdbc_minimum_idle_connections`.
+- Description: The length of time after which an idle connection in the JDBC connection pool expires. If the connection idle time in the JDBC connection pool exceeds this value, the connection pool closes idle connections beyond the number specified in the configuration item `jdbc_minimum_idle_connections`. If no query uses a connection pool for this length of time, the BE closes the whole connection pool, including the connections kept by `jdbc_minimum_idle_connections`, and creates a new one on the next query. This releases the connection pools of dropped or altered JDBC catalogs and resources.
 - Introduced in: -
 
 ### jdbc_connection_pool_size
@@ -685,8 +695,8 @@ This topic introduces the following types of BE configurations:
 - Default: 0
 - Type: Int
 - Unit: -
-- Is mutable: Yes
-- Description: The maximum concurrency (per BE node) of the materialized view refresh tasks in the resource group `default_mv_wg`. The default value `0` indicates no limits.
+- Is mutable: No
+- Description: The maximum concurrency (per BE node) of the materialized view refresh tasks in the resource group `default_mv_wg`. The default value `0` indicates no limits. Deprecated: from v3.4 onwards, this item no longer takes effect because the FE stores `default_mv_wg` and sends it to the BEs. Use `ALTER RESOURCE GROUP default_mv_wg WITH (...)` instead.
 - Introduced in: v3.1
 
 ### default_mv_resource_group_cpu_limit
@@ -694,8 +704,8 @@ This topic introduces the following types of BE configurations:
 - Default: 1
 - Type: Int
 - Unit: -
-- Is mutable: Yes
-- Description: The maximum number of CPU cores (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`.
+- Is mutable: No
+- Description: The maximum number of CPU cores (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`. Deprecated: from v3.4 onwards, this item no longer takes effect because the FE stores `default_mv_wg` and sends it to the BEs. Use `ALTER RESOURCE GROUP default_mv_wg WITH (...)` instead.
 - Introduced in: v3.1
 
 ### default_mv_resource_group_memory_limit
@@ -703,8 +713,8 @@ This topic introduces the following types of BE configurations:
 - Default: 0.8
 - Type: Double
 - Unit:
-- Is mutable: Yes
-- Description: The maximum memory proportion (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`. The default value indicates 80% of the memory.
+- Is mutable: No
+- Description: The maximum memory proportion (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`. The default value indicates 80% of the memory. Deprecated: from v3.4 onwards, this item no longer takes effect because the FE stores `default_mv_wg` and sends it to the BEs. Use `ALTER RESOURCE GROUP default_mv_wg WITH (...)` instead.
 - Introduced in: v3.1
 
 ### default_mv_resource_group_spill_mem_limit_threshold
@@ -712,8 +722,8 @@ This topic introduces the following types of BE configurations:
 - Default: 0.8
 - Type: Double
 - Unit: -
-- Is mutable: Yes
-- Description: The memory usage threshold before a materialized view refresh task in the resource group `default_mv_wg` triggers intermediate result spilling. The default value indicates 80% of the memory.
+- Is mutable: No
+- Description: The memory usage threshold before a materialized view refresh task in the resource group `default_mv_wg` triggers intermediate result spilling. The default value indicates 80% of the memory. Deprecated: from v3.4 onwards, this item no longer takes effect because the FE stores `default_mv_wg` and sends it to the BEs. Use `ALTER RESOURCE GROUP default_mv_wg WITH (...)` instead.
 - Introduced in: v3.1
 
 ### enable_resolve_hostname_to_ip_in_load_error_url

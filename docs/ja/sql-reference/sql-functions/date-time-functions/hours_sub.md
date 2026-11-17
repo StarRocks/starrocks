@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された日時から指定された時間数を減算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hours_sub

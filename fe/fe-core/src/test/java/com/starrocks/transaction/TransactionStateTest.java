@@ -82,6 +82,28 @@ public class TransactionStateTest {
         Assertions.assertFalse(json.contains("temporary reason"));
     }
 
+    // The tablets a commit skipped stay in memory until the transaction is committed and reports them: they are
+    // never persisted.
+    @Test
+    public void testIgnoredTabletsAreNotPersisted() {
+        TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L),
+                3000, "label_ignored_tablets", UUIDUtil.genTUniqueId(),
+                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+        Map<Long, List<Long>> ignoredTabletsByPartition = new HashMap<>();
+        ignoredTabletsByPartition.put(30000L, Lists.newArrayList(40000L, 40001L));
+        transactionState.setIgnoredTablets(20000L, ignoredTabletsByPartition);
+        assertEquals(Map.of(20000L, ignoredTabletsByPartition), transactionState.getIgnoredTablets());
+
+        String json = GsonUtils.GSON.toJson(transactionState);
+        TransactionState readTransactionState = GsonUtils.GSON.fromJson(json, TransactionState.class);
+        assertTrue(readTransactionState.getIgnoredTablets().isEmpty());
+
+        // a prepare that skips nothing for the table clears it
+        transactionState.setIgnoredTablets(20000L, new HashMap<>());
+        assertTrue(transactionState.getIgnoredTablets().isEmpty());
+    }
+
     @Test
     public void testSerDeTxnFinishStatePB() throws IOException {
         Codec<TxnFinishStatePB> finishStatePBCodec = ProtobufProxy.create(TxnFinishStatePB.class);

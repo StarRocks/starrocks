@@ -65,6 +65,11 @@ public class ScalarOperationToDeltaLakeExpr {
         return result.orElse(ALWAYS_TRUE);
     }
 
+    // Whether the conjunct is pushed into the kernel scan as a whole, i.e. files are pruned by it.
+    public boolean canConvert(ScalarOperator operator, DeltaLakeContext context) {
+        return operator.accept(new DeltaLakeExprVisitor(), context) != null;
+    }
+
     public static class DeltaLakeContext {
         private final io.delta.kernel.types.StructType schema;
         private final Set<String> partitionColumns;
@@ -388,7 +393,10 @@ public class ScalarOperationToDeltaLakeExpr {
 
         @Override
         public String visitCastOperator(CastOperator operator, Void context) {
-            if (operator.isTruncatingCharCast()) {
+            // Stripping a non-identity cast can change predicate semantics and incorrectly prune files,
+            // e.g. cast(date_col AS datetime) < '2020-01-01 10:00:00' must not become date_col < '2020-01-01'.
+            // Any non-identity cast that still reaches this converter must remain a residual predicate.
+            if (!operator.getType().equals(operator.getChild(0).getType())) {
                 return null;
             }
             return operator.getChild(0).accept(this, context);

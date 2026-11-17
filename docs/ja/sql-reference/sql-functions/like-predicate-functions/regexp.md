@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "与えられた式が指定されたパターンの正規表現に一致するかどうかをチェックします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # regexp

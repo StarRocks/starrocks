@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "UNINSTALL PLUGIN is used to uninstall a plugin."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # UNINSTALL PLUGIN

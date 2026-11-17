@@ -78,6 +78,7 @@ public:
 
     std::string getName() const override = 0;
     uint64_t flush() override;
+    void suppress() override;
 
     bool isCompressed() const override { return true; }
     uint64_t getSize() const override;
@@ -135,6 +136,12 @@ uint64_t CompressionStreamBase::flush() {
     BufferedOutputStream::BackUp(outputSize - outputPosition);
     bufferSize = outputSize = outputPosition = 0;
     return BufferedOutputStream::flush();
+}
+
+void CompressionStreamBase::suppress() {
+    outputBuffer = nullptr;
+    bufferSize = outputPosition = outputSize = 0;
+    BufferedOutputStream::suppress();
 }
 
 uint64_t CompressionStreamBase::getSize() const {
@@ -860,6 +867,7 @@ public:
     }
 
     bool Next(void** data, int* size) override;
+    void suppress() override;
     std::string getName() const override = 0;
 
 protected:
@@ -924,6 +932,11 @@ bool BlockCompressionStream::Next(void** data, int* size) {
     compressorBuffer.resize(estimateMaxCompressionSize());
 
     return true;
+}
+
+void BlockCompressionStream::suppress() {
+    compressorBuffer.resize(0);
+    CompressionStreamBase::suppress();
 }
 
 /**

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "如果字符串以指定前缀开头返回1，否则返回0。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # starts_with

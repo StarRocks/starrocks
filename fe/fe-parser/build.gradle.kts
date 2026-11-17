@@ -31,6 +31,7 @@ dependencies {
     implementation("org.antlr:antlr4-runtime")
     implementation("org.apache.commons:commons-lang3")
     implementation("com.google.guava:guava")
+    implementation("com.google.code.findbugs:jsr305")
     implementation("javax.validation:validation-api")
 
     testImplementation("org.junit.jupiter:junit-jupiter")

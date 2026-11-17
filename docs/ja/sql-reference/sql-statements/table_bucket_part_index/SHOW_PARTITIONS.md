@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW PARTITIONS displays partition information including common and temporary partitions."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW PARTITIONS

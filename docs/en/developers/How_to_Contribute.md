@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Contributing to StarRocks is cordially welcome from everyone."
+products: [oss]
 ---
 
 # Contribute to StarRocks

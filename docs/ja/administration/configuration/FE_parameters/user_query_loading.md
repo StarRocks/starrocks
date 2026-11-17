@@ -3,6 +3,7 @@ sidebar_position: 20
 displayed_sidebar: docs
 description: "FE 設定パラメーター：認証、クエリ実行、データロードに関連する設定項目。"
 sidebar_label: "認証、クエリ、およびロード"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 設定 - 認証、クエリ、およびロード
@@ -785,7 +786,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：自動収集の終了時刻。値の範囲: `00:00:00` - `23:59:59`。
+- 説明：自動収集の終了時刻。値の範囲: `00:00:00` - `23:59:59`。開始時刻と終了時刻は秒単位で扱われ、どちらも収集期間に含まれます。例えば、終了時刻が `17:00:00` の場合、`17:00:00` の 1 秒間が終わるまで収集できます。開始時刻が終了時刻より遅い場合、収集期間は午前 0 時をまたぎます。
 - 導入時期：-
 
 ### `statistic_auto_analyze_start_time`
@@ -794,7 +795,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：自動収集の開始時刻。値の範囲: `00:00:00` - `23:59:59`。
+- 説明：自動収集の開始時刻。値の範囲: `00:00:00` - `23:59:59`。開始時刻と終了時刻は秒単位で扱われ、どちらも収集期間に含まれます。例えば、終了時刻が `17:00:00` の場合、`17:00:00` の 1 秒間が終わるまで収集できます。開始時刻が終了時刻より遅い場合、収集期間は午前 0 時をまたぎます。
 - 導入時期：-
 
 ### `statistic_auto_collect_ratio`
@@ -1070,7 +1071,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：Seconds
 - 変更可能：Yes
-- 説明：データをロードするために使用される INSERT INTO ステートメントのタイムアウト期間。
+- 説明：非推奨。この項目は INSERT ステートメントのタイムアウトを制御しません。代わりにセッション変数 `insert_timeout` を使用してください。
 - 導入時期：-
 
 ### `label_clean_interval_second`
@@ -1261,6 +1262,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：Minutes
 - 変更可能：Yes
 - 説明：ルーチンロードジョブが自動的に回復される間隔。
+- 導入時期：-
+
+### `pipe_max_consecutive_failed_task_executions`
+
+- デフォルト：5
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：パイプで連続して失敗できるタスク実行回数の上限。連続して失敗したタスク実行回数がこの値を超えると、パイプは `ERROR` 状態になり、再開されるまでデータのロードを停止します。失敗したタスクの再試行は、それぞれ 1 回の実行として数えられます。タスクがファイルのロードに成功したとき、および `ALTER PIPE <pipe_name> RESUME` または `ALTER PIPE <pipe_name> { RETRY ALL | RETRY FILE '<file_name>' }` を実行したときに、カウントはリセットされます。失敗したタスクは最大 5 回再試行されます。この項目を 5 より大きい値に設定すると、再試行後も失敗するタスクは打ち切られます。そのファイルは `ERROR` としてマークされ、`RETRY` で再度ロードでき、パイプは次のファイルのロードに進みます。
 - 導入時期：-
 
 ### `prepared_transaction_default_timeout_second`

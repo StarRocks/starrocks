@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "判断几何图形 shape1 是否完全包含几何图形 shape2。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Contains

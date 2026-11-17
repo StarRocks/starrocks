@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "2 バイト符号付き整数型で値の範囲は -32768 から 32767。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SMALLINT

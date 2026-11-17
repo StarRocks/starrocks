@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Parses and gets the boolean value from a specified JSON path in a JSON string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # get_json_bool

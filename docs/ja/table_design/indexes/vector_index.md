@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "StarRocks v3.4 以降は IVFPQ、HNSW ベクターインデックスで高次元ベクターデータの近似最近傍探索をサポートします。"
 sidebar_position: 60
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'

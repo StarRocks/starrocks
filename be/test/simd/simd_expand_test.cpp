@@ -129,6 +129,7 @@ void test_expand_load() {
 }
 
 PARALLEL_TEST(ExpandTest, All) {
+    test_expand_load<uint8_t>();
     test_expand_load<int32_t>();
     test_expand_load<int64_t>();
     test_expand_load<float>();

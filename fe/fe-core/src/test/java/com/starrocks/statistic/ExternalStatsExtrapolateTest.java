@@ -73,4 +73,21 @@ public class ExternalStatsExtrapolateTest {
         Assertions.assertEquals(5, s.nullCount);
         Assertions.assertEquals(800, s.dataSize);
     }
+
+    @Test
+    public void testLiveRowLowerBoundWithManyDanglingDeletes() {
+        // record_count 1000 with 600 position deletes gives a lower bound of 400, while most deletes are dangling
+        // and 990 rows are actually live.
+        long lowerBound = 1000 - 600;
+        // Fully scanned: the sample (990) is above the bound and is kept as-is.
+        ScaledStats full = ExternalFullStatisticsCollectJob.extrapolate(990, 10, 7920, lowerBound);
+        Assertions.assertEquals(990, full.rowCount);
+        Assertions.assertEquals(10, full.nullCount);
+        Assertions.assertEquals(7920, full.dataSize);
+        // Budget-truncated at 100 rows: scaled up to the bound, never above the real live total.
+        ScaledStats truncated = ExternalFullStatisticsCollectJob.extrapolate(100, 5, 800, lowerBound);
+        Assertions.assertEquals(400, truncated.rowCount);
+        Assertions.assertEquals(20, truncated.nullCount);
+        Assertions.assertEquals(3200, truncated.dataSize);
+    }
 }

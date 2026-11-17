@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW RESOURCE GROUP shows the information of resource groups."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW RESOURCE GROUP

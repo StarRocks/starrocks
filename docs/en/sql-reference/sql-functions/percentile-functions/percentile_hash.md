@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Constructs DOUBLE values as PERCENTILE values."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_hash

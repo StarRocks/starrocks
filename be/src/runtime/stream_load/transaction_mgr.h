@@ -28,6 +28,12 @@ namespace starrocks {
 
 class HttpRequest;
 
+// How long a read of a channel stream load pipe waits for data before the pipeline scan yields. A channel can stay
+// idle for seconds between the requests of a transaction. Data and the end of the stream wake the read at once, so
+// a longer wait only means fewer wake-ups of idle channels: with a 500 us wait, the scan task of every idle channel
+// was re-queued thousands of times a second.
+static constexpr int32_t CHANNEL_PIPE_READ_WAIT_US = 20 * 1000;
+
 // used to register all streams in process so that other module can get this stream
 class StreamContextMgr {
 public:
@@ -92,7 +98,13 @@ public:
     Status create_channel_context(ExecEnv* exec_env, const string& label, int channel_id, const string& db_name,
                                   const string& table_name, TFileFormatType::type format, StreamLoadContext*& ctx,
                                   const TUniqueId& load_id, long txn_id) {
-        auto pipe = std::make_shared<StreamLoadPipe>(true);
+        // A channel stays open between the requests of a transaction and until it is committed. Its fragment reads
+        // without blocking (the pipeline scan yields on a timed-out read), so an open channel holds a connector scan
+        // thread for at most one read wait instead of until its next request, and requests are buffered like any
+        // stream load's, so an HTTP worker does not wait for the fragment to consume the previous chunk.
+        auto pipe = std::make_shared<StreamLoadPipe>(/*non_blocking_read=*/true, CHANNEL_PIPE_READ_WAIT_US,
+                                                     DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES,
+                                                     DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE);
         RETURN_IF_ERROR(exec_env->load_stream_mgr()->put(load_id, pipe));
         ctx = new StreamLoadContext(exec_env, load_id);
         if (ctx == nullptr) {

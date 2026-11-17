@@ -19,6 +19,7 @@
 #include <arrow/io/api.h>
 #include <arrow/io/file.h>
 #include <arrow/io/interfaces.h>
+#include <arrow/util/future.h>
 #include <parquet/api/reader.h>
 #include <parquet/api/writer.h>
 #include <parquet/arrow/reader.h>
@@ -38,15 +39,20 @@
 
 namespace starrocks {
 
+class RuntimeState;
 class ScannerCounter;
 using RecordBatch = ::arrow::RecordBatch;
 using RecordBatchPtr = std::shared_ptr<RecordBatch>;
 class ParquetChunkFile : public arrow::io::RandomAccessFile {
 public:
-    ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos, ScannerCounter* counter);
+    // `state` is optional. When set, reads fail fast once the query is cancelled.
+    ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos, ScannerCounter* counter,
+                     RuntimeState* state = nullptr);
     ~ParquetChunkFile() override;
     arrow::Result<int64_t> Read(int64_t nbytes, void* buffer) override;
     arrow::Result<int64_t> ReadAt(int64_t position, int64_t nbytes, void* out) override;
+    arrow::Future<std::shared_ptr<arrow::Buffer>> ReadAsync(const arrow::io::IOContext& ctx, int64_t position,
+                                                            int64_t nbytes) override;
     arrow::Result<int64_t> GetSize() override;
     arrow::Status Seek(int64_t position) override;
     arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override;
@@ -59,6 +65,7 @@ private:
     std::shared_ptr<starrocks::RandomAccessFile> _file;
     uint64_t _pos = 0;
     ScannerCounter* _counter = nullptr;
+    RuntimeState* _state = nullptr;
 };
 
 class ParquetReaderWrap {

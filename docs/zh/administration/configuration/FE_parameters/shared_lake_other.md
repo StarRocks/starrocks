@@ -3,6 +3,7 @@ sidebar_position: 40
 displayed_sidebar: docs
 description: "FE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
 sidebar_label: "存算分离、数据湖和其他"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 配置 - 存算分离、数据湖和其他
@@ -551,6 +552,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 存算分离集群中版本发布任务的最大线程数。
 - 引入版本: v3.2.0
 
+### `lake_publish_version_timeout_ms`
+
+- 默认值: 60000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 存算分离集群中事务版本发布（Publish Version）RPC 的超时时间。该值同时限定 FE 等待计算节点响应的时长和计算节点执行发布任务的截止时间，两者始终保持一致。如果单个事务发布的 tablet 数量很多，发布确实需要更长时间，并因此出现发布超时导致事务失败，可以调大该值。
+- 引入版本: v4.2.0
+
 ### `slow_publish_partition_log_threshold_ms`
 
 - 默认值: 3000
@@ -795,6 +805,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 等待 Iceberg 提交操作完成的超时时间（秒）。当使用提交队列 (`enable_iceberg_commit_queue=true`) 时，每个提交操作必须在此超时时间内完成。如果提交时间超过此超时，它将被取消并引发错误。影响提交时间的因素包括：正在提交的数据文件数量、表的元数据大小、底层存储（例如 S3、HDFS）的性能。
 - 引入版本: v4.1.0
+
+### `iceberg_rewrite_commit_max_retries`
+
+- 默认值: 5
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: Iceberg `rewrite_data_files` 提交时，如果 Iceberg 自身的提交重试（表属性 `commit.retry.num-retries`）全部输给其他写入方的并发提交（例如持续向表中追加数据的流式作业），在重新加载的表上再重试的次数。重试间隔从 1 秒开始指数退避，最长 30 秒。存在冲突的修改（例如对正在重写的文件的并发删除）不会重试。设置为 `0` 关闭此重试。整个提交仍需在 `iceberg_commit_queue_timeout_seconds` 内完成。
+- 引入版本: -
 
 ### `iceberg_commit_queue_max_size`
 
@@ -1379,16 +1398,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位:
 - 是否可变: Yes
-- 描述: 物化视图计划缓存的最大大小（用于物化视图重写）。如果有很多物化视图用于透明查询重写，您可以增加此值。
+- 描述: 物化视图计划缓存的最大大小（用于物化视图重写）。如果有很多物化视图用于透明查询重写，您可以增加此值。该值仅在 FE 启动创建缓存时读取一次，因此运行时修改后需重启 FE 才会生效。
 - 引入版本: v3.2
 
 ### `mv_plan_cache_thread_pool_size`
 
-- 默认值: 3
+- 默认值: 8
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 物化视图计划缓存的默认线程池大小（用于物化视图重写）。
+- 描述: 已废弃。自 v3.5.14、v4.0.7 和 v4.1 起，设置后不生效。加载物化视图计划缓存（用于物化视图重写）的线程池大小固定为 2 与 CPU 核数的四分之三中的较大值。
 - 引入版本: v3.2
 
 ### `mv_refresh_default_planner_optimize_timeout`
@@ -1408,6 +1427,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 如果刷新过程中存在过滤数据，物化视图刷新失败，默认为 true，否则忽略过滤数据并返回成功。
 - 引入版本: -
+
+### `mv_refresh_force_partition_type`
+
+- 默认值: 0
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 对指定分区类型的物化视图，无论基表是否发生变化，刷新时都强制刷新。适用于基于外表、无法准确检测数据变化的物化视图。该值为位图：`0` 表示禁用，`1` 表示非分区物化视图，`2` 表示 Range 分区物化视图，`4` 表示 List 分区物化视图。可将多个值相加组合使用，例如 `7` 表示以上三种类型。对 `refresh_mode` 为 `INCREMENTAL` 的物化视图不生效。
+- 引入版本: v3.5.16, v4.0.9, v4.1
 
 ### `mv_refresh_try_lock_timeout_ms`
 

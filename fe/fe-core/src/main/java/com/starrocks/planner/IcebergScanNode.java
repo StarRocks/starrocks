@@ -393,28 +393,7 @@ public class IcebergScanNode extends ScanNode {
         }
 
         if (detailLevel == TExplainLevel.VERBOSE && !isResourceMappingCatalog(icebergTable.getCatalogName())) {
-            ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
-            requestContext.setTableVersionRange(tvrVersionRange);
-            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    icebergTable.getCatalogName(), icebergTable.getCatalogDBName(),
-                    icebergTable.getCatalogTableName(), requestContext);
-
-            if (selectedPartitionCount == -1) {
-                if (scanRangeSource != null) {
-                    // we have to consume all scan ranges to know how many partition been selected.
-                    while (scanRangeSource.hasMoreOutput()) {
-                        scanRangeSource.getOutputs(1000);
-                    }
-                    selectedPartitionCount = scanRangeSource.selectedPartitionCount();
-                } else {
-                    selectedPartitionCount = 0;
-                }
-            }
-
-            output.append(prefix).append(
-                    String.format("partitions=%s/%s", selectedPartitionCount,
-                            partitionNames.isEmpty() ? 1 : partitionNames.size()));
-            output.append("\n");
+            appendPartitionsExplain(output, prefix);
 
             //record scan metrics, should cosume all scan ranges too.
             //print scan metrics
@@ -438,6 +417,36 @@ public class IcebergScanNode extends ScanNode {
         }
 
         return output.toString();
+    }
+
+    // Lists every partition of the table and may plan all scan ranges. Skipped when the finished query's plan is
+    // rendered into its profile: nothing bounds that metadata read once the query has ended.
+    private void appendPartitionsExplain(StringBuilder output, String prefix) {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext != null && connectContext.isExplainForProfile()) {
+            return;
+        }
+        ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
+        requestContext.setTableVersionRange(tvrVersionRange);
+        List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                icebergTable.getCatalogName(), icebergTable.getCatalogDBName(),
+                icebergTable.getCatalogTableName(), requestContext);
+        if (selectedPartitionCount == -1) {
+            if (scanRangeSource != null) {
+                // we have to consume all scan ranges to know how many partition been selected.
+                while (scanRangeSource.hasMoreOutput()) {
+                    scanRangeSource.getOutputs(1000);
+                }
+                selectedPartitionCount = scanRangeSource.selectedPartitionCount();
+            } else {
+                selectedPartitionCount = 0;
+            }
+        }
+
+        output.append(prefix).append(
+                String.format("partitions=%s/%s", selectedPartitionCount,
+                        partitionNames.isEmpty() ? 1 : partitionNames.size()));
+        output.append("\n");
     }
 
     @Override

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a string into a DATE value according to the specified format."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # str2date

@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "升级 StarRocks 后出现异常时，可通过降级恢复到之前版本。"
+products: [oss]
 ---
 
 # 降级 StarRocks

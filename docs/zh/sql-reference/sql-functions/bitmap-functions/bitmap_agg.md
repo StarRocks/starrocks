@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将列中的多行非 NULL 数值合并成一行 BITMAP 值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_agg

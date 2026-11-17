@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "unnest_bitmap 是表函数，用于将 BITMAP 展开成多行。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # unnest_bitmap

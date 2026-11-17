@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 description: "FE 設定パラメーター：統計情報収集とストレージに関連する設定項目。"
 sidebar_label: "統計とストレージ"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 設定 - 統計とストレージ

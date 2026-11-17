@@ -78,8 +78,8 @@ public class DeltaLakeMetastoreTest {
 
         Assertions.assertTrue(keyEstimateCalls.get() > 0);
         Assertions.assertTrue(valueEstimateCalls.get() > 0);
-        Assertions.assertEquals(3, sampledSize.get());
-        Assertions.assertEquals(8, sampledDepth.get());
+        Assertions.assertEquals(20, sampledSize.get());
+        Assertions.assertEquals(20, sampledDepth.get());
     }
 
     @Test
@@ -110,8 +110,8 @@ public class DeltaLakeMetastoreTest {
 
         Assertions.assertTrue(keyEstimateCalls.get() > 0);
         Assertions.assertTrue(valueEstimateCalls.get() > 0);
-        Assertions.assertEquals(5, sampledSize.get());
-        Assertions.assertEquals(10, sampledDepth.get());
+        Assertions.assertEquals(20, sampledSize.get());
+        Assertions.assertEquals(20, sampledDepth.get());
     }
 
     @Test

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ALTER VIEW modifies the definition of a logical view."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER VIEW

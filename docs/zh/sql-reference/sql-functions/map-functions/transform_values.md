@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "使用 Lambda 表达式对 Map 中的 Value 进行转换。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # transform_values

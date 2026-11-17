@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Shifts the binary representation of a numeric expression to the right by a specified number of bits, without preserving the sign."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bit_shift_right_logical

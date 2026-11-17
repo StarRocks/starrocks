@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "tables_config provides information about the configuration of tables."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # tables_config

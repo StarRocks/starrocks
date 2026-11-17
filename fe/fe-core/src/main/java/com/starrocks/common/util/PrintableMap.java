@@ -17,11 +17,15 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import com.google.common.escape.Escaper;
 import com.google.common.escape.Escapers;
+import com.starrocks.credential.CredentialUtil;
 
 import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -69,6 +73,30 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("client_secret");
         SENSITIVE_KEY.add("ldap_bind_root_pwd");
         SENSITIVE_KEY.add("ldap_ssl_conn_trust_store_pwd");
+        // Catalog / storage credentials masked by SHOW CREATE CATALOG, so that the AST rendering and the
+        // audit log redaction (SqlCredentialRedactor seeds from this set) cover the same keys.
+        SENSITIVE_KEY.addAll(CredentialUtil.CREDENTIAL_KEYS);
+    }
+
+    // Keys that carry a credential under a variable suffix, matched case-insensitively by prefix.
+    public static final List<String> SENSITIVE_KEY_PREFIX = CredentialUtil.CREDENTIAL_KEY_PREFIXES.stream()
+            .map(prefix -> prefix.toLowerCase(Locale.ROOT)).collect(ImmutableList.toImmutableList());
+
+    public static boolean isSensitiveKey(Object key) {
+        if (key == null) {
+            return false;
+        }
+        String name = key.toString();
+        if (SENSITIVE_KEY.contains(name)) {
+            return true;
+        }
+        String lower = name.toLowerCase(Locale.ROOT);
+        for (String prefix : SENSITIVE_KEY_PREFIX) {
+            if (lower.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public PrintableMap(Map<K, V> map, String keyValueSaperator,
@@ -114,7 +142,7 @@ public class PrintableMap<K, V> {
             if (withQuotation) {
                 sb.append("\"");
             }
-            if (hidePassword && SENSITIVE_KEY.contains(entry.getKey())) {
+            if (hidePassword && isSensitiveKey(entry.getKey())) {
                 sb.append(CredentialMask.SHORT);
             } else {
                 String text = entry.getValue().toString();

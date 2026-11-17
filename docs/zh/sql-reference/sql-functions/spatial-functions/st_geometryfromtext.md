@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将 WKT（Well Known Text）转换为对应的内存几何形式。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_GeometryFromText, ST_GeomFromText

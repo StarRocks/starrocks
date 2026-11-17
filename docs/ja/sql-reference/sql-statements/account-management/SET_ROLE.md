@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SET ROLE activates roles with their associated privileges for the current session."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SET ROLE

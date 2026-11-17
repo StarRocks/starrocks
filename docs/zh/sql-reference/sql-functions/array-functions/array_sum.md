@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "对数组中的所有元素求和，支持Lambda表达式作为高阶函数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_sum

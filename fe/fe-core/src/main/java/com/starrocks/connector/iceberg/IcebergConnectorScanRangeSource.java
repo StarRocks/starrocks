@@ -258,8 +258,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                             int filePathId = 2147483546; //https://iceberg.apache.org/spec/#reserved-field-ids
                             if (del.referencedDataFile() == null && (del.lowerBounds() != null && del.upperBounds() != null &&
                                     !del.lowerBounds().get(filePathId).equals(del.upperBounds().get(filePathId)))) {
-                                //partition pos delete file related files
+                                //partition pos delete file related files; add the task once, not once per delete
                                 res.add(fileScanTask);
+                                break;
                             }
                         } else if (del.content() == FileContent.EQUALITY_DELETES) {
                             // to judge if a equality delete is fully applied is not easy. Only the rewrite-all can make sure that
@@ -276,8 +277,14 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         if (bucketProperties.isPresent()) {
             List<PartitionField> fields = table.getNativeTable().spec().fields();
             for (BucketProperty bucket : bucketProperties.get()) {
-                for (int i = 0; i < fields.size(); i++) {
-                    if (fields.get(i).name().equals(bucket.getColumn().getName() + "_bucket")) {
+                // Match the partition field by its source column id and bucket count: the field name is not
+                // always <column>_bucket (a renamed source column keeps the old field name, or the name was set
+                // explicitly), and one column can have several bucket transforms with different counts.
+                Types.NestedField source = table.getReadSchema().findField(bucket.getColumn().getName());
+                String transform = "bucket[" + bucket.getBucketNum() + "]";
+                for (int i = 0; source != null && i < fields.size(); i++) {
+                    if (fields.get(i).sourceId() == source.fieldId()
+                            && fields.get(i).transform().toString().equals(transform)) {
                         bucketInfo.add(new Pair<>(i, bucket.getBucketNum()));
                         break;
                     }

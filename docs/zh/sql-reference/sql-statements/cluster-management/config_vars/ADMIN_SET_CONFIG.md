@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN SET CONFIG 为 StarRocks 集群在运行时设置 FE 动态配置项。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SET CONFIG

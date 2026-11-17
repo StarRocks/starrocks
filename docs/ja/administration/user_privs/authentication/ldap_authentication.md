@@ -2,11 +2,11 @@
 displayed_sidebar: docs
 description: "StarRocks で LDAP を使用してユーザーを作成・認証し、外部 LDAP サーバーと統合します。"
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # LDAP 認証
 
-import LDAPSSLLink from '../../../_assets/commonMarkdown/ldap_ssl_link.mdx'
 
 StarRocks は、ネイティブなパスワードベースの認証に加えて、LDAP 認証もサポートしています。
 
@@ -174,7 +174,7 @@ mysql -utom -P9030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-c
 
 - **JDBC**
 
-<LDAPSSLLink />
+JDBC 接続を使用する場合、サーバー側で SSL を有効にする必要があることに注意してください。詳細については、[SSL 認証](../ssl_authentication.md)を参照してください。
 
 JDBC 5:
 

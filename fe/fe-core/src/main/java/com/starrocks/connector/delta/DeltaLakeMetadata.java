@@ -352,8 +352,9 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     // Partition columns of string type. Delta partitioning is always identity, so every string partition column is
-    // an identity string partition column for PartitionCastPredicatePruner.split. Package-private for testing.
-    static Set<String> identityStringPartitionColumns(DeltaLakeTable table, Set<String> partitionColumns) {
+    // an identity string partition column for PartitionCastPredicatePruner.split. Also used by the
+    // scan statistics to tell which conjuncts this residual prunes.
+    public static Set<String> identityStringPartitionColumns(DeltaLakeTable table, Set<String> partitionColumns) {
         Set<String> lowerPartitionColumns = new HashSet<>();
         for (String name : partitionColumns) {
             lowerPartitionColumns.add(name.toLowerCase(Locale.ROOT));
@@ -483,6 +484,21 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
         if (cacheUpdateProcessor != null) {
             cacheUpdateProcessor.refreshTable(srDbName, table, onlyCachedPartitions);
+        }
+    }
+
+    /**
+     * Drops this table's snapshot from both cache levels instead of reloading it, with no remote I/O and without the
+     * catalog's per-table refresh lock: the planner's next getTable then loads the latest snapshot. A refresh would
+     * read the Delta log under that lock, so concurrent INSERTs reading the same source would queue behind it.
+     */
+    @Override
+    public void invalidateTableForRead(String srDbName, Table table) {
+        String dbName = table.getCatalogDBName();
+        String tableName = table.getCatalogTableName();
+        deltaOps.invalidateTable(dbName, tableName);
+        if (cacheUpdateProcessor != null) {
+            cacheUpdateProcessor.invalidateTable(dbName, tableName);
         }
     }
 

@@ -165,6 +165,7 @@ public:
     Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
     Status load_segments(std::vector<LoadedSegment>* segments, bool fill_cache, int64_t buffer_size = -1);
 
+    // Returns Status::Cancelled without loading the remaining segments once seg_options.is_cancelled is set.
     [[nodiscard]] Status load_segments(
             std::vector<LoadedSegment>* segments, SegmentReadOptions& seg_options,
             std::pair<std::vector<LoadedSegment>, std::vector<LoadedSegment>>* not_used_segments,

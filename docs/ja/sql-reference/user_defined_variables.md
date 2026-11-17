@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 2.5 以降のバージョンがサポートするユーザー定義変数は SQL ステートメント内で値を格納し計算を簡素化します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ユーザー定義変数

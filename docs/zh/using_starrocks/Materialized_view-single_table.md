@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "How to create, use, and manage synchronous materialized views (Rollups) in StarRocks for transparent acceleration of single-table queries."
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 同步物化视图

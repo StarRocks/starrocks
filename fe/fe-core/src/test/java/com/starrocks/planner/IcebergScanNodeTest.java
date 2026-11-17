@@ -818,7 +818,8 @@ public class IcebergScanNodeTest {
         // --- Mock FileScanTask ---
         FileScanTask fileScanTask = Mockito.mock(FileScanTask.class);
         Mockito.when(fileScanTask.file()).thenReturn(dataFile);
-        Mockito.when(fileScanTask.deletes()).thenReturn(List.of(posDeleteFile, eqDeleteFile));
+        // Two partition-scoped position deletes must still pick the data file once, not once per delete.
+        Mockito.when(fileScanTask.deletes()).thenReturn(List.of(posDeleteFile, posDeleteFile, eqDeleteFile));
 
         // --- Mock IcebergRemoteFileInfo ---
         IcebergRemoteFileInfo icebergRemoteFileInfo = Mockito.mock(IcebergRemoteFileInfo.class);

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Updates rows in a Primary Key table with support for joins and CTEs."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # UPDATE

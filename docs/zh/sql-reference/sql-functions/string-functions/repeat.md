@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将字符串重复指定次数输出。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # repeat

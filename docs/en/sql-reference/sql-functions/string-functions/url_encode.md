@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Translates a string into the application/x-www-form-urlencoded format."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # url_encode

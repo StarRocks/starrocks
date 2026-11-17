@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a WKT (Well Known Text) to the corresponding memory geometry."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_GeometryFromText,ST_GeomFromText

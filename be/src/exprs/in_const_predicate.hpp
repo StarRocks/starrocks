@@ -151,6 +151,14 @@ public:
                     return Status::InternalError("VectorizedInPredicate type not same");
                 }
 
+                // The value list is evaluated without a chunk, so a slot reference in it would dereference a
+                // null chunk. Reject such a plan here instead of crashing.
+                std::vector<SlotId> slot_ids;
+                if (_children[i]->get_slot_ids(&slot_ids) > 0) {
+                    return Status::InternalError(strings::Substitute("VectorizedInPredicate value not const: $0",
+                                                                     _children[i]->debug_string()));
+                }
+
                 ASSIGN_OR_RETURN(ColumnPtr value, _children[i]->evaluate_checked(context, nullptr));
                 if (!value->is_constant() && !value->only_null()) {
                     return Status::InternalError("VectorizedInPredicate value not const");

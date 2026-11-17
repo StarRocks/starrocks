@@ -3,6 +3,7 @@ sidebar_position: 120
 displayed_sidebar: docs
 description: "统一 catalog 从 v3.2 起支持 Hive、Iceberg、Hudi、Delta Lake、Kudu 数据源的统一查询。"
 toc_max_heading_level: 5
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'

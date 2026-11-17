@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "How to add or remove nodes to scale a StarRocks cluster up or down."
+products: [oss, enterprise, anywhere]
 ---
 
 # 扩容缩容 StarRocks

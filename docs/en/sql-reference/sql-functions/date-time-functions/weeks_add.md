@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the value with the number of weeks added to date."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # weeks_add

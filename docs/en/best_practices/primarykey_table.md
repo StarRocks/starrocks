@@ -1,6 +1,7 @@
 ---
 sidebar_position: 40
 description: "The Primary Key table uses a new storage engine designed by StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Primary Key tables
@@ -86,7 +87,7 @@ You can also monitor this `update` item via metrics monitor service. For example
 
 :::tip
 
-More about [Monitoring and alerting with Prometheus and Grafana](../administration/management/monitoring/monitoring.md)
+More about [Monitoring and alerting with Prometheus and Grafana](../administration/management/monitoring/prometheus_grafana.md)
 
 :::
 

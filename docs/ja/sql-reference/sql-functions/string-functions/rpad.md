@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された長さに達するまで文字列の右側にパッド文字を追加します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # rpad

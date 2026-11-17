@@ -102,7 +102,7 @@ public:
     void cancel(const TUniqueId& fragment_instance_id);
     void close();
 
-    void prepare_pass_through_chunk_buffer(const TUniqueId& query_id);
+    void prepare_pass_through_chunk_buffer(const TUniqueId& query_id, std::shared_ptr<MemTracker> query_mem_tracker);
     void destroy_pass_through_chunk_buffer(const TUniqueId& query_id);
     PassThroughChunkBuffer* get_pass_through_chunk_buffer(const TUniqueId& query_id);
 

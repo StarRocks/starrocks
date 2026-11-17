@@ -18,6 +18,9 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.starrocks.catalog.ColocateRange;
+import com.starrocks.catalog.ColocateRangeUtils;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -31,7 +34,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -62,6 +67,12 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         schemaChangeJob.setComputeResource(computeResource);
         schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
         schemaChangeJob.setSortKeyUniqueIds(sortKeyUniqueIds);
+        ColocateTableIndex colocateTableIndex = globalStateMgr.getColocateTableIndex();
+        ColocateTableIndex.GroupId rangeColocateGroupId = colocateTableIndex.getRangeColocateGroupId(tableId);
+        List<ColocateRange> colocateRanges = rangeColocateGroupId == null ? null
+                : colocateTableIndex.getColocateRanges(rangeColocateGroupId.grpId);
+        int colocateColumnCount = rangeColocateGroupId == null ? 0
+                : colocateTableIndex.getGroupSchema(rangeColocateGroupId).getColocateColumnCount();
         for (Map.Entry<Long, List<Column>> entry : newIndexMetaIdToSchema.entrySet()) {
             long originIndexMetaId = entry.getKey();
             // 1. get new schema version/schema version hash, short key column count
@@ -86,10 +97,16 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
                 properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
                 properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(shadowIndexId));
-                List<Long> shadowTabletIds = createShards(originTablets.size(),
-                        table.getPartitionFilePathInfo(physicalPartitionId),
-                        table.getPartitionFileCacheInfo(physicalPartitionId), shardGroupId,
-                        originTabletIds, properties, computeResource);
+                List<Long> shadowTabletIds;
+                if (colocateRanges == null) {
+                    shadowTabletIds = createShards(originTablets.size(),
+                            table.getPartitionFilePathInfo(physicalPartitionId),
+                            table.getPartitionFileCacheInfo(physicalPartitionId), shardGroupId,
+                            originTabletIds, properties, computeResource);
+                } else {
+                    shadowTabletIds = createRangeColocateShadowShards(originTablets, colocateRanges,
+                            colocateColumnCount, physicalPartitionId, shardGroupId, properties);
+                }
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
@@ -114,6 +131,41 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                     entry.getValue());
         } // end for index
         return schemaChangeJob;
+    }
+
+    /**
+     * Creates the shadow shards of a table in a range colocate group, one per origin tablet and in the same order.
+     *
+     * <p>Every tablet of such a table must be in the PACK shard group of the ColocateRange it lies in, as partition
+     * creation, split and merge place it. Otherwise, once the origin shard is deleted, nothing keeps the tablet with
+     * the other tablets of its range, and nothing puts it back while the group stays stable. A shadow tablet copies its
+     * origin tablet's range, so its shard joins the index shard group and the PACK shard group of the origin tablet's
+     * ColocateRange. Like the children of a split, it stays pinned to its origin shard to reuse the warm cache. In a
+     * stable group the origin shard already sits with that PACK shard group; while the group is unstable they may
+     * differ, and the colocate checker settles the placement after the job, as it does after a split.
+     */
+    private List<Long> createRangeColocateShadowShards(List<Tablet> originTablets, List<ColocateRange> colocateRanges,
+                                                       int colocateColumnCount, long physicalPartitionId,
+                                                       long shardGroupId, Map<String, String> properties)
+            throws DdlException {
+        Map<Long, Long> newToOldShardId = new LinkedHashMap<>();
+        Map<Long, List<Long>> newShardIdToGroupIds = new LinkedHashMap<>();
+        for (Tablet originTablet : originTablets) {
+            // Reads only the colocate prefix of the range, so it also holds for a rollup with a sort key of its own.
+            long packShardGroupId = ColocateRangeUtils.lookupPackShardGroupId(originTablet.getRange().getRange(),
+                    colocateRanges, colocateColumnCount);
+            // The ColocateRanges of a group cover the whole key space.
+            Preconditions.checkState(packShardGroupId != PhysicalPartition.INVALID_SHARD_GROUP_ID,
+                    "tablet %s %s of table %s lies in no ColocateRange", originTablet.getId(),
+                    originTablet.getRange().getRange(), table.getName());
+            long shadowShardId = GlobalStateMgr.getCurrentState().getNextId();
+            newToOldShardId.put(shadowShardId, originTablet.getId());
+            newShardIdToGroupIds.put(shadowShardId, List.of(shardGroupId, packShardGroupId));
+        }
+        GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForSplit(newToOldShardId, newShardIdToGroupIds,
+                table.getPartitionFilePathInfo(physicalPartitionId), table.getPartitionFileCacheInfo(physicalPartitionId),
+                properties, computeResource, false);
+        return new ArrayList<>(newToOldShardId.keySet());
     }
 
     @VisibleForTesting

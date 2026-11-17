@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.clone.DynamicPartitionScheduler;
+import com.starrocks.common.Config;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
@@ -429,5 +430,43 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
                                 });
                     });
         }
+    }
+
+    @Test
+    public void testForceDropMVPartitionWithoutRetention() {
+        starRocksAssert.withTable(R2,
+                (obj) -> {
+                    String tableName = (String) obj;
+                    withTablePartitions(tableName);
+                    String mvCreateDdl = String.format("create materialized view test_mv1\n" +
+                            "partition by (dt) \n" +
+                            "distributed by random \n" +
+                            "REFRESH DEFERRED MANUAL \n" +
+                            "AS select * from %s;", tableName);
+                    starRocksAssert.withMaterializedView(mvCreateDdl,
+                            () -> {
+                                MaterializedView mv = starRocksAssert.getMv("test", "test_mv1");
+                                refreshMV("test", mv);
+                                Assertions.assertEquals(4, mv.getVisiblePartitions().size());
+                                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+                                // without a retention period, a force drop falls back to a plain force drop
+                                // instead of recursing between MaterializedView and OlapTable
+                                Partition partition = mv.getPartitions().iterator().next();
+                                long retentionPeriod = Config.partition_recycle_retention_period_secs;
+                                Config.partition_recycle_retention_period_secs = 0;
+                                try {
+                                    mv.dropPartition(db.getId(), partition.getName(), true);
+                                } finally {
+                                    Config.partition_recycle_retention_period_secs = retentionPeriod;
+                                }
+                                Assertions.assertNull(mv.getPartition(partition.getName()));
+                                RecyclePartitionInfo recycled = GlobalStateMgr.getCurrentState().getRecycleBin()
+                                        .getRecyclePartitionInfo(partition.getId());
+                                Assertions.assertNotNull(recycled);
+                                Assertions.assertFalse(recycled.isRecoverable());
+                                Assertions.assertEquals(0, recycled.getRetentionPeriod());
+                            });
+                });
     }
 }

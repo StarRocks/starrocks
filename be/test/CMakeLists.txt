@@ -190,6 +190,7 @@ set(EXEC_FILES
         ./exprs/decimal_cast_expr_float_test.cpp
         ./exprs/decimal_cast_expr_time_test.cpp
         ./exprs/decimal_cast_expr_decimalv2_test.cpp
+        ./exprs/decimal_null_row_report_error_test.cpp
         ./exprs/coalesce_expr_test.cpp
         ./exprs/compound_predicate_test.cpp
         ./exprs/condition_expr_test.cpp
@@ -361,6 +362,7 @@ set(EXEC_FILES
         ./runtime/memory/counting_allocator_test.cpp
         ./runtime/memory/jemalloc_conf_updater_test.cpp
         ./runtime/mem_pool_test.cpp
+        ./runtime/current_thread_test.cpp
         ./runtime/mem_tracker_test.cpp
         ./runtime/result_queue_mgr_test.cpp
         ./runtime/batch_write/batch_write_mgr_test.cpp
@@ -372,6 +374,7 @@ set(EXEC_FILES
         ./runtime/routine_load/data_consumer_test.cpp
         ./runtime/small_file_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
+        ./runtime/stream_context_mgr_test.cpp
         ./runtime/stream_load_pipe_test.cpp
         ./runtime/time_bounded_stream_load_pipe_test.cpp
         ./runtime/type_descriptor_test.cpp
@@ -510,6 +513,8 @@ set(EXEC_FILES
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
+        ./udf/udf_call_stub_test.cpp
+        ./udf/python/env_test.cpp
         ./util/table_metrics_mgr_test.cpp
         ./util/jvm_metrics_test.cpp
         ./util/llm_cache_test.cpp
@@ -600,7 +605,9 @@ SET(DW_TEST_FILES
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
     ./storage/lake/lake_merged_del_op_offset_test.cpp
+    ./storage/lake/lake_merged_bundled_segments_test.cpp
     ./storage/lake/lake_multi_statement_bundle_mix_test.cpp
+    ./storage/lake/lake_multi_statement_publish_test.cpp
     ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/tablet_splitter_test.cpp
@@ -703,6 +710,7 @@ SET(DW_TEST_FILES
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_manager_test.cpp
     ./storage/snapshot_meta_test.cpp
+    ./storage/sort_key_bounds_test.cpp
     ./storage/sort_key_sampler_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_engine_compaction_test.cpp

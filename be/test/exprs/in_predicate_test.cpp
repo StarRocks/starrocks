@@ -21,6 +21,7 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "exprs/column_ref.h"
 #include "exprs/mock_vectorized_expr.h"
 
 namespace starrocks {
@@ -477,6 +478,29 @@ TEST_F(VectorizedInPredicateTest, inArrayConstAllNULL) {
             ASSERT_TRUE(ptr->only_null());
         }
     }
+}
+
+// A slot reference in the value list must fail open() instead of being evaluated against a null chunk.
+TEST_F(VectorizedInPredicateTest, columnRefInValueListFailsOpen) {
+    expr_node.child_type = TPrimitiveType::TINYINT;
+    expr_node.opcode = TExprOpcode::FILTER_IN;
+    expr_node.type = gen_type_desc(TPrimitiveType::TINYINT);
+    expr_node.in_predicate.is_not_in = false;
+
+    auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node));
+
+    MockVectorizedExpr<TYPE_TINYINT> lhs(expr_node, 10, 1);
+    MockConstVectorizedExpr<TYPE_TINYINT> zero(expr_node, 0);
+    ColumnRef slot(TypeDescriptor(TYPE_TINYINT), 14);
+
+    expr->_children.push_back(&lhs);
+    expr->_children.push_back(&zero);
+    expr->_children.push_back(&slot);
+
+    ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
+    Status st = expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    ASSERT_FALSE(st.ok());
+    ASSERT_NE(st.message().find("value not const"), std::string::npos) << st;
 }
 
 } // namespace starrocks

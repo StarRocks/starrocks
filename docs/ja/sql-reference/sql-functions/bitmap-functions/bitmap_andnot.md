@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "lhsに存在し、rhsに存在しないビットマップ値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_andnot

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "x を y 乗した結果を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # pow, power, dpow, fpow

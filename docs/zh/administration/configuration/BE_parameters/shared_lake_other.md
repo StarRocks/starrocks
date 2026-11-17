@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "BE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
 sidebar_label: "存算分离、数据湖和其他"
 keywords: ['Canshu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -146,13 +147,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。该参数默认值自 v3.2.4 和 v3.1.10 版本开始从 `5` 变更为 `1000`，并自 v3.3.1 和 v3.2.9 版本开始变更为 `500`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
 - 引入版本：v3.1.8, v3.2.3
 
+### lake_pk_compaction_max_rowsets_per_level
+
+- 默认值：20
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，主键表的某个大小层中待合并的 Rowset 达到该数量时，即使该层得分不是最高，也会被合并。Size-tiered Compaction 策略每轮只合并得分最高的一层。持续导入时，最新写入的小 Rowset 所在层每轮得分都最高，由较大 Rowset（之前 Compaction 的产物和中等批次的导入）组成的层会一直增长，导致查询需要读取的 Segment 增多，并在 Compaction 刚完成时表现为 Compaction Score 的尖峰。当某个未被选中的层中待合并的 Rowset 达到该数量，且这些 Rowset 能与已选中的 Rowset 在同一次 Compaction 任务中合并时，该层会并入该次 Compaction 任务。设置为 `0` 表示关闭该行为。
+- 引入版本：-
+
 ### lake_pk_compaction_base_enable_delete_trigger
 
 - 默认值：false
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，主键表 Tablet 的删除量达到 `lake_pk_compaction_base_delete_ratio_threshold` 或 `lake_pk_compaction_base_delete_rows_threshold` 时，是否自动从 Cumulative Compaction 切换到 Base Compaction。默认关闭，因为 `lake_pk_compaction_base_delete_rows_threshold` 是绝对行数：在已有数据持续被更新或删除的大表上，Tablet 每次 Base Compaction 之后很快又会达到该值，而每次 Base Compaction 最多重写 Tablet 中 `update_compaction_ratio_threshold`（默认 0.5）比例的数据。手动执行 `ALTER TABLE ... COMPACT` 时，无论该参数如何设置都会执行 Base Compaction。
+- 描述：是否允许存算分离主键表的自动 Compaction 在删除比例或删除行数达到阈值时选择 Base Compaction。此项只控制按删除量自动触发 Base Compaction，不影响普通 Cumulative Compaction。默认关闭，因为持续更新或删除的大 Tablet 可能频繁达到绝对删除行数阈值，导致反复重写数据。手动 `ALTER TABLE ... COMPACT` 不受此开关和两个删除阈值限制；没有删除行时回退到普通 Compaction 选取。自动和手动请求都不保证一次合完整个 Tablet。详见[主键表 Base Compaction](../../management/compaction.md#primary-key-base-compaction)。
 - 引入版本：v4.1.7
 
 ### lake_pk_compaction_base_delete_ratio_threshold
@@ -161,7 +171,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Double
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，将主键表 Tablet 从 Cumulative Compaction（Size-tiered 小文件合并）切换到 Base Compaction 的两个触发条件之一。Base Compaction 会重写带删除的 Rowset（删除行数多的优先），物理清除被删除的行并缩小其 Delete Vector。`lake_pk_compaction_base_enable_delete_trigger` 为 `true` 时，当 Tablet 的整体删除比例（各 Rowset 的 `sum(num_dels) / sum(num_rows)`）达到该值、或其累计删除行数达到 `lake_pk_compaction_base_delete_rows_threshold` 时触发。手动执行 `ALTER TABLE ... COMPACT` 时，无论这些参数如何设置都会强制执行 Base Compaction。
+- 描述：存算分离主键表按删除量自动选择 Base Compaction 的两个阈值之一。Tablet 当前所有 Rowset 的整体删除比例 `sum(num_dels) / sum(num_rows)` 达到此值，或累计删除行数达到 `lake_pk_compaction_base_delete_rows_threshold`，即可进入 Base Compaction 选取。v4.1.4～v4.1.6 直接检查这两个阈值；从 v4.1.7 开始，还需要 `lake_pk_compaction_base_enable_delete_trigger = true`。手动 `ALTER TABLE ... COMPACT` 不受这两个阈值限制。达到阈值不保证立即获得 FE 调度。详见[自动触发](../../management/compaction.md#automatic-base-compaction)。
 - 引入版本：v4.1.4
 
 ### lake_pk_compaction_base_delete_rows_threshold
@@ -170,7 +180,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下主键表 Base Compaction 的两个触发条件之一（参见 `lake_pk_compaction_base_delete_ratio_threshold`）。`lake_pk_compaction_base_enable_delete_trigger` 为 `true` 时，当 Tablet 的累计删除行数（各 Rowset 的 `sum(num_dels)`）达到该值时触发 Base Compaction。该绝对数量触发条件是对比例触发条件的补充：在高频更新/删除的表上，Delete Vector 会膨胀、空间被浪费，但整体删除比例可能因大量存活行的稀释而偏低，仅靠比例触发条件不会触发。调大该值可降低 Base Compaction 频率，调小则可更早回收 Delete Vector。
+- 描述：存算分离主键表按删除量自动选择 Base Compaction 的绝对行数阈值，与 `lake_pk_compaction_base_delete_ratio_threshold` 为 OR 关系。累计删除行数为 Tablet 当前所有 Rowset 的 `sum(num_dels)`。v4.1.4～v4.1.6 直接检查此阈值；从 v4.1.7 开始，还需要 `lake_pk_compaction_base_enable_delete_trigger = true`。手动请求不受此阈值限制。该条件补充了整体删除比例较低、但 Delete Vector 中删除标记较多的场景。调大该值可降低自动 Base Compaction 的频率，调小可更早进入删除回收选取。详见[自动触发](../../management/compaction.md#automatic-base-compaction)。
 - 引入版本：v4.1.4
 
 ### lake_put_txn_log_timeout_guard_ms
@@ -389,7 +399,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### datacache_disk_idle_seconds_for_expansion
 
-- 默认值：7200
+- 默认值：180
 - 类型：Int
 - 单位：秒
 - 是否动态：是
@@ -398,11 +408,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### datacache_disk_size
 
-- 默认值：0
+- 默认值：100%
 - 类型：String
 - 单位：-
 - 是否动态：是
-- 描述：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。假设系统使用了两块磁盘进行缓存，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
+- 描述：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。假设系统使用了两块磁盘进行缓存，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。比例上限是相对于每个 `storage_root_path` 所在磁盘的容量。默认值为 `100%`。当 `enable_datacache_disk_auto_adjust` 为 `true`（默认）时，系统会根据磁盘使用率自动调整实际的磁盘缓存容量，该参数仅作为该容量的上限。设为 `0` 表示禁用磁盘缓存。
 - 引入版本：-
 
 ### datacache_enable
@@ -510,7 +520,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：毫秒
 - 是否动态：否
-- 描述：JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。
+- 描述：JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。如果某个连接池在此时间内没有被任何查询使用，BE 会关闭整个连接池（包括 `jdbc_minimum_idle_connections` 保留的连接），并在下一次查询时重新创建。这样可以释放已删除或已修改的 JDBC Catalog 和资源所对应的连接池。
 - 引入版本：-
 
 ### jdbc_connection_pool_size
@@ -673,8 +683,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：0
 - 类型：Int
 - 单位：-
-- 是否动态：是
-- 描述：物化视图刷新任务在单个 BE 上的并发上限。默认为 `0`，即不做并发数限制。
+- 是否动态：否
+- 描述：物化视图刷新任务在单个 BE 上的并发上限。默认为 `0`，即不做并发数限制。已弃用：自 v3.4 起，FE 持久化 `default_mv_wg` 并下发给 BE，该参数不再生效。请使用 `ALTER RESOURCE GROUP default_mv_wg WITH (...)` 调整。
 - 引入版本：-
 
 ### default_mv_resource_group_cpu_limit
@@ -682,8 +692,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：1
 - 类型：Int
 - 单位：-
-- 是否动态：是
-- 描述：物化视图刷新任务占用单个 BE 的 CPU 核数上限。
+- 是否动态：否
+- 描述：物化视图刷新任务占用单个 BE 的 CPU 核数上限。已弃用：自 v3.4 起，FE 持久化 `default_mv_wg` 并下发给 BE，该参数不再生效。请使用 `ALTER RESOURCE GROUP default_mv_wg WITH (...)` 调整。
 - 引入版本：-
 
 ### default_mv_resource_group_memory_limit
@@ -691,8 +701,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：0.8
 - 类型：Double
 - 单位：
-- 是否动态：是
-- 描述：物化视图刷新任务占用单个 BE 内存上限，默认 80%。
+- 是否动态：否
+- 描述：物化视图刷新任务占用单个 BE 内存上限，默认 80%。已弃用：自 v3.4 起，FE 持久化 `default_mv_wg` 并下发给 BE，该参数不再生效。请使用 `ALTER RESOURCE GROUP default_mv_wg WITH (...)` 调整。
 - 引入版本：v3.1
 
 ### default_mv_resource_group_spill_mem_limit_threshold
@@ -700,8 +710,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：0.8
 - 类型：Double
 - 单位：
-- 是否动态：是
-- 描述：物化视图刷新任务触发落盘的内存占用阈值，默认80%。
+- 是否动态：否
+- 描述：物化视图刷新任务触发落盘的内存占用阈值，默认80%。已弃用：自 v3.4 起，FE 持久化 `default_mv_wg` 并下发给 BE，该参数不再生效。请使用 `ALTER RESOURCE GROUP default_mv_wg WITH (...)` 调整。
 - 引入版本：v3.1
 
 ### enable_resolve_hostname_to_ip_in_load_error_url

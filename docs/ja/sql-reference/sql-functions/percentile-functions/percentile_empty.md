@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Stream LoadまたはINSERT INTOのデータロード時に使用する空のPERCENTILE値を構築します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_empty

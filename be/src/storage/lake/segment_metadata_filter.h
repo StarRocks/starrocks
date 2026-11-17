@@ -21,7 +21,7 @@
 namespace starrocks::lake {
 
 // Segment metadata filter for Lake tables.
-// Uses sort_key_min/max from SegmentMetadataPB to filter segments
+// Uses the sort key bounds of SegmentMetadataPB (see storage/sort_key_bounds.h) to filter segments
 // that cannot possibly contain data matching the query predicates.
 class SegmentMetadataFilter {
 public:

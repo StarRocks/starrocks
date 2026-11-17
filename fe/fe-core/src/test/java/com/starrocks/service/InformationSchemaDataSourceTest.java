@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.starrocks.authentication.UserIdentityUtils;
+import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
@@ -90,6 +91,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -512,6 +515,73 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         Assertions.assertEquals("NO", adminRole.getIs_grantable(), "isGrantable should be NO");
         Assertions.assertEquals("NO", adminRole.getIs_default(), "isDefault should be NO");
         Assertions.assertEquals("NO", adminRole.getIs_mandatory(), "isMandatory should be NO");
+    }
+
+    private static Set<String> applicableRolesWithoutSession(TUserIdentity caller) throws Exception {
+        FrontendServiceImpl impl = new FrontendServiceImpl(null);
+        TGetApplicableRolesRequest req = new TGetApplicableRolesRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("ar_db");
+        authInfo.setCurrent_user_ident(caller);
+        req.setAuth_info(authInfo);
+        // The FE RPC threads serving a BE schema scan have no session.
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            return executor.submit(() -> {
+                Assertions.assertNull(ConnectContext.get());
+                List<TApplicableRolesInfo> roles = impl.getApplicableRoles(req).getRoles();
+                for (TApplicableRolesInfo role : roles) {
+                    Assertions.assertEquals(caller.getUsername(), role.getUser());
+                }
+                return roles.stream().map(TApplicableRolesInfo::getRole_name).collect(Collectors.toSet());
+            }).get(60, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private static TUserIdentity applicableRolesCaller(UserIdentity user, List<String> roles, List<String> groups) {
+        AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        ConnectContext caller = new ConnectContext();
+        caller.setCurrentUserIdentity(user);
+        caller.setCurrentRoleIds(roles.stream().map(authorizationMgr::getRoleIdByNameAllowNull).collect(Collectors.toSet()));
+        caller.setGroups(Set.copyOf(groups));
+        return UserIdentityUtils.callerToThrift(caller);
+    }
+
+    private static void createApplicableRolesFixture() throws Exception {
+        if (GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdByNameAllowNull("ar_db_role") != null) {
+            return;
+        }
+        starRocksAssert.withDatabase("ar_db");
+        starRocksAssert.ddl("CREATE ROLE ar_db_role");
+        starRocksAssert.ddl("GRANT ALL ON DATABASE ar_db TO ROLE ar_db_role");
+        starRocksAssert.ddl("CREATE ROLE ar_group_role");
+        starRocksAssert.ddl("GRANT ar_group_role TO EXTERNAL GROUP ar_group");
+        starRocksAssert.ddl("CREATE ROLE ar_other_role");
+        starRocksAssert.ddl("CREATE USER ar_native");
+        starRocksAssert.ddl("GRANT ar_db_role TO USER ar_native");
+    }
+
+    @Test
+    public void testGetApplicableRolesForEphemeralCallerWithoutSession() throws Exception {
+        createApplicableRolesFixture();
+        // An ephemeral user, one logged in through a security integration, owns no roles: it can use the roles
+        // its session activated and the roles of its groups. Looking its roles up must not read the session of
+        // the thread, which the RPC thread does not have.
+        TUserIdentity caller = applicableRolesCaller(UserIdentity.createEphemeralUserIdent("ar_ephemeral", "%"),
+                List.of("ar_db_role"), List.of("ar_group"));
+        Assertions.assertEquals(Set.of("ar_db_role", "ar_group_role"), applicableRolesWithoutSession(caller));
+    }
+
+    @Test
+    public void testGetApplicableRolesForNativeCallerListsGroupRoles() throws Exception {
+        createApplicableRolesFixture();
+        // A native user can use the roles granted to it, activated or not, and the roles of its groups. A role
+        // granted to neither is not listed even if the caller sends it.
+        TUserIdentity caller = applicableRolesCaller(new UserIdentity("ar_native", "%"),
+                List.of("ar_db_role", "ar_other_role"), List.of("ar_group"));
+        Assertions.assertEquals(Set.of("ar_db_role", "ar_group_role"), applicableRolesWithoutSession(caller));
     }
 
     @Test

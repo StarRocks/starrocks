@@ -1,6 +1,7 @@
 ---
 description: データのパーティションとバケット化
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # データ分散
@@ -876,6 +877,7 @@ PRIMARY KEY (tenant_id, created_time, id);
 | `ALTER TABLE ... DROP COLUMN <col>`（`<col>` がレンジソートキーに含まれる場合） | ソートキー列の削除は、保存されている tablet 境界値を無効化します。 |
 | `ALTER TABLE ... MODIFY COLUMN <col> ...`（`<col>` がレンジソートキーに含まれる場合） | 列の型 / セマンティクスを変更すると、保存されている tablet 境界値が記録された時点の前提が崩れます。 |
 | `ALTER TABLE ... MODIFY COLUMN <col> ... KEY`（または任意のキータイプにおける値列のキー昇格）による keyness の反転 | 集計テーブル / ユニークキーテーブル、または明示的な `ORDER BY` を持たないテーブルでは、keyness の反転によりキー列から導出されるレンジソートキーが変化します。 |
+| `colocate_with` を設定したテーブルでの `CREATE TABLE ... ROLLUP (...)` | Rollup の tablet はベーステーブルのソートキーで分割される一方、行は Rollup 自身のソートキーで配置されるため、その Rollup を読む Colocate Join が誤った結果を返す可能性があります。 |
 
 Rollup のような集計ユースケースには、明示的な `REFRESH` 句または `DISTRIBUTED BY` 句を伴う**非同期マテリアライズドビュー**を使用してください。例：
 
@@ -961,7 +963,7 @@ AS SELECT ... FROM range_table;
 
 - バケット数を手動で設定
 
-  v2.4.0以降、StarRocksは、クエリ中に複数のスレッドを使用してtabletを並行してスキャンすることをサポートしており、スキャンパフォーマンスのtablet数への依存を減らします。各tabletに約10 GBの生データを含めることをお勧めします。バケット数を手動で設定する場合、テーブルの各パーティションのデータ量を見積もり、その後tabletの数を決定できます。
+  v2.4.0以降、StarRocksは、クエリ中に複数のスレッドを使用してtabletを並行してスキャンすることをサポートしており、スキャンパフォーマンスのtablet数への依存を減らします。各tabletに約10 GBの生データを含めることをお勧めします。大容量タブレットをサポートするv4.1以降の共有データクラスタでは、各tabletのデータ量を10 GBから50 GBとし、100 GBを超えないようにすることをお勧めします。バケット数を手動で設定する場合、テーブルの各パーティションのデータ量を見積もり、その後tabletの数を決定できます。
 
   tabletでの並行スキャンを有効にするには、`enable_tablet_internal_parallel` パラメータをシステム全体でグローバルに `TRUE` に設定してください (`SET GLOBAL enable_tablet_internal_parallel = true;`)。
 

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "N-gram ブルームフィルターインデックスは StarRocks で文字列を N 文字部分文字列にトークン化して LIKE クエリを加速します。"
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'

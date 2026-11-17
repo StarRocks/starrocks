@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "各集約グループから任意の行を取得します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # any_value

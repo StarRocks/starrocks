@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns an empty bitmap."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_empty

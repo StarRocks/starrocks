@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Shared-data, Data Lake, and Others"
 description: "FE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE Configuration - Shared-data, Data Lake, and Others
@@ -550,6 +551,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of threads for Version Publish tasks in a shared-data cluster.
 - Introduced in: v3.2.0
 
+### `lake_publish_version_timeout_ms`
+
+- Default: 60000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The timeout of the Version Publish RPC of a transaction in a shared-data cluster. It bounds both how long the FE waits for the compute node to answer and the deadline the compute node applies to the publish task itself, so the two always move together. Raise it when a publish legitimately needs longer than the default, for example when a single transaction publishes a large number of tablets and the transaction fails with a publish timeout.
+- Introduced in: v4.2.0
+
 ### `slow_publish_partition_log_threshold_ms`
 
 - Default: 3000
@@ -795,6 +805,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The timeout in seconds for waiting for an Iceberg commit operation to complete. When using the commit queue (`enable_iceberg_commit_queue=true`), each commit operation must complete within this timeout. If a commit takes longer than this timeout, it will be cancelled and an error will be raised. Factors that affect commit time include: number of data files being committed, metadata size of the table, performance of the underlying storage (e.g., S3, HDFS).
 - Introduced in: v4.1.0
+
+### `iceberg_rewrite_commit_max_retries`
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: How many more times the commit of an Iceberg `rewrite_data_files` is retried on a freshly loaded table after Iceberg's own commit retries (table property `commit.retry.num-retries`) all lose to concurrent commits from other writers, for example a streaming job that keeps appending to the table. The retries back off exponentially from 1 second up to 30 seconds. Conflicting changes, such as a concurrent delete on a file being rewritten, are never retried. `0` disables these retries. The whole commit must still finish within `iceberg_commit_queue_timeout_seconds`.
+- Introduced in: -
 
 ### `iceberg_commit_queue_max_size`
 
@@ -1379,7 +1398,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit:
 - Is mutable: Yes
-- Description: The maximum size of materialized view plan cache (which is used for materialized view rewrite). If there are many materialized views used for transparent query rewrite, you may increase this value.
+- Description: The maximum size of materialized view plan cache (which is used for materialized view rewrite). If there are many materialized views used for transparent query rewrite, you may increase this value. The value is read only once, when the cache is created at FE startup, so a value changed at runtime takes effect only after the FE restarts.
 - Introduced in: v3.2
 
 ### `mv_plan_cache_thread_pool_size`
@@ -1388,7 +1407,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The default thread pool size of materialized view plan cache (which is used for materialized view rewrite).
+- Description: Deprecated. From v3.5.14, v4.0.7, and v4.1 onwards, this parameter no longer takes effect. The size of the thread pool that loads the materialized view plan cache (which is used for materialized view rewrite) is fixed at the larger of 2 and three quarters of the number of CPU cores.
 - Introduced in: v3.2
 
 ### `mv_refresh_default_planner_optimize_timeout`
@@ -1408,6 +1427,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Mv refresh fails if there is filtered data in refreshing, true by default, otherwise return success by ignoring the filtered data.
 - Introduced in: -
+
+### `mv_refresh_force_partition_type`
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Forces materialized view refreshes of the specified partition types to refresh regardless of whether the base tables have changed. This is useful for materialized views on external tables, where data changes cannot be accurately detected. The value is a bitmap: `0` disables this behavior, `1` applies it to non-partitioned materialized views, `2` to range-partitioned materialized views, and `4` to list-partitioned materialized views. Add the values to combine types, for example, `7` applies to all three. It does not apply to a materialized view whose `refresh_mode` is `INCREMENTAL`.
+- Introduced in: v3.5.16, v4.0.9, v4.1
 
 ### `mv_refresh_try_lock_timeout_ms`
 

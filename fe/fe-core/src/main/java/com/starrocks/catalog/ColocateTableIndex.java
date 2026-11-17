@@ -58,6 +58,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ColocateRangePersistInfo;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -319,9 +320,9 @@ public class ColocateTableIndex implements Writable {
                                         0 /* partitionId: not partition-specific */,
                                         0 /* indexId: not index-specific */,
                                         PlacementPolicy.PACK);
-                        // In-memory only; OP_COLOCATE_RANGE_UPDATE is journaled from OlapTable.onCreate
-                        // after OP_CREATE_TABLE is durably written, so the range record cannot precede the
-                        // table-create record.
+                        // In-memory only; the ranges are journaled by logAddTableToRangeGroup (from
+                        // OlapTable.onCreate) after OP_CREATE_TABLE is durably written, so the range record
+                        // cannot precede the table-create record.
                         colocateRangeMgr.initColocateGroup(groupId.grpId, packShardGroupId);
                     }
                 } else if (distributionInfo instanceof HashDistributionInfo) {
@@ -781,6 +782,44 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
+    /**
+     * Journals that a newly created table joined a range colocate group: the group's ColocateRanges, then
+     * OP_COLOCATE_ADD_TABLE_V2 carrying the same ranges, then OP_COLOCATE_MARK_UNSTABLE_V2 if the GroupId is unstable.
+     *
+     * <p>Runs under the write lock, which {@link #applyRangeSplitResult} also holds while it reads, splices and journals
+     * the ranges and marks the group unstable, so the journal orders these records as the ranges changed in memory: a
+     * split cannot journal its ranges between this read and this write and then be overwritten on replay. The ranges
+     * are journaled on every CREATE, as nothing in memory says whether they are durable yet (a group may exist only on
+     * this leader, e.g. after a CREATE that failed before its OP_CREATE_TABLE record).
+     *
+     * <p>The add-table record carries the ranges because removing another member of the group is journaled outside
+     * this lock (a force drop journals before it removes the member here). When such a record lands between the range
+     * record and the add-table record and removes the group's last GroupId on a follower, replay drops the ranges; the
+     * add-table record restores them with the member. The separate range record stays for an FE that does not know
+     * the field.
+     *
+     * <p>A mark-unstable journaled for this GroupId before its add-table record is dropped on replay, as the GroupId
+     * has no member yet on a follower, so the flag is journaled again after it. Every stable or unstable mark is
+     * journaled under this lock, so none can land between the add-table record and the check.
+     */
+    public void logAddTableToRangeGroup(GroupId groupId, long tableId) {
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+        writeLock();
+        try {
+            List<ColocateRange> ranges = colocateRangeMgr.getColocateRanges(groupId.grpId);
+            if (!ranges.isEmpty()) {
+                editLog.logColocateRangeUpdate(ColocateRangePersistInfo.create(groupId.grpId, ranges));
+            }
+            editLog.logColocateAddTable(ColocatePersistInfo.createForAddTable(groupId, tableId,
+                    getBackendsPerBucketSeq(groupId), ranges));
+            if (unstableGroups.contains(groupId)) {
+                editLog.logColocateMarkUnstable(ColocatePersistInfo.createForMarkUnstable(groupId));
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
     public void replayAddTableToGroup(ColocatePersistInfo info) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(info.getGroupId().dbId);
         Preconditions.checkNotNull(db);
@@ -791,6 +830,10 @@ public class ColocateTableIndex implements Writable {
         try {
             if (!group2BackendsPerBucketSeq.containsKey(info.getGroupId())) {
                 group2BackendsPerBucketSeq.put(info.getGroupId(), info.getBackendsPerBucketSeq());
+            }
+            // Before addTableToGroup, which rejects a member of an existing range group whose ranges are missing.
+            if (!info.getColocateRanges().isEmpty()) {
+                colocateRangeMgr.setColocateRanges(info.getGroupId().grpId, info.getColocateRanges());
             }
 
             addTableToGroup(info.getGroupId().dbId, tbl, tbl.getColocateGroup(), info.getGroupId(), true /* isReplay */);

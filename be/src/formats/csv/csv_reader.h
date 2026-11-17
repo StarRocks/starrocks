@@ -220,6 +220,8 @@ private:
 
     size_t _parsed_bytes = 0;
     size_t _limit = 0;
+    // Set by the first read of a more_rows() call that times out (a stream load pipe that has no data yet).
+    Status _read_timeout;
 };
 
 } // namespace starrocks

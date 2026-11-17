@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <set>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -56,6 +57,25 @@ template <typename K, typename V>
 using FlatJsonHashMap = phmap::flat_hash_map<K, V>;
 #endif
 
+namespace flat_json {
+// What JsonPathDeriver::_visit_json_paths collects for a path, gathered from the values of a JSON-typed
+// sub-column. Kept in the segment (JsonValueStatsPB) so a later derivation from metadata can type the path by
+// its values instead of leaving it JSON.
+struct JsonValueStats {
+    uint8_t json_type = 31; // JSON_NULL_TYPE_BITS
+    // non-NULL rows
+    uint64_t values = 0;
+    // values of a base JSON type (JSON_BASE_TYPE)
+    uint64_t base_type_count = 0;
+    uint64_t max_uint = 0;
+    int64_t min_int = 0;
+
+    // `column` is a JSON column, nullable or not.
+    void update(const Column& column);
+    void merge(const JsonValueStats& other);
+};
+} // namespace flat_json
+
 class JsonFlatPath {
 public:
     using OP = uint8_t;
@@ -80,6 +100,8 @@ public:
     uint32_t hits = 0;
     // for json-uint, json-uint is uint64_t, check the maximum value and downgrade to bigint
     uint64_t max_uint = 0;
+    // the most negative integer seen; with max_uint, tells whether a numeric type holds every integer exactly
+    int64_t min_int = 0;
     // same key may appear many times in json, so we need avoid duplicate compute hits
     uint32_t last_row = -1;
     uint32_t multi_times = 0;
@@ -89,6 +111,11 @@ public:
     // base-typed values too, but unlike base_type_count they do not mark the node as also seen as a
     // primitive, which is what the object/primitive conflict check keys on.
     uint32_t flat_base_type_hits = 0;
+    // A path created under this node may have missed some of its values: JsonPathDeriver dropped children of this
+    // node to bound its trie, and a dropped path that shows up again starts its stats afresh, without the values
+    // seen before it was dropped. Such a path is typed JSON, which holds any value. Paths created under it inherit
+    // this.
+    bool partial_children = false;
 
     JsonFlatPath() = default;
     JsonFlatPath(JsonFlatPath&&) = default;
@@ -169,9 +196,19 @@ private:
     // Keeps the trie within _max_nodes between rows. See _derived().
     void _shrink_path_tree(size_t current_row);
     size_t _drop_singleton_paths(JsonFlatPath* node, size_t current_row);
+
+    // After a derivation: drops the paths an input cannot be read into and, from metadata, types JSON the paths
+    // some input may hold in its remain. Each input is given as its sub-column paths and whether it has a remain.
+    // With `type_from_remain` false the types stay as derived (the remain values were visited).
+    void _keep_readable_paths(const std::vector<std::pair<std::set<std::string>, bool>>& input_layouts,
+                              bool type_from_remain);
     static size_t _count_nodes(const JsonFlatPath* node);
     // A key left out of the trie ends up in the remain column, so the remain filter must report it.
     void _add_remain_key(const std::string_view& key);
+    // Readers test only the last component of a path against the remain filter, so a subtree that goes
+    // to the remain column must report every key in it, not just its root.
+    void _add_remain_keys_in(const vpack::Slice& value);
+    void _add_remain_subtree(const JsonFlatPath* node);
 
 private:
     bool _has_remain = false;
@@ -220,6 +257,9 @@ private:
     bool _flatten_json(const vpack::Slice& value, const JsonFlatPath* root, vpack::Builder* builder,
                        uint32_t* hit_count);
 
+    // Fill one row that repeats a key of the layout, see _flatten().
+    void _flatten_duplicate_row(const vpack::Slice& value, const JsonFlatPath* root);
+
 private:
     bool _has_remain = false;
     // note: paths may be less 1 than flat columns
@@ -228,6 +268,11 @@ private:
 
     MutableColumns _flat_columns;
     JsonColumn* _remain;
+
+    // Stamp of the row being flattened, kept in JsonFlatPath::last_row of the layout nodes it reaches.
+    uint32_t _row_stamp = 0;
+    // The current row repeats a key of the layout.
+    bool _duplicate = false;
 };
 
 // merge flat json A,B,C to JsonColumn
@@ -237,7 +282,7 @@ public:
 
     JsonMerger(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain = false);
 
-    // for read, only read some leaf node
+    // For reads, reconstruct a parent path from its descendants.
     void set_root_path(const std::string& base_path);
 
     // for read, must return nullable column
@@ -254,12 +299,12 @@ public:
     ColumnPtr merge(const Columns& columns);
 
 private:
-    template <bool IN_TREE>
     void _merge_impl(size_t rows, JsonColumn& json_result, NullColumn& null_result);
 
+    // `keep_excluded`: `remain` is a copy of an object its row repeats, which keeps the excluded paths below it.
     template <bool IN_TREE>
     void _merge_json_with_remain(const JsonFlatPath* root, const vpack::Slice* remain, vpack::Builder* builder,
-                                 size_t index);
+                                 size_t index, bool keep_excluded = false);
 
     void _merge_json(const JsonFlatPath* root, vpack::Builder* builder, size_t index);
 
@@ -272,6 +317,10 @@ private:
     bool _has_remain = false;
 
     std::shared_ptr<JsonFlatPath> _src_root;
+    // The nodes with an excluded path below them.
+    phmap::flat_hash_set<const JsonFlatPath*> _above_excluded;
+    const JsonFlatPath* _merge_root = nullptr;
+    std::vector<std::string> _root_path;
     std::vector<const Column*> _src_columns;
     std::vector<std::string> _exclude_paths;
     std::vector<std::string> _level_paths;
@@ -322,10 +371,15 @@ private:
     // equals or merge, dst-src: 1-N/1-1
     struct MergeTask {
         // to avoid create column with find type
-        Expr* cast_expr;
+        Expr* cast_expr = nullptr;
 
         bool is_merge = false;
         bool need_cast = false;
+        // Convert a scalar sub-column of src_type to JSON value by value (see _to_json).
+        bool to_json = false;
+        // Extract the destination type from a JSON sub-column value by value (see _from_json).
+        bool from_json = false;
+        LogicalType src_type = TYPE_UNKNOWN;
 
         int dst_index = -1;
         std::vector<int> src_index;
@@ -341,8 +395,13 @@ private:
         std::unique_ptr<JsonFlattener> flattener;
     };
 
+    // Sets up the conversion of a source sub-column of src_type to the destination type at dst_index.
+    // `compaction`: the destination is written to a segment, see _from_json.
+    void _init_conversion(MergeTask* task, int dst_index, LogicalType src_type, bool compaction);
     Status _equals(const MergeTask& task, const Columns& columns);
     Status _cast(const MergeTask& task, const ColumnPtr& columns);
+    Status _to_json(const MergeTask& task, const ColumnPtr& col);
+    Status _from_json(const MergeTask& task, const ColumnPtr& col);
     Status _merge(const MergeTask& task, const Columns& columns);
     void _flat(const FlatTask& task, const Columns& columns);
 

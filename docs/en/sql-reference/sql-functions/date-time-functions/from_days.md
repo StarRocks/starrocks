@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns a date from 0000-01-01."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # from_days

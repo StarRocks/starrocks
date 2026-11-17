@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "load_tracking_logs provides error logs of load jobs."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # load_tracking_logs

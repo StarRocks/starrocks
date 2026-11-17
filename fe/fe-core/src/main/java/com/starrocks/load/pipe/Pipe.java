@@ -42,6 +42,7 @@ import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PipeAnalyzer;
@@ -79,6 +80,8 @@ public class Pipe implements GsonPostProcessable {
     public static final int MAX_POLL_INTERVAL = 3600; // 1 hour
     public static final long DEFAULT_BATCH_SIZE = 1 << 30; // 1 GB
     public static final long DEFAULT_BATCH_FILES = 256;
+    // How many times a failed task is retried before it gives up and marks its files as ERROR. The
+    // pipe itself stops on Config.pipe_max_consecutive_failed_task_executions failures in a row.
     public static final int FAILED_TASK_THRESHOLD = 5;
 
     private static final String TASK_PROPERTY_PREFIX = "task.";
@@ -399,10 +402,15 @@ public class Pipe implements GsonPostProcessable {
      */
     private void finalizeTasks() {
         List<Long> removeTaskId = new ArrayList<>();
+        List<String> endedTaskNames = new ArrayList<>();
         Runnable changeStateAction = null;
         LoadStatus changedLoadStatus = loadStatus.cloneForUpdate();
         try (CloseableLock l = takeWriteLock()) {
             for (PipeTaskDesc task : runningTasks.values()) {
+                if (task.isFinished() || task.isError()) {
+                    // The attempt is over either way, and a retry runs as a new task: drop this one below.
+                    endedTaskNames.add(task.getUniqueTaskName());
+                }
                 if (task.isFinished() || task.tooManyErrors()) {
                     removeTaskId.add(task.getId());
                     pipeSource.finishPiece(task);
@@ -410,11 +418,20 @@ public class Pipe implements GsonPostProcessable {
                 }
                 if (task.isError()) {
                     failedTaskExecutionCount++;
-                    if (failedTaskExecutionCount > FAILED_TASK_THRESHOLD) {
-                        changeStateAction = () -> changeState(State.ERROR, false);
+                    int maxFailures = Config.pipe_max_consecutive_failed_task_executions;
+                    if (failedTaskExecutionCount > maxFailures) {
+                        LOG.warn("pipe {} changes to ERROR: {} task executions failed in a row, more than "
+                                        + "pipe_max_consecutive_failed_task_executions={}, last error: {}",
+                                this, failedTaskExecutionCount, maxFailures, task.getErrorMsg());
+                        // Persisted like every other state change, so that followers, a restarted
+                        // FE and the next leader all keep the pipe stopped.
+                        changeStateAction = () -> changeState(State.ERROR, true);
                     }
                 }
                 if (task.isFinished()) {
+                    // A task that loads ends the failure streak. The pipe stops only on failures in
+                    // a row, so transient ones spread over time never add up to stopping it.
+                    failedTaskExecutionCount = 0;
                     FilePipePiece piece = task.getPiece();
                     changedLoadStatus.loadedFiles += piece.getNumFiles();
                     changedLoadStatus.loadedBytes += piece.getTotalBytes();
@@ -443,6 +460,32 @@ public class Pipe implements GsonPostProcessable {
                         alterPipeLog, wal -> this.loadStatus = changedLoadStatus);
             }
             LOG.info("pipe {} remove finalized tasks {}", this, removeTaskId);
+        }
+
+        dropEndedTasks(endedTaskNames);
+    }
+
+    /**
+     * Drop the tasks of ended attempts from TaskManager. Pipe tasks carry no expire time, so nothing else removes them:
+     * without this, every batch and every retry of one would stay registered for good. The task run history is kept
+     * apart from the task and is not affected.
+     */
+    private void dropEndedTasks(List<String> taskNames) {
+        if (taskNames.isEmpty()) {
+            return;
+        }
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        List<Long> taskIds = new ArrayList<>();
+        for (String taskName : taskNames) {
+            // There is no task if creating it failed. The source check leaves alone a task of another kind that
+            // happens to have the same name.
+            Task task = taskManager.getTask(taskName);
+            if (task != null && task.getSource() == Constants.TaskSource.PIPE) {
+                taskIds.add(task.getId());
+            }
+        }
+        if (!taskIds.isEmpty()) {
+            taskManager.dropTasks(taskIds);
         }
     }
 
@@ -527,7 +570,7 @@ public class Pipe implements GsonPostProcessable {
         if (taskDesc.getFuture().isCancelled()) {
             recordTaskError(taskDesc, "task got cancelled");
             return;
-        } else if (!taskDesc.getFuture().isDone()) {
+        } else if (!taskDesc.getFuture().isDone() || isTaskRunArchivePending(taskDesc)) {
             return;
         }
         try {
@@ -549,6 +592,35 @@ public class Pipe implements GsonPostProcessable {
                 return;
             }
             recordTaskError(taskDesc, e.getMessage());
+        }
+    }
+
+    /**
+     * Whether the attempt's task run is still registered as running although its future is done. The task run
+     * scheduler moves a done run into the task run history on its next dispatch round, so wait for that before treating
+     * the attempt as ended:
+     * - a failed attempt reads its error from the history, which does not have the run before then;
+     * - {@link #dropEndedTasks} must journal the drop after the run's archive record. Dropping a task kills its
+     *   registered run: the leader then archives the run from the kill path, but a follower replaying the drop discards
+     *   the run first and the archive record that follows finds nothing, so the run is missing from its history.
+     * The scheduler archives a run under the task run lock, removing it from the running map before adding it to the
+     * history, so check under that lock: a run gone from the map is then in the history too. While the lock is busy,
+     * check again next round.
+     */
+    private static boolean isTaskRunArchivePending(PipeTaskDesc taskDesc) {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(taskDesc.getUniqueTaskName());
+        if (task == null) {
+            return false;
+        }
+        TaskRunManager taskRunManager = taskManager.getTaskRunManager();
+        if (!taskRunManager.tryTaskRunLock()) {
+            return true;
+        }
+        try {
+            return taskRunManager.getTaskRunScheduler().getRunningTaskRun(task.getId()) != null;
+        } finally {
+            taskRunManager.taskRunUnlock();
         }
     }
 
@@ -589,6 +661,11 @@ public class Pipe implements GsonPostProcessable {
 
         // Change the pipe state if it's stopped
         if (getState().canResume()) {
+            // Restart with a clean failure count, as RESUME does. Clear it while the pipe is still
+            // stopped: once it is RUNNING the scheduler may count a new failure.
+            try (CloseableLock l = takeWriteLock()) {
+                this.failedTaskExecutionCount = 0;
+            }
             changeState(State.RUNNING, true);
         }
     }

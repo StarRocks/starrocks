@@ -38,6 +38,7 @@
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
+#include "storage/tablet_meta_manager.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
 #include "storage/tablet_schema.h"
@@ -46,6 +47,7 @@
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/json.h"
 
 namespace starrocks {
@@ -108,11 +110,15 @@ public:
         return *writer->build();
     }
 
-    TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool add_v3 = false) {
+    TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool add_v3 = false,
+                                  bool enable_persistent_index = false) {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
         request.__set_version_hash(0);
+        if (enable_persistent_index) {
+            request.__set_enable_persistent_index(true);
+        }
         request.tablet_schema.schema_hash = schema_hash;
         request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
@@ -647,6 +653,62 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_and_check) {
     }));
 }
 
+// Skip a column-mode partial update whose apply put the tablet in error state.
+TEST_P(RowsetColumnPartialUpdateTest, skip_failed_partial_update_apply) {
+    if (GetParam().primary_key_batch_get_index_memory_limit != 104857600) return;
+    const auto old_retry_timeout = config::retry_apply_timeout_second;
+    DeferOp restore_config([&]() { config::retry_apply_timeout_second = old_retry_timeout; });
+    // A failed apply puts the tablet in error state instead of retrying.
+    config::retry_apply_timeout_second = 0;
+
+    const int N = 100;
+    auto tablet = create_tablet(rand(), rand());
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    std::vector<RowsetSharedPtr> rowsets{create_rowset(tablet, keys)};
+    int64_t version = 1;
+    commit_rowsets(tablet, rowsets, version);
+    auto unchanged = [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+        return (int16_t)(k1 % 100 + 1) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
+    };
+    ASSERT_TRUE(check_tablet(tablet, version, N, unchanged));
+
+    std::vector<int32_t> column_indexes = {0, 1};
+    auto v1_func = [](int64_t k1) { return (int16_t)(k1 % 100 + 3); };
+    auto v2_func = [](int64_t k1) { return (int32_t)(k1 % 1000 + 4); };
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+    auto failed = create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schema, 1);
+    ASSERT_GT(failed->num_update_files(), 0);
+
+    // The column-mode apply fails and puts the tablet in error state.
+    auto fp = failpoint::FailPointRegistry::GetInstance()->get(
+            "tablet_apply_column_partial_update_commit_internal_error");
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp->setMode(trigger_mode);
+    ASSERT_OK(tablet->rowset_commit(++version, failed, 0));
+    tablet->updates()->wait_apply_done();
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+    ASSERT_TRUE(tablet->updates()->is_error());
+
+    // The skipped update leaves the data unchanged, and the same update applies normally afterwards.
+    int64_t skipped_txn_id = -1;
+    EditVersion skipped_version;
+    ASSERT_OK(tablet->updates()->skip_apply(&skipped_txn_id, &skipped_version));
+    ASSERT_EQ(failed->txn_id(), skipped_txn_id);
+    ASSERT_TRUE(skipped_version == EditVersion(version, 0));
+    ASSERT_FALSE(tablet->updates()->is_error());
+    ASSERT_TRUE(check_tablet(tablet, version, N, unchanged));
+    auto partial = create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schema, 1);
+    ASSERT_OK(tablet->rowset_commit(++version, partial, 10000));
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
+    }));
+}
+
 TEST_P(RowsetColumnPartialUpdateTest, normal_partial_update_and_check) {
     const int N = 100;
     auto tablet = create_tablet(rand(), rand());
@@ -1047,6 +1109,79 @@ TEST_P(RowsetColumnPartialUpdateTest, test_upsert) {
                                      return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
                                  }));
     }
+}
+
+// A column-mode apply must move the persistent index meta to the applied version even when it inserts no row.
+// Otherwise, once the index is evicted from the cache, the next load finds the meta behind the applied version
+// and rebuilds the whole index from all rowsets.
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_keeps_persistent_index_version) {
+    const int N = 100;
+    auto tablet = create_tablet(rand(), rand(), false, true);
+    ASSERT_TRUE(tablet->get_enable_persistent_index());
+    auto* manager = StorageEngine::instance()->update_manager();
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    std::vector<RowsetSharedPtr> rowsets{create_rowset(tablet, keys)};
+    int64_t version = 1;
+    commit_rowsets(tablet, rowsets, version);
+    // rowset_commit() returns once the version is applied, but the apply thread may still hold
+    // the index cache entry. Wait for it before touching the cache.
+    tablet->updates()->wait_apply_done();
+
+    auto expect_index_meta_at_applied_version = [&]() {
+        EditVersion applied_version;
+        ASSERT_OK(tablet->updates()->get_latest_applied_version(&applied_version));
+        ASSERT_EQ(EditVersion(version, 0), applied_version);
+        PersistentIndexMetaPB index_meta;
+        ASSERT_OK(TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &index_meta));
+        ASSERT_EQ(applied_version, EditVersion(index_meta.version()));
+    };
+    ASSERT_NO_FATAL_FAILURE(expect_index_meta_at_applied_version());
+
+    auto v1_func = [](int64_t k1) { return (int16_t)(k1 % 100 + 3); };
+    auto v2_func = [](int64_t k1) { return (int32_t)(k1 % 1000 + 4); };
+    std::vector<int32_t> column_indexes = {0, 1};
+    auto partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+    // UPDATE mode, then UPSERT mode where every key already exists: neither inserts a row.
+    for (auto mode : {PartialUpdateMode::COLUMN_UPDATE_MODE, PartialUpdateMode::COLUMN_UPSERT_MODE}) {
+        // Apply with the index cached. Then load the update state ahead of the apply, as the write-time
+        // preload does, and evict the index before the apply, so the apply finds the index unloaded.
+        for (bool evict_index : {false, true}) {
+            auto partial_rowset =
+                    create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schema, 1, mode);
+            if (evict_index) {
+                ASSERT_OK(manager->on_rowset_finished(tablet.get(), partial_rowset.get()));
+                ASSERT_TRUE(manager->index_cache().try_remove_by_key(tablet->tablet_id()));
+            }
+            ASSERT_OK(tablet->rowset_commit(++version, partial_rowset, 10000));
+            tablet->updates()->wait_apply_done();
+            ASSERT_FALSE(tablet->updates()->is_error());
+            ASSERT_NO_FATAL_FAILURE(expect_index_meta_at_applied_version());
+            // An apply that loaded the index keeps it cached for the next apply.
+            auto index_entry = manager->index_cache().get(tablet->tablet_id());
+            ASSERT_NE(nullptr, index_entry);
+            manager->index_cache().release(index_entry);
+        }
+    }
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
+    }));
+
+    // A normal load after eviction reuses the index on disk and still sees every key.
+    ASSERT_TRUE(manager->index_cache().try_remove_by_key(tablet->tablet_id()));
+    rowsets = {create_rowset(tablet, {0, N})};
+    commit_rowsets(tablet, rowsets, version);
+    tablet->updates()->wait_apply_done();
+    ASSERT_NO_FATAL_FAILURE(expect_index_meta_at_applied_version());
+    ASSERT_TRUE(check_tablet(tablet, version, N + 1, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+        if (k1 == 0 || k1 == N) {
+            return (int16_t)(k1 % 100 + 1) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
+        }
+        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
+    }));
 }
 
 TEST_P(RowsetColumnPartialUpdateTest, partial_update_two_rowset_and_check) {

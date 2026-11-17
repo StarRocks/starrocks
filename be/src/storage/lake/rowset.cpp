@@ -21,6 +21,7 @@
 #include "column/datum_convert.h"
 #include "common/config.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
@@ -47,6 +48,10 @@
 #include "util/trace.h"
 
 namespace starrocks::lake {
+
+static bool cancel_requested(const std::atomic<bool>* flag) {
+    return flag != nullptr && flag->load(std::memory_order_acquire);
+}
 
 Rowset::Rowset(TabletManager* tablet_mgr, int64_t tablet_id, const RowsetMetadataPB* metadata, int index,
                TabletSchemaPtr tablet_schema)
@@ -295,6 +300,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.has_preaggregation = options.has_preaggregation;
     seg_options.sample_options = options.sample_options;
     seg_options.enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;
+    if (options.runtime_state != nullptr) {
+        seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
+    }
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
         seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(
@@ -368,6 +376,11 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr, skip_ptr));
 
     for (int i = 0; i < segments.size(); i++) {
+        // Creating an iterator loads the segment's delete vector, which can be a remote read.
+        if (cancel_requested(seg_options.is_cancelled)) {
+            return Status::Cancelled(
+                    fmt::format("cancelled while opening segments, tablet:{} rowset:{}", _tablet_id, metadata().id()));
+        }
         auto& seg_ptr = segments[i].segment;
         // Skip segments that were filtered by metadata filter (nullptr placeholders)
         if (seg_ptr == nullptr) {
@@ -699,6 +712,13 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
     // For segment range mode, seg_idx should match the original segment index
     seg_idx = seg_start;
     for (index = seg_start; index < seg_end; index++) {
+        // A rowset can hold thousands of segments and each one costs a footer read, so a query that
+        // was cancelled must stop here instead of opening the rest. Checked before every load: the
+        // check after one segment's IO is the check before the next one's.
+        if (cancel_requested(seg_options.is_cancelled)) {
+            return Status::Cancelled(fmt::format("cancelled while loading segments, tablet:{} rowset:{} segment:{}/{}",
+                                                 _tablet_id, metadata().id(), index - seg_start, seg_end - seg_start));
+        }
         const auto& segment_meta = metadata().segment_metas(index);
         const auto& seg_name = segment_meta.filename();
         int current_idx = base_idx + seg_idx;
@@ -735,7 +755,15 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
 
         if (_parallel_load) {
             int captured_idx = current_idx;
+            // The flag outlives the task: |wait_futures| keeps this call, and so its caller, from
+            // returning before every submitted task has finished.
+            const std::atomic<bool>* cancel_flag = seg_options.is_cancelled;
             auto task = std::make_shared<std::packaged_task<std::pair<StatusOr<SegmentPtr>, std::string>()>>([=]() {
+                // A task still queued when the query is cancelled must not start its IO.
+                if (cancel_requested(cancel_flag)) {
+                    return std::make_pair(StatusOr<SegmentPtr>(Status::Cancelled("cancelled while loading segments")),
+                                          seg_name);
+                }
 #ifdef BE_TEST
                 Status injected_st;
                 TEST_SYNC_POINT_CALLBACK("Rowset::load_segments::parallel_load", &injected_st);
@@ -771,6 +799,7 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
                 !status.ok()) {
                 return status;
             }
+            TEST_SYNC_POINT_CALLBACK("Rowset::load_segments::serial_loaded", &index);
             seg_idx++;
         }
     }

@@ -674,12 +674,13 @@ void HdfsScannerContext::update_min_max_columns() {
             // fills the column with the statistics values instead of reading the
             // actual data from the file.
             update_with_none_existed_slot(column.slot_desc);
-        } else if (options.can_use_any_column) {
+        } else if (options.can_use_any_column && !options.any_column_queried_slots.contains(column.slot_id())) {
             // This column has no min/max statistics (e.g. STRING or TIMESTAMP type
             // which are not yet supported, or a placeholder column injected by
             // PruneHDFSScanColumnRule when every queried column is a partition column).
-            // Because can_use_any_column is set we know its value is irrelevant to the
-            // query result, so fill it with a default value and skip reading the file.
+            // Because can_use_any_column is set and the query does not read this column,
+            // its value is irrelevant to the query result, so fill it with a default value
+            // and skip reading the file.
             update_with_none_existed_slot(column.slot_desc);
         } else {
             // This column genuinely needs to be read from the data file.

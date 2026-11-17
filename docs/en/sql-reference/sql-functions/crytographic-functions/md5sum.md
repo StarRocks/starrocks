@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Calculates the 128-bit checksum of multiple strings."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # md5sum

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical a - c"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Metrics a through c
@@ -13,7 +14,7 @@ Metrics for materialized views and shared-data clusters are detailed in the corr
 - [Metrics for asynchronous materialized view metrics](../metrics-materialized_view.md)
 - [Metrics for Shared-data Dashboard metrics, and Starlet Dashboard metrics](../metrics-shared-data.md)
 
-For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../monitoring.md).
+For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../prometheus_grafana.md).
 
 :::
 

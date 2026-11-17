@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the current version of the MySQL database."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # version

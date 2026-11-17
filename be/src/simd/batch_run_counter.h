@@ -58,15 +58,15 @@ public:
 
         if (batch_size >= 32 && _left >= 32) {
             __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(_filter + _offset));
-            uint32_t mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(f, all0));
+            uint32_t zero_mask = _mm256_movemask_epi8(_mm256_cmpeq_epi8(f, all0));
             _offset += 32;
             _left -= 32;
 
-            if (mask == 0) {
+            if (zero_mask == 0xffffffff) {
                 // all zero
                 return BatchCount(32, 0, true);
-            } else if (mask == 0xffffffff) {
-                // all one
+            } else if (zero_mask == 0) {
+                // all non-zero
                 return BatchCount(32, 32, true);
             } else {
                 return BatchCount(32, 0, false);
@@ -79,15 +79,15 @@ public:
 
         if (batch_size >= 16 && _left >= 16) {
             const auto f = _mm_loadu_si128(reinterpret_cast<const __m128i*>(_filter + _offset));
-            const auto mask = _mm_movemask_epi8(_mm_cmpgt_epi8(f, zero16));
+            const auto zero_mask = _mm_movemask_epi8(_mm_cmpeq_epi8(f, zero16));
             _offset += 16;
             _left -= 16;
 
-            if (mask == 0) {
+            if (zero_mask == 0xffff) {
                 // all zero
                 return BatchCount(16, 0, true);
-            } else if (mask == 0xffff) {
-                // all one
+            } else if (zero_mask == 0) {
+                // all non-zero
                 return BatchCount(16, 16, true);
             } else {
                 return BatchCount(16, 0, false);
@@ -102,7 +102,8 @@ public:
             _left -= 8;
             if (partital_value == 0) {
                 return BatchCount(8, 0, true);
-            } else if (partital_value == 0x0101010101010101) {
+            } else if (partital_value == 0x0101010101010101ULL ||
+                       (((partital_value - 0x0101010101010101ULL) & ~partital_value & 0x8080808080808080ULL) == 0)) {
                 return BatchCount(8, 8, true);
             } else {
                 return BatchCount(8, 0, false);

@@ -40,6 +40,7 @@ import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -79,13 +80,11 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
@@ -94,7 +93,6 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.LargeInPredicateException;
-import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.staros.StarMgrServer;
@@ -393,7 +391,6 @@ public class ConnectProcessor {
         if (!Config.enable_audit_sql) {
             return "?";
         }
-        boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
         if (parsedStmt == null) {
             // invalid sql, record the original statement to avoid audit log can't replay
             // but redact sensitive credentials first
@@ -401,15 +398,10 @@ public class ConnectProcessor {
                 return "this is a desensitized invalid sql";
             }
             return SqlCredentialRedactor.redact(origStmt);
+        } else if (Config.enable_sql_desensitize_in_log) {
+            return AstToSQLBuilder.toDesensitizedSQL(parsedStmt);
         } else if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             return SqlCredentialRedactor.redact(origStmt);
-        } else if (Config.enable_sql_desensitize_in_log) {
-            // Some information like username, password in the stmt should not be printed.
-            return AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
-                            .setColumnSimplifyTableName(false)
-                            .setHideCredential(needEncrypt)
-                            .setEnableDigest(Config.enable_sql_desensitize_in_log))
-                    .orElse("this is a desensitized sql");
         } else {
             // Always redact credentials as defense in depth - raw SQL may contain
             // credentials that AuditEncryptionChecker does not yet recognize
@@ -508,14 +500,15 @@ public class ConnectProcessor {
                 return;
             }
         } catch (AnalysisException e) {
-            LOG.warn("Failed to parse SQL: " + SqlCredentialRedactor.redact(originStmt) + ", because.", e);
+            LOG.warn("Failed to parse SQL: " + LogUtil.redactSqlForLog(originStmt, null)
+                    + ", because.", LogUtil.desensitize(e));
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
         } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
-            LOG.warn("Process one query failed. SQL: " + SqlCredentialRedactor.redact(originStmt) +
-                    ", because unknown reason: ", e);
+            LOG.warn("Process one query failed. SQL: " + LogUtil.redactSqlForLog(originStmt, null) +
+                    ", because unknown reason: ", LogUtil.desensitize(e));
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
@@ -657,14 +650,7 @@ public class ConnectProcessor {
             ctx.setIsLastStmt(i == stmts.size() - 1);
             ctx.setSingleStmt(stmts.size() == 1);
 
-            //Build View SQL without Policy Rewrite
-            new AstTraverser<Void, Void>() {
-                @Override
-                public Void visitRelation(Relation relation, Void context) {
-                    relation.setNeedRewrittenByPolicy(true);
-                    return null;
-                }
-            }.visit(parsedStmt);
+            SecurityPolicyRewriteRule.markRelationsForRewrite(parsedStmt);
 
             // Only add the last running stmt for multi statement,
             // because the audit log will only show the last stmt.
@@ -1192,14 +1178,7 @@ public class ConnectProcessor {
             // in the profile and audit log instead of the origin text.
             ctx.setSingleStmt(stmts.size() == 1);
             StatementBase statement = stmts.get(idx);
-            //Build View SQL without Policy Rewrite
-            new AstTraverser<Void, Void>() {
-                @Override
-                public Void visitRelation(Relation relation, Void context) {
-                    relation.setNeedRewrittenByPolicy(true);
-                    return null;
-                }
-            }.visit(statement);
+            SecurityPolicyRewriteRule.markRelationsForRewrite(statement);
             statement.setOrigStmt(new OriginStatement(request.getSql(), idx));
 
             executor = doProxyExecute(result, request, statement, requestFE);

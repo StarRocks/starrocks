@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns metadata for all pipes in the current database as a JSON string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_all_pipes

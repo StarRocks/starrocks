@@ -24,6 +24,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
@@ -36,6 +37,7 @@
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/rowset/rowset_options.h"
+#include "storage/sort_key_bounds.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "testutil/assert.h"
@@ -206,6 +208,40 @@ TEST_F(LakeRowsetTest, test_data_size_after_deletion_scales_by_live_fraction) {
 
     Rowset rs(_tablet_mgr.get(), metadata, 0, /*compaction_segment_limit=*/0);
     EXPECT_EQ(600, rs.data_size_after_deletion());
+}
+
+// A segment written by the tablet writer records its sort key bounds in the encoded form only.
+TEST_F(LakeRowsetTest, WriterStoresEncodedSortKeyBounds) {
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+    ASSERT_OK(writer->open());
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    for (int key : {3, 7, 11, 42}) {
+        c0->append(key);
+        c1->append(key * 2);
+    }
+    Chunk chunk({c0, c1}, _schema);
+    ASSERT_OK(writer->write(chunk));
+    ASSERT_OK(writer->finish());
+    ASSERT_EQ(1, writer->segments().size());
+
+    SegmentMetadataPB meta;
+    writer->segments()[0].to_proto(0, &meta);
+    writer->close();
+
+    EXPECT_FALSE(meta.has_deprecated_sort_key_min());
+    EXPECT_FALSE(meta.has_deprecated_sort_key_max());
+    EXPECT_TRUE(meta.has_sort_key_min_encoded());
+    EXPECT_TRUE(meta.has_sort_key_max_encoded());
+    EXPECT_TRUE(has_segment_sort_key_bounds(meta));
+
+    VariantTuple min, max;
+    ASSERT_OK(decode_segment_sort_key_bounds(meta, &min, &max));
+    ASSERT_EQ(1, min.size());
+    ASSERT_EQ(1, max.size());
+    EXPECT_EQ(3, min[0].value().get_int32());
+    EXPECT_EQ(42, max[0].value().get_int32());
 }
 
 TEST_F(LakeRowsetTest, test_load_segments) {
@@ -1008,13 +1044,13 @@ public:
         {
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(files[0].path);
-            auto* min_tuple = segment_meta->mutable_sort_key_min();
+            auto* min_tuple = segment_meta->mutable_deprecated_sort_key_min();
             auto* min_var = min_tuple->add_values();
             TypeDescriptor td(TYPE_INT);
             *min_var->mutable_type() = td.to_protobuf();
             min_var->set_value("0");
 
-            auto* max_tuple = segment_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_deprecated_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = td.to_protobuf();
             max_var->set_value("10");
@@ -1026,13 +1062,13 @@ public:
         {
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(files[1].path);
-            auto* min_tuple = segment_meta->mutable_sort_key_min();
+            auto* min_tuple = segment_meta->mutable_deprecated_sort_key_min();
             auto* min_var = min_tuple->add_values();
             TypeDescriptor td(TYPE_INT);
             *min_var->mutable_type() = td.to_protobuf();
             min_var->set_value("20");
 
-            auto* max_tuple = segment_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_deprecated_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = td.to_protobuf();
             max_var->set_value("30");
@@ -1044,13 +1080,13 @@ public:
         {
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(files[2].path);
-            auto* min_tuple = segment_meta->mutable_sort_key_min();
+            auto* min_tuple = segment_meta->mutable_deprecated_sort_key_min();
             auto* min_var = min_tuple->add_values();
             TypeDescriptor td(TYPE_INT);
             *min_var->mutable_type() = td.to_protobuf();
             min_var->set_value("40");
 
-            auto* max_tuple = segment_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_deprecated_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = td.to_protobuf();
             max_var->set_value("50");
@@ -1485,6 +1521,129 @@ TEST_F(LakeRowsetTest, test_vertical_pass_shrinks_stream_buffer) {
     EXPECT_EQ(CompactionTask::stream_buffer_size(5000), task._stream_buffer_size);
     EXPECT_LT(task._stream_buffer_size, 1024 * 1024);
     EXPECT_EQ(1, context.stats->stream_buffer_shrunk_passes);
+}
+
+// A query scan that is cancelled while it opens a rowset stops before the next segment instead of
+// loading every remaining footer, and releases the segments it had already loaded.
+TEST_F(LakeRowsetTest, test_read_stops_loading_segments_after_cancel) {
+    create_rowsets_for_testing();
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    auto* cache = _tablet_mgr->metacache();
+    cache->prune();
+
+    RuntimeState state;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    int loaded = 0;
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::serial_loaded", [&](void*) {
+        ++loaded;
+        state.set_is_cancelled(true);
+    });
+
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = _tablet_schema;
+    rs_opts.runtime_state = &state;
+    rs_opts.lake_io_opts.fill_metadata_cache = true;
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    auto res = rowset->read(input_schema, rs_opts);
+    ASSERT_TRUE(res.status().is_cancelled()) << res.status();
+    ASSERT_EQ(1, loaded);
+
+    const auto& rs_meta = _tablet_metadata->rowsets(0);
+    auto segment_path = [&](int i) {
+        return _tablet_mgr->segment_location(_tablet_metadata->id(), rs_meta.segment_metas(i).filename());
+    };
+    auto first = cache->lookup_segment(segment_path(0));
+    ASSERT_NE(nullptr, first);
+    EXPECT_EQ(nullptr, cache->lookup_segment(segment_path(1)));
+    EXPECT_EQ(nullptr, cache->lookup_segment(segment_path(2)));
+    // Nothing but the cache and this test holds the segment that was loaded before the cancel.
+    cache->prune();
+    EXPECT_EQ(1, first.use_count());
+}
+
+// A cancel that lands during the last segment's IO is caught before the iterators, and so the delete
+// vector loads, are created.
+TEST_F(LakeRowsetTest, test_read_stops_creating_iterators_after_cancel) {
+    create_rowsets_for_testing();
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+
+    RuntimeState state;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    int loaded = 0;
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::serial_loaded", [&](void*) {
+        if (++loaded == 3) {
+            state.set_is_cancelled(true);
+        }
+    });
+
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = _tablet_schema;
+    rs_opts.runtime_state = &state;
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    auto res = rowset->read(input_schema, rs_opts);
+    ASSERT_TRUE(res.status().is_cancelled()) << res.status();
+    ASSERT_EQ(3, loaded);
+    EXPECT_EQ(0, stats.segments_read_count);
+}
+
+// Queued parallel load tasks see the cancel and skip their IO; the read still waits for all of them.
+TEST_F(LakeRowsetTest, test_parallel_load_stops_after_cancel) {
+    create_rowsets_for_testing();
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, true);
+
+    RuntimeState state;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    std::atomic<int> started{0};
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::parallel_load", [&](void*) {
+        started.fetch_add(1);
+        state.set_is_cancelled(true);
+    });
+
+    // Rowset captures _parallel_load in its constructor.
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = _tablet_schema;
+    rs_opts.runtime_state = &state;
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    auto res = rowset->read(input_schema, rs_opts);
+    ASSERT_TRUE(res.status().is_cancelled()) << res.status();
+    ASSERT_GE(started.load(), 1);
+    ASSERT_LE(started.load(), 3);
+}
+
+// A query that is not cancelled reads exactly what it read before.
+TEST_F(LakeRowsetTest, test_read_with_runtime_state_not_cancelled) {
+    create_rowsets_for_testing();
+    RuntimeState state;
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = _tablet_schema;
+    rs_opts.runtime_state = &state;
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+    ASSERT_EQ(count_rows_from_iters(iters), 3 * (22 + 12));
 }
 
 } // namespace starrocks::lake

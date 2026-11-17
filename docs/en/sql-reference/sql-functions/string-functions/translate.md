@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Substitutes specified characters within a string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # translate

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算两个 Bitmap 列是否存在相交元素并返回布尔值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_has_any

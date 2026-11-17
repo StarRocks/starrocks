@@ -1324,6 +1324,38 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
     ASSERT_EQ(1, shared_buffered_input_stream->direct_io_count());
     ASSERT_EQ(1, shared_buffered_input_stream->shared_io_count());
 }
+// Several conjuncts on the same dict column must register the column (and its sub field path) only
+// once; otherwise the per row group dict predicate rewrite runs N^2 times for N conjuncts.
+TEST_F(FileReaderTest, TestDictFilterRegistersColumnOnceForMultipleConjuncts) {
+    auto file_reader = _create_file_reader(_file2_path);
+    auto* ctx = _create_file2_base_context();
+    // c3 >= "c" AND c3 <= "c"
+    auto& c3_conjuncts = ctx->conjunct_ctxs_by_slot[2];
+    for (auto opcode : {TExprOpcode::GE, TExprOpcode::LE}) {
+        std::vector<ExprContext*> ctxs;
+        _create_string_conjunct_ctxs(opcode, 2, "c", &ctxs);
+        c3_conjuncts.insert(c3_conjuncts.end(), ctxs.begin(), ctxs.end());
+    }
+    ASSERT_EQ(2, c3_conjuncts.size());
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    const auto& materializer = file_reader->_row_group_readers[0]->_column_materializer;
+    const auto& dict_column_indices = materializer->dict_column_indices();
+    ASSERT_EQ(1, dict_column_indices.size());
+    int col_idx = dict_column_indices[0];
+    ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id());
+    ASSERT_EQ(1, materializer->dict_column_sub_field_paths().at(col_idx).size());
+
+    auto chunk = _create_chunk();
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(3, chunk->num_rows());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.is_end_of_file());
+}
 
 TEST_F(FileReaderTest, TestGetNextOtherFilter) {
     auto file_reader = _create_file_reader(_file2_path);
@@ -2823,6 +2855,64 @@ TEST_F(FileReaderTest, TestStructSubfieldDictFilter) {
     }
     EXPECT_EQ(100, total_row_nums);
 }
+// Different sub field paths of one struct column are still registered separately, while repeated
+// conjuncts on the same sub field path are registered once.
+TEST_F(FileReaderTest, TestStructDictFilterRegistersEachSubFieldPathOnce) {
+    const std::string struct_in_struct_file_path =
+            "./be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet";
+    auto ctx = _create_file_struct_in_struct_read_context(struct_in_struct_file_path);
+
+    TypeDescriptor type_struct =
+            TypeDescriptor::create_struct_type({"c0", "c1"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
+    TypeDescriptor type_struct_in_struct =
+            TypeDescriptor::create_struct_type({"c0", "c_struct"}, {TYPE_VARCHAR_DESC, type_struct});
+
+    std::vector<std::string> inner_path({"c_struct", "c0"});
+    std::vector<std::string> outer_path({"c0"});
+    auto& conjuncts = ctx->conjunct_ctxs_by_slot[3];
+    auto add_conjunct = [&](TExprOpcode::type opcode, const std::vector<std::string>& path) {
+        std::vector<ExprContext*> ctxs;
+        _create_struct_subfield_predicate_conjunct_ctxs(opcode, 3, type_struct_in_struct, path, "55", &ctxs);
+        conjuncts.insert(conjuncts.end(), ctxs.begin(), ctxs.end());
+    };
+    // c_struct_struct.c_struct.c0 = '55' AND c_struct_struct.c_struct.c0 >= '55' AND c_struct_struct.c0 = '55'
+    add_conjunct(TExprOpcode::EQ, inner_path);
+    add_conjunct(TExprOpcode::GE, inner_path);
+    add_conjunct(TExprOpcode::EQ, outer_path);
+    ASSERT_EQ(3, conjuncts.size());
+
+    auto file_reader = _create_file_reader(struct_in_struct_file_path);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct_in_struct, true), chunk->num_columns());
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    const auto& materializer = file_reader->_row_group_readers[0]->_column_materializer;
+    const auto& dict_column_indices = materializer->dict_column_indices();
+    const auto& dict_column_sub_field_paths = materializer->dict_column_sub_field_paths();
+    ASSERT_EQ(1, dict_column_indices.size());
+    ASSERT_EQ(3, dict_column_indices[0]);
+    ASSERT_EQ(2, dict_column_sub_field_paths.at(3).size());
+    ASSERT_EQ(inner_path, dict_column_sub_field_paths.at(3)[0]);
+    ASSERT_EQ(outer_path, dict_column_sub_field_paths.at(3)[1]);
+
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        ASSERT_TRUE(status.ok() || status.is_end_of_file());
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        if (chunk->num_rows() != 0) {
+            ASSERT_EQ("{c0:'55',c_struct:{c0:'55',c1:'46'}}", chunk->get_column_by_slot_id(3)->debug_item(0));
+        }
+    }
+    EXPECT_EQ(100, total_row_nums);
+}
 
 // Reproduce: when a chunk is fully filtered (hit_count==0), the ScalarColumnReader's
 // fill_dst_column() is skipped and the subfield slot is left pointing at the internal
@@ -3091,6 +3181,61 @@ TEST_F(FileReaderTest, bloom_filter_reader_test_hit) {
     ASSERT_OK(file_reader->init(ctx));
 
     EXPECT_EQ(file_reader->row_group_size(), 1);
+}
+
+/*
+    c1 = [f"a{i:04d}" for i in range(1000) if i != 500] + ["a0999"] + [f"b{i:04d}" for i in range(1000)]
+    table = pa.table({
+        "c0": pa.array(range(len(c1)), pa.int32()),
+        "c_struct": pa.StructArray.from_arrays(
+                [pa.array(range(len(c1)), pa.int32()), pa.array(c1, pa.string())], ["c0", "c1"]),
+    })
+    pq.write_table(table, path, row_group_size=1000, use_dictionary=False, write_page_index=False,
+                   bloom_filter_options={"c_struct.c1": {"ndv": 1000, "fpp": 0.01}})
+ */
+TEST_F(FileReaderTest, StructSubfieldStringBloomFilter) {
+    const std::string file_path = "./be/test/formats/parquet/test_data/struct_subfield_bloom_filter.parquet";
+    TypeDescriptor type_struct = TypeDescriptor::create_struct_type({"c0", "c1"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC});
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC}, {"c_struct", type_struct}, {""}};
+
+    auto scan = [&](const std::string& value, size_t* total_rows, int* bloom_filtered_row_groups) {
+        auto* ctx = _create_scan_context(slot_descs, file_path);
+        auto& conjunct_ctxs = ctx->conjunct_ctxs_by_slot[1];
+        _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::EQ, 1, type_struct, {"c1"}, value, &conjunct_ctxs);
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        ParquetUTBase::setup_conjuncts_manager(conjunct_ctxs, nullptr, tuple_desc, _runtime_state, ctx);
+        HdfsScannerStats stats;
+        ctx->stats = &stats;
+
+        auto file_reader = _create_file_reader(file_path);
+        Status status = file_reader->init(ctx);
+        ASSERT_OK(status);
+
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+        chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+        *total_rows = 0;
+        while (!status.is_end_of_file()) {
+            chunk->reset();
+            status = file_reader->get_next(&chunk);
+            chunk->check_or_die();
+            *total_rows += chunk->num_rows();
+        }
+        *bloom_filtered_row_groups = stats.bloom_filter_success_counter;
+    };
+
+    size_t total_rows = 0;
+    int bloom_filtered_row_groups = 0;
+
+    // Row group 0 holds 'a0400' and its bloom filter contains it, so it must not be pruned.
+    scan("a0400", &total_rows, &bloom_filtered_row_groups);
+    EXPECT_EQ(1, total_rows);
+    EXPECT_EQ(0, bloom_filtered_row_groups);
+
+    // 'a0500' is inside row group 0's min/max but absent, so only the bloom filter can prune it.
+    scan("a0500", &total_rows, &bloom_filtered_row_groups);
+    EXPECT_EQ(0, total_rows);
+    EXPECT_EQ(1, bloom_filtered_row_groups);
 }
 
 TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop) {
@@ -4121,6 +4266,28 @@ TEST_F(FileReaderTest, no_matched_reader) {
     ASSERT_EQ("Global dictionary not match", status.code_as_string());
 }
 
+// Column b is an optional BOOLEAN whose data page is RLE_DICTIONARY over a PLAIN dictionary page of {false, true}.
+TEST_F(FileReaderTest, boolean_rle_dictionary) {
+    const std::string file = "./be/test/formats/parquet/test_data/boolean_rle_dictionary.parquet";
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_BOOLEAN_DESC, true), chunk->num_columns());
+
+    Utils::SlotDesc slot_descs[] = {{"id", TYPE_INT_DESC}, {"b", TYPE_BOOLEAN_DESC}, {""}};
+    auto ctx = _create_file_random_read_context(file, slot_descs);
+    auto file_reader = _create_file_reader(file);
+    ASSERT_OK(file_reader->init(ctx));
+
+    ASSERT_OK(file_reader->get_next(&chunk));
+    ASSERT_EQ(10, chunk->num_rows());
+    const std::vector<std::string> expected = {"[0, 1]", "[1, 0]",    "[2, NULL]", "[3, 1]", "[4, 1]",
+                                               "[5, 0]", "[6, NULL]", "[7, 0]",    "[8, 1]", "[9, 1]"};
+    for (size_t i = 0; i < expected.size(); i++) {
+        EXPECT_EQ(expected[i], chunk->debug_row(i));
+    }
+}
+
 TEST_F(FileReaderTest, low_rows_reader) {
     auto chunk = std::make_shared<Chunk>();
 
@@ -4533,6 +4700,60 @@ TEST_F(FileReaderTest, test_read_variant) {
     }
 
     ASSERT_EQ(total_rows, 24) << "Should have read all 24 rows from the variant parquet file";
+}
+
+// Boolean columns whose values are RLE-encoded: parquet-mr does this for every boolean column in
+// PARQUET_2_0 mode and pyarrow for data_page_version=2.0 (the v1-page file shows the encoding is
+// independent of the page layout). 200 rows: a run of true, a run of false, alternating literal
+// groups, then nulls interleaved with alternating values.
+TEST_F(FileReaderTest, test_rle_boolean_values) {
+    auto expected_flag = [](int i) -> int {
+        if (i < 50) return 1;
+        if (i < 100) return 0;
+        if (i < 150) return i % 2 == 0;
+        return i % 3 == 0 ? -1 : (i % 2 == 0);
+    };
+
+    for (const std::string& name :
+         {"rle_boolean_v2_parquet_mr.parquet", "rle_boolean_v2_pyarrow.parquet", "rle_boolean_v1_pyarrow.parquet"}) {
+        const std::string file_path = "./be/test/formats/parquet/test_data/" + name;
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+        chunk->append_column(ColumnHelper::create_column(TYPE_BOOLEAN_DESC, true), chunk->num_columns());
+
+        Utils::SlotDesc slot_descs[] = {{"id", TYPE_INT_DESC}, {"flag", TYPE_BOOLEAN_DESC}, {""}};
+        auto ctx = _create_file_random_read_context(file_path, slot_descs);
+        auto file_reader = _create_file_reader(file_path);
+        Status status = file_reader->init(ctx);
+        ASSERT_TRUE(status.ok()) << name << ": " << status.to_string();
+
+        size_t total_rows = 0;
+        while (!status.is_end_of_file()) {
+            chunk->reset();
+            status = file_reader->get_next(&chunk);
+            ASSERT_TRUE(status.ok() || status.is_end_of_file()) << name << ": " << status.to_string();
+            chunk->check_or_die();
+
+            const auto* id_col = down_cast<const NullableColumn*>(chunk->columns()[0].get());
+            const auto* flag_col = down_cast<const NullableColumn*>(chunk->columns()[1].get());
+            const auto& ids =
+                    down_cast<const FixedLengthColumn<int32_t>*>(id_col->data_column().get())->immutable_data();
+            const auto& flags =
+                    down_cast<const FixedLengthColumn<uint8_t>*>(flag_col->data_column().get())->immutable_data();
+            for (size_t r = 0; r < chunk->num_rows(); ++r) {
+                int id = ids[r];
+                int expected = expected_flag(id);
+                if (expected < 0) {
+                    ASSERT_TRUE(flag_col->is_null(r)) << name << " id=" << id;
+                } else {
+                    ASSERT_FALSE(flag_col->is_null(r)) << name << " id=" << id;
+                    ASSERT_EQ(expected, static_cast<int>(flags[r])) << name << " id=" << id;
+                }
+            }
+            total_rows += chunk->num_rows();
+        }
+        EXPECT_EQ(200, total_rows) << name;
+    }
 }
 
 } // namespace starrocks::parquet

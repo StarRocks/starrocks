@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列のバイト長を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # length

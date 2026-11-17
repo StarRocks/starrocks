@@ -15,12 +15,14 @@
 #include "storage/lake/tablet_reader.h"
 
 #include <future>
+#include <unordered_set>
 #include <utility>
 
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "gutil/stl_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -42,8 +44,19 @@
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/json_flattener.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::lake {
+
+// The open loops below can run for minutes on a tablet with many segments, so they stop as soon as the
+// query is cancelled instead of opening the rest. A read without a RuntimeState (compaction, publish) is
+// never cancelled here.
+static Status check_cancelled(const TabletReaderParams& params, int64_t tablet_id) {
+    if (params.runtime_state != nullptr && params.runtime_state->is_cancelled()) {
+        return Status::Cancelled(fmt::format("cancelled while opening tablet:{}", tablet_id));
+    }
+    return Status::OK();
+}
 
 using ConjunctivePredicates = starrocks::ConjunctivePredicates;
 using Datum = starrocks::Datum;
@@ -183,6 +196,8 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         split_morsel_queue->set_tablet_schema(_tablet_schema);
 
         while (true) {
+            // Every split can load a rowset's segments (PhysicalSplitMorselQueue::_init_segment).
+            RETURN_IF_ERROR(check_cancelled(read_params, _tablet_metadata->id()));
             auto split_status_or = split_morsel_queue->try_get();
             if (UNLIKELY(!split_status_or.ok())) {
                 LOG(WARNING) << "failed to get split morsel: " << split_status_or.status()
@@ -225,13 +240,27 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
         return Status::OK();
     }
 
-    if (!read_params.column_access_paths->empty()) {
-        VLOG(3) << "Lake Compaction flat json paths exists: " << read_params.column_access_paths->size();
+    // A vertical compaction reads its column groups in turn and keeps the paths derived by earlier groups in this
+    // list: derive the JSON columns of this read that have none yet, rather than only the first group's.
+    std::unordered_set<uint32_t> columns_with_path;
+    for (const auto& path : *read_params.column_access_paths) {
+        columns_with_path.insert(path->index());
+    }
+    // Bail out before touching any segment when this read has no JSON column left to derive: the loops below
+    // load every input segment, and a vertical compaction now comes back here for each column group.
+    bool has_json_column = false;
+    for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
+        const auto& col = _tablet_schema->column(i);
+        if (col.type() == LogicalType::TYPE_JSON && _schema.get_field_by_name(std::string(col.name())) != nullptr &&
+            !columns_with_path.contains(i)) {
+            has_json_column = true;
+            break;
+        }
+    }
+    if (!has_json_column) {
         return Status::OK();
     }
 
-    DCHECK(is_compaction(read_params.reader_type) && read_params.column_access_paths != nullptr &&
-           read_params.column_access_paths->empty());
     int num_readers = 0;
     for (const auto& rowset : _rowsets) {
         auto segments = rowset->get_segments();
@@ -239,14 +268,27 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
                       [&](const auto& segment) { num_readers += segment->num_rows() > 0 ? 1 : 0; });
     }
 
+    std::shared_ptr<FlatJsonConfig> flat_json_config;
+    if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_metadata->id());
+        metadata && metadata->has_flat_json_config()) {
+        flat_json_config = std::make_shared<FlatJsonConfig>();
+        flat_json_config->update(metadata->flat_json_config());
+    }
+    // Only a table that flattens JSON writes the output flat; otherwise inputs read flat are merged back.
+    const bool mixed_inputs =
+            config::enable_compaction_flat_json_mixed_inputs &&
+            (flat_json_config != nullptr ? flat_json_config->is_flat_json_enabled() : config::enable_json_flat);
+
     std::vector<const ColumnReader*> readers;
     for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
         const auto& col = _tablet_schema->column(i);
         auto col_name = std::string(col.name());
-        if (_schema.get_field_by_name(col_name) == nullptr || col.type() != LogicalType::TYPE_JSON) {
+        if (_schema.get_field_by_name(col_name) == nullptr || col.type() != LogicalType::TYPE_JSON ||
+            columns_with_path.contains(i)) {
             continue;
         }
         readers.clear();
+        int num_plain = 0;
         for (const auto& rowset : _rowsets) {
             for (const auto& segment : rowset->get_segments()) {
                 if (segment->num_rows() == 0) {
@@ -256,23 +298,26 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
                 if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON &&
                     nullptr != reader->sub_readers() && !reader->sub_readers()->empty()) {
                     readers.emplace_back(reader);
+                } else if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON) {
+                    num_plain++;
                 }
             }
         }
-        if (readers.size() == num_readers) {
-            // must all be flat json type
+        // Some inputs flat, the others whole JSON: a segment without the column reads as defaults that are
+        // never flat, so it is left to the whole-JSON path.
+        const bool mixed = !readers.empty() && readers.size() + num_plain == num_readers && num_plain > 0;
+        if (readers.size() == num_readers || (mixed && mixed_inputs)) {
             JsonPathDeriver deriver;
-
-            if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_metadata->id());
-                metadata && metadata->has_flat_json_config()) {
-                auto flat_json_config = std::make_shared<FlatJsonConfig>();
-                flat_json_config->update(metadata->flat_json_config());
-                deriver.init_flat_json_config(flat_json_config.get());
-            }
-
+            deriver.init_flat_json_config(flat_json_config.get());
             deriver.derived(readers);
             auto paths = deriver.flat_paths();
             auto types = deriver.flat_types();
+            if (mixed && !paths.empty()) {
+                // A whole-JSON input may hold any value at any path; JSON keeps each as it is, and the value
+                // stats of the JSON sub-columns written let a later compaction type the paths by their values.
+                types.assign(types.size(), LogicalType::TYPE_JSON);
+                StarRocksMetrics::instance()->flat_json_compaction_mixed_inputs_total.increment(1);
+            }
             VLOG(3) << "Lake Compaction flat json column: " << JsonFlatPath::debug_flat_json(paths, types, true);
             ASSIGN_OR_RETURN(auto res, ColumnAccessPath::create(TAccessPathType::ROOT, std::string(col.name()), i));
             for (size_t j = 0; j < paths.size(); j++) {
@@ -396,6 +441,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         }
     });
     for (auto& rowset : _rowsets) {
+        // Stop opening, and submitting, the remaining rowsets. Rowset::read() checks again per segment.
+        RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
         if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;
         }

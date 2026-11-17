@@ -322,6 +322,9 @@ Status GlobalEnv::_init_mem_tracker() {
     _jit_cache_mem_tracker = regist_tracker(MemTrackerType::JIT_CACHE, -1, process_mem_tracker());
     _update_mem_tracker = regist_tracker(MemTrackerType::UPDATE, calc_max_update_memory(bytes_limit), nullptr);
     _update_mem_tracker->set_level(2);
+    // Diagnostic only: mirrors the bytes buffered in local pass-through channels. Those bytes are
+    // already accounted on the query tracker (or the process tracker as a fallback), so keep this
+    // tracker out of the tree, or they would be counted twice.
     _passthrough_mem_tracker = regist_tracker(MemTrackerType::PASSTHROUGH, -1, nullptr);
     _passthrough_mem_tracker->set_level(2);
     _brpc_iobuf_mem_tracker = regist_tracker(MemTrackerType::BRPC_IOBUF, -1, nullptr);

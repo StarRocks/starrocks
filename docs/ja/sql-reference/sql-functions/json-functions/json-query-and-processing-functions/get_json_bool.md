@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定されたJSONパスからJSON文字列内のブール値を解析して取得します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # get_json_bool

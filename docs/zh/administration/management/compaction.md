@@ -2,6 +2,7 @@
 sidebar_position: 120
 displayed_sidebar: docs
 description: "存算分离集群中 Compaction 的管理和监控方法。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 存算分离集群 Compaction
@@ -16,7 +17,7 @@ description: "存算分离集群中 Compaction 的管理和监控方法。"
 
 ### 介绍
 
-Compaction Score 反映了分区的数据文件合并状态。分数越高，表示该分区的数据文件合并程度越低，即该分区有更多版本的数据文件需要合并。FE 为每个分区维护 Compaction Score 信息，包括 Max Compaction Score （即这个分区中 Compaction Score 最高的 Tablet 的分数）。当 Partition 的 Max Compaction Score 小于 FE 参数 `lake_compaction_score_selector_min_score`(默认10)，则这个 Partition 的所有 Compaction 已经结束。当 Partition 的 Max Compaction Score 超过 100，就可以认为是不太健康的 Compaction 状态。当这个分区的 Max Compaction Score 超过 FE 参数 `lake_ingest_slowdown_threshold`(默认100)，系统会开始减缓这个分区的数据导入事务的提交速度，当超过 FE 参数 `lake_compaction_score_upper_bound`(默认2000) 时，系统会拒绝这个分区的数据导入事务。
+Compaction Score 反映了分区的数据文件合并状态。分数越高，表示该分区的数据文件合并程度越低，即该分区有更多版本的数据文件需要合并。FE 为每个分区维护 Compaction Score 信息，包括 Max Compaction Score （即这个分区中 Compaction Score 最高的 Tablet 的分数）。当 Partition 的 Max Compaction Score 小于 FE 参数 `lake_compaction_score_selector_min_score`(默认10)，则该分区通常不再被选为自动 Compaction 候选，但这不表示删除标记已全部清理。当 Partition 的 Max Compaction Score 超过 100，就可以认为是不太健康的 Compaction 状态。当这个分区的 Max Compaction Score 超过 FE 参数 `lake_ingest_slowdown_threshold`(默认100)，系统会开始减缓这个分区的数据导入事务的提交速度，当超过 FE 参数 `lake_compaction_score_upper_bound`(默认2000) 时，系统会拒绝这个分区的数据导入事务。
 
 ### 计算规则
 
@@ -37,11 +38,87 @@ Compaction Score 反映了分区的数据文件合并状态。分数越高，表
 5. FE 收集所有子任务的结果，然后进行 Compaction 事务提交。
 6. FE 将成功提交的 Compaction 事务进行 Publish。
 
+## 主键表 Base Compaction {/* #primary-key-base-compaction */}
+
+本节介绍存算分离主键表的 Base Compaction。普通 Cumulative Compaction 按 size-tiered 策略选取 Rowset，主要用于合并小文件。Base Compaction 将整个 Tablet 的 Rowset 纳入候选，优先重写删除行数较多的 Rowset，清理失效数据并缩小 Delete Vector。因此，在已有主键持续被更新或删除时，即使后台一直在合并小文件，也可能仍需要 Base Compaction。
+
+### 版本支持 {/* #primary-key-base-compaction-versions */}
+
+| 版本 | 自动 PK Base Compaction | 手动 PK Base Compaction | 存算分离 Base Compaction 时段和最小间隔控制 |
+| --- | --- | --- | --- |
+| v4.1.0～v4.1.3 | 不支持。 | 不支持 PK Base Compaction；仍可手动触发普通 Compaction。 | 不支持。 |
+| v4.1.4～v4.1.6 | 调度后按删除比例或删除行数判断，没有独立的自动触发开关。 | 支持，不要求达到自动触发阈值。 | 不支持。 |
+| v4.1.7 及后续 4.1 版本 | 由 `lake_pk_compaction_base_enable_delete_trigger` 控制，默认 `false`。 | 支持，不受该开关和删除阈值限制。 | 不支持。 |
+| v4.2 | 由上述开关控制，默认 `false`。 | 支持，并可绕过自动 Base Compaction 的时段和最小间隔限制。 | 支持，详见[执行时间控制](#base-compaction-time-controls)。 |
+
+PK Base Compaction 从 v4.1.4 开始支持。v4.1.7 新增的 `lake_pk_compaction_base_enable_delete_trigger` **只控制按删除量自动触发 Base Compaction**，不会禁止手动 Base Compaction，也不会关闭普通 Cumulative Compaction。
+
+### 自动触发 {/* #automatic-base-compaction */}
+
+自动 Compaction 仍由 FE 按分区调度。默认使用 Compaction Score 筛选候选分区；任务下发到 CN 后，CN 再决定某个 Tablet 是否执行 Base Compaction。达到删除阈值不会独立触发一次 FE 调度，因此不保证立即执行。
+
+从 v4.1.7 开始，需要先将 CN 参数 `lake_pk_compaction_base_enable_delete_trigger` 设置为 `true`，再检查以下两个条件。v4.1.4～v4.1.6 没有此开关，直接检查这两个条件：
+
+- Tablet 的整体删除比例 `sum(num_dels) / sum(num_rows)` 大于或等于 `lake_pk_compaction_base_delete_ratio_threshold`，默认 `0.5`。
+- Tablet 的累计删除行数 `sum(num_dels)` 大于或等于 `lake_pk_compaction_base_delete_rows_threshold`，默认 `10000000`。
+
+两个条件满足**任意一个**即可进入 Base Compaction 选取。统计范围为 Tablet 当前所有 Rowset；更新产生的旧行删除标记也计入。没有删除行时，继续使用普通 Compaction 选取。在支持[执行时间控制](#base-compaction-time-controls)的版本中，自动 Base Compaction 还必须满足相应的时段和最小间隔限制。
+
+例如，从 v4.1.7 开始，可以动态开启删除量自动触发：
+
+```sql
+UPDATE information_schema.be_configs
+SET VALUE = 'true'
+WHERE NAME = 'lake_pk_compaction_base_enable_delete_trigger';
+```
+
+参数的完整定义见 [BE 参数参考](../configuration/BE_parameters/shared_lake_other.md#lake_pk_compaction_base_enable_delete_trigger)。在持续更新的大 Tablet 上，绝对删除行数可能很快再次达到阈值；开启前应评估反复重写数据的资源开销。
+
+### 手动触发 {/* #manual-base-compaction */}
+
+对目标表或分区执行 `ALTER TABLE ... COMPACT` 即可请求手动 Compaction，无需额外指定 `BASE`。SQL 示例见[手动触发 Compaction 任务](#手动触发-compaction-任务)。
+
+- 从 v4.1.4 开始，Tablet 存在删除行时，手动请求可进入 Base Compaction 选取，无需达到上述两个删除阈值。
+- 从 v4.1.7 开始，即使 `lake_pk_compaction_base_enable_delete_trigger = false`，仍可手动触发 Base Compaction。
+- 在支持执行时间控制的版本中，手动请求还会绕过自动 Base Compaction 的禁用时段和最小间隔。
+- Tablet 完全没有删除行时，会回退到普通 Compaction 选取，仍可能没有可合并的输入。
+
+手动请求是异步的，SQL 返回成功表示请求已提交，不表示 Compaction 已完成。它仍受任务调度和资源限制，也不保证一次合完整个 Tablet。
+
+### 输入范围与资源开销 {/* #base-compaction-inputs */}
+
+Base Compaction 按各 Rowset 的**删除行数绝对值降序**选取输入，而不是按删除比例排序。所有 Rowset 都是候选，因此在预算允许时，无删除行的 Rowset 也可能被合并。
+
+单次选取受 `lake_pk_compaction_max_input_rowsets`（默认 `500`）以及预计保留数据量预算 `max(update_compaction_result_bytes, Tablet 总数据量 × update_compaction_ratio_threshold)` 限制。后两个参数默认分别为 `1 GiB` 和 `0.5`。按 Rowset 选取时，最后一个 Rowset 可能使预计结果超过预算；该预算也不是实际读取字节数的上限。自动和手动 Base Compaction 都受这些输入限制，因此一次执行不保证清理全部删除标记。
+
+### 执行时间控制 {/* #base-compaction-time-controls */}
+
+以下能力从 v4.2 开始支持；**4.1 系列不支持这些存算分离限制**：
+
+- 表属性 [`base_compaction_forbidden_time_ranges`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#禁止-base-compaction) 指定的是**禁止自动 Base Compaction** 的时段，其余时段允许。4.1 系列的 FE 会拒绝为存算分离表设置此属性。
+- CN 参数 [`base_compaction_interval_seconds_since_last_operation`](../configuration/BE_parameters/stats_storage.md#base_compaction_interval_seconds_since_last_operation) 默认 `86400` 秒，表示同一 Tablet 两次成功 Base Compaction 之间的自动选取最小间隔。它不是每天定时触发的周期；没有历史 Base Compaction 时间记录或该值小于等于 `0` 时，不施加间隔限制。此参数早于 v4.1 已存在，但在 4.1 系列中不用于限制存算分离 PK Base Compaction。
+
+例如，仅在支持上述能力的版本中，可以禁止每天 08:00（含）到 21:00（不含）的自动 Base Compaction：
+
+```sql
+ALTER TABLE example_db.pk_table SET (
+    "base_compaction_forbidden_time_ranges" = "* 8-20 * * *"
+);
+```
+
+这些限制只控制自动 Base Compaction；普通 Cumulative Compaction 仍可继续，手动 `ALTER TABLE ... COMPACT` 可绕过这些限制。
+
+### 查看执行效果 {/* #verify-base-compaction */}
+
+使用[查看 Compaction 任务](#查看-compaction-任务)中的 `SHOW PROC '/compactions'` 和 `information_schema.be_cloud_native_compactions` 检查异步任务的状态和执行详情。Compaction Score 用于调度，不能单独用于判断删除标记是否已全部清理。
+
+Base Compaction 会消耗 CN 的 CPU、内存以及对象存储读写资源。建议先选择一个分区手动执行并观察开销。Compaction 完成后，历史数据版本仍可能因保留策略而存在；旧版本的回收还受 AutoVacuum 和 [`lake_autovacuum_grace_period_minutes`](../configuration/FE_parameters/shared_lake_other.md#lake_autovacuum_grace_period_minutes) 控制，不能把任务完成等同于对象存储空间立即全部释放。
+
 ## 管理 Compaction
 
 ### 查看 Compaction Score
 
-- 您可以通过 SHOW PROC 语句查看特定表中分区的 Compaction Score，通常只需要关注 `MaxCS` 字段，如果 `MaxCS` 低于 10，代表 Compaction 已经完成；如果 `MaxCS` 大于 100，代表 Compaction Score 相对较高；如果 `MaxCS` 大于 500，代表 Compaction Score 非常高，需要人工介入。
+- 您可以通过 SHOW PROC 语句查看特定表中分区的 Compaction Score，通常只需要关注 `MaxCS` 字段，默认调度配置下，如果 `MaxCS` 低于 10，通常不再被选为自动 Compaction 候选，但不代表删除标记已全部清理；如果 `MaxCS` 大于 100，代表 Compaction Score 相对较高；如果 `MaxCS` 大于 500，代表 Compaction Score 非常高，需要人工介入。
 
   ```Plain
   SHOW PARTITIONS FROM <table_name>
@@ -252,7 +329,18 @@ WHERE name = "compact_threads";
 >
 > 在生产环境中，建议将 `max_cumulative_compaction_num_singleton_deltas` 设置为 `100`，以加速 Compaction 任务并减少资源消耗。
 
+##### lake_pk_compaction_max_rowsets_per_level
+
+- 默认值：20
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，主键表的某个大小层中待合并的 Rowset 达到该数量时，即使该层得分不是最高，也会被合并。Size-tiered Compaction 策略每轮只合并得分最高的一层。持续导入时，最新写入的小 Rowset 所在层每轮得分都最高，由较大 Rowset（之前 Compaction 的产物和中等批次的导入）组成的层会一直增长，导致查询需要读取的 Segment 增多，并在 Compaction 刚完成时表现为 Compaction Score 的尖峰。当某个未被选中的层中待合并的 Rowset 达到该数量，且这些 Rowset 能与已选中的 Rowset 在同一次 Compaction 任务中合并时，该层会并入该次 Compaction 任务。设置为 `0` 表示关闭该行为。
+- 引入版本：-
+
 ### 手动触发 Compaction 任务
+
+以下语句异步提交手动请求。存算分离 PK Base Compaction 从 v4.1.4 开始支持；从 v4.1.7 开始，自动删除触发开关设为 `false` 也不影响手动请求。无删除行时会回退到普通 Compaction 选取。详情见[主键表 Base Compaction](#primary-key-base-compaction)。
 
 ```SQL
 -- 触发整个表的 Compaction 任务。

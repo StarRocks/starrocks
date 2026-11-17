@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "BE 設定パラメーター：共有データクラスタ、データレイク統合、その他の設定項目。"
 sidebar_label: "共有データ、データレイク、その他"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -149,13 +150,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタでの主キーテーブルコンパクションタスクで許可される最大入力 rowset 数。このパラメータのデフォルト値は v3.2.4 および v3.1.10 以降 `5` から `1000` に、v3.3.1 および v3.2.9 以降 `500` に変更されました。主キーテーブルのためのサイズ階層型コンパクションポリシーが有効になった後 (`enable_pk_size_tiered_compaction_strategy` を `true` に設定することで)、StarRocks は各コンパクションの rowset 数を制限して書き込み増幅を減らす必要がなくなります。したがって、このパラメータのデフォルト値は増加しました。
 - 導入バージョン: v3.1.8, v3.2.3
 
+### lake_pk_compaction_max_rowsets_per_level
+
+- デフォルト: 20
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタの主キーテーブルで、あるサイズレベルのコンパクション待ちの rowset がこの数に達すると、そのレベルのスコアが最高でなくてもマージされます。サイズ階層型コンパクションポリシーは各ラウンドでスコアが最も高いレベルのみをマージします。ロードが継続している間は、最新の小さな rowset のレベルが毎回最高スコアとなるため、より大きな rowset（以前のコンパクションの出力や中規模のロード）からなるレベルは増え続けます。その結果、クエリが読み取る segment 数が増え、コンパクションの完了直後にコンパクションスコアのスパイクとして現れます。選択されていないレベルのコンパクション待ちの rowset がこの数に達し、かつそれらが選択済みの rowset と同じコンパクションタスクに収まる場合、そのレベルはそのコンパクションタスクでマージされます。`0` に設定するとこの動作は無効になります。
+- 導入バージョン: -
+
 ### lake_pk_compaction_base_enable_delete_trigger
 
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタで、主キーテーブルの tablet の削除量が `lake_pk_compaction_base_delete_ratio_threshold` または `lake_pk_compaction_base_delete_rows_threshold` に達したときに、累積コンパクションからベースコンパクションへ自動的に切り替えるかどうか。`lake_pk_compaction_base_delete_rows_threshold` は絶対行数であるため、デフォルトでは無効です。既存の行が継続的に更新または削除される大きなテーブルでは、tablet はベースコンパクションのたびにすぐ再びこの値に達し、各ベースコンパクションは tablet のデータのうち最大 `update_compaction_ratio_threshold` (デフォルト 0.5) の割合を書き換えます。手動の `ALTER TABLE ... COMPACT` は、この項目の設定に関係なくベースコンパクションを実行します。
+- 説明: 共有データの主キータブレットに対する自動 Compaction で、削除率または削除行数がしきい値に達したときに Base Compaction を選択できるかどうか。このスイッチは削除量による自動 Base Compaction だけを制御し、通常の Cumulative Compaction には影響しません。継続的な更新や削除がある大きなタブレットでは、絶対削除行数のしきい値に頻繁に達し、データが繰り返し書き換えられる可能性があるため、デフォルトでは無効です。手動の `ALTER TABLE ... COMPACT` はこのスイッチと 2 つの削除しきい値を回避します。削除行がなければ通常の Compaction 選択にフォールバックします。自動と手動のいずれも、1 回でタブレット全体がマージされるとは限りません。[主キーテーブルの Base Compaction](../../management/compaction.md#primary-key-base-compaction)を参照してください。
 - 導入バージョン: v4.1.7
 
 ### lake_pk_compaction_base_delete_ratio_threshold
@@ -164,7 +174,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Double
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタで、主キーテーブルの tablet を累積コンパクション (サイズ階層型の小ファイルマージ) からベースコンパクションに切り替える 2 つのトリガーの 1 つ。ベースコンパクションは削除を含む rowset を (削除行数の多いものから優先して) 書き換え、削除された行を物理的に除去して delete vector を縮小します。`lake_pk_compaction_base_enable_delete_trigger` が `true` の場合、tablet の集約削除率 (各 rowset の `sum(num_dels) / sum(num_rows)`) がこの値に達したとき、または絶対削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達したときに実行されます。手動の `ALTER TABLE ... COMPACT` は、これらの設定に関係なくベースコンパクションを強制します。
+- 説明: 共有データの主キータブレットで、削除量による自動 Base Compaction の選択を判定する 2 つのしきい値の一方です。現在のすべての Rowset の合計削除率 `sum(num_dels) / sum(num_rows)` がこの値に達するか、合計削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達すると選択対象になります。v4.1.4～v4.1.6 は両方のしきい値を直接確認します。v4.1.7 以降は `lake_pk_compaction_base_enable_delete_trigger = true` も必要です。手動の `ALTER TABLE ... COMPACT` は両方のしきい値を回避します。しきい値に達しても FE による即時スケジュールは保証されません。[自動トリガー](../../management/compaction.md#automatic-base-compaction)を参照してください。
 - 導入バージョン: v4.1.4
 
 ### lake_pk_compaction_base_delete_rows_threshold
@@ -173,7 +183,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタでの主キーテーブルのベースコンパクションの 2 つのトリガーの 1 つ (`lake_pk_compaction_base_delete_ratio_threshold` を参照)。`lake_pk_compaction_base_enable_delete_trigger` が `true` の場合、tablet の絶対削除行数 (各 rowset の `sum(num_dels)`) がこの値に達したときにベースコンパクションが実行されます。この絶対数トリガーは比率トリガーを補完します。高頻度の更新/削除テーブルでは、delete vector が肥大化して領域が無駄になる一方、集約削除率は多数のほぼ生存している rowset によって希釈されて低いままになるため、比率トリガーだけでは発火しません。この値を大きくするとベースコンパクションの頻度が下がり、小さくすると delete vector をより早く回収できます。
+- 説明: 共有データの主キータブレットで、削除量による自動 Base Compaction を選択する絶対行数のしきい値です。`lake_pk_compaction_base_delete_ratio_threshold` と OR 条件で組み合わせます。削除行数はタブレット内の現在のすべての Rowset の `sum(num_dels)` です。v4.1.4～v4.1.6 はこのしきい値を直接確認します。v4.1.7 以降は `lake_pk_compaction_base_enable_delete_trigger = true` も必要です。手動要求はこのしきい値を回避します。全体の削除率が低くても Delete Vector の削除マークが多い場合を補います。値を大きくすると自動 Base Compaction の頻度が下がり、小さくすると削除データ回収の選択対象に早くなります。[自動トリガー](../../management/compaction.md#automatic-base-compaction)を参照してください。
 - 導入バージョン: v4.1.4
 
 ### lake_put_txn_log_timeout_guard_ms
@@ -383,7 +393,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### datacache_disk_idle_seconds_for_expansion
 
-- デフォルト: 7200
+- デフォルト: 180
 - タイプ: Int
 - 単位: 秒
 - 変更可能: はい
@@ -392,11 +402,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### datacache_disk_size
 
-- デフォルト: 0
+- デフォルト: 100%
 - タイプ: String
 - 単位: -
 - 変更可能: はい
-- 説明: 単一ディスクにキャッシュできるデータの最大量。パーセンテージ (例: `80%`) または物理的な制限 (例: `2T`、`500G`) として設定できます。たとえば、2 つのディスクを使用し、`datacache_disk_size` パラメータの値を `21474836480` (20 GB) に設定した場合、これらの 2 つのディスクに最大 40 GB のデータをキャッシュできます。デフォルト値は `0` で、これはメモリのみがデータをキャッシュするために使用されることを示します。
+- 説明: 単一ディスクにキャッシュできるデータの最大量。パーセンテージ (例: `80%`) または物理的な制限 (例: `2T`、`500G`) として設定できます。たとえば、2 つのディスクを使用し、`datacache_disk_size` パラメータの値を `21474836480` (20 GB) に設定した場合、これらの 2 つのディスクに最大 40 GB のデータをキャッシュできます。パーセンテージは、各 `storage_root_path` が存在するディスクの容量に対する割合です。デフォルト値は `100%` です。`enable_datacache_disk_auto_adjust` が `true` (デフォルト) の場合、システムはディスク使用率に基づいて実際のディスクキャッシュ容量を自動調整し、この項目はその容量の上限のみを設定します。`0` はディスクキャッシュを無効にします。
 - 導入バージョン: -
 
 ### datacache_enable
@@ -504,7 +514,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: ミリ秒
 - 変更可能: いいえ
-- 説明: JDBC 接続プール内のアイドル接続が期限切れになるまでの時間。JDBC 接続プール内の接続アイドル時間がこの値を超えると、接続プールは設定項目 `jdbc_minimum_idle_connections` で指定された数を超えるアイドル接続を閉じます。
+- 説明: JDBC 接続プール内のアイドル接続が期限切れになるまでの時間。JDBC 接続プール内の接続アイドル時間がこの値を超えると、接続プールは設定項目 `jdbc_minimum_idle_connections` で指定された数を超えるアイドル接続を閉じます。接続プールがこの時間内にどのクエリにも使用されない場合、BE は `jdbc_minimum_idle_connections` で保持されている接続を含む接続プール全体を閉じ、次のクエリで新しく作成します。これにより、削除または変更された JDBC Catalog およびリソースの接続プールが解放されます。
 - 導入バージョン: -
 
 ### jdbc_connection_pool_size
@@ -676,8 +686,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
-- 変更可能: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクの最大同時実行数 (BE ノードごと)。デフォルト値 `0` は制限がないことを示します。
+- 変更可能: いいえ
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクの最大同時実行数 (BE ノードごと)。デフォルト値 `0` は制限がないことを示します。非推奨: v3.4 以降、FE が `default_mv_wg` を永続化して BE に送信するため、この項目は効果がありません。代わりに `ALTER RESOURCE GROUP default_mv_wg WITH (...)` を使用してください。
 - 導入バージョン: v3.1
 
 ### default_mv_resource_group_cpu_limit
@@ -685,8 +695,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 1
 - タイプ: Int
 - 単位: -
-- 変更可能: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大 CPU コア数 (BE ノードごと)。
+- 変更可能: いいえ
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大 CPU コア数 (BE ノードごと)。非推奨: v3.4 以降、FE が `default_mv_wg` を永続化して BE に送信するため、この項目は効果がありません。代わりに `ALTER RESOURCE GROUP default_mv_wg WITH (...)` を使用してください。
 - 導入バージョン: v3.1
 
 ### default_mv_resource_group_memory_limit
@@ -694,8 +704,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 0.8
 - タイプ: Double
 - 単位: 
-- 変更可能: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大メモリ比率 (BE ノードごと)。デフォルト値はメモリの 80% を示します。
+- 変更可能: いいえ
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大メモリ比率 (BE ノードごと)。デフォルト値はメモリの 80% を示します。非推奨: v3.4 以降、FE が `default_mv_wg` を永続化して BE に送信するため、この項目は効果がありません。代わりに `ALTER RESOURCE GROUP default_mv_wg WITH (...)` を使用してください。
 - 導入バージョン: v3.1
 
 ### default_mv_resource_group_spill_mem_limit_threshold
@@ -703,8 +713,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 0.8
 - タイプ: Double
 - 単位: -
-- 変更可能: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで中間結果のスピリングをトリガーする前のメモリ使用量のしきい値。デフォルト値はメモリの 80% を示します。
+- 変更可能: いいえ
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで中間結果のスピリングをトリガーする前のメモリ使用量のしきい値。デフォルト値はメモリの 80% を示します。非推奨: v3.4 以降、FE が `default_mv_wg` を永続化して BE に送信するため、この項目は効果がありません。代わりに `ALTER RESOURCE GROUP default_mv_wg WITH (...)` を使用してください。
 - 導入バージョン: v3.1
 
 ### enable_resolve_hostname_to_ip_in_load_error_url

@@ -2,6 +2,7 @@
 sidebar_position: 50
 displayed_sidebar: docs
 description: "The StarRocks Cross-cluster Data Migration Tool is provided by StarRocks Community."
+products: [oss, enterprise, anywhere]
 ---
 
 import Tabs from '@theme/Tabs';
