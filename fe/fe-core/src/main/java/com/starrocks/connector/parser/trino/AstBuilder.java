@@ -261,6 +261,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     private final Set<Expression> wallClockArguments = Collections.newSetFromMap(new IdentityHashMap<>());
     // with_timezone values whose consumer formats them, which in Trino rounds the instant to milliseconds; by identity
     private final Set<Expression> formattedArguments = Collections.newSetFromMap(new IdentityHashMap<>());
+    // Nesting depth of date_format and format_datetime calls that may print other than Trino. A with_timezone value
+    // under one is rejected, also when a cast to TIMESTAMP or DATE reads it as a wall-clock time first
+    private int unlikeFormatDepth = 0;
 
     public AstBuilder(long sqlMode) {
         this.sqlMode = sqlMode;
@@ -825,7 +828,14 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             throw unsupportedWithTimezone(node);
         }
         addWallClockArguments(node);
-        List<Expr> arguments = visit(node.getArguments(), context, Expr.class);
+        boolean unlikeFormat = isFormatCallUnlikeTrino(node);
+        unlikeFormatDepth += unlikeFormat ? 1 : 0;
+        List<Expr> arguments;
+        try {
+            arguments = visit(node.getArguments(), context, Expr.class);
+        } finally {
+            unlikeFormatDepth -= unlikeFormat ? 1 : 0;
+        }
         // A format rounds a TIMESTAMP cast of a with_timezone value to milliseconds too
         if (!node.getArguments().isEmpty() && node.getArguments().get(0) instanceof Cast
                 && formattedArguments.contains(node.getArguments().get(0))
@@ -1191,7 +1201,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         Optional<ZoneId> fromZone = backendZone(withTimezone.getArguments().get(1));
         Optional<ZoneId> to = toZone == null ? fromZone : backendZone(toZone);
         Optional<String> from = fromZone.flatMap(zone -> attachedOffset(timestamp, zone));
-        if (!wallClockArguments.contains(node) || from.isEmpty() || to.isEmpty()) {
+        if (unlikeFormatDepth > 0 || !wallClockArguments.contains(node) || from.isEmpty() || to.isEmpty()) {
             throw unsupportedWithTimezone(node);
         }
         // Trino promotes a DATE argument to TIMESTAMP. A format rounds the instant to milliseconds, which is rounding ts
@@ -1296,15 +1306,24 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         List<Expression> arguments = node.getArguments();
         if (WALL_CLOCK_FUNCTIONS.contains(name) && arguments.size() == 1) {
             wallClockArguments.add(arguments.get(0));
-        } else if ((name.equals("date_format") || name.equals("format_datetime")) && arguments.size() == 2
-                && arguments.get(1) instanceof StringLiteral
-                && !isFormatUnlikeTrino(name, ((StringLiteral) arguments.get(1)).getValue())) {
+        } else if ((name.equals("date_format") || name.equals("format_datetime")) && !isFormatCallUnlikeTrino(node)) {
             wallClockArguments.add(arguments.get(0));
             formattedArguments.add(arguments.get(0));
         } else if (name.equals("date_trunc") && arguments.size() == 2 && wallClockArguments.contains(node)
                 && isTruncationExact(arguments.get(0), arguments.get(1))) {
             wallClockArguments.add(arguments.get(1));
         }
+    }
+
+    // A date_format or format_datetime call whose format isn't a literal, or may not print what Trino prints
+    private static boolean isFormatCallUnlikeTrino(FunctionCall node) {
+        String name = node.getName().toString().toLowerCase();
+        if (!name.equals("date_format") && !name.equals("format_datetime")) {
+            return false;
+        }
+        List<Expression> arguments = node.getArguments();
+        return arguments.size() != 2 || !(arguments.get(1) instanceof StringLiteral)
+                || isFormatUnlikeTrino(name, ((StringLiteral) arguments.get(1)).getValue());
     }
 
     // Whether a date_format (MySQL-style) or format_datetime (Joda) format may not print what Trino prints. Only the
