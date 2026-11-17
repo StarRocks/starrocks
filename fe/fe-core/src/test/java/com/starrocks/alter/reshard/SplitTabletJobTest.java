@@ -382,6 +382,16 @@ public class SplitTabletJobTest {
     @Test
     public void testFallbackToIdenticalTablet() throws Exception {
         installLakeServiceMock(this::addFallbackToIdenticalRanges);
+        // Nothing was split, so cleaning must not abort the partition's compactions.
+        AtomicReference<Set<Long>> abortPartitionIdsArg = new AtomicReference<>();
+        new MockUp<CompactionMgr>() {
+            @Mock
+            public Set<Long> cancelPreviousCompactions(Invocation invocation, long endTransactionId, long dbId,
+                    long tableId, Set<Long> includePartitionIds, Set<Long> abortPartitionIds) {
+                abortPartitionIdsArg.set(Set.copyOf(abortPartitionIds));
+                return invocation.proceed();
+            }
+        };
 
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
@@ -404,6 +414,7 @@ public class SplitTabletJobTest {
         tabletReshardJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, tabletReshardJob.getJobState());
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(Set.of(), abortPartitionIdsArg.get());
 
         long newVersion = physicalPartition.getVisibleVersion();
         Assertions.assertTrue(newVersion == oldVersion + 1);
@@ -994,12 +1005,14 @@ public class SplitTabletJobTest {
         Set<Long> ignoredCompactionTxnIds = Set.of(7L, 8L);
         splitJob.addCleanupExcludedTransactionId(42L);
         AtomicReference<Set<Long>> includePartitionIdsArg = new AtomicReference<>();
+        AtomicReference<Set<Long>> abortPartitionIdsArg = new AtomicReference<>();
         AtomicReference<Set<Long>> excludeTxnIdsArg = new AtomicReference<>();
         new MockUp<CompactionMgr>() {
             @Mock
             public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
-                    Set<Long> includePartitionIds) {
+                    Set<Long> includePartitionIds, Set<Long> abortPartitionIds) {
                 includePartitionIdsArg.set(includePartitionIds);
+                abortPartitionIdsArg.set(abortPartitionIds);
                 return ignoredCompactionTxnIds;
             }
         };
@@ -1017,6 +1030,8 @@ public class SplitTabletJobTest {
         // the returned ignored txn ids to the wait; while the wait is unsatisfied the job stays CLEANING.
         splitJob.runCleaningJob();
         Assertions.assertEquals(splitJob.getReshardingPhysicalPartitions().keySet(), includePartitionIdsArg.get());
+        // Every tablet of this job is really split, so every resharded partition's compactions may be aborted.
+        Assertions.assertEquals(includePartitionIdsArg.get(), abortPartitionIdsArg.get());
         Assertions.assertEquals(Set.of(7L, 8L, 42L), excludeTxnIdsArg.get());
         Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, splitJob.getJobState());
 
@@ -1026,6 +1041,104 @@ public class SplitTabletJobTest {
         splitJob.runCleaningJob();
         Assertions.assertEquals(ignoredCompactionTxnIds, excludeTxnIdsArg.get());
         Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, splitJob.getJobState());
+    }
+
+    // A split the compute node refused fell back to an identical tablet. The partition's in-flight compaction stays
+    // valid on the identical tablet, so cleaning waits for it instead of aborting it: a retried split would
+    // otherwise keep aborting the compaction that could make the tablet splittable.
+    @Test
+    public void testRunCleaningKeepsCompactionsOfPartitionsWithoutRealSplit() throws Exception {
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        SplitTabletJob splitJob = (SplitTabletJob) createTabletReshardJob(table, physicalPartition);
+        splitJob.setJobState(TabletReshardJob.JobState.CLEANING);
+        splitJob.endTransactionId = 5000L;
+        fallBackToIdenticalTablet(splitJob, physicalPartition.getLatestBaseIndex().getTablets().get(0).getId());
+
+        AtomicReference<Set<Long>> includePartitionIdsArg = new AtomicReference<>();
+        AtomicReference<Set<Long>> abortPartitionIdsArg = new AtomicReference<>();
+        captureCompactionCancellation(includePartitionIdsArg, abortPartitionIdsArg);
+
+        splitJob.runCleaningJob();
+        Assertions.assertEquals(Set.of(physicalPartition.getId()), includePartitionIdsArg.get());
+        Assertions.assertEquals(Set.of(), abortPartitionIdsArg.get());
+        Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, splitJob.getJobState());
+    }
+
+    // One job over two partitions: the split in p1 fell back to an identical tablet, the one in p2 really split.
+    // Only p2's compactions may be aborted; p1's are waited on.
+    @Test
+    public void testRunCleaningAbortsCompactionsOnlyOfPartitionsWithRealSplit() throws Exception {
+        starRocksAssert.withTable("create table split_partial_fallback (p int, k int, v int) partition by range(p) "
+                + "(partition p1 values [('0'), ('10')), partition p2 values [('10'), ('20'))) "
+                + "order by(k) properties('replication_num' = '1')");
+        OlapTable target = (OlapTable) db.getTable("split_partial_fallback");
+        long fallbackPartitionId = target.getPartition("p1").getDefaultPhysicalPartition().getId();
+        long splitPartitionId = target.getPartition("p2").getDefaultPhysicalPartition().getId();
+        List<Long> tabletIds = new ArrayList<>();
+        for (long physicalPartitionId : List.of(fallbackPartitionId, splitPartitionId)) {
+            tabletIds.add(target.getPhysicalPartition(physicalPartitionId).getLatestBaseIndex().getTablets().get(0).getId());
+        }
+        SplitTabletClause clause = new SplitTabletClause(null, new TabletList(tabletIds),
+                Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
+        clause.setTabletReshardTargetSize(-2);
+        SplitTabletJob splitJob = (SplitTabletJob) new SplitTabletJobFactory(db, target, clause).createTabletReshardJob();
+        Assertions.assertEquals(Set.of(fallbackPartitionId, splitPartitionId),
+                splitJob.getReshardingPhysicalPartitions().keySet());
+        splitJob.setJobState(TabletReshardJob.JobState.CLEANING);
+        splitJob.endTransactionId = 5000L;
+        fallBackToIdenticalTablet(splitJob, tabletIds.get(0));
+
+        AtomicReference<Set<Long>> includePartitionIdsArg = new AtomicReference<>();
+        AtomicReference<Set<Long>> abortPartitionIdsArg = new AtomicReference<>();
+        captureCompactionCancellation(includePartitionIdsArg, abortPartitionIdsArg);
+
+        splitJob.runCleaningJob();
+        Assertions.assertEquals(Set.of(fallbackPartitionId, splitPartitionId), includePartitionIdsArg.get());
+        Assertions.assertEquals(Set.of(splitPartitionId), abortPartitionIdsArg.get());
+        Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, splitJob.getJobState());
+    }
+
+    // Falls the split of |oldTabletId| back to an identical tablet the way runRunningJob does when the compute node
+    // refuses it: the new index keeps only the first new tablet, and the split keeps only its id.
+    private static void fallBackToIdenticalTablet(SplitTabletJob job, long oldTabletId) {
+        for (ReshardingPhysicalPartition partition : job.getReshardingPhysicalPartitions().values()) {
+            for (ReshardingMaterializedIndex index : partition.getReshardingIndexes().values()) {
+                for (ReshardingTablet tablet : index.getReshardingTablets()) {
+                    SplittingTablet splittingTablet = tablet.getSplittingTablet();
+                    if (splittingTablet != null && splittingTablet.getOldTabletId() == oldTabletId) {
+                        List<Long> newTabletIds = splittingTablet.getNewTabletIds();
+                        for (long newTabletId : newTabletIds.subList(1, newTabletIds.size())) {
+                            index.getMaterializedIndex().removeTablet(newTabletId);
+                        }
+                        splittingTablet.fallbackToIdenticalTablet();
+                        return;
+                    }
+                }
+            }
+        }
+        throw new AssertionError("SplittingTablet for old tablet " + oldTabletId + " not found");
+    }
+
+    // Captures the partitions cleaning passes to cancelPreviousCompactions, and keeps the previous-transactions wait
+    // unsatisfied so the job stays CLEANING.
+    private static void captureCompactionCancellation(AtomicReference<Set<Long>> includePartitionIdsArg,
+            AtomicReference<Set<Long>> abortPartitionIdsArg) {
+        new MockUp<CompactionMgr>() {
+            @Mock
+            public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                    Set<Long> includePartitionIds, Set<Long> abortPartitionIds) {
+                includePartitionIdsArg.set(Set.copyOf(includePartitionIds));
+                abortPartitionIdsArg.set(Set.copyOf(abortPartitionIds));
+                return Set.of();
+            }
+        };
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public boolean isPreviousTransactionsFinishedForReshard(long endTransactionId, long dbId,
+                    List<Long> tableIds, Set<Long> excludeTransactionIds) {
+                return false;
+            }
+        };
     }
 
     @Test
@@ -1039,7 +1152,7 @@ public class SplitTabletJobTest {
             new MockUp<CompactionMgr>() {
                 @Mock
                 public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
-                        Set<Long> includePartitionIds) {
+                        Set<Long> includePartitionIds, Set<Long> abortPartitionIds) {
                     return Set.of();
                 }
             };
@@ -1104,7 +1217,7 @@ public class SplitTabletJobTest {
             new MockUp<CompactionMgr>() {
                 @Mock
                 public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
-                        Set<Long> includePartitionIds) {
+                        Set<Long> includePartitionIds, Set<Long> abortPartitionIds) {
                     return Set.of();
                 }
             };

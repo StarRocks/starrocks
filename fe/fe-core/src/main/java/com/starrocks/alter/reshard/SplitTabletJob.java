@@ -450,12 +450,21 @@ public class SplitTabletJob extends TabletReshardJob {
         endTransactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
                 .peekNextTransactionId();
 
+        // Said here, once per job, rather than in cleaning, which reruns every few milliseconds while it waits.
+        Set<Long> keptPartitionIds = new HashSet<>(reshardingPhysicalPartitions.keySet());
+        keptPartitionIds.removeAll(getPartitionsWithRealSplit());
+        if (!keptPartitionIds.isEmpty()) {
+            LOG.info("No tablet was split in physical partitions {}, so cleaning leaves their in-flight compactions "
+                    + "to finish and waits for them. {}", keptPartitionIds, this);
+        }
+
         // 4. Set job state to CLEANING
         setJobState(JobState.CLEANING);
     }
 
     /*
-     * 1. Abort in-flight lake compactions, then wait for the remaining previous transactions finished
+     * 1. Abort in-flight lake compactions on the partitions where a tablet was really split, then wait for the
+     *    remaining previous transactions finished
      * 2. Remove old versions of materialized index
      * 3. Unregister resharding tablets
      * 4. Release the new shards' creation-time placement pin
@@ -463,12 +472,15 @@ public class SplitTabletJob extends TabletReshardJob {
      */
     @Override
     protected void runCleaningJob() {
-        // 1. Cancel previous in-flight compactions on the resharded partitions so cleaning does not wait
-        //    for slow compaction, then wait for the rest. Compactions on partitions this job does not
-        //    reshard are neither cancelled nor waited on (see CompactionScheduler#cancelPreviousCompactions).
+        // 1. Cancel previous in-flight compactions on the partitions where a tablet was really split so
+        //    cleaning does not wait for slow compaction, then wait for the rest. In a partition where every
+        //    split fell back to an identical tablet the compactions stay valid, so they are left to finish
+        //    and waited on; aborting them would keep a retried split from ever seeing the compaction that
+        //    could make the tablet splittable. Compactions on partitions this job does not reshard are
+        //    neither cancelled nor waited on (see CompactionScheduler#cancelPreviousCompactions).
         Set<Long> ignoredTransactionIds = new HashSet<>(getCleanupExcludedTransactionIds());
-        ignoredTransactionIds.addAll(GlobalStateMgr.getCurrentState().getCompactionMgr()
-                .cancelPreviousCompactions(endTransactionId, dbId, tableId, reshardingPhysicalPartitions.keySet()));
+        ignoredTransactionIds.addAll(GlobalStateMgr.getCurrentState().getCompactionMgr().cancelPreviousCompactions(
+                endTransactionId, dbId, tableId, reshardingPhysicalPartitions.keySet(), getPartitionsWithRealSplit()));
         try {
             if (!GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().isPreviousTransactionsFinishedForReshard(
                     endTransactionId, dbId, List.of(tableId), ignoredTransactionIds)) {
@@ -512,6 +524,24 @@ public class SplitTabletJob extends TabletReshardJob {
 
         // 5. Durably publish FINISHED
         setJobState(JobState.FINISHED);
+    }
+
+    // The physical partitions of this job where a tablet was really split. An index has one resharding tablet per
+    // old tablet, and a split that fell back to an identical tablet keeps only its first new tablet in the new index
+    // (runRunningJob drops the others), so the new index holds more tablets than the old one exactly when one of
+    // them was really split.
+    private Set<Long> getPartitionsWithRealSplit() {
+        Set<Long> partitionIds = new HashSet<>();
+        for (Map.Entry<Long, ReshardingPhysicalPartition> entry : reshardingPhysicalPartitions.entrySet()) {
+            for (ReshardingMaterializedIndex reshardingIndex : entry.getValue().getReshardingIndexes().values()) {
+                if (reshardingIndex.getMaterializedIndex().getTablets().size()
+                        > reshardingIndex.getReshardingTablets().size()) {
+                    partitionIds.add(entry.getKey());
+                    break;
+                }
+            }
+        }
+        return partitionIds;
     }
 
     @Override
