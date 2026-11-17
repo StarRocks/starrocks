@@ -1731,15 +1731,6 @@ CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
 // the compute nodes. An unrecognized value is reported and falls back to "none" rather than
 // keeping the node from starting.
 CONF_mString_enum_or_default(starlet_starmgr_client_compression_type, "none", "none,zstd");
-<<<<<<< HEAD
-=======
-// Deadline, in milliseconds, of each RPC this node sends StarMgr, including GetShard, the worker
-// heartbeat and the shard replica info update. A node sends GetShard when it touches a tablet whose
-// shard it does not hold locally, which is how a file-bundling vacuum reads the metadata of every
-// tablet in the partition from a single node. Must be greater than 0: a dynamic update to a
-// non-positive value is rejected, and at startup a non-positive value is not applied and a warning
-// is logged, leaving the starlet default in force.
-CONF_mInt32(starlet_starmgr_client_rpc_timeout_ms, "5000");
 // Whether the gRPC channels that starlet opens from this node to StarMgr (GetShard, the worker
 // heartbeat, the shard replica info update) and to peer nodes (cache replication) go through the
 // HTTP proxy that the process environment names. starlet's gRPC library reads only the lowercase
@@ -1754,7 +1745,6 @@ CONF_mInt32(starlet_starmgr_client_rpc_timeout_ms, "5000");
 // channel to a peer is kept for the life of the process), so a runtime change would reach some
 // channels and never others.
 CONF_Bool(starlet_grpc_client_enable_http_proxy, "false");
->>>>>>> 305171cefd4... [Enhancement][RB-154] Make the StarOS gRPC proxy switch configurable (#69930)
 CONF_mBool(starlet_write_file_with_tag, "false");
 #endif
 
