@@ -539,7 +539,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
     }
 
     template <int64_t units_per_second>
-    static bool convert_subsecond_datetime(CppType& datum, int64_t timestamp, TzOffsetCache* offset_cache) {
+    static bool convert_subsecond_datetime(CppType& datum, int64_t timestamp, const cctz::time_zone& ctz) {
         int64_t second = timestamp / units_per_second;
         int64_t fraction = timestamp % units_per_second;
         // Civil-time conversion requires a nonnegative fraction, including before the Unix epoch.
@@ -553,7 +553,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
         } else {
             microsecond = fraction / (units_per_second / 1000000);
         }
-        return convert_one_datetime(datum, second, microsecond, offset_cache);
+        return convert_one_datetime(datum, second, microsecond, ctz);
     }
 
     static void fill_null(CppType* data, int num_elements, const uint8_t* null_data) {
@@ -601,11 +601,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-<<<<<<< HEAD:be/src/exec/arrow_to_starrocks_converter.cpp
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000, arrow_data[i] % 1000 * 1000, ctz)) {
-=======
-            if (convert_subsecond_datetime<1000>(data[i], arrow_data[i], &offset_cache)) {
->>>>>>> aca57a8 ([BugFix] Fix negative fractional Arrow timestamp conversion (#83490)):be/src/column/arrow/arrow_to_starrocks_converter.cpp
+            if (convert_subsecond_datetime<1000>(data[i], arrow_data[i], ctz)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -622,11 +618,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-<<<<<<< HEAD:be/src/exec/arrow_to_starrocks_converter.cpp
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000000, arrow_data[i] % 1000000, ctz)) {
-=======
-            if (convert_subsecond_datetime<1000000>(data[i], arrow_data[i], &offset_cache)) {
->>>>>>> aca57a8 ([BugFix] Fix negative fractional Arrow timestamp conversion (#83490)):be/src/column/arrow/arrow_to_starrocks_converter.cpp
+            if (convert_subsecond_datetime<1000000>(data[i], arrow_data[i], ctz)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -643,11 +635,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-<<<<<<< HEAD:be/src/exec/arrow_to_starrocks_converter.cpp
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000000000, arrow_data[i] % 1000000000 / 1000, ctz)) {
-=======
-            if (convert_subsecond_datetime<1000000000>(data[i], arrow_data[i], &offset_cache)) {
->>>>>>> aca57a8 ([BugFix] Fix negative fractional Arrow timestamp conversion (#83490)):be/src/column/arrow/arrow_to_starrocks_converter.cpp
+            if (convert_subsecond_datetime<1000000000>(data[i], arrow_data[i], ctz)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
