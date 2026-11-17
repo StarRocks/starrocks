@@ -19,11 +19,8 @@
 #include <limits>
 
 #include "common/logging.h"
-<<<<<<< HEAD
 #include "testutil/sync_point.h"
-=======
 #include "util/updater.h"
->>>>>>> a515ff9 ([Enhancement] add memory limit for sink buffer (#65888))
 
 namespace starrocks::pipeline {
 // Manage the memory usage for local exchange
@@ -61,11 +58,12 @@ public:
     // A standalone model of this schedule is attached to PR #64858 (with a 200us delay in the window: 18/100 runs
     // hang with the old code, 0/400 with this one).
     void update_memory_usage(int64_t memory_usage, int64_t num_rows) {
-<<<<<<< HEAD
         TEST_SYNC_POINT_CALLBACK("ChunkBufferMemoryManager::update_memory_usage::begin", &memory_usage);
         int64_t prev_memusage = _memory_usage.fetch_add(memory_usage);
         TEST_SYNC_POINT_CALLBACK("ChunkBufferMemoryManager::update_memory_usage::between_counters", &memory_usage);
         int64_t prev_num_rows = _buffered_num_rows.fetch_add(num_rows);
+        _update_peak_memusage();
+        _update_peak_num_rows();
         // Load the limit after fetch_add(): update_max_memory_usage() may lower it concurrently, and a sink that
         // parked on the lower limit must still see the fall below it.
         const auto max_memory_usage = static_cast<int64_t>(_max_memory_usage.load());
@@ -74,19 +72,6 @@ public:
         bool rows_fell = prev_num_rows > max_buffered_rows && prev_num_rows + num_rows <= max_buffered_rows;
         if (memory_fell || rows_fell) {
             _full_events_changed.store(true, std::memory_order_release);
-=======
-        bool prev_full = is_full();
-        size_t prev_memusage = _memory_usage.fetch_add(memory_usage);
-        size_t prev_num_rows = _buffered_num_rows.fetch_add(num_rows);
-        _update_peak_memusage();
-        _update_peak_num_rows();
-        bool is_full =
-                prev_memusage + memory_usage >= _max_memory_usage || prev_num_rows + num_rows > _max_buffered_rows;
-        bool expect = false;
-        bool full_changed = prev_full != is_full;
-        if (!full_changed) {
-            return;
->>>>>>> a515ff9 ([Enhancement] add memory limit for sink buffer (#65888))
         }
     }
 
