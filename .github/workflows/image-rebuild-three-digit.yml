@@ -1,7 +1,7 @@
 name: IMAGE REBUILD (three-digit branches)
 
-# Mirrors only the `thirdparty-filter` + `thirdparty-update-image` jobs
-# from ci-merged.yml, scoped to three-digit patch branches
+# Mirrors the `thirdparty-filter` + `thirdparty-update-image` jobs and the
+# version label from ci-merged.yml, scoped to three-digit patch branches
 # (branch-X.Y.Z) which ci-merged.yml's branch pattern `branch-[0-9].[0-9]`
 # does NOT match. Without this, a PR that touches thirdparty/** merged
 # into a three-digit branch leaves the official dev-env image stale,
@@ -13,13 +13,11 @@ name: IMAGE REBUILD (three-digit branches)
 #     elastic-update-image.sh:26-29, StarRocks-side rebuild also pings
 #     the Jenkins job that publishes to dockerhub)
 #
-# Why a separate workflow (not extending ci-merged.yml's `on:`):
-# ci-merged.yml's `update_backport_merged_msg` job calls
-# `get_next_release_tag.sh` which assumes `GITHUB_BASE_REF` is two-digit
-# (`branch-X.Y`). On a three-digit base it produces a four-digit
-# `version:4.1.1.X` label (cosmetic bug — visible to issue trackers).
-# By keeping this workflow independent we avoid that side effect; only
-# the image-rebuild path runs.
+# Why a separate workflow (not extending ci-merged.yml's `on:`): only the
+# image rebuild and the version label apply to a patch branch, none of
+# ci-merged.yml's backport jobs. `get_next_release_tag.sh` returns a
+# three-digit base's own version (branch-4.0.18 -> 4.0.18); it used to
+# assume `branch-X.Y` and produce a four-digit `version:4.1.1.X`.
 #
 # Branch pattern uses `[0-9]+` per segment so multi-digit minors like
 # branch-4.10.0 are also covered. Pre-release suffixes (branch-4.1.1-rc01)
@@ -36,11 +34,59 @@ permissions:
   pull-requests: write
   issues: write
   actions: write
+  # get_next_release_tag.sh reads /tags and /branches with GITHUB_TOKEN; with an explicit
+  # permissions block unlisted scopes default to none, so contents:read is spelled out.
+  contents: read
 
 env:
   PR_NUMBER: ${{ github.event.number }}
 
 jobs:
+  # ci-merged.yml labels every PR merged to a release branch, in `update_backport_merged_msg`,
+  # which never runs for a three-digit base: PRs merged to branch-4.0.18 got no version label
+  # (28 of them in 4.0.16..4.1.7, labelled by hand on 2026-11-17). Same steps as there.
+  version_label:
+    runs-on: [self-hosted, quick]
+    if: github.event.pull_request.merged == true
+    steps:
+      - name: prepare version label
+        id: prepare_version_label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          version=$(./scripts/get_next_release_tag.sh)
+          version_label="version:${version}"
+          echo "LABEL=${version_label}" >> $GITHUB_OUTPUT
+          gh label create "${version_label}" -R ${GITHUB_REPOSITORY} -c 1d76db -f
+
+      - name: add version label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
+        run: |
+          gh api --method POST "/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" -f "labels[]=${VERSION_LABEL}"
+
+  # Freeze-window correction, the usual order: the same change merged to branch-X.Y days ago
+  # and is labelled X.Y.(Z+1); this patch-branch copy means users get it in X.Y.Z, so the
+  # branch-X.Y PR's label is lowered (ci-tool scripts/reconcile-version-label.py).
+  reconcile-version-label:
+    runs-on: [self-hosted, quick]
+    if: github.event.pull_request.merged == true
+    # Label accuracy is not worth a red pipeline on a PR that is already merged.
+    continue-on-error: true
+    env:
+      REPO: ${{ github.repository }}
+      BASE_REF: ${{ github.base_ref }}
+      PR_NUMBER: ${{ github.event.number }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Reconcile version label
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull -q || true)
+          python3 scripts/reconcile-version-label.py
+
   thirdparty-filter:
     runs-on: ubuntu-latest
     if: github.event.pull_request.merged == true
