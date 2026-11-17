@@ -3267,6 +3267,15 @@ public class Config extends ConfigBase {
     public static int iceberg_commit_queue_timeout_seconds = 300;
 
     /**
+     * How many more times an Iceberg rewrite (rewrite_data_files) commit is retried, each time on a freshly
+     * loaded table, after Iceberg's own commit retries (table property commit.retry.num-retries) all lost to
+     * concurrent commits from other writers. Rounds back off exponentially from 1 second up to 30 seconds.
+     * 0 disables the extra retries.
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_rewrite_commit_max_retries = 5;
+
+    /**
      * The maximum number of pending commit operations per Iceberg table.
      * <p>
      * When using the commit queue (enable_iceberg_commit_queue=true), this limits the number
