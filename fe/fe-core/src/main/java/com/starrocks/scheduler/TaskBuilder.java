@@ -17,6 +17,7 @@ package com.starrocks.scheduler;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.OptimizeTask;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
@@ -42,6 +43,7 @@ import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -142,6 +144,11 @@ public class TaskBuilder {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
+        List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+        if (baseTableInfos != null && !baseTableInfos.isEmpty()) {
+            // All base tables should be in the same catalog
+            task.setCatalogName(baseTableInfos.get(0).getCatalogName());
+        }
 
         Map<String, String> taskProperties = Maps.newHashMap();
         taskProperties.put(MV_ID, String.valueOf(materializedView.getId()));
@@ -166,6 +173,11 @@ public class TaskBuilder {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
+        List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+        if (baseTableInfos != null && !baseTableInfos.isEmpty()) {
+            // All base tables should be in the same catalog
+            task.setCatalogName(baseTableInfos.get(0).getCatalogName());
+        }
         String mvId = String.valueOf(materializedView.getId());
         previousTaskProperties.put(MV_ID, mvId);
         task.setProperties(previousTaskProperties);
