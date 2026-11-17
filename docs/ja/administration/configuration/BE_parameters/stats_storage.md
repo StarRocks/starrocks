@@ -135,6 +135,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 最後のベースコンパクションからの時間間隔。共有なしテーブルでは、ベースコンパクションのトリガー条件の一つです。共有データの主キーテーブルと、Base and Cumulative ポリシーを使用する非主キーテーブルでは、同一タブレットで前回のベースコンパクションが正常に完了してから、自動ベースコンパクションが少なくともこの時間だけ待機します。Size Tiered ポリシーを使用する非主キーテーブルでは、この間隔は削除バージョン数のしきい値によるベースコンパクションの強制だけを無効にし、通常のレベル選択は変更しません。手動コンパクションはこの制限の対象外です。
 - 導入バージョン: -
 
+このパラメータは v4.1 より前から存在しますが、その時点で共有データの間隔制御に対応していたことを意味しません。v4.1.7 までにリリースされた 4.1 バージョンでは、共有データ Base Compaction の制限には使用しません。上記の共有データの動作は現在の main に実装されており、リリースバージョンは未確定です。自動 Base Compaction の最小間隔であり、毎日定時に実行する周期ではありません。手動要求はこの制限を回避します。[バージョン別のサポート](../../management/compaction.md#primary-key-base-compaction-versions)と[実行時間の制御](../../management/compaction.md#base-compaction-time-controls)を参照してください。
+
 ### base_compaction_num_threads_per_disk
 
 - デフォルト: 1
