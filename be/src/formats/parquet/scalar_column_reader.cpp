@@ -214,8 +214,8 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
                                                            const TypeDescriptor& col_type, const uint64_t rg_first_row,
                                                            const uint64_t rg_num_rows) const {
     bool filtered = false;
-    if (!get_chunk_metadata()->meta_data.__isset.statistics || get_column_parquet_field() == nullptr ||
-        has_geo_annotation(get_column_parquet_field()->schema_element)) {
+    if (col_type.is_geo_type() || !get_chunk_metadata()->meta_data.__isset.statistics ||
+        get_column_parquet_field() == nullptr || has_geo_annotation(get_column_parquet_field()->schema_element)) {
         // Missing statistics or undefined GEO sort order cannot filter this row group.
         return filtered;
     }
@@ -272,7 +272,8 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
                                                             const uint64_t rg_num_rows) {
     const tparquet::ColumnChunk* chunk_meta = get_chunk_metadata();
     // ColumnIndex min/max is undefined for GEO too; do not read or prune from it.
-    if (get_column_parquet_field() != nullptr && has_geo_annotation(get_column_parquet_field()->schema_element)) {
+    if (col_type.is_geo_type() ||
+        (get_column_parquet_field() != nullptr && has_geo_annotation(get_column_parquet_field()->schema_element))) {
         return false;
     }
     if (!chunk_meta->__isset.column_index_offset || !chunk_meta->__isset.offset_index_offset ||

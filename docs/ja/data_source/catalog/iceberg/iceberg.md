@@ -55,6 +55,8 @@ StarRocks を使用して Iceberg からデータをクエリする際には、�
 | Parquet         | SNAPPY, LZ4, ZSTD, GZIP, NO_COMPRESSION      | <ul><li>v1 テーブル: サポートされています。 </li><li>v2 テーブル: StarRocks v3.1 以降でサポートされており、これらの v2 テーブルに対するクエリは位置削除をサポートします。v3.1.10、v3.2.5、v3.3 およびそれ以降のバージョンでは、v2 テーブルに対するクエリは等価削除もサポートします。 </li></ul> |
 | ORC             | ZLIB, SNAPPY, LZO, LZ4, ZSTD, NO_COMPRESSION | <ul><li>v1 テーブル: サポートされています。 </li><li>v2 テーブル: StarRocks v3.0 以降でサポートされており、これらの v2 テーブルに対するクエリは位置削除をサポートします。v3.1.8、v3.2.3、v3.3 およびそれ以降のバージョンでは、v2 テーブルに対するクエリは等価削除もサポートします。 </li></ul> |
 
+Iceberg のネストされた `GEOGRAPHY` をクエリできる FE バージョンにアップグレードする前に、すべての BE と CN ノードを、Parquet のネストされた `GEOGRAPHY` を読み取れるバージョンにアップグレードしてください。
+
 ## 統合準備
 
 Iceberg catalog を作成する前に、StarRocks クラスターが Iceberg クラスターのストレージシステムとメタストアと統合できることを確認してください。
