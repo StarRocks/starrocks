@@ -261,8 +261,12 @@ struct TExprNode {
   // Set by the FE when SQLMode contains STRUCT_CAST_BY_NAME.
   59: optional bool cast_struct_by_name
 
+  // 60 is reserved: it is ai_provider_id on main / branch-4.2. Do not use it on this branch.
+
   // Only explicit CAST(x AS CHAR(N)) truncates. Absent/false preserves assignment cast semantics.
-  60: optional bool cast_char_truncate
+  // Must keep the same field id as main (61), otherwise mixed-version FE/BE (e.g. during upgrade
+  // to 4.2) decode it as ai_provider_id.
+  61: optional bool cast_char_truncate
 }
 
 struct TPartitionLiteral {
