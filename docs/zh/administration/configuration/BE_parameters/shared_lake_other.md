@@ -613,6 +613,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群中，向 S3 或兼容 S3 的对象存储进行分片上传时使用的分片大小。每次上传分片之前，每个输出流最多在内存中缓存该大小的数据，因此调大该值会增加内存占用，且随并发输出流数量成倍增加。取值过小会增加请求数量，并可能超出 AWS S3 的 10000 个分片上限，或低于其 5 MB 的最小分片大小；其他兼容 S3 的对象存储限制不同。修改该参数对正在进行的上传立即生效。取值必须大于 0，非正数将被拒绝。合法取值会覆盖通过 BE 命令行传入的对应的 `--fslib_*` gflag；而在 BE 启动时被拒绝的取值不会生效，BE 保留此前生效的值并记录 WARNING 日志，此时该参数显示的值可能并非实际生效的值。该参数用于存算分离集群中的 starlet 上传，与 `experimental_s3_*` 系列参数无关。
 - 引入版本：v4.1.5, v4.2
 
+### starlet_grpc_client_enable_http_proxy
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：存算分离集群中，当前 CN 向 StarMgr 及其他 CN 发起的 gRPC 连接是否经过 CN 进程环境变量中设置的 HTTP 代理。这些连接用于查询 Tablet 信息（GetShard）、发送 Worker 心跳、更新 Tablet 副本信息，以及在 CN 之间复制 Data Cache 数据。CN 只从小写的 `grpc_proxy`、`https_proxy` 和 `http_proxy` 环境变量获取代理，并且只对小写的 `no_grpc_proxy` 或 `no_proxy` 中列出的主机绕过代理。默认值 `false` 表示忽略这些环境变量，直接建立连接。这样，即使 CN 进程为其他对外访问继承了代理配置，而且豁免列表中没有集群节点地址，集群节点之间的流量也不会被转发到代理。仅当这些连接必须经过代理时才需要设为 `true`，即沿用早期版本的行为。该项不影响 CN 的其他对外访问，例如访问对象存储。CN 仅在启动时读取该项，修改后需重启 CN 才能生效。FE 侧的对应配置参见 FE 参数 `starmgr_grpc_client_enable_http_proxy`。
+- 引入版本：v26.3
+
 ### starlet_port
 
 - 默认值：9070

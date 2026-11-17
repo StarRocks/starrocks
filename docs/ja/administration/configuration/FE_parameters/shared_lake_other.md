@@ -692,6 +692,15 @@ replication 移行では、`lake_compaction_max_tasks = 0` を維持したまま
 - Description:
 - 導入時期：-
 
+### `starmgr_grpc_client_enable_http_proxy`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：No
+- 説明：共有データクラスターで、FE 内の StarMgr が CN に対して開始する gRPC 接続と、FE が StarMgr に対して開始する gRPC 接続が、HTTP プロキシを経由するかどうか。FE はプロキシを JVM のプロキシ設定（`-Dhttps.proxyHost` など）から取得し、`http_proxy` や `https_proxy` 環境変数を直接読み取ることはありません。デフォルト値の `false` では、これらの接続は JVM のプロキシ設定を無視して直接接続するため、FE の他の外部通信用に設定されたプロキシにクラスターノード間の通信が送られることはありません。これらの接続がプロキシを経由する必要がある場合にのみ `true` に設定してください。これは以前のバージョンの動作です。この項目は FE の他の外部通信には影響しません。FE はこの項目を起動時に一度だけ読み取るため、変更は FE の再起動後にのみ有効になります。CN 側の接続については、BE パラメータ `starlet_grpc_client_enable_http_proxy` を参照してください。
+- 導入時期：v26.3
+
 ### `star_client_get_shard_info_batch_size`
 
 - デフォルト：1024

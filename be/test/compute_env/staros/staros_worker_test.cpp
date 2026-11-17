@@ -1195,6 +1195,68 @@ TEST_F(StarOSWorkerTest, upload_threshold_configs_reject_non_positive_at_startup
     EXPECT_EQ(11L << 20, FLAGS_fslib_azure_storage_min_upload_part_size);
 }
 
+<<<<<<< HEAD
+=======
+// The BE config default must equal the starlet gflag's registered default, so that merging this
+// config changes no behavior.
+TEST_F(StarOSWorkerTest, starmgr_client_rpc_timeout_config_default_matches_starlet) {
+    auto configs = config::list_configs();
+    auto it = std::find_if(configs.begin(), configs.end(), [](const config::ConfigInfo& info) {
+        return info.name == "starlet_starmgr_client_rpc_timeout_ms";
+    });
+    ASSERT_NE(configs.end(), it);
+
+    gflags::CommandLineFlagInfo flag_info;
+    ASSERT_TRUE(gflags::GetCommandLineFlagInfo("starmgr_client_rpc_timeout_ms", &flag_info));
+    EXPECT_EQ(flag_info.default_value, it->defval);
+}
+
+TEST_F(StarOSWorkerTest, starmgr_client_rpc_timeout_config_applied_at_startup) {
+    gflags::FlagSaver flag_saver;
+    SCOPED_UPDATE(int32_t, config::starlet_starmgr_client_rpc_timeout_ms, 12345);
+
+    ASSERT_OK(apply_starlet_starmgr_client_rpc_timeout_config());
+    EXPECT_EQ(12345, FLAGS_starmgr_client_rpc_timeout_ms);
+}
+
+// A non-positive deadline would fail every starmgr call, so it must not be applied.
+TEST_F(StarOSWorkerTest, starmgr_client_rpc_timeout_config_rejects_non_positive) {
+    gflags::FlagSaver flag_saver;
+    FLAGS_starmgr_client_rpc_timeout_ms = 7000;
+
+    for (int32_t bad_value : {0, -1}) {
+        SCOPED_UPDATE(int32_t, config::starlet_starmgr_client_rpc_timeout_ms, bad_value);
+        EXPECT_FALSE(apply_starlet_starmgr_client_rpc_timeout_config().ok()) << bad_value;
+        EXPECT_EQ(7000, FLAGS_starmgr_client_rpc_timeout_ms) << bad_value;
+    }
+}
+
+// The BE config default must equal the starlet gflag's registered default, so that a node without
+// the config in its conf file keeps starlet's own choice of whether to use a proxy.
+TEST_F(StarOSWorkerTest, grpc_client_proxy_config_default_matches_starlet) {
+    auto configs = config::list_configs();
+    auto it = std::find_if(configs.begin(), configs.end(), [](const config::ConfigInfo& info) {
+        return info.name == "starlet_grpc_client_enable_http_proxy";
+    });
+    ASSERT_NE(configs.end(), it);
+    EXPECT_FALSE(it->valmutable);
+
+    gflags::CommandLineFlagInfo flag_info;
+    ASSERT_TRUE(gflags::GetCommandLineFlagInfo("grpc_client_enable_http_proxy", &flag_info));
+    EXPECT_EQ(flag_info.default_value, it->defval);
+}
+
+TEST_F(StarOSWorkerTest, grpc_client_proxy_config_applied_at_startup) {
+    gflags::FlagSaver flag_saver;
+
+    for (bool value : {true, false}) {
+        SCOPED_UPDATE(bool, config::starlet_grpc_client_enable_http_proxy, value);
+        apply_starlet_grpc_client_proxy_config();
+        EXPECT_EQ(value, FLAGS_grpc_client_enable_http_proxy) << value;
+    }
+}
+
+>>>>>>> 305171cefd4... [Enhancement][RB-154] Make the StarOS gRPC proxy switch configurable (#69930)
 // s3_multipart_equal_part_size is shared with the BE S3 filesystem, so it has no `starlet_` prefix,
 // but it reaches starlet through the same startup hook as the thresholds above.
 TEST_F(StarOSWorkerTest, s3_multipart_equal_part_size_applied_at_startup) {

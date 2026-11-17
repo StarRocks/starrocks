@@ -115,6 +115,26 @@ void apply_starlet_upload_threshold_configs() {
     FLAGS_fslib_s3_multipart_equal_part_size = config::s3_multipart_equal_part_size;
 }
 
+<<<<<<< HEAD
+=======
+Status apply_starlet_starmgr_client_rpc_timeout_config() {
+    // starlet registers no validator on this flag, and a non-positive gRPC deadline would fail every
+    // starmgr call, including the worker heartbeat, so reject it here.
+    auto timeout_ms = config::starlet_starmgr_client_rpc_timeout_ms;
+    if (timeout_ms <= 0) {
+        return Status::InvalidArgument(fmt::format(
+                "starlet_starmgr_client_rpc_timeout_ms must be greater than 0, got {}; effective value remains {}",
+                timeout_ms, FLAGS_starmgr_client_rpc_timeout_ms));
+    }
+    FLAGS_starmgr_client_rpc_timeout_ms = timeout_ms;
+    return Status::OK();
+}
+
+void apply_starlet_grpc_client_proxy_config() {
+    FLAGS_grpc_client_enable_http_proxy = config::starlet_grpc_client_enable_http_proxy;
+}
+
+>>>>>>> 305171cefd4... [Enhancement][RB-154] Make the StarOS gRPC proxy switch configurable (#69930)
 namespace fslib = staros::starlet::fslib;
 
 std::optional<int32_t> starlet_request_timeout_ms(int64_t configured_timeout_ms, bool use_poco_client) {
@@ -328,6 +348,13 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
     }
     fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
     apply_starlet_upload_threshold_configs();
+<<<<<<< HEAD
+=======
+    if (auto st = apply_starlet_starmgr_client_rpc_timeout_config(); !st.ok()) {
+        LOG(WARNING) << "Failed to apply BE config: " << st;
+    }
+    apply_starlet_grpc_client_proxy_config();
+>>>>>>> 305171cefd4... [Enhancement][RB-154] Make the StarOS gRPC proxy switch configurable (#69930)
 
     // Goes through UpdateFlagValue rather than a typed FLAGS_ assignment: starlet registers an update
     // hook on this flag that resolves the string to the enum its heartbeat path actually reads, and

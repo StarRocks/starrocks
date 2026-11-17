@@ -4073,6 +4073,14 @@ public class Config extends ConfigBase {
             + "Valid values: 1 or more; fe.conf and ADMIN SET FRONTEND CONFIG reject a value of 0 or less.")
     public static int starmgr_grpc_server_max_worker_threads = 1024;
 
+    @ConfField(mutable = false, comment = "Whether the shared-data gRPC channels in the FE, from StarMgr to the "
+            + "compute nodes and from the StarOS client to StarMgr, go through the HTTP proxy that the JVM proxy "
+            + "settings select, such as -Dhttps.proxyHost. These channels only connect cluster nodes, so by default "
+            + "they ignore the JVM proxy and connect directly. Read once at FE startup: StarMgr and the StarOS client "
+            + "build their channels at unrelated times, so a runtime change would reach some channels and not "
+            + "others. Default: false")
+    public static boolean starmgr_grpc_client_enable_http_proxy = false;
+
     @ConfField(mutable = true)
     public static int star_client_read_timeout_seconds = 15;
 

@@ -143,6 +143,36 @@ public class StarMgrServerTest {
     }
 
     @Test
+    public void testStarMgrGrpcClientProxyConfigWiring() throws Exception {
+        boolean oldConf = Config.starmgr_grpc_client_enable_http_proxy;
+        boolean oldStarMgrConf = com.staros.util.Config.GRPC_CLIENT_ENABLE_HTTP_PROXY;
+        try {
+            new MockUp<StarManagerServer>() {
+                @Mock
+                public void start(String host, int port, Executor executor) throws IOException {
+                }
+            };
+
+            Config.starmgr_grpc_client_enable_http_proxy = true;
+
+            StarMgrServer server = new StarMgrServer();
+            server.initialize(environment, tempFolder.getPath());
+
+            Assertions.assertTrue(com.staros.util.Config.GRPC_CLIENT_ENABLE_HTTP_PROXY);
+
+            // StarMgr and the StarOS client read it whenever they build a channel, so a later change must
+            // not reach them through the refresh daemon and leave the channels split between two settings.
+            Config.starmgr_grpc_client_enable_http_proxy = false;
+            Deencapsulation.invoke(GlobalStateMgr.getCurrentState().getConfigRefreshDaemon(), "runAfterCatalogReady");
+
+            Assertions.assertTrue(com.staros.util.Config.GRPC_CLIENT_ENABLE_HTTP_PROXY);
+        } finally {
+            Config.starmgr_grpc_client_enable_http_proxy = oldConf;
+            com.staros.util.Config.GRPC_CLIENT_ENABLE_HTTP_PROXY = oldStarMgrConf;
+        }
+    }
+
+    @Test
     public void testGrpcExecutorScalesUpToConfiguredMax() throws Exception {
         int oldMaxThreads = Config.starmgr_grpc_server_max_worker_threads;
         try {
