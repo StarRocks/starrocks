@@ -18,8 +18,6 @@ products: [oss, enterprise, cloud, anywhere]
 每个 provider 还通过 `protocol` 属性声明其端点使用的**协议**。省略时按类型取默认值：`embedding` 和 `chat`
 为 `openai`，`rerank` 为 `cohere`。
 
-[ai_complete](../../../sql-functions/ai-functions/ai_text_functions.md#ai_complete) 和 [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed) 当前要求 `openai` 协议。使用其他已注册协议调用这些函数时，会在查询规划阶段报错。
-
 provider 对象（含 `api_key` 属性）持久化在 FE 元数据 journal 与 image 中，重启和升级后凭证仍保留。
 这些设置没有 `fe.conf` 开关。
 
@@ -44,7 +42,7 @@ TYPE { embedding | rerank | chat }
 PROPERTIES (
     "endpoint"   = "<url>",
     "model"      = "<model_name>"
-    [, "protocol" = "{ openai | anthropic | cohere }" ]
+    [, "protocol" = "{ openai | anthropic | cohere | dashscope }" ]
     [, "dimensions" = "<int>" ]      -- 仅 embedding
     [, "max_documents" = "<int>" ]   -- 仅 rerank（可选）
     [, "deadline_ms" = "<int>" ]     -- 仅 rerank（可选）
@@ -68,7 +66,7 @@ PROPERTIES (
 | --------------- | -------------- | ---- | ------------------------------------------------------------------------------------ |
 | `endpoint`      | 全部           | 是   | HTTP(S) 端点 URL，必须以 `http://` 或 `https://` 开头。                               |
 | `model`         | 全部           | 是   | 请求体 `model` 字段的模型名（如 `text-embedding-3-small`、`cohere/rerank-4-fast`）。 |
-| `protocol`      | 全部           | 否   | 端点使用的协议：`openai`、`anthropic` 或 `cohere`。默认值：`embedding` 和 `chat` 为 `openai`，`rerank` 为 `cohere`。|
+| `protocol`      | 全部           | 否   | 端点使用的协议：`openai`、`anthropic`、`cohere` 或 `dashscope`。默认值：`embedding` 和 `chat` 为 `openai`，`rerank` 为 `cohere`。|
 | `dimensions`    | embedding      | 否   | embedding 向量维度（正整数）。必须与 provider 输出及向量索引维度一致。                |
 | `max_documents` | rerank         | 否   | 每次 rerank 请求发送的最大文档数（正整数；默认 1000）。                               |
 | `deadline_ms`   | rerank         | 否   | 整个 rerank 调用（含所有重试）的总时间预算（毫秒，正整数；默认 10000）。用于限制慢/不可达的 rerank 服务最多拖慢搜索多久,超过后降级为融合排序。超时不重试,仅连接失败或 HTTP 5xx 才重试。 |

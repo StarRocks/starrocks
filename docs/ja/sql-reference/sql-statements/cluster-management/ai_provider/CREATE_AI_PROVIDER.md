@@ -18,8 +18,6 @@ products: [oss, enterprise, cloud, anywhere]
 各プロバイダーは `protocol` プロパティでエンドポイントが話す**プロトコル**も宣言します。省略した場合はタイプ
 が暗黙に持つプロトコルがデフォルトになります: `embedding` と `chat` は `openai`、`rerank` は `cohere` です。
 
-[ai_complete](../../../sql-functions/ai-functions/ai_text_functions.md#ai_complete) と [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed) は現在 `openai` プロトコルを必要とします。これらの関数に他の登録済みプロトコルを指定すると、クエリの計画時にエラーになります。
-
 プロバイダーオブジェクトは `api_key` プロパティを含めて FE のメタデータジャーナルとイメージに永続化されるため、
 クラスターの再起動やアップグレード後も認証情報は保持されます。これらの設定に対応する `fe.conf` の項目はありません。
 
@@ -45,7 +43,7 @@ TYPE { embedding | rerank | chat }
 PROPERTIES (
     "endpoint"   = "<url>",
     "model"      = "<model_name>"
-    [, "protocol" = "{ openai | anthropic | cohere }" ]
+    [, "protocol" = "{ openai | anthropic | cohere | dashscope }" ]
     [, "dimensions" = "<int>" ]      -- embedding only
     [, "max_documents" = "<int>" ]   -- rerank only (optional)
     [, "deadline_ms" = "<int>" ]     -- rerank only (optional)
@@ -69,7 +67,7 @@ PROPERTIES (
 | --------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `endpoint`      | すべて         | はい     | HTTP(S) エンドポイントの URL。`http://` または `https://` で始まる必要があります。                    |
 | `model`         | すべて         | はい     | リクエストの `model` フィールドに渡されるモデル名 (例: `text-embedding-3-small`、`cohere/rerank-4-fast`)。 |
-| `protocol`      | すべて         | いいえ   | エンドポイントのプロトコル: `openai`、`anthropic`、または `cohere`。デフォルト: `embedding` と `chat` は `openai`、`rerank` は `cohere`。 |
+| `protocol`      | すべて         | いいえ   | エンドポイントのプロトコル: `openai`、`anthropic`、`cohere`、または `dashscope`。デフォルト: `embedding` と `chat` は `openai`、`rerank` は `cohere`。 |
 | `dimensions`    | embedding      | いいえ   | 埋め込みベクトルの次元数 (正の整数)。プロバイダーの出力およびベクトルインデックスの次元と一致する必要があります。 |
 | `max_documents` | rerank         | いいえ   | 1 回の rerank リクエストで送信するドキュメントの最大数 (正の整数、デフォルト 1000)。                  |
 | `deadline_ms`   | rerank         | いいえ   | すべてのリトライを含む rerank 呼び出し全体の実時間の上限 (ミリ秒、正の整数、デフォルト 10000)。応答の遅い、または到達不能なリランカーが検索をどれだけ長く停止させられるかを制限し、超過した場合はフュージョン順にフォールバックします。タイムアウトはリトライされません。リトライされるのは接続失敗または HTTP 5xx のみです。 |

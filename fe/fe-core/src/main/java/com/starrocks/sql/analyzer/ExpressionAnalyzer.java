@@ -1185,7 +1185,7 @@ public class ExpressionAnalyzer {
                 FunctionAnalyzer.analyze(node);
                 verifyNoAIInConditionalFunction(node);
                 checkGetQueryProfileAccess(node);
-                Authorizer.checkAIFunctionUsage(session, node);
+                AIFunctionAnalyzer.checkUsage(session, node);
                 return null;
             }
 
@@ -1212,7 +1212,7 @@ public class ExpressionAnalyzer {
                     FunctionAnalyzer.analyze(node);
                     verifyNoAIInConditionalFunction(node);
                     checkGetQueryProfileAccess(node);
-                    Authorizer.checkAIFunctionUsage(session, node);
+                    AIFunctionAnalyzer.checkUsage(session, node);
                     return null;
                 }
                 // Try to provide a more user-friendly error message for positional calls
@@ -1229,7 +1229,7 @@ public class ExpressionAnalyzer {
             FunctionAnalyzer.analyze(node);
             verifyNoAIInConditionalFunction(node);
             checkGetQueryProfileAccess(node);
-            Authorizer.checkAIFunctionUsage(session, node);
+            AIFunctionAnalyzer.checkUsage(session, node);
             return null;
         }
 
