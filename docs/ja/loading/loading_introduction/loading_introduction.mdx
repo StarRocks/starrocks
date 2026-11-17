@@ -184,14 +184,14 @@ StarRocks は、データロードのためにさまざまなオプションを�
 
 | **データソース** | **利用可能なロードオプション**                                |
 | --------------- | ------------------------------------------------------------ |
-| Apache Hive™    | <ul><li>(バッチ) [Hive catalog](../../data_source/catalog/hive_catalog.md) を作成し、その後 [INSERT INTO SELECT FROM `<table_name>`](../InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table) を使用します。</li><li>(バッチ) [Spark Load](https://docs.starrocks.io/docs/loading/spark/SparkLoad/).</li></ul> |
+| Apache Hive™    | <ul><li>(バッチ) [Hive catalog](../../data_source/catalog/hive_catalog.md) を作成し、その後 [INSERT INTO SELECT FROM `<table_name>`](../InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table) を使用します。</li><li>(バッチ) [Spark Load](../spark/SparkLoad.md).</li></ul> |
 | Apache Iceberg  | (バッチ) [Iceberg catalog](../../data_source/catalog/iceberg/iceberg.md) を作成し、その後 [INSERT INTO SELECT FROM `<table_name>`](../InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table) を使用します。 |
 | Apache Hudi     | (バッチ) [Hudi catalog](../../data_source/catalog/hudi_catalog.md) を作成し、その後 [INSERT INTO SELECT FROM `<table_name>`](../InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table) を使用します。 |
 | Delta Lake      | (バッチ) [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md) を作成し、その後 [INSERT INTO SELECT FROM `<table_name>`](../InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table) を使用します。 |
 | Elasticsearch   | (バッチ) [Elasticsearch catalog](../../data_source/catalog/elasticsearch_catalog.md) を作成し、その後 [INSERT INTO SELECT FROM `<table_name>`](../InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table) を使用します。 |
 | Apache Paimon   | (バッチ) [Paimon catalog](../../data_source/catalog/paimon_catalog.md) を作成し、その後 [INSERT INTO SELECT FROM `<table_name>`](../InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table) を使用します。 |
 
-StarRocks は、v3.2 以降で [unified catalogs](https://docs.starrocks.io/docs/data_source/catalog/unified_catalog/) を提供しており、Hive、Iceberg、Hudi、Delta Lake のデータソースからのテーブルを統合データソースとして取り扱うことができ、インジェストを必要としません。
+StarRocks は、v3.2 以降で [unified catalogs](../../data_source/catalog/unified_catalog.md) を提供しており、Hive、Iceberg、Hudi、Delta Lake のデータソースからのテーブルを統合データソースとして取り扱うことができ、インジェストを必要としません。
 
 :::tip
 運用データベースから StarRocks がクエリ可能な Iceberg テーブルにデータをレプリケートするには、CDC および増分同期をサポートするオープンソースの取り込みエンジン [OLake Go](https://olake.io/docs/) を使用できます。StarRocks のサポート状況については、[OLake クエリエンジン互換性ガイド](https://olake.io/docs/understanding/compatibility-engines/)を参照してください。
