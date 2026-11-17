@@ -89,11 +89,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-<<<<<<< HEAD
-=======
-import java.util.Optional;
 import java.util.function.LongPredicate;
->>>>>>> 3af8f421a29... [BugFix][RB-926] Stop queries from seeing a multi-partition transaction half visible (#67727)
 import java.util.stream.Collectors;
 
 public class OlapTableTest {
@@ -446,11 +442,6 @@ public class OlapTableTest {
         OlapTable copyOfCopy = new OlapTable();
         copy.copyOnlyForQuery(copyOfCopy);
         Assertions.assertEquals(copiedAt, copyOfCopy.getVisibleVersionForQuery(physical));
-
-        // A partition given to the copy in place of the shared one, as a bookmark read does, keeps its own version.
-        PhysicalPartition bookmark = physical.copyForBookmark(copiedAt + 5, copiedTime);
-        Assertions.assertEquals(copiedAt + 5, copy.getVisibleVersionForQuery(bookmark));
-        Assertions.assertFalse(copy.isPlanningVisibleVersionMoved(bookmark));
 
         copy.rereadPlanningVisibleVersion(physical);
         Assertions.assertFalse(copy.isPlanningVisibleVersionMoved(physical));

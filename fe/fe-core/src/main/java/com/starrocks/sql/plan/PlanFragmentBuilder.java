@@ -294,22 +294,8 @@ public class PlanFragmentBuilder {
                                               List<String> colNames,
                                               TResultSinkType resultSinkType,
                                               boolean hasOutputFragment, boolean isShortCircuit) {
-<<<<<<< HEAD
-=======
-        return createPhysicalPlan(plan, connectContext, outputColumns, columnRefFactory, colNames, resultSinkType,
-                hasOutputFragment, isShortCircuit, hasOutputFragment);
-    }
-
-    // resultToClient is false when the caller swaps the result sink for a table sink afterwards
-    public static ExecPlan createPhysicalPlan(OptExpression plan, ConnectContext connectContext,
-                                              List<ColumnRefOperator> outputColumns, ColumnRefFactory columnRefFactory,
-                                              List<String> colNames,
-                                              TResultSinkType resultSinkType,
-                                              boolean hasOutputFragment, boolean isShortCircuit,
-                                              boolean resultToClient) {
         // Before any scan reads the versions its table copy recorded.
         PlanningVersionRecheck.recheck(plan);
->>>>>>> 3af8f421a29... [BugFix][RB-926] Stop queries from seeing a multi-partition transaction half visible (#67727)
         UKFKConstraintsCollector.collectColumnConstraints(plan);
         ExecPlan execPlan = new ExecPlan(connectContext, colNames, plan, outputColumns, isShortCircuit);
         boolean planned = false;

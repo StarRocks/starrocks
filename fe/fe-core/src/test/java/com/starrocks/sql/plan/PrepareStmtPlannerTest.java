@@ -19,17 +19,10 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
-import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.context.ai.AIProviderType;
-=======
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.planner.OlapScanNode;
-import com.starrocks.qe.DDLStmtExecutor;
->>>>>>> 3af8f421a29... [BugFix][RB-926] Stop queries from seeing a multi-partition transaction half visible (#67727)
 import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.AIProviderMgr;

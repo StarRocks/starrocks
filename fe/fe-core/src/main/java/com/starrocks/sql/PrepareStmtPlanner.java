@@ -149,17 +149,10 @@ public class PrepareStmtPlanner {
             prepareStmtContext.reset();
             return execPlan;
         }
-<<<<<<< HEAD
         // isRebindable guarantees the physical plan root is an olap scan
         OlapTable plannedTable = (OlapTable) ((PhysicalOlapScanOperator) execPlan.getPhysicalPlan().getOp()).getTable();
         if (prepareStmtContext.isPlannedOnLiveTable(queryStmt, session, plannedTable)) {
             rejectCaching(executeStmt, "the plan scans the live table");
-=======
-        OlapTable plannedTable = plannedTable(execPlan.getPhysicalPlan());
-        if (!prepareStmtContext.recordPlannedTable(queryStmt, session, plannedTable, schemaUpdateTime)) {
-            rejectCaching(executeStmt,
-                    "the plan scans the live table, or the table name no longer leads to the table it scans");
->>>>>>> 3af8f421a29... [BugFix][RB-926] Stop queries from seeing a multi-partition transaction half visible (#67727)
             prepareStmtContext.reset();
             return execPlan;
         }
