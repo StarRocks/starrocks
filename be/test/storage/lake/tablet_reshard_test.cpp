@@ -3253,9 +3253,8 @@ TEST_F(LakeTabletReshardTest, test_off_range_rowset_with_real_data_splits_across
     cross_txn_info.set_txn_id(cross_txn);
     cross_txn_info.set_txn_type(TXN_NORMAL);
     cross_txn_info.set_commit_time(1);
-    ASSIGN_OR_ABORT(auto source,
-                    lake::publish_version(_tablet_manager.get(), cross_info, kBaseVersion, kCrossVersion,
-                                          std::span<const TxnInfoPB>(&cross_txn_info, 1), false, std::nullopt));
+    ASSIGN_OR_ABORT(auto source, lake::publish_version(_tablet_manager.get(), cross_info, kBaseVersion, kCrossVersion,
+                                                       std::span<const TxnInfoPB>(&cross_txn_info, 1), false));
     ASSERT_EQ(2, source->rowsets_size());
     const RowsetMetadataPB off_range = source->rowsets(1);
     ASSERT_TRUE(off_range.segment_metas(0).shared());
@@ -3431,9 +3430,9 @@ TEST_F(LakeTabletReshardTest, test_pk_off_range_rowset_with_in_range_delete_spli
     txn_info.set_commit_time(1);
     lake::PublishTabletInfo cross_info(lake::PublishTabletInfo::SPLITTING_TABLET, parent, child,
                                        /*split_count=*/2, /*split_index=*/0);
-    ASSIGN_OR_ABORT(auto source, lake::publish_version(_tablet_manager.get(), cross_info, metadata->version(),
-                                                       metadata->version() + 1,
-                                                       std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
+    ASSIGN_OR_ABORT(auto source,
+                    lake::publish_version(_tablet_manager.get(), cross_info, metadata->version(),
+                                          metadata->version() + 1, std::span<const TxnInfoPB>(&txn_info, 1), false));
     const RowsetMetadataPB off_range = source->rowsets(source->rowsets_size() - 1);
     ASSERT_TRUE(off_range.has_range());
     ASSERT_GT(off_range.segment_metas_size(), 0);
