@@ -4045,8 +4045,13 @@ public class StmtExecutor {
                         attachment,
                         jobDeadLineMs - System.currentTimeMillis());
 
-                long publishWaitMs = Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
-                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000;
+                // A shadow rewrite runs on the alter scheduler thread that runs every other alter job of its kind,
+                // and its job checks a committed rewrite again on later ticks. Waiting until the INSERT deadline
+                // would stop all of those jobs for as long as this publish cannot finish.
+                boolean isShadowRewrite = stmt instanceof InsertStmt && ((InsertStmt) stmt).isShadowRewrite();
+                long publishWaitMs = Config.enable_sync_publish && !isShadowRewrite
+                        ? jobDeadLineMs - System.currentTimeMillis()
+                        : context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000;
 
                 txnStatus = TransactionStatus.COMMITTED;
                 final long waitInterval = 300;

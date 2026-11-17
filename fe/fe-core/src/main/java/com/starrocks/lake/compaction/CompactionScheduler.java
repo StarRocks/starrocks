@@ -380,10 +380,12 @@ public class CompactionScheduler extends Daemon {
             //     txn vlogs over [alter_version + 1, commit_version). A compaction only writes the visible (base)
             //     index tablets, so a compaction version inside that range has no rollup vlog and the rollup
             //     publish fails on every retry, wedging the job forever (RB-320).
+            // An alter that still waits for earlier transactions when a partition starts rejecting commits is
+            // cancelled (LakeAlterWaitGuard), allowing compaction to resume when the table returns to NORMAL.
             if (table != null && (table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
                     || table.getState() == OlapTable.OlapTableState.ROLLUP)) {
                 long retryAfterMs = Config.lake_compaction_interval_ms_on_failure;
-                compactionManager.enableCompactionAfter(partitionIdentifier, retryAfterMs);
+                compactionManager.deferCompactionForAlter(partitionIdentifier, retryAfterMs);
                 logCompactionSkippedByAlter(db, table, partitionStatisticsSnapshot, retryAfterMs);
                 return null;
             }

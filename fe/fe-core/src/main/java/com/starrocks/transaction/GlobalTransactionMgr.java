@@ -1041,6 +1041,17 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         }
     }
 
+    /**
+     * The oldest of the running transactions that {@link #isPreviousTransactionsFinished(long, long, List)} waits for,
+     * or null when there is none or the database has no transaction manager.
+     */
+    public TransactionState getOldestPreviousRunningTransaction(long endTransactionId, long dbId,
+                                                                List<Long> tableIdList) {
+        DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        return dbTransactionMgr == null ? null
+                : dbTransactionMgr.getOldestPreviousRunningTransaction(endTransactionId, tableIdList);
+    }
+
     public boolean isPreviousTransactionsFinishedForReshard(
             long endTransactionId, long dbId, List<Long> tableIdList,
             Set<Long> excludeTransactionIds) throws AnalysisException {

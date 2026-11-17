@@ -1082,6 +1082,7 @@ public abstract class LakeOnlineRewriteJobBase
             if (!isPreviousLoadFinished(dbId, tableId, watershedTxnId)) {
                 LOG.info("wait transactions before {} to be finished, online rewrite job: {}",
                         watershedTxnId, jobId);
+                LakeAlterWaitGuard.cancelIfCommitsRejected(this, watershedTxnId);
                 return;
             }
         } catch (AnalysisException e) {
@@ -1424,6 +1425,11 @@ public abstract class LakeOnlineRewriteJobBase
             // SELECT reading the base deterministically (no-op for single-index rewrite jobs).
             sessionVariable.setEnableSyncMaterializedViewRewrite(false);
             sessionVariable.setInsertTimeoutS((int) (timeoutMs / 2000));
+            // The next scheduler tick checks a committed rewrite again, so wait for its publish at most one tick,
+            // whatever the global tx_visible_wait_timeout. StmtExecutor applies this wait to a shadow rewrite
+            // even with enable_sync_publish on.
+            sessionVariable.setTransactionVisibleWaitTimeout(
+                    Math.max(1L, Config.alter_scheduler_interval_millisecond / 1000L));
 
             // Journal the rewrite txn id BEFORE executing: peekNextTransactionId() is the id the
             // INSERT's beginTransaction will allocate, so record it as durable evidence of which txn
@@ -2179,6 +2185,7 @@ public abstract class LakeOnlineRewriteJobBase
                         advanceVisibleVersionForForceSkip(table, commitVersionMapView());
                     }
                     removeShadowIndexOnCancel(table);
+                    GlobalStateMgr.getCurrentState().getCompactionMgr().resumeCompactionAfterAlter(dbId, table);
                 }
             }
         });
@@ -2209,8 +2216,11 @@ public abstract class LakeOnlineRewriteJobBase
             if (physicalPartition == null) {
                 continue;
             }
-            // Release the GC pin (may have been set in RUNNING or not at all).
-            physicalPartition.setMinRetainVersion(0);
+            PartitionRewriteState state = entry.getValue();
+            // Before the transaction drain there is no rewrite pin. A reserved version means it was already released.
+            if (state.watershedVersion != null && state.commitVersion == null) {
+                physicalPartition.releaseMinRetainVersion(state.watershedVersion);
+            }
             // Drop the shadow index from the partition's catalog index map (if it was exposed).
             physicalPartition.deleteMaterializedIndexByMetaId(shadowIndexMetaId);
         }
@@ -2374,6 +2384,7 @@ public abstract class LakeOnlineRewriteJobBase
                 }
                 // Remove all shadow artifacts so the catalog is clean after cancel replay.
                 removeShadowIndexOnCancel(table);
+                GlobalStateMgr.getCurrentState().getCompactionMgr().resumeCompactionAfterAlter(dbId, table);
             } else {
                 throw new RuntimeException("unknown job state '" + jobState.name() + "'");
             }

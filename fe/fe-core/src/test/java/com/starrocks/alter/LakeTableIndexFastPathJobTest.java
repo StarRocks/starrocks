@@ -34,6 +34,9 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.PartitionIdentifier;
+import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.DropFrontendInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonUtils;
@@ -71,6 +74,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.iceberg.exceptions.CommitFailedException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -1335,6 +1339,97 @@ public class LakeTableIndexFastPathJobTest {
                     commitInfos, new ArrayList<>(), null);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), List.of(table.getId()), LockType.WRITE);
+        }
+    }
+
+    /**
+     * StarRocksTest#12647: a two-phase load PREPARED before the job draws its watershed keeps the job in WAITING_TXN,
+     * and the table does not compact meanwhile. Once a partition's compaction score is above
+     * lake_compaction_score_upper_bound, every commit into it is rejected, the PREPARED load's own commit included,
+     * so the job is cancelled, naming the load, and the table is NORMAL again instead of staying read-only.
+     */
+    @Test
+    public void testJobWaitingForPreparedLoadIsCancelledOnceCommitsAreRejected() throws Exception {
+        ConcurrentLoad.holdPublishDaemon();
+        OlapTable table = createTable("t_cancel_on_rejected_commits", "c0 INT, c1 INT, INDEX idx_c1 (c1) USING BITMAP");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(db.getId(), table.getId(), physicalPartition.getId());
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        long oldSlowdownThreshold = Config.lake_ingest_slowdown_threshold;
+        long oldUpperBound = Config.lake_compaction_score_upper_bound;
+        Config.lake_enable_ingest_slowdown = true;
+        Config.lake_ingest_slowdown_threshold = 1000;
+        Config.lake_compaction_score_upper_bound = 100;
+
+        // A partition the table no longer has (dropped, or replaced by TRUNCATE) whose statistics the scheduler has
+        // not cleaned up yet.
+        PartitionIdentifier goneJustBefore = new PartitionIdentifier(db.getId(), table.getId(),
+                GlobalStateMgr.getCurrentState().getNextId());
+        long preparedTxnId = ConcurrentLoad.prepare(db, table);
+        String preparedLabel = txnMgr.getTransactionState(db.getId(), preparedTxnId).getLabel();
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "DROP INDEX idx_c1");
+        try {
+            // At the bound commits still go through, and the job waits for the PREPARED load. The score left behind
+            // by the partition that is gone rejects no commit, so it does not cancel the job either.
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 100.0));
+            compactionMgr.handleLoadingFinished(goneJustBefore, 2, System.currentTimeMillis(),
+                    new Quantiles(1.0, 1.0, 500.0));
+            for (int i = 0; i < 3; i++) {
+                job.run();
+            }
+            assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+            assertTrue(preparedTxnId < job.getTransactionId().orElseThrow());
+            assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
+
+            // Verify the actual two-phase commit rejects the load at the same score as the ALTER guard.
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 101.0));
+            CommitFailedException rejection = assertThrows(CommitFailedException.class,
+                    () -> txnMgr.commitPreparedTransaction(db.getId(), preparedTxnId, 5000));
+            assertTrue(rejection.getMessage().contains("too large compaction score"), rejection.getMessage());
+            assertEquals(TransactionStatus.PREPARED,
+                    txnMgr.getTransactionState(db.getId(), preparedTxnId).getTransactionStatus());
+            job.run();
+            assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+            assertTrue(job.errMsg.contains("transaction " + preparedTxnId + " (label " + preparedLabel + ", PREPARED)"),
+                    job.errMsg);
+            assertTrue(job.errMsg.contains("partition " + physicalPartition.getId()), job.errMsg);
+            assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+            // Feed the lower score that a completed compaction would publish, then retry the same prepared load.
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 1.0));
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+            try {
+                txnMgr.getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(preparedTxnId);
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+            }
+            TransactionState committed = txnMgr.getTransactionState(db.getId(), preparedTxnId);
+            assertEquals(TransactionStatus.COMMITTED, committed.getTransactionStatus());
+            ConcurrentLoad.makeVisible(db, committed);
+            assertEquals(TransactionStatus.VISIBLE,
+                    txnMgr.getTransactionState(db.getId(), preparedTxnId).getTransactionStatus());
+        } finally {
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_ingest_slowdown_threshold = oldSlowdownThreshold;
+            Config.lake_compaction_score_upper_bound = oldUpperBound;
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(0.0, 0.0, 0.0));
+            compactionMgr.handleLoadingFinished(goneJustBefore, 2, System.currentTimeMillis(),
+                    new Quantiles(0.0, 0.0, 0.0));
+            if (!job.isDone()) {
+                job.cancel("test done");
+            }
+            if (txnMgr.getTransactionState(db.getId(), preparedTxnId).getTransactionStatus()
+                    == TransactionStatus.PREPARED) {
+                txnMgr.abortTransaction(db.getId(), preparedTxnId, "test done");
+            }
         }
     }
 
