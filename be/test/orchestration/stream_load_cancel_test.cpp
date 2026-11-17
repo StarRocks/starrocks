@@ -57,6 +57,8 @@ namespace {
 
 using namespace std::chrono_literals;
 
+MemTracker* g_stream_load_test_mem_tracker = nullptr;
+
 enum class ExecutionMode { NON_PIPELINE, PIPELINE_NODE_RANGES, PIPELINE_DRIVER_RANGES };
 
 class TestSchedulePolicy final : public workgroup::WorkGroupSchedulePolicy {
@@ -89,6 +91,13 @@ private:
 class StreamLoadCancelTest : public testing::TestWithParam<ExecutionMode> {
 protected:
     void SetUp() override {
+        // This standalone test binary does not initialize RuntimeEnv's tracker source.
+        CurrentThread::get_mem_tracker_source_for_test(_previous_initialized_fn, _previous_tracker_fn);
+        _previous_tls_tracker = tls_thread_status.set_mem_tracker(nullptr);
+        g_stream_load_test_mem_tracker = &_buffer_tracker;
+        CurrentThread::set_mem_tracker_source([] { return true; }, [] { return g_stream_load_test_mem_tracker; });
+        ASSERT_EQ(&_buffer_tracker, CurrentThread::mem_tracker());
+
         CpuInfo::init();
         _compute_env._load_stream_mgr = std::make_unique<LoadStreamMgr>();
         _compute_env._stream_mgr = std::make_unique<DataStreamMgr>();
@@ -134,6 +143,13 @@ protected:
         _legacy.reset();
         _pipeline.reset();
         _state.reset();
+        // Release queued buffers while the test tracker source is still installed.
+        if (_compute_env._load_stream_mgr != nullptr) {
+            _compute_env._load_stream_mgr->close();
+        }
+        tls_thread_status.set_mem_tracker(_previous_tls_tracker);
+        CurrentThread::set_mem_tracker_source(_previous_initialized_fn, _previous_tracker_fn);
+        g_stream_load_test_mem_tracker = nullptr;
     }
 
     bool is_pipeline() const { return GetParam() != ExecutionMode::NON_PIPELINE; }
@@ -229,6 +245,9 @@ protected:
 
     // Outlive every buffer, including buffers still held by LoadStreamMgr at teardown.
     MemTracker _buffer_tracker{MemTrackerType::QUERY, -1, "stream_load_cancel_test"};
+    CurrentThread::IsEnvInitializedFn _previous_initialized_fn = nullptr;
+    CurrentThread::ProcessMemTrackerFn _previous_tracker_fn = nullptr;
+    MemTracker* _previous_tls_tracker = nullptr;
     ComputeEnv _compute_env;
     ExecEnv _exec_env;
     workgroup::PipelineExecutorSetConfig _executor_config{1, 1, 1, 1, {}, false, false, nullptr};
