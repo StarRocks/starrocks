@@ -1602,6 +1602,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BE 在请求未提供显式超时时使用的 Pulsar 相关 routine load 操作的默认超时（秒）。具体地，`PInternalServiceImplBase::get_pulsar_info` 将该值乘以 1000，形成以毫秒为单位的超时值，传递给用于获取 Pulsar 分区元数据和 backlog 的 routine load 任务执行器方法。增大该值可在 Pulsar 响应较慢时减少超时失败，但会延长故障检测时间；减小该值可在 broker 响应慢时更快失败。与用于 Kafka 的 `routine_load_kafka_timeout_second` 类似。
 - 引入版本：v3.2.0
 
+### routine_load_kafka_consumer_pool_size
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：BE 为 routine load 保留的空闲 consumer 的最大数量，作业的下一个任务或下一轮可以复用它们的连接，而不必新建。Kafka 和 Pulsar 的 consumer 共用这个池子和这个上限。池满时关闭空闲最久的 consumer；空闲超过 10 分钟的 consumer 也会被关闭。默认值可容纳每个 BE 16 个 routine load 任务（`max_routine_load_task_num_per_be`）、每个任务最多 3 个 consumer（`max_consumer_num_per_group`）。
+- 引入版本：-
+
+### routine_load_kafka_fetch_queue_backoff_ms
+
+- 默认值：10
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：Routine Load 的 Kafka consumer 本地消息队列超过 librdkafka 的队列阈值（`queued.min.messages` 或 `queued.max.messages.kbytes`）后，等待多久再拉取该分区。该值作为 `fetch.queue.backoff.ms` 传给 librdkafka，librdkafka 自身的默认值为 1000 ms。队列被消费完时 librdkafka 不会提前拉取，因此等待时间较长时，消费较快的 consumer 会空等剩余的时间，降低 Routine Load 的吞吐。Routine Load 作业的 `property.fetch.queue.backoff.ms` 属性优先于该配置项。设为负数时使用 librdkafka 的默认值，大于 300000 时按 300000 处理。不要设为 `0`：设为 `0` 时，队列超过阈值期间 librdkafka 的 broker 线程会忙等轮询，占用 CPU。修改后，Routine Load 任务会改用按新值创建的 consumer。
+- 引入版本：-
+
 ### routine_load_kafka_timeout_second
 
 - 默认值：10

@@ -59,10 +59,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -80,6 +82,10 @@ public class StreamLoadMgr implements MemoryTrackable {
     // Only used for sync stream load
     // txnId -> StreamLoadTask (only StreamLoadTask can be sync)
     private Map<Long, StreamLoadTask> txnIdToSyncStreamLoadTasks;
+    // The sync stream load tasks, such as routine load tasks, in the order they were added. When there are too many
+    // tasks, the oldest finished ones go first, so a frequent routine load keeps its recent history listed and each
+    // added task evicts about one instead of scanning all of them.
+    protected Deque<StreamLoadTask> syncStreamLoadTaskQueue;
 
     private Map<Long, Map<String, AbstractStreamLoadTask>> dbToLabelToStreamLoadTask;
 
@@ -112,6 +118,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         LOG.debug("begin to init stream load manager");
         idToStreamLoadTask = Maps.newConcurrentMap();
         txnIdToSyncStreamLoadTasks = Maps.newConcurrentMap();
+        syncStreamLoadTaskQueue = new ConcurrentLinkedDeque<>();
         dbToLabelToStreamLoadTask = Maps.newConcurrentMap();
         lock = new ReentrantReadWriteLock(true);
     }
@@ -329,35 +336,52 @@ public class StreamLoadMgr implements MemoryTrackable {
      * @param addTxnCallback whether to register the task as a transaction state change callback
      */
     public void addLoadTask(AbstractStreamLoadTask task, boolean addTxnCallback) {
-        if (task instanceof StreamLoadTask && ((StreamLoadTask) task).isSyncStreamLoad()) {
-            txnIdToSyncStreamLoadTasks.put(task.getTxnId(), (StreamLoadTask) task);
-        }
-
-        // Clear the stream load tasks manually
-        if (idToStreamLoadTask.size() > Config.stream_load_task_keep_max_num) {
-            LOG.info("trigger cleanSyncStreamLoadTasks when add load task label:{}", task.getLabel());
-            cleanSyncStreamLoadTasks();
-            if (idToStreamLoadTask.size() > Config.stream_load_task_keep_max_num / 2) {
-                LOG.info("trigger cleanOldStreamLoadTasks when add load task label{}", task.getLabel());
-                cleanOldStreamLoadTasks(true);
+        writeLock();
+        try {
+            String label = task.getLabel();
+            boolean syncStreamLoad = task instanceof StreamLoadTask && ((StreamLoadTask) task).isSyncStreamLoad();
+            if (syncStreamLoad) {
+                txnIdToSyncStreamLoadTasks.put(task.getTxnId(), (StreamLoadTask) task);
             }
-        }
 
-        long dbId = task.getDBId();
-        String label = task.getLabel();
-        Map<String, AbstractStreamLoadTask> labelToStreamLoadTask = null;
-        if (dbToLabelToStreamLoadTask.containsKey(dbId)) {
-            labelToStreamLoadTask = dbToLabelToStreamLoadTask.get(dbId);
-        } else {
-            labelToStreamLoadTask = Maps.newConcurrentMap();
-            dbToLabelToStreamLoadTask.put(dbId, labelToStreamLoadTask);
-        }
-        labelToStreamLoadTask.put(label, task);
-        idToStreamLoadTask.put(label, task);
+            // Capacity calculation, eviction and registration share the lock so concurrent additions cannot
+            // each evict the same excess tasks using a count computed before another addition cleaned them up.
+            if (!idToStreamLoadTask.containsKey(label)
+                    && idToStreamLoadTask.size() >= Config.stream_load_task_keep_max_num) {
+                unprotectedEvictFinishedSyncStreamLoadTasks(
+                        idToStreamLoadTask.size() - Config.stream_load_task_keep_max_num + 1);
+                if (idToStreamLoadTask.size() >= Config.stream_load_task_keep_max_num) {
+                    LOG.info("trigger cleanOldStreamLoadTasks when add load task label{}", task.getLabel());
+                    cleanOldStreamLoadTasks(true, true);
+                }
+            }
 
-        // register txn state listener
-        if (addTxnCallback) {
-            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(task);
+            long dbId = task.getDBId();
+            Map<String, AbstractStreamLoadTask> labelToStreamLoadTask = null;
+            if (dbToLabelToStreamLoadTask.containsKey(dbId)) {
+                labelToStreamLoadTask = dbToLabelToStreamLoadTask.get(dbId);
+            } else {
+                labelToStreamLoadTask = Maps.newConcurrentMap();
+                dbToLabelToStreamLoadTask.put(dbId, labelToStreamLoadTask);
+            }
+            labelToStreamLoadTask.put(label, task);
+            AbstractStreamLoadTask previousTask = idToStreamLoadTask.put(label, task);
+            // A label has one map entry; its previous task must not remain retained by the eviction queue.
+            if (previousTask instanceof StreamLoadTask && (previousTask != task || !syncStreamLoad)) {
+                syncStreamLoadTaskQueue.remove(previousTask);
+            }
+            // Queue only once the map holds the task, after cleanup has made room for it.
+            // Re-registering the same sync task preserves its existing place rather than duplicating it.
+            if (syncStreamLoad && (previousTask != task || !syncStreamLoadTaskQueue.contains(task))) {
+                syncStreamLoadTaskQueue.add((StreamLoadTask) task);
+            }
+
+            // register txn state listener
+            if (addTxnCallback) {
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(task);
+            }
+        } finally {
+            writeUnlock();
         }
     }
 
@@ -494,6 +518,10 @@ public class StreamLoadMgr implements MemoryTrackable {
     // Cancelled and Committed task will be removed after Config.stream_load_task_keep_max_second seconds.
     // Also retries abort for MultiStmtTasks stuck in ABORTING state (background compensation).
     public void cleanOldStreamLoadTasks(boolean isForce) {
+        cleanOldStreamLoadTasks(isForce, false);
+    }
+
+    private void cleanOldStreamLoadTasks(boolean isForce, boolean onlyFinished) {
         LOG.debug("begin to clean old stream load tasks");
 
         List<StreamLoadMultiStmtTask> abortingTasks = new ArrayList<>();
@@ -504,6 +532,12 @@ public class StreamLoadMgr implements MemoryTrackable {
             long currentMs = System.currentTimeMillis();
             while (iterator.hasNext()) {
                 AbstractStreamLoadTask streamLoadTask = iterator.next().getValue();
+
+                // Registration only needs capacity. Leave timeout cancellation and abort retries to the
+                // periodic cleanup, which does not have addLoadTask's outer manager lock.
+                if (onlyFinished && !streamLoadTask.isFinalState()) {
+                    continue;
+                }
 
                 if (streamLoadTask instanceof StreamLoadMultiStmtTask) {
                     StreamLoadMultiStmtTask multiTask = (StreamLoadMultiStmtTask) streamLoadTask;
@@ -528,6 +562,7 @@ public class StreamLoadMgr implements MemoryTrackable {
                     );
                 }
             }
+            unprotectedPruneSyncStreamLoadTaskQueue();
         } finally {
             writeUnlock();
         }
@@ -538,6 +573,30 @@ public class StreamLoadMgr implements MemoryTrackable {
                 task.retryAbortIfNeeded(currentMs);
             }
         }
+    }
+
+    // Evicts at most num of the oldest finished sync tasks; the caller holds the manager write lock.
+    private void unprotectedEvictFinishedSyncStreamLoadTasks(int num) {
+        int evicted = 0;
+        Iterator<StreamLoadTask> iterator = syncStreamLoadTaskQueue.iterator();
+        while (iterator.hasNext() && evicted < num) {
+            StreamLoadTask streamLoadTask = iterator.next();
+            if (idToStreamLoadTask.get(streamLoadTask.getLabel()) != streamLoadTask) {
+                // removed by another cleanup
+                iterator.remove();
+            } else if (streamLoadTask.isFinalState()) {
+                unprotectedRemoveTaskFromDb(streamLoadTask);
+                idToStreamLoadTask.remove(streamLoadTask.getLabel());
+                txnIdToSyncStreamLoadTasks.remove(streamLoadTask.getTxnId());
+                iterator.remove();
+                evicted++;
+            }
+        }
+    }
+
+    // drops the queued sync tasks that another cleanup has removed; the caller holds the write lock
+    private void unprotectedPruneSyncStreamLoadTaskQueue() {
+        syncStreamLoadTaskQueue.removeIf(task -> idToStreamLoadTask.get(task.getLabel()) != task);
     }
 
     // There maybe many streamLoadTasks in memory when enable_load_profile = true,
@@ -563,7 +622,7 @@ public class StreamLoadMgr implements MemoryTrackable {
                     );
                 }
             }
-
+            unprotectedPruneSyncStreamLoadTaskQueue();
         } finally {
             writeUnlock();
         }

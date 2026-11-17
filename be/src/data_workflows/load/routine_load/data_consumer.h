@@ -75,6 +75,7 @@ public:
 
     const UniqueId& id() { return _id; }
     time_t last_visit_time() const { return _last_visit_time; }
+    void set_last_visit_time(time_t last_visit_time) { _last_visit_time = last_visit_time; }
     void set_grp(const UniqueId& grp_id) { _grp_id = grp_id; }
 
 protected:
@@ -187,6 +188,8 @@ private:
     std::string _topic;
     std::string _group_id;
     std::unordered_map<std::string, std::string> _custom_properties;
+    // routine_load_kafka_fetch_queue_backoff_ms when the consumer was created
+    int32_t _fetch_queue_backoff_ms = -1;
 
     size_t _assigned_partition_count = 0;
     // Partitions whose latest delivered event is EOF; new data clears the state.
