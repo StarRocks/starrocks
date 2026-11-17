@@ -646,7 +646,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                 for (const auto& load_id : txn_infos[i].load_ids()) {
                     auto source_path = tablet_mgr->txn_log_location(tablet_id, txn_id, load_id);
                     files_to_delete.emplace_back(source_path);
-                    tablet_mgr->metacache()->erase(MetacacheKey::txn_log(source_path));
+                    tablet_mgr->metacache()->erase(source_path);
                 }
             };
             // FE sends the load ids of every statement of the transaction, but a statement writes txn logs only
@@ -678,7 +678,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                 for (int k = 0; k < expected_count; ++k) {
                     if (named[k]) continue;
                     auto source = tablet_mgr->txn_log_location(tablet_id, txn_id, txn_infos[i].load_ids(k));
-                    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(source));
+                    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(source));
                     auto st = fs->path_exists(source);
                     if (st.ok()) {
                         // Reusing the log and deleting the sources would drop this statement.
@@ -701,25 +701,6 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             }
 
             if (static_cast<int>(txn_logs.size()) < expected_count) {
-<<<<<<< HEAD
-                // load_ids lists every statement of the transaction, while a statement writes txn logs only
-                // for the tablets it loads: when one statement loads another table or another partition, this
-                // tablet has no log under that statement's load id. publish_version applies whatever logs it
-                // finds for the same reason, and so does this path.
-                //
-                // A shortfall is also what a retry sees after a previous attempt wrote the .vlog and deleted
-                // some or all source logs. Check the .vlog first: rewriting it from the logs that are left would
-                // drop the statements whose logs are gone. If its existence cannot be determined, fail instead of
-                // risking that.
-                auto txn_vlog_path = tablet_mgr->txn_vlog_location(tablet_id, log_version);
-                ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txn_vlog_path));
-                auto check_st = fs->path_exists(txn_vlog_path);
-                if (check_st.ok()) {
-                    for (const auto& load_id : txn_infos[i].load_ids()) {
-                        auto stale_path = tablet_mgr->txn_log_location(tablet_id, txn_id, load_id);
-                        files_to_delete.emplace_back(stale_path);
-                        tablet_mgr->metacache()->erase(stale_path);
-=======
                 // load_txn_log skips per-load_id files that are NotFound. A shortfall means either
                 // statements that did not load this tablet, or an idempotent retry whose sources were
                 // (partly) deleted after the target .vlog had been written. Look the target up as replay
@@ -734,7 +715,6 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                     } else if (existing->front()->tablet_id() != tablet_id || existing->front()->txn_id() != txn_id) {
                         return Status::Corruption(fmt::format(
                                 "txn vlog does not match publish request for tablet {} txn {}", tablet_id, txn_id));
->>>>>>> ab3169b ([BugFix][RB-925] Keep a lake explicit transaction's statement logs in shadow tablet replay and batch publish (#83413))
                     }
                     stage_source_logs();
                     continue;
@@ -816,18 +796,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                     }
                 }
 
-<<<<<<< HEAD
-            RETURN_IF_ERROR(tablet_mgr->put_txn_vlog(merged, log_version));
-
-            // Stage every per-load_id source .log for async deletion, mirroring what
-            // publish_version does for the non-shadow path on the same txn shape.
-            for (const auto& load_id : txn_infos[i].load_ids()) {
-                auto txn_log_path = tablet_mgr->txn_log_location(tablet_id, txn_id, load_id);
-                files_to_delete.emplace_back(txn_log_path);
-                tablet_mgr->metacache()->erase(txn_log_path);
-=======
                 RETURN_IF_ERROR(tablet_mgr->put_txn_vlog(merged, log_version));
->>>>>>> ab3169b ([BugFix][RB-925] Keep a lake explicit transaction's statement logs in shadow tablet replay and batch publish (#83413))
             }
             stage_source_logs();
         } else if (!txn_infos[i].combined_txn_log()) {

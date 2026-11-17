@@ -31,18 +31,11 @@
 
 #include <ctime>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
->>>>>>> ab3169b ([BugFix][RB-925] Keep a lake explicit transaction's statement logs in shadow tablet replay and batch publish (#83413))
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
-#include "common/config_lake_fwd.h"
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
@@ -57,6 +50,8 @@
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
 
 namespace starrocks::lake {
 
@@ -152,9 +147,9 @@ protected:
     // What a publish finds on a node other than the one that ran the previous attempt: neither the metadata,
     // the txn logs nor the primary index of the tablet are cached there.
     void switch_node() {
-        StorageEngine::instance()->wait_storage_cleanup_tasks();
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
         _tablet_mgr->metacache()->prune();
-        _primary_key_mgr->unload_and_remove_primary_index(_tablet_metadata->id());
+        _update_mgr->unload_and_remove_primary_index(_tablet_metadata->id());
     }
 
     bool txn_log_exists(int64_t txn_id, const PUniqueId* load_id) {
@@ -840,7 +835,7 @@ TEST_P(LakeMultiStatementPublishTest, batch_publish_leaves_txn_logs_to_vacuum) {
     ASSERT_OK(
             publish_batch(1, {make_txn_info(load_before, {}), make_txn_info(txn_id, {load_id_1, load_id_2})}).status());
     ASSERT_OK(publish_multi_statement(4, single_txn_id, {single_load_id}).status());
-    StorageEngine::instance()->wait_storage_cleanup_tasks();
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
     EXPECT_TRUE(txn_log_exists(load_before, nullptr));
     EXPECT_TRUE(txn_log_exists(txn_id, &load_id_1));
     EXPECT_TRUE(txn_log_exists(txn_id, &load_id_2));

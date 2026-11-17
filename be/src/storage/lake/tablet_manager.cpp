@@ -45,11 +45,8 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/txn_log.h"
-<<<<<<< HEAD
-#include "storage/lake/update_manager.h"
-=======
 #include "storage/lake/txn_vlog_format.h"
->>>>>>> ab3169b ([BugFix][RB-925] Keep a lake explicit transaction's statement logs in shadow tablet replay and batch publish (#83413))
+#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
@@ -116,9 +113,9 @@ static Status validate_txn_vlog_group(const TxnLogVector& logs, bool write_only)
         if (log->tablet_id() != logs.front()->tablet_id() || log->txn_id() != logs.front()->txn_id()) {
             return Status::InvalidArgument("txn vlog group entries have different tablet ids or txn ids");
         }
-        if (write_only && (!log->has_op_write() || log->has_op_compaction() || log->has_op_schema_change() ||
-                           log->has_op_alter_metadata() || log->has_op_replication() ||
-                           log->has_op_parallel_compaction() || log->has_op_add_index() || log->has_op_drop_index())) {
+        if (write_only &&
+            (!log->has_op_write() || log->has_op_compaction() || log->has_op_schema_change() ||
+             log->has_op_alter_metadata() || log->has_op_replication() || log->has_op_parallel_compaction())) {
             return Status::InvalidArgument("txn vlog group only supports op_write statements");
         }
     }
@@ -1402,7 +1399,7 @@ StatusOr<TxnLogVector> TabletManager::get_txn_vlog_group(const std::string& path
     bool checksum_verified = false;
     auto load = [&]() -> StatusOr<TxnLogVector> {
         checksum_verified = false;
-        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
         RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
         ASSIGN_OR_RETURN(auto file, fs->new_random_access_file(opts, path));
         ASSIGN_OR_RETURN(auto content, file->read_all());

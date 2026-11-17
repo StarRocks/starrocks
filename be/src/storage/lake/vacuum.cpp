@@ -1356,8 +1356,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
     }
     for (const auto& log_name : damaged_vlogs) {
         auto [tablet_id, version] = parse_txn_vlog_filename(log_name);
-        tablet_mgr->metacache()->erase(MetacacheKey::txn_log(
-                join_path(tablet_mgr->location_provider()->txn_log_root_location(tablet_id), log_name)));
+        tablet_mgr->metacache()->erase(
+                join_path(tablet_mgr->location_provider()->txn_log_root_location(tablet_id), log_name));
         RETURN_IF_ERROR(ignore_not_found(fs->delete_file(join_path(log_dir, log_name))));
         txn_logs.erase(log_name);
     }

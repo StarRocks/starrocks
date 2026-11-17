@@ -58,6 +58,11 @@ inline bool is_txn_vlog(std::string_view file_name) {
     return HasSuffixString(file_name, ".vlog");
 }
 
+// A statement-group version log, which is_txn_vlog() also matches.
+inline bool is_txn_vlog_group_file(std::string_view file_name) {
+    return HasSuffixString(file_name, ".group.vlog");
+}
+
 inline bool is_tablet_metadata(std::string_view file_name) {
     return HasSuffixString(file_name, ".meta");
 }

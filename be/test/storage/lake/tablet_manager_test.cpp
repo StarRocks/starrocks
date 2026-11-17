@@ -28,35 +28,22 @@
 
 #include "common/config.h"
 #include "fs/fs.h"
-#include "fs/fs_memory.h"
-#include "fs/fs_posix.h"
-#include "fs/fs_registry.h"
 #include "fs/fs_util.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
-<<<<<<< HEAD
 #include "storage/lake/tablet_reshard.h"
+#include "storage/lake/transactions.h"
+#include "storage/lake/txn_vlog_format.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
-#include "storage/rowset/segment.h"
-=======
-#include "storage/lake/primary_key_manager.h"
-#include "storage/lake/scoped_local_disk_cache.h"
-#include "storage/lake/transactions.h"
-#include "storage/lake/txn_vlog_format.h"
-#include "storage/lake/versioned_tablet.h"
 #include "storage/protobuf_file.h"
-#include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
-#include "storage/rowset/segment_writer.h"
 #include "storage/storage_engine.h"
-#include "storage/storage_metrics.h"
->>>>>>> ab3169b ([BugFix][RB-925] Keep a lake explicit transaction's statement logs in shadow tablet replay and batch publish (#83413))
 #include "storage/tablet_schema.h"
 #include "storage/utils.h"
 #include "test_util.h"
@@ -118,98 +105,6 @@ public:
     }
 };
 
-<<<<<<< HEAD
-=======
-// Serves |path| from an in-memory copy standing in for the disk cache, or from |remote| when a read bypasses it.
-class CachedVlogFileSystem final : public MemoryFileSystem {
-public:
-    CachedVlogFileSystem(std::string path, FileSystem* remote) : path(std::move(path)), _remote(remote) {}
-
-    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
-                                                                       const std::string& filename) override {
-        if (opts.skip_disk_cache) {
-            ++remote_reads;
-            return _remote->new_random_access_file(opts, filename);
-        }
-        ++cached_reads;
-        return MemoryFileSystem::new_random_access_file(opts, filename);
-    }
-
-    const std::string path;
-    int cached_reads = 0;
-    int remote_reads = 0;
-
-private:
-    FileSystem* _remote;
-};
-
-std::shared_ptr<CachedVlogFileSystem> g_cached_vlog_fs;
-
-bool matches_cached_vlog(std::string_view uri) {
-    return g_cached_vlog_fs != nullptr && uri == g_cached_vlog_fs->path;
-}
-
-StatusOr<std::shared_ptr<FileSystem>> create_cached_vlog(std::string_view) {
-    return std::static_pointer_cast<FileSystem>(g_cached_vlog_fs);
-}
-
-struct SegmentSchemaCacheTestData {
-    std::shared_ptr<FileSystem> fs;
-    FileInfo file_info;
-    std::shared_ptr<TabletSchema> full_schema;
-    std::shared_ptr<TabletSchema> narrow_schema;
-};
-
-StatusOr<SegmentSchemaCacheTestData> write_segment_schema_cache_test_data(lake::TabletManager* tablet_manager) {
-    SegmentSchemaCacheTestData data;
-    auto key = create_int_key_pb(0, /*is_nullable=*/false);
-    key.set_name("k");
-    auto value = create_int_value_pb(1, "NONE", /*is_nullable=*/true, /*default_value=*/"77");
-    value.set_name("v");
-    data.full_schema = std::shared_ptr<TabletSchema>(TabletSchemaHelper::create_tablet_schema({key, value}, 1));
-    data.full_schema->set_id(next_id());
-    data.full_schema->set_schema_version(0);
-    data.narrow_schema = std::shared_ptr<TabletSchema>(TabletSchemaHelper::create_tablet_schema({key}, 1));
-    data.narrow_schema->set_id(next_id());
-    data.narrow_schema->set_schema_version(1);
-    data.file_info.path = tablet_manager->segment_location(1, fmt::format("schema_cache_{}.dat", next_id()));
-    ASSIGN_OR_RETURN(data.fs, FileSystemFactory::CreateSharedFromString(data.file_info.path));
-    data.file_info.fs = data.fs;
-    ASSIGN_OR_RETURN(auto wfile, data.fs->new_writable_file(data.file_info.path));
-    SegmentWriter writer(std::move(wfile), /*segment_id=*/0, data.full_schema, SegmentWriterOptions{});
-    RETURN_IF_ERROR(writer.init());
-    auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(data.full_schema), 3);
-    for (int32_t row = 1; row <= 3; ++row) {
-        chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(row));
-        chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(100 + row));
-    }
-    RETURN_IF_ERROR(writer.append_chunk(*chunk));
-    uint64_t file_size = 0, index_size = 0, footer_position = 0;
-    RETURN_IF_ERROR(writer.finalize(&file_size, &index_size, &footer_position));
-    data.file_info.size = file_size;
-    return data;
-}
-
-StatusOr<std::vector<int32_t>> read_segment_schema_cache_values(const SegmentSchemaCacheTestData& data,
-                                                                const std::shared_ptr<Segment>& segment) {
-    ASSIGN_OR_RETURN(auto file, data.fs->new_random_access_file_with_bundling({}, data.file_info));
-    OlapReaderStatistics stats;
-    ColumnIteratorOptions options;
-    options.stats = &stats;
-    options.read_file = file.get();
-    ASSIGN_OR_RETURN(auto iterator, segment->new_column_iterator_or_default(data.full_schema->column(1), nullptr));
-    RETURN_IF_ERROR(iterator->init(options));
-    auto values = ChunkFactory::column_from_field_type(TYPE_INT, /*is_nullable=*/true);
-    const std::vector<rowid_t> rowids{0, 1, 2};
-    RETURN_IF_ERROR(iterator->fetch_values_by_rowid(rowids.data(), rowids.size(), values.get()));
-    std::vector<int32_t> result;
-    for (size_t row = 0; row < values->size(); ++row) {
-        result.push_back(values->get(row).get_int32());
-    }
-    return result;
-}
-
->>>>>>> ab3169b ([BugFix][RB-925] Keep a lake explicit transaction's statement logs in shadow tablet replay and batch publish (#83413))
 } // namespace
 
 // NOLINTNEXTLINE
@@ -561,7 +456,7 @@ TEST_F(LakeTabletManagerTest, txn_vlog_group_preserves_statement_metadata_and_re
     ASSERT_OK(_tablet_manager->put_txn_vlog(second, 2));
     ASSERT_OK(_tablet_manager->put_txn_vlog_group({first, second}, 2));
     const auto legacy_path = _tablet_manager->txn_vlog_location(tablet_id, 2);
-    EXPECT_NE(nullptr, _tablet_manager->metacache()->lookup_txn_log(lake::MetacacheKey::txn_log(legacy_path)));
+    EXPECT_NE(nullptr, _tablet_manager->metacache()->lookup_txn_log(legacy_path));
     _tablet_manager->metacache()->prune();
     ASSIGN_OR_ABORT(auto legacy, _tablet_manager->get_txn_vlog(legacy_path, false));
     EXPECT_EQ(22, legacy->load_id().hi());
@@ -839,72 +734,6 @@ TEST_F(LakeTabletManagerTest, txn_vlog_group_validation_failure_skips_cache_reco
     auto legacy = _tablet_manager->get_txn_vlog_group(legacy_path, false);
     EXPECT_TRUE(legacy.status().is_corruption()) << legacy.status();
     EXPECT_EQ(1, cache_drops);
-}
-
-// Neither version log file is ever rewritten in the other format, so a cached copy stays valid and the reads of
-// replay and of a retry that reuses the group go through the disk cache instead of to remote storage.
-TEST_F(LakeTabletManagerTest, txn_vlog_group_reads_go_through_the_disk_cache) {
-    lake::ConfigResetGuard group_write_guard(&config::lake_enable_txn_vlog_group, false);
-    const int64_t tablet_id = next_id();
-    const int64_t txn_id = next_id();
-    auto first = std::make_shared<TxnLog>();
-    first->set_tablet_id(tablet_id);
-    first->set_txn_id(txn_id);
-    first->mutable_load_id()->set_hi(66273);
-    first->mutable_load_id()->set_lo(1);
-    first->mutable_op_write()->mutable_rowset()->set_num_rows(0);
-    auto second = std::make_shared<TxnLog>(*first);
-    second->mutable_load_id()->set_lo(2);
-    ASSERT_OK(_tablet_manager->put_txn_log(first));
-    ASSERT_OK(_tablet_manager->put_txn_log(second));
-
-    const int64_t version = 2;
-    ASSERT_OK(_tablet_manager->put_txn_vlog_group({first, second}, version));
-    const auto path = _tablet_manager->txn_vlog_group_location(tablet_id, version);
-    auto cache_fs = std::make_shared<CachedVlogFileSystem>(path, FileSystem::Default());
-    ASSERT_OK(cache_fs->create_dir_recursive(_location_provider->txn_log_root_location(tablet_id)));
-    {
-        ASSIGN_OR_ABORT(auto remote_file, FileSystem::Default()->new_random_access_file(path));
-        ASSIGN_OR_ABORT(auto content, remote_file->read_all());
-        ASSIGN_OR_ABORT(auto cached_file, cache_fs->new_writable_file(path));
-        ASSERT_OK(cached_file->append(content));
-        ASSERT_OK(cached_file->close());
-    }
-
-    fs::FileSystemProviderRegistry registry;
-    ASSERT_OK(registry.register_provider({.id = "cached-vlog",
-                                          .priority = -1,
-                                          .match_shared = matches_cached_vlog,
-                                          .create_shared = create_cached_vlog}));
-    ASSERT_OK(registry.register_provider(fs::new_posix_file_system_provider()));
-    const auto* previous_registry = &fs::default_file_system_provider_registry();
-    DeferOp restore_registry([&] {
-        StorageEngine::instance()->wait_storage_cleanup_tasks();
-        fs::install_default_file_system_provider_registry(*previous_registry);
-        g_cached_vlog_fs.reset();
-    });
-    g_cached_vlog_fs = cache_fs;
-    fs::install_default_file_system_provider_registry(registry.freeze());
-
-    // Replay finds no legacy file and reads the group.
-    std::string read_path;
-    ASSIGN_OR_ABORT(auto logs, _tablet_manager->get_txn_vlog_group(tablet_id, version, &read_path));
-    EXPECT_EQ(path, read_path);
-    ASSERT_EQ(2, logs.size());
-    EXPECT_EQ(first->load_id().SerializeAsString(), logs[0]->load_id().SerializeAsString());
-    EXPECT_EQ(second->load_id().SerializeAsString(), logs[1]->load_id().SerializeAsString());
-    EXPECT_EQ(1, cache_fs->cached_reads);
-
-    // A retry that lacks a source looks the group up and validates it through the cache as well.
-    ASSERT_OK(fs::delete_file(_tablet_manager->txn_log_location(tablet_id, txn_id, first->load_id())));
-    _tablet_manager->metacache()->prune();
-    TxnInfoPB info;
-    info.set_txn_id(txn_id);
-    info.add_load_ids()->CopyFrom(first->load_id());
-    info.add_load_ids()->CopyFrom(second->load_id());
-    ASSERT_OK(lake::publish_log_version(_tablet_manager, tablet_id, std::span<const TxnInfoPB>(&info, 1), &version));
-    EXPECT_EQ(2, cache_fs->cached_reads);
-    EXPECT_EQ(0, cache_fs->remote_reads);
 }
 
 // A version log is the legacy file when there is one. publish_log_version never adds a group next to it, but

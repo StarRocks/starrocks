@@ -3141,13 +3141,9 @@ TEST_F(LakeServiceTest, test_publish_log_version_merge_repeated_fields) {
         ASSERT_EQ(0, response.failed_tablets_size());
     }
 
-<<<<<<< HEAD
     ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
-=======
-    StorageEngine::instance()->wait_storage_cleanup_tasks();
     EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
     EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_2)));
->>>>>>> ab3169b ([BugFix][RB-925] Keep a lake explicit transaction's statement logs in shadow tablet replay and batch publish (#83413))
     _tablet_mgr->prune_metacache();
 
     ASSIGN_OR_ABORT(auto vlog, _tablet_mgr->get_txn_vlog(_tablet_mgr->txn_vlog_location(_tablet_id, version), false));
@@ -3291,7 +3287,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_preserves_statement_metadata) {
         ASSERT_EQ(0, response.failed_tablets_size());
     }
 
-    StorageEngine::instance()->wait_storage_cleanup_tasks();
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
     _tablet_mgr->prune_metacache();
 
     ASSIGN_OR_ABORT(auto vlogs, _tablet_mgr->get_txn_vlog_group(_tablet_id, version));
