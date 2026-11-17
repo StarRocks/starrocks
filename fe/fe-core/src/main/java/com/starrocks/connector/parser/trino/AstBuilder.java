@@ -1080,7 +1080,22 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                     throw new ParsingException("'%s' is not a valid BOOLEAN literal", node.getValue());
             }
         }
-        // Other typed literals such as BIGINT '42' or DOUBLE '1.5' are casts of the string value.
+        if (literalType != null && literalType.isDouble()) {
+            // Trino parses the value as Java does, so parse it here. StarRocks has no NaN or infinite DOUBLE, and
+            // its string cast would return NULL for them, so reject those.
+            double value;
+            try {
+                value = Double.parseDouble(node.getValue());
+            } catch (NumberFormatException e) {
+                throw new ParsingException("'%s' is not a valid DOUBLE literal", node.getValue());
+            }
+            if (!Double.isFinite(value)) {
+                throw unsupportedException(String.format("Trino parser on StarRocks does not support NaN or " +
+                        "infinite DOUBLE literals: %s", node));
+            }
+            return new FloatLiteral(value, FloatType.DOUBLE);
+        }
+        // Other typed literals such as BIGINT '42' or VARCHAR 'a' are casts of the string value.
         if (literalType != null && (literalType.isNumericType() || literalType.isStringType())) {
             return new CastExpr(new TypeDef(literalType),
                     new com.starrocks.sql.ast.expression.StringLiteral(node.getValue()));

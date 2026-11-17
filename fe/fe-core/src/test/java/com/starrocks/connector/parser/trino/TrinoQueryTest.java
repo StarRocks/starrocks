@@ -823,6 +823,18 @@ public class TrinoQueryTest extends TrinoTestBase {
         // Trino's single-letter and numeric BOOLEAN spellings, in any case
         sql = "select if(BOOLEAN 't', v1, 0), if(BOOLEAN 'F', 0, v2), if(BOOLEAN '0', 0, v3) from t0";
         assertPlanContains(sql, "OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3");
+
+        // DOUBLE values are parsed as Trino parses them, including spellings a StarRocks string cast doesn't take
+        sql = "select DOUBLE '1e3' + v1, DOUBLE '0x1p3' + v2 from t0";
+        assertPlanContains(sql, "1000.0 + CAST(1: v1 AS DOUBLE)", "8.0 + CAST(2: v2 AS DOUBLE)");
+
+        // Values that StarRocks can't hold or compares otherwise are rejected instead of becoming NULL or false
+        analyzeFail("select DOUBLE 'NaN'", "does not support NaN or infinite DOUBLE literals");
+        analyzeFail("select DOUBLE '-Infinity'", "does not support NaN or infinite DOUBLE literals");
+        analyzeFail("select DOUBLE 'x'", "'x' is not a valid DOUBLE literal");
+        // Trino parses CHAR 'a' as a CharLiteral, which isn't converted: Trino ignores trailing spaces in CHAR
+        // comparisons and StarRocks doesn't
+        analyzeFail("select CHAR 'a' = CHAR 'a '", "Unsupported expression [CHAR 'a']");
     }
 
     @Test
