@@ -16,6 +16,7 @@
 #include "compute_env/staros/staros_worker.h"
 
 #include <aws/core/Aws.h>
+#include <fslib/cache_fill.h>
 #include <fslib/configuration.h>
 #include <fslib/fslib_all_initializer.h>
 #include <fslib/remote_read_scheduler.h>
@@ -1390,6 +1391,26 @@ TEST(RemoteIOSchedulerConfigTest, IoCoalesceStaysOffAfterRejectedUpdate) {
     ASSERT_OK(config::set_config("io_coalesce_lake_read_enable", "true"));
     ASSERT_OK(config::rollback_config("io_coalesce_lake_read_enable"));
     EXPECT_FALSE(config::io_coalesce_lake_read_enable);
+}
+
+// With the cache on and valid configs, startup installs the fill buffer allocator and turns the starlet buffer
+// prefetch off before starting the scheduler. A unit test cannot start it (see enable_remote_io_scheduler), so this
+// takes the path of a scheduler that failed to start: the prefetch flag is restored and nothing is marked enabled.
+TEST(RemoteIOSchedulerConfigTest, EnableFallsBackWhenTheSchedulerDoesNotStart) {
+    SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, true);
+    SCOPED_UPDATE(bool, config::datacache_enable, true);
+    SCOPED_UPDATE(bool, config::starlet_use_star_cache, true);
+    SCOPED_UPDATE(bool, config::starlet_fs_read_prefetch_enable, true);
+    DeferOp restore([] {
+        (void)staros::starlet::fslib::set_fill_buffer_allocator(staros::starlet::fslib::FillBufferAllocator{});
+        (void)staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_enable_buffer_prefetch", "false");
+    });
+    ASSERT_FALSE(staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_enable_buffer_prefetch", "1").empty());
+
+    EXPECT_OK(enable_remote_io_scheduler());
+    EXPECT_FALSE(remote_io_scheduler_enabled());
+    EXPECT_EQ(nullptr, staros::starlet::fslib::RemoteReadScheduler::instance());
+    EXPECT_TRUE(FLAGS_fs_enable_buffer_prefetch);
 }
 
 // An invalid config refuses startup instead of falling back.

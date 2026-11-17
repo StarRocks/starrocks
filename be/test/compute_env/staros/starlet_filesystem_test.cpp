@@ -15,6 +15,7 @@
 #include "compute_env/staros/starlet_filesystem.h"
 
 #include <fmt/format.h>
+#include <fslib/cache_fill.h>
 #include <fslib/configuration.h>
 #include <fslib/file.h>
 #include <fslib/file_system.h>
@@ -579,6 +580,20 @@ public:
 // returns a pre-populated `IOStats` with distinct sentinel values per field, so
 // the corresponding fields surfacing through `StarletInputStream::get_io_stats_snapshot()`
 // can be matched 1:1.
+// What the last warm_cache_async() on a SnapshotMockInputStream was asked.
+struct MockWarmRequest {
+    int64_t offset = -1;
+    size_t length = 0;
+    bool urgent = false;
+};
+MockWarmRequest g_mock_warm_request;
+
+class MockStarletWarmHandle final : public staros::starlet::fslib::CacheWarmHandle {
+public:
+    size_t submitted_blocks() const override { return 3; }
+    size_t pending_blocks() const override { return 1; }
+};
+
 class SnapshotMockInputStream : public staros::starlet::fslib::InputStream {
 public:
     SnapshotMockInputStream() {
@@ -607,6 +622,16 @@ public:
     absl::StatusOr<size_t> size() override { return 0; }
     absl::Status close() override { return absl::OkStatus(); }
     absl::StatusOr<size_t> read(void* /*data*/, size_t /*length*/) override { return 0; }
+    // An empty range has nothing to warm: the mock answers it the way a stream that cannot warm does.
+    absl::StatusOr<std::shared_ptr<staros::starlet::fslib::CacheWarmHandle>> warm_cache_async(int64_t offset,
+                                                                                              size_t length,
+                                                                                              bool urgent) override {
+        g_mock_warm_request = {offset, length, urgent};
+        if (length == 0) {
+            return absl::UnimplementedError("warm_cache_async (mock)");
+        }
+        return std::make_shared<MockStarletWarmHandle>();
+    }
 };
 
 class SnapshotMockReadOnlyFile : public staros::starlet::fslib::ReadOnlyFile {
@@ -718,6 +743,31 @@ TEST_F(NewFsStarletTest, test_starlet_input_stream_get_io_stats_snapshot_stream_
     EXPECT_EQ(0, snap.bytes_read_remote);
     EXPECT_EQ(0, snap.io_count_local_disk);
     EXPECT_EQ(0, snap.io_count_remote);
+    // A warm-up cannot reach the stream either: the error comes back instead of a handle.
+    EXPECT_FALSE(rf->warm_cache_async(0, 4096).ok());
+}
+
+// StarletInputStream::warm_cache_async() hands the request to the starlet stream unchanged, through the
+// RandomAccessFile wrapper, and keeps starlet's handle alive behind the BE handle.
+TEST_F(NewFsStarletTest, test_starlet_input_stream_warm_cache_async) {
+    auto mock_fs = std::make_shared<SnapshotMockFileSystem>();
+    int64_t test_shard_id = 99997;
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    auto fs = new_fs_starlet(test_shard_id, false);
+    ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(fmt::format("staros://{}/anyfile", test_shard_id)));
+    ASSIGN_OR_ABORT(auto handle, rf->warm_cache_async(100, 4096, true));
+    EXPECT_EQ(3u, handle->submitted_blocks());
+    EXPECT_EQ(1u, handle->pending_blocks());
+    EXPECT_EQ(100, g_mock_warm_request.offset);
+    EXPECT_EQ(4096u, g_mock_warm_request.length);
+    EXPECT_TRUE(g_mock_warm_request.urgent);
+
+    // A starlet error is mapped to a BE status, not a handle.
+    EXPECT_FALSE(rf->warm_cache_async(0, 0).ok());
 }
 
 TEST_F(NewFsStarletTest, test_new_fs_starlet_with_s3_raw_path_mode_true) {

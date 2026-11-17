@@ -151,10 +151,10 @@ protected:
 
     std::unique_ptr<SegmentPrefetchWindow> make_window(const SparseRange<>* range, rowid_t start_row,
                                                        size_t ahead_blocks, double late_ratio = 2.0,
-                                                       int64_t object_offset = 0) {
+                                                       int64_t object_offset = 0, size_t block_size = kBlockSize) {
         return std::make_unique<SegmentPrefetchWindow>(std::vector<SegmentPrefetchWindow::Column>{{_reader, &_stream}},
                                                        range, start_row, object_offset, ahead_blocks, late_ratio,
-                                                       kBlockSize, &_stats);
+                                                       block_size, &_stats);
     }
 
     std::shared_ptr<MemoryFileSystem> _fs;
@@ -251,6 +251,31 @@ TEST_F(SegmentPrefetchWindowTest, start_row_skips_earlier_pages) {
     EXPECT_EQ(_pages.size() - 5, _stream.warms.size());
 }
 
+// A window created past the end of its scan range has nothing to warm.
+TEST_F(SegmentPrefetchWindowTest, start_row_past_scan_range_is_exhausted) {
+    SparseRange<> range(0, _pages[2].first);
+    auto window = make_window(&range, _pages[3].first, 1024);
+    EXPECT_TRUE(window->exhausted());
+    window->advance(_pages[3].first);
+    EXPECT_TRUE(_stream.warms.empty());
+}
+
+// Pages sharing one cache block are warmed once, and the warm-up stays until the reader is past the last of them.
+TEST_F(SegmentPrefetchWindowTest, pages_in_one_block_share_a_warm_up) {
+    SparseRange<> range(0, kRows);
+    auto window = make_window(&range, 0, 1024, 2.0, 0, 1L << 30);
+    window->advance(0);
+    ASSERT_EQ(1u, _stream.warms.size());
+    EXPECT_EQ(1u, window->ahead_blocks());
+    EXPECT_TRUE(window->exhausted());
+
+    window->advance(_pages.back().first);
+    EXPECT_FALSE(_stream.warms[0].handle.expired());
+    window->advance(kRows);
+    EXPECT_TRUE(_stream.warms[0].handle.expired());
+    EXPECT_EQ(0u, window->ahead_blocks());
+}
+
 // In a bundle file the blocks are counted where the segment sits in the object, but the stream is asked in segment
 // offsets: the bundle stream adds its own base.
 TEST_F(SegmentPrefetchWindowTest, object_offset_keeps_segment_offsets) {
@@ -279,6 +304,24 @@ TEST_F(SegmentPrefetchWindowTest, not_supported_disables_window) {
     window->advance(_pages[3].first);
     rowid_t row = 10;
     window->warm_rows({{_reader, &_stream}}, &row, 1);
+    EXPECT_TRUE(_stream.warms.empty());
+    EXPECT_EQ(0, _stats.remote_prefetch_ranges);
+}
+
+// Late rows on a stream that cannot warm turn the window off, whether the failing range is followed by more pages
+// of the batch or is its last one.
+TEST_F(SegmentPrefetchWindowTest, warm_rows_not_supported_disables_window) {
+    _stream.supported = false;
+    SparseRange<> range(0, kRows);
+    auto gapped = make_window(&range, 0, 0);
+    std::vector<rowid_t> rows{_pages[0].first, _pages[4].first};
+    gapped->warm_rows({{_reader, &_stream}}, rows.data(), rows.size());
+    EXPECT_TRUE(gapped->disabled());
+
+    auto single = make_window(&range, 0, 0);
+    rowid_t row = _pages[2].first;
+    single->warm_rows({{_reader, &_stream}}, &row, 1);
+    EXPECT_TRUE(single->disabled());
     EXPECT_TRUE(_stream.warms.empty());
     EXPECT_EQ(0, _stats.remote_prefetch_ranges);
 }
