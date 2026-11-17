@@ -169,6 +169,8 @@ private:
     Status init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
 
     Status init_collector(const TabletReaderParams& read_params);
+    // Whether init_collector() unions the segment iterators with lake_scan_read_ahead_segments.
+    bool union_reads_ahead(const TabletReaderParams& params) const;
     Status init_compaction_column_paths(const TabletReaderParams& read_params);
 
     static Status to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
@@ -209,6 +211,9 @@ private:
     std::optional<std::vector<SeekRange>> _cached_seek_ranges;
 
     bool _is_asc_hint = true;
+    // Set by init_collector() from union_reads_ahead(): the union reads ahead across the segments, so every rowset
+    // returns one iterator per segment.
+    bool _union_reads_ahead = false;
 
     // used for vertical compaction
     bool _is_vertical_merge = false;

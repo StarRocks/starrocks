@@ -212,6 +212,9 @@ struct OlapReaderStatistics {
     // their wall time, so that starting readers cold shows apart from the steady read.
     int64_t segment_first_chunks = 0;
     int64_t segment_first_chunk_ns = 0;
+    // Segment readers that started fetching their first blocks while the reader before them was still read
+    // (ChunkIterator::start_read_ahead).
+    int64_t segment_read_ahead_started = 0;
 
     // Segments whose footer was read on behalf of this reader, i.e. that were not already open. Only the
     // callers that pass their statistics to Segment::open count them.
@@ -414,6 +417,7 @@ struct OlapReaderStatistics {
         remote_prefetch_late_read_ahead += other.remote_prefetch_late_read_ahead;
         segment_first_chunks += other.segment_first_chunks;
         segment_first_chunk_ns += other.segment_first_chunk_ns;
+        segment_read_ahead_started += other.segment_read_ahead_started;
         lake_prepared_rowsets += other.lake_prepared_rowsets;
         lake_prepared_segments += other.lake_prepared_segments;
         lake_prepared_scan_rows += other.lake_prepared_scan_rows;

@@ -908,6 +908,12 @@ CONF_mBool(enable_lake_prepared_split_pre_refinement, "true");
 // and the other readers keep following enable_load_segment_parallel.
 CONF_mBool(lake_scan_parallel_segment_open, "true");
 
+// When a query scan reads a tablet's segments one after another (a tablet not split across scan tasks), the next
+// segments start fetching the first blocks they will read while the current one is still read, once it has asked for
+// all of its own: up to this many segments ahead. A next segment starts only while they all hold fewer than
+// remote_prefetch_window_blocks blocks not read yet, so the segment started last can take that to about twice the
+// window. 0 starts each segment's read-ahead only when its turn comes.
+CONF_mInt32(lake_scan_read_ahead_segments, "16");
 // Fragment thread pool
 CONF_Int32(fragment_pool_thread_num_min, "64");
 CONF_Int32(fragment_pool_thread_num_max, "4096");
