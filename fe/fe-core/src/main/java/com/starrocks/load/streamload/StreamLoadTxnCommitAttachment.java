@@ -41,6 +41,12 @@ public class StreamLoadTxnCommitAttachment extends TxnCommitAttachment implement
     private long numRowsUnselected;
     @SerializedName(value = "numLoadBytesTotal")
     private long numLoadBytesTotal;
+    // resources the load consumed on the backends; 0 when unknown, also for an attachment
+    // written before these fields existed
+    @SerializedName(value = "cpuNs")
+    private long cpuNs;
+    @SerializedName(value = "peakMemBytes")
+    private long peakMemBytes;
 
     public StreamLoadTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.FRONTEND_STREAMING);
@@ -103,6 +109,19 @@ public class StreamLoadTxnCommitAttachment extends TxnCommitAttachment implement
 
     public long getNumLoadBytesTotal() {
         return numLoadBytesTotal;
+    }
+
+    public long getCpuNs() {
+        return cpuNs;
+    }
+
+    public long getPeakMemBytes() {
+        return peakMemBytes;
+    }
+
+    public void setResourceUsage(long cpuNs, long peakMemBytes) {
+        this.cpuNs = cpuNs;
+        this.peakMemBytes = peakMemBytes;
     }
 
 

@@ -137,6 +137,10 @@ SHOW LOAD ステートメントは Broker Load、Insert Into、Spark Load タス
 
 **`_statistics_.loads_history`** システムビューは、デフォルトで過去 30 日間のロード記録を保存します。DBA は FE 設定項目 [`loads_history_retained_days`](../../administration/configuration/FE_parameters/user_query_loading.md#loads_history_retained_days) を変更して保持期間を調整できます。StarRocks はテーブルの `partition_live_number` プロパティを `loads_history_retained_days` の値にリセットするため、このプロパティを直接変更しないでください。**`_statistics_.loads_history`** は **information_schema.loads** と一貫したスキーマを持っています。
 
+:::note
+アップグレード後、StarRocks は新しいバージョンで **information_schema.loads** に追加された列を **statistics.loads_history** にも追加します。その後、これらの列を持たないバージョンにクラスターをダウングレードすると、そのバージョンは列の位置で行をコピーするため、**statistics.loads_history** への同期が失敗します。ダウングレード後に同期を再開するには、ALTER TABLE を使用して、追加された列（`txn_id`、`load_id`、`table_id`、`parent_id`、`statement`、`error_code`、`visible_time`、`sink_bytes`、`client_ip`、`be_ids`、`commit_throttle_ms`、`cpu_ns`、`peak_mem_bytes`）を `_statistics_.loads_history` から削除してください。アップグレード時は、FE より先にすべての BE と CN をアップグレードしてください。旧バージョンの BE または CN は新しい列を提供できないため、アップグレードされるまで **information_schema.loads** へのクエリと同期は失敗します。
+:::
+
 ## Load Profiles でロードパフォーマンスの問題を特定する
 
 **Load Profile** は、データロードに関与するすべてのワーカーノードの実行詳細を記録します。これにより、StarRocks クラスター内のパフォーマンスボトルネックを迅速に特定できます。

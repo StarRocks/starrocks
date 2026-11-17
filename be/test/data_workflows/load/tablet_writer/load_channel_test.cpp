@@ -341,7 +341,24 @@ TEST_F(LoadChannelTestForLakeTablet, test_simple_write) {
 
     _load_channel->add_chunk(add_chunk_request, &add_chunk_response);
     ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK);
+    // the peak memory is not attached to the response of a successful request that is not an eos
+    ASSERT_FALSE(add_chunk_response.has_load_channel_peak_mem_bytes());
     clear_response(&add_chunk_response);
+
+    // A failed request carries it though: a load killed by a memory limit never sends an eos.
+    {
+        PTabletWriterAddChunkRequest failing_request;
+        PTabletWriterAddBatchResult failing_response;
+        failing_request.set_index_id(kIndexId + 12345); // no tablets channel was opened for it
+        failing_request.set_sender_id(0);
+        failing_request.set_eos(false);
+        failing_request.set_packet_seq(0);
+        failing_request.set_timeout_ms(60000);
+        _load_channel->add_chunk(failing_request, &failing_response);
+        ASSERT_NE(TStatusCode::OK, failing_response.status().status_code());
+        ASSERT_TRUE(failing_response.has_load_channel_peak_mem_bytes());
+        ASSERT_EQ(_load_channel->mem_tracker()->peak_consumption(), failing_response.load_channel_peak_mem_bytes());
+    }
 
     PTabletWriterAddChunkRequest finish_request;
     PTabletWriterAddBatchResult finish_response;
@@ -356,6 +373,8 @@ TEST_F(LoadChannelTestForLakeTablet, test_simple_write) {
     _load_channel->add_chunk(finish_request, &finish_response);
     ASSERT_EQ(TStatusCode::OK, finish_response.status().status_code());
     ASSERT_EQ(4, finish_response.tablet_vec_size());
+    ASSERT_TRUE(finish_response.has_load_channel_peak_mem_bytes());
+    ASSERT_EQ(_load_channel->mem_tracker()->peak_consumption(), finish_response.load_channel_peak_mem_bytes());
 
     std::vector<int64_t> finished_tablets;
     for (auto& info : finish_response.tablet_vec()) {

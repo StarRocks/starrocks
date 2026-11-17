@@ -33,8 +33,10 @@ import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnStateCallbackFactory;
+import com.starrocks.transaction.VisibleStateWaiter;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -126,6 +128,18 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         assertFalse(task.containsBackend(99999L));
         assertTrue(task.getTxnId() < 0);
 
+        // Job-level columns before the task ran: parent id and backend ids are known at
+        // creation, table id and visible time only after run() resolved the table and published.
+        assertEquals(-1L, task.getMergeCommitJobId());
+        task.setMergeCommitJobId(42L);
+        TLoadInfo info = task.toThrift().get(0);
+        assertEquals(42L, info.getParent_id());
+        assertEquals("10002,10003", info.getBe_ids());
+        assertFalse(info.isSetTable_id());
+        assertFalse(info.isSetVisible_time_ms());
+        assertFalse(info.isSetSink_bytes());
+        assertFalse(info.isSetCommit_throttle_ms());
+
         Set<Long> returnedBackendIds = task.getBackendIds();
         assertEquals(backendIds, returnedBackendIds);
         try {
@@ -154,17 +168,63 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
                 loadExecuteCallback);
 
         stubCoordinatorSuccess();
+        when(coordinator.getLoadCpuNs()).thenReturn(1234L);
+        when(coordinator.getLoadPeakMemBytes()).thenReturn(5678L);
+        assertEquals(0L, task.getCpuNs());
+        assertEquals(0L, task.getPeakMemBytes());
 
         task.run();
         assertEquals(1, loadExecuteCallback.getFinishedLoads().size());
         assertEquals(label, loadExecuteCallback.getFinishedLoads().get(0));
         assertEquals(TransactionStatus.VISIBLE, getTxnStatus(label));
         assertTrue(task.getTxnId() > 0);
+        assertEquals(1234L, task.getCpuNs());
+        assertEquals(5678L, task.getPeakMemBytes());
+        assertEquals(1234L, task.toThrift().get(0).getCpu_ns());
+        assertEquals(5678L, task.toThrift().get(0).getPeak_mem_bytes());
         assertNull(ProfileManager.getInstance().getProfile(DebugUtil.printId(loadId)));
         // The task must always remove its txn callback after completion to avoid leaking callbacks.
         TxnStateCallbackFactory callbackFactory =
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory();
         assertNull(callbackFactory.getCallback(task.getId()));
+    }
+
+    @Test
+    public void testVisibleTimeAfterPublishWaitTimeout() {
+        // The transaction does become visible, but the task is told that its wait timed out.
+        MergeCommitTask task = new MergeCommitTask(
+                GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
+                new TableId(DB_NAME_1, TABLE_NAME_1_1),
+                label,
+                loadId,
+                streamLoadInfo,
+                1000,
+                kvParams,
+                "root",
+                warehouseName,
+                new HashSet<>(Arrays.asList(10002L, 10003L)),
+                coordinatorFactory,
+                loadExecuteCallback) {
+            @Override
+            boolean awaitPublish(VisibleStateWaiter waiter, long publishTimeoutMs) throws InterruptedException {
+                super.awaitPublish(waiter, publishTimeoutMs);
+                return false;
+            }
+        };
+
+        stubCoordinatorSuccess();
+
+        task.run();
+        assertEquals(TransactionStatus.VISIBLE, getTxnStatus(label));
+        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(DATABASE_1.getId(), task.getTxnId());
+        assertTrue(txnState.getFinishTime() > 0);
+
+        // The task finished without recording a visible time, so the column comes from the transaction.
+        TLoadInfo info = task.toThrift().get(0);
+        assertEquals("FINISHED", info.getState());
+        assertEquals(txnState.getFinishTime(), info.getVisible_time_ms());
     }
 
     @Test
@@ -186,12 +246,19 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
 
         stubCoordinatorSuccess();
         when(coordinator.getExecStatus()).thenReturn(new Status(TStatusCode.INTERNAL_ERROR, "artificial failure"));
+        when(coordinator.getLoadCpuNs()).thenReturn(321L);
+        when(coordinator.getLoadPeakMemBytes()).thenReturn(654L);
 
         task.run();
         assertEquals(1, loadExecuteCallback.getFinishedLoads().size());
         assertEquals(label, loadExecuteCallback.getFinishedLoads().get(0));
         assertEquals(TransactionStatus.ABORTED, getTxnStatus(label));
         assertTrue(task.getTxnId() > 0);
+        // a failed execution still records what the load consumed
+        assertEquals(321L, task.getCpuNs());
+        assertEquals(654L, task.getPeakMemBytes());
+        assertEquals(321L, task.toThrift().get(0).getCpu_ns());
+        assertEquals(654L, task.toThrift().get(0).getPeak_mem_bytes());
     }
 
     @Test
@@ -897,7 +964,8 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         
         // Verify conditional fields based on state
         if (taskState == MergeCommitTask.TaskState.PENDING) {
-            assertEquals(-1, info.getTxn_id());
+            // No transaction was begun, so the txn id stays unset rather than a sentinel.
+            assertFalse(info.isSetTxn_id());
             assertNull(info.getError_msg());
             assertEquals(0, info.getNum_scan_rows());
             assertEquals(0, info.getNum_scan_bytes());
@@ -963,7 +1031,8 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
             assertTrue(info.getNum_filtered_rows() > 0);
             assertEquals(0, info.getNum_unselected_rows());
         } else if (taskState == MergeCommitTask.TaskState.CANCELLED) {
-            assertEquals(-1, info.getTxn_id());
+            // No transaction was begun, so the txn id stays unset rather than a sentinel.
+            assertFalse(info.isSetTxn_id());
             assertTrue(task.endTimeMs() > 0);
             assertNotNull(info.getLoad_finish_time());
             assertTrue(info.getCreate_time_ms() > 0);

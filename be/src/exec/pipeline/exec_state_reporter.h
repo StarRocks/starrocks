@@ -26,6 +26,7 @@
 
 namespace starrocks {
 class RuntimeProfile;
+class RuntimeState;
 
 namespace pipeline {
 class ExecStateReporterMetrics;
@@ -40,6 +41,13 @@ public:
             RuntimeProfile* load_channel_profile, const Status& status, bool done);
 
     static Status report_exec_status(const TReportExecStatusParams& params, const TNetworkAddress& fe_addr);
+
+    // Put into a load's report the CPU time and the peak query memory this backend has spent
+    // on it so far. Both only grow, so the FE keeps the largest value per backend. Running
+    // reports carry them as well as the final one: a load that is cancelled, or fails on
+    // another backend, is read by the FE before the final reports of its instances arrive.
+    static void set_load_resource_usage(QueryContext* query_ctx, RuntimeState* runtime_state,
+                                        TReportExecStatusParams* params);
 
     void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status, bool done);
 

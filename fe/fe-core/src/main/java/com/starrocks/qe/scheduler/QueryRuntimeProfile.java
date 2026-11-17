@@ -125,6 +125,16 @@ public class QueryRuntimeProfile {
     private final List<String> deltaUrls = Lists.newArrayList();
     private final Map<String, String> loadCounters = Maps.newHashMap();
     private String trackingUrl = "";
+    // Resource usage of a load as reported by the final exec status of each fragment instance.
+    // Per backend: cumulative cpu time and the peak of the query memory tracker, both monotonic
+    // per backend so the last report of a backend wins by taking the max. The peak of the load
+    // channel a backend hosts is reported by the sinks that wrote to it and kept per hosting
+    // backend, because that backend may run no fragment of the load at all.
+    private final Map<Long, Long> backendLoadCpuNs = Maps.newConcurrentMap();
+    private final Map<Long, Long> backendLoadPeakMemBytes = Maps.newConcurrentMap();
+    private final Map<Long, Long> backendLoadChannelPeakMemBytes = Maps.newConcurrentMap();
+    // Largest load channel peak over all backends, for sinks that do not say which backend it is.
+    private volatile long loadChannelPeakMemBytes = 0;
     private final Set<String> rejectedRecordPaths = Sets.newHashSet();
 
     // ------------------------------------------------------------------------------------
@@ -186,6 +196,33 @@ public class QueryRuntimeProfile {
 
     public String getTrackingUrl() {
         return trackingUrl;
+    }
+
+    public long getLoadChannelPeakMemBytes() {
+        return loadChannelPeakMemBytes;
+    }
+
+    // CPU time of the load summed over the backends that reported it in their exec status;
+    // zero when none did. Backends of an older version are not in this sum, and nothing is
+    // added for them here: the audit statistics a backend sends are already merged over the
+    // backends upstream of it, so they cannot be attributed to a single backend.
+    public long getLoadCpuNs() {
+        return backendLoadCpuNs.values().stream().mapToLong(Long::longValue).sum();
+    }
+
+    // Peak memory of the load: the largest per-backend total, where a backend adds up the peak
+    // of its query memory and the peak of the load channel it hosts. Either part can be missing:
+    // a backend may only run fragments, or only host a load channel.
+    public long getLoadPeakMemBytes() {
+        long peak = loadChannelPeakMemBytes;
+        for (Map.Entry<Long, Long> entry : backendLoadPeakMemBytes.entrySet()) {
+            long channelPeak = backendLoadChannelPeakMemBytes.getOrDefault(entry.getKey(), 0L);
+            peak = Math.max(peak, entry.getValue() + channelPeak);
+        }
+        for (Long channelPeak : backendLoadChannelPeakMemBytes.values()) {
+            peak = Math.max(peak, channelPeak);
+        }
+        return peak;
     }
 
     public List<String> getRejectedRecordPaths() {
@@ -405,6 +442,42 @@ public class QueryRuntimeProfile {
         if (params.isSetLoad_datacache_metrics()) {
             updateDataCacheSelectMetrics(params.backend_id, params.load_datacache_metrics);
         }
+        updateLoadResourceUsage(execState, params);
+    }
+
+    /**
+     * Record the CPU time and peak memory a final exec status report carries. Every value is merged
+     * with max, so applying the same report twice is harmless. It is separate from
+     * {@link #updateLoadInformation} because it must also run for the report of a failed instance,
+     * and before that failure cancels the query and releases whoever waits for it.
+     */
+    public void updateLoadResourceUsage(FragmentInstanceExecState execState, TReportExecStatusParams params) {
+        if (params.isSetLoad_channel_peak_mem_bytes()) {
+            loadChannelPeakMemBytes = Math.max(loadChannelPeakMemBytes, params.getLoad_channel_peak_mem_bytes());
+        }
+        if (params.isSetLoad_channel_peak_mem_bytes_by_backend()) {
+            params.getLoad_channel_peak_mem_bytes_by_backend().forEach(
+                    (backendId, peak) -> backendLoadChannelPeakMemBytes.merge(backendId, peak, Math::max));
+        }
+        if (params.isSetLoad_cpu_ns() || params.isSetLoad_peak_mem_bytes()) {
+            long backendKey = loadBackendKey(execState, params);
+            if (params.isSetLoad_cpu_ns()) {
+                backendLoadCpuNs.merge(backendKey, params.getLoad_cpu_ns(), Math::max);
+            }
+            if (params.isSetLoad_peak_mem_bytes()) {
+                backendLoadPeakMemBytes.merge(backendKey, params.getLoad_peak_mem_bytes(), Math::max);
+            }
+        }
+    }
+
+    private static long loadBackendKey(FragmentInstanceExecState execState, TReportExecStatusParams params) {
+        if (params.isSetBackend_id()) {
+            return params.getBackend_id();
+        }
+        if (execState != null && execState.getWorker() != null) {
+            return execState.getWorker().getId();
+        }
+        return params.getBackend_num();
     }
 
     public RuntimeProfile buildQueryProfile(boolean needMerge) {

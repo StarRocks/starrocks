@@ -30,6 +30,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/statusor.h"
+#include "common/system/master_info.h"
 #include "common/tracer.h"
 #include "common/util/thrift_util.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
@@ -952,6 +953,18 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         }
         VLOG(2) << "NodeChannel[" << _load_info << "] recevied response : " << printed.DebugString() << "] from ["
                 << _node_info->host << ":" << _node_info->brpc_port << "]";
+    }
+
+    // Record the peak before looking at the status: a failed eos is exactly where the
+    // memory usage matters.
+    if (closure->result.has_load_channel_peak_mem_bytes()) {
+        int64_t peak_bytes = closure->result.load_channel_peak_mem_bytes();
+        _runtime_state->update_load_channel_peak_mem_bytes(peak_bytes);
+        _runtime_state->update_backend_load_channel_peak_mem_bytes(_node_id, peak_bytes);
+        auto backend_id = get_backend_id();
+        if (backend_id.has_value() && backend_id.value() == _node_id) {
+            _runtime_state->update_local_load_channel_peak_mem_bytes(peak_bytes);
+        }
     }
 
     Status st(closure->result.status());

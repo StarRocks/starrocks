@@ -34,6 +34,7 @@
 
 package com.starrocks.load.loadv2;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -308,15 +309,26 @@ public class LoadLoadingTask extends LoadTask {
                         TabletCommitInfo.fromThrift(curCoordinator.getCommitInfos()),
                         TabletFailInfo.fromThrift(curCoordinator.getFailInfos()),
                         curCoordinator.getRejectedRecordPaths(),
-                        System.currentTimeMillis() - writeBeginTime);
+                        System.currentTimeMillis() - writeBeginTime,
+                        curCoordinator.getLoadCpuNs(),
+                        curCoordinator.getLoadPeakMemBytes());
             } else {
-                attachment = new BrokerLoadingTaskAttachment(signature,
-                        TabletFailInfo.fromThrift(curCoordinator.getFailInfos()));
+                attachment = failedTaskAttachment(curCoordinator);
                 throw new LoadException(status.getErrorMsg());
             }
         } else {
+            attachment = failedTaskAttachment(curCoordinator);
             throw new LoadException("coordinator could not finished before job timeout");
         }
+    }
+
+    // A failed task still reports what it consumed, as far as the backends have told the coordinator.
+    @VisibleForTesting
+    BrokerLoadingTaskAttachment failedTaskAttachment(Coordinator curCoordinator) {
+        return new BrokerLoadingTaskAttachment(signature,
+                TabletFailInfo.fromThrift(curCoordinator.getFailInfos()),
+                curCoordinator.getLoadCpuNs(),
+                curCoordinator.getLoadPeakMemBytes());
     }
 
     private long getLeftTimeMs() {

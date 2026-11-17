@@ -214,9 +214,13 @@ Status FragmentExecState::execute() {
     int64_t duration_ns = 0;
     {
         SCOPED_RAW_TIMER(&duration_ns);
+        // The plan and the sink run on this thread; a scan node adds the CPU of its own
+        // scanner threads, which close() joins.
+        int64_t cpu_start_ns = RuntimeState::thread_cpu_time_ns();
         WARN_IF_ERROR(_executor.open(),
                       strings::Substitute("Fail to open fragment $0", print_id(_fragment_instance_id)));
         _executor.close();
+        _runtime_state->add_non_pipeline_cpu_ns(RuntimeState::thread_cpu_time_ns() - cpu_start_ns);
     }
     RuntimeMetrics::instance()->fragment_requests_total.increment(1);
     RuntimeMetrics::instance()->fragment_request_duration_us.increment(duration_ns / 1000);

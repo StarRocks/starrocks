@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -107,6 +108,21 @@ protected:
     static constexpr int LOAD_COMMIT_TIME = 20;
     static constexpr int LOAD_FINISH_TIME = 21;
     static constexpr int PROPERTIES = 22;
+
+    // Slot ids of the job-level columns appended after JOB_ID.
+    static constexpr int TXN_ID = 27;
+    static constexpr int LOAD_ID = 28;
+    static constexpr int TABLE_ID = 29;
+    static constexpr int PARENT_ID = 30;
+    static constexpr int STATEMENT = 31;
+    static constexpr int ERROR_CODE = 32;
+    static constexpr int VISIBLE_TIME = 33;
+    static constexpr int SINK_BYTES = 34;
+    static constexpr int CLIENT_IP = 35;
+    static constexpr int BE_IDS = 36;
+    static constexpr int COMMIT_THROTTLE_MS = 37;
+    static constexpr int CPU_NS = 38;
+    static constexpr int PEAK_MEM_BYTES = 39;
 };
 
 // Pin the wall-clock that an epoch-ms job timestamp renders to in two
@@ -184,6 +200,55 @@ TEST_F(SchemaLoadsScannerTest, ms_field_preserves_sub_second_remainder) {
 
 // Old BE never sets the ms field. New BE must keep parsing the legacy
 // wall-clock string for compatibility, preserving the pre-fix semantics.
+// The job-level columns appended after JOB_ID are all nullable: a set thrift
+// field materializes its value, an unset one renders NULL, and a negative
+// txn_id (FE's "no transaction yet") also renders NULL.
+TEST_F(SchemaLoadsScannerTest, job_columns_render_values_and_nulls) {
+    SchemaLoadsScanner scanner;
+    init_scanner(scanner, "UTC");
+
+    TLoadInfo info = make_min_load_info(1);
+    info.__set_txn_id(-1);
+    info.__set_table_id(77);
+    info.__set_parent_id(42);
+    info.__set_statement("INSERT_SELECT");
+    info.__set_visible_time_ms(1778827508123L); // 2026-05-15 06:45:08.123 UTC
+    info.__set_sink_bytes(4096);
+    info.__set_be_ids("10001,10002");
+    scanner._result.loads = {info};
+    scanner._cur_idx = 0;
+
+    auto chunk = create_chunk(scanner.get_slot_descs());
+    bool eos = false;
+    EXPECT_OK(scanner.get_next(&chunk, &eos));
+    EXPECT_EQ(1, chunk->num_rows());
+
+    auto read_bigint = [&](int slot_id) {
+        auto* nullable = down_cast<NullableColumn*>(chunk->get_column_raw_ptr_by_slot_id(slot_id));
+        EXPECT_FALSE(nullable->is_null(0));
+        return down_cast<Int64Column*>(nullable->data_column_raw_ptr())->get_data()[0];
+    };
+    auto read_varchar = [&](int slot_id) {
+        auto* nullable = down_cast<NullableColumn*>(chunk->get_column_raw_ptr_by_slot_id(slot_id));
+        EXPECT_FALSE(nullable->is_null(0));
+        return down_cast<BinaryColumn*>(nullable->data_column_raw_ptr())->get_slice(0).to_string();
+    };
+
+    EXPECT_TRUE(is_null_at(chunk, TXN_ID));
+    EXPECT_TRUE(is_null_at(chunk, LOAD_ID));
+    EXPECT_EQ(77, read_bigint(TABLE_ID));
+    EXPECT_EQ(42, read_bigint(PARENT_ID));
+    EXPECT_EQ("INSERT_SELECT", read_varchar(STATEMENT));
+    EXPECT_TRUE(is_null_at(chunk, ERROR_CODE));
+    EXPECT_EQ("2026-05-15 06:45:08", read_datetime(chunk, VISIBLE_TIME).to_string(/*ignore_microsecond=*/true));
+    EXPECT_EQ(4096, read_bigint(SINK_BYTES));
+    EXPECT_TRUE(is_null_at(chunk, CLIENT_IP));
+    EXPECT_EQ("10001,10002", read_varchar(BE_IDS));
+    EXPECT_TRUE(is_null_at(chunk, COMMIT_THROTTLE_MS));
+    EXPECT_TRUE(is_null_at(chunk, CPU_NS));
+    EXPECT_TRUE(is_null_at(chunk, PEAK_MEM_BYTES));
+}
+
 TEST_F(SchemaLoadsScannerTest, legacy_string_fallback_when_ms_unset) {
     SchemaLoadsScanner scanner;
     init_scanner(scanner, "Asia/Shanghai");

@@ -119,6 +119,9 @@ public:
     Span get_span() { return _span; }
 
     void report_profile(PTabletWriterAddBatchResult* result, bool print_profile);
+    // Attach the peak memory of this load channel to the response. Called only for eos
+    // requests so that it costs nothing on the per-chunk path.
+    void report_peak_mem_usage(PTabletWriterAddBatchResult* result);
 
     void diagnose(const std::string& remote_ip, const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* response);
     void get_load_replica_status(const std::string& remote_ip, const PLoadReplicaStatusRequest* request,

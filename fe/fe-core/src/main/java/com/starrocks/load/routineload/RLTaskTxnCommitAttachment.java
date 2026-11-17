@@ -63,6 +63,11 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
     private String errorLogUrl;
     private long loadedBytes;
     private boolean nonRetryable = false;
+    // resources the task consumed on the backend; 0 when the backend did not report them
+    @SerializedName("cpuNs")
+    private long cpuNs;
+    @SerializedName("peakMemBytes")
+    private long peakMemBytes;
 
     public RLTaskTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK);
@@ -96,6 +101,12 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
 
         if (rlTaskTxnCommitAttachment.isSetErrorLogUrl()) {
             this.errorLogUrl = rlTaskTxnCommitAttachment.getErrorLogUrl();
+        }
+        if (rlTaskTxnCommitAttachment.isSetCpuNs()) {
+            this.cpuNs = rlTaskTxnCommitAttachment.getCpuNs();
+        }
+        if (rlTaskTxnCommitAttachment.isSetPeakMemBytes()) {
+            this.peakMemBytes = rlTaskTxnCommitAttachment.getPeakMemBytes();
         }
         if (rlTaskTxnCommitAttachment.isSetNonRetryable()) {
             this.nonRetryable = rlTaskTxnCommitAttachment.isNonRetryable();
@@ -136,6 +147,14 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
 
     public long getTaskExecutionTimeMs() {
         return taskExecutionTimeMs;
+    }
+
+    public long getCpuNs() {
+        return cpuNs;
+    }
+
+    public long getPeakMemBytes() {
+        return peakMemBytes;
     }
 
     public RoutineLoadProgress getProgress() {

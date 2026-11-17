@@ -347,6 +347,12 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         if (!ctx->error_url.empty()) {
             manual_load_attach.__set_errorLogUrl(ctx->error_url);
         }
+        if (ctx->cpu_ns > 0) {
+            manual_load_attach.__set_cpuNs(ctx->cpu_ns);
+        }
+        if (ctx->peak_mem_bytes > 0) {
+            manual_load_attach.__set_peakMemBytes(ctx->peak_mem_bytes);
+        }
 
         attach->manualLoadTxnCommitAttachment = manual_load_attach;
         attach->__isset.manualLoadTxnCommitAttachment = true;
@@ -366,6 +372,12 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         rl_attach.__set_loadCostMs(ctx->load_cost_nanos / 1000 / 1000);
         if (!ctx->status.ok() && is_non_retryable_load_error(ctx->status.message())) {
             rl_attach.__set_nonRetryable(true);
+        }
+        if (ctx->cpu_ns > 0) {
+            rl_attach.__set_cpuNs(ctx->cpu_ns);
+        }
+        if (ctx->peak_mem_bytes > 0) {
+            rl_attach.__set_peakMemBytes(ctx->peak_mem_bytes);
         }
 
         attach->rlTaskTxnCommitAttachment = rl_attach;

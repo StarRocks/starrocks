@@ -39,6 +39,8 @@ public class InsertLoadJobEditLogTest {
     private static final String LOAD_ID = "load_id";
     private static final String USER = "test_user";
     private static final long TIMEOUT = 3600L;
+    private static final long CPU_NS = 123456L;
+    private static final long PEAK_MEM_BYTES = 7890L;
 
     @BeforeEach
     public void setUp() throws Exception {
@@ -62,6 +64,10 @@ public class InsertLoadJobEditLogTest {
         Assertions.assertEquals(JobState.FINISHED, job.getState());
         Assertions.assertEquals(100, job.getProgress());
         Assertions.assertEquals(trackingUrl, job.loadingStatus.getTrackingUrl());
+        Assertions.assertEquals(CPU_NS, job.getCpuNs());
+        Assertions.assertEquals(PEAK_MEM_BYTES, job.getPeakMemBytes());
+        Assertions.assertEquals(CPU_NS, job.toThrift().getCpu_ns());
+        Assertions.assertEquals(PEAK_MEM_BYTES, job.toThrift().getPeak_mem_bytes());
 
         LoadMgr followerLoadMgr = new LoadMgr(new LoadJobScheduler());
         LoadJob replayCreateJob = (LoadJob) UtFrameUtils.PseudoJournalReplayer
@@ -74,6 +80,8 @@ public class InsertLoadJobEditLogTest {
         Assertions.assertEquals(JobState.FINISHED, operation.getJobState());
         Assertions.assertEquals(100, operation.getProgress());
         Assertions.assertEquals(trackingUrl, operation.getLoadingStatus().getTrackingUrl());
+        Assertions.assertEquals(CPU_NS, operation.getLoadingStatus().getCpuNs());
+        Assertions.assertEquals(PEAK_MEM_BYTES, operation.getLoadingStatus().getPeakMemBytes());
         Assertions.assertNull(operation.getFailMsg());
 
         followerLoadMgr.replayEndLoadJob(operation);
@@ -82,6 +90,8 @@ public class InsertLoadJobEditLogTest {
         Assertions.assertEquals(JobState.FINISHED, followerJob.getState());
         Assertions.assertEquals(100, followerJob.getProgress());
         Assertions.assertEquals(trackingUrl, followerJob.loadingStatus.getTrackingUrl());
+        Assertions.assertEquals(CPU_NS, followerJob.getCpuNs());
+        Assertions.assertEquals(PEAK_MEM_BYTES, followerJob.getPeakMemBytes());
     }
 
     @Test
@@ -108,10 +118,12 @@ public class InsertLoadJobEditLogTest {
     private static InsertLoadJob createLoadingJob(String label) {
         Coordinator coordinator = mock(Coordinator.class);
         when(coordinator.getLoadJobType()).thenReturn(TLoadJobType.INSERT_QUERY);
+        when(coordinator.getLoadCpuNs()).thenReturn(CPU_NS);
+        when(coordinator.getLoadPeakMemBytes()).thenReturn(PEAK_MEM_BYTES);
         InsertLoadTxnCallback insertLoadTxnCallback = mock(InsertLoadTxnCallback.class);
         long createTimestamp = System.currentTimeMillis();
         return new InsertLoadJob(label, DB_ID, TABLE_ID, TXN_ID, LOAD_ID, USER, createTimestamp,
                 Math.max(TIMEOUT, Config.insert_load_default_timeout_second),
-                0L, coordinator, insertLoadTxnCallback);
+                0L, coordinator, insertLoadTxnCallback, "INSERT_SELECT", "127.0.0.1");
     }
 }

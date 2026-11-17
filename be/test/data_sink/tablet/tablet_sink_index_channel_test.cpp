@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <map>
 #include <thread>
 
 #include "base/testutil/assert.h"
@@ -26,14 +27,20 @@
 #include "column/serde/encode_level.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_ingest_fwd.h"
+#include "common/runtime_profile.h"
+#include "common/system/master_info.h"
 #include "common/util/thrift_util.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "data_sink/tablet/olap_table_sink.h"
 #include "exec/exec_env.h"
+#include "exec/pipeline/exec_state_reporter.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
+#include "gen_cpp/HeartbeatService_types.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "storage_primitive/tablet_info.h"
 
@@ -821,6 +828,133 @@ TEST_F(TabletSinkIndexChannelTest, send_request_releases_protobuf_memory) {
     // Verify: before Swap the request had serialized chunk data, after Swap it's cleared
     EXPECT_GT(request_size_before_swap, 0);
     EXPECT_EQ(request_size_after_swap, 0);
+}
+
+// The peak memory reported by each load channel is folded into the runtime state as the
+// max over all node channels, so the final exec status report carries the largest one.
+TEST_F(TabletSinkIndexChannelTest, load_channel_peak_mem_bytes) {
+    TQueryOptions query_options;
+    query_options.__set_batch_size(4096);
+    query_options.__set_query_timeout(3600);
+    auto runtime_state = _build_runtime_state(query_options);
+    DescriptorTbl* desc_tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(runtime_state.get(), _object_pool.get(), _desc_tbl, &desc_tbl,
+                                    config::vector_chunk_size));
+    runtime_state->set_desc_tbl(desc_tbl);
+    auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, runtime_state.get());
+    ASSERT_OK(sink->init(_data_sink, runtime_state.get()));
+    ASSERT_OK(sink->prepare(runtime_state.get()));
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::open_send");
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::open_join");
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_send");
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_join");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_send", [&](void* arg) {
+        RpcOpenPair* rpc_pair = (RpcOpenPair*)arg;
+        RefCountClosure<PTabletWriterOpenResult>* closure = rpc_pair->second;
+        closure->result.mutable_status()->set_status_code(TStatusCode::OK);
+        closure->Run();
+    });
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_join", [&](void* arg) {
+        RefCountClosure<PTabletWriterOpenResult>* closure = (RefCountClosure<PTabletWriterOpenResult>*)arg;
+        EXPECT_FALSE(closure->cntl.Failed());
+        EXPECT_EQ(TStatusCode::OK, closure->result.status().status_code());
+    });
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_send", [&](void* arg) {
+        RpcAddChunkTuple* rpc_tuple = (RpcAddChunkTuple*)arg;
+        int64_t node_id = std::get<0>(*rpc_tuple);
+        ReusableClosure<PTabletWriterAddBatchResult>* closure = std::get<2>(*rpc_tuple);
+        closure->result.mutable_status()->set_status_code(TStatusCode::OK);
+        // each node reports a different peak, node 2 the largest
+        closure->result.set_load_channel_peak_mem_bytes(1000 * (node_id + 1));
+        closure->Run();
+    });
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_join", [&](void* arg) {
+        std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>* rpc_pair =
+                (std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>*)arg;
+        *rpc_pair->second = true;
+    });
+
+    // This backend is node 1, so the load channel of node 1 is the local one.
+    TMasterInfo previous_master_info = get_master_info();
+    TMasterInfo master_info = previous_master_info;
+    master_info.__set_backend_id(1);
+    ASSERT_TRUE(update_master_info(master_info));
+    DeferOp restore_master_info([&]() { (void)update_master_info(previous_master_info); });
+
+    ASSERT_EQ(0, runtime_state->load_channel_peak_mem_bytes());
+    ASSERT_EQ(0, runtime_state->local_load_channel_peak_mem_bytes());
+    ASSERT_TRUE(runtime_state->backend_load_channel_peak_mem_bytes().empty());
+    ASSERT_OK(sink->open(runtime_state.get()));
+    auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
+    ChunkUniquePtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
+    chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
+    chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(int64_t(1)));
+    ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
+    (void)sink->close(runtime_state.get(), Status::OK());
+
+    EXPECT_EQ(3000, runtime_state->load_channel_peak_mem_bytes());
+    // only the response of the node that is this backend counts as local
+    EXPECT_EQ(2000, runtime_state->local_load_channel_peak_mem_bytes());
+    // and each hosting backend keeps its own peak for the exec status report
+    std::map<int64_t, int64_t> expected_peaks{{0, 1000}, {1, 2000}, {2, 3000}};
+    EXPECT_EQ(expected_peaks, runtime_state->backend_load_channel_peak_mem_bytes());
+}
+
+// The final exec status report of a load fragment carries this backend's CPU time and query
+// memory peak, and the peak of every load channel the sink wrote to keyed by hosting backend.
+TEST_F(TabletSinkIndexChannelTest, exec_state_report_carries_load_resource_usage) {
+    TQueryOptions query_options;
+    query_options.__set_query_type(TQueryType::LOAD);
+
+    MemTracker parent_mem_tracker(-1, "exec_state_report_load_resource_usage");
+    pipeline::QueryContext query_ctx;
+    query_ctx.init_mem_tracker(-1, &parent_mem_tracker);
+    query_ctx.mem_tracker()->consume(4096);
+    query_ctx.mem_tracker()->release(4096);
+    query_ctx.query_runtime_state().incr_cpu_cost(1234);
+
+    std::shared_ptr<RuntimeState> runtime_state = _build_runtime_state(query_options);
+    runtime_state->set_query_ctx(&query_ctx, &query_ctx.query_runtime_state(), query_ctx.object_pool());
+    runtime_state->update_load_channel_peak_mem_bytes(900);
+    runtime_state->update_backend_load_channel_peak_mem_bytes(10, 700);
+    runtime_state->update_backend_load_channel_peak_mem_bytes(12, 900);
+    // a smaller peak reported later for the same backend does not lower it
+    runtime_state->update_backend_load_channel_peak_mem_bytes(10, 300);
+
+    auto fragment_ctx = std::make_shared<pipeline::FragmentContext>();
+    fragment_ctx->set_runtime_state(std::move(runtime_state));
+    RuntimeProfile profile("fragment");
+    RuntimeProfile load_channel_profile("load_channel");
+
+    // a failed final report carries the usage as well
+    auto params = pipeline::ExecStateReporter::create_report_exec_status_params(
+            &query_ctx, fragment_ctx.get(), &profile, &load_channel_profile,
+            Status::MemoryLimitExceeded("Memory of query exceed limit"), true);
+    ASSERT_TRUE(params->__isset.load_cpu_ns);
+    EXPECT_EQ(1234, params->load_cpu_ns);
+    ASSERT_TRUE(params->__isset.load_peak_mem_bytes);
+    EXPECT_EQ(4096, params->load_peak_mem_bytes);
+    ASSERT_TRUE(params->__isset.load_channel_peak_mem_bytes);
+    EXPECT_EQ(900, params->load_channel_peak_mem_bytes);
+    ASSERT_TRUE(params->__isset.load_channel_peak_mem_bytes_by_backend);
+    std::map<int64_t, int64_t> expected_peaks{{10, 700}, {12, 900}};
+    EXPECT_EQ(expected_peaks, params->load_channel_peak_mem_bytes_by_backend);
+
+    // An intermediate report of a running load stays brief, but it carries the CPU time and
+    // the peak query memory so far: a load cancelled before its final reports shows those.
+    auto running_params = pipeline::ExecStateReporter::create_report_exec_status_params(
+            &query_ctx, fragment_ctx.get(), &profile, &load_channel_profile, Status::OK(), false);
+    ASSERT_TRUE(running_params->__isset.load_cpu_ns);
+    EXPECT_EQ(1234, running_params->load_cpu_ns);
+    ASSERT_TRUE(running_params->__isset.load_peak_mem_bytes);
+    EXPECT_EQ(4096, running_params->load_peak_mem_bytes);
+    EXPECT_FALSE(running_params->__isset.load_channel_peak_mem_bytes_by_backend);
 }
 
 // Reproduces the race condition fixed in _send_chunk_by_node where it directly

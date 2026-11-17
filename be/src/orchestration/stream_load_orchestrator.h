@@ -19,11 +19,16 @@
 namespace starrocks {
 
 class ExecEnv;
+class RuntimeState;
 class StreamLoadContext;
 
 namespace orchestration {
 
 class FragmentMgr;
+
+// Move the results of a finished stream load fragment from its RuntimeState into the
+// StreamLoadContext and fulfill ctx->promise with the final status. Declared here for tests.
+void finish_stream_load(StreamLoadContext* ctx, RuntimeState* rs, Status status);
 
 class StreamLoadOrchestrator {
 public:

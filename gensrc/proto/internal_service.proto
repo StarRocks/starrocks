@@ -330,6 +330,9 @@ message PTabletWriterAddBatchResult {
     // Time the server-side add_chunk handler spent blocked in count_down_latch.wait(),
     // i.e. waiting for the async delta-writer write()/finish() callbacks to complete.
     optional int64 wait_writer_time_us = 11;
+    // Peak memory of the load channel for this load id on the responding backend, as
+    // tracked by its memory tracker. Set on responses to eos requests.
+    optional int64 load_channel_peak_mem_bytes = 12;
 };
 
 message PTabletWriterAddSegmentRequest {
