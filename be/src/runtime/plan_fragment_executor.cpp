@@ -39,7 +39,18 @@
 
 #include "common/logging.h"
 #include "common/object_pool.h"
+<<<<<<< HEAD:be/src/runtime/plan_fragment_executor.cpp
 #include "exec/data_sink.h"
+=======
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_context_mgr.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/profile_report_worker.h"
+#include "compute_env/result/result_buffer_mgr.h"
+#include "compute_env/result/result_queue_mgr.h"
+>>>>>>> 6506f99 ([BugFix] Propagate fragment cancellation to stream load pipes (#82741)):be/src/orchestration/plan_fragment_executor.cpp
 #include "exec/exchange_node.h"
 #include "exec/exec_node.h"
 #include "exec/scan_node.h"
@@ -378,6 +389,16 @@ void PlanFragmentExecutor::cancel() {
         _runtime_state->set_is_cancelled(true);
     }
 
+    if (!_stream_load_sinks.empty()) {
+        auto st = status();
+        if (st.ok()) {
+            st = Status::Cancelled("Fragment cancelled");
+        }
+        for (const auto& sink : _stream_load_sinks) {
+            sink->cancel(st);
+        }
+    }
+
     const TQueryOptions& query_options = _runtime_state->query_options();
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
@@ -465,6 +486,16 @@ void PlanFragmentExecutor::close() {
         }
         // _runtime_state init failed
         if (_plan != nullptr) {
+            // Unblock input before close waits for scanner threads to exit.
+            if (!_stream_load_sinks.empty()) {
+                auto st = status();
+                if (st.ok()) {
+                    st = Status::Cancelled("Close the stream load pipe");
+                }
+                for (const auto& sink : _stream_load_sinks) {
+                    sink->cancel(st);
+                }
+            }
             _plan->close(_runtime_state);
         }
 
@@ -499,21 +530,47 @@ void PlanFragmentExecutor::close() {
 }
 
 Status PlanFragmentExecutor::_prepare_stream_load_pipe(const TExecPlanFragmentParams& request) {
-    const auto& scan_range_map = request.params.per_node_scan_ranges;
-    if (scan_range_map.size() == 0) {
-        return Status::OK();
+    auto check_channel_stream_load = [&]() -> Status {
+        const auto& scan_range_map = request.params.per_node_scan_ranges;
+        if (scan_range_map.size() == 0) {
+            return Status::OK();
+        }
+        auto iter = scan_range_map.begin();
+        if (iter->second.size() == 0) {
+            return Status::OK();
+        }
+        if (!iter->second[0].scan_range.__isset.broker_scan_range) {
+            return Status::OK();
+        }
+        if (!iter->second[0].scan_range.broker_scan_range.__isset.channel_id) {
+            return Status::OK();
+        }
+        return Status::NotSupported("Non-pipeline engine does not support channel stream load");
+    };
+    RETURN_IF_ERROR(check_channel_stream_load());
+
+    for (const auto& [node_id, scan_ranges] : request.params.per_node_scan_ranges) {
+        for (const auto& scan_range : scan_ranges) {
+            if (!scan_range.scan_range.__isset.broker_scan_range) {
+                continue;
+            }
+            const auto& broker_range = scan_range.scan_range.broker_scan_range;
+            if (broker_range.__isset.channel_id) {
+                continue;
+            }
+            for (const auto& range : broker_range.ranges) {
+                if (range.file_type != TFileType::FILE_STREAM) {
+                    continue;
+                }
+                auto pipe = runtime_services(_query_execution_services).load_stream_mgr->get(range.load_id);
+                if (pipe == nullptr) {
+                    return Status::InternalError("Invalid or outdated load id " + print_id(range.load_id));
+                }
+                _stream_load_sinks.emplace_back(std::move(pipe));
+            }
+        }
     }
-    auto iter = scan_range_map.begin();
-    if (iter->second.size() == 0) {
-        return Status::OK();
-    }
-    if (!iter->second[0].scan_range.__isset.broker_scan_range) {
-        return Status::OK();
-    }
-    if (!iter->second[0].scan_range.broker_scan_range.__isset.channel_id) {
-        return Status::OK();
-    }
-    return Status::NotSupported("Non-pipeline engine does not support channel stream load");
+    return Status::OK();
 }
 
 } // namespace starrocks
