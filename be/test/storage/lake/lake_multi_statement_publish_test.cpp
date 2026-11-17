@@ -141,7 +141,7 @@ protected:
     // Publish `txns` as one batch: versions base_version + 1 .. base_version + txns.size().
     StatusOr<TabletMetadataPtr> publish_batch(int64_t base_version, const std::vector<TxnInfoPB>& txns) {
         return publish_version(_tablet_mgr.get(), PublishTabletInfo(_tablet_metadata->id()), base_version,
-                               base_version + static_cast<int64_t>(txns.size()), txns, false, std::nullopt);
+                               base_version + static_cast<int64_t>(txns.size()), txns, false);
     }
 
     // What a publish finds on a node other than the one that ran the previous attempt: neither the metadata,

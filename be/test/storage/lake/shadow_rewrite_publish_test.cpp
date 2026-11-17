@@ -294,7 +294,7 @@ TEST_F(ShadowRewritePublishDupTest, MultiStatementVlogRetainsDuplicateKeysAndSeg
     const int64_t flip_version = watershed + 2;
     auto flip_info = TEST_shadow_rewrite_txn_info(rewrite_txn_id, watershed, time(nullptr));
     ASSIGN_OR_ABORT(auto metadata, publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, flip_version,
-                                                   std::span<const TxnInfoPB>(&flip_info, 1), false, std::nullopt));
+                                                   std::span<const TxnInfoPB>(&flip_info, 1), false));
     ASSERT_EQ(2, metadata->rowsets_size());
     const auto& merged = metadata->rowsets(1);
     ASSERT_EQ(2, merged.segment_metas_size());
@@ -364,7 +364,7 @@ TEST_F(ShadowRewritePublishDupTest, MultiStatementVlogSkipsStatementsOfOtherTabl
         const int64_t flip_version = watershed + 2;
         auto flip_info = TEST_shadow_rewrite_txn_info(rewrite_txn_id, watershed, time(nullptr));
         ASSERT_OK(publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, flip_version,
-                                  std::span<const TxnInfoPB>(&flip_info, 1), false, std::nullopt)
+                                  std::span<const TxnInfoPB>(&flip_info, 1), false)
                           .status());
         _tablet_mgr->metacache()->prune();
         const std::map<int32_t, int32_t> expected{{0, 100}, {1, 200}, {3, 400}};
@@ -617,7 +617,7 @@ TEST_P(ShadowRewriteMultiStatementPkTest, PartialDeleteThenInsertSurvivesReplayA
     const int64_t flip_version = watershed + 2;
     auto flip_info = TEST_shadow_rewrite_txn_info(rewrite_txn_id, watershed, time(nullptr));
     ASSERT_OK(publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, flip_version,
-                              std::span<const TxnInfoPB>(&flip_info, 1), false, std::nullopt)
+                              std::span<const TxnInfoPB>(&flip_info, 1), false)
                       .status());
     const std::vector<std::pair<int32_t, int32_t>> replay_rows{{0, 100}, {1, 999}};
     EXPECT_EQ(replay_rows, read_visible_rows(flip_version));
@@ -667,7 +667,7 @@ TEST_P(ShadowRewriteMultiStatementPkTest, FullInsertThenInsertPreservesLastState
     const int64_t flip_version = watershed + 2;
     auto flip_info = TEST_shadow_rewrite_txn_info(rewrite_txn_id, watershed, time(nullptr));
     ASSERT_OK(publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, flip_version,
-                              std::span<const TxnInfoPB>(&flip_info, 1), false, std::nullopt)
+                              std::span<const TxnInfoPB>(&flip_info, 1), false)
                       .status());
     const std::vector<std::pair<int32_t, int32_t>> replay_rows{{0, 100}, {1, 999}};
     EXPECT_EQ(replay_rows, read_visible_rows(flip_version));
@@ -722,7 +722,7 @@ TEST_P(ShadowRewriteMultiStatementPkTest, GroupReplayRecoversFromIndexLoadFailur
     const int64_t flip_version = watershed + 2;
     auto flip_info = TEST_shadow_rewrite_txn_info(rewrite_txn_id, watershed, time(nullptr));
     ASSERT_OK(publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, flip_version,
-                              std::span<const TxnInfoPB>(&flip_info, 1), false, std::nullopt)
+                              std::span<const TxnInfoPB>(&flip_info, 1), false)
                       .status());
     // The failed load and the one after the recover.
     EXPECT_GE(index_loads, 2);
@@ -893,7 +893,7 @@ TEST_P(ShadowRewriteBundledMultiStatementPkTest, PartialThenFullKeepsBundleSlice
         const int32_t key = static_cast<int32_t>(1000 * i);
         auto flip_info = TEST_shadow_rewrite_txn_info(rewrite_txn, watershed, time(nullptr));
         ASSIGN_OR_ABORT(auto metadata, publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, flip_version,
-                                                       std::span<const TxnInfoPB>(&flip_info, 1), false, std::nullopt));
+                                                       std::span<const TxnInfoPB>(&flip_info, 1), false));
         ASSERT_EQ(2, metadata->rowsets_size());
         const auto& replayed = metadata->rowsets(1);
         ASSERT_EQ(2, replayed.segment_metas_size());
