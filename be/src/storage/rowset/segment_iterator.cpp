@@ -1219,13 +1219,21 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
     // With late materialization the read loop reads the predicate columns over the scan range and the other columns
     // only for the surviving rows of each chunk.
     const size_t early = _context->_late_materialize ? std::min<size_t>(_predicate_columns, num_fields) : num_fields;
+    // With predicate column late materialization only the first predicate column is read over the scan range; the
+    // other predicate columns are read for the rows it keeps, on demand.
+    const auto& predicate_order = _context->_predicate_order;
+    auto staged_predicate = [&](ColumnId cid) {
+        return _context->_enable_predicate_col_late_materialize && !predicate_order.empty() &&
+               cid != predicate_order.front() &&
+               std::find(predicate_order.begin(), predicate_order.end(), cid) != predicate_order.end();
+    };
     std::vector<SegmentPrefetchWindow::Column> columns;
     for (size_t i = 0; i < num_fields; ++i) {
         const FieldPtr& f = _schema.field(i);
         SegmentPrefetchWindow::Column c;
         // A column the inverted index already answered is not read at all (see read_columns()).
         const bool pruned = _context->_prune_column_after_index_filter && _context->_prune_cols.count(f->id()) > 0;
-        if (f->is_virtual() || pruned || !column_of(f->id(), &c)) {
+        if (f->is_virtual() || pruned || (i < early && staged_predicate(f->id())) || !column_of(f->id(), &c)) {
             continue;
         }
         (i < early ? columns : _prefetch_late_columns).push_back(c);
@@ -2441,6 +2449,14 @@ StatusOr<size_t> SegmentIterator::_sample_predicate_columns(vector<rowid_t>* row
         _context->_column_iterators_for_predicate_late_materialize[0] =
                 _context->_column_ids_to_column_iterators[new_first_column_id];
         _context->_column_id_for_predicate_late_materialize[0] = new_first_column_id;
+        if (_prefetch_window != nullptr) {
+            // The window reads the first predicate column ahead; move it to the new one.
+            if (_range_iter.has_more()) {
+                _init_prefetch_window(_range_iter.begin());
+            } else {
+                _reset_prefetch_window();
+            }
+        }
     }
 
     // Return the filtered chunk size (after applying all predicates)

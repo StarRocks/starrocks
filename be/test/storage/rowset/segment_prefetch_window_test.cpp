@@ -375,12 +375,18 @@ TEST_F(SegmentPrefetchWindowTest, sparse_late_rows_stay_on_demand) {
         rowid_t row = _pages[page].first;
         gapped->warm_rows({{_reader, &_stream}}, &row, 1);
     }
+    // Several batches on one page count it once: 2 pages touched out of 7.
+    auto repeated = make_window(&range, 0, 4, 0.5);
+    for (rowid_t row : {_pages[0].first, _pages[0].first + 1, _pages[0].first + 2, _pages[6].first}) {
+        repeated->warm_rows({{_reader, &_stream}}, &row, 1);
+    }
     auto never = make_window(&range, 0, 4, 1.5);
     for (int batch = 0; batch < 8; ++batch) {
         std::vector<rowid_t> dense{_pages[batch].first};
         never->warm_rows({{_reader, &_stream}}, dense.data(), dense.size());
     }
     EXPECT_FALSE(gapped->reads_ahead_late_columns());
+    EXPECT_FALSE(repeated->reads_ahead_late_columns());
     EXPECT_FALSE(never->reads_ahead_late_columns());
     EXPECT_EQ(0, _stats.remote_prefetch_late_read_ahead);
 }

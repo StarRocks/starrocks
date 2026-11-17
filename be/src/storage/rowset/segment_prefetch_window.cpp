@@ -200,7 +200,10 @@ void SegmentPrefetchWindow::warm_rows(const std::vector<Column>& columns, const 
                 first_page = it.page_index();
             }
             last_page = it.page_index();
-            _late_pages_touched++;
+            // Rows only move forward, so a page an earlier batch touched is at or before that batch's last page.
+            if (_late_last_page[ci] < it.page_index()) {
+                _late_pages_touched++;
+            }
             const PagePointer pp = it.page();
             if (run_end == static_cast<int64_t>(pp.offset)) {
                 run_end += pp.size;
