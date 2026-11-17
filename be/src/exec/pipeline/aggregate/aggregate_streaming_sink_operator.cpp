@@ -41,7 +41,9 @@ Status AggregateStreamingSinkOperator::prepare_local_state(RuntimeState* state) 
 
 void AggregateStreamingSinkOperator::close(RuntimeState* state) {
     auto* counter = ADD_COUNTER(_unique_metrics, "HashTableMemoryUsage", TUnit::BYTES);
-    COUNTER_SET(counter, _aggregator->hash_map_memory_usage());
+    if (!_aggregator->is_streaming_all_states()) {
+        COUNTER_SET(counter, _aggregator->hash_map_memory_usage());
+    }
     _aggregator->unref(state);
     Operator::close(state);
 }
@@ -54,7 +56,8 @@ Status AggregateStreamingSinkOperator::set_finishing(RuntimeState* state) {
         return Status::OK();
     }
 
-    if (_aggregator->hash_map_variant().size() == 0) {
+    // While the source owns the hash table it sets ht_eos itself once the table is drained.
+    if (!_aggregator->is_streaming_all_states() && _aggregator->hash_map_variant().size() == 0) {
         _aggregator->set_ht_eos();
     }
 
@@ -70,14 +73,25 @@ void AggregateStreamingSinkOperator::set_execute_mode(int performance_level) {
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::AUTO) {
         _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::LIMITED_MEM;
     }
-    _limited_mem_state.limited_memory_size = LimitedMemAggState::clamp_budget(
-            _aggregator->hash_map_memory_usage(), config::streaming_agg_limited_memory_size);
+    // The driver may call this on the way to set_finishing, after the hash table was handed to the source.
+    const int64_t hash_map_usage = _aggregator->is_streaming_all_states() ? config::streaming_agg_limited_memory_size
+                                                                          : _aggregator->hash_map_memory_usage();
+    _limited_mem_state.limited_memory_size =
+            LimitedMemAggState::clamp_budget(hash_map_usage, config::streaming_agg_limited_memory_size);
+}
+
+void AggregateStreamingSinkOperator::_update_revocable_mem_bytes() {
+    // Once streaming_all_states is set, the source drains the hash table and may rebuild it in reset_state(), so
+    // the sink must not read it. Only the sink sets the flag and the source clears it after the rebuild, so a
+    // cleared flag means the table is the sink's again.
+    if (_aggregator->is_streaming_all_states()) {
+        return;
+    }
+    set_revocable_mem_bytes(_aggregator->hash_map_variant().allocated_memory_usage(_aggregator->mem_pool()));
 }
 
 Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    DeferOp update_revocable_bytes{[this]() {
-        set_revocable_mem_bytes(_aggregator->hash_map_variant().allocated_memory_usage(_aggregator->mem_pool()));
-    }};
+    DeferOp update_revocable_bytes{[this]() { _update_revocable_mem_bytes(); }};
     size_t chunk_size = chunk->num_rows();
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());

@@ -45,7 +45,9 @@ Status AggregateDistinctStreamingSinkOperator::prepare_local_state(RuntimeState*
 
 void AggregateDistinctStreamingSinkOperator::close(RuntimeState* state) {
     auto* counter = ADD_COUNTER(_unique_metrics, "HashTableMemoryUsage", TUnit::BYTES);
-    COUNTER_SET(counter, _aggregator->hash_set_memory_usage());
+    if (!_aggregator->is_streaming_all_states()) {
+        COUNTER_SET(counter, _aggregator->hash_set_memory_usage());
+    }
     _aggregator->unref(state);
     Operator::close(state);
 }
@@ -64,7 +66,8 @@ Status AggregateDistinctStreamingSinkOperator::set_finishing(RuntimeState* state
         return Status::OK();
     }
 
-    if (_aggregator->hash_set_variant().size() == 0) {
+    // While the source owns the hash set it sets ht_eos itself once the set is drained.
+    if (!_aggregator->is_streaming_all_states() && _aggregator->hash_set_variant().size() == 0) {
         _aggregator->set_ht_eos();
     }
 
@@ -84,8 +87,11 @@ void AggregateDistinctStreamingSinkOperator::set_execute_mode(int performance_le
     // unique_ptr (latent UB, currently masked only because variant slot 0 is a SmallFixedSizeHashMap
     // whose dump_bound() folds to a compile-time constant). memory_usage() reports the hash-set-based
     // footprint safely; cap it by config like the aggregate-with-functions sink, and keep it > 0.
+    // The driver may call this on the way to set_finishing, after the hash set was handed to the source.
+    const int64_t usage = _aggregator->is_streaming_all_states() ? config::streaming_agg_limited_memory_size
+                                                                 : _aggregator->memory_usage();
     _limited_mem_state.limited_memory_size =
-            LimitedMemAggState::clamp_budget(_aggregator->memory_usage(), config::streaming_agg_limited_memory_size);
+            LimitedMemAggState::clamp_budget(usage, config::streaming_agg_limited_memory_size);
 }
 
 Status AggregateDistinctStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {

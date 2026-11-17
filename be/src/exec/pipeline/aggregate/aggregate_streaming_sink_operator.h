@@ -75,6 +75,8 @@ private:
     // Build the topn runtime filter for the current chunk
     Status _build_topn_runtime_filter(RuntimeState* state);
 
+    void _update_revocable_mem_bytes();
+
     // It is used to perform aggregation algorithms shared by
     // AggregateStreamingSourceOperator. It is
     // - prepared at SinkOperator::prepare(),
