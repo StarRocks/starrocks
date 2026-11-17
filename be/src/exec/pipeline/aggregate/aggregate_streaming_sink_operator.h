@@ -74,6 +74,9 @@ private:
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::LIMITED
     Status _push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size);
 
+    void _update_revocable_mem_bytes();
+    void _publish_hash_table_memory_usage();
+
     // It is used to perform aggregation algorithms shared by
     // AggregateStreamingSourceOperator. It is
     // - prepared at SinkOperator::prepare(),
@@ -85,6 +88,13 @@ private:
     AggrAutoState _auto_state{};
     AggrAutoContext _auto_context;
     LimitedMemAggState _limited_mem_state;
+<<<<<<< HEAD
+=======
+    // Hash table memory usage measured right before the table was last handed to the source.
+    int64_t _handed_off_hash_table_memory_usage = 0;
+    // the size of hash table when the last time the topn runtime filter is built
+    size_t _hash_table_size = 0;
+>>>>>>> 04b5bb7 ([BugFix] Stop the streaming aggregate sink from reading a hash table handed to the source (#83452))
 
     DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
