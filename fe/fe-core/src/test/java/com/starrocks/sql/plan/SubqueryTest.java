@@ -647,8 +647,89 @@ public class SubqueryTest extends PlanTestBase {
                 "      SELECT t1.v5 FROM t1\n" +
                 "      WHERE nullif(false, t0.v1 < 0)\n" +
                 ");";
-        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql),
-                "Not support Non-EQ correlation predicate correlation scalar-subquery");
+        String plan = getFragmentPlan(sql);
+        // the predicate only reads the outer column, so it filters the distinct outer values
+        assertContains(plan, "predicates: nullif(FALSE, 14: v1 < 0)");
+        assertContains(plan, "assert_true((9: countRows IS NULL) OR (9: countRows <= 1), " +
+                "'correlate scalar subquery result must 1 row')");
+        assertContains(plan, "equal join conjunct: 14: v1 <=> 12: v1");
+    }
+
+    @Test
+    public void testNonEQCorrelatedScalarAggSubquery() throws Exception {
+        String sql = "select v1, (select count(*) from t1 where t1.v4 = t0.v1 and t1.v5 < t0.v2) c from t0";
+        String plan = getFragmentPlan(sql);
+        // count is 0, not NULL, for outer rows without a qualifying inner row
+        assertContains(plan, "  15:Project\n" +
+                "  |  <slot 1> : 9: v1\n" +
+                "  |  <slot 8> : ifnull(7: count, 0)\n" +
+                "  |  \n" +
+                "  14:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 12: v1 <=> 9: v1\n" +
+                "  |  equal join conjunct: 13: v2 <=> 10: v2");
+        assertContains(plan, "  10:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 12: v1, 13: v2\n" +
+                "  |  \n" +
+                "  9:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 12: v1 = 4: v4\n" +
+                "  |  other join predicates: 5: v5 < 13: v2");
+        // the outer input is shared by the outer side and the distinct correlation values
+        assertContains(plan, "MultiCastDataSinks");
+    }
+
+    @Test
+    public void testNonEQCorrelatedExistsSubqueryOutsideWhereConjuncts() throws Exception {
+        {
+            String sql = "select v1, exists (select 1 from t1 where t1.v4 = t0.v1 and t1.v5 > t0.v2) e from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "<slot 8> : 9: countRows IS NOT NULL");
+            assertContains(plan, "equal join conjunct: 13: v1 = 4: v4\n" +
+                    "  |  other join predicates: 5: v5 > 14: v2");
+        }
+        {
+            String sql = "select v1, case when not exists (select 1 from t1 where t1.v4 = t0.v1 and t1.v5 <> t0.v2) " +
+                    "then 1 else 0 end from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "<slot 9> : if(NOT (10: countRows IS NOT NULL), 1, 0)");
+            assertContains(plan, "other join predicates: 5: v5 != 15: v2");
+        }
+        {
+            // no equality at all
+            String sql = "select * from t0 where v3 > 0 or exists (select 1 from t1 where t1.v4 < t0.v1)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  13:HASH JOIN\n" +
+                    "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 10: v1 <=> 13: v1\n" +
+                    "  |  other predicates: (12: v3 > 0) OR (9: countRows IS NOT NULL)");
+            assertContains(plan, "  11:NESTLOOP JOIN\n" +
+                    "  |    |  join op: INNER JOIN\n" +
+                    "  |    |  colocate: false, reason: \n" +
+                    "  |    |  other join predicates: 4: v4 < 13: v1");
+        }
+    }
+
+    @Test
+    public void testNonEQCorrelatedScalarSubquery() throws Exception {
+        String sql = "select v1, (select v6 from t1 where t1.v4 = t0.v1 and t1.v5 < t0.v2) c from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 7> : 9: anyValue");
+        assertContains(plan, "assert_true((8: countRows IS NULL) OR (8: countRows <= 1), " +
+                "'correlate scalar subquery result must 1 row')");
+        assertContains(plan, "equal join conjunct: 14: v1 <=> 11: v1\n" +
+                "  |  equal join conjunct: 15: v2 <=> 12: v2");
+    }
+
+    @Test
+    public void testNonEQCorrelatedInSubqueryOutsideWhereConjuncts() {
+        String sql = "select v1, v2 in (select v5 from t1 where t1.v4 = t0.v1 and t1.v6 < t0.v3) from t0";
+        Throwable exception = assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("Not support Non-EQ correlated predicate"));
     }
 
     @Test

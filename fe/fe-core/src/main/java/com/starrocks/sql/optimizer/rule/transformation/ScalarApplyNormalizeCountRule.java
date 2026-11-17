@@ -72,15 +72,30 @@ public class ScalarApplyNormalizeCountRule extends TransformationRule {
         LogicalApplyOperator apply = input.getOp().cast();
         LogicalAggregationOperator agg = input.inputAt(1).getOp().cast();
 
+        ScalarOperator subqueryOperator = normalizeCount(apply.getSubqueryOperator(), agg.getAggregations());
+        if (subqueryOperator == apply.getSubqueryOperator()) {
+            return Collections.emptyList();
+        }
+
+        LogicalApplyOperator newApply = LogicalApplyOperator.builder().withOperator(apply)
+                .setSubqueryOperator(subqueryOperator)
+                .build();
+        return Lists.newArrayList(OptExpression.create(newApply, input.getInputs()));
+    }
+
+    // Replaces every count aggregation used by the subquery operator with ifnull(count, 0). Returns the subquery
+    // operator itself if it uses no count.
+    public static ScalarOperator normalizeCount(ScalarOperator subqueryOperator,
+                                                Map<ColumnRefOperator, CallOperator> aggregations) {
         List<ColumnRefOperator> countRefs = Lists.newArrayList();
-        agg.getAggregations().forEach((k, v) -> {
+        aggregations.forEach((k, v) -> {
             if (FunctionSet.COUNT.equals(v.getFnName())) {
                 countRefs.add(k);
             }
         });
 
-        if (!apply.getSubqueryOperator().getUsedColumns().containsAny(countRefs)) {
-            return Collections.emptyList();
+        if (!subqueryOperator.getUsedColumns().containsAny(countRefs)) {
+            return subqueryOperator;
         }
 
         Map<ColumnRefOperator, ScalarOperator> replaceMaps = Maps.newHashMap();
@@ -92,10 +107,6 @@ public class ScalarApplyNormalizeCountRule extends TransformationRule {
             replaceMaps.put(countRef, call);
         }
 
-        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(replaceMaps);
-        LogicalApplyOperator newApply = LogicalApplyOperator.builder().withOperator(apply)
-                .setSubqueryOperator(rewriter.rewrite(apply.getSubqueryOperator()))
-                .build();
-        return Lists.newArrayList(OptExpression.create(newApply, input.getInputs()));
+        return new ReplaceColumnRefRewriter(replaceMaps).rewrite(subqueryOperator);
     }
 }
