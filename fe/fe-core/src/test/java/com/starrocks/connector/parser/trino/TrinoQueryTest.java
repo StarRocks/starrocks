@@ -808,8 +808,12 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 2> : if(regexp_extract('1abb 2b 14m', '[a-z]+', 1) = '', NULL, " +
                 "regexp_extract('1abb 2b 14m', '[a-z]+', 1))");
 
+        // Trino's . doesn't match a newline unless the pattern sets (?s), so the pattern clears the BE's dot_nl
         sql = "select regexp_extract_all('1a 2b 14m', '\\d+');";
-        assertPlanContains(sql, "regexp_extract_all('1a 2b 14m', '\\\\d+', 0)");
+        assertPlanContains(sql, "regexp_extract_all('1a 2b 14m', '(?-s)\\\\d+', 0)");
+
+        sql = "select regexp_extract_all('a1', '.(\\d)', 1);";
+        assertPlanContains(sql, "regexp_extract_all('a1', '(?-s).(\\\\d)', 1)");
     }
 
     @Test

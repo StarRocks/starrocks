@@ -312,11 +312,20 @@ public class Trino2SRFunctionCallTransformer {
                         List.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class),
                                 new StringLiteral(""))));
 
+        // In Trino, . doesn't match \n unless the pattern sets (?s); the BE sets dot_nl, so clear it first.
         // regexp_extract_all(string, pattern) returns whole matches, which is group 0 in StarRocks
         registerFunctionTransformer("regexp_extract_all", 2,
                 new FunctionCallExpr("regexp_extract_all",
-                        List.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class),
-                                new IntLiteral(0L))));
+                        List.of(new PlaceholderExpr(1, Expr.class), trinoRegexpPattern(2), new IntLiteral(0L))));
+        registerFunctionTransformer("regexp_extract_all", 3,
+                new FunctionCallExpr("regexp_extract_all",
+                        List.of(new PlaceholderExpr(1, Expr.class), trinoRegexpPattern(2),
+                                new PlaceholderExpr(3, Expr.class))));
+    }
+
+    private static Expr trinoRegexpPattern(int index) {
+        return new FunctionCallExpr("concat",
+                List.of(new StringLiteral("(?-s)"), new PlaceholderExpr(index, Expr.class)));
     }
 
     private static void registerURLFunctionTransformer() {
