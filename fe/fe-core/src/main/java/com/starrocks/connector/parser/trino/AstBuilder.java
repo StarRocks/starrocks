@@ -188,6 +188,7 @@ import io.trino.sql.tree.Rollup;
 import io.trino.sql.tree.Row;
 import io.trino.sql.tree.RowDataType;
 import io.trino.sql.tree.SearchedCaseExpression;
+import io.trino.sql.tree.SelectItem;
 import io.trino.sql.tree.SetOperation;
 import io.trino.sql.tree.SimpleCaseExpression;
 import io.trino.sql.tree.SimpleGroupBy;
@@ -265,10 +266,57 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     // can be a with_timezone value through a cast, a derived table or a CTE, which isn't tracked, so every
     // with_timezone in such a statement is rejected
     private final boolean hasFormatUnlikeTrino;
+    // Expressions that their consumer reads by value or that the statement returns: comparison, BETWEEN, IN and
+    // IS NULL operands, sort and grouping keys, and the outermost query's columns; by identity
+    private final Set<Expression> valueArguments = Collections.newSetFromMap(new IdentityHashMap<>());
+    // Nesting depth of with_timezone timestamp arguments, in which a TIMESTAMP(p) cast is rounded as in Trino
+    private int withTimezoneSourceDepth = 0;
 
     public AstBuilder(long sqlMode, Node statement) {
         this.sqlMode = sqlMode;
         this.hasFormatUnlikeTrino = containsFormatCallUnlikeTrino(statement);
+        addValueArguments(statement);
+        addOutputColumns(statement);
+    }
+
+    private void addValueArguments(Node node) {
+        if (node instanceof ComparisonExpression) {
+            valueArguments.add(((ComparisonExpression) node).getLeft());
+            valueArguments.add(((ComparisonExpression) node).getRight());
+        } else if (node instanceof BetweenPredicate) {
+            valueArguments.addAll(List.of(((BetweenPredicate) node).getValue(), ((BetweenPredicate) node).getMin(),
+                    ((BetweenPredicate) node).getMax()));
+        } else if (node instanceof InPredicate) {
+            valueArguments.add(((InPredicate) node).getValue());
+            if (((InPredicate) node).getValueList() instanceof InListExpression) {
+                valueArguments.addAll(((InListExpression) ((InPredicate) node).getValueList()).getValues());
+            }
+        } else if (node instanceof IsNullPredicate) {
+            valueArguments.add(((IsNullPredicate) node).getValue());
+        } else if (node instanceof IsNotNullPredicate) {
+            valueArguments.add(((IsNotNullPredicate) node).getValue());
+        } else if (node instanceof SortItem) {
+            valueArguments.add(((SortItem) node).getSortKey());
+        } else if (node instanceof SimpleGroupBy) {
+            valueArguments.addAll(((SimpleGroupBy) node).getExpressions());
+        }
+        node.getChildren().forEach(this::addValueArguments);
+    }
+
+    private void addOutputColumns(Node node) {
+        if (node instanceof Explain) {
+            addOutputColumns(((Explain) node).getStatement());
+        } else if (node instanceof Query) {
+            addOutputColumns(((Query) node).getQueryBody());
+        } else if (node instanceof SetOperation) {
+            ((SetOperation) node).getRelations().forEach(this::addOutputColumns);
+        } else if (node instanceof QuerySpecification) {
+            for (SelectItem item : ((QuerySpecification) node).getSelect().getSelectItems()) {
+                if (item instanceof SingleColumn) {
+                    valueArguments.add(((SingleColumn) item).getExpression());
+                }
+            }
+        }
     }
 
     private static final ImmutableMap<Join.Type, JoinOperator> JOIN_TYPE_MAP =
@@ -1202,7 +1250,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         // Trino promotes a DATE argument to TIMESTAMP. A format rounds the instant to milliseconds, which is rounding ts
         // in the fixed offset attached to it, before the value is read in its zone
         boolean formatted = formattedArguments.contains(node);
-        Expr value = roundHalfUp(new CastExpr(new TypeDef(DATETIME), (Expr) visit(timestamp, context)),
+        Expr value = roundHalfUp(new CastExpr(new TypeDef(DATETIME), visitWithTimezoneSource(timestamp, context)),
                 formatted ? 3 : 6);
         if (toZone == null && (fromZone.get().getRules().isFixedOffset() || !formatted)) {
             return value;
@@ -1211,6 +1259,15 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return new FunctionCallExpr("convert_tz", List.of(value,
                 new com.starrocks.sql.ast.expression.StringLiteral(from.get()),
                 new com.starrocks.sql.ast.expression.StringLiteral(to.get().getId())));
+    }
+
+    private Expr visitWithTimezoneSource(Expression timestamp, ParseTreeContext context) {
+        withTimezoneSourceDepth++;
+        try {
+            return (Expr) visit(timestamp, context);
+        } finally {
+            withTimezoneSourceDepth--;
+        }
     }
 
     private static RuntimeException unsupportedWithTimezone(Expression node) {
@@ -1740,6 +1797,18 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             if (!isWallClockType(node.getType())) {
                 throw unsupportedWithTimezone(node);
             }
+            // Trino rounds the value again where a later cast or format reads it. That is only tracked within an
+            // expression, so a value with fractional seconds must be read here or returned by the statement, not
+            // passed through a derived table, a CTE or another function
+            int precision = castPrecision((DateTimeDataType) node.getType(), node);
+            if (precision > 0 && !wallClockArguments.contains(node) && !valueArguments.contains(node)) {
+                throw unsupportedWithTimezone(node);
+            }
+            return roundHalfUp(cast, precision);
+        }
+        // Trino rounds a cast to TIMESTAMP(p) in a with_timezone argument too, where a DATETIME cast keeps the digits
+        if (withTimezoneSourceDepth > 0 && node.getType() instanceof DateTimeDataType
+                && isWallClockType(node.getType())) {
             return roundHalfUp(cast, castPrecision((DateTimeDataType) node.getType(), node));
         }
         return cast;

@@ -107,9 +107,22 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                 values, "date_trunc('second', microseconds_add(", "500000)");
         assertPlanContains("select date_format(CAST(with_timezone(ts, 'UTC') AS TIMESTAMP(6)), '%H:%i:%s')" + values,
                 "time_slice(microseconds_add(", "500), 1, 'millisecond', 'floor')");
+        // A TIMESTAMP(p) cast in the with_timezone argument rounds as in Trino
+        assertPlanContains("select second(with_timezone(CAST(ts AS TIMESTAMP(0)), 'UTC'))" + values,
+                "date_trunc('second', microseconds_add(");
         String plan = getFragmentPlan("select CAST(with_timezone(TIMESTAMP '2024-08-19 14:36:41.6', 'UTC') " +
                 "AS TIMESTAMP(6))");
         Assertions.assertFalse(plan.contains("microseconds_add"), plan);
+    }
+
+    // A cast with fractional seconds can be returned or compared; through a derived table only whole seconds can pass
+    @Test
+    public void testConsumersOfCasts() throws Exception {
+        String values = " from (values TIMESTAMP '2024-08-19 14:36:41.6') t(ts)";
+        assertPlanContains("select CAST(with_timezone(ts, 'UTC') AS TIMESTAMP)" + values +
+                " where CAST(with_timezone(ts, 'UTC') AS TIMESTAMP) > TIMESTAMP '2024-08-19 00:00:00'", "time_slice(");
+        assertPlanContains("select x from (select CAST(with_timezone(ts, 'UTC') AS TIMESTAMP(0)) x" + values + ") s",
+                "date_trunc('second', microseconds_add(");
     }
 
     // Below a day, truncation is exact only in a fixed-offset zone; Trino promotes a DATE argument to TIMESTAMP
@@ -191,6 +204,17 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                         "TIMESTAMP '2024-08-19 14:36:41', 'UTC') AS TIMESTAMP(6)) as ts) t",
                 "with t as (select CAST(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC') AS DATE) as d) " +
                         "select date_format(d, 'yyyy-MM-dd') from t",
+                // Fractional seconds that Trino rounds again where a derived table, a CTE or another function hands
+                // the value to a format or a cast (Trino: 14:36:42 and 42)
+                "select date_format(ts, '%H:%i:%s') from (select CAST(with_timezone(" +
+                        "TIMESTAMP '2024-08-19 14:36:41.9996', 'UTC') AS TIMESTAMP(6)) as ts) t",
+                "select second(CAST(ts AS TIMESTAMP(0))) from (select CAST(with_timezone(" +
+                        "TIMESTAMP '2024-08-19 14:36:41.6', 'UTC') AS TIMESTAMP(6)) as ts) t",
+                "with t as (select CAST(with_timezone(TIMESTAMP '2024-08-19 14:36:41.6', 'UTC') AS TIMESTAMP) as x) " +
+                        "select x from t",
+                "select date_format(coalesce(CAST(with_timezone(ts, 'UTC') AS TIMESTAMP(6)), ts), '%H:%i:%s')" +
+                        values,
+                "select CAST(CAST(with_timezone(ts, 'UTC') AS TIMESTAMP) AS VARCHAR)" + values,
                 // Trino rejects with_timezone as a window function
                 "select cast(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC') over () AS DATE)",
                 // A DST zone attached to a column, or to a literal it skips or repeats: Trino and convert_tz resolve
