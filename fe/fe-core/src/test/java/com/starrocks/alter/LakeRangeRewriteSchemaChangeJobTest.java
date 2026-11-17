@@ -542,7 +542,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                 "the shadow index must not be exposed to loads that began before it");
 
         Assertions.assertTrue(inMemory.cancelImpl(e.getMessage()));
-        assertShadowCleanedUp(inMemory, physicalPartition.getId(), shadowTabletIds, 0);
+        assertShadowCleanedUp(inMemory, physicalPartition.getId(), shadowTabletIds);
         Assertions.assertNull(table.getIndexMetaByMetaId(job.getShadowIndexMetaId()));
         ConcurrentLoad.assertSinkIndexesMatch(db, table);
     }
@@ -840,59 +840,6 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                 "W must not be captured before the drain is confirmed finished");
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * StarRocksTest#12647: the table does not compact while the online rewrite waits for earlier transactions. Once a
-     * partition's compaction score is above lake_compaction_score_upper_bound, every commit into it is rejected, the
-     * commits of those transactions included, so the job is cancelled and the table is NORMAL again.
-     */
-    @Test
-    public void testWaitingTxnCancelledOnceCommitsAreRejected() throws Exception {
-        long txnId = ConcurrentLoad.begin(db, table);
-        LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
-        job.runPendingJob();
-        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
-
-        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
-        long externalPinVersion = physicalPartition.getVisibleVersion();
-        physicalPartition.setMinRetainVersion(externalPinVersion);
-        PartitionIdentifier partition =
-                new PartitionIdentifier(job.getDbId(), table.getId(), physicalPartition.getId());
-        CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
-        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
-        long oldUpperBound = Config.lake_compaction_score_upper_bound;
-        Config.lake_enable_ingest_slowdown = true;
-        Config.lake_compaction_score_upper_bound = 100;
-        try {
-            // At the bound commits still go through, and the job keeps waiting.
-            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
-                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 100.0));
-            job.runWaitingTxnJob();
-            Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
-
-            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
-                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 101.0));
-            AlterCancelException e = Assertions.assertThrows(AlterCancelException.class, job::runWaitingTxnJob);
-            Assertions.assertTrue(e.getMessage().contains("partition " + physicalPartition.getId()), e.getMessage());
-            Assertions.assertTrue(e.getMessage().contains("lake_compaction_score_upper_bound 100"), e.getMessage());
-            Assertions.assertNull(job.getWatershedVersion(physicalPartition.getId()));
-
-            Assertions.assertTrue(job.cancel(e.getMessage()));
-            Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
-            Assertions.assertEquals(externalPinVersion, physicalPartition.getMinRetainVersion());
-        } finally {
-            physicalPartition.setMinRetainVersion(0);
-            Config.lake_enable_ingest_slowdown = oldSlowdown;
-            Config.lake_compaction_score_upper_bound = oldUpperBound;
-            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
-                    System.currentTimeMillis(), new Quantiles(0.0, 0.0, 0.0));
-            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), txnId, "test done");
-        }
-    }
-
->>>>>>> d8488d6bff0... [BugFix][RB-96] Install a range online rewrite's shadow index together with its meta (#69902)
     @Test
     public void testWaitingTxnCapturesWatershedVersionAndTransitionsToRunning() throws Exception {
         LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
@@ -1875,63 +1822,6 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertFalse(abortCalled.get(),
                 "cancelImpl must not abort a txn that is already in a terminal status");
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
-    }
-
-    @Test
-<<<<<<< HEAD
-    public void testCancelInWaitingTxnBeforeShadowExposedIsClean() throws Exception {
-        // runPendingJob() transitions to WAITING_TXN but does not expose the shadow to the partition
-        // catalog map (exposure happens on the first runWaitingTxnJob run). So at this point the shadow
-        // meta and tablets are in the inverted index, but the shadow is NOT in the partition catalog map.
-        LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
-        job.runPendingJob();
-        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
-
-        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
-        List<Long> shadowTabletIds = job.getShadowIndex(physicalPartitionId).getTablets()
-                .stream().map(Tablet::getId).collect(Collectors.toList());
-        // At this point the shadow IS in the inverted index but NOT in the partition catalog map.
-        Assertions.assertNull(table.getPhysicalPartition(physicalPartitionId)
-                .getLatestIndex(job.getShadowIndexMetaId()),
-                "precondition: shadow not yet in partition catalog map");
-
-        boolean cancelled = job.cancelImpl("cancel after PENDING");
-
-        Assertions.assertTrue(cancelled);
-        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
-        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds);
-=======
-    public void testTimeoutWithACommittedRewriteTxnCancelsAndDropsShadow() throws Exception {
-        // The rewrite INSERT returns while its txn is still COMMITTED, so a publish that never finishes meets the job
-        // deadline in that state. That tick must still cancel the job and clean up, although the transaction manager
-        // refuses to abort a committed txn; the txn later publishes as a no-op.
-        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
-        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
-        job.setRewriteTxnIdForTest(physicalPartitionId, 777L);
-        new MockUp<GlobalTransactionMgr>() {
-            @Mock
-            public TransactionState getTransactionState(long dbId, long transactionId) {
-                TransactionState state = new TransactionState();
-                state.setTransactionStatus(TransactionStatus.COMMITTED);
-                return state;
-            }
-
-            @Mock
-            public void abortTransaction(long dbId, long transactionId, String reason)
-                    throws com.starrocks.common.StarRocksException {
-                throw new TransactionAlreadyCommitException("transaction " + transactionId + " is already committed");
-            }
-        };
-        List<Long> shadowTabletIds = job.getShadowIndex(physicalPartitionId).getTablets()
-                .stream().map(Tablet::getId).collect(Collectors.toList());
-        job.createTimeMs = System.currentTimeMillis() - job.timeoutMs - 1;
-
-        job.run();
-
-        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
-        Assertions.assertTrue(job.errMsg.contains("Timeout"), job.errMsg);
-        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds, 0);
->>>>>>> d8488d6bff0... [BugFix][RB-96] Install a range online rewrite's shadow index together with its meta (#69902)
     }
 
     @Test
