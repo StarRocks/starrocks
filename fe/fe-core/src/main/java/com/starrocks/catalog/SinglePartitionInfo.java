@@ -34,11 +34,16 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.persist.proto.PartitionInfoPB;
+
 public class SinglePartitionInfo extends PartitionInfo {
     public SinglePartitionInfo() {
         super(PartitionType.UNPARTITIONED);
     }
 
-
-
+    @Override
+    protected void fillProtoVariant(PartitionInfoPB.Builder builder) {
+        // Nothing beyond the PartitionInfo fields.
+        builder.setKind(PartitionInfoPB.Kind.KIND_SINGLE);
+    }
 }

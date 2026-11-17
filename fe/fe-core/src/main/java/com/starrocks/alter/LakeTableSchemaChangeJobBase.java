@@ -22,6 +22,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.persist.proto.LakeTableSchemaChangeJobCorePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -135,5 +136,18 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
 
     public static long getNextGtid() {
         return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
+    }
+
+    /** Image v3 form of the fields of this layer, embedded by every subclass. */
+    protected LakeTableSchemaChangeJobCorePB toLakeTableSchemaChangeJobCoreProto() {
+        return LakeTableSchemaChangeJobCorePB.newBuilder()
+                .setWatershedTxnId(watershedTxnId)
+                .setWatershedGtid(commitGtid)
+                .build();
+    }
+
+    protected void fillFromLakeTableSchemaChangeJobCoreProto(LakeTableSchemaChangeJobCorePB pb) {
+        watershedTxnId = pb.getWatershedTxnId();
+        commitGtid = pb.getWatershedGtid();
     }
 }

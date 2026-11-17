@@ -15,6 +15,7 @@
 package com.starrocks.common.tvr;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.TvrVersionPB;
 
 /**
  * TvrVersion represents a specific version in a Time Varying Relation (TVR).
@@ -57,6 +58,14 @@ public class TvrVersion implements Comparable<TvrVersion> {
 
     public long getVersion() {
         return version;
+    }
+
+    public TvrVersionPB toProto() {
+        return TvrVersionPB.newBuilder().setVersion(version).build();
+    }
+
+    public static TvrVersion fromProto(TvrVersionPB pb) {
+        return of(pb.getVersion());
     }
 
     @Override

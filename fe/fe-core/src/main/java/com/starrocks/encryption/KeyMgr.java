@@ -18,13 +18,19 @@ import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.ImageEncryptionKeyPB;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.proto.EncryptionMetaPB;
 import com.starrocks.qe.GlobalVariable;
@@ -37,6 +43,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -272,5 +279,34 @@ public class KeyMgr {
         } catch (IOException e) {
             throw new AnalysisException("encode EncryptionMetaPB failed", e);
         }
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        keysLock.readLock().lock();
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.KEY_MGR)) {
+            for (EncryptionKey key : idToKey.values()) {
+                writer.writeEntry(key.toProto(this));
+            }
+        } finally {
+            keysLock.readLock().unlock();
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.KEY_MGR, reader -> {
+            keysLock.writeLock().lock();
+            try {
+                reader.readEntries(ImageEncryptionKeyPB.parser(), pb -> {
+                    EncryptionKey key = EncryptionKey.fromProto(pb, this);
+                    idToKey.put(key.id, key);
+                });
+                LOG.info("loaded {} keys", idToKey.size());
+                if (MetricRepo.hasInit) {
+                    MetricRepo.GAUGE_ENCRYPTION_KEY_NUM.setValue((long) idToKey.size());
+                }
+            } finally {
+                keysLock.writeLock().unlock();
+            }
+        }));
     }
 }

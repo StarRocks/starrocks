@@ -15,9 +15,13 @@
 package com.starrocks.replication;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.Int64MapPB;
+import com.starrocks.persist.proto.ReplicationTxnCommitAttachmentPB;
+import com.starrocks.persist.proto.TxnCommitAttachmentPB;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /*
@@ -49,6 +53,30 @@ public class ReplicationTxnCommitAttachment extends TxnCommitAttachment {
         return partitionVersionEpochs;
     }
 
+    @Override
+    protected void fillProtoVariant(TxnCommitAttachmentPB.Builder parent) {
+        ReplicationTxnCommitAttachmentPB.Builder builder = ReplicationTxnCommitAttachmentPB.newBuilder();
+        if (partitionVersions != null) {
+            builder.setPartitionVersions(Int64MapPB.newBuilder().putAllValues(partitionVersions).build());
+        }
+        if (partitionVersionEpochs != null) {
+            builder.setPartitionVersionEpochs(Int64MapPB.newBuilder().putAllValues(partitionVersionEpochs).build());
+        }
+        parent.setKind(TxnCommitAttachmentPB.Kind.REPLICATION).setReplication(builder);
+    }
 
-
+    @Override
+    protected void fillFromVariantProto(TxnCommitAttachmentPB parent) {
+        ReplicationTxnCommitAttachmentPB pb = parent.getReplication();
+        if (pb.hasPartitionVersions()) {
+            partitionVersions = new HashMap<>(pb.getPartitionVersions().getValuesMap());
+        } else {
+            partitionVersions = null;
+        }
+        if (pb.hasPartitionVersionEpochs()) {
+            partitionVersionEpochs = new HashMap<>(pb.getPartitionVersionEpochs().getValuesMap());
+        } else {
+            partitionVersionEpochs = null;
+        }
+    }
 }

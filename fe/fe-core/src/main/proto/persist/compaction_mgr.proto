@@ -1,0 +1,49 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/transaction.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "CompactionMgrProto";
+
+message PartitionIdentifierPB {
+  int64 db_id = 1;
+  int64 table_id = 2;
+  int64 partition_id = 3;
+}
+
+message PartitionVersionPB {
+  int64 version = 1;
+  int64 create_time = 2;
+}
+
+message PartitionStatisticsPB {
+  enum Priority {
+    UNSPECIFIED = 0;
+    DEFAULT = 1;
+    MANUAL_COMPACT = 2;
+    UNSHARE = 3;
+  }
+  PartitionIdentifierPB partition = 1;
+  PartitionVersionPB compaction_version = 2;
+  PartitionVersionPB current_version = 3;
+  int64 next_compaction_time = 4;
+  QuantilesPB compaction_score = 5;
+  optional Priority priority = 6;
+}

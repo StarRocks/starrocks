@@ -44,6 +44,11 @@ import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.persist.OriginStatementInfo;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.AlterJobPB;
+import com.starrocks.persist.proto.ColumnPB;
+import com.starrocks.persist.proto.KeysTypePB;
+import com.starrocks.persist.proto.LakeRollupJobPB;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
@@ -899,5 +904,82 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     @Override
     public Map<Long, MaterializedIndex> getPartitionIdToRollupIndex() {
         return physicalPartitionIdToRollupIndex;
+    }
+
+    @Override
+    protected void fillFromVariantProto(AlterJobPB pb) {
+        LakeRollupJobPB variant = pb.getLakeRollupJob();
+        fillFromLakeTableSchemaChangeJobCoreProto(variant.getLakeSchemaChange());
+        if (variant.hasCommitVersionMap()) {
+            commitVersionMap = AlterJobProtos.int64MapFromProto(variant.getCommitVersionMap());
+        }
+        physicalPartitionIdToBaseRollupTabletIdMap =
+                AlterJobProtos.int64MapsFromProto(variant.getPartitionIdToBaseRollupTabletIdsMap());
+        physicalPartitionIdToRollupIndex =
+                AlterJobProtos.materializedIndexesFromProto(variant.getPartitionIdToRollupIndexMap());
+        baseIndexMetaId = variant.getBaseIndexMetaId();
+        rollupIndexMetaId = variant.getRollupIndexMetaId();
+        if (variant.hasBaseIndexName()) {
+            baseIndexName = variant.getBaseIndexName();
+        }
+        if (variant.hasRollupIndexName()) {
+            rollupIndexName = variant.getRollupIndexName();
+        }
+        rollupSchema = new ArrayList<>(variant.getRollupSchemaCount());
+        for (ColumnPB column : variant.getRollupSchemaList()) {
+            rollupSchema.add(Column.fromProto(column));
+        }
+        rollupSchemaVersion = variant.getRollupSchemaVersion();
+        baseSchemaHash = variant.getBaseSchemaHash();
+        rollupSchemaHash = variant.getRollupSchemaHash();
+        if (variant.hasRollupKeysType()) {
+            rollupKeysType = ProtoEnums.fromProto(variant.getRollupKeysType(), KeysType.class, "KEYS_TYPE_");
+        }
+        rollupShortKeyColumnCount = (short) variant.getRollupShortKeyColumnCount();
+        if (variant.hasOrigStmt()) {
+            origStmt = OriginStatementInfo.fromProto(variant.getOrigStmt());
+        }
+        if (variant.hasViewDefineSql()) {
+            viewDefineSql = variant.getViewDefineSql();
+        }
+        isColocateMVIndex = variant.getIsColocateMvIndex();
+    }
+
+    @Override
+    protected void fillProtoVariant(AlterJobPB.Builder builder) {
+        LakeRollupJobPB.Builder variant = LakeRollupJobPB.newBuilder()
+                .setLakeSchemaChange(toLakeTableSchemaChangeJobCoreProto())
+                .putAllPartitionIdToBaseRollupTabletIds(
+                        AlterJobProtos.toInt64MapProtos(physicalPartitionIdToBaseRollupTabletIdMap))
+                .putAllPartitionIdToRollupIndex(AlterJobProtos.toMaterializedIndexProtos(physicalPartitionIdToRollupIndex))
+                .setBaseIndexMetaId(baseIndexMetaId)
+                .setRollupIndexMetaId(rollupIndexMetaId)
+                .setRollupSchemaVersion(rollupSchemaVersion)
+                .setBaseSchemaHash(baseSchemaHash)
+                .setRollupSchemaHash(rollupSchemaHash)
+                .setRollupShortKeyColumnCount(rollupShortKeyColumnCount)
+                .setIsColocateMvIndex(isColocateMVIndex);
+        if (commitVersionMap != null) {
+            variant.setCommitVersionMap(AlterJobProtos.int64Map(commitVersionMap));
+        }
+        if (baseIndexName != null) {
+            variant.setBaseIndexName(baseIndexName);
+        }
+        if (rollupIndexName != null) {
+            variant.setRollupIndexName(rollupIndexName);
+        }
+        for (Column column : rollupSchema) {
+            variant.addRollupSchema(column.toProto());
+        }
+        if (rollupKeysType != null) {
+            variant.setRollupKeysType(ProtoEnums.toProto(rollupKeysType, KeysTypePB.class, "KEYS_TYPE_"));
+        }
+        if (origStmt != null) {
+            variant.setOrigStmt(origStmt.toProto());
+        }
+        if (viewDefineSql != null) {
+            variant.setViewDefineSql(viewDefineSql);
+        }
+        builder.setKind(AlterJobPB.Kind.LAKE_ROLLUP_JOB).setLakeRollupJob(variant);
     }
 }

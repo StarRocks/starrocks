@@ -16,6 +16,8 @@
 package com.starrocks.scheduler.persist;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.TaskSchedulePB;
 import com.starrocks.sql.optimizer.Utils;
 
 import java.util.concurrent.TimeUnit;
@@ -71,5 +73,24 @@ public class TaskSchedule {
                     + ") EVERY(" + period + " " + timeUnit + ")";
         }
         return "EVERY(" + period + " " + timeUnit + ")";
+    }
+
+    /** Image v3 form. */
+    public TaskSchedulePB toProto() {
+        TaskSchedulePB.Builder builder = TaskSchedulePB.newBuilder().setStartTime(startTime).setPeriod(period);
+        if (timeUnit != null) {
+            builder.setTimeUnit(ProtoEnums.toProto(timeUnit, TaskSchedulePB.TimeUnit.class));
+        }
+        return builder.build();
+    }
+
+    public static TaskSchedule fromProto(TaskSchedulePB pb) {
+        TaskSchedule schedule = new TaskSchedule();
+        schedule.startTime = pb.getStartTime();
+        schedule.period = pb.getPeriod();
+        if (pb.hasTimeUnit()) {
+            schedule.timeUnit = ProtoEnums.fromProto(pb.getTimeUnit(), TimeUnit.class);
+        }
+        return schedule;
     }
 }

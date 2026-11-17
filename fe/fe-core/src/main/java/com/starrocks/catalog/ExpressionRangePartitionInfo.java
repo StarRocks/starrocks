@@ -24,6 +24,8 @@ import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.persist.ExpressionSerializedObject;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.persist.proto.ExpressionRangePartitionInfoPB;
+import com.starrocks.persist.proto.PartitionInfoPB;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -90,6 +92,36 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         for (ExpressionSerializedObject expressionSql : serializedPartitionExprs) {
             partitionExprs.add(expressionSql.deserialize());
         }
+        this.partitionExprs = partitionExprs;
+    }
+
+    @Override
+    protected void fillProtoVariant(PartitionInfoPB.Builder builder) throws IOException {
+        ExpressionRangePartitionInfoPB.Builder expression = ExpressionRangePartitionInfoPB.newBuilder()
+                .setRange(toRangeCoreProto());
+        // Same conversion as gsonPreProcess.
+        if (partitionExprs != null) {
+            for (ColumnIdExpr partitionExpr : partitionExprs) {
+                if (partitionExpr != null) {
+                    expression.addPartitionExprs(ExpressionSerializedObject.create(partitionExpr).getExpressionSql());
+                }
+            }
+        }
+        builder.setKind(PartitionInfoPB.Kind.KIND_EXPRESSION_RANGE).setExpressionRange(expression);
+    }
+
+    void fillFromVariantProto(ExpressionRangePartitionInfoPB pb) throws IOException {
+        fillFromRangeCoreProto(pb.getRange());
+        // Same rebuild as gsonPostProcess; the slot references are resolved against the table columns by
+        // OlapTable once the table is assembled.
+        List<ExpressionSerializedObject> serializedPartitionExprs = Lists.newArrayList();
+        List<ColumnIdExpr> partitionExprs = Lists.newArrayList();
+        for (String expressionSql : pb.getPartitionExprsList()) {
+            ExpressionSerializedObject serialized = new ExpressionSerializedObject(expressionSql);
+            serializedPartitionExprs.add(serialized);
+            partitionExprs.add(serialized.deserialize());
+        }
+        this.serializedPartitionExprs = serializedPartitionExprs;
         this.partitionExprs = partitionExprs;
     }
 

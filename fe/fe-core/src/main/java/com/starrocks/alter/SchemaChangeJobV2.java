@@ -72,6 +72,11 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.AlterJobPB;
+import com.starrocks.persist.proto.SchemaChangeJobV2PB;
+import com.starrocks.persist.proto.ZstdCompressionPageSizesPB;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -1370,4 +1375,102 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     public Optional<Long> getTransactionId() {
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
     }
+
+    @Override
+    protected void fillProtoVariant(AlterJobPB.Builder builder) {
+        SchemaChangeJobV2PB.Builder variant = SchemaChangeJobV2PB.newBuilder()
+                .addAllPartitionIndexTablets(AlterJobProtos.toPartitionIndexTabletsProtos(physicalPartitionIndexTabletMap))
+                .addAllPartitionIndexes(AlterJobProtos.toPartitionIndexProtos(physicalPartitionIndexMap))
+                .putAllIndexMetaIdMap(ProtoMaps.withoutNullValues(indexMetaIdMap))
+                .putAllIndexMetaIdToName(ProtoMaps.withoutNullValues(indexMetaIdToName))
+                .putAllIndexMetaIdToSchema(AlterJobProtos.toColumnListProtos(indexMetaIdToSchema))
+                .putAllIndexMetaIdToSchemaVersionAndHash(
+                        AlterJobProtos.toSchemaVersionAndHashProtos(indexMetaIdToSchemaVersionAndHash))
+                .putAllIndexMetaIdToShortKey(AlterJobProtos.toInt32Values(indexMetaIdToShortKey))
+                .setHasBfChange(hasBfChange)
+                .setBfFpp(bfFpp)
+                .setIndexChange(indexChange)
+                .setWatershedTxnId(watershedTxnId)
+                .setStartTime(startTime)
+                .setDisableReplicatedStorageForGin(disableReplicatedStorageForGIN);
+        if (bfColumns != null) {
+            variant.setBfColumns(AlterJobProtos.columnIdList(bfColumns));
+        }
+        if (indexes != null) {
+            variant.setIndexes(Index.toListProto(indexes));
+        }
+        if (sortKeyIdxes != null) {
+            variant.setSortKeyIdxes(ProtoLists.int32List(sortKeyIdxes));
+        }
+        if (sortKeyUniqueIds != null) {
+            variant.setSortKeyUniqueIds(ProtoLists.int32List(sortKeyUniqueIds));
+        }
+        if (historySchema != null) {
+            variant.setHistorySchema(historySchema.toProto());
+        }
+        variant.setHasZstdCompressionChange(hasZstdCompressionChange);
+        if (zstdCompressionColumns != null) {
+            variant.setZstdCompressionColumns(AlterJobProtos.columnIdList(zstdCompressionColumns));
+        }
+        if (zstdCompressionPageSizes != null) {
+            ZstdCompressionPageSizesPB.Builder sizes = ZstdCompressionPageSizesPB.newBuilder();
+            zstdCompressionPageSizes.forEach((columnId, size) -> sizes.putValues(columnId.getId(), size));
+            variant.setZstdCompressionPageSizes(sizes);
+        }
+        builder.setKind(AlterJobPB.Kind.SCHEMA_CHANGE_JOB_V2).setSchemaChangeJobV2(variant);
+    }
+
+    @Override
+    protected void fillFromVariantProto(AlterJobPB pb) {
+        SchemaChangeJobV2PB variant = pb.getSchemaChangeJobV2();
+        physicalPartitionIndexTabletMap = AlterJobProtos.partitionIndexTabletsFromProto(variant.getPartitionIndexTabletsList());
+        physicalPartitionIndexMap = AlterJobProtos.partitionIndexesFromProto(variant.getPartitionIndexesList());
+        indexMetaIdMap = new HashMap<>(variant.getIndexMetaIdMapMap());
+        indexMetaIdToName = new HashMap<>(variant.getIndexMetaIdToNameMap());
+        indexMetaIdToSchema = AlterJobProtos.columnListsFromProto(variant.getIndexMetaIdToSchemaMap());
+        indexMetaIdToSchemaVersionAndHash =
+                AlterJobProtos.schemaVersionAndHashesFromProto(variant.getIndexMetaIdToSchemaVersionAndHashMap());
+        indexMetaIdToShortKey = AlterJobProtos.shortValuesFromProto(variant.getIndexMetaIdToShortKeyMap());
+        hasBfChange = variant.getHasBfChange();
+        hasZstdCompressionChange = variant.getHasZstdCompressionChange();
+        zstdCompressionColumns = variant.hasZstdCompressionColumns()
+                ? AlterJobProtos.columnIdSetFromProto(variant.getZstdCompressionColumns()) : null;
+        zstdCompressionPageSizes = null;
+        if (variant.hasZstdCompressionPageSizes()) {
+            zstdCompressionPageSizes = new HashMap<>();
+            variant.getZstdCompressionPageSizes().getValuesMap().forEach(
+                    (columnId, size) -> zstdCompressionPageSizes.put(ColumnId.create(columnId), size));
+        }
+        if (variant.hasBfColumns()) {
+            bfColumns = AlterJobProtos.columnIdSetFromProto(variant.getBfColumns());
+        }
+        bfFpp = variant.getBfFpp();
+        indexChange = variant.getIndexChange();
+        if (variant.hasIndexes()) {
+            indexes = Index.fromListProto(variant.getIndexes());
+        }
+        watershedTxnId = variant.getWatershedTxnId();
+        startTime = variant.getStartTime();
+        if (variant.hasSortKeyIdxes()) {
+            sortKeyIdxes = ProtoLists.toIntegers(variant.getSortKeyIdxes());
+        }
+        if (variant.hasSortKeyUniqueIds()) {
+            sortKeyUniqueIds = ProtoLists.toIntegers(variant.getSortKeyUniqueIds());
+        }
+        disableReplicatedStorageForGIN = variant.getDisableReplicatedStorageForGin();
+        if (variant.hasHistorySchema()) {
+            historySchema = OlapTableHistorySchema.fromProto(variant.getHistorySchema());
+        }
+    }
+
+    public static SchemaChangeJobV2 fromProto(AlterJobPB pb) {
+        SchemaChangeJobV2 job = new SchemaChangeJobV2();
+        job.fillFromAlterJobCoreProto(pb.getCore());
+        job.fillFromVariantProto(pb);
+        return job;
+    }
+    static SchemaChangeJobV2 newForImageV3() {
+        return new SchemaChangeJobV2();
+    }
+
 }

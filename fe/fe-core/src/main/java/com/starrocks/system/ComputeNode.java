@@ -25,6 +25,8 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DnsCache;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.proto.ComputeNodeCorePB;
+import com.starrocks.persist.proto.ComputeNodePB;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -863,6 +865,130 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
 
         public boolean isSharedMemPool() {
             return memPool != null && !ResourceGroup.DEFAULT_MEM_POOL.equals(memPool);
+        }
+    }
+
+
+    // ---- image v3 -------------------------------------------------------------------------------
+
+    /**
+     * Named after the message rather than {@code toProto()} on purpose: Backend extends this class and
+     * has its own message, and an overriding {@code toProto()} would need a common return type.
+     */
+    public ComputeNodePB toComputeNodeProto() {
+        return ComputeNodePB.newBuilder().setCore(toCoreProto()).build();
+    }
+
+    public static ComputeNode fromProto(ComputeNodePB pb) {
+        ComputeNode node = new ComputeNode();
+        node.fillFromCoreProto(pb.getCore());
+        return node;
+    }
+
+    /** The fields declared on this class; shared by the ComputeNode and Backend messages. */
+    protected ComputeNodeCorePB toCoreProto() {
+        ComputeNodeCorePB.Builder builder = ComputeNodeCorePB.newBuilder()
+                .setId(id)
+                .setHeartbeatPort(heartbeatPort)
+                .setBePort(bePort)
+                .setHttpPort(httpPort)
+                .setBeRpcPort(beRpcPort)
+                .setBrpcPort(brpcPort)
+                .setArrowFlightPort(arrowFlightPort)
+                .setCpuCores(cpuCores)
+                .setMemLimitBytes(memLimitBytes)
+                .setLastUpdateMs(lastUpdateMs)
+                .setLastStartTime(lastStartTime)
+                .setIsAlive(isAlive.get())
+                .setIsDecommissioned(isDecommissioned.get())
+                .setDecommissionType(decommissionType)
+                .setBackendState(backendState)
+                .setLastMissingHeartbeatTime(lastMissingHeartbeatTime)
+                .setHeartbeatRetryTimes(heartbeatRetryTimes)
+                .setStarletPort(starletPort)
+                .setLastWriteFail(lastWriteFail)
+                .setWorkerGroupId(workerGroupId)
+                .setWarehouseId(warehouseId)
+                .setIsSetStoragePath(isSetStoragePath)
+                .setStatus(toProto(status));
+        if (host != null) {
+            builder.setHost(host);
+        }
+        if (version != null) {
+            builder.setVersion(version);
+        }
+        if (heartbeatErrMsg != null) {
+            builder.setHeartbeatErrMsg(heartbeatErrMsg);
+        }
+        return builder.build();
+    }
+
+    /**
+     * Counterpart of {@link #toCoreProto()}. Unlike GSON loading this runs no compatibility fix-up
+     * ({@link #gsonPostProcess()} repairs images written before {@code status} existed); a v3 image is
+     * always written with every field.
+     */
+    protected void fillFromCoreProto(ComputeNodeCorePB pb) {
+        id = pb.getId();
+        host = pb.getHost();
+        version = pb.hasVersion() ? pb.getVersion() : null;
+        heartbeatPort = pb.getHeartbeatPort();
+        bePort = pb.getBePort();
+        httpPort = pb.getHttpPort();
+        beRpcPort = pb.getBeRpcPort();
+        brpcPort = pb.getBrpcPort();
+        arrowFlightPort = pb.getArrowFlightPort();
+        cpuCores = pb.getCpuCores();
+        memLimitBytes = pb.getMemLimitBytes();
+        lastUpdateMs = pb.getLastUpdateMs();
+        lastStartTime = pb.getLastStartTime();
+        isAlive.set(pb.getIsAlive());
+        isDecommissioned.set(pb.getIsDecommissioned());
+        decommissionType = pb.getDecommissionType();
+        backendState = pb.getBackendState();
+        heartbeatErrMsg = pb.hasHeartbeatErrMsg() ? pb.getHeartbeatErrMsg() : null;
+        lastMissingHeartbeatTime = pb.getLastMissingHeartbeatTime();
+        heartbeatRetryTimes = pb.getHeartbeatRetryTimes();
+        starletPort = pb.getStarletPort();
+        lastWriteFail = pb.getLastWriteFail();
+        workerGroupId = pb.getWorkerGroupId();
+        warehouseId = pb.getWarehouseId();
+        isSetStoragePath = pb.getIsSetStoragePath();
+        status = fromProto(pb.getStatus());
+    }
+
+    private static ComputeNodeCorePB.Status toProto(Status status) {
+        if (status == null) {
+            return ComputeNodeCorePB.Status.UNSPECIFIED;
+        }
+        switch (status) {
+            case CONNECTING:
+                return ComputeNodeCorePB.Status.CONNECTING;
+            case OK:
+                return ComputeNodeCorePB.Status.OK;
+            case SHUTDOWN:
+                return ComputeNodeCorePB.Status.SHUTDOWN;
+            case DISCONNECTED:
+                return ComputeNodeCorePB.Status.DISCONNECTED;
+            default:
+                throw new IllegalArgumentException("unmapped compute node status " + status);
+        }
+    }
+
+    private static Status fromProto(ComputeNodeCorePB.Status status) {
+        switch (status) {
+            case UNSPECIFIED:
+                return null;
+            case CONNECTING:
+                return Status.CONNECTING;
+            case OK:
+                return Status.OK;
+            case SHUTDOWN:
+                return Status.SHUTDOWN;
+            case DISCONNECTED:
+                return Status.DISCONNECTED;
+            default:
+                throw new IllegalArgumentException("unknown compute node status " + status.getNumber());
         }
     }
 }

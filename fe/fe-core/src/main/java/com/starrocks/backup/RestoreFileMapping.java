@@ -39,6 +39,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.proto.RestoreFileMappingPB;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -155,5 +156,31 @@ public class RestoreFileMapping implements Writable {
             sb.append(entry.getKey()).append(" : ").append(entry.getValue()).append("\n");
         }
         return sb.toString();
+    }
+
+    public RestoreFileMappingPB toProto() {
+        RestoreFileMappingPB.Builder builder = RestoreFileMappingPB.newBuilder();
+        mapping.forEach((local, remote) -> builder.addEntries(RestoreFileMappingPB.Entry.newBuilder()
+                .setLocal(chainToProto(local)).setRemote(chainToProto(remote))));
+        builder.putAllOverwrite(overwriteMap);
+        return builder.build();
+    }
+
+    public static RestoreFileMapping fromProto(RestoreFileMappingPB pb) {
+        RestoreFileMapping value = new RestoreFileMapping();
+        pb.getEntriesList().forEach(entry -> value.mapping.put(
+                chainFromProto(entry.getLocal()), chainFromProto(entry.getRemote())));
+        value.overwriteMap.putAll(pb.getOverwriteMap());
+        return value;
+    }
+
+    private static RestoreFileMappingPB.IdChainPB chainToProto(IdChain chain) {
+        return RestoreFileMappingPB.IdChainPB.newBuilder().setTableId(chain.getTblId())
+                .setPartitionId(chain.getPartId()).setIndexId(chain.getIdxId())
+                .setTabletId(chain.getTabletId()).setReplicaId(chain.getReplicaId()).build();
+    }
+
+    private static IdChain chainFromProto(RestoreFileMappingPB.IdChainPB pb) {
+        return new IdChain(pb.getTableId(), pb.getPartitionId(), pb.getIndexId(), pb.getTabletId(), pb.getReplicaId());
     }
 }

@@ -24,6 +24,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.persist.proto.AlterJobPB;
+import com.starrocks.persist.proto.LakeMvSortKeyRewriteJobPB;
 import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InsertStmt;
@@ -327,5 +329,20 @@ public class LakeMvSortKeyRewriteJob extends LakeRangeRewriteSchemaChangeJob {
             MaterializedView mv = resolveMv();
             return mv != null && mv.existTempPartitions();
         }
+    }
+
+    @Override
+    protected void fillProtoVariant(AlterJobPB.Builder builder) {
+        builder.setKind(AlterJobPB.Kind.LAKE_MV_SORT_KEY_REWRITE_JOB)
+                .setLakeMvSortKeyRewriteJob(LakeMvSortKeyRewriteJobPB.newBuilder()
+                        .setRangeRewrite(toLakeRangeRewriteSchemaChangeJobCoreProto())
+                        .setRefreshWasActiveAtSubmit(refreshWasActiveAtSubmit));
+    }
+
+    @Override
+    protected void fillFromVariantProto(AlterJobPB pb) {
+        LakeMvSortKeyRewriteJobPB variant = pb.getLakeMvSortKeyRewriteJob();
+        fillFromLakeRangeRewriteSchemaChangeJobCoreProto(variant.getRangeRewrite());
+        refreshWasActiveAtSubmit = variant.getRefreshWasActiveAtSubmit();
     }
 }

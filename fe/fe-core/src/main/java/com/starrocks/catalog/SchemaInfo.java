@@ -17,6 +17,13 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.proto.KeysTypePB;
+import com.starrocks.persist.proto.PrimaryKeyEncodingTypePB;
+import com.starrocks.persist.proto.SchemaInfoPB;
+import com.starrocks.persist.proto.StorageTypePB;
+import com.starrocks.persist.proto.ZstdCompressionPageSizesPB;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TColumn;
@@ -30,10 +37,12 @@ import org.apache.commons.collections.CollectionUtils;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class SchemaInfo {
     @SerializedName("id")
@@ -407,5 +416,94 @@ public class SchemaInfo {
                 .setCompressionLevel(table.getCompressionLevel())
                 .setPrimaryKeyEncodingType(table.getPrimaryKeyEncodingType())
                 .build();
+    }
+
+    /** Image v3 form. */
+    public SchemaInfoPB toProto() {
+        SchemaInfoPB.Builder builder = SchemaInfoPB.newBuilder()
+                .setId(id)
+                .setShortKeyColumnCount(shortKeyColumnCount)
+                .setVersion(version)
+                .setSchemaHash(schemaHash)
+                .setBloomFilterFpp(bloomFilterFpp)
+                .setCompressionLevel(compressionLevel);
+        if (keysType != null) {
+            builder.setKeysType(ProtoEnums.toProto(keysType, KeysTypePB.class, "KEYS_TYPE_"));
+        }
+        if (storageType != null) {
+            builder.setStorageType(ProtoEnums.toProto(storageType, StorageTypePB.class, "STORAGE_TYPE_"));
+        }
+        if (columns != null) {
+            builder.setColumns(Column.toListProto(columns));
+        }
+        if (sortKeyIndexes != null) {
+            builder.setSortKeyIndexes(ProtoLists.int32List(sortKeyIndexes));
+        }
+        if (sortKeyUniqueIds != null) {
+            builder.setSortKeyUniqueIds(ProtoLists.int32List(sortKeyUniqueIds));
+        }
+        if (indexes != null) {
+            builder.setIndexes(Index.toListProto(indexes));
+        }
+        if (bloomFilterColumnNames != null) {
+            builder.setBloomFilterColumnNames(ProtoLists.stringList(
+                    bloomFilterColumnNames.stream().map(ColumnId::getId).collect(Collectors.toList())));
+        }
+        if (compressionType != null) {
+            builder.setCompressionType(ProtoEnums.toProto(compressionType, SchemaInfoPB.CompressionType.class));
+        }
+        if (primaryKeyEncodingType != null) {
+            builder.setPrimaryKeyEncodingType(ProtoEnums.toProto(primaryKeyEncodingType, PrimaryKeyEncodingTypePB.class));
+        }
+        if (zstdCompressionColumnNames != null) {
+            builder.setZstdCompressionColumns(ProtoLists.stringList(
+                    zstdCompressionColumnNames.stream().map(ColumnId::getId).collect(Collectors.toList())));
+        }
+        if (zstdCompressionPageSizes != null) {
+            ZstdCompressionPageSizesPB.Builder sizes = ZstdCompressionPageSizesPB.newBuilder();
+            zstdCompressionPageSizes.forEach((columnId, size) -> sizes.putValues(columnId.getId(), size));
+            builder.setZstdCompressionPageSizes(sizes);
+        }
+        return builder.build();
+    }
+
+    public static SchemaInfo fromProto(SchemaInfoPB pb) {
+        return new SchemaInfo(pb);
+    }
+
+    /** The fields are final and GSON sets them without the builder's checks, so the image load does the same. */
+    private SchemaInfo(SchemaInfoPB pb) {
+        this.id = pb.getId();
+        this.shortKeyColumnCount = (short) pb.getShortKeyColumnCount();
+        this.keysType = pb.hasKeysType() ? ProtoEnums.fromProto(pb.getKeysType(), KeysType.class, "KEYS_TYPE_") : null;
+        this.storageType = pb.hasStorageType()
+                ? ProtoEnums.fromProto(pb.getStorageType(), TStorageType.class, "STORAGE_TYPE_") : null;
+        this.version = pb.getVersion();
+        this.schemaHash = pb.getSchemaHash();
+        this.columns = pb.hasColumns() ? Column.fromListProto(pb.getColumns()) : null;
+        this.sortKeyIndexes = pb.hasSortKeyIndexes() ? ProtoLists.toIntegers(pb.getSortKeyIndexes()) : null;
+        this.sortKeyUniqueIds = pb.hasSortKeyUniqueIds() ? ProtoLists.toIntegers(pb.getSortKeyUniqueIds()) : null;
+        this.indexes = pb.hasIndexes() ? Index.fromListProto(pb.getIndexes()) : null;
+        Set<ColumnId> bfColumns = null;
+        if (pb.hasBloomFilterColumnNames()) {
+            // An insertion-ordered set, as GSON delivers it.
+            bfColumns = new LinkedHashSet<>();
+            for (String name : pb.getBloomFilterColumnNames().getValuesList()) {
+                bfColumns.add(ColumnId.create(name));
+            }
+        }
+        this.bloomFilterColumnNames = bfColumns;
+        this.zstdCompressionColumnNames = pb.hasZstdCompressionColumns()
+                ? pb.getZstdCompressionColumns().getValuesList().stream().map(ColumnId::create)
+                        .collect(Collectors.toCollection(LinkedHashSet::new)) : null;
+        this.zstdCompressionPageSizes = pb.hasZstdCompressionPageSizes()
+                ? pb.getZstdCompressionPageSizes().getValuesMap().entrySet().stream()
+                        .collect(Collectors.toMap(e -> ColumnId.create(e.getKey()), Map.Entry::getValue)) : null;
+        this.bloomFilterFpp = pb.getBloomFilterFpp();
+        this.compressionType = pb.hasCompressionType()
+                ? ProtoEnums.fromProto(pb.getCompressionType(), TCompressionType.class) : null;
+        this.compressionLevel = pb.getCompressionLevel();
+        this.primaryKeyEncodingType = pb.hasPrimaryKeyEncodingType()
+                ? ProtoEnums.fromProto(pb.getPrimaryKeyEncodingType(), TPrimaryKeyEncodingType.class) : null;
     }
 }

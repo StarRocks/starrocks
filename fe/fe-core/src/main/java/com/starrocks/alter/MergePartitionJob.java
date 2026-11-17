@@ -51,6 +51,12 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.PartitionUtils;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.proto.AlterJobPB;
+import com.starrocks.persist.proto.Int64ListPB;
+import com.starrocks.persist.proto.MergePartitionJobPB;
+import com.starrocks.persist.proto.OptimizeTaskPB;
+import com.starrocks.persist.proto.StringListPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Constants;
@@ -1239,8 +1245,60 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         this.postfix = "job" + jobId;
     }
 
+    /** The postfix is derived from the job id. Shared by the GSON hook and the image v3 load. */
+    private void rebuildPostfix() {
+        this.postfix = "job" + jobId;
+    }
+
     @Override
     public Optional<Long> getTransactionId() {
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
+    }
+
+    @Override
+    protected void fillProtoVariant(AlterJobPB.Builder builder) {
+        MergePartitionJobPB.Builder variant = MergePartitionJobPB.newBuilder().setWatershedTxnId(watershedTxnId);
+        for (Map.Entry<Long, Collection<Long>> entry : tempPartitionIdToSourcePartitionIds.asMap().entrySet()) {
+            variant.putTempPartitionIdToSourcePartitionIds(entry.getKey(), ProtoLists.int64List(entry.getValue()));
+        }
+        for (Map.Entry<String, Collection<String>> entry : tempPartitionNameToSourcePartitionNames.asMap().entrySet()) {
+            variant.putTempPartitionNameToSourcePartitionNames(entry.getKey(), ProtoLists.stringList(entry.getValue()));
+        }
+        for (OptimizeTask task : rewriteTasks) {
+            variant.addRewriteTasks(task.toProto());
+        }
+        if (distributionInfo != null) {
+            variant.setDistributionInfo(distributionInfo.toProto());
+        }
+        if (optimizeOperation != null) {
+            variant.setOptimizeOperation(optimizeOperation);
+        }
+        builder.setKind(AlterJobPB.Kind.MERGE_PARTITION_JOB).setMergePartitionJob(variant);
+    }
+
+    @Override
+    protected void fillFromVariantProto(AlterJobPB pb) {
+        MergePartitionJobPB variant = pb.getMergePartitionJob();
+        watershedTxnId = variant.getWatershedTxnId();
+        // List multimaps, as the field initialisers and the GSON adapter create them.
+        tempPartitionIdToSourcePartitionIds = ArrayListMultimap.create();
+        for (Map.Entry<Long, Int64ListPB> entry : variant.getTempPartitionIdToSourcePartitionIdsMap().entrySet()) {
+            tempPartitionIdToSourcePartitionIds.putAll(entry.getKey(), entry.getValue().getValuesList());
+        }
+        tempPartitionNameToSourcePartitionNames = ArrayListMultimap.create();
+        for (Map.Entry<String, StringListPB> entry : variant.getTempPartitionNameToSourcePartitionNamesMap().entrySet()) {
+            tempPartitionNameToSourcePartitionNames.putAll(entry.getKey(), entry.getValue().getValuesList());
+        }
+        rewriteTasks = new ArrayList<>(variant.getRewriteTasksCount());
+        for (OptimizeTaskPB task : variant.getRewriteTasksList()) {
+            rewriteTasks.add(OptimizeTask.fromProto(task));
+        }
+        if (variant.hasDistributionInfo()) {
+            distributionInfo = DistributionInfo.fromProto(variant.getDistributionInfo());
+        }
+        if (variant.hasOptimizeOperation()) {
+            optimizeOperation = variant.getOptimizeOperation();
+        }
+        rebuildPostfix();
     }
 }

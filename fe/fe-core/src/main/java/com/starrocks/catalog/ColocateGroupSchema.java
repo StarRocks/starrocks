@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
@@ -43,8 +44,11 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.ColocatePropertyInfo;
+import com.starrocks.persist.proto.ColocateGroupSchemaPB;
+import com.starrocks.persist.proto.TypePB;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeProtoConverter;
 
 import java.util.List;
 import java.util.Map;
@@ -196,5 +200,39 @@ public class ColocateGroupSchema implements Writable {
             ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_REPLICATION_NUM,
                     replicationNum, groupId.toString(), String.valueOf(repNum));
         }
+    }
+
+    public ColocateGroupSchemaPB toProto() {
+        ColocateGroupSchemaPB.Builder builder = ColocateGroupSchemaPB.newBuilder()
+                .setGroupId(groupId.toProto()).setBucketsNum(bucketsNum).setReplicationNum(replicationNum);
+        for (Type type : distributionColTypes) {
+            builder.addDistributionColTypes(TypeProtoConverter.toProto(type));
+        }
+        if (distributionType != null) {
+            builder.setDistributionType(ColocateGroupSchemaPB.DistributionType.valueOf(distributionType.name()));
+        }
+        return builder.build();
+    }
+
+    public static ColocateGroupSchema fromProto(ColocateGroupSchemaPB pb) {
+        Preconditions.checkArgument(pb.hasGroupId() && pb.getGroupId().hasDbId() && pb.getGroupId().hasGrpId(),
+                "missing colocate schema group id");
+        ColocateGroupSchema schema = new ColocateGroupSchema();
+        schema.groupId = GroupId.fromProto(pb.getGroupId());
+        for (TypePB type : pb.getDistributionColTypesList()) {
+            schema.distributionColTypes.add(TypeProtoConverter.fromProto(type));
+        }
+        if (pb.hasBucketsNum()) {
+            schema.bucketsNum = pb.getBucketsNum();
+        }
+        if (pb.hasReplicationNum()) {
+            Preconditions.checkArgument(pb.getReplicationNum() >= Short.MIN_VALUE && pb.getReplicationNum() <= Short.MAX_VALUE,
+                    "colocate replication number out of range");
+            schema.replicationNum = (short) pb.getReplicationNum();
+        }
+        if (pb.hasDistributionType()) {
+            schema.distributionType = DistributionInfoType.valueOf(pb.getDistributionType().name());
+        }
+        return schema;
     }
 }

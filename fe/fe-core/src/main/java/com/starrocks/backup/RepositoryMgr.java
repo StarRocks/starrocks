@@ -41,6 +41,7 @@ import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.proto.RepositoryMgrPB;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -177,10 +178,33 @@ public class RepositoryMgr extends LeaderDaemon implements Writable, GsonPostPro
         return infos;
     }
 
+    /** @deprecated only used by the v2 image loader. */
     @Override
     public void gsonPostProcess() throws IOException {
         for (Repository repo : repoNameMap.values()) {
             repoIdMap.put(repo.getId(), repo);
         }
+    }
+
+    private void rebuildIdMap() {
+        for (Repository repo : repoNameMap.values()) {
+            repoIdMap.put(repo.getId(), repo);
+        }
+    }
+
+    public RepositoryMgrPB toProto() {
+        RepositoryMgrPB.Builder builder = RepositoryMgrPB.newBuilder();
+        repoNameMap.values().forEach(repo -> builder.addRepositories(repo.toProto()));
+        return builder.build();
+    }
+
+    public static RepositoryMgr fromProto(RepositoryMgrPB pb) {
+        RepositoryMgr value = new RepositoryMgr();
+        pb.getRepositoriesList().forEach(repo -> {
+            Repository restored = Repository.fromProto(repo);
+            value.repoNameMap.put(restored.getName(), restored);
+        });
+        value.rebuildIdMap();
+        return value;
     }
 }

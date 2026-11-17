@@ -27,6 +27,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
@@ -35,11 +36,17 @@ import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.AlterTaskInfo;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.TaskCorePB;
+import com.starrocks.persist.proto.TaskRunStatusPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -1605,5 +1612,29 @@ public class TaskManager implements MemoryTrackable {
         }
         String taskName = TaskBuilder.getMvTaskName(mv.getId());
         return getTask(taskName);
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        taskRunManager.getTaskRunHistory().forceGC();
+        List<TaskRunStatus> runStatusList = getMatchedTaskRunStatus(null);
+        LOG.info("saveTasksV3, nameToTaskMap size:{}, runStatusList size: {}", nameToTaskMap.size(), runStatusList.size());
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.TASK)) {
+            for (Task task : nameToTaskMap.values()) {
+                writer.writeEntry(task.toTaskCoreProto());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.TASK_RUN_STATUS)) {
+            for (TaskRunStatus status : runStatusList) {
+                writer.writeEntry(status.toProto());
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(
+                Pair.create(SectionId.TASK, reader ->
+                        reader.readEntries(TaskCorePB.parser(), pb -> replayCreateTask(Task.fromTaskCoreProto(pb)))),
+                Pair.create(SectionId.TASK_RUN_STATUS, reader ->
+                        reader.readEntries(TaskRunStatusPB.parser(), pb -> replayCreateTaskRun(TaskRunStatus.fromProto(pb)))));
     }
 }

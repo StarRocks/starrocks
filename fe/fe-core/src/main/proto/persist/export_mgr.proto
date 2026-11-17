@@ -1,0 +1,82 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/common.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "ExportMgrProto";
+
+// ExportMgr is one section, EXPORT_MGR: the manager message, then one ExportJobPB per export job,
+// finished and cancelled ones included; the load drops the ones older than
+// history_job_keep_max_second, as the v2 load does. See common.proto for the conventions.
+
+// The manager message of the EXPORT_MGR section. ExportMgr keeps no state besides the jobs.
+message ExportMgrPB {
+}
+
+// com.starrocks.load.ExportJob
+message ExportJobPB {
+  enum State {
+    UNSPECIFIED = 0;
+    PENDING = 1;
+    EXPORTING = 2;
+    FINISHED = 3;
+    CANCELLED = 4;
+  }
+  int64 id = 1;
+  optional string query_id = 2;
+  int64 db_id = 3;
+  int64 table_id = 4;
+  BrokerPropertiesPersistInfoPB broker = 5;
+  optional string export_path = 6;
+  optional string column_separator = 7;
+  optional string row_delimiter = 8;
+  bool with_header = 9;
+  StringMapPB properties = 10;
+  StringListPB partitions = 11;
+  TableNamePB table_name = 12;
+  State state = 13;
+  int64 create_time_ms = 14;
+  int64 start_time_ms = 15;
+  int64 finish_time_ms = 16;
+  int32 progress = 17;
+  ExportFailMsgPB fail_msg = 18;
+  int64 warehouse_id = 19;
+}
+
+// com.starrocks.persist.BrokerPropertiesPersistInfo
+message BrokerPropertiesPersistInfoPB {
+  optional string name = 1;
+  StringMapPB properties = 2;
+}
+
+// com.starrocks.load.ExportFailMsg
+message ExportFailMsgPB {
+  enum CancelType {
+    UNSPECIFIED = 0;
+    BE_STATUS_ERR = 1;
+    USER_CANCEL = 2;
+    SUBMIT_FAIL = 3;
+    RUN_FAIL = 4;
+    TIMEOUT = 5;
+    UNKNOWN = 6;
+  }
+  CancelType cancel_type = 1;
+  optional string msg = 2;
+}

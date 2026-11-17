@@ -64,6 +64,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -77,11 +78,18 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.SwapTableOperationLog;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.AlterJobMgrPB;
+import com.starrocks.persist.proto.AlterJobPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
@@ -1011,5 +1019,49 @@ public class AlterJobMgr {
         Map<Long, Long> sc = schemaChangeHandler.getRunningAlterJobCount();
         sc.forEach((key, value) -> mv.merge(key, value, Long::sum));
         return mv;
+    }
+
+    private void loadSection(SectionReader reader) throws IOException {
+        reader.readManager(AlterJobMgrPB.parser());
+        // The handler follows from the job type, exactly as the edit log replay dispatches OP_ALTER_JOB_V2. Pending
+        // jobs replay into the catalog under table locks, so the entries are consumed one at a time.
+        reader.readEntries(AlterJobPB.parser(), pb -> {
+            AlterJobV2 job = AlterJobV2.fromProto(pb);
+            loadAlterJob(job.getType() == AlterJobV2.JobType.ROLLUP ? materializedViewHandler : schemaChangeHandler, job);
+        });
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.<SectionId, SectionLoader>create(SectionId.ALTER_JOB_MGR, this::loadSection));
+    }
+
+    /**
+     * Image v3: one section, the manager message first (it carries nothing yet) and then every job as an entry,
+     * the schema change handler's jobs before the materialized view handler's as in v2.
+     */
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.ALTER_JOB_MGR)) {
+            writer.writeManager(AlterJobMgrPB.getDefaultInstance());
+            for (AlterJobV2 alterJobV2 : schemaChangeHandler.getAlterJobsV2().values()) {
+                writer.writeEntry(alterJobV2.toProto());
+            }
+            for (AlterJobV2 alterJobV2 : materializedViewHandler.getAlterJobsV2().values()) {
+                writer.writeEntry(alterJobV2.toProto());
+            }
+        }
+    }
+
+    /** Installs a loaded job in its handler; the same for both image formats. */
+    private static void loadAlterJob(AlterHandler handler, AlterJobV2 alterJobV2) {
+        handler.addAlterJobV2(alterJobV2);
+        alterJobV2.pruneIfDone();
+
+        // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
+        // to prevent TabletInvertedIndex data loss,
+        // So just use AlterJob.replay() instead of AlterHandler.replay().
+        if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
+            alterJobV2.replay(alterJobV2);
+            LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
+        }
     }
 }

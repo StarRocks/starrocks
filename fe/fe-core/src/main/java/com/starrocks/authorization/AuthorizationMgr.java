@@ -24,22 +24,40 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authentication.GroupNameMatch;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.UpdateGroupToRoleLog;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
+import com.starrocks.persist.image.ImageFormatException;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.AuthorizationGroupRolesEntryPB;
+import com.starrocks.persist.proto.AuthorizationMgrPB;
+import com.starrocks.persist.proto.AuthorizationRoleHeaderEntryPB;
+import com.starrocks.persist.proto.AuthorizationRoleNameIdEntryPB;
+import com.starrocks.persist.proto.AuthorizationRolePrivilegeEntryPB;
+import com.starrocks.persist.proto.AuthorizationUserHeaderEntryPB;
+import com.starrocks.persist.proto.AuthorizationUserPrivilegeEntryPB;
+import com.starrocks.persist.proto.PrivilegeEntryPB;
+import com.starrocks.persist.proto.UserIdentityPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -2095,5 +2113,200 @@ public class AuthorizationMgr {
             roleReadUnlock();
         }
         return applicableRoles;
+    }
+
+    /** Reassemble owner collections before applying the v2 built-in and compatibility rules. */
+    private static class AuthorizationImageState {
+        private final AuthorizationMgr data;
+        private final Map<UserIdentity, UserPrivilegeCollectionV2> users = new HashMap<>();
+        private final Map<Long, RolePrivilegeCollectionV2> roles = new HashMap<>();
+
+        private AuthorizationImageState(AuthorizationMgr data) {
+            this.data = data;
+        }
+
+        private void loadRoleNameId(AuthorizationRoleNameIdEntryPB entry) {
+            Preconditions.checkArgument(entry.hasName() && entry.hasRoleId(), "missing role name/id");
+            data.roleNameToId.put(entry.getName(), entry.getRoleId());
+        }
+
+        private void loadGroupRoles(AuthorizationGroupRolesEntryPB entry) {
+            Preconditions.checkArgument(entry.hasGroup() && entry.hasRoleIds(), "missing group roles");
+            data.groupToRoleList.put(entry.getGroup(), new HashSet<>(ProtoLists.toLongs(entry.getRoleIds())));
+        }
+
+        private void loadUserHeader(AuthorizationUserHeaderEntryPB entry) {
+            Preconditions.checkArgument(entry.hasUser() && entry.hasHeader(), "missing user header");
+            UserIdentity user = UserIdentityUtils.fromProto(entry.getUser());
+            users.put(user, UserPrivilegeCollectionV2.fromHeaderProto(entry.getHeader()));
+        }
+
+        private void loadRoleHeader(AuthorizationRoleHeaderEntryPB entry) {
+            Preconditions.checkArgument(entry.hasRoleId() && entry.hasHeader(), "missing role header");
+            roles.put(entry.getRoleId(), RolePrivilegeCollectionV2.fromHeaderProto(entry.getHeader()));
+        }
+
+        private void loadUserPrivilege(AuthorizationUserPrivilegeEntryPB entry) {
+            Preconditions.checkArgument(entry.hasUser() && entry.hasObjectType() && entry.hasPrivilege(),
+                    "missing user privilege");
+            loadPrivilege(UserIdentityUtils.fromProto(entry.getUser()), entry.getObjectType(), entry.getPrivilege(),
+                    users);
+        }
+
+        private void loadRolePrivilege(AuthorizationRolePrivilegeEntryPB entry) {
+            Preconditions.checkArgument(entry.hasRoleId() && entry.hasObjectType() && entry.hasPrivilege(),
+                    "missing role privilege");
+            loadPrivilege(entry.getRoleId(), entry.getObjectType(), entry.getPrivilege(), roles);
+        }
+
+        private <K, V extends PrivilegeCollectionV2> void loadPrivilege(K owner, int type, PrivilegeEntryPB pb,
+                                                                      Map<K, V> collections) {
+            V collection = collections.get(owner);
+            Preconditions.checkArgument(collection != null, "privilege precedes its owner header");
+            PrivilegeEntry entry = PrivilegeEntry.fromProto(pb);
+            collection.typeToPrivilegeEntryList.computeIfAbsent(new ObjectType(type), key -> new ArrayList<>()).add(entry);
+        }
+    }
+
+    private static short imageShort(int value) {
+        Preconditions.checkArgument(value >= Short.MIN_VALUE && value <= Short.MAX_VALUE, "invalid authorization plugin value");
+        return (short) value;
+    }
+
+    private void finishLoad(AuthorizationImageState state) throws IOException {
+        AuthorizationMgr data = state.data;
+        // Metadata maps are loaded before built-ins, as in v2's manager message.
+        data.initBuiltinRolesAndUsers();
+        for (Map.Entry<UserIdentity, UserPrivilegeCollectionV2> entry : state.users.entrySet()) {
+            entry.getValue().gsonPostProcess();
+            data.installLoadedUser(entry.getKey(), entry.getValue());
+        }
+        for (Map.Entry<Long, RolePrivilegeCollectionV2> entry : state.roles.entrySet()) {
+            entry.getValue().gsonPostProcess();
+            replacePrivilegeEntryForImmutableBuiltInRole(entry.getKey(), entry.getValue(), data);
+            data.roleIdToPrivilegeCollection.put(entry.getKey(), entry.getValue());
+        }
+        LOG.info("loaded {} users, {} roles", data.userToPrivilegeCollection.size(), data.roleIdToPrivilegeCollection.size());
+        installLoadedAuthorization(data);
+    }
+
+    private static SectionLoader checkedImageSection(SectionLoader loader) {
+        return reader -> {
+            try {
+                loader.load(reader);
+            } catch (IllegalArgumentException | IllegalStateException | NullPointerException e) {
+                throw new ImageFormatException("invalid " + reader.id().getName() + " entry", e);
+            }
+        };
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        AuthorizationMgr data = new AuthorizationMgr();
+        data.provider = Objects.requireNonNullElseGet(provider, DefaultAuthorizationProvider::new);
+        AuthorizationImageState state = new AuthorizationImageState(data);
+        return List.of(
+                Pair.create(SectionId.AUTHORIZATION_ROLE_NAME, checkedImageSection(reader -> {
+                    AuthorizationMgrPB manager = reader.readManager(AuthorizationMgrPB.parser());
+                    data.pluginId = imageShort(manager.getPluginId());
+                    data.pluginVersion = imageShort(manager.getPluginVersion());
+                    LOG.info("loading users and roles");
+                    reader.readEntries(AuthorizationRoleNameIdEntryPB.parser(), state::loadRoleNameId);
+                })),
+                Pair.create(SectionId.AUTHORIZATION_GROUP_ROLES, checkedImageSection(reader ->
+                        reader.readEntries(AuthorizationGroupRolesEntryPB.parser(), state::loadGroupRoles))),
+                Pair.create(SectionId.AUTHORIZATION_USER_HEADER, checkedImageSection(reader ->
+                        reader.readEntries(AuthorizationUserHeaderEntryPB.parser(), state::loadUserHeader))),
+                Pair.create(SectionId.AUTHORIZATION_USER_PRIVILEGE, checkedImageSection(reader ->
+                        reader.readEntries(AuthorizationUserPrivilegeEntryPB.parser(), state::loadUserPrivilege))),
+                Pair.create(SectionId.AUTHORIZATION_ROLE_HEADER, checkedImageSection(reader ->
+                        reader.readEntries(AuthorizationRoleHeaderEntryPB.parser(), state::loadRoleHeader))),
+                Pair.create(SectionId.AUTHORIZATION_ROLE_PRIVILEGE, checkedImageSection(reader -> {
+                    reader.readEntries(AuthorizationRolePrivilegeEntryPB.parser(), state::loadRolePrivilege);
+                    finishLoad(state);
+                })));
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.AUTHORIZATION_ROLE_NAME)) {
+            writer.writeManager(AuthorizationMgrPB.newBuilder().setPluginId(pluginId).setPluginVersion(pluginVersion).build());
+            for (Map.Entry<String, Long> entry : ProtoMaps.withoutNullValues(roleNameToId).entrySet()) {
+                writer.writeEntry(AuthorizationRoleNameIdEntryPB.newBuilder().setName(entry.getKey())
+                        .setRoleId(entry.getValue()).build());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.AUTHORIZATION_GROUP_ROLES)) {
+            for (Map.Entry<String, Set<Long>> entry : ProtoMaps.withoutNullValues(groupToRoleList).entrySet()) {
+                writer.writeEntry(AuthorizationGroupRolesEntryPB.newBuilder().setGroup(entry.getKey())
+                        .setRoleIds(ProtoLists.int64List(entry.getValue())).build());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.AUTHORIZATION_USER_HEADER)) {
+            for (Map.Entry<UserIdentity, UserPrivilegeCollectionV2> entry : userToPrivilegeCollection.entrySet()) {
+                writer.writeEntry(AuthorizationUserHeaderEntryPB.newBuilder()
+                        .setUser(UserIdentityUtils.toProto(entry.getKey())).setHeader(entry.getValue().toHeaderProto()).build());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.AUTHORIZATION_USER_PRIVILEGE)) {
+            for (Map.Entry<UserIdentity, UserPrivilegeCollectionV2> entry : userToPrivilegeCollection.entrySet()) {
+                UserIdentityPB user = UserIdentityUtils.toProto(entry.getKey());
+                for (Map.Entry<ObjectType, List<PrivilegeEntry>> grants : entry.getValue().typeToPrivilegeEntryList.entrySet()) {
+                    for (PrivilegeEntry grant : grants.getValue()) {
+                        writer.writeEntry(AuthorizationUserPrivilegeEntryPB.newBuilder().setUser(user)
+                                .setObjectType(grants.getKey().getId()).setPrivilege(grant.toProto()).build());
+                    }
+                }
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.AUTHORIZATION_ROLE_HEADER)) {
+            for (Map.Entry<Long, RolePrivilegeCollectionV2> entry : roleIdToPrivilegeCollection.entrySet()) {
+                writer.writeEntry(AuthorizationRoleHeaderEntryPB.newBuilder().setRoleId(entry.getKey())
+                        .setHeader(entry.getValue().toHeaderProto()).build());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.AUTHORIZATION_ROLE_PRIVILEGE)) {
+            for (Map.Entry<Long, RolePrivilegeCollectionV2> entry : roleIdToPrivilegeCollection.entrySet()) {
+                // V2 also omits immutable built-in privileges, while retaining role relationships.
+                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(entry.getKey())) {
+                    continue;
+                }
+                for (Map.Entry<ObjectType, List<PrivilegeEntry>> grants : entry.getValue().typeToPrivilegeEntryList.entrySet()) {
+                    for (PrivilegeEntry grant : grants.getValue()) {
+                        writer.writeEntry(AuthorizationRolePrivilegeEntryPB.newBuilder().setRoleId(entry.getKey())
+                                .setObjectType(grants.getKey().getId()).setPrivilege(grant.toProto()).build());
+                    }
+                }
+            }
+        }
+    }
+
+    private void installLoadedAuthorization(AuthorizationMgr ret) {
+        // mark data is loaded
+        isLoaded = true;
+        roleNameToId = ret.roleNameToId;
+        pluginId = ret.pluginId;
+        pluginVersion = ret.pluginVersion;
+        userToPrivilegeCollection = ret.userToPrivilegeCollection;
+        roleIdToPrivilegeCollection = ret.roleIdToPrivilegeCollection;
+        groupToRoleList = ret.groupToRoleList;
+
+        // Initialize the Authorizer class in advance during the loading phase
+        // to prevent loading errors and lack of permissions.
+        Authorizer.getInstance();
+    }
+
+    private void installLoadedUser(UserIdentity userIdentity, UserPrivilegeCollectionV2 collection) throws IOException {
+        if (userIdentity.equals(UserIdentity.ROOT)) {
+            try {
+                UserPrivilegeCollectionV2 rootUserPrivCollection =
+                        getUserPrivilegeCollectionUnlocked(UserIdentity.ROOT);
+                collection.grantRoles(rootUserPrivCollection.getAllRoles());
+                collection.setDefaultRoleIds(rootUserPrivCollection.getDefaultRoleIds());
+                collection.typeToPrivilegeEntryList = rootUserPrivCollection.typeToPrivilegeEntryList;
+            } catch (PrivilegeException e) {
+                throw new IOException("failed to load users in AuthorizationManager!", e);
+            }
+        }
+
+        userToPrivilegeCollection.put(userIdentity, collection);
     }
 }

@@ -36,6 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.persist.proto.SyncMaterializedViewDefinitionPB;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -231,5 +232,19 @@ public final class SyncMaterializedViewDefinition {
             return new CastExpr(new TypeDef(expr.getType()), expr);
         }
         return expr;
+    }
+
+    public static SyncMaterializedViewDefinition fromProto(SyncMaterializedViewDefinitionPB pb) {
+        return new SyncMaterializedViewDefinition(pb.getColumnExprSqlMap(), pb.getSourceColumnNamesList(),
+                pb.hasWhereClauseSql() ? pb.getWhereClauseSql() : null);
+    }
+
+    public SyncMaterializedViewDefinitionPB toProto() {
+        SyncMaterializedViewDefinitionPB.Builder builder = SyncMaterializedViewDefinitionPB.newBuilder()
+                .putAllColumnExprSql(columnExprSql).addAllSourceColumnNames(sourceColumnNames);
+        if (whereClauseSql != null) {
+            builder.setWhereClauseSql(whereClauseSql);
+        }
+        return builder.build();
     }
 }

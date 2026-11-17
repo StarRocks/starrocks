@@ -57,6 +57,14 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.Int64ListPB;
+import com.starrocks.persist.proto.LoadJobSourceTypePB;
+import com.starrocks.persist.proto.LoadedTableIndexesPB;
+import com.starrocks.persist.proto.TransactionLoadIdPB;
+import com.starrocks.persist.proto.TransactionLoadIdsPB;
+import com.starrocks.persist.proto.TransactionStatePB;
+import com.starrocks.persist.proto.TxnCoordinatorPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
@@ -79,6 +87,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -88,6 +98,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -226,6 +237,30 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
         @Override
         public String toString() {
             return sourceType.toString() + ": " + ip;
+        }
+
+        public static TxnCoordinator fromProto(TxnCoordinatorPB pb) {
+            TxnCoordinator value = new TxnCoordinator();
+            if (pb.hasSourceType()) {
+                value.sourceType = ProtoEnums.fromProto(pb.getSourceType(), TxnSourceType.class);
+            }
+            if (pb.hasIp()) {
+                value.ip = pb.getIp();
+            } else {
+                value.ip = null;
+            }
+            return value;
+        }
+
+        public TxnCoordinatorPB toProto() {
+            TxnCoordinatorPB.Builder builder = TxnCoordinatorPB.newBuilder();
+            if (sourceType != null) {
+                builder.setSourceType(ProtoEnums.toProto(sourceType, TxnCoordinatorPB.TxnSourceType.class));
+            }
+            if (ip != null) {
+                builder.setIp(ip);
+            }
+            return builder.build();
         }
     }
 
@@ -1723,5 +1758,212 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
                     + " its txn logs cannot be found and its publish fails. ADMIN SKIP COMMITTED TRANSACTION {}"
                     + " unblocks the partitions it writes, without its data.", transactionId, transactionId);
         }
+    }
+
+    private static LoadId loadIdFromProto(TransactionLoadIdPB pb) {
+        return new LoadId(pb.getHi(), pb.getLo());
+    }
+
+    private static TransactionLoadIdPB loadIdToProto(TUniqueId id) {
+        TransactionLoadIdPB.Builder builder = TransactionLoadIdPB.newBuilder();
+        if (id.isSetHi()) {
+            builder.setHi(id.getHi());
+        }
+        if (id.isSetLo()) {
+            builder.setLo(id.getLo());
+        }
+        return builder.build();
+    }
+
+    public static TransactionState fromProto(TransactionStatePB pb) {
+        TransactionState value = new TransactionState();
+        if (pb.hasDbId()) {
+            value.dbId = pb.getDbId();
+        }
+        if (pb.hasTableIdList()) {
+            value.tableIdList = new ArrayList<>(pb.getTableIdList().getValuesList());
+        } else {
+            value.tableIdList = null;
+        }
+        if (pb.hasTransactionId()) {
+            value.transactionId = pb.getTransactionId();
+        }
+        if (pb.hasLabel()) {
+            value.label = pb.getLabel();
+        }
+        pb.getTableCommitInfosList().forEach(info -> value.idToTableCommitInfos.put(
+                info.getTableId(), TableCommitInfo.fromProto(info)));
+        if (pb.hasTxnCoordinator()) {
+            value.txnCoordinator = TxnCoordinator.fromProto(pb.getTxnCoordinator());
+        }
+        if (pb.hasTransactionStatus()) {
+            value.transactionStatus = ProtoEnums.fromProto(pb.getTransactionStatus(), TransactionStatus.class);
+        }
+        if (pb.hasSourceType()) {
+            value.sourceType = ProtoEnums.fromProto(pb.getSourceType(),
+                    TransactionState.LoadJobSourceType.class, "LOAD_JOB_SOURCE_TYPE_");
+        }
+        if (pb.hasPrepareTime()) {
+            value.prepareTime = pb.getPrepareTime();
+        }
+        if (pb.hasPreparedTime()) {
+            value.preparedTime = pb.getPreparedTime();
+        }
+        if (pb.hasCommitTime()) {
+            value.commitTime = pb.getCommitTime();
+        }
+        if (pb.hasFinishTime()) {
+            value.finishTime = pb.getFinishTime();
+        }
+        if (pb.hasReason()) {
+            value.reason = pb.getReason();
+        }
+        if (pb.hasGlobalTransactionId()) {
+            value.globalTransactionId = pb.getGlobalTransactionId();
+        }
+        if (pb.hasNewFinish()) {
+            value.newFinish = pb.getNewFinish();
+        }
+        if (pb.hasFinishState()) {
+            value.finishState = TxnFinishState.fromProto(pb.getFinishState());
+        } else {
+            value.finishState = null;
+        }
+        if (pb.hasErrorReplicas()) {
+            value.errorReplicas = new HashSet<>(pb.getErrorReplicas().getValuesList());
+        } else {
+            value.errorReplicas = null;
+        }
+        if (pb.hasUnknownReplicas()) {
+            value.unknownReplicas = new HashSet<>(pb.getUnknownReplicas().getValuesList());
+        } else {
+            value.unknownReplicas = null;
+        }
+        if (pb.hasUseCombinedTxnLog()) {
+            value.useCombinedTxnLog = pb.getUseCombinedTxnLog();
+        }
+        if (pb.hasIsNoOpPublish()) {
+            value.isNoOpPublish = pb.getIsNoOpPublish();
+        }
+        if (pb.hasNoOpPublishReason()) {
+            value.noOpPublishReason = pb.getNoOpPublishReason();
+        }
+        if (pb.hasLoadIds() && pb.getLoadIds().getValuesCount() > 0) {
+            value.loadIds = pb.getLoadIds().getValuesList().stream()
+                    .map(TransactionState::loadIdFromProto).collect(Collectors.toList());
+        } else {
+            value.loadIds = null;
+        }
+        if (pb.hasCallbackId()) {
+            value.callbackId = pb.getCallbackId();
+        }
+        if (pb.hasCallbackIdList()) {
+            value.callbackIdList = new ArrayList<>(pb.getCallbackIdList().getValuesList());
+        } else {
+            value.callbackIdList = null;
+        }
+        if (pb.hasTimeoutMs()) {
+            value.timeoutMs = pb.getTimeoutMs();
+        }
+        if (pb.hasPreparedTimeoutMs()) {
+            value.preparedTimeoutMs = pb.getPreparedTimeoutMs();
+        }
+        if (pb.hasTxnCommitAttachment()) {
+            value.txnCommitAttachment = TxnCommitAttachment.fromProto(pb.getTxnCommitAttachment());
+        } else {
+            value.txnCommitAttachment = null;
+        }
+        if (pb.hasWarehouseId()) {
+            value.warehouseId = pb.getWarehouseId();
+        }
+        if (pb.hasComputeResource()) {
+            value.computeResource = ComputeResource.fromProto(pb.getComputeResource());
+        }
+        pb.getLoadedTableIndexesList().forEach(indexes -> {
+            Map<Long, List<Long>> partitions = new HashMap<>();
+            indexes.getPartitionIndexesMap().forEach((id, ids) -> partitions.put(id, new ArrayList<>(ids.getValuesList())));
+            value.loadedTblPartitionIndexes.put(indexes.getTableId(), partitions);
+        });
+        if (value.transactionStatus == TransactionStatus.COMMITTED && value.hasLostLoadIds()
+                && !GlobalStateMgr.isCheckpointThread()) {
+            LOG.warn("Transaction {} was committed by an FE that persisted the load ids of its statements as 0, so"
+                    + " its txn logs cannot be found and its publish fails. ADMIN SKIP COMMITTED TRANSACTION {}"
+                    + " unblocks the partitions it writes, without its data.", value.transactionId, value.transactionId);
+        }
+        return value;
+    }
+
+    public TransactionStatePB toProto() {
+        TransactionStatePB.Builder builder = TransactionStatePB.newBuilder();
+        builder.setDbId(dbId);
+        if (tableIdList != null) {
+            builder.setTableIdList(Int64ListPB.newBuilder().addAllValues(tableIdList).build());
+        }
+        builder.setTransactionId(transactionId);
+        if (label != null) {
+            builder.setLabel(label);
+        }
+        idToTableCommitInfos.values().forEach(info -> builder.addTableCommitInfos(info.toProto()));
+        if (txnCoordinator != null) {
+            builder.setTxnCoordinator(txnCoordinator.toProto());
+        }
+        if (transactionStatus != null) {
+            builder.setTransactionStatus(ProtoEnums.toProto(transactionStatus, TransactionStatePB.TransactionStatus.class));
+        }
+        if (sourceType != null) {
+            builder.setSourceType(ProtoEnums.toProto(sourceType, LoadJobSourceTypePB.class, "LOAD_JOB_SOURCE_TYPE_"));
+        }
+        builder.setPrepareTime(prepareTime);
+        builder.setPreparedTime(preparedTime);
+        builder.setCommitTime(commitTime);
+        builder.setFinishTime(finishTime);
+        if (reason != null) {
+            builder.setReason(reason);
+        }
+        builder.setGlobalTransactionId(globalTransactionId);
+        builder.setNewFinish(newFinish);
+        if (finishState != null) {
+            builder.setFinishState(finishState.toProto());
+        }
+        if (errorReplicas != null) {
+            builder.setErrorReplicas(Int64ListPB.newBuilder().addAllValues(errorReplicas).build());
+        }
+        if (unknownReplicas != null) {
+            builder.setUnknownReplicas(Int64ListPB.newBuilder().addAllValues(unknownReplicas).build());
+        }
+        builder.setUseCombinedTxnLog(useCombinedTxnLog);
+        builder.setIsNoOpPublish(isNoOpPublish);
+        if (noOpPublishReason != null) {
+            builder.setNoOpPublishReason(noOpPublishReason);
+        }
+        if (loadIds != null) {
+            builder.setLoadIds(TransactionLoadIdsPB.newBuilder().addAllValues(loadIds.stream()
+                    .map(TransactionState::loadIdToProto).collect(Collectors.toList())).build());
+        }
+        builder.setCallbackId(callbackId == -1 && callbackIdList != null && !callbackIdList.isEmpty()
+                ? callbackIdList.get(0) : callbackId);
+        if (callbackIdList != null) {
+            builder.setCallbackIdList(Int64ListPB.newBuilder().addAllValues(callbackIdList).build());
+        }
+        builder.setTimeoutMs(timeoutMs);
+        builder.setPreparedTimeoutMs(preparedTimeoutMs);
+        if (txnCommitAttachment != null) {
+            builder.setTxnCommitAttachment(txnCommitAttachment.toProto());
+        }
+        builder.setWarehouseId(warehouseId);
+        if (computeResource != null) {
+            builder.setComputeResource(computeResource.toProto());
+        }
+        loadedTblPartitionIndexes.forEach((tableId, partitions) -> {
+            LoadedTableIndexesPB.Builder indexes = LoadedTableIndexesPB.newBuilder().setTableId(tableId);
+            partitions.forEach((partitionId, ids) -> indexes.putPartitionIndexes(partitionId,
+                    Int64ListPB.newBuilder().addAllValues(ids).build()));
+            builder.addLoadedTableIndexes(indexes);
+        });
+        return builder.build();
+    }
+
+    private static TransactionLoadIdPB loadIdToProto(LoadId id) {
+        return TransactionLoadIdPB.newBuilder().setHi(id.hi).setLo(id.lo).build();
     }
 }

@@ -21,7 +21,13 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.backup.LakeTableSnapshotInfo;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.SnapshotInfoCorePB;
+import com.starrocks.persist.proto.SnapshotInfoPB;
+import com.starrocks.persist.proto.StringListPB;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -149,5 +155,85 @@ public class SnapshotInfo implements Writable {
     @Override
     public int hashCode() {
         return Objects.hash(tabletId, beId);
+    }
+
+    public SnapshotInfoPB toProto() {
+        SnapshotInfoCorePB.Builder builder = SnapshotInfoCorePB.newBuilder();
+        builder.setDbId(dbId);
+        builder.setTblId(tblId);
+        builder.setPartitionId(partitionId);
+        builder.setIndexId(indexId);
+        builder.setTabletId(tabletId);
+        builder.setBeId(beId);
+        builder.setSchemaHash(schemaHash);
+        if (path != null) {
+            builder.setPath(path);
+        }
+        if (files != null) {
+            builder.setFiles(StringListPB.newBuilder().addAllValues(files).build());
+        }
+        SnapshotInfoPB.Builder parent = SnapshotInfoPB.newBuilder().setCore(builder);
+        fillProtoVariant(parent);
+        return parent.build();
+    }
+
+    protected void fillProtoVariant(SnapshotInfoPB.Builder builder) {
+        builder.setKind(SnapshotInfoPB.Kind.SNAPSHOT_INFO)
+                .setSnapshotInfo(SnapshotInfoPB.SnapshotPB.getDefaultInstance());
+    }
+
+    public static SnapshotInfo fromProto(SnapshotInfoPB parent) {
+        ProtoKinds.checkKnown(parent.getKind(), parent.getKindValue());
+        SnapshotInfo value;
+        switch (parent.getKind()) {
+            case SNAPSHOT_INFO:
+                if (!parent.hasSnapshotInfo()) {
+                    throw new IllegalArgumentException("missing snapshot variant");
+                }
+                value = new SnapshotInfo();
+                break;
+            case LAKE_TABLE_SNAPSHOT_INFO:
+                if (!parent.hasLakeTableSnapshotInfo()) {
+                    throw new IllegalArgumentException("missing lake snapshot variant");
+                }
+                value = new LakeTableSnapshotInfo(0, 0, 0, 0, 0, 0, 0,
+                        parent.getLakeTableSnapshotInfo().getVersion());
+                break;
+            default:
+                throw new IllegalArgumentException("unknown snapshot kind " + parent.getKind());
+        }
+        SnapshotInfoCorePB pb = parent.getCore();
+        if (pb.hasDbId()) {
+            value.dbId = pb.getDbId();
+        }
+        if (pb.hasTblId()) {
+            value.tblId = pb.getTblId();
+        }
+        if (pb.hasPartitionId()) {
+            value.partitionId = pb.getPartitionId();
+        }
+        if (pb.hasIndexId()) {
+            value.indexId = pb.getIndexId();
+        }
+        if (pb.hasTabletId()) {
+            value.tabletId = pb.getTabletId();
+        }
+        if (pb.hasBeId()) {
+            value.beId = pb.getBeId();
+        }
+        if (pb.hasSchemaHash()) {
+            value.schemaHash = pb.getSchemaHash();
+        }
+        if (pb.hasPath()) {
+            value.path = pb.getPath();
+        } else {
+            value.path = null;
+        }
+        if (pb.hasFiles()) {
+            value.files = new ArrayList<>(pb.getFiles().getValuesList());
+        } else {
+            value.files = null;
+        }
+        return value;
     }
 }

@@ -1,0 +1,60 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "ClusterSnapshotProto";
+
+message ClusterSnapshotMgrPB {
+  optional string storage_volume_name = 1;
+  int64 automated_snapshot_interval_seconds = 2;
+}
+
+message ClusterSnapshotPB {
+  enum ClusterSnapshotType {
+    UNSPECIFIED = 0;
+    AUTOMATED = 1;
+    MANUAL = 2;
+    INCREMENTAL = 3;
+  }
+  int64 id = 1;
+  optional string snapshot_name = 2;
+  optional ClusterSnapshotType type = 3;
+  optional string storage_volume_name = 4;
+  int64 created_time_ms = 5;
+  int64 finished_time_ms = 6;
+  int64 fe_journal_id = 7;
+  int64 star_mgr_journal_id = 8;
+}
+
+message ClusterSnapshotJobPB {
+  enum ClusterSnapshotJobState {
+    UNSPECIFIED = 0;
+    INITIALIZING = 1;
+    SNAPSHOTING = 2;
+    UPLOADING = 3;
+    FINISHED = 4;
+    EXPIRED = 5;
+    DELETED = 6;
+    ERROR = 7;
+  }
+  ClusterSnapshotPB snapshot = 1;
+  optional ClusterSnapshotJobState state = 2;
+  optional string err_msg = 3;
+  optional string detail_info = 4;
+}

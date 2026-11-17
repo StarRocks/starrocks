@@ -15,18 +15,32 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.image.ProtoDateTimes;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.AnalyzeJobCorePB;
+import com.starrocks.persist.proto.AnalyzeJobPB;
+import com.starrocks.persist.proto.AnalyzeScheduleStatusPB;
+import com.starrocks.persist.proto.AnalyzeScheduleTypePB;
+import com.starrocks.persist.proto.AnalyzeTypePB;
+import com.starrocks.persist.proto.ExternalAnalyzeJobPB;
+import com.starrocks.persist.proto.TypeListPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants.AnalyzeType;
 import com.starrocks.statistic.StatsConstants.ScheduleStatus;
 import com.starrocks.statistic.StatsConstants.ScheduleType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeProtoConverter;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class ExternalAnalyzeJob implements AnalyzeJob, Writable {
     @SerializedName("id")
@@ -234,5 +248,96 @@ public class ExternalAnalyzeJob implements AnalyzeJob, Writable {
                 ", workTime=" + workTime +
                 ", reason='" + reason + '\'' +
                 '}';
+    }
+
+    @Override
+    public AnalyzeJobPB toProto() {
+        AnalyzeJobCorePB.Builder core = AnalyzeJobCorePB.newBuilder();
+        core.setId(id);
+        if (columns != null) {
+            core.setColumns(ProtoLists.stringList(columns));
+        }
+        if (columnTypes != null) {
+            core.setColumnTypes(TypeListPB.newBuilder().addAllValues(columnTypes.stream()
+                    .map(TypeProtoConverter::toProto).collect(Collectors.toList())).build());
+        }
+        if (type != null) {
+            core.setType(ProtoEnums.toProto(type, AnalyzeTypePB.class, "ANALYZE_"));
+        }
+        if (scheduleType != null) {
+            core.setScheduleType(ProtoEnums.toProto(scheduleType, AnalyzeScheduleTypePB.class, "SCHEDULE_"));
+        }
+        if (properties != null) {
+            core.setProperties(ProtoMaps.toStringMapProto(properties));
+        }
+        if (status != null) {
+            core.setStatus(ProtoEnums.toProto(status, AnalyzeScheduleStatusPB.class, "STATUS_"));
+        }
+        if (workTime != null) {
+            core.setWorkTime(ProtoDateTimes.toEpochSecond(workTime));
+        }
+        if (reason != null) {
+            core.setReason(reason);
+        }
+        ExternalAnalyzeJobPB.Builder identity = ExternalAnalyzeJobPB.newBuilder();
+        if (catalogName != null) {
+            identity.setCatalogName(catalogName);
+        }
+        if (dbName != null) {
+            identity.setDbName(dbName);
+        }
+        if (tableName != null) {
+            identity.setTableName(tableName);
+        }
+        return AnalyzeJobPB.newBuilder().setKind(AnalyzeJobPB.Kind.EXTERNAL)
+                .setCore(core).setExternal(identity).build();
+    }
+
+    private ExternalAnalyzeJob(AnalyzeJobPB pb) {
+        Preconditions.checkArgument(pb.getKind() == AnalyzeJobPB.Kind.EXTERNAL && pb.hasCore()
+                && pb.hasExternal(), "missing or mismatched ExternalAnalyzeJob payload");
+        AnalyzeJobCorePB core = pb.getCore();
+        if (core.hasId()) {
+            id = core.getId();
+        }
+        if (core.hasColumns()) {
+            columns = ProtoLists.toStrings(core.getColumns());
+        }
+        if (core.hasColumnTypes()) {
+            columnTypes = core.getColumnTypes().getValuesList().stream()
+                    .map(TypeProtoConverter::fromProto).collect(Collectors.toList());
+        }
+        if (core.hasType()) {
+            type = ProtoEnums.fromProto(core.getType(), StatsConstants.AnalyzeType.class, "ANALYZE_");
+        }
+        if (core.hasScheduleType()) {
+            scheduleType = ProtoEnums.fromProto(core.getScheduleType(), StatsConstants.ScheduleType.class, "SCHEDULE_");
+        }
+        if (core.hasProperties()) {
+            properties = ProtoMaps.fromStringMapProto(core.getProperties());
+        }
+        if (core.hasStatus()) {
+            status = ProtoEnums.fromProto(core.getStatus(), StatsConstants.ScheduleStatus.class, "STATUS_");
+        }
+        if (core.hasWorkTime()) {
+            workTime = ProtoDateTimes.fromEpochSecond(core.getWorkTime());
+        }
+        if (core.hasReason()) {
+            reason = core.getReason();
+        }
+        ExternalAnalyzeJobPB identity = pb.getExternal();
+        if (identity.hasCatalogName()) {
+            catalogName = identity.getCatalogName();
+        }
+        if (identity.hasDbName()) {
+            dbName = identity.getDbName();
+        }
+        if (identity.hasTableName()) {
+            tableName = identity.getTableName();
+        }
+    }
+
+    public static ExternalAnalyzeJob fromProto(AnalyzeJobPB pb) {
+        return new ExternalAnalyzeJob(pb);
     }
 }

@@ -17,6 +17,8 @@ package com.starrocks.lake.compaction;
 
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.PartitionStatisticsPB;
 
 import javax.annotation.Nullable;
 
@@ -151,5 +153,49 @@ public class PartitionStatistics {
     @Override
     public String toString() {
         return new Gson().toJson(this);
+    }
+
+    public PartitionStatisticsPB toProto() {
+        PartitionStatisticsPB.Builder builder = PartitionStatisticsPB.newBuilder();
+        if (partition != null) {
+            builder.setPartition(partition.toProto());
+        }
+        if (compactionVersion != null) {
+            builder.setCompactionVersion(compactionVersion.toProto());
+        }
+        if (currentVersion != null) {
+            builder.setCurrentVersion(currentVersion.toProto());
+        }
+        builder.setNextCompactionTime(nextCompactionTime);
+        if (compactionScore != null) {
+            builder.setCompactionScore(compactionScore.toProto());
+        }
+        if (priority != null) {
+            builder.setPriority(ProtoEnums.toProto(priority, PartitionStatisticsPB.Priority.class));
+        }
+        return builder.build();
+    }
+
+    public static PartitionStatistics fromProto(PartitionStatisticsPB pb) {
+        PartitionStatistics result = new PartitionStatistics(
+                pb.hasPartition() ? PartitionIdentifier.fromProto(pb.getPartition()) : null);
+        // V2 Gson restoration bypasses the constructor and leaves this runtime field at zero.
+        result.punishFactor = 0;
+        result.priority = null;
+        result.compactionVersion = null;
+        if (pb.hasCompactionVersion()) {
+            result.compactionVersion = PartitionVersion.fromProto(pb.getCompactionVersion());
+        }
+        if (pb.hasCurrentVersion()) {
+            result.currentVersion = PartitionVersion.fromProto(pb.getCurrentVersion());
+        }
+        result.nextCompactionTime = pb.getNextCompactionTime();
+        if (pb.hasCompactionScore()) {
+            result.compactionScore = Quantiles.fromProto(pb.getCompactionScore());
+        }
+        if (pb.hasPriority()) {
+            result.priority = ProtoEnums.fromProto(pb.getPriority(), CompactionPriority.class);
+        }
+        return result;
     }
 }

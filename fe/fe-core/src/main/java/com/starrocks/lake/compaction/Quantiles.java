@@ -17,6 +17,7 @@ package com.starrocks.lake.compaction;
 
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.QuantilesPB;
 
 import java.util.Collection;
 import java.util.List;
@@ -90,5 +91,17 @@ public class Quantiles implements Comparable<Quantiles> {
     @Override
     public String toString() {
         return new Gson().toJson(this);
+    }
+
+    public QuantilesPB toProto() {
+        QuantilesPB.Builder builder = QuantilesPB.newBuilder();
+        builder.setAvg(avg);
+        builder.setP50(p50);
+        builder.setMax(max);
+        return builder.build();
+    }
+
+    public static Quantiles fromProto(QuantilesPB pb) {
+        return new Quantiles(pb.getAvg(), pb.getP50(), pb.getMax());
     }
 }

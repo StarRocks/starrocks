@@ -21,15 +21,21 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DeleteSqlBlackLists;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.SqlBlackListPersistInfo;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.SqlBlackListPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
@@ -213,5 +219,33 @@ public class SqlBlackList {
             ids.set(0);
             refreshSnapshot();
         }
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (LockCloseable ignored = new LockCloseable(updateLock);
+                SectionWriter writer = imageWriter.beginSection(SectionId.SQL_BLACKLIST)) {
+            for (BlackListSql rule : sqlBlackListMap.values()) {
+                writer.writeEntry(SqlBlackListPB.newBuilder().setId(rule.id).setPattern(rule.pattern.pattern()).build());
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.SQL_BLACKLIST, reader -> {
+            try (LockCloseable ignored = new LockCloseable(updateLock)) {
+                try {
+                    reader.readEntries(SqlBlackListPB.parser(), pb -> {
+                        Pattern pattern = Pattern.compile(pb.getPattern());
+                        if (!sqlBlackListMap.containsKey(pattern.toString())) {
+                            ids.set(Math.max(ids.get(), pb.getId() + 1));
+                            sqlBlackListMap.put(pattern.toString(), new BlackListSql(pattern, pb.getId()));
+                        }
+                    });
+                } finally {
+                    refreshSnapshot();
+                }
+                LOG.info("loaded {} SQL blacklist patterns", sqlBlackListMap.size());
+            }
+        }));
     }
 }

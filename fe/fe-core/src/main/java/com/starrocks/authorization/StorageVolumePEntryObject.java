@@ -15,6 +15,7 @@
 package com.starrocks.authorization;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.StorageVolumePrivilegeObjectPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaNotFoundException;
 import com.starrocks.storagevolume.StorageVolume;
@@ -127,5 +128,24 @@ public class StorageVolumePEntryObject implements PEntryObject {
             }
             return storageVolumeName;
         }
+    }
+
+    public StorageVolumePrivilegeObjectPB toProto() {
+        StorageVolumePrivilegeObjectPB.Builder builder = StorageVolumePrivilegeObjectPB.newBuilder();
+        if (id != null) {
+            builder.setId(id);
+        }
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    private StorageVolumePEntryObject(StorageVolumePrivilegeObjectPB pb) {
+        if (pb.hasId()) {
+            id = pb.getId();
+        }
+    }
+
+    public static StorageVolumePEntryObject fromProto(StorageVolumePrivilegeObjectPB pb) {
+        return new StorageVolumePEntryObject(pb);
     }
 }

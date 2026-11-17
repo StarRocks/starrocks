@@ -16,6 +16,7 @@ package com.starrocks.common;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.Int128PB;
 
 import java.math.BigInteger;
 import java.util.Objects;
@@ -52,6 +53,14 @@ public class Int128 implements Comparable<Int128> {
 
     private Int128(long value) {
         this(value >> 63, value);
+    }
+
+    public Int128PB toProto() {
+        return Int128PB.newBuilder().setHigh(high).setLow(low).build();
+    }
+
+    public static Int128 fromProto(Int128PB pb) {
+        return new Int128(pb.getHigh(), pb.getLow());
     }
 
     public long getHigh() {

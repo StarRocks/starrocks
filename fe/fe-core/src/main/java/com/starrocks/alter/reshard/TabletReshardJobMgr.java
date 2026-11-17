@@ -24,6 +24,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
@@ -33,11 +34,16 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.TabletReshardJobPB;
 import com.starrocks.proto.ParentTabletPublishInfoPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LeaderLease;
@@ -772,5 +778,26 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
         TabletReshardJobMgr tabletReshardJobMgr = reader.readJson(TabletReshardJobMgr.class);
         tabletReshardJobs.putAll(tabletReshardJobMgr.tabletReshardJobs);
         reshardingTabletInfos.putAll(tabletReshardJobMgr.reshardingTabletInfos);
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.TABLET_RESHARD_JOB_MGR)) {
+            for (TabletReshardJob job : tabletReshardJobs.values()) {
+                writer.writeEntry(job.toProto());
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.TABLET_RESHARD_JOB_MGR, reader -> {
+            reader.readEntries(TabletReshardJobPB.parser(), pb -> {
+                TabletReshardJob job = TabletReshardJob.fromProto(pb);
+                job.initializeAfterRecovery();
+                if (!job.isDone()) {
+                    job.registerReshardingTabletsOnRestart();
+                }
+                tabletReshardJobs.put(job.getJobId(), job);
+            });
+        }));
     }
 }

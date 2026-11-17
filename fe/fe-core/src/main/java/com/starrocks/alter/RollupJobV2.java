@@ -70,6 +70,11 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.AlterJobPB;
+import com.starrocks.persist.proto.ColumnPB;
+import com.starrocks.persist.proto.KeysTypePB;
+import com.starrocks.persist.proto.RollupJobV2PB;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
@@ -1122,6 +1127,27 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         setColumnsDefineExpr(columnNameToDefineExpr);
     }
 
+    /**
+     * Rebuilds the where clause and the column define expressions of a pending job from its original statement.
+     * Shared by the GSON hook and the image v3 load.
+     */
+    private void rebuildDefineExprs() {
+        // analyze define stmt
+        if (origStmt == null) {
+            return;
+        }
+
+        if (jobState != JobState.PENDING) {
+            return;
+        }
+
+        Map<String, Expr> columnNameToDefineExpr = MetaUtils.parseColumnNameToDefineExpr(origStmt);
+        if (columnNameToDefineExpr.containsKey(CreateSyncMVStmt.WHERE_PREDICATE_COLUMN_NAME)) {
+            whereClause = columnNameToDefineExpr.get(CreateSyncMVStmt.WHERE_PREDICATE_COLUMN_NAME);
+        }
+        setColumnsDefineExpr(columnNameToDefineExpr);
+    }
+
     @Override
     public AlterJobV2 copyForPersist() {
         return new RollupJobV2(this);
@@ -1130,5 +1156,77 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     @Override
     public Optional<Long> getTransactionId() {
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
+    }
+
+    @Override
+    protected void fillProtoVariant(AlterJobPB.Builder builder) {
+        RollupJobV2PB.Builder variant = RollupJobV2PB.newBuilder()
+                .putAllPartitionIdToBaseRollupTabletIds(
+                        AlterJobProtos.toInt64MapProtos(physicalPartitionIdToBaseRollupTabletIdMap))
+                .putAllPartitionIdToRollupIndex(AlterJobProtos.toMaterializedIndexProtos(physicalPartitionIdToRollupIndex))
+                .setBaseIndexMetaId(baseIndexMetaId)
+                .setRollupIndexMetaId(rollupIndexMetaId)
+                .setRollupSchemaVersion(rollupSchemaVersion)
+                .setBaseSchemaHash(baseSchemaHash)
+                .setRollupSchemaHash(rollupSchemaHash)
+                .setRollupShortKeyColumnCount(rollupShortKeyColumnCount)
+                .setWatershedTxnId(watershedTxnId)
+                .setIsColocateMvIndex(isColocateMVIndex);
+        if (baseIndexName != null) {
+            variant.setBaseIndexName(baseIndexName);
+        }
+        if (rollupIndexName != null) {
+            variant.setRollupIndexName(rollupIndexName);
+        }
+        for (Column column : rollupSchema) {
+            variant.addRollupSchema(column.toProto());
+        }
+        if (rollupKeysType != null) {
+            variant.setRollupKeysType(ProtoEnums.toProto(rollupKeysType, KeysTypePB.class, "KEYS_TYPE_"));
+        }
+        if (origStmt != null) {
+            variant.setOrigStmt(origStmt.toProto());
+        }
+        if (viewDefineSql != null) {
+            variant.setViewDefineSql(viewDefineSql);
+        }
+        builder.setKind(AlterJobPB.Kind.ROLLUP_JOB_V2).setRollupJobV2(variant);
+    }
+
+    @Override
+    protected void fillFromVariantProto(AlterJobPB pb) {
+        RollupJobV2PB variant = pb.getRollupJobV2();
+        physicalPartitionIdToBaseRollupTabletIdMap =
+                AlterJobProtos.int64MapsFromProto(variant.getPartitionIdToBaseRollupTabletIdsMap());
+        physicalPartitionIdToRollupIndex =
+                AlterJobProtos.materializedIndexesFromProto(variant.getPartitionIdToRollupIndexMap());
+        baseIndexMetaId = variant.getBaseIndexMetaId();
+        rollupIndexMetaId = variant.getRollupIndexMetaId();
+        if (variant.hasBaseIndexName()) {
+            baseIndexName = variant.getBaseIndexName();
+        }
+        if (variant.hasRollupIndexName()) {
+            rollupIndexName = variant.getRollupIndexName();
+        }
+        rollupSchema = new ArrayList<>(variant.getRollupSchemaCount());
+        for (ColumnPB column : variant.getRollupSchemaList()) {
+            rollupSchema.add(Column.fromProto(column));
+        }
+        rollupSchemaVersion = variant.getRollupSchemaVersion();
+        baseSchemaHash = variant.getBaseSchemaHash();
+        rollupSchemaHash = variant.getRollupSchemaHash();
+        if (variant.hasRollupKeysType()) {
+            rollupKeysType = ProtoEnums.fromProto(variant.getRollupKeysType(), KeysType.class, "KEYS_TYPE_");
+        }
+        rollupShortKeyColumnCount = (short) variant.getRollupShortKeyColumnCount();
+        if (variant.hasOrigStmt()) {
+            origStmt = OriginStatementInfo.fromProto(variant.getOrigStmt());
+        }
+        watershedTxnId = variant.getWatershedTxnId();
+        if (variant.hasViewDefineSql()) {
+            viewDefineSql = variant.getViewDefineSql();
+        }
+        isColocateMVIndex = variant.getIsColocateMvIndex();
+        rebuildDefineExprs();
     }
 }

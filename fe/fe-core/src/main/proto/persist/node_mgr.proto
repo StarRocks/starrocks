@@ -1,0 +1,144 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "NodeMgrProto";
+
+// Section NODE_MGR: everything NodeMgr persists, as a single manager message without entries. A
+// cluster has at most a few hundred nodes, so there is nothing to gain from splitting them out.
+//
+// Conventions used here and in the other persist protos:
+// - a Java field that can be null is an `optional` field, so null survives the round trip;
+// - a Java map whose key is a field of the value becomes a repeated field of the value;
+// - enums owned by one message are nested in it, so their values need no prefix.
+message NodeMgrPB {
+  int32 leader_rpc_port = 1;
+  int32 leader_http_port = 2;
+  optional string leader_ip = 3;
+  // Keyed by node_name in memory.
+  repeated FrontendPB frontends = 4;
+  // Order matters: it is a queue in memory.
+  repeated string removed_frontends = 5;
+  SystemInfoServicePB system_info = 6;
+  BrokerMgrPB broker_mgr = 7;
+}
+
+message FrontendPB {
+  enum Role {
+    UNSPECIFIED = 0;
+    LEADER = 1;
+    FOLLOWER = 2;
+    OBSERVER = 3;
+    INIT = 4;
+    UNKNOWN = 5;
+  }
+  Role role = 1;
+  string node_name = 2;
+  string host = 3;
+  int32 edit_log_port = 4;
+  int32 fid = 5;
+  // Filled in by the first heartbeat; absent before that and in older images.
+  optional string mac_address = 6;
+}
+
+message SystemInfoServicePB {
+  // Both keyed by id in memory.
+  repeated BackendPB backends = 1;
+  repeated ComputeNodePB compute_nodes = 2;
+}
+
+// The persisted fields of the ComputeNode Java class. Backend extends ComputeNode, so both
+// ComputeNodePB and BackendPB embed this instead of repeating the fields.
+message ComputeNodeCorePB {
+  enum Status {
+    // Also stands for a null Java field, which images written before the field existed have.
+    UNSPECIFIED = 0;
+    CONNECTING = 1;
+    OK = 2;
+    SHUTDOWN = 3;
+    DISCONNECTED = 4;
+  }
+  int64 id = 1;
+  string host = 2;
+  optional string version = 3;
+  int32 heartbeat_port = 4;
+  int32 be_port = 5;
+  int32 http_port = 6;
+  int32 be_rpc_port = 7;
+  int32 brpc_port = 8;
+  int32 arrow_flight_port = 9;
+  int32 cpu_cores = 10;
+  int64 mem_limit_bytes = 11;
+  int64 last_update_ms = 12;
+  int64 last_start_time = 13;
+  bool is_alive = 14;
+  bool is_decommissioned = 15;
+  // The Java field holds DecommissionType.ordinal(); kept as the integer it is.
+  int32 decommission_type = 16;
+  // The Java field holds BackendState.ordinal(); kept as the integer it is.
+  int32 backend_state = 17;
+  optional string heartbeat_err_msg = 18;
+  int64 last_missing_heartbeat_time = 19;
+  int32 heartbeat_retry_times = 20;
+  int32 starlet_port = 21;
+  bool last_write_fail = 22;
+  int64 worker_group_id = 23;
+  int64 warehouse_id = 24;
+  bool is_set_storage_path = 25;
+  Status status = 26;
+}
+
+message ComputeNodePB {
+  ComputeNodeCorePB core = 1;
+}
+
+message BackendPB {
+  ComputeNodeCorePB core = 1;
+  // Keyed by root_path in memory.
+  repeated DiskInfoPB disks = 2;
+  map<string, string> location = 3;
+}
+
+message DiskInfoPB {
+  enum State {
+    UNSPECIFIED = 0;
+    ONLINE = 1;
+    OFFLINE = 2;
+    DISABLED = 3;
+  }
+  string root_path = 1;
+  State state = 2;
+}
+
+message BrokerMgrPB {
+  // Keyed by name in memory.
+  repeated BrokerGroupPB groups = 1;
+}
+
+message BrokerGroupPB {
+  string name = 1;
+  repeated FsBrokerPB brokers = 2;
+}
+
+message FsBrokerPB {
+  string ip = 1;
+  int32 port = 2;
+  int64 last_start_time = 3;
+  bool is_alive = 4;
+}

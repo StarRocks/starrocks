@@ -40,6 +40,22 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.ReplicationBackendListPB;
+import com.starrocks.persist.proto.ReplicationBackendPB;
+import com.starrocks.persist.proto.ReplicationIndexMapPB;
+import com.starrocks.persist.proto.ReplicationIndexPB;
+import com.starrocks.persist.proto.ReplicationJobCorePB;
+import com.starrocks.persist.proto.ReplicationJobPB;
+import com.starrocks.persist.proto.ReplicationPartitionMapPB;
+import com.starrocks.persist.proto.ReplicationPartitionPB;
+import com.starrocks.persist.proto.ReplicationReplicaMapPB;
+import com.starrocks.persist.proto.ReplicationReplicaPB;
+import com.starrocks.persist.proto.ReplicationSnapshotPB;
+import com.starrocks.persist.proto.ReplicationTabletMapPB;
+import com.starrocks.persist.proto.ReplicationTabletPB;
+import com.starrocks.persist.proto.TablePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -70,6 +86,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -202,6 +220,34 @@ public class ReplicationJob implements GsonPostProcessable {
         public long getSrcPartitionId() {
             return srcPartitionId;
         }
+
+        private ReplicationPartitionPB toProto() {
+            ReplicationPartitionPB.Builder builder = ReplicationPartitionPB.newBuilder();
+            builder.setPartitionId(partitionId);
+            builder.setVersion(version);
+            builder.setDataVersion(dataVersion);
+            builder.setSrcVersion(srcVersion);
+            builder.setSrcVersionEpoch(srcVersionEpoch);
+            builder.setSrcPartitionId(srcPartitionId);
+            if (indexInfos != null) {
+                ReplicationIndexMapPB.Builder values = ReplicationIndexMapPB.newBuilder();
+                indexInfos.forEach((key, value) -> values.putValues(key, value.toProto()));
+                builder.setIndexInfos(values);
+            }
+            return builder.build();
+        }
+
+        private static PartitionInfo fromProto(ReplicationPartitionPB pb) {
+            Map<Long, IndexInfo> values = null;
+            if (pb.hasIndexInfos()) {
+                values = new HashMap<>();
+                for (var entry : pb.getIndexInfos().getValuesMap().entrySet()) {
+                    values.put(entry.getKey(), IndexInfo.fromProto(entry.getValue()));
+                }
+            }
+            return new PartitionInfo(pb.getPartitionId(), pb.getVersion(), pb.getDataVersion(),
+                    pb.getSrcVersion(), pb.getSrcVersionEpoch(), values, pb.getSrcPartitionId());
+        }
     }
 
     protected static class IndexInfo {
@@ -239,6 +285,30 @@ public class ReplicationJob implements GsonPostProcessable {
         public Map<Long, TabletInfo> getTabletInfos() {
             return tabletInfos;
         }
+
+        private ReplicationIndexPB toProto() {
+            ReplicationIndexPB.Builder builder = ReplicationIndexPB.newBuilder();
+            builder.setIndexId(indexId);
+            builder.setSchemaHash(schemaHash);
+            builder.setSrcSchemaHash(srcSchemaHash);
+            if (tabletInfos != null) {
+                ReplicationTabletMapPB.Builder values = ReplicationTabletMapPB.newBuilder();
+                tabletInfos.forEach((key, value) -> values.putValues(key, value.toProto()));
+                builder.setTabletInfos(values);
+            }
+            return builder.build();
+        }
+
+        private static IndexInfo fromProto(ReplicationIndexPB pb) {
+            Map<Long, TabletInfo> values = null;
+            if (pb.hasTabletInfos()) {
+                values = new HashMap<>();
+                for (var entry : pb.getTabletInfos().getValuesMap().entrySet()) {
+                    values.put(entry.getKey(), TabletInfo.fromProto(entry.getValue()));
+                }
+            }
+            return new IndexInfo(pb.getIndexId(), pb.getSchemaHash(), pb.getSrcSchemaHash(), values);
+        }
     }
 
     protected static class TabletInfo {
@@ -267,6 +337,29 @@ public class ReplicationJob implements GsonPostProcessable {
 
         public Map<Long, ReplicaInfo> getReplicaInfos() {
             return replicaInfos;
+        }
+
+        private ReplicationTabletPB toProto() {
+            ReplicationTabletPB.Builder builder = ReplicationTabletPB.newBuilder();
+            builder.setTabletId(tabletId);
+            builder.setSrcTabletId(srcTabletId);
+            if (replicaInfos != null) {
+                ReplicationReplicaMapPB.Builder values = ReplicationReplicaMapPB.newBuilder();
+                replicaInfos.forEach((key, value) -> values.putValues(key, value.toProto()));
+                builder.setReplicaInfos(values);
+            }
+            return builder.build();
+        }
+
+        private static TabletInfo fromProto(ReplicationTabletPB pb) {
+            Map<Long, ReplicaInfo> values = null;
+            if (pb.hasReplicaInfos()) {
+                values = new HashMap<>();
+                for (var entry : pb.getReplicaInfos().getValuesMap().entrySet()) {
+                    values.put(entry.getKey(), ReplicaInfo.fromProto(entry.getValue()));
+                }
+            }
+            return new TabletInfo(pb.getTabletId(), pb.getSrcTabletId(), values);
         }
     }
 
@@ -304,6 +397,32 @@ public class ReplicationJob implements GsonPostProcessable {
         public void setSrcSnapshotInfo(SnapshotInfo srcSnapshotInfo) {
             this.srcSnapshotInfo = srcSnapshotInfo;
         }
+
+        private ReplicationReplicaPB toProto() {
+            ReplicationReplicaPB.Builder builder = ReplicationReplicaPB.newBuilder().setBackendId(backendId);
+            if (srcBackendInfos != null) {
+                ReplicationBackendListPB.Builder values = ReplicationBackendListPB.newBuilder();
+                srcBackendInfos.forEach(value -> values.addValues(value.toProto()));
+                builder.setSrcBackendInfos(values);
+            }
+            if (srcSnapshotInfo != null) {
+                builder.setSrcSnapshotInfo(srcSnapshotInfo.toProto());
+            }
+            return builder.build();
+        }
+
+        private static ReplicaInfo fromProto(ReplicationReplicaPB pb) {
+            List<BackendInfo> backends = null;
+            if (pb.hasSrcBackendInfos()) {
+                backends = new ArrayList<>();
+                for (ReplicationBackendPB backend : pb.getSrcBackendInfos().getValuesList()) {
+                    backends.add(BackendInfo.fromProto(backend));
+                }
+            }
+            ReplicaInfo result = new ReplicaInfo(pb.getBackendId(), backends);
+            result.srcSnapshotInfo = pb.hasSrcSnapshotInfo() ? SnapshotInfo.fromProto(pb.getSrcSnapshotInfo()) : null;
+            return result;
+        }
     }
 
     private static class BackendInfo {
@@ -337,6 +456,18 @@ public class ReplicationJob implements GsonPostProcessable {
         public TBackend getBackend() {
             return new TBackend(host, bePort, httpPort);
         }
+
+        private ReplicationBackendPB toProto() {
+            ReplicationBackendPB.Builder builder = ReplicationBackendPB.newBuilder().setBePort(bePort).setHttpPort(httpPort);
+            if (host != null) {
+                builder.setHost(host);
+            }
+            return builder.build();
+        }
+
+        private static BackendInfo fromProto(ReplicationBackendPB pb) {
+            return new BackendInfo(pb.hasHost() ? pb.getHost() : null, pb.getBePort(), pb.getHttpPort());
+        }
     }
 
     private static class SnapshotInfo {
@@ -367,6 +498,23 @@ public class ReplicationJob implements GsonPostProcessable {
             tSnapshotInfo.setSnapshot_path(snapshotPath);
             tSnapshotInfo.setIncremental_snapshot(incrementalSnapshot);
             return tSnapshotInfo;
+        }
+
+        private ReplicationSnapshotPB toProto() {
+            ReplicationSnapshotPB.Builder builder = ReplicationSnapshotPB.newBuilder()
+                    .setIncrementalSnapshot(incrementalSnapshot);
+            if (backendInfo != null) {
+                builder.setBackendInfo(backendInfo.toProto());
+            }
+            if (snapshotPath != null) {
+                builder.setSnapshotPath(snapshotPath);
+            }
+            return builder.build();
+        }
+
+        private static SnapshotInfo fromProto(ReplicationSnapshotPB pb) {
+            return new SnapshotInfo(pb.hasBackendInfo() ? BackendInfo.fromProto(pb.getBackendInfo()) : null,
+                    pb.hasSnapshotPath() ? pb.getSnapshotPath() : null, pb.getIncrementalSnapshot());
         }
     }
 
@@ -1183,5 +1331,82 @@ public class ReplicationJob implements GsonPostProcessable {
     public void gsonPostProcess() throws IOException {
         runningTasks = Maps.newConcurrentMap();
         finishedTasks = Maps.newConcurrentMap();
+    }
+
+    protected ReplicationJob(ReplicationJobCorePB pb) {
+        jobId = pb.hasJobId() ? pb.getJobId() : null;
+        createdTimeMs = pb.getCreatedTimeMs();
+        finishedTimeMs = pb.getFinishedTimeMs();
+        srcToken = pb.hasSrcToken() ? pb.getSrcToken() : null;
+        databaseId = pb.getDatabaseId();
+        tableId = pb.getTableId();
+        tableType = pb.hasTableType() ? ProtoEnums.fromProto(pb.getTableType(), Table.TableType.class) : null;
+        srcTableType = pb.hasSrcTableType() ? ProtoEnums.fromProto(pb.getSrcTableType(), Table.TableType.class) : null;
+        replicationDataSize = pb.getReplicationDataSize();
+        replicationReplicaCount = pb.getReplicationReplicaCount();
+        partitionInfos = pb.hasPartitionInfos() ? new HashMap<>() : null;
+        if (partitionInfos != null) {
+            pb.getPartitionInfos().getValuesMap().forEach((key, value) ->
+                    partitionInfos.put(key, PartitionInfo.fromProto(value)));
+        }
+        transactionId = pb.getTransactionId();
+        state = pb.hasStateId() ? new ReplicationJobState(pb.getStateId()) : null;
+    }
+
+    protected ReplicationJobCorePB toCoreProto() {
+        ReplicationJobCorePB.Builder builder = ReplicationJobCorePB.newBuilder()
+                .setCreatedTimeMs(createdTimeMs).setFinishedTimeMs(finishedTimeMs)
+                .setDatabaseId(databaseId).setTableId(tableId).setReplicationDataSize(replicationDataSize)
+                .setReplicationReplicaCount(replicationReplicaCount).setTransactionId(transactionId);
+        if (jobId != null) {
+            builder.setJobId(jobId);
+        }
+        if (srcToken != null) {
+            builder.setSrcToken(srcToken);
+        }
+        if (tableType != null) {
+            builder.setTableType(ProtoEnums.toProto(tableType, TablePB.Kind.class));
+        }
+        if (srcTableType != null) {
+            builder.setSrcTableType(ProtoEnums.toProto(srcTableType, TablePB.Kind.class));
+        }
+        if (partitionInfos != null) {
+            ReplicationPartitionMapPB.Builder values = ReplicationPartitionMapPB.newBuilder();
+            partitionInfos.forEach((key, value) -> values.putValues(key, value.toProto()));
+            builder.setPartitionInfos(values);
+        }
+        if (state != null) {
+            builder.setStateId(state.getId());
+        }
+        return builder.build();
+    }
+
+    public ReplicationJobPB toProto() {
+        if (getClass() != ReplicationJob.class) {
+            throw new IllegalStateException("replication job class " + getClass().getName() + " cannot be persisted");
+        }
+        return ReplicationJobPB.newBuilder().setKind(ReplicationJobPB.Kind.REPLICATION)
+                .setReplication(toCoreProto()).build();
+    }
+
+    public static ReplicationJob fromProto(ReplicationJobPB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        ReplicationJob job;
+        switch (pb.getKind()) {
+            case REPLICATION:
+                job = new ReplicationJob(pb.getReplication());
+                break;
+            case LAKE_REPLICATION:
+                job = new LakeReplicationJob(pb.getLakeReplication());
+                break;
+            default:
+                throw new IllegalArgumentException("unknown replication job kind " + pb.getKind());
+        }
+        try {
+            job.gsonPostProcess();
+        } catch (IOException e) {
+            throw new IllegalArgumentException("invalid replication job metadata", e);
+        }
+        return job;
     }
 }

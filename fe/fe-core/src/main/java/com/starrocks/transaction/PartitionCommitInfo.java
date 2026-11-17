@@ -39,11 +39,16 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.persist.proto.Int64ListPB;
+import com.starrocks.persist.proto.PartitionCommitInfoPB;
+import com.starrocks.persist.proto.StringListPB;
 import com.starrocks.proto.TabletStatPB;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 public class PartitionCommitInfo implements Writable {
@@ -327,5 +332,74 @@ public class PartitionCommitInfo implements Writable {
         sb.append(", versionTime=").append(versionTime);
         sb.append(", isDoubleWrite=").append(isDoubleWrite);
         return sb.toString();
+    }
+
+    public PartitionCommitInfoPB toProto() {
+        PartitionCommitInfoPB.Builder builder = PartitionCommitInfoPB.newBuilder();
+        builder.setPhysicalPartitionId(physicalPartitionId);
+        builder.setVersion(version);
+        builder.setVersionTime(versionTime);
+        builder.setDataVersion(dataVersion);
+        builder.setVersionEpoch(versionEpoch);
+        builder.setIsDoubleWrite(isDoubleWrite);
+        if (invalidDictCacheColumns != null) {
+            builder.setInvalidDictCacheColumns(StringListPB.newBuilder().addAllValues(invalidDictCacheColumns.stream()
+                    .map(ColumnId::getId).collect(Collectors.toList())).build());
+        }
+        if (validDictCacheColumns != null) {
+            builder.setValidDictCacheColumns(StringListPB.newBuilder().addAllValues(validDictCacheColumns.stream()
+                    .map(ColumnId::getId).collect(Collectors.toList())).build());
+        }
+        if (dictCollectedVersions != null) {
+            builder.setDictCollectedVersions(Int64ListPB.newBuilder().addAllValues(dictCollectedVersions).build());
+        }
+        if (dictContentIdentities != null) {
+            builder.setDictContentIdentities(Int64ListPB.newBuilder().addAllValues(dictContentIdentities));
+        }
+        if (compactionScore != null) {
+            builder.setCompactionScore(compactionScore.toProto());
+        }
+        return builder.build();
+    }
+
+    public static PartitionCommitInfo fromProto(PartitionCommitInfoPB pb) {
+        PartitionCommitInfo value = new PartitionCommitInfo();
+        if (pb.hasPhysicalPartitionId()) {
+            value.physicalPartitionId = pb.getPhysicalPartitionId();
+        }
+        if (pb.hasVersion()) {
+            value.version = pb.getVersion();
+        }
+        if (pb.hasVersionTime()) {
+            value.versionTime = pb.getVersionTime();
+        }
+        if (pb.hasDataVersion()) {
+            value.dataVersion = pb.getDataVersion();
+        }
+        if (pb.hasVersionEpoch()) {
+            value.versionEpoch = pb.getVersionEpoch();
+        }
+        value.isDoubleWrite = pb.getIsDoubleWrite();
+        // Missing dictionary fields keep the constructor's empty lists, matching V2 image loading.
+        if (pb.hasInvalidDictCacheColumns()) {
+            value.invalidDictCacheColumns = pb.getInvalidDictCacheColumns().getValuesList().stream()
+                    .map(ColumnId::create).collect(Collectors.toList());
+        }
+        if (pb.hasValidDictCacheColumns()) {
+            value.validDictCacheColumns = pb.getValidDictCacheColumns().getValuesList().stream()
+                    .map(ColumnId::create).collect(Collectors.toList());
+        }
+        if (pb.hasDictCollectedVersions()) {
+            value.dictCollectedVersions = new ArrayList<>(pb.getDictCollectedVersions().getValuesList());
+        }
+        if (pb.hasCompactionScore()) {
+            value.compactionScore = Quantiles.fromProto(pb.getCompactionScore());
+        } else {
+            value.compactionScore = null;
+        }
+        if (pb.hasDictContentIdentities()) {
+            value.dictContentIdentities = new ArrayList<>(pb.getDictContentIdentities().getValuesList());
+        }
+        return value;
     }
 }

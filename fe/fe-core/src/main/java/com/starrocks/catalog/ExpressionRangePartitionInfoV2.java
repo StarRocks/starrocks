@@ -21,6 +21,10 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.persist.proto.ExpressionRangePartitionInfoV2PB;
+import com.starrocks.persist.proto.PartitionInfoPB;
+import com.starrocks.persist.proto.TypeListPB;
+import com.starrocks.persist.proto.TypePB;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
@@ -32,6 +36,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeProtoConverter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -115,6 +120,77 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
             }
         }
         serializedPartitionExprs = null;
+    }
+
+    /**
+     * Re-parses and analyzes the partition expressions from their SQL form. Shared by the GSON hook and
+     * {@link #fillFromVariantProto}.
+     */
+    private void restorePartitionExprs(List<String> expressionSqls) {
+        partitionExprs = Lists.newArrayList();
+        for (String expressionSql : expressionSqls) {
+            partitionExprs.add(ColumnIdExpr.fromSql(expressionSql));
+        }
+        // Analyze partition expr
+        SlotRef slotRef;
+        for (ColumnIdExpr columnIdExpr : partitionExprs) {
+            Expr expr = columnIdExpr.getExpr();
+            if (expr instanceof FunctionCallExpr) {
+                slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
+            } else if (expr instanceof CastExpr) {
+                slotRef = AnalyzerUtils.getSlotRefFromCast(expr);
+            } else if (expr instanceof SlotRef) {
+                slotRef = (SlotRef) expr;
+            } else {
+                LOG.warn("Unknown expr type: {}", ExprToSql.toSql(expr));
+                continue;
+            }
+
+            try {
+                // The current expression partition only supports 1 column
+                slotRef.setType(sourcePartitionTypes.get(0));
+                PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
+            } catch (Throwable ex) {
+                LOG.warn("Failed to analyze partition expr: {}", ExprToSql.toSql(expr), ex);
+            }
+        }
+    }
+
+    @Override
+    protected void fillProtoVariant(PartitionInfoPB.Builder builder) throws IOException {
+        ExpressionRangePartitionInfoV2PB.Builder expression = ExpressionRangePartitionInfoV2PB.newBuilder()
+                .setRange(toRangeCoreProto());
+        // Same conversion as gsonPreProcess.
+        if (partitionExprs != null) {
+            for (ColumnIdExpr partitionExpr : partitionExprs) {
+                expression.addPartitionExprs(partitionExpr.toSql());
+            }
+        }
+        if (automaticPartition != null) {
+            expression.setAutomaticPartition(automaticPartition);
+        }
+        if (sourcePartitionTypes != null) {
+            TypeListPB.Builder types = TypeListPB.newBuilder();
+            for (Type type : sourcePartitionTypes) {
+                types.addValues(TypeProtoConverter.toProto(type));
+            }
+            expression.setSourcePartitionTypes(types);
+        }
+        builder.setKind(PartitionInfoPB.Kind.KIND_EXPRESSION_RANGE_V2).setExpressionRangeV2(expression);
+    }
+
+    void fillFromVariantProto(ExpressionRangePartitionInfoV2PB pb) throws IOException {
+        fillFromRangeCoreProto(pb.getRange());
+        if (pb.hasAutomaticPartition()) {
+            automaticPartition = pb.getAutomaticPartition();
+        }
+        if (pb.hasSourcePartitionTypes()) {
+            sourcePartitionTypes = new ArrayList<>(pb.getSourcePartitionTypes().getValuesCount());
+            for (TypePB type : pb.getSourcePartitionTypes().getValuesList()) {
+                sourcePartitionTypes.add(TypeProtoConverter.fromProto(type));
+            }
+        }
+        restorePartitionExprs(pb.getPartitionExprsList());
     }
 
     @Override

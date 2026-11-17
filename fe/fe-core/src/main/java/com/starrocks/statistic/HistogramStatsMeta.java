@@ -17,6 +17,11 @@ package com.starrocks.statistic;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.image.ProtoDateTimes;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.AnalyzeTypePB;
+import com.starrocks.persist.proto.HistogramStatsMetaPB;
 import org.apache.commons.collections4.MapUtils;
 
 import java.time.LocalDateTime;
@@ -79,5 +84,50 @@ public class HistogramStatsMeta implements Writable {
 
     public boolean isInitJobMeta() {
         return MapUtils.isNotEmpty(properties) && properties.containsKey(StatsConstants.INIT_SAMPLE_STATS_JOB);
+    }
+
+    public HistogramStatsMetaPB toProto() {
+        HistogramStatsMetaPB.Builder builder = HistogramStatsMetaPB.newBuilder();
+        builder.setDbId(dbId);
+        builder.setTableId(tableId);
+        if (column != null) {
+            builder.setColumn(column);
+        }
+        if (type != null) {
+            builder.setType(ProtoEnums.toProto(type, AnalyzeTypePB.class, "ANALYZE_"));
+        }
+        if (updateTime != null) {
+            builder.setUpdateTime(ProtoDateTimes.toEpochSecond(updateTime));
+        }
+        if (properties != null) {
+            builder.setProperties(ProtoMaps.toStringMapProto(properties));
+        }
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    private HistogramStatsMeta(HistogramStatsMetaPB pb) {
+        if (pb.hasDbId()) {
+            dbId = pb.getDbId();
+        }
+        if (pb.hasTableId()) {
+            tableId = pb.getTableId();
+        }
+        if (pb.hasColumn()) {
+            column = pb.getColumn();
+        }
+        if (pb.hasType()) {
+            type = ProtoEnums.fromProto(pb.getType(), StatsConstants.AnalyzeType.class, "ANALYZE_");
+        }
+        if (pb.hasUpdateTime()) {
+            updateTime = ProtoDateTimes.fromEpochSecond(pb.getUpdateTime());
+        }
+        if (pb.hasProperties()) {
+            properties = ProtoMaps.fromStringMapProto(pb.getProperties());
+        }
+    }
+
+    public static HistogramStatsMeta fromProto(HistogramStatsMetaPB pb) {
+        return new HistogramStatsMeta(pb);
     }
 }

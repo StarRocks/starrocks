@@ -49,6 +49,11 @@ import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.AlterJobPB;
+import com.starrocks.persist.proto.LakeTableSchemaChangeJobPB;
+import com.starrocks.persist.proto.ZstdCompressionPageSizesPB;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
@@ -1541,6 +1546,90 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         }
     }
 
+    @Override
+    protected void fillProtoVariant(AlterJobPB.Builder builder) {
+        LakeTableSchemaChangeJobPB.Builder variant = LakeTableSchemaChangeJobPB.newBuilder()
+                .setLakeSchemaChange(toLakeTableSchemaChangeJobCoreProto())
+                .addAllPartitionIndexTablets(AlterJobProtos.toPartitionIndexTabletsProtos(physicalPartitionIndexTabletMap))
+                .addAllPartitionIndexes(AlterJobProtos.toPartitionIndexProtos(physicalPartitionIndexMap))
+                .putAllIndexMetaIdMap(ProtoMaps.withoutNullValues(indexMetaIdMap))
+                .putAllIndexMetaIdToName(ProtoMaps.withoutNullValues(indexMetaIdToName))
+                .putAllIndexMetaIdToSchema(AlterJobProtos.toColumnListProtos(indexMetaIdToSchema))
+                .putAllIndexMetaIdToShortKey(AlterJobProtos.toInt32Values(indexMetaIdToShortKey))
+                .setHasBfChange(hasBfChange)
+                .setBfFpp(bfFpp)
+                .setIndexChange(indexChange)
+                .setStartTime(startTime);
+        if (bfColumns != null) {
+            variant.setBfColumns(AlterJobProtos.columnIdList(bfColumns));
+        }
+        if (indexes != null) {
+            variant.setIndexes(Index.toListProto(indexes));
+        }
+        if (commitVersionMap != null) {
+            variant.setCommitVersionMap(AlterJobProtos.int64Map(commitVersionMap));
+        }
+        if (sortKeyIdxes != null) {
+            variant.setSortKeyIdxes(ProtoLists.int32List(sortKeyIdxes));
+        }
+        if (sortKeyUniqueIds != null) {
+            variant.setSortKeyUniqueIds(ProtoLists.int32List(sortKeyUniqueIds));
+        }
+        indexSortKeyIdxes.forEach((id, keys) -> variant.putIndexSortKeyIdxes(id, ProtoLists.int32List(keys)));
+        indexSortKeyUniqueIds.forEach((id, keys) -> variant.putIndexSortKeyUniqueIds(id, ProtoLists.int32List(keys)));
+        variant.setHasZstdCompressionChange(hasZstdCompressionChange);
+        if (zstdCompressionColumns != null) {
+            variant.setZstdCompressionColumns(AlterJobProtos.columnIdList(zstdCompressionColumns));
+        }
+        if (zstdCompressionPageSizes != null) {
+            ZstdCompressionPageSizesPB.Builder sizes = ZstdCompressionPageSizesPB.newBuilder();
+            zstdCompressionPageSizes.forEach((columnId, size) -> sizes.putValues(columnId.getId(), size));
+            variant.setZstdCompressionPageSizes(sizes);
+        }
+        builder.setKind(AlterJobPB.Kind.LAKE_TABLE_SCHEMA_CHANGE_JOB).setLakeTableSchemaChangeJob(variant);
+    }
 
-
+    @Override
+    protected void fillFromVariantProto(AlterJobPB pb) {
+        LakeTableSchemaChangeJobPB variant = pb.getLakeTableSchemaChangeJob();
+        fillFromLakeTableSchemaChangeJobCoreProto(variant.getLakeSchemaChange());
+        physicalPartitionIndexTabletMap = AlterJobProtos.partitionIndexTabletsFromProto(variant.getPartitionIndexTabletsList());
+        physicalPartitionIndexMap = AlterJobProtos.partitionIndexesFromProto(variant.getPartitionIndexesList());
+        indexMetaIdMap = new HashMap<>(variant.getIndexMetaIdMapMap());
+        indexMetaIdToName = new HashMap<>(variant.getIndexMetaIdToNameMap());
+        indexMetaIdToSchema = AlterJobProtos.columnListsFromProto(variant.getIndexMetaIdToSchemaMap());
+        indexMetaIdToShortKey = AlterJobProtos.shortValuesFromProto(variant.getIndexMetaIdToShortKeyMap());
+        hasBfChange = variant.getHasBfChange();
+        hasZstdCompressionChange = variant.getHasZstdCompressionChange();
+        zstdCompressionColumns = variant.hasZstdCompressionColumns()
+                ? AlterJobProtos.columnIdSetFromProto(variant.getZstdCompressionColumns()) : null;
+        zstdCompressionPageSizes = null;
+        if (variant.hasZstdCompressionPageSizes()) {
+            zstdCompressionPageSizes = new HashMap<>();
+            variant.getZstdCompressionPageSizes().getValuesMap().forEach(
+                    (columnId, size) -> zstdCompressionPageSizes.put(ColumnId.create(columnId), size));
+        }
+        if (variant.hasBfColumns()) {
+            bfColumns = AlterJobProtos.columnIdSetFromProto(variant.getBfColumns());
+        }
+        bfFpp = variant.getBfFpp();
+        indexChange = variant.getIndexChange();
+        if (variant.hasIndexes()) {
+            indexes = Index.fromListProto(variant.getIndexes());
+        }
+        startTime = variant.getStartTime();
+        if (variant.hasCommitVersionMap()) {
+            commitVersionMap = AlterJobProtos.int64MapFromProto(variant.getCommitVersionMap());
+        }
+        if (variant.hasSortKeyIdxes()) {
+            sortKeyIdxes = ProtoLists.toIntegers(variant.getSortKeyIdxes());
+        }
+        if (variant.hasSortKeyUniqueIds()) {
+            sortKeyUniqueIds = ProtoLists.toIntegers(variant.getSortKeyUniqueIds());
+        }
+        indexSortKeyIdxes = new HashMap<>();
+        variant.getIndexSortKeyIdxesMap().forEach((id, keys) -> indexSortKeyIdxes.put(id, ProtoLists.toIntegers(keys)));
+        indexSortKeyUniqueIds = new HashMap<>();
+        variant.getIndexSortKeyUniqueIdsMap().forEach((id, keys) -> indexSortKeyUniqueIds.put(id, ProtoLists.toIntegers(keys)));
+    }
 }

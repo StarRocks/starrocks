@@ -1,0 +1,90 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/common.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "ResourceGroupProto";
+
+message ResourceGroupMgrPB {}
+message ResourceGroupPB {
+  enum Type {
+    UNSPECIFIED = 0;
+    WG_REALTIME = 1;
+    WG_NORMAL = 2;
+    WG_DEFAULT = 3;
+    WG_SHORT_QUERY = 4;
+    WG_MV = 5;
+  }
+  optional string name = 1;
+  optional int64 id = 2;
+  optional int32 cpu_weight = 3;
+  optional int32 cpu_weight_percent = 4;
+  optional int32 exclusive_cpu_cores = 5;
+  optional int32 exclusive_cpu_percent = 6;
+  optional int32 max_cpu_cores = 7;
+  optional double mem_limit = 8;
+  optional string mem_pool = 9;
+  optional int64 big_query_mem_limit = 10;
+  optional int64 big_query_scan_rows_limit = 11;
+  optional int64 big_query_cpu_second_limit = 12;
+  optional int32 concurrency_limit = 13;
+  optional double spill_mem_limit_threshold = 14;
+  optional double mem_used_pct_limit = 15;
+  optional Type resource_group_type = 16;
+  optional int64 version = 17;
+  StringListPB warehouses = 18;
+  ResourceGroupClassifiersPB classifiers = 19;
+}
+message ResourceGroupClassifiersPB {
+  repeated ResourceGroupClassifierPB values = 1;
+}
+message ResourceGroupClassifierPB {
+  optional int64 id = 1;
+  optional string user = 2;
+  optional string role = 3;
+  optional string source_ip = 4;
+  optional int64 resource_group_id = 5;
+  Int64ListPB database_ids = 6;
+  ResourceGroupQueryTypesPB query_types = 7;
+  ResourceGroupCostRangePB plan_cpu_cost_range = 8;
+  ResourceGroupCostRangePB plan_mem_cost_range = 9;
+}
+message ResourceGroupCostRangePB {
+  optional double min = 1;
+  optional double max = 2;
+}
+message ResourceGroupQueryTypesPB {
+  enum Type {
+    UNSPECIFIED = 0;
+    SELECT = 1;
+    CTAS = 2;
+    INSERT = 3;
+    COPY = 4;
+    EXPORT = 5;
+    UPDATE = 6;
+    DELETE = 7;
+    COMPACTION = 8;
+    SCHEMA_CHANGE = 9;
+    CLONE = 10;
+    MV = 11;
+    SYSTEM_OTHER = 12;
+  }
+  repeated Type values = 1;
+}

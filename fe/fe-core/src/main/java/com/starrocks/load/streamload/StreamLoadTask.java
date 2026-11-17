@@ -48,6 +48,8 @@ import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.StreamLoadTaskPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
@@ -1895,5 +1897,119 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
 
     public ExplicitTxnState.ExplicitTxnStateItem getTxnStateItem() {
         return txnStateItem;
+    }
+
+    public StreamLoadTaskPB toProto() {
+        StreamLoadTaskPB.Builder builder = StreamLoadTaskPB.newBuilder();
+        builder.setId(id);
+        builder.setLoadIdHi(loadId.getHi());
+        builder.setLoadIdLo(loadId.getLo());
+        if (label != null) {
+            builder.setLabel(label);
+        }
+        builder.setDbId(dbId);
+        if (dbName != null) {
+            builder.setDbName(dbName);
+        }
+        builder.setTableId(tableId);
+        if (tableName != null) {
+            builder.setTableName(tableName);
+        }
+        if (user != null) {
+            builder.setUser(user);
+        }
+        if (clientIp != null) {
+            builder.setClientIp(clientIp);
+        }
+        if (errorMsg != null) {
+            builder.setErrorMsg(errorMsg);
+        }
+        if (trackingUrl != null) {
+            builder.setTrackingUrl(trackingUrl);
+        }
+        builder.setTimeoutMs(timeoutMs);
+        builder.setCreateTimeMs(createTimeMs);
+        if (state != null) {
+            builder.setState(ProtoEnums.toProto(state, StreamLoadTaskPB.State.class));
+        }
+        builder.setBeforeLoadTimeMs(beforeLoadTimeMs);
+        builder.setStartLoadingTimeMs(startLoadingTimeMs);
+        builder.setStartPreparingTimeMs(startPreparingTimeMs);
+        builder.setFinishPreparingTimeMs(finishPreparingTimeMs);
+        builder.setCommitTimeMs(commitTimeMs);
+        builder.setEndTimeMs(endTimeMs);
+        builder.setTxnId(txnId);
+        builder.setChannelNum(channelNum);
+        builder.setPreparedChannelNum(preparedChannelNum);
+        builder.setNumRowsNormal(numRowsNormal);
+        builder.setNumRowsAbnormal(numRowsAbnormal);
+        builder.setNumRowsUnselected(numRowsUnselected);
+        builder.setNumLoadBytesTotal(numLoadBytesTotal);
+        builder.setWarehouseId(warehouseId);
+        if (computeResource != null) {
+            builder.setComputeResource(computeResource.toProto());
+        }
+        builder.setBeginTxnTimeMs(beginTxnTimeMs);
+        builder.setPlanTimeMs(planTimeMs);
+        builder.setReceiveDataTimeMs(receiveDataTimeMs);
+        return builder.build();
+    }
+
+    public static StreamLoadTask fromProto(StreamLoadTaskPB pb) {
+        StreamLoadTask result = new StreamLoadTask();
+        result.id = pb.getId();
+        result.loadIdHi = pb.getLoadIdHi();
+        result.loadIdLo = pb.getLoadIdLo();
+        if (pb.hasLabel()) {
+            result.label = pb.getLabel();
+        }
+        result.dbId = pb.getDbId();
+        if (pb.hasDbName()) {
+            result.dbName = pb.getDbName();
+        }
+        result.tableId = pb.getTableId();
+        if (pb.hasTableName()) {
+            result.tableName = pb.getTableName();
+        }
+        if (pb.hasUser()) {
+            result.user = pb.getUser();
+        }
+        if (pb.hasClientIp()) {
+            result.clientIp = pb.getClientIp();
+        }
+        if (pb.hasErrorMsg()) {
+            result.errorMsg = pb.getErrorMsg();
+        }
+        if (pb.hasTrackingUrl()) {
+            result.trackingUrl = pb.getTrackingUrl();
+        }
+        result.timeoutMs = pb.getTimeoutMs();
+        result.createTimeMs = pb.getCreateTimeMs();
+        if (pb.hasState()) {
+            result.state = ProtoEnums.fromProto(pb.getState(), State.class);
+        }
+        result.beforeLoadTimeMs = pb.getBeforeLoadTimeMs();
+        result.startLoadingTimeMs = pb.getStartLoadingTimeMs();
+        result.startPreparingTimeMs = pb.getStartPreparingTimeMs();
+        result.finishPreparingTimeMs = pb.getFinishPreparingTimeMs();
+        result.commitTimeMs = pb.getCommitTimeMs();
+        result.endTimeMs = pb.getEndTimeMs();
+        result.txnId = pb.getTxnId();
+        result.channelNum = pb.getChannelNum();
+        result.preparedChannelNum = pb.getPreparedChannelNum();
+        result.numRowsNormal = pb.getNumRowsNormal();
+        result.numRowsAbnormal = pb.getNumRowsAbnormal();
+        result.numRowsUnselected = pb.getNumRowsUnselected();
+        result.numLoadBytesTotal = pb.getNumLoadBytesTotal();
+        result.warehouseId = pb.getWarehouseId();
+        if (pb.hasComputeResource()) {
+            result.computeResource = ComputeResource.fromProto(pb.getComputeResource());
+        }
+        result.beginTxnTimeMs = pb.getBeginTxnTimeMs();
+        result.planTimeMs = pb.getPlanTimeMs();
+        result.receiveDataTimeMs = pb.getReceiveDataTimeMs();
+        result.loadId = new TUniqueId(result.loadIdHi, result.loadIdLo);
+        result.init();
+        return result;
     }
 }

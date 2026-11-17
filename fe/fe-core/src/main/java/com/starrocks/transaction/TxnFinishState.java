@@ -18,6 +18,9 @@ import com.baidu.bjf.remoting.protobuf.Codec;
 import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.Int64ListPB;
+import com.starrocks.persist.proto.Int64MapPB;
+import com.starrocks.persist.proto.TransactionFinishStatePB;
 import com.starrocks.proto.TxnFinishStatePB;
 
 import java.io.IOException;
@@ -69,5 +72,31 @@ public class TxnFinishState {
         for (int i = 0; i < pb.abnormalReplicasWithVersion.size(); i += 2) {
             abnormalReplicasWithVersion.put(pb.abnormalReplicasWithVersion.get(i), pb.abnormalReplicasWithVersion.get(i + 1));
         }
+    }
+
+    public TransactionFinishStatePB toProto() {
+        TransactionFinishStatePB.Builder builder = TransactionFinishStatePB.newBuilder();
+        if (normalReplicas != null) {
+            builder.setNormalReplicas(Int64ListPB.newBuilder().addAllValues(normalReplicas).build());
+        }
+        if (abnormalReplicasWithVersion != null) {
+            builder.setAbnormalReplicasWithVersion(Int64MapPB.newBuilder().putAllValues(abnormalReplicasWithVersion).build());
+        }
+        return builder.build();
+    }
+
+    public static TxnFinishState fromProto(TransactionFinishStatePB pb) {
+        TxnFinishState value = new TxnFinishState();
+        if (pb.hasNormalReplicas()) {
+            value.normalReplicas = new HashSet<>(pb.getNormalReplicas().getValuesList());
+        } else {
+            value.normalReplicas = null;
+        }
+        if (pb.hasAbnormalReplicasWithVersion()) {
+            value.abnormalReplicasWithVersion = new HashMap<>(pb.getAbnormalReplicasWithVersion().getValuesMap());
+        } else {
+            value.abnormalReplicasWithVersion = null;
+        }
+        return value;
     }
 }

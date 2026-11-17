@@ -17,6 +17,8 @@ package com.starrocks.load.streamload;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.proto.StreamLoadTxnCommitAttachmentPB;
+import com.starrocks.persist.proto.TxnCommitAttachmentPB;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
@@ -111,5 +113,60 @@ public class StreamLoadTxnCommitAttachment extends TxnCommitAttachment implement
     @Override
     public String toString() {
         return GsonUtils.GSON.toJson(this);
+    }
+
+    @Override
+    protected void fillProtoVariant(TxnCommitAttachmentPB.Builder parent) {
+        StreamLoadTxnCommitAttachmentPB.Builder builder = StreamLoadTxnCommitAttachmentPB.newBuilder();
+        if (trackingURL != null) {
+            builder.setTrackingUrl(trackingURL);
+        }
+        builder.setBeforeLoadTimeMs(beforeLoadTimeMs);
+        builder.setStartLoadingTimeMs(startLoadingTimeMs);
+        builder.setStartPreparingTimeMs(startPreparingTimeMs);
+        builder.setFinishPreparingTimeMs(finishPreparingTimeMs);
+        builder.setEndTimeMs(endTimeMs);
+        builder.setNumRowsNormal(numRowsNormal);
+        builder.setNumRowsAbnormal(numRowsAbnormal);
+        builder.setNumRowsUnselected(numRowsUnselected);
+        builder.setNumLoadBytesTotal(numLoadBytesTotal);
+        parent.setKind(TxnCommitAttachmentPB.Kind.STREAM_LOAD).setStreamLoad(builder);
+    }
+
+    @Override
+    protected void fillFromVariantProto(TxnCommitAttachmentPB parent) {
+        StreamLoadTxnCommitAttachmentPB pb = parent.getStreamLoad();
+        if (pb.hasTrackingUrl()) {
+            trackingURL = pb.getTrackingUrl();
+        } else {
+            trackingURL = null;
+        }
+        if (pb.hasBeforeLoadTimeMs()) {
+            beforeLoadTimeMs = pb.getBeforeLoadTimeMs();
+        }
+        if (pb.hasStartLoadingTimeMs()) {
+            startLoadingTimeMs = pb.getStartLoadingTimeMs();
+        }
+        if (pb.hasStartPreparingTimeMs()) {
+            startPreparingTimeMs = pb.getStartPreparingTimeMs();
+        }
+        if (pb.hasFinishPreparingTimeMs()) {
+            finishPreparingTimeMs = pb.getFinishPreparingTimeMs();
+        }
+        if (pb.hasEndTimeMs()) {
+            endTimeMs = pb.getEndTimeMs();
+        }
+        if (pb.hasNumRowsNormal()) {
+            numRowsNormal = pb.getNumRowsNormal();
+        }
+        if (pb.hasNumRowsAbnormal()) {
+            numRowsAbnormal = pb.getNumRowsAbnormal();
+        }
+        if (pb.hasNumRowsUnselected()) {
+            numRowsUnselected = pb.getNumRowsUnselected();
+        }
+        if (pb.hasNumLoadBytesTotal()) {
+            numLoadBytesTotal = pb.getNumLoadBytesTotal();
+        }
     }
 }

@@ -1,0 +1,139 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/catalog.proto";
+import "persist/colocate.proto";
+import "persist/common.proto";
+import "persist/function.proto";
+import "persist/partition.proto";
+import "persist/table.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "BackupMetaProto";
+
+message PartitionNamesPB {
+  StringListPB partition_names = 1;
+  optional bool is_temp = 2;
+}
+
+message TableRefPersistPB {
+  TableNamePB name = 1;
+  PartitionNamesPB partition_names = 2;
+  StringListPB aliases = 3;
+}
+
+message BackupTabletInfoPB {
+  optional int64 id = 1;
+}
+
+message BackupIndexInfoPB {
+  optional string name = 1;
+  optional int64 id = 2;
+  optional int32 schema_hash = 3;
+  BackupTabletListPB tablets = 4;
+}
+
+message BackupPhysicalPartitionInfoPB {
+  optional int64 id = 1;
+  optional int64 version = 2;
+  BackupIndexMapPB indexes = 3;
+}
+
+message BackupPartitionInfoPB {
+  optional string name = 1;
+  optional int64 id = 2;
+  optional int64 version = 3;
+  BackupIndexMapPB indexes = 4;
+  BackupPhysicalPartitionMapPB sub_partitions = 5;
+}
+
+message BackupTableInfoPB {
+  optional string name = 1;
+  optional int64 id = 2;
+  optional int64 auto_increment_id = 3;
+  BackupPartitionMapPB partitions = 4;
+}
+
+message BackupJobInfoPB {
+  optional string name = 1;
+  optional string db_name = 2;
+  optional int64 db_id = 3;
+  optional int64 backup_time = 4;
+  optional int32 cluster_id = 5;
+  optional int64 finish_time = 6;
+  optional string ttl = 7;
+  optional int64 expire_time = 8;
+  BackupTableMapPB tables = 9;
+  optional int32 meta_version = 10;
+  optional int32 starrocks_meta_version = 11;
+  StringMapPB tbl_alias = 12;
+}
+
+message BackupTabletListPB {
+  repeated BackupTabletInfoPB values = 1;
+}
+
+message BackupIndexMapPB {
+  map<string, BackupIndexInfoPB> values = 1;
+}
+
+message BackupPhysicalPartitionMapPB {
+  map<int64, BackupPhysicalPartitionInfoPB> values = 1;
+}
+
+message BackupPartitionMapPB {
+  map<string, BackupPartitionInfoPB> values = 1;
+}
+
+message BackupTableMapPB {
+  map<string, BackupTableInfoPB> values = 1;
+}
+
+message BackupTablePB {
+  TablePB table = 1;
+  repeated PartitionPB partitions = 2;
+  repeated PartitionPB temp_partitions = 3;
+}
+
+message BackupFunctionListPB {
+  repeated FunctionPB values = 1;
+}
+
+message BackupCatalogListPB {
+  repeated CatalogPB values = 1;
+}
+
+message BackupTableListPB {
+  repeated BackupTablePB values = 1;
+}
+
+message BackupTableRefListPB {
+  repeated TableRefPersistPB values = 1;
+}
+
+message BackupColocateListPB {
+  repeated ColocatePersistInfoPB values = 1;
+}
+
+message BackupMetaPB {
+  // Restore can rename a table object while retaining its original lookup key.
+  map<string, BackupTablePB> tables = 1;
+  BackupFunctionListPB functions = 2;
+  BackupCatalogListPB catalogs = 3;
+}

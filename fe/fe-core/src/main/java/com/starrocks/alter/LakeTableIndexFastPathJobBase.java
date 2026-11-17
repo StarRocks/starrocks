@@ -30,6 +30,8 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.LakeTableIndexFastPathJobCorePB;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
@@ -1034,4 +1036,27 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     // Per-column is_bf_column is no longer a first-class Column attribute;
     // bloom-filter columns are tracked at the OlapTable level via bfColumns,
     // so add/drop subclasses do not need a shared helper here today.
+
+    /** Image v3 form of the fields of this layer, embedded by every subclass. */
+    protected LakeTableIndexFastPathJobCorePB toLakeTableIndexFastPathJobCoreProto() {
+        LakeTableIndexFastPathJobCorePB.Builder builder = LakeTableIndexFastPathJobCorePB.newBuilder()
+                .setWatershedTxnId(watershedTxnId)
+                .setCommitGtid(commitGtid)
+                .putAllPartitionToTablets(AlterJobProtos.toInt64ListProtos(partitionToTablets))
+                .putAllTabletToIndexMetaId(ProtoMaps.withoutNullValues(tabletToIndexMetaId))
+                .putAllCommitVersionMap(ProtoMaps.withoutNullValues(commitVersionMap));
+        if (historySchema != null) {
+            builder.setHistorySchema(historySchema.toProto());
+        }
+        return builder.build();
+    }
+
+    protected void fillFromLakeTableIndexFastPathJobCoreProto(LakeTableIndexFastPathJobCorePB pb) {
+        watershedTxnId = pb.getWatershedTxnId();
+        commitGtid = pb.getCommitGtid();
+        partitionToTablets = AlterJobProtos.int64ListsFromProto(pb.getPartitionToTabletsMap());
+        tabletToIndexMetaId = new HashMap<>(pb.getTabletToIndexMetaIdMap());
+        commitVersionMap = new HashMap<>(pb.getCommitVersionMapMap());
+        historySchema = pb.hasHistorySchema() ? OlapTableHistorySchema.fromProto(pb.getHistorySchema()) : null;
+    }
 }

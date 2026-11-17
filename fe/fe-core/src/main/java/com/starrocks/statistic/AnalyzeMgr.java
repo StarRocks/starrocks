@@ -35,11 +35,25 @@ import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.image.ImageFormatException;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.AnalyzeJobPB;
+import com.starrocks.persist.proto.AnalyzeMgrPB;
+import com.starrocks.persist.proto.AnalyzeStatusPB;
+import com.starrocks.persist.proto.BasicStatsMetaPB;
+import com.starrocks.persist.proto.ExternalBasicStatsMetaPB;
+import com.starrocks.persist.proto.ExternalHistogramStatsMetaPB;
+import com.starrocks.persist.proto.HistogramStatsMetaPB;
+import com.starrocks.persist.proto.MultiColumnStatsMetaPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -1516,6 +1530,118 @@ public class AnalyzeMgr implements Writable {
         @Override
         public int hashCode() {
             return java.util.Objects.hash(tableId, columnIds, statisticsTypes);
+        }
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        List<AnalyzeStatus> analyzeStatuses = getAnalyzeStatusMap().values().stream().distinct().collect(Collectors.toList());
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.ANALYZE_JOB)) {
+            writer.writeManager(AnalyzeMgrPB.getDefaultInstance());
+            for (AnalyzeJob entry : analyzeJobMap.values()) {
+                writer.writeEntry(entry.toProto());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.ANALYZE_STATUS)) {
+            for (AnalyzeStatus entry : analyzeStatuses) {
+                writer.writeEntry(entry.toProto());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.ANALYZE_BASIC_STATS)) {
+            for (BasicStatsMeta entry : basicStatsMetaMap.values()) {
+                writer.writeEntry(entry.toProto());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.ANALYZE_HISTOGRAM_STATS)) {
+            for (HistogramStatsMeta entry : histogramStatsMetaMap.values()) {
+                writer.writeEntry(entry.toProto());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.ANALYZE_EXTERNAL_BASIC_STATS)) {
+            for (ExternalBasicStatsMeta entry : externalBasicStatsMetaMap.values()) {
+                writer.writeEntry(entry.toProto());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.ANALYZE_EXTERNAL_HISTOGRAM_STATS)) {
+            for (ExternalHistogramStatsMeta entry : externalHistogramStatsMetaMap.values()) {
+                writer.writeEntry(entry.toProto());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.ANALYZE_MULTI_COLUMN_STATS)) {
+            for (MultiColumnStatsMeta entry : multiColumnStatsMetaMap.values()) {
+                writer.writeEntry(entry.toProto());
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(
+                Pair.create(SectionId.ANALYZE_JOB, this::loadAnalyzeJobSection),
+                Pair.create(SectionId.ANALYZE_STATUS, this::loadAnalyzeStatusSection),
+                Pair.create(SectionId.ANALYZE_BASIC_STATS, this::loadBasicStatsMetaSection),
+                Pair.create(SectionId.ANALYZE_HISTOGRAM_STATS, this::loadHistogramStatsMetaSection),
+                Pair.create(SectionId.ANALYZE_EXTERNAL_BASIC_STATS, this::loadExternalBasicStatsMetaSection),
+                Pair.create(SectionId.ANALYZE_EXTERNAL_HISTOGRAM_STATS, this::loadExternalHistogramStatsMetaSection),
+                Pair.create(SectionId.ANALYZE_MULTI_COLUMN_STATS, this::loadMultiColumnStatsMetaSection));
+    }
+
+    private void loadAnalyzeJobSection(SectionReader reader) throws IOException {
+        reader.readManager(AnalyzeMgrPB.parser());
+        try {
+            reader.readEntries(AnalyzeJobPB.parser(), pb -> replayAddAnalyzeJob(AnalyzeJob.fromProto(pb)));
+        } catch (IllegalArgumentException | IllegalStateException | NullPointerException e) {
+            throw new ImageFormatException("invalid " + reader.id().getName() + " entry", e);
+        }
+    }
+
+    private void loadAnalyzeStatusSection(SectionReader reader) throws IOException {
+        try {
+            reader.readEntries(AnalyzeStatusPB.parser(), pb -> replayAddAnalyzeStatus(AnalyzeStatus.fromProto(pb)));
+        } catch (IllegalArgumentException | IllegalStateException | NullPointerException e) {
+            throw new ImageFormatException("invalid " + reader.id().getName() + " entry", e);
+        }
+    }
+
+    private void loadBasicStatsMetaSection(SectionReader reader) throws IOException {
+        try {
+            reader.readEntries(BasicStatsMetaPB.parser(), pb -> replayAddBasicStatsMeta(BasicStatsMeta.fromProto(pb)));
+        } catch (IllegalArgumentException | IllegalStateException | NullPointerException e) {
+            throw new ImageFormatException("invalid " + reader.id().getName() + " entry", e);
+        }
+    }
+
+    private void loadHistogramStatsMetaSection(SectionReader reader) throws IOException {
+        try {
+            reader.readEntries(HistogramStatsMetaPB.parser(),
+                    pb -> replayAddHistogramStatsMeta(HistogramStatsMeta.fromProto(pb)));
+        } catch (IllegalArgumentException | IllegalStateException | NullPointerException e) {
+            throw new ImageFormatException("invalid " + reader.id().getName() + " entry", e);
+        }
+    }
+
+    private void loadExternalBasicStatsMetaSection(SectionReader reader) throws IOException {
+        try {
+            reader.readEntries(ExternalBasicStatsMetaPB.parser(),
+                    pb -> replayAddExternalBasicStatsMeta(ExternalBasicStatsMeta.fromProto(pb)));
+        } catch (IllegalArgumentException | IllegalStateException | NullPointerException e) {
+            throw new ImageFormatException("invalid " + reader.id().getName() + " entry", e);
+        }
+    }
+
+    private void loadExternalHistogramStatsMetaSection(SectionReader reader) throws IOException {
+        try {
+            reader.readEntries(ExternalHistogramStatsMetaPB.parser(),
+                    pb -> replayAddExternalHistogramStatsMeta(ExternalHistogramStatsMeta.fromProto(pb)));
+        } catch (IllegalArgumentException | IllegalStateException | NullPointerException e) {
+            throw new ImageFormatException("invalid " + reader.id().getName() + " entry", e);
+        }
+    }
+
+    private void loadMultiColumnStatsMetaSection(SectionReader reader) throws IOException {
+        try {
+            reader.readEntries(MultiColumnStatsMetaPB.parser(),
+                    pb -> replayAddMultiColumnStatsMeta(MultiColumnStatsMeta.fromProto(pb)));
+        } catch (IllegalArgumentException | IllegalStateException | NullPointerException e) {
+            throw new ImageFormatException("invalid " + reader.id().getName() + " entry", e);
         }
     }
 }

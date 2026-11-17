@@ -1,0 +1,39 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "TransactionTypesProto";
+
+enum LoadJobSourceTypePB {
+  LOAD_JOB_SOURCE_TYPE_UNSPECIFIED = 0;
+  LOAD_JOB_SOURCE_TYPE_FRONTEND = 1;
+  LOAD_JOB_SOURCE_TYPE_BACKEND_STREAMING = 2;
+  LOAD_JOB_SOURCE_TYPE_INSERT_STREAMING = 3;
+  LOAD_JOB_SOURCE_TYPE_ROUTINE_LOAD_TASK = 4;
+  LOAD_JOB_SOURCE_TYPE_BATCH_LOAD_JOB = 5;
+  LOAD_JOB_SOURCE_TYPE_DELETE = 6;
+  LOAD_JOB_SOURCE_TYPE_LAKE_COMPACTION = 7;
+  LOAD_JOB_SOURCE_TYPE_FRONTEND_STREAMING = 8;
+  LOAD_JOB_SOURCE_TYPE_MV_REFRESH = 9;
+  LOAD_JOB_SOURCE_TYPE_REPLICATION = 10;
+  LOAD_JOB_SOURCE_TYPE_BYPASS_WRITE = 11;
+  LOAD_JOB_SOURCE_TYPE_MULTI_STATEMENT_STREAMING = 12;
+  LOAD_JOB_SOURCE_TYPE_SHADOW_REWRITE = 13;
+}

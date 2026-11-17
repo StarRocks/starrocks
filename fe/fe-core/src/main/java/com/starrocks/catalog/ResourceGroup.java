@@ -17,6 +17,10 @@ package com.starrocks.catalog;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.proto.ResourceGroupClassifiersPB;
+import com.starrocks.persist.proto.ResourceGroupPB;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -600,4 +604,128 @@ public class ResourceGroup {
         return minCoreNum;
     }
 
+
+    public ResourceGroupPB toProto() {
+        ResourceGroupPB.Builder builder = ResourceGroupPB.newBuilder();
+        if (name != null) {
+            builder.setName(name);
+        }
+        builder.setId(id);
+        if (cpuWeight != null) {
+            builder.setCpuWeight(cpuWeight);
+        }
+        if (cpuWeightPercent != null) {
+            builder.setCpuWeightPercent(cpuWeightPercent);
+        }
+        if (exclusiveCpuCores != null) {
+            builder.setExclusiveCpuCores(exclusiveCpuCores);
+        }
+        if (exclusiveCpuPercent != null) {
+            builder.setExclusiveCpuPercent(exclusiveCpuPercent);
+        }
+        if (maxCpuCores != null) {
+            builder.setMaxCpuCores(maxCpuCores);
+        }
+        if (memLimit != null) {
+            builder.setMemLimit(memLimit);
+        }
+        if (memPool != null) {
+            builder.setMemPool(memPool);
+        }
+        if (bigQueryMemLimit != null) {
+            builder.setBigQueryMemLimit(bigQueryMemLimit);
+        }
+        if (bigQueryScanRowsLimit != null) {
+            builder.setBigQueryScanRowsLimit(bigQueryScanRowsLimit);
+        }
+        if (bigQueryCpuSecondLimit != null) {
+            builder.setBigQueryCpuSecondLimit(bigQueryCpuSecondLimit);
+        }
+        if (concurrencyLimit != null) {
+            builder.setConcurrencyLimit(concurrencyLimit);
+        }
+        if (spillMemLimitThreshold != null) {
+            builder.setSpillMemLimitThreshold(spillMemLimitThreshold);
+        }
+        if (memUsedPctLimit != null) {
+            builder.setMemUsedPctLimit(memUsedPctLimit);
+        }
+        if (resourceGroupType != null) {
+            builder.setResourceGroupType(ProtoEnums.toProto(resourceGroupType, ResourceGroupPB.Type.class, ""));
+        }
+        builder.setVersion(version);
+        if (warehouses != null) {
+            builder.setWarehouses(ProtoLists.stringList(warehouses));
+        }
+        if (classifiers != null) {
+            builder.setClassifiers(ResourceGroupClassifiersPB.newBuilder().addAllValues(classifiers.stream()
+                    .map(ResourceGroupClassifier::toProto).collect(Collectors.toList())));
+        }
+        return builder.build();
+    }
+
+    private ResourceGroup(ResourceGroupPB pb) {
+        if (pb.hasName()) {
+            name = pb.getName();
+        }
+        if (pb.hasId()) {
+            id = pb.getId();
+        }
+        if (pb.hasCpuWeight()) {
+            cpuWeight = pb.getCpuWeight();
+        }
+        if (pb.hasCpuWeightPercent()) {
+            cpuWeightPercent = pb.getCpuWeightPercent();
+        }
+        if (pb.hasExclusiveCpuCores()) {
+            exclusiveCpuCores = pb.getExclusiveCpuCores();
+        }
+        if (pb.hasExclusiveCpuPercent()) {
+            exclusiveCpuPercent = pb.getExclusiveCpuPercent();
+        }
+        if (pb.hasMaxCpuCores()) {
+            maxCpuCores = pb.getMaxCpuCores();
+        }
+        if (pb.hasMemLimit()) {
+            memLimit = pb.getMemLimit();
+        }
+        if (pb.hasMemPool()) {
+            memPool = pb.getMemPool();
+        }
+        if (pb.hasBigQueryMemLimit()) {
+            bigQueryMemLimit = pb.getBigQueryMemLimit();
+        }
+        if (pb.hasBigQueryScanRowsLimit()) {
+            bigQueryScanRowsLimit = pb.getBigQueryScanRowsLimit();
+        }
+        if (pb.hasBigQueryCpuSecondLimit()) {
+            bigQueryCpuSecondLimit = pb.getBigQueryCpuSecondLimit();
+        }
+        if (pb.hasConcurrencyLimit()) {
+            concurrencyLimit = pb.getConcurrencyLimit();
+        }
+        if (pb.hasSpillMemLimitThreshold()) {
+            spillMemLimitThreshold = pb.getSpillMemLimitThreshold();
+        }
+        if (pb.hasMemUsedPctLimit()) {
+            memUsedPctLimit = pb.getMemUsedPctLimit();
+        }
+        if (pb.hasResourceGroupType()) {
+            resourceGroupType = ProtoEnums.fromProto(pb.getResourceGroupType(), TWorkGroupType.class, "");
+        }
+        if (pb.hasVersion()) {
+            version = pb.getVersion();
+        }
+        if (pb.hasWarehouses()) {
+            warehouses = ProtoLists.toStrings(pb.getWarehouses());
+        }
+        if (pb.hasClassifiers()) {
+            classifiers = pb.getClassifiers().getValuesList().stream()
+                    .map(ResourceGroupClassifier::fromProto).collect(Collectors.toList());
+        }
+    }
+
+    public static ResourceGroup fromProto(ResourceGroupPB pb) {
+        return new ResourceGroup(pb);
+    }
 }

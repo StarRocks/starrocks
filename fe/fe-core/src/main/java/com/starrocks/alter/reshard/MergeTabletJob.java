@@ -42,6 +42,9 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
+import com.starrocks.persist.proto.MergeTabletJobPB;
+import com.starrocks.persist.proto.TabletReshardJobCorePB;
+import com.starrocks.persist.proto.TabletReshardJobPB;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
@@ -1049,5 +1052,27 @@ public class MergeTabletJob extends TabletReshardJob {
                     + "re-aligns it.", crossingTabletId, crossingRange, grpId, tableId);
             colocateTableIndex.markAllGroupsWithSameColocateGroupIdUnstable(grpId, true);
         }
+    }
+
+    @Override
+    public TabletReshardJobPB toProto() {
+        MergeTabletJobPB.Builder builder = MergeTabletJobPB.newBuilder().setDbId(dbId).setTableId(tableId)
+                .setTransactionId(transactionId).setGtid(gtid).setEndTransactionId(endTransactionId);
+        if (reshardingPhysicalPartitions != null) {
+            builder.setReshardingPhysicalPartitions(ReshardingPhysicalPartition.toProtoMap(reshardingPhysicalPartitions));
+        }
+        return TabletReshardJobPB.newBuilder().setKind(TabletReshardJobPB.Kind.MERGE_TABLET)
+                .setCore(toCoreProto()).setMergeTablet(builder).build();
+    }
+
+    protected MergeTabletJob(TabletReshardJobCorePB core, MergeTabletJobPB pb) {
+        super(core, JobType.MERGE_TABLET);
+        dbId = pb.getDbId();
+        tableId = pb.getTableId();
+        reshardingPhysicalPartitions = pb.hasReshardingPhysicalPartitions()
+                ? ReshardingPhysicalPartition.fromProtoMap(pb.getReshardingPhysicalPartitions()) : null;
+        transactionId = pb.getTransactionId();
+        gtid = pb.getGtid();
+        endTransactionId = pb.getEndTransactionId();
     }
 }

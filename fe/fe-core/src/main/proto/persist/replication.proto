@@ -1,0 +1,122 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/table.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "ReplicationProto";
+
+message ReplicationJobPB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    REPLICATION = 1;
+    LAKE_REPLICATION = 2;
+  }
+  Kind kind = 1;
+  oneof instance {
+    ReplicationJobCorePB replication = 11;
+    LakeReplicationJobPB lake_replication = 12;
+  }
+}
+
+message ReplicationJobCorePB {
+  optional string job_id = 1;
+  int64 created_time_ms = 2;
+  int64 finished_time_ms = 3;
+  optional string src_token = 4;
+  int64 database_id = 5;
+  int64 table_id = 6;
+  optional TablePB.Kind table_type = 7;
+  optional TablePB.Kind src_table_type = 8;
+  int64 replication_data_size = 9;
+  int64 replication_replica_count = 10;
+  ReplicationPartitionMapPB partition_infos = 11;
+  int64 transaction_id = 12;
+  // ReplicationJobState is an extensible numeric class, not a Java enum.
+  optional int32 state_id = 13;
+}
+
+message LakeReplicationJobPB {
+  ReplicationJobCorePB core = 1;
+  int64 virtual_tablet_id = 2;
+  int64 src_database_id = 3;
+  int64 src_table_id = 4;
+  optional bytes src_table_file_path_info = 5;
+}
+
+message ReplicationPartitionMapPB {
+  map<int64, ReplicationPartitionPB> values = 1;
+}
+
+message ReplicationPartitionPB {
+  int64 partition_id = 1;
+  int64 version = 2;
+  int64 data_version = 3;
+  int64 src_version = 4;
+  int64 src_version_epoch = 5;
+  ReplicationIndexMapPB index_infos = 6;
+  int64 src_partition_id = 7;
+}
+
+message ReplicationIndexMapPB {
+  map<int64, ReplicationIndexPB> values = 1;
+}
+
+message ReplicationIndexPB {
+  int64 index_id = 1;
+  int32 schema_hash = 2;
+  int32 src_schema_hash = 3;
+  ReplicationTabletMapPB tablet_infos = 4;
+}
+
+message ReplicationTabletMapPB {
+  map<int64, ReplicationTabletPB> values = 1;
+}
+
+message ReplicationTabletPB {
+  int64 tablet_id = 1;
+  int64 src_tablet_id = 2;
+  ReplicationReplicaMapPB replica_infos = 3;
+}
+
+message ReplicationReplicaMapPB {
+  map<int64, ReplicationReplicaPB> values = 1;
+}
+
+message ReplicationReplicaPB {
+  int64 backend_id = 1;
+  ReplicationBackendListPB src_backend_infos = 2;
+  ReplicationSnapshotPB src_snapshot_info = 3;
+}
+
+message ReplicationBackendListPB {
+  repeated ReplicationBackendPB values = 1;
+}
+
+message ReplicationBackendPB {
+  optional string host = 1;
+  int32 be_port = 2;
+  int32 http_port = 3;
+}
+
+message ReplicationSnapshotPB {
+  ReplicationBackendPB backend_info = 1;
+  optional string snapshot_path = 2;
+  bool incremental_snapshot = 3;
+}

@@ -20,6 +20,11 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.proto.FunctionPB;
+import com.starrocks.persist.proto.StringListPB;
+import com.starrocks.persist.proto.TableFunctionPB;
+import com.starrocks.persist.proto.TypeListPB;
+import com.starrocks.persist.proto.TypePB;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
@@ -35,9 +40,11 @@ import com.starrocks.type.InvalidType;
 import com.starrocks.type.JsonType;
 import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeProtoConverter;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.type.VarcharType;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -100,6 +107,39 @@ public class TableFunction extends Function {
         defaultColumnNames = other.defaultColumnNames;
         tableFnReturnTypes = other.tableFnReturnTypes;
         symbolName = other.symbolName;
+    }
+
+    @Override
+    protected void fillProtoVariant(FunctionPB.Builder builder) {
+        TableFunctionPB.Builder table = TableFunctionPB.newBuilder();
+        if (defaultColumnNames != null) {
+            table.setDefaultColumnNames(StringListPB.newBuilder().addAllValues(defaultColumnNames));
+        }
+        if (tableFnReturnTypes != null) {
+            TypeListPB.Builder types = TypeListPB.newBuilder();
+            for (Type type : tableFnReturnTypes) {
+                types.addValues(TypeProtoConverter.toProto(type));
+            }
+            table.setTableFnReturnTypes(types);
+        }
+        if (symbolName != null) {
+            table.setSymbolName(symbolName);
+        }
+        builder.setKind(FunctionPB.Kind.TABLE).setTable(table);
+    }
+
+    void fillFromVariantProto(TableFunctionPB pb) {
+        defaultColumnNames = pb.hasDefaultColumnNames()
+                ? new ArrayList<>(pb.getDefaultColumnNames().getValuesList()) : null;
+        if (pb.hasTableFnReturnTypes()) {
+            tableFnReturnTypes = new ArrayList<>(pb.getTableFnReturnTypes().getValuesCount());
+            for (TypePB type : pb.getTableFnReturnTypes().getValuesList()) {
+                tableFnReturnTypes.add(TypeProtoConverter.fromProto(type));
+            }
+        } else {
+            tableFnReturnTypes = null;
+        }
+        symbolName = pb.hasSymbolName() ? pb.getSymbolName() : null;
     }
 
     public static void initBuiltins(FunctionSet functionSet) {

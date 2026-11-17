@@ -44,6 +44,9 @@ import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
 import com.starrocks.connector.iceberg.procedure.RollbackToTimestampProcedure;
 import com.starrocks.connector.iceberg.procedure.SetCurrentSnapshotProcedure;
 import com.starrocks.persist.ColumnIdExpr;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.IcebergTablePB;
+import com.starrocks.persist.proto.TablePB;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
@@ -146,6 +149,37 @@ public class IcebergTable extends Table {
 
     public IcebergTable() {
         super(TableType.ICEBERG);
+    }
+
+    @Override
+    protected void fillProtoVariant(TablePB.Builder builder) {
+        IcebergTablePB.Builder iceberg = IcebergTablePB.newBuilder();
+        if (catalogDBName != null) {
+            iceberg.setCatalogDbName(catalogDBName);
+        }
+        if (catalogTableName != null) {
+            iceberg.setCatalogTableName(catalogTableName);
+        }
+        if (resourceName != null) {
+            iceberg.setResourceName(resourceName);
+        }
+        if (icebergProperties != null) {
+            iceberg.putAllIcebergProperties(ProtoMaps.withoutNullValues(icebergProperties));
+        }
+        builder.setIceberg(iceberg);
+    }
+
+    void fillFromVariantProto(IcebergTablePB pb) {
+        if (pb.hasCatalogDbName()) {
+            catalogDBName = pb.getCatalogDbName();
+        }
+        if (pb.hasCatalogTableName()) {
+            catalogTableName = pb.getCatalogTableName();
+        }
+        if (pb.hasResourceName()) {
+            resourceName = pb.getResourceName();
+        }
+        icebergProperties = Maps.newHashMap(pb.getIcebergPropertiesMap());
     }
 
     public IcebergTable(long id, String srTableName, String catalogName, String resourceName, String catalogDBName,

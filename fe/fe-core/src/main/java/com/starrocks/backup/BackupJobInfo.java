@@ -50,6 +50,18 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.proto.BackupIndexInfoPB;
+import com.starrocks.persist.proto.BackupIndexMapPB;
+import com.starrocks.persist.proto.BackupJobInfoPB;
+import com.starrocks.persist.proto.BackupPartitionInfoPB;
+import com.starrocks.persist.proto.BackupPartitionMapPB;
+import com.starrocks.persist.proto.BackupPhysicalPartitionInfoPB;
+import com.starrocks.persist.proto.BackupPhysicalPartitionMapPB;
+import com.starrocks.persist.proto.BackupTableInfoPB;
+import com.starrocks.persist.proto.BackupTableMapPB;
+import com.starrocks.persist.proto.BackupTabletInfoPB;
+import com.starrocks.persist.proto.BackupTabletListPB;
+import com.starrocks.persist.proto.StringMapPB;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -64,7 +76,9 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -190,6 +204,46 @@ public class BackupJobInfo implements Writable {
             sb.append(", partitions: [").append(Joiner.on(", ").join(partitions.keySet())).append("]");
             return sb.toString();
         }
+
+        public BackupTableInfoPB toProto() {
+            BackupTableInfoPB.Builder builder = BackupTableInfoPB.newBuilder();
+            if (name != null) {
+                builder.setName(name);
+            }
+            builder.setId(id);
+            if (autoIncrementId != null) {
+                builder.setAutoIncrementId(autoIncrementId);
+            }
+            if (partitions != null) {
+                builder.setPartitions(BackupPartitionMapPB.newBuilder().putAllValues(partitions.entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().toProto()))).build());
+            }
+            return builder.build();
+        }
+
+        public static BackupTableInfo fromProto(BackupTableInfoPB pb) {
+            BackupTableInfo value = new BackupTableInfo();
+            if (pb.hasName()) {
+                value.name = pb.getName();
+            } else {
+                value.name = null;
+            }
+            if (pb.hasId()) {
+                value.id = pb.getId();
+            }
+            if (pb.hasAutoIncrementId()) {
+                value.autoIncrementId = pb.getAutoIncrementId();
+            } else {
+                value.autoIncrementId = null;
+            }
+            if (pb.hasPartitions()) {
+                value.partitions = pb.getPartitions().getValuesMap().entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, e -> BackupPartitionInfo.fromProto(e.getValue())));
+            } else {
+                value.partitions = null;
+            }
+            return value;
+        }
     }
 
     public static class BackupPartitionInfo {
@@ -208,6 +262,52 @@ public class BackupJobInfo implements Writable {
         public BackupIndexInfo getIdx(String idxName) {
             return indexes.get(idxName);
         }
+
+        public BackupPartitionInfoPB toProto() {
+            BackupPartitionInfoPB.Builder builder = BackupPartitionInfoPB.newBuilder();
+            if (name != null) {
+                builder.setName(name);
+            }
+            builder.setId(id);
+            builder.setVersion(version);
+            if (indexes != null) {
+                builder.setIndexes(BackupIndexMapPB.newBuilder().putAllValues(indexes.entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().toProto()))).build());
+            }
+            if (subPartitions != null) {
+                builder.setSubPartitions(BackupPhysicalPartitionMapPB.newBuilder().putAllValues(subPartitions.entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().toProto()))).build());
+            }
+            return builder.build();
+        }
+
+        public static BackupPartitionInfo fromProto(BackupPartitionInfoPB pb) {
+            BackupPartitionInfo value = new BackupPartitionInfo();
+            if (pb.hasName()) {
+                value.name = pb.getName();
+            } else {
+                value.name = null;
+            }
+            if (pb.hasId()) {
+                value.id = pb.getId();
+            }
+            if (pb.hasVersion()) {
+                value.version = pb.getVersion();
+            }
+            if (pb.hasIndexes()) {
+                value.indexes = pb.getIndexes().getValuesMap().entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, e -> BackupIndexInfo.fromProto(e.getValue())));
+            } else {
+                value.indexes = null;
+            }
+            if (pb.hasSubPartitions()) {
+                value.subPartitions = pb.getSubPartitions().getValuesMap().entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, e -> BackupPhysicalPartitionInfo.fromProto(e.getValue())));
+            } else {
+                value.subPartitions = null;
+            }
+            return value;
+        }
     }
 
     public static class BackupPhysicalPartitionInfo {
@@ -220,6 +320,34 @@ public class BackupJobInfo implements Writable {
 
         public BackupIndexInfo getIdx(String idxName) {
             return indexes.get(idxName);
+        }
+
+        public BackupPhysicalPartitionInfoPB toProto() {
+            BackupPhysicalPartitionInfoPB.Builder builder = BackupPhysicalPartitionInfoPB.newBuilder();
+            builder.setId(id);
+            builder.setVersion(version);
+            if (indexes != null) {
+                builder.setIndexes(BackupIndexMapPB.newBuilder().putAllValues(indexes.entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().toProto()))).build());
+            }
+            return builder.build();
+        }
+
+        public static BackupPhysicalPartitionInfo fromProto(BackupPhysicalPartitionInfoPB pb) {
+            BackupPhysicalPartitionInfo value = new BackupPhysicalPartitionInfo();
+            if (pb.hasId()) {
+                value.id = pb.getId();
+            }
+            if (pb.hasVersion()) {
+                value.version = pb.getVersion();
+            }
+            if (pb.hasIndexes()) {
+                value.indexes = pb.getIndexes().getValuesMap().entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, e -> BackupIndexInfo.fromProto(e.getValue())));
+            } else {
+                value.indexes = null;
+            }
+            return value;
         }
     }
 
@@ -241,11 +369,61 @@ public class BackupJobInfo implements Writable {
             }
             return null;
         }
+
+        public BackupIndexInfoPB toProto() {
+            BackupIndexInfoPB.Builder builder = BackupIndexInfoPB.newBuilder();
+            if (name != null) {
+                builder.setName(name);
+            }
+            builder.setId(id);
+            builder.setSchemaHash(schemaHash);
+            if (tablets != null) {
+                builder.setTablets(BackupTabletListPB.newBuilder().addAllValues(tablets.stream()
+                        .map(BackupTabletInfo::toProto).collect(Collectors.toList())).build());
+            }
+            return builder.build();
+        }
+
+        public static BackupIndexInfo fromProto(BackupIndexInfoPB pb) {
+            BackupIndexInfo value = new BackupIndexInfo();
+            if (pb.hasName()) {
+                value.name = pb.getName();
+            } else {
+                value.name = null;
+            }
+            if (pb.hasId()) {
+                value.id = pb.getId();
+            }
+            if (pb.hasSchemaHash()) {
+                value.schemaHash = pb.getSchemaHash();
+            }
+            if (pb.hasTablets()) {
+                value.tablets = pb.getTablets().getValuesList().stream()
+                        .map(BackupTabletInfo::fromProto).collect(Collectors.toCollection(ArrayList::new));
+            } else {
+                value.tablets = null;
+            }
+            return value;
+        }
     }
 
     public static class BackupTabletInfo {
         @SerializedName(value = "id")
         public long id;
+
+        public BackupTabletInfoPB toProto() {
+            BackupTabletInfoPB.Builder builder = BackupTabletInfoPB.newBuilder();
+            builder.setId(id);
+            return builder.build();
+        }
+
+        public static BackupTabletInfo fromProto(BackupTabletInfoPB pb) {
+            BackupTabletInfo value = new BackupTabletInfo();
+            if (pb.hasId()) {
+                value.id = pb.getId();
+            }
+            return value;
+        }
     }
 
     // eg: __db_10001/__tbl_10002/__part_10003/__idx_10002/__10004
@@ -716,6 +894,98 @@ public class BackupJobInfo implements Writable {
     @Override
     public String toString() {
         return toJson(true).toString();
+    }
+
+    public BackupJobInfoPB toProto() {
+        BackupJobInfoPB.Builder builder = BackupJobInfoPB.newBuilder();
+        if (name != null) {
+            builder.setName(name);
+        }
+        if (dbName != null) {
+            builder.setDbName(dbName);
+        }
+        builder.setDbId(dbId);
+        builder.setBackupTime(backupTime);
+        if (clusterId != null) {
+            builder.setClusterId(clusterId);
+        }
+        if (finishTime != null) {
+            builder.setFinishTime(finishTime);
+        }
+        if (ttl != null) {
+            builder.setTtl(ttl);
+        }
+        if (expireTime != null) {
+            builder.setExpireTime(expireTime);
+        }
+        if (tables != null) {
+            builder.setTables(BackupTableMapPB.newBuilder().putAllValues(tables.entrySet().stream()
+                    .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().toProto()))).build());
+        }
+        builder.setMetaVersion(metaVersion);
+        builder.setStarrocksMetaVersion(starrocksMetaVersion);
+        if (tblAlias != null) {
+            builder.setTblAlias(StringMapPB.newBuilder().putAllValues(tblAlias).build());
+        }
+        return builder.build();
+    }
+
+    public static BackupJobInfo fromProto(BackupJobInfoPB pb) {
+        BackupJobInfo value = new BackupJobInfo();
+        if (pb.hasName()) {
+            value.name = pb.getName();
+        } else {
+            value.name = null;
+        }
+        if (pb.hasDbName()) {
+            value.dbName = pb.getDbName();
+        } else {
+            value.dbName = null;
+        }
+        if (pb.hasDbId()) {
+            value.dbId = pb.getDbId();
+        }
+        if (pb.hasBackupTime()) {
+            value.backupTime = pb.getBackupTime();
+        }
+        if (pb.hasClusterId()) {
+            value.clusterId = pb.getClusterId();
+        } else {
+            value.clusterId = null;
+        }
+        if (pb.hasFinishTime()) {
+            value.finishTime = pb.getFinishTime();
+        } else {
+            value.finishTime = null;
+        }
+        if (pb.hasTtl()) {
+            value.ttl = pb.getTtl();
+        } else {
+            value.ttl = null;
+        }
+        if (pb.hasExpireTime()) {
+            value.expireTime = pb.getExpireTime();
+        } else {
+            value.expireTime = null;
+        }
+        if (pb.hasTables()) {
+            value.tables = pb.getTables().getValuesMap().entrySet().stream()
+                    .collect(Collectors.toMap(Map.Entry::getKey, e -> BackupTableInfo.fromProto(e.getValue())));
+        } else {
+            value.tables = null;
+        }
+        if (pb.hasMetaVersion()) {
+            value.metaVersion = pb.getMetaVersion();
+        }
+        if (pb.hasStarrocksMetaVersion()) {
+            value.starrocksMetaVersion = pb.getStarrocksMetaVersion();
+        }
+        if (pb.hasTblAlias()) {
+            value.tblAlias = new HashMap<>(pb.getTblAlias().getValuesMap());
+        } else {
+            value.tblAlias = null;
+        }
+        return value;
     }
 }
 

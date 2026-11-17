@@ -1,0 +1,127 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/common.proto";
+import "persist/transaction_types.proto";
+import "persist/txn_commit_attachment.proto";
+import "persist/warehouse.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "TransactionProto";
+
+message QuantilesPB {
+  optional double avg = 1;
+  optional double p50 = 2;
+  optional double max = 3;
+}
+
+message PartitionCommitInfoPB {
+  optional int64 physical_partition_id = 1;
+  optional int64 version = 2;
+  optional int64 version_time = 3;
+  optional int64 data_version = 4;
+  optional int64 version_epoch = 5;
+  StringListPB invalid_dict_cache_columns = 6;
+  StringListPB valid_dict_cache_columns = 7;
+  Int64ListPB dict_collected_versions = 8;
+  QuantilesPB compaction_score = 9;
+  Int64ListPB dict_content_identities = 10;
+  optional bool is_double_write = 11;
+}
+
+message TableCommitInfoPB {
+  optional int64 table_id = 1;
+  repeated PartitionCommitInfoPB partition_commit_infos = 2;
+}
+
+message TransactionFinishStatePB {
+  Int64ListPB normal_replicas = 1;
+  Int64MapPB abnormal_replicas_with_version = 2;
+}
+
+message TransactionIdGeneratorPB {
+  optional int64 batch_end_id = 1;
+}
+
+message TxnCoordinatorPB {
+  enum TxnSourceType {
+    UNSPECIFIED = 0;
+    FE = 1;
+    BE = 2;
+  }
+  optional TxnSourceType source_type = 1;
+  optional string ip = 2;
+}
+
+message TransactionStatePB {
+  enum TransactionStatus {
+    UNSPECIFIED = 0;
+    UNKNOWN = 1;
+    PREPARE = 2;
+    COMMITTED = 3;
+    VISIBLE = 4;
+    ABORTED = 5;
+    PREPARED = 6;
+  }
+  optional int64 db_id = 1;
+  Int64ListPB table_id_list = 2;
+  optional int64 transaction_id = 3;
+  optional string label = 4;
+  repeated TableCommitInfoPB table_commit_infos = 5;
+  TxnCoordinatorPB txn_coordinator = 6;
+  optional TransactionStatus transaction_status = 7;
+  optional LoadJobSourceTypePB source_type = 8;
+  optional int64 prepare_time = 9;
+  optional int64 prepared_time = 10;
+  optional int64 commit_time = 11;
+  optional int64 finish_time = 12;
+  optional string reason = 13;
+  optional int64 global_transaction_id = 14;
+  optional bool new_finish = 15;
+  TransactionFinishStatePB finish_state = 16;
+  Int64ListPB error_replicas = 17;
+  Int64ListPB unknown_replicas = 18;
+  optional bool use_combined_txn_log = 19;
+  optional bool is_no_op_publish = 20;
+  optional string no_op_publish_reason = 21;
+  TransactionLoadIdsPB load_ids = 22;
+  optional int64 callback_id = 23;
+  Int64ListPB callback_id_list = 24;
+  optional int64 timeout_ms = 25;
+  optional int64 prepared_timeout_ms = 26;
+  TxnCommitAttachmentPB txn_commit_attachment = 27;
+  optional int64 warehouse_id = 28;
+  ComputeResourcePB compute_resource = 29;
+  repeated LoadedTableIndexesPB loaded_table_indexes = 30;
+}
+
+message GlobalTransactionMgrPB {
+  TransactionIdGeneratorPB id_generator = 1;
+}
+message TransactionLoadIdPB {
+  optional int64 hi = 1;
+  optional int64 lo = 2;
+}
+message TransactionLoadIdsPB {
+  repeated TransactionLoadIdPB values = 1;
+}
+message LoadedTableIndexesPB {
+  int64 table_id = 1;
+  map<int64, Int64ListPB> partition_indexes = 2;
+}

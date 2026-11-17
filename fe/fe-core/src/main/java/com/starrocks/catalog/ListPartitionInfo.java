@@ -25,6 +25,12 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.ListPartitionPersistInfo;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.ColumnPB;
+import com.starrocks.persist.proto.ListPartitionInfoPB;
+import com.starrocks.persist.proto.MultiValuesPB;
+import com.starrocks.persist.proto.PartitionInfoPB;
+import com.starrocks.persist.proto.StringListPB;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
@@ -805,5 +811,63 @@ public class ListPartitionInfo extends PartitionInfo {
         if (partitionColumnIds.size() <= 0) {
             partitionColumnIds = deprecatedColumns.stream().map(Column::getColumnId).collect(Collectors.toList());
         }
+    }
+
+    @Override
+    protected void fillProtoVariant(PartitionInfoPB.Builder builder) {
+        ListPartitionInfoPB.Builder list = ListPartitionInfoPB.newBuilder();
+        if (deprecatedColumns != null) {
+            for (Column column : deprecatedColumns) {
+                list.addPartitionColumns(column.toProto());
+            }
+        }
+        if (partitionColumnIds != null) {
+            for (ColumnId columnId : partitionColumnIds) {
+                list.addPartitionColumnIds(columnId.getId());
+            }
+        }
+        for (Map.Entry<Long, List<List<String>>> entry : ProtoMaps.withoutNullValues(idToMultiValues).entrySet()) {
+            MultiValuesPB.Builder multiValues = MultiValuesPB.newBuilder();
+            for (List<String> row : entry.getValue()) {
+                multiValues.addRows(StringListPB.newBuilder().addAllValues(row));
+            }
+            list.putIdToMultiValues(entry.getKey(), multiValues.build());
+        }
+        for (Map.Entry<Long, List<String>> entry : ProtoMaps.withoutNullValues(idToValues).entrySet()) {
+            list.putIdToValues(entry.getKey(), StringListPB.newBuilder().addAllValues(entry.getValue()).build());
+        }
+        list.putAllIdToTemp(ProtoMaps.withoutNullValues(idToIsTempPartition));
+        if (automaticPartition != null) {
+            list.setAutomaticPartition(automaticPartition);
+        }
+        builder.setKind(PartitionInfoPB.Kind.KIND_LIST).setList(list);
+    }
+
+    void fillFromVariantProto(ListPartitionInfoPB pb) {
+        deprecatedColumns = new ArrayList<>();
+        for (ColumnPB column : pb.getPartitionColumnsList()) {
+            deprecatedColumns.add(Column.fromProto(column));
+        }
+        partitionColumnIds = new ArrayList<>();
+        for (String columnId : pb.getPartitionColumnIdsList()) {
+            partitionColumnIds.add(ColumnId.create(columnId));
+        }
+        idToMultiValues = new HashMap<>();
+        for (Map.Entry<Long, MultiValuesPB> entry : pb.getIdToMultiValuesMap().entrySet()) {
+            List<List<String>> rows = new ArrayList<>(entry.getValue().getRowsCount());
+            for (StringListPB row : entry.getValue().getRowsList()) {
+                rows.add(new ArrayList<>(row.getValuesList()));
+            }
+            idToMultiValues.put(entry.getKey(), rows);
+        }
+        idToValues = new HashMap<>();
+        for (Map.Entry<Long, StringListPB> entry : pb.getIdToValuesMap().entrySet()) {
+            idToValues.put(entry.getKey(), new ArrayList<>(entry.getValue().getValuesList()));
+        }
+        idToIsTempPartition = new HashMap<>(pb.getIdToTempMap());
+        if (pb.hasAutomaticPartition()) {
+            automaticPartition = pb.getAutomaticPartition();
+        }
+        // The literal values are derived from the table columns by OlapTable once the table is assembled.
     }
 }

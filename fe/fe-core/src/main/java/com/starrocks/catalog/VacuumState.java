@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.VacuumStatePB;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -146,5 +147,27 @@ public class VacuumState {
         nextProposeStartVersion = 0;
         passStartVersion = 0;
         passStartIndexIds = new HashSet<>();
+    }
+
+    public static VacuumState fromProto(VacuumStatePB pb) {
+        VacuumState state = new VacuumState();
+        state.toDeleteLow = pb.getToDeleteLow();
+        state.toDeleteHigh = pb.getToDeleteHigh();
+        state.nextProposeStartVersion = pb.getNextProposeStartVersion();
+        state.passStartVersion = pb.getPassStartVersion();
+        state.passStartIndexIds = new HashSet<>(pb.getPassStartIndexIdsList());
+        state.minRetainedVersion = pb.getMinRetainedVersion();
+        return state;
+    }
+
+    public VacuumStatePB toProto() {
+        return VacuumStatePB.newBuilder()
+                .setToDeleteLow(toDeleteLow)
+                .setToDeleteHigh(toDeleteHigh)
+                .setNextProposeStartVersion(nextProposeStartVersion)
+                .setPassStartVersion(passStartVersion)
+                .addAllPassStartIndexIds(passStartIndexIds)
+                .setMinRetainedVersion(minRetainedVersion)
+                .build();
     }
 }

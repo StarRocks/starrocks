@@ -16,6 +16,7 @@
 package com.starrocks.authorization;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.ResourcePrivilegeObjectPB;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
@@ -126,5 +127,17 @@ public class ResourcePEntryObject implements PEntryObject {
         } else {
             return name;
         }
+    }
+
+    public ResourcePrivilegeObjectPB toProto() {
+        ResourcePrivilegeObjectPB.Builder builder = ResourcePrivilegeObjectPB.newBuilder();
+        if (name != null) {
+            builder.setName(name);
+        }
+        return builder.build();
+    }
+
+    public static ResourcePEntryObject fromProto(ResourcePrivilegeObjectPB pb) {
+        return new ResourcePEntryObject(pb.hasName() ? pb.getName() : null);
     }
 }

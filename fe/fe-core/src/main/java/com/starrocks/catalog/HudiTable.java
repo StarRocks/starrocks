@@ -28,6 +28,9 @@ import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hudi.HudiRemoteFileDesc;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.HudiTablePB;
+import com.starrocks.persist.proto.TablePB;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.CatalogMgr;
@@ -108,6 +111,45 @@ public class HudiTable extends Table {
 
     public HudiTable() {
         super(TableType.HUDI);
+    }
+
+    @Override
+    protected void fillProtoVariant(TablePB.Builder builder) {
+        HudiTablePB.Builder hudi = HudiTablePB.newBuilder();
+        if (hiveDbName != null) {
+            hudi.setHiveDbName(hiveDbName);
+        }
+        if (hiveTableName != null) {
+            hudi.setHiveTableName(hiveTableName);
+        }
+        if (resourceName != null) {
+            hudi.setResourceName(resourceName);
+        }
+        if (partColumnNames != null) {
+            hudi.addAllPartColumnNames(partColumnNames);
+        }
+        if (dataColumnNames != null) {
+            hudi.addAllDataColumnNames(dataColumnNames);
+        }
+        if (hudiProperties != null) {
+            hudi.putAllHudiProperties(ProtoMaps.withoutNullValues(hudiProperties));
+        }
+        builder.setHudi(hudi);
+    }
+
+    void fillFromVariantProto(HudiTablePB pb) {
+        if (pb.hasHiveDbName()) {
+            hiveDbName = pb.getHiveDbName();
+        }
+        if (pb.hasHiveTableName()) {
+            hiveTableName = pb.getHiveTableName();
+        }
+        if (pb.hasResourceName()) {
+            resourceName = pb.getResourceName();
+        }
+        partColumnNames = Lists.newArrayList(pb.getPartColumnNamesList());
+        dataColumnNames = Lists.newArrayList(pb.getDataColumnNamesList());
+        hudiProperties = Maps.newHashMap(pb.getHudiPropertiesMap());
     }
 
     public HudiTable(long id, String name, String catalogName, String hiveDbName, String hiveTableName,

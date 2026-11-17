@@ -25,6 +25,10 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.TabletReshardJobCorePB;
+import com.starrocks.persist.proto.TabletReshardJobPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LeaderLease;
 import com.starrocks.server.WarehouseManager;
@@ -93,7 +97,7 @@ public abstract class TabletReshardJob implements Writable {
     protected volatile JobState jobState = JobState.PENDING;
 
     @SerializedName(value = "createdTimeMs")
-    protected final long createdTimeMs = System.currentTimeMillis();
+    protected long createdTimeMs = System.currentTimeMillis();
     @SerializedName(value = "finishedTimeMs")
     protected long finishedTimeMs;
     @SerializedName(value = "stateStartedTimeMs")
@@ -614,5 +618,47 @@ public abstract class TabletReshardJob implements Writable {
             // goes on to FINISHED either way, so the stack trace is the only trace left.
             LOG.warn("Failed to clear placement preference for reshard job {}", jobId, e);
         }
+    }
+
+    public static TabletReshardJob fromProto(TabletReshardJobPB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        switch (pb.getKind()) {
+            case SPLIT_TABLET:
+                return new SplitTabletJob(pb.getCore(), pb.getSplitTablet());
+            case MERGE_TABLET:
+                return new MergeTabletJob(pb.getCore(), pb.getMergeTablet());
+            default:
+                throw new IllegalArgumentException("unknown tablet reshard job kind " + pb.getKind());
+        }
+    }
+
+    public TabletReshardJobPB toProto() {
+        throw new IllegalStateException("tablet reshard job class " + getClass().getName() + " cannot be persisted");
+    }
+
+    protected TabletReshardJobCorePB toCoreProto() {
+        TabletReshardJobCorePB.Builder builder = TabletReshardJobCorePB.newBuilder().setJobId(jobId)
+                .setCreatedTimeMs(createdTimeMs).setFinishedTimeMs(finishedTimeMs).setStateStartedTimeMs(stateStartedTimeMs);
+        if (jobState != null) {
+            builder.setJobState(ProtoEnums.toProto(jobState, TabletReshardJobCorePB.JobState.class));
+        }
+        if (errorMessage != null) {
+            builder.setErrorMessage(errorMessage);
+        }
+        if (warehouseId != null) {
+            builder.setWarehouseId(warehouseId);
+        }
+        return builder.build();
+    }
+
+    protected TabletReshardJob(TabletReshardJobCorePB pb, JobType type) {
+        jobId = pb.getJobId();
+        jobType = type;
+        jobState = pb.hasJobState() ? ProtoEnums.fromProto(pb.getJobState(), JobState.class) : null;
+        createdTimeMs = pb.getCreatedTimeMs();
+        finishedTimeMs = pb.getFinishedTimeMs();
+        stateStartedTimeMs = pb.getStateStartedTimeMs();
+        errorMessage = pb.hasErrorMessage() ? pb.getErrorMessage() : null;
+        warehouseId = pb.hasWarehouseId() ? pb.getWarehouseId() : null;
     }
 }

@@ -37,6 +37,8 @@ package com.starrocks.catalog;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
+import com.starrocks.persist.proto.MysqlTablePB;
+import com.starrocks.persist.proto.TablePB;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMySQLTable;
@@ -80,6 +82,57 @@ public class MysqlTable extends Table {
 
     public MysqlTable() {
         super(TableType.MYSQL);
+    }
+
+    @Override
+    protected void fillProtoVariant(TablePB.Builder builder) {
+        MysqlTablePB.Builder mysql = MysqlTablePB.newBuilder();
+        if (odbcCatalogResourceName != null) {
+            mysql.setOdbcCatalogResourceName(odbcCatalogResourceName);
+        }
+        if (host != null) {
+            mysql.setHost(host);
+        }
+        if (port != null) {
+            mysql.setPort(port);
+        }
+        if (userName != null) {
+            mysql.setUserName(userName);
+        }
+        if (passwd != null) {
+            mysql.setPasswd(passwd);
+        }
+        if (mysqlDatabaseName != null) {
+            mysql.setMysqlDatabaseName(mysqlDatabaseName);
+        }
+        if (mysqlTableName != null) {
+            mysql.setMysqlTableName(mysqlTableName);
+        }
+        builder.setMysql(mysql);
+    }
+
+    void fillFromVariantProto(MysqlTablePB pb) {
+        if (pb.hasOdbcCatalogResourceName()) {
+            odbcCatalogResourceName = pb.getOdbcCatalogResourceName();
+        }
+        if (pb.hasHost()) {
+            host = pb.getHost();
+        }
+        if (pb.hasPort()) {
+            port = pb.getPort();
+        }
+        if (pb.hasUserName()) {
+            userName = pb.getUserName();
+        }
+        if (pb.hasPasswd()) {
+            passwd = pb.getPasswd();
+        }
+        if (pb.hasMysqlDatabaseName()) {
+            mysqlDatabaseName = pb.getMysqlDatabaseName();
+        }
+        if (pb.hasMysqlTableName()) {
+            mysqlTableName = pb.getMysqlTableName();
+        }
     }
 
     public MysqlTable(long id, String name, List<Column> schema, Map<String, String> properties)

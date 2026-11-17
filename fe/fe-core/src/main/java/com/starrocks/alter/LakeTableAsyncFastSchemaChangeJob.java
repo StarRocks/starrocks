@@ -27,12 +27,17 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.TabletRangeProtoConverter;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.proto.AlterJobPB;
+import com.starrocks.persist.proto.LakeTableAsyncFastSchemaChangeJobPB;
+import com.starrocks.persist.proto.TabletRangeMapPB;
+import com.starrocks.persist.proto.TabletRangePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
@@ -516,5 +521,60 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         if (targetRanges != null) {
             targetRanges = Collections.unmodifiableMap(targetRanges);
         }
+    }
+
+    /** Shared by the GSON hook and the image v3 load. */
+    private void rebuildTransientState() {
+        partitionsWithSchemaFile = new HashSet<>();
+        if (targetRanges != null) {
+            targetRanges = Collections.unmodifiableMap(targetRanges);
+        }
+    }
+
+    @Override
+    protected void fillProtoVariant(AlterJobPB.Builder builder) {
+        LakeTableAsyncFastSchemaChangeJobPB.Builder variant = LakeTableAsyncFastSchemaChangeJobPB.newBuilder()
+                .setAlterMeta(toLakeTableAlterMetaJobCoreProto())
+                .setDisableFastSchemaEvolutionV2(disableFastSchemaEvolutionV2);
+        if (schemaInfos != null) {
+            variant.setSchemaInfos(IndexSchemaInfo.toListProto(schemaInfos));
+        }
+        if (historySchema != null) {
+            variant.setHistorySchema(historySchema.toProto());
+        }
+        if (targetRanges != null) {
+            TabletRangeMapPB.Builder ranges = TabletRangeMapPB.newBuilder();
+            for (Map.Entry<Long, TabletRange> entry : targetRanges.entrySet()) {
+                if (entry.getValue() != null) {
+                    ranges.putValues(entry.getKey(), TabletRangeProtoConverter.toProto(entry.getValue()));
+                }
+            }
+            variant.setTargetRanges(ranges);
+        }
+        if (pinnedColocateWith != null) {
+            variant.setPinnedColocateWith(pinnedColocateWith);
+        }
+        builder.setKind(AlterJobPB.Kind.LAKE_TABLE_ASYNC_FAST_SCHEMA_CHANGE_JOB).setLakeTableAsyncFastSchemaChangeJob(variant);
+    }
+
+    @Override
+    protected void fillFromVariantProto(AlterJobPB pb) {
+        LakeTableAsyncFastSchemaChangeJobPB variant = pb.getLakeTableAsyncFastSchemaChangeJob();
+        fillFromLakeTableAlterMetaJobCoreProto(variant.getAlterMeta());
+        if (variant.hasSchemaInfos()) {
+            schemaInfos = IndexSchemaInfo.fromListProto(variant.getSchemaInfos());
+        }
+        disableFastSchemaEvolutionV2 = variant.getDisableFastSchemaEvolutionV2();
+        if (variant.hasHistorySchema()) {
+            historySchema = OlapTableHistorySchema.fromProto(variant.getHistorySchema());
+        }
+        if (variant.hasTargetRanges()) {
+            targetRanges = new HashMap<>();
+            for (Map.Entry<Long, TabletRangePB> entry : variant.getTargetRanges().getValuesMap().entrySet()) {
+                targetRanges.put(entry.getKey(), TabletRangeProtoConverter.fromProto(entry.getValue()));
+            }
+        }
+        pinnedColocateWith = variant.hasPinnedColocateWith() ? variant.getPinnedColocateWith() : null;
+        rebuildTransientState();
     }
 }

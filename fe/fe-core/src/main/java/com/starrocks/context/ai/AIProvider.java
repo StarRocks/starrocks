@@ -18,6 +18,9 @@ import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CredentialMask;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.AIProviderPB;
+import com.starrocks.persist.proto.StringMapPB;
 import com.starrocks.thrift.TAIProvider;
 import com.starrocks.thrift.TAIProviderProtocol;
 import com.starrocks.thrift.TAIProviderType;
@@ -206,5 +209,37 @@ public class AIProvider implements Writable {
 
     public static Map<String, String> emptyParams() {
         return new HashMap<>();
+    }
+
+    public static AIProvider fromProto(AIProviderPB pb) {
+        return new AIProvider(pb);
+    }
+
+    private AIProvider(AIProviderPB pb) {
+        id = pb.hasId() ? pb.getId() : null;
+        name = pb.hasName() ? pb.getName() : null;
+        type = pb.hasType() ? ProtoEnums.fromProto(pb.getType(), AIProviderType.class) : null;
+        params = pb.hasParams() ? new java.util.LinkedHashMap<>(pb.getParams().getValuesMap()) : null;
+        comment = pb.hasComment() ? pb.getComment() : null;
+    }
+
+    public AIProviderPB toProto() {
+        AIProviderPB.Builder builder = AIProviderPB.newBuilder();
+        if (id != null) {
+            builder.setId(id);
+        }
+        if (name != null) {
+            builder.setName(name);
+        }
+        if (type != null) {
+            builder.setType(ProtoEnums.toProto(type, AIProviderPB.Type.class));
+        }
+        if (params != null) {
+            builder.setParams(StringMapPB.newBuilder().putAllValues(params));
+        }
+        if (comment != null) {
+            builder.setComment(comment);
+        }
+        return builder.build();
     }
 }

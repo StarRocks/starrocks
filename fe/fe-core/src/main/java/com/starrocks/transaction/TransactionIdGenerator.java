@@ -19,6 +19,7 @@ package com.starrocks.transaction;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.proto.TransactionIdGeneratorPB;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.io.IOException;
@@ -64,8 +65,28 @@ public class TransactionIdGenerator implements GsonPostProcessable {
         return batchEndId;
     }
 
+    /** @deprecated only used by the v2 image loader. */
     @Override
     public void gsonPostProcess() throws IOException {
         nextId = batchEndId;
+    }
+
+    private void finishLoad() {
+        nextId = batchEndId;
+    }
+
+    public TransactionIdGeneratorPB toProto() {
+        TransactionIdGeneratorPB.Builder builder = TransactionIdGeneratorPB.newBuilder();
+        builder.setBatchEndId(batchEndId);
+        return builder.build();
+    }
+
+    public static TransactionIdGenerator fromProto(TransactionIdGeneratorPB pb) {
+        TransactionIdGenerator value = new TransactionIdGenerator();
+        if (pb.hasBatchEndId()) {
+            value.batchEndId = pb.getBatchEndId();
+        }
+        value.finishLoad();
+        return value;
     }
 }

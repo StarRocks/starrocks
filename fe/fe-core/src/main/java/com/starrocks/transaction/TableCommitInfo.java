@@ -37,6 +37,7 @@ package com.starrocks.transaction;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.proto.TableCommitInfoPB;
 
 import java.util.Map;
 
@@ -85,5 +86,22 @@ public class TableCommitInfo implements Writable {
 
     public PartitionCommitInfo getPartitionCommitInfo(long partitionId) {
         return this.idToPartitionCommitInfo.get(partitionId);
+    }
+
+    public TableCommitInfoPB toProto() {
+        TableCommitInfoPB.Builder builder = TableCommitInfoPB.newBuilder();
+        builder.setTableId(tableId);
+        idToPartitionCommitInfo.values().forEach(info -> builder.addPartitionCommitInfos(info.toProto()));
+        return builder.build();
+    }
+
+    public static TableCommitInfo fromProto(TableCommitInfoPB pb) {
+        TableCommitInfo value = new TableCommitInfo();
+        if (pb.hasTableId()) {
+            value.tableId = pb.getTableId();
+        }
+        pb.getPartitionCommitInfosList().forEach(info -> value.idToPartitionCommitInfo.put(
+                info.getPhysicalPartitionId(), PartitionCommitInfo.fromProto(info)));
+        return value;
     }
 }

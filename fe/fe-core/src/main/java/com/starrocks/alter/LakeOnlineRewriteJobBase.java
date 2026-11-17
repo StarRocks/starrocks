@@ -44,6 +44,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.TabletRangeProtoConverter;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
@@ -62,6 +63,8 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
+import com.starrocks.persist.proto.LakeOnlineRewriteJobCorePB;
+import com.starrocks.persist.proto.PartitionRewriteStatePB;
 import com.starrocks.planner.RangeColocateScanDispatch;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
@@ -223,6 +226,56 @@ public abstract class LakeOnlineRewriteJobBase
             this.commitVersion = other.commitVersion;
             this.sourceEmpty = other.sourceEmpty;
             this.rewriteFinished = other.rewriteFinished;
+        }
+
+        static PartitionRewriteState fromProto(PartitionRewriteStatePB pb) {
+            PartitionRewriteState state = new PartitionRewriteState();
+            if (pb.hasShadowIndex()) {
+                state.shadowIndex = MaterializedIndex.fromProto(pb.getShadowIndex());
+            }
+            state.tabletCount = pb.getTabletCount();
+            state.rewriteFinished = pb.getRewriteFinished();
+            if (pb.hasBoundaries()) {
+                state.boundaries = TabletRangeProtoConverter.fromListProto(pb.getBoundaries());
+            }
+            if (pb.hasWatershedVersion()) {
+                state.watershedVersion = pb.getWatershedVersion();
+            }
+            if (pb.hasRewriteTxnId()) {
+                state.rewriteTxnId = pb.getRewriteTxnId();
+            }
+            if (pb.hasCommitVersion()) {
+                state.commitVersion = pb.getCommitVersion();
+            }
+            if (pb.hasSourceEmpty()) {
+                state.sourceEmpty = pb.getSourceEmpty();
+            }
+            return state;
+        }
+
+        /** Image v3 form. */
+        PartitionRewriteStatePB toProto() {
+            PartitionRewriteStatePB.Builder builder = PartitionRewriteStatePB.newBuilder()
+                    .setTabletCount(tabletCount).setRewriteFinished(rewriteFinished);
+            if (shadowIndex != null) {
+                builder.setShadowIndex(shadowIndex.toProto());
+            }
+            if (boundaries != null) {
+                builder.setBoundaries(TabletRangeProtoConverter.toListProto(boundaries));
+            }
+            if (watershedVersion != null) {
+                builder.setWatershedVersion(watershedVersion);
+            }
+            if (rewriteTxnId != null) {
+                builder.setRewriteTxnId(rewriteTxnId);
+            }
+            if (commitVersion != null) {
+                builder.setCommitVersion(commitVersion);
+            }
+            if (sourceEmpty != null) {
+                builder.setSourceEmpty(sourceEmpty);
+            }
+            return builder.build();
         }
     }
 
@@ -2458,5 +2511,35 @@ public abstract class LakeOnlineRewriteJobBase
                 physicalPartition.setMinRetainVersion(0);
             }
         }
+    }
+
+    protected void fillFromLakeOnlineRewriteJobCoreProto(LakeOnlineRewriteJobCorePB pb) {
+        fillFromLakeTableSchemaChangeJobCoreProto(pb.getLakeSchemaChange());
+        shadowIndexMetaId = pb.getShadowIndexMetaId();
+        originIndexMetaId = pb.getOriginIndexMetaId();
+        if (pb.hasShadowIndexName()) {
+            shadowIndexName = pb.getShadowIndexName();
+        }
+        partitionStates = new HashMap<>();
+        for (Map.Entry<Long, PartitionRewriteStatePB> entry : pb.getPartitionStatesMap().entrySet()) {
+            partitionStates.put(entry.getKey(), PartitionRewriteState.fromProto(entry.getValue()));
+        }
+    }
+
+    /** Image v3 form of the fields of this layer, embedded by every subclass. */
+    protected LakeOnlineRewriteJobCorePB toLakeOnlineRewriteJobCoreProto() {
+        LakeOnlineRewriteJobCorePB.Builder builder = LakeOnlineRewriteJobCorePB.newBuilder()
+                .setLakeSchemaChange(toLakeTableSchemaChangeJobCoreProto())
+                .setShadowIndexMetaId(shadowIndexMetaId)
+                .setOriginIndexMetaId(originIndexMetaId);
+        if (shadowIndexName != null) {
+            builder.setShadowIndexName(shadowIndexName);
+        }
+        for (Map.Entry<Long, PartitionRewriteState> entry : partitionStates.entrySet()) {
+            if (entry.getValue() != null) {
+                builder.putPartitionStates(entry.getKey(), entry.getValue().toProto());
+            }
+        }
+        return builder.build();
     }
 }

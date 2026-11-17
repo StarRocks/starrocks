@@ -42,6 +42,13 @@ cd test && python3 run.py -v
 - User-facing config or metric changes must update the matching docs in `docs/en/` and `docs/zh/` when applicable.
 - When editing any file under `docs/`, read `docs/CLAUDE.md` for documentation-specific rules before making changes.
 
+## FE Metadata Persistence
+
+When implementing or reviewing image-persisted metadata, follow the
+[FE metadata persistence policy](./handbook/policies/fe-metadata-persistence.md). A Gson field addition does not
+update Image V3: check the protobuf schema, both conversion directions and recovery
+tests, including for in-flight PRs and backports.
+
 ## Observability Awareness
 
 Before generating or modifying production code for a feature, bug fix, or performance optimization, review the existing observability of the affected end-to-end path. Follow the [Observability Awareness policy](./handbook/policies/observability-awareness.md) and the matching domain guide before deciding whether existing signals must be preserved or extended.

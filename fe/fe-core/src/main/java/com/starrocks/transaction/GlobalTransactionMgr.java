@@ -55,11 +55,19 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.image.ImageFormatException;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.GlobalTransactionMgrPB;
+import com.starrocks.persist.proto.TransactionStatePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TUniqueId;
@@ -1176,7 +1184,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     }
 
     // for replay idToTransactionState
-    // check point also run transaction cleaner, the cleaner maybe concurrently modify id to 
+    // check point also run transaction cleaner, the cleaner maybe concurrently modify id to
     public void replayUpsertTransactionState(TransactionState transactionState) {
         try {
             DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionState.getDbId());
@@ -1367,5 +1375,41 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             size += dbTxnMgr.estimateSize();
         }
         return size;
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.GLOBAL_TRANSACTION_MGR)) {
+            writer.writeManager(GlobalTransactionMgrPB.newBuilder().setIdGenerator(idGenerator.toProto()).build());
+            for (DatabaseTransactionMgr manager : dbIdToDatabaseTransactionMgrs.values()) {
+                manager.unprotectWriteAllTransactionStates(writer);
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.GLOBAL_TRANSACTION_MGR, this::loadSection));
+    }
+
+    private void loadSection(SectionReader reader) throws IOException {
+        GlobalTransactionMgrPB manager = reader.readManager(GlobalTransactionMgrPB.parser());
+        idGenerator = TransactionIdGenerator.fromProto(manager.getIdGenerator());
+        long now = System.currentTimeMillis();
+        List<TransactionState> states = new ArrayList<>();
+        try {
+            reader.readEntries(TransactionStatePB.parser(), pb -> {
+                TransactionState state = TransactionState.fromProto(pb);
+                if (state.isExpired(now)) {
+                    LOG.info("discard expired transaction state: {}", state);
+                } else if (state.getTransactionStatus() == TransactionStatus.UNKNOWN) {
+                    LOG.info("discard unknown transaction state: {}", state);
+                } else {
+                    states.add(state);
+                }
+            });
+        } catch (IllegalArgumentException e) {
+            throw new ImageFormatException("invalid transaction entry", e);
+        }
+        // putTransactionStats sorts by commitTime before rebuilding each DB's dependency graph.
+        putTransactionStats(states);
     }
 }

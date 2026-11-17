@@ -26,6 +26,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
@@ -34,11 +35,17 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.StreamLoadMultiStmtTaskPB;
+import com.starrocks.persist.proto.StreamLoadTaskPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
@@ -863,5 +870,48 @@ public class StreamLoadMgr implements MemoryTrackable {
         } finally {
             readUnlock();
         }
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.STREAM_LOAD_TASK)) {
+            for (AbstractStreamLoadTask task : idToStreamLoadTask.values()) {
+                if (task instanceof StreamLoadTask) {
+                    writer.writeEntry(((StreamLoadTask) task).toProto());
+                }
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.STREAM_LOAD_MULTI_STMT_TASK)) {
+            for (AbstractStreamLoadTask task : idToStreamLoadTask.values()) {
+                if (task instanceof StreamLoadMultiStmtTask) {
+                    writer.writeEntry(((StreamLoadMultiStmtTask) task).toProto());
+                }
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        // Capture the cutoff when loading starts, and share it across both task lists as in v2.
+        long[] currentMs = {0};
+        return List.of(
+                Pair.create(SectionId.STREAM_LOAD_TASK, reader -> {
+                    currentMs[0] = System.currentTimeMillis();
+                    reader.readEntries(StreamLoadTaskPB.parser(), pb ->
+                            loadImageTask(StreamLoadTask.fromProto(pb), currentMs[0]));
+                }),
+                Pair.create(SectionId.STREAM_LOAD_MULTI_STMT_TASK, reader -> {
+                    if (currentMs[0] == 0) {
+                        currentMs[0] = System.currentTimeMillis();
+                    }
+                    reader.readEntries(StreamLoadMultiStmtTaskPB.parser(), pb ->
+                            loadImageTask(StreamLoadMultiStmtTask.fromProto(pb), currentMs[0]));
+                }));
+    }
+
+    private void loadImageTask(AbstractStreamLoadTask task, long currentMs) {
+        if (task.checkNeedRemove(currentMs, false)) {
+            LOG.info("discard expired task, type: {}, label: {}", task.getClass().getSimpleName(), task.getLabel());
+            return;
+        }
+        addLoadTask(task);
     }
 }

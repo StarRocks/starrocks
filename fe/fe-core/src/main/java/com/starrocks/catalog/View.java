@@ -39,6 +39,8 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.SqlCredentialRedactor;
+import com.starrocks.persist.proto.TablePB;
+import com.starrocks.persist.proto.ViewPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -104,6 +106,29 @@ public class View extends Table {
 
     public View(long id, String name, List<Column> schema, TableType type) {
         super(id, name, type, schema);
+    }
+
+    @Override
+    protected void fillProtoVariant(TablePB.Builder builder) {
+        ViewPB.Builder view = ViewPB.newBuilder().setSqlMode(sqlMode).setSecurity(security);
+        if (originalViewDef != null) {
+            view.setOriginalViewDef(originalViewDef);
+        }
+        if (inlineViewDef != null) {
+            view.setInlineViewDef(inlineViewDef);
+        }
+        builder.setView(view);
+    }
+
+    void fillFromVariantProto(ViewPB pb) {
+        if (pb.hasOriginalViewDef()) {
+            originalViewDef = pb.getOriginalViewDef();
+        }
+        if (pb.hasInlineViewDef()) {
+            inlineViewDef = pb.getInlineViewDef();
+        }
+        sqlMode = pb.getSqlMode();
+        security = pb.getSecurity();
     }
 
     public QueryStatement getQueryStatement() throws StarRocksPlannerException {

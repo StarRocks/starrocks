@@ -72,6 +72,7 @@ import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.WALApplier;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
@@ -2997,6 +2998,15 @@ public class DatabaseTransactionMgr {
                     Estimator.estimate(idToFinalStatusTransactionState, 20);
         } finally {
             readUnlock();
+        }
+    }
+
+    void unprotectWriteAllTransactionStates(SectionWriter writer) throws IOException {
+        for (TransactionState state : idToRunningTransactionState.values()) {
+            writer.writeEntry(state.toProto());
+        }
+        for (TransactionState state : finalStatusTransactionStateDeque) {
+            writer.writeEntry(state.toProto());
         }
     }
 }

@@ -30,6 +30,9 @@ import com.starrocks.connector.hive.HiveRemoteFileIO;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.FileTablePB;
+import com.starrocks.persist.proto.TablePB;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TFileTable;
@@ -66,6 +69,19 @@ public class FileTable extends Table {
 
     public FileTable() {
         super(TableType.FILE);
+    }
+
+    @Override
+    protected void fillProtoVariant(TablePB.Builder builder) {
+        FileTablePB.Builder file = FileTablePB.newBuilder();
+        if (fileProperties != null) {
+            file.putAllFileProperties(ProtoMaps.withoutNullValues(fileProperties));
+        }
+        builder.setFile(file);
+    }
+
+    void fillFromVariantProto(FileTablePB pb) {
+        fileProperties = Maps.newHashMap(pb.getFilePropertiesMap());
     }
 
     public FileTable(long id, String name, List<Column> fullSchema, Map<String, String> properties)

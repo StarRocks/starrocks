@@ -21,6 +21,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.MVMaintenanceJobPB;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.io.IOException;
@@ -172,4 +174,33 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         FAILED
     }
 
+
+    public MVMaintenanceJobPB toProto() {
+        MVMaintenanceJobPB.Builder builder = MVMaintenanceJobPB.newBuilder()
+                .setJobId(jobId).setDbId(dbId).setViewId(viewId);
+        JobState current = getState();
+        if (current != null) {
+            builder.setState(ProtoEnums.toProto(current, MVMaintenanceJobPB.State.class));
+        }
+        if (epoch != null) {
+            builder.setEpoch(epoch.toProto());
+        }
+        return builder.build();
+    }
+
+    public static MVMaintenanceJob fromProto(MVMaintenanceJobPB pb) {
+        return new MVMaintenanceJob(pb);
+    }
+
+    private MVMaintenanceJob(MVMaintenanceJobPB pb) {
+        jobId = pb.getJobId();
+        dbId = pb.getDbId();
+        viewId = pb.getViewId();
+        // The v2 postprocessor resets absent or unknown job states to INIT.
+        serializedState = !pb.hasState() || pb.getState() == MVMaintenanceJobPB.State.UNRECOGNIZED
+                || pb.getState() == MVMaintenanceJobPB.State.UNSPECIFIED
+                ? JobState.INIT : ProtoEnums.fromProto(pb.getState(), JobState.class);
+        setState(serializedState);
+        epoch = pb.hasEpoch() ? MVEpoch.fromProto(pb.getEpoch()) : null;
+    }
 }

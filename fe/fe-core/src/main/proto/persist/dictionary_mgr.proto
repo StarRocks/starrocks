@@ -1,0 +1,62 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/common.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "DictionaryMgrProto";
+
+message DictionaryMgrPB {
+  int64 next_txn_id = 1;
+  int64 next_dictionary_id = 2;
+}
+
+message DictionaryNamePB {
+  string name = 1;
+  int64 dictionary_id = 2;
+}
+
+message DictionaryPB {
+  enum State {
+    UNSPECIFIED = 0;
+    UNINITIALIZED = 1;
+    REFRESHING = 2;
+    COMMITTING = 3;
+    FINISHED = 4;
+    CANCELLED = 5;
+  }
+  int64 dictionary_id = 1;
+  optional string dictionary_name = 2;
+  optional string catalog_name = 3;
+  optional string db_name = 4;
+  optional string queryable_object = 5;
+  StringListPB dictionary_keys = 6;
+  StringListPB dictionary_values = 7;
+  optional int64 next_schedulable_time = 8;
+  int64 last_success_refresh_time = 9;
+  int64 last_success_finished_time = 10;
+  optional State state = 11;
+  optional State state_before_refresh = 12;
+  optional string runtime_err_msg = 13;
+  int64 last_success_version = 14;
+  optional int64 memory_limit = 15;
+  int32 refresh_interval = 16;
+  bool read_latest = 17;
+  bool ignore_failed_refresh = 18;
+}
