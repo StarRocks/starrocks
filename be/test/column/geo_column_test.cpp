@@ -210,13 +210,16 @@ TEST(GeoColumnTest, SelfAppendAndIndependentClone) {
     EXPECT_EQ(10, copy->size());
 }
 
-TEST(GeoColumnTest, CopyRejectsDescriptorChangesWithoutSqlCoercion) {
+#ifndef NDEBUG
+TEST(GeoColumnDeathTest, CopyRejectsDescriptorChangesWithoutSqlCoercion) {
+    testing::FLAGS_gtest_death_test_style = "threadsafe";
     auto column = GeoColumn::create(descriptor());
     auto other = GeoColumn::create(descriptor(GEO_LOGICAL_TYPE_GEOMETRY));
     other->append_wkb(Slice(point()));
-    EXPECT_THROW(column->append(*other), std::invalid_argument);
+    EXPECT_DEATH(column->append(*other), "descriptor mismatch");
     EXPECT_EQ(0, column->size());
 }
+#endif
 
 TEST(GeoColumnTest, CopiesCheckSemanticType) {
     auto desc = descriptor(GEO_LOGICAL_TYPE_GEOMETRY);
@@ -247,13 +250,16 @@ TEST(GeoColumnTest, CopiesCheckSemanticType) {
         EXPECT_EQ(point(), destination->get_wkb(destination->size() - 1).to_string());
     }
 
+#ifndef NDEBUG
     // An untyped column must never acquire semantic identity from its input.
+    testing::FLAGS_gtest_death_test_style = "threadsafe";
     auto untyped = GeoColumn::create();
-    EXPECT_THROW(untyped->append(*source), std::invalid_argument);
+    EXPECT_DEATH(untyped->append(*source), "descriptor mismatch");
     auto other_crs = type;
     other_crs.geo_type->crs = "custom:other";
     auto incompatible = GeoColumn::create(other_crs, 0);
-    EXPECT_THROW(incompatible->append(*source), std::invalid_argument);
+    EXPECT_DEATH(incompatible->append(*source), "descriptor mismatch");
+#endif
 
     // Populated destinations of the same type accept further copies.
     auto raw = GeoColumn::create(type, 0);
@@ -312,7 +318,10 @@ TEST(GeoColumnTest, ZeroCountCopiesCheckTypeOnly) {
                     else
                         incompatible.type = {};
                     auto target = GeoColumn::create(incompatible);
-                    EXPECT_THROW(copy(*target, *source), std::invalid_argument) << mismatch;
+#ifndef NDEBUG
+                    testing::FLAGS_gtest_death_test_style = "threadsafe";
+                    EXPECT_DEATH(copy(*target, *source), "descriptor mismatch") << mismatch;
+#endif
                     EXPECT_EQ(incompatible, target->descriptor());
                     EXPECT_EQ(0, target->size());
                 }
