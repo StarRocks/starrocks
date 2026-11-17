@@ -162,7 +162,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，主键表 Tablet 的删除量达到 `lake_pk_compaction_base_delete_ratio_threshold` 或 `lake_pk_compaction_base_delete_rows_threshold` 时，是否自动从 Cumulative Compaction 切换到 Base Compaction。默认关闭，因为 `lake_pk_compaction_base_delete_rows_threshold` 是绝对行数：在已有数据持续被更新或删除的大表上，Tablet 每次 Base Compaction 之后很快又会达到该值，而每次 Base Compaction 最多重写 Tablet 中 `update_compaction_ratio_threshold`（默认 0.5）比例的数据。手动执行 `ALTER TABLE ... COMPACT` 时，无论该参数如何设置都会执行 Base Compaction。
+- 描述：是否允许存算分离主键表的自动 Compaction 在删除比例或删除行数达到阈值时选择 Base Compaction。此项只控制按删除量自动触发 Base Compaction，不影响普通 Cumulative Compaction。默认关闭，因为持续更新或删除的大 Tablet 可能频繁达到绝对删除行数阈值，导致反复重写数据。手动 `ALTER TABLE ... COMPACT` 不受此开关和两个删除阈值限制；没有删除行时回退到普通 Compaction 选取。自动和手动请求都不保证一次合完整个 Tablet。详见[主键表 Base Compaction](../../management/compaction.md#primary-key-base-compaction)。
 - 引入版本：v4.1.7
 
 ### lake_pk_compaction_base_delete_ratio_threshold
@@ -171,7 +171,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Double
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，将主键表 Tablet 从 Cumulative Compaction（Size-tiered 小文件合并）切换到 Base Compaction 的两个触发条件之一。Base Compaction 会重写带删除的 Rowset（删除行数多的优先），物理清除被删除的行并缩小其 Delete Vector。`lake_pk_compaction_base_enable_delete_trigger` 为 `true` 时，当 Tablet 的整体删除比例（各 Rowset 的 `sum(num_dels) / sum(num_rows)`）达到该值、或其累计删除行数达到 `lake_pk_compaction_base_delete_rows_threshold` 时触发。手动执行 `ALTER TABLE ... COMPACT` 时，无论这些参数如何设置都会强制执行 Base Compaction。
+- 描述：存算分离主键表按删除量自动选择 Base Compaction 的两个阈值之一。Tablet 当前所有 Rowset 的整体删除比例 `sum(num_dels) / sum(num_rows)` 达到此值，或累计删除行数达到 `lake_pk_compaction_base_delete_rows_threshold`，即可进入 Base Compaction 选取。v4.1.4～v4.1.6 直接检查这两个阈值；从 v4.1.7 开始，还需要 `lake_pk_compaction_base_enable_delete_trigger = true`。手动 `ALTER TABLE ... COMPACT` 不受这两个阈值限制。达到阈值不保证立即获得 FE 调度。详见[自动触发](../../management/compaction.md#automatic-base-compaction)。
 - 引入版本：v4.1.4
 
 ### lake_pk_compaction_base_delete_rows_threshold
@@ -180,7 +180,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下主键表 Base Compaction 的两个触发条件之一（参见 `lake_pk_compaction_base_delete_ratio_threshold`）。`lake_pk_compaction_base_enable_delete_trigger` 为 `true` 时，当 Tablet 的累计删除行数（各 Rowset 的 `sum(num_dels)`）达到该值时触发 Base Compaction。该绝对数量触发条件是对比例触发条件的补充：在高频更新/删除的表上，Delete Vector 会膨胀、空间被浪费，但整体删除比例可能因大量存活行的稀释而偏低，仅靠比例触发条件不会触发。调大该值可降低 Base Compaction 频率，调小则可更早回收 Delete Vector。
+- 描述：存算分离主键表按删除量自动选择 Base Compaction 的绝对行数阈值，与 `lake_pk_compaction_base_delete_ratio_threshold` 为 OR 关系。累计删除行数为 Tablet 当前所有 Rowset 的 `sum(num_dels)`。v4.1.4～v4.1.6 直接检查此阈值；从 v4.1.7 开始，还需要 `lake_pk_compaction_base_enable_delete_trigger = true`。手动请求不受此阈值限制。该条件补充了整体删除比例较低、但 Delete Vector 中删除标记较多的场景。调大该值可降低自动 Base Compaction 的频率，调小可更早进入删除回收选取。详见[自动触发](../../management/compaction.md#automatic-base-compaction)。
 - 引入版本：v4.1.4
 
 ### lake_put_txn_log_timeout_guard_ms
