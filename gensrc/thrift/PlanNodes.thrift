@@ -726,7 +726,7 @@ struct TSchemaScanNode {
 enum TAccessPathType {
     ROOT,       // ROOT
     KEY,        // MAP KEY
-    OFFSET,     // ARRAY/MAP OFFSET
+    OFFSET,     // ARRAY/MAP OFFSET; on a VARIANT column: only the outer null mask (`v IS [NOT] NULL`)
     FIELD,      // STRUCT FIELD
     INDEX,      // ARRAY/MAP INDEX-AT POSITION DATA
     ALL,        // ARRAY/MAP ALL DATA
