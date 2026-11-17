@@ -18,13 +18,6 @@
 #include <future>
 #include <unordered_set>
 
-<<<<<<< HEAD
-=======
-#include "base/debug/trace.h"
-#include "base/phmap/phmap.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
->>>>>>> 53b21e7 ([BugFix][RB-1307] Keep the tablet schema map lock short on lake scans of wide tables (#83415))
 #include "column/datum_convert.h"
 #include "common/config.h"
 #include "runtime/current_thread.h"
@@ -52,26 +45,13 @@
 #include "testutil/sync_point.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
+#include "util/phmap/phmap.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
 
 static bool cancel_requested(const std::atomic<bool>* flag) {
     return flag != nullptr && flag->load(std::memory_order_acquire);
-}
-
-<<<<<<< HEAD
-=======
-static SegmentReadStateCache make_segment_read_state_cache(const PreparedSegmentReadState& state) {
-    SegmentReadStateCache cache;
-    if (state.has_pruned_scan_range()) {
-        cache.scan_range = state.pruned_scan_range;
-    }
-    if (state.has_rowid_bounds_cache()) {
-        cache.seek_range_rowid_ranges = &state.seek_ranges_rowid_bounds;
-        cache.tablet_rowid_range = &state.tablet_range_rowid_bounds;
-    }
-    return cache;
 }
 
 // The schema that rowset |rowset_index| of |tablet_metadata| was written with: the historical schema that
@@ -105,7 +85,6 @@ std::vector<RowsetPtr> Rowset::get_rowsets(TabletManager* tablet_mgr, const Tabl
     return rowsets;
 }
 
->>>>>>> 53b21e7 ([BugFix][RB-1307] Keep the tablet schema map lock short on lake scans of wide tables (#83415))
 Rowset::Rowset(TabletManager* tablet_mgr, int64_t tablet_id, const RowsetMetadataPB* metadata, int index,
                TabletSchemaPtr tablet_schema)
         : _tablet_mgr(tablet_mgr),
