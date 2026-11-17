@@ -36,7 +36,17 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
 
 :::
 
-An Iceberg column containing nested geography in a list, map, or struct is exposed as `UNKNOWN_TYPE` and cannot be queried, including its non-geo subfields. Other supported columns and scalar geography remain readable.
+## Iceberg type mapping
+
+| Iceberg type | StarRocks type | Supported reads |
+| --- | --- | --- |
+| `geometry` | `GEOMETRY` | Top-level columns in Parquet-backed tables with Iceberg format version 3 or later. The CRS must be `OGC:CRS84` (the default) or `EPSG:<n>`, where `n` contains only ASCII digits and represents a positive 32-bit signed integer. Other CRS identifiers map to `UNKNOWN_TYPE`. |
+
+StarRocks preserves the CRS identifier as stored. `OGC:CRS84` and `EPSG:4326` are distinct. Use `ST_AsText(g)` or `ST_AsBinary(g)` to return a GEOMETRY value. Direct projection, including `SELECT *` when it includes a GEOMETRY column, fails during query analysis.
+
+An Iceberg list, map, or struct containing geography or geometry is exposed as `UNKNOWN_TYPE` and cannot be queried, including its non-geo subfields. Other supported columns and scalar geography remain readable.
+
+During a rolling upgrade, upgrade all BE and CN nodes before upgrading FE nodes.
 
 ## Usage notes
 

@@ -114,11 +114,8 @@ class IcebergGeoColumnStatisticsTest {
                         ColumnStatistic geo = result.getColumnStatistic(shape);
                         assertEquals(Double.NEGATIVE_INFINITY, geo.getMinValue());
                         assertEquals(Double.POSITIVE_INFINITY, geo.getMaxValue());
-                        if (geoType.typeId() == Type.TypeID.GEOGRAPHY) {
-                            assertEquals(0.5, geo.getNullsFraction());
-                        } else {
-                            assertTrue(geo.isUnknown());
-                        }
+                        assertEquals(ColumnStatistic.StatisticType.ESTIMATE, geo.getType());
+                        assertEquals(0.5, geo.getNullsFraction());
                         assertFileStatistics(metadata, table.schema().findField("shape").fieldId());
                     },
                     // The stats requests for SELECT id and SELECT count(*) omit the geo column.
@@ -138,7 +135,7 @@ class IcebergGeoColumnStatisticsTest {
     }
 
     private static void assertFileStatistics(IcebergMetadata metadata, int shapeId) throws IllegalAccessException {
-        // GEOMETRY is still UNKNOWN in the SQL schema, so verify its retained counts in the file aggregate.
+        // Verify the retained GEO counts and sizes alongside the absence of GEO bounds.
         Object provider = FieldUtils.readField(metadata, "statisticProvider", true);
         Map<?, ?> aggregates = (Map<?, ?>) FieldUtils.readField(provider, "icebergFileStatistics", true);
         assertEquals(1, aggregates.size());
