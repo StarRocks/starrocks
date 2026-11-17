@@ -44,7 +44,7 @@ public class TrinoParserUtils {
         if (statement instanceof Query || statement instanceof Explain || statement instanceof ExplainAnalyze
                 || statement instanceof CreateTableAsSelect || statement instanceof Insert
                 || statement instanceof DropTable) {
-            return (StatementBase) statement.accept(new AstBuilder(sqlMode), new ParseTreeContext());
+            return (StatementBase) statement.accept(new AstBuilder(sqlMode, statement), new ParseTreeContext());
         } else {
             throw trinoParserUnsupportedException("Unsupported statement type: " + statement.getClass().getName());
         }

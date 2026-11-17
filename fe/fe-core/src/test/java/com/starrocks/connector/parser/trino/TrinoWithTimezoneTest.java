@@ -186,6 +186,11 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                 "select date_format(CAST(with_timezone(ts, 'UTC') AS DATE), 'yyyy-MM-dd')" + values,
                 "select format_datetime(CAST(with_timezone(ts, 'UTC') AS TIMESTAMP), fmt) " +
                         "from (values (TIMESTAMP '2024-08-19 14:36:41', 'HH:mm')) t(ts, fmt)",
+                // or through a derived table or a CTE, which isn't tracked, so the whole statement is rejected
+                "select date_format(ts, 'yyyy-MM-dd') from (select CAST(with_timezone(" +
+                        "TIMESTAMP '2024-08-19 14:36:41', 'UTC') AS TIMESTAMP(6)) as ts) t",
+                "with t as (select CAST(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC') AS DATE) as d) " +
+                        "select date_format(d, 'yyyy-MM-dd') from t",
                 // Trino rejects with_timezone as a window function
                 "select cast(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC') over () AS DATE)",
                 // A DST zone attached to a column, or to a literal it skips or repeats: Trino and convert_tz resolve

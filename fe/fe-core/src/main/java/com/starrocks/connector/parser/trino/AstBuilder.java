@@ -261,12 +261,14 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     private final Set<Expression> wallClockArguments = Collections.newSetFromMap(new IdentityHashMap<>());
     // with_timezone values whose consumer formats them, which in Trino rounds the instant to milliseconds; by identity
     private final Set<Expression> formattedArguments = Collections.newSetFromMap(new IdentityHashMap<>());
-    // Nesting depth of date_format and format_datetime calls that may print other than Trino. A with_timezone value
-    // under one is rejected, also when a cast to TIMESTAMP or DATE reads it as a wall-clock time first
-    private int unlikeFormatDepth = 0;
+    // Whether the statement has a date_format or format_datetime call that may print other than Trino. Its argument
+    // can be a with_timezone value through a cast, a derived table or a CTE, which isn't tracked, so every
+    // with_timezone in such a statement is rejected
+    private final boolean hasFormatUnlikeTrino;
 
-    public AstBuilder(long sqlMode) {
+    public AstBuilder(long sqlMode, Node statement) {
         this.sqlMode = sqlMode;
+        this.hasFormatUnlikeTrino = containsFormatCallUnlikeTrino(statement);
     }
 
     private static final ImmutableMap<Join.Type, JoinOperator> JOIN_TYPE_MAP =
@@ -828,14 +830,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             throw unsupportedWithTimezone(node);
         }
         addWallClockArguments(node);
-        boolean unlikeFormat = isFormatCallUnlikeTrino(node);
-        unlikeFormatDepth += unlikeFormat ? 1 : 0;
-        List<Expr> arguments;
-        try {
-            arguments = visit(node.getArguments(), context, Expr.class);
-        } finally {
-            unlikeFormatDepth -= unlikeFormat ? 1 : 0;
-        }
+        List<Expr> arguments = visit(node.getArguments(), context, Expr.class);
         // A format rounds a TIMESTAMP cast of a with_timezone value to milliseconds too
         if (!node.getArguments().isEmpty() && node.getArguments().get(0) instanceof Cast
                 && formattedArguments.contains(node.getArguments().get(0))
@@ -1201,7 +1196,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         Optional<ZoneId> fromZone = backendZone(withTimezone.getArguments().get(1));
         Optional<ZoneId> to = toZone == null ? fromZone : backendZone(toZone);
         Optional<String> from = fromZone.flatMap(zone -> attachedOffset(timestamp, zone));
-        if (unlikeFormatDepth > 0 || !wallClockArguments.contains(node) || from.isEmpty() || to.isEmpty()) {
+        if (hasFormatUnlikeTrino || !wallClockArguments.contains(node) || from.isEmpty() || to.isEmpty()) {
             throw unsupportedWithTimezone(node);
         }
         // Trino promotes a DATE argument to TIMESTAMP. A format rounds the instant to milliseconds, which is rounding ts
@@ -1313,6 +1308,13 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 && isTruncationExact(arguments.get(0), arguments.get(1))) {
             wallClockArguments.add(arguments.get(1));
         }
+    }
+
+    private static boolean containsFormatCallUnlikeTrino(Node node) {
+        if (node instanceof FunctionCall && isFormatCallUnlikeTrino((FunctionCall) node)) {
+            return true;
+        }
+        return node.getChildren().stream().anyMatch(AstBuilder::containsFormatCallUnlikeTrino);
     }
 
     // A date_format or format_datetime call whose format isn't a literal, or may not print what Trino prints
