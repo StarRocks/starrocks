@@ -932,7 +932,7 @@ TEST_F(AIProjectNodeProviderRoutesTest, RejectsUnsupportedProtocolsAlongsideProv
     auto& configs = node.ai_project_node.ai_provider_mapping;
     configs.at("provider:default_chat").__set_protocol(TAIProviderProtocol::ANTHROPIC);
     configs.at("provider:default_embedding").__set_protocol(TAIProviderProtocol::COHERE);
-    EXPECT_TRUE(initialize_after_wire_round_trip(node).is_invalid_argument());
+    EXPECT_TRUE(initialize_after_wire_round_trip(node).is_not_supported());
 }
 
 TEST_F(AIProjectNodeProviderRoutesTest, AcceptsImplicitProviderAICompleteWireContract) {
@@ -954,35 +954,42 @@ TEST_F(AIProjectNodeProviderRoutesTest, RejectsInvalidModelRouteWireContracts) {
     struct Case {
         const char* name;
         std::function<void(TAIProjectNode&)> mutate;
+        TStatusCode::type expected_status = TStatusCode::INVALID_ARGUMENT;
     };
     const std::vector<Case> cases = {
             {"unknown provider",
              [](auto& project) {
                  project.ai_provider_mapping.at("provider:chat")
                          .__set_protocol(static_cast<TAIProviderProtocol::type>(99));
-             }},
+             },
+             TStatusCode::NOT_IMPLEMENTED_ERROR},
             {"unknown default provider protocol",
              [](auto& project) {
                  project.ai_provider_mapping.at("provider:default_chat")
                          .__set_protocol(static_cast<TAIProviderProtocol::type>(99));
-             }},
+             },
+             TStatusCode::NOT_IMPLEMENTED_ERROR},
             {"default chat protocol capability mismatch",
              [](auto& project) {
                  project.ai_provider_mapping.at("provider:default_chat").__set_protocol(TAIProviderProtocol::COHERE);
-             }},
+             },
+             TStatusCode::NOT_IMPLEMENTED_ERROR},
             {"default embedding protocol capability mismatch",
              [](auto& project) {
                  project.ai_provider_mapping.at("provider:default_embedding")
                          .__set_protocol(TAIProviderProtocol::ANTHROPIC);
-             }},
+             },
+             TStatusCode::NOT_IMPLEMENTED_ERROR},
             {"named provider chat protocol remains openai compatible",
              [](auto& project) {
                  project.ai_provider_mapping.at("provider:chat").__set_protocol(TAIProviderProtocol::ANTHROPIC);
-             }},
+             },
+             TStatusCode::NOT_IMPLEMENTED_ERROR},
             {"named provider embedding protocol remains openai compatible",
              [](auto& project) {
                  project.ai_provider_mapping.at("provider:embedding").__set_protocol(TAIProviderProtocol::COHERE);
-             }},
+             },
+             TStatusCode::NOT_IMPLEMENTED_ERROR},
             {"blank provider model",
              [](auto& project) { project.ai_provider_mapping.at("provider:chat").params["model"] = " \t"; }},
             {"api key with newline",
@@ -1029,7 +1036,7 @@ TEST_F(AIProjectNodeProviderRoutesTest, RejectsInvalidModelRouteWireContracts) {
         auto node = make_mixed_route_node();
         test_case.mutate(node.ai_project_node);
         const auto status = initialize_after_wire_round_trip(node);
-        EXPECT_TRUE(status.is_invalid_argument()) << status;
+        EXPECT_EQ(test_case.expected_status, status.code()) << status;
         EXPECT_EQ(std::string::npos, status.to_string().find(kEndpointSentinel));
         EXPECT_EQ(std::string::npos, status.to_string().find(kModelSentinel));
     }

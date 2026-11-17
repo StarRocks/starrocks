@@ -26,8 +26,8 @@ SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | chat } ]
 | 列             | 说明                                              |
 | -------------- | ------------------------------------------------- |
 | `Name`         | provider 名称。                                   |
-| `Type`         | provider 类型（`embedding` / `rerank` / `chat`）。 |
-| `Protocol`     | 端点协议（`openai` / `anthropic` / `cohere`）。 |
+| `Type`         | provider 类型。                                   |
+| `Protocol`     | 端点协议。                                        |
 | `IsDefault`    | 是否为其类型的默认值（`true`/`false`）。          |
 | `Endpoint`     | 端点 URL。                                        |
 | `Model`        | 模型名。                                          |

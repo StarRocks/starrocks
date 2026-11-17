@@ -19,8 +19,6 @@ Each provider also declares the wire **protocol** its endpoint speaks via the `p
 When omitted it defaults to the protocol the type implies: `openai` for `embedding` and `chat`,
 `cohere` for `rerank`.
 
-[ai_complete](../../../sql-functions/ai-functions/ai_text_functions.md#ai_complete) and [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed) currently require the `openai` protocol. Other registered protocols are rejected when these functions are planned.
-
 The provider object — including the `api_key` property — is persisted on the FE metadata journal and
 image, so cluster restarts and upgrades retain the credential. There is no `fe.conf` knob for these
 settings.
@@ -47,7 +45,7 @@ TYPE { embedding | rerank | chat }
 PROPERTIES (
     "endpoint"   = "<url>",
     "model"      = "<model_name>"
-    [, "protocol" = "{ openai | anthropic | cohere }" ]
+    [, "protocol" = "{ openai | anthropic | cohere | dashscope }" ]
     [, "dimensions" = "<int>" ]      -- embedding only
     [, "max_documents" = "<int>" ]   -- rerank only (optional)
     [, "deadline_ms" = "<int>" ]     -- rerank only (optional)
@@ -71,7 +69,7 @@ PROPERTIES (
 | --------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `endpoint`      | all            | Yes      | HTTP(S) endpoint URL. Must start with `http://` or `https://`.                                       |
 | `model`         | all            | Yes      | Model name passed in the request `model` field (e.g. `text-embedding-3-small`, `cohere/rerank-4-fast`). |
-| `protocol`      | all            | No       | Wire protocol of the endpoint: `openai`, `anthropic`, or `cohere`. Default: `openai` for `embedding` and `chat`, `cohere` for `rerank`. |
+| `protocol`      | all            | No       | Wire protocol of the endpoint: `openai`, `anthropic`, `cohere`, or `dashscope`. Default: `openai` for `embedding` and `chat`, `cohere` for `rerank`. |
 | `dimensions`    | embedding      | No       | Embedding vector dimension (positive int). Must match the provider output and the vector index dim. |
 | `max_documents` | rerank         | No       | Max documents sent per rerank request (positive int; default 1000).                                  |
 | `deadline_ms`   | rerank         | No       | Overall wall-clock budget in ms for the whole rerank call across all retry attempts (positive int; default 10000). Bounds how long a slow/unreachable reranker can stall a search before it degrades to fusion order. A timeout is never retried; only a connection failure or HTTP 5xx is. |
