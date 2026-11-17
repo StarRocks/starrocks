@@ -14,6 +14,7 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -22,21 +23,33 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TOlapTableIndexSchema;
+import com.starrocks.thrift.TOlapTableIndexTablets;
+import com.starrocks.thrift.TOlapTablePartition;
+import com.starrocks.thrift.TOlapTablePartitionParam;
+import com.starrocks.thrift.TOlapTableSchemaParam;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.stream.Collectors;
 
 /**
  * A load that commits on a table while an alter or reshard job on that table is under way, as a stream load
@@ -118,6 +131,38 @@ public class ConcurrentLoad {
      */
     public static long versionIn(TransactionState load, OlapTable table, long physicalPartitionId) {
         return load.getTableCommitInfo(table.getId()).getPartitionCommitInfo(physicalPartitionId).getVersion();
+    }
+
+    /**
+     * Plans the sink parameters a load on the table would get now and checks them the way the compute node does
+     * (OlapTablePartitionParam::init): every partition lists exactly the indexes the schema lists, or the load is
+     * rejected with "number of partition's index is not equal with schema's".
+     */
+    public static void assertSinkIndexesMatch(Database db, OlapTable table) throws Exception {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), List.of(table.getId()), LockType.READ)) {
+            DescriptorTable descTable = new DescriptorTable();
+            TupleDescriptor tuple = descTable.createTupleDescriptor();
+            for (Column column : table.getFullSchema()) {
+                SlotDescriptor slot = descTable.addSlotDescriptor(tuple);
+                slot.setIsMaterialized(true);
+                slot.setColumn(column);
+                slot.setIsNullable(column.isAllowNull());
+            }
+            descTable.computeMemLayout();
+
+            TOlapTableSchemaParam schema = OlapTableSink.createSchema(db.getId(), table, tuple, null);
+            TOlapTablePartitionParam partitions = OlapTableSink.createPartition(
+                    db.getId(), table, tuple, false, 0, table.getAllPartitionIds(), null, null);
+
+            List<Long> schemaIndexIds = schema.getIndexes().stream()
+                    .map(TOlapTableIndexSchema::getId).sorted().collect(Collectors.toList());
+            for (TOlapTablePartition partition : partitions.getPartitions()) {
+                List<Long> partitionIndexIds = partition.getIndexes().stream()
+                        .map(TOlapTableIndexTablets::getIndex_id).sorted().collect(Collectors.toList());
+                Assertions.assertEquals(schemaIndexIds, partitionIndexIds,
+                        "a load would be rejected: partition " + partition.getId() + " lists other indexes than the schema");
+            }
+        }
     }
 
     private static List<TabletCommitInfo> commitInfos(OlapTable table) {
