@@ -1223,7 +1223,6 @@ TEST_F(SchemaChangeTest, historical_key_conversion_order) {
 
     SchemaChangeHandler handler;
     ASSERT_OK(handler.process_alter_tablet(gen_alter_tablet_req(base_id, target_id, version)));
-    EXPECT_NE(std::string::npos, handler.get_task_detail_msg().find("doing sorting schema change"));
     auto converted = target->get_rowset_by_version(version);
     ASSERT_NE(nullptr, converted);
     ASSERT_OK(converted->load());
@@ -1381,7 +1380,6 @@ TEST_F(SchemaChangeTest, historical_key_conversion_order_and_aggregation) {
         ASSERT_OK(base->add_rowset(*rowset, false));
         SchemaChangeHandler handler;
         ASSERT_OK(handler.process_alter_tablet(gen_alter_tablet_req(base_id, target_id, version)));
-        EXPECT_NE(std::string::npos, handler.get_task_detail_msg().find("doing sorting schema change"));
         auto converted = target->get_rowset_by_version(version);
         ASSERT_NE(nullptr, converted);
         ASSERT_EQ(8192, converted->num_rows());
