@@ -501,26 +501,36 @@ public class StreamLoadManagerTest {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         Config.stream_load_task_keep_max_num = 5;
         try {
-            StreamLoadMgr streamLoadManager = new StreamLoadMgr() {
+            StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+            // StreamLoadMgr.writeLock() is private and only takes lock.writeLock(), so hold each thread back there.
+            ReentrantReadWriteLock coordinatedLock = new ReentrantReadWriteLock(true) {
                 private final ThreadLocal<Boolean> coordinated = ThreadLocal.withInitial(() -> false);
+                private final ReentrantReadWriteLock.WriteLock coordinatedWriteLock =
+                        new ReentrantReadWriteLock.WriteLock(this) {
+                            @Override
+                            public void lock() {
+                                if (coordinateLock.get() && !coordinated.get()) {
+                                    coordinated.set(true);
+                                    waitingForLock.countDown();
+                                    try {
+                                        if (!takeLock.await(10, TimeUnit.SECONDS)) {
+                                            throw new AssertionError("timed out waiting to take the manager lock");
+                                        }
+                                    } catch (InterruptedException e) {
+                                        Thread.currentThread().interrupt();
+                                        throw new AssertionError(e);
+                                    }
+                                }
+                                super.lock();
+                            }
+                        };
 
                 @Override
-                protected void writeLock() {
-                    if (coordinateLock.get() && !coordinated.get()) {
-                        coordinated.set(true);
-                        waitingForLock.countDown();
-                        try {
-                            if (!takeLock.await(10, TimeUnit.SECONDS)) {
-                                throw new AssertionError("timed out waiting to take the manager lock");
-                            }
-                        } catch (InterruptedException e) {
-                            Thread.currentThread().interrupt();
-                            throw new AssertionError(e);
-                        }
-                    }
-                    super.writeLock();
+                public ReentrantReadWriteLock.WriteLock writeLock() {
+                    return coordinatedWriteLock;
                 }
             };
+            Deencapsulation.setField(streamLoadManager, "lock", coordinatedLock);
             Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(CatalogMocker.TEST_DB_NAME);
             OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
@@ -664,7 +674,7 @@ public class StreamLoadManagerTest {
                             response.status);
                     StreamLoadTask latest = (StreamLoadTask) streamLoadManager.getTaskByLabel(label);
                     Assertions.assertNotSame(previous, latest);
-                    Assertions.assertEquals(StreamLoadTask.State.CANCELLED, latest.getState());
+                    Assertions.assertEquals(StreamLoadTask.State.CANCELLED.name(), latest.getStateName());
                     Assertions.assertEquals(2, streamLoadManager.getStreamLoadTaskCount());
                     Assertions.assertEquals(List.of(history, latest),
                             Lists.newArrayList(streamLoadManager.syncStreamLoadTaskQueue));
