@@ -22,12 +22,8 @@
 #include <testutil/parallel_test.h>
 #include <util/guard.h>
 
-<<<<<<< HEAD:be/test/exec/arrow_converter_test.cpp
-=======
 #include <chrono>
 #include <random>
-#include <type_traits>
->>>>>>> aca57a8 ([BugFix] Fix negative fractional Arrow timestamp conversion (#83490)):be/test/column/arrow_to_starrocks_converter_test.cpp
 #include <utility>
 
 #include "arrow/array/builder_base.h"
@@ -1092,8 +1088,6 @@ PARALLEL_TEST(ArrowConverterTest, test_timestamp_to_datetime) {
     }
 }
 
-<<<<<<< HEAD:be/test/exec/arrow_converter_test.cpp
-=======
 // Expected UTC values are explicit calendar literals, independent of epoch division.
 PARALLEL_TEST(ArrowConverterTest, test_timestamp_fractional_epoch_boundaries) {
     using Case = std::pair<int64_t, const char*>;
@@ -1267,24 +1261,6 @@ PARALLEL_TEST(ArrowConverterTest, test_timestamp_dst_zone_matches_cctz) {
     }
 }
 
-PARALLEL_TEST(ArrowConverterTest, test_timestamp_convert_uses_context_timezone) {
-    auto type = std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND, "UTC");
-    size_t counter = 0;
-    auto array = create_constant_datetime_array<arrow::TimestampType, false>(1, 0, type, counter);
-    ConvertFuncTree cf(get_arrow_converter(ArrowTypeId::TIMESTAMP, TYPE_DATETIME, false, false));
-    ASSERT_TRUE(cf.func != nullptr);
-
-    ArrowConvertContext ctx;
-    ctx.timezone = "Asia/Shanghai";
-    auto column = TimestampColumn::create();
-    Filter filter(1, 1);
-    ASSERT_STATUS_OK(
-            convert_arrow_array_to_column(&cf, array->length(), array.get(), column.get(), 0, 0, &filter, &ctx));
-
-    ASSERT_EQ(column->get_data()[0], string_to_datetime<TYPE_DATETIME>("1970-01-01 08:00:00"));
-}
-
->>>>>>> aca57a8 ([BugFix] Fix negative fractional Arrow timestamp conversion (#83490)):be/test/column/arrow_to_starrocks_converter_test.cpp
 // Per Parquet LogicalTypes.md TIMESTAMP section, an INT64 timestamp with
 // isAdjustedToUTC=false is surfaced by Arrow as timezone-naive (empty
 // `timezone`) and must be displayed "the same way, regardless of the local
