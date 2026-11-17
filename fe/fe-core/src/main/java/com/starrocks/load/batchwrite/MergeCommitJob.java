@@ -252,6 +252,7 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
                     GlobalStateMgr.getCurrentState().getNextId(),
                     dbId.get(), tableId, label, loadId, streamLoadInfo, batchWriteIntervalMs, loadParameters,
                     user, warehouseName, backendIds, queryCoordinatorFactory, this);
+            newTask.setMergeCommitJobId(id);
             mergeCommitTasks.put(label, newTask);
             try {
                 executor.execute(newTask);

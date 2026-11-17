@@ -58,9 +58,20 @@ public class LoadJobRedactionTest {
         assertEquals(Set.of("txn_id", "file_size"), details.keySet());
         // Numbers are written back as they were.
         assertEquals("{\"file_size\":10,\"txn_id\":1001}", info.getRuntime_details());
+        // The load ids and the backends are gone from the columns of their own as well.
+        assertFalse(info.isSetLoad_id());
+        assertFalse(info.isSetBe_ids());
         // The metadata stays.
         assertEquals("label", info.getLabel());
         assertEquals(3, info.getNum_filtered_rows());
+        assertEquals(1001L, info.getTxn_id());
+        assertEquals(20001L, info.getTable_id());
+        assertEquals(30001L, info.getParent_id());
+        assertEquals("INSERT_SELECT", info.getStatement());
+        assertEquals(1_700_000_000_000L, info.getVisible_time_ms());
+        assertEquals(4096L, info.getSink_bytes());
+        assertEquals("10.0.0.1", info.getClient_ip());
+        assertEquals(15L, info.getCommit_throttle_ms());
     }
 
     @Test
@@ -207,6 +218,16 @@ public class LoadJobRedactionTest {
         info.setTracking_sql(TRACKING_SQL);
         info.setRejected_record_path("127.0.0.1:/home/disk1/rejected_record/x");
         info.setProperties("{\"max_filter_ratio\":0.0,\"timeout\":300}");
+        info.setLoad_id("load-id");
+        info.setBe_ids("10001");
+        info.setTxn_id(1001L);
+        info.setTable_id(20001L);
+        info.setParent_id(30001L);
+        info.setStatement("INSERT_SELECT");
+        info.setVisible_time_ms(1_700_000_000_000L);
+        info.setSink_bytes(4096L);
+        info.setClient_ip("10.0.0.1");
+        info.setCommit_throttle_ms(15L);
         info.setRuntime_details("{\"backends\":{\"load-id\":[10001]},\"file_size\":10,\"load_id\":\"load-id\","
                 + "\"txn_error_msg\":\"" + ROW_VALUE + "\",\"txn_id\":1001,\"unfinished_backends\":{\"load-id\":[]}}");
         return info;

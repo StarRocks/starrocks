@@ -112,6 +112,6 @@ public class InsertLoadJobEditLogTest {
         long createTimestamp = System.currentTimeMillis();
         return new InsertLoadJob(label, DB_ID, TABLE_ID, TXN_ID, LOAD_ID, USER, createTimestamp,
                 Math.max(TIMEOUT, Config.insert_load_default_timeout_second),
-                0L, coordinator, insertLoadTxnCallback);
+                0L, coordinator, insertLoadTxnCallback, "INSERT_SELECT", "127.0.0.1");
     }
 }

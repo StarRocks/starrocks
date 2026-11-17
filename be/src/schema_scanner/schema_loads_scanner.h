@@ -57,6 +57,10 @@ private:
     // should then skip its legacy string-parsing fallback.
     bool _fill_datetime_column_from_ms(Column* column, bool is_set, int64_t epoch_ms) const;
 
+    // Append the value when the thrift field is set, otherwise append NULL.
+    static void _fill_nullable_bigint(Column* column, bool is_set, int64_t value);
+    static void _fill_nullable_varchar(Column* column, bool is_set, const std::string& value);
+
     int _cur_idx = 0;
     TGetLoadsResult _result;
     // Request built once in start() and reused for every page; only the job id cursor changes.

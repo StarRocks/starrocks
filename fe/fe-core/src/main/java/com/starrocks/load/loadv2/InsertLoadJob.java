@@ -49,8 +49,16 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
+import com.starrocks.planner.FileScanNode;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
+import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -74,6 +82,11 @@ public class InsertLoadJob extends LoadJob {
 
     @SerializedName("tid")
     private long tableId;
+    // Which DML statement created the job: INSERT_SELECT, INSERT_VALUES, INSERT_FILES, UPDATE, DELETE or MERGE.
+    @SerializedName("sk")
+    private String statementKind;
+    @SerializedName("cip")
+    private String clientIp;
     private long estimateScanRow = 0;
     private TLoadJobType loadType;
     private Coordinator coordinator;
@@ -88,9 +101,12 @@ public class InsertLoadJob extends LoadJob {
     public InsertLoadJob(String label, long dbId, long tableId, long txnId,
                          String loadId, String user, long createTimestamp,
                          long timeout, long warehouseId, Coordinator coordinator,
-                         InsertLoadTxnCallback insertLoadTxnCallback) {
+                         InsertLoadTxnCallback insertLoadTxnCallback,
+                         String statementKind, String clientIp) {
         super(dbId, label);
         this.tableId = tableId;
+        this.statementKind = statementKind;
+        this.clientIp = clientIp;
         this.createTimestamp = createTimestamp;
         this.loadStartTimestamp = createTimestamp;
         this.state = JobState.LOADING;
@@ -295,6 +311,7 @@ public class InsertLoadJob extends LoadJob {
     @Override
     public void afterCommitted(TransactionState txnState) throws StarRocksException {
         loadCommittedTimestamp = txnState.getCommitTime();
+        captureCommitThrottle(txnState);
         if (txnCallback != null) {
             txnCallback.afterCommitted(txnState);
         }
@@ -320,13 +337,53 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public void afterVisible(TransactionState txnState) {
+        visibleTimestamp = txnState.getFinishTime() > 0 ? txnState.getFinishTime() : System.currentTimeMillis();
     }
 
     @Override
     public void replayOnVisible(TransactionState txnState) {
+        visibleTimestamp = txnState.getFinishTime();
     }
 
     public long getTableId() {
         return tableId;
+    }
+
+    @Override
+    protected String getStatementKind() {
+        return statementKind;
+    }
+
+    @Override
+    protected String getClientIp() {
+        return clientIp;
+    }
+
+    /**
+     * Classify the DML statement that produced an insert load job. INSERT is split by
+     * its source: literal VALUES, FILES() (planned as a FileScanNode), or any other query.
+     */
+    public static String statementKindOf(DmlStmt stmt, ExecPlan execPlan) {
+        if (stmt instanceof UpdateStmt) {
+            return "UPDATE";
+        }
+        if (stmt instanceof DeleteStmt) {
+            return "DELETE";
+        }
+        if (stmt instanceof MergeIntoStmt) {
+            return "MERGE";
+        }
+        if (stmt instanceof InsertStmt) {
+            InsertStmt insertStmt = (InsertStmt) stmt;
+            if (insertStmt.getQueryStatement() != null
+                    && insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation) {
+                return "INSERT_VALUES";
+            }
+            if (execPlan != null && execPlan.getScanNodes().stream().anyMatch(node -> node instanceof FileScanNode)) {
+                return "INSERT_FILES";
+            }
+            return "INSERT_SELECT";
+        }
+        return null;
     }
 }
