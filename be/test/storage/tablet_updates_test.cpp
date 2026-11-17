@@ -3725,6 +3725,94 @@ TEST_F(TabletUpdatesTest, restore_primary_snapshot_with_gin_index) {
     ASSERT_GT(index_directory_count, 0);
 }
 
+class TabletUpdatesGinRestoreTest : public TabletUpdatesTest,
+                                    public testing::WithParamInterface<std::pair<int64_t, int64_t>> {};
+
+TEST_P(TabletUpdatesGinRestoreTest, restore_uses_snapshot_index_schema) {
+    const auto [source_index_id, destination_index_id] = GetParam();
+    srand(GetCurrentTimeMicros());
+    auto source = create_tablet(rand(), rand(), false, 0, 0, false, source_index_id >= 0, true, source_index_id);
+    auto destination = create_tablet(rand(), source->schema_hash(), false, 0, 0, false, destination_index_id >= 0, true,
+                                     destination_index_id);
+    DeferOp cleanup_tablets([&]() {
+        auto* manager = StorageEngine::instance()->tablet_manager();
+        (void)manager->drop_tablet(source->tablet_id());
+        (void)manager->drop_tablet(destination->tablet_id());
+        (void)fs::remove_all(source->schema_hash_path());
+        (void)fs::remove_all(destination->schema_hash_path());
+    });
+
+    // Keep the columns and schema hash identical; only the secondary index definition differs.
+    ASSERT_OK(source->rowset_commit(2, create_rowset(source, {21, 22, 23})));
+    ASSERT_OK(destination->rowset_commit(2, create_rowset(destination, {99})));
+    ASSERT_EQ(3, read_tablet(source, 2));
+    ASSERT_EQ(1, read_tablet(destination, 2));
+
+    auto snapshot_path = SnapshotManager::instance()->snapshot_full(source, 2, 3600);
+    ASSERT_OK(snapshot_path.status());
+    DeferOp cleanup_snapshot([&]() { (void)fs::remove_all(*snapshot_path); });
+    const auto snapshot_dir = SnapshotManager::instance()->get_schema_hash_full_path(source, *snapshot_path);
+    const auto restore_root =
+            fmt::format("{}/restore_schema_{}", destination->data_dir()->path(), destination->tablet_id());
+    const auto restore_parent = fmt::format("{}/{}", restore_root, destination->tablet_id());
+    const auto restore_dir = fmt::format("{}/{}", restore_parent, destination->schema_hash());
+    ASSERT_OK(fs::create_directories(restore_parent));
+    DeferOp cleanup_restore([&]() { (void)fs::remove_all(restore_root); });
+    std::error_code copy_error;
+    std::filesystem::copy(snapshot_dir, restore_dir, std::filesystem::copy_options::recursive, copy_error);
+    ASSERT_FALSE(copy_error) << copy_error.message();
+
+    SnapshotLoader loader(nullptr, 1, 2);
+    ASSERT_OK(loader.primary_key_move(restore_dir, destination, true));
+    ASSERT_FALSE(fs::path_exist(restore_dir));
+    ASSERT_EQ(3, read_tablet(destination, 2));
+
+    std::vector<RowsetSharedPtr> rowsets;
+    ASSERT_OK(destination->updates()->get_applied_rowsets(2, &rowsets));
+    ASSERT_FALSE(rowsets.empty());
+    size_t index_count = 0;
+    for (const auto& rowset : rowsets) {
+        for (const auto& index : *rowset->schema()->indexes()) {
+            if (index.index_type() != GIN) {
+                continue;
+            }
+            ASSERT_EQ(source_index_id, index.index_id());
+            for (int segment_id = 0; segment_id < rowset->num_segments(); ++segment_id) {
+                const auto index_dir = IndexDescriptor::inverted_index_file_path(
+                        destination->schema_hash_path(), rowset->rowset_id().to_string(), segment_id, index.index_id());
+                std::set<std::string> index_files;
+                ASSERT_OK(fs::list_dirs_files(index_dir, nullptr, &index_files));
+                ASSERT_FALSE(index_files.empty());
+
+                // Query the active index after the restore workspace has been removed.
+                std::unique_ptr<InvertedReader> reader;
+                ASSERT_OK(CLucenePlugin::get_instance().create_inverted_index_reader(
+                        index_dir, std::make_shared<TabletIndex>(index), TYPE_VARCHAR, &reader));
+                OlapReaderStatistics stats;
+                Slice query("23");
+                roaring::Roaring matches;
+                ASSERT_OK(reader->query(&stats, "v2", &query, InvertedIndexQueryType::EQUAL_QUERY, &matches));
+                ASSERT_EQ(1, matches.cardinality());
+                ++index_count;
+            }
+        }
+    }
+    if (source_index_id < 0) {
+        ASSERT_EQ(0, index_count);
+        std::set<std::string> directories;
+        ASSERT_OK(fs::list_dirs_files(destination->schema_hash_path(), &directories, nullptr));
+        ASSERT_TRUE(std::none_of(directories.begin(), directories.end(),
+                                 [](const std::string& directory) { return directory.ends_with(".ivt"); }));
+    } else {
+        ASSERT_GT(index_count, 0);
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(DifferentIndexSchemas, TabletUpdatesGinRestoreTest,
+                         testing::Values(std::make_pair(int64_t{-1}, int64_t{1}),
+                                         std::make_pair(int64_t{1}, int64_t{-1}),
+                                         std::make_pair(int64_t{1}, int64_t{2})));
+
 TEST_F(TabletUpdatesTest, link_primary_snapshot_gin_indexes_is_idempotent) {
     srand(GetCurrentTimeMicros());
     auto tablet = create_tablet(rand(), rand(), false, 0, 0, false, true);

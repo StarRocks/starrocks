@@ -63,6 +63,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
+#include "storage/tablet_schema.h"
 #include "storage/tablet_updates.h"
 
 namespace starrocks {
@@ -608,8 +609,9 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
     }
     snapshot_meta.tablet_meta().set_tablet_id(tablet_id);
 
-    RETURN_IF_ERROR(
-            SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, snapshot_path, tablet->tablet_schema()));
+    // A full backup carries its own index definitions, which may differ from the destination tablet's.
+    auto snapshot_schema = TabletSchema::create(snapshot_meta.tablet_meta().schema());
+    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, snapshot_path, snapshot_schema));
 
     std::vector<std::string> linked_files;
     std::set<std::string> linked_index_dirs;
@@ -663,7 +665,7 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
         }
 
         RETURN_IF_ERROR(SnapshotManager::instance()->link_inverted_index_directories(
-                snapshot_meta, tablet->tablet_schema(), snapshot_path, tablet_path, &linked_index_dirs));
+                snapshot_meta, snapshot_schema, snapshot_path, tablet_path, &linked_index_dirs));
         LOG(INFO) << "linked " << linked_index_dirs.size() << " inverted index directories from " << snapshot_path
                   << " to " << tablet_path;
     } else {
