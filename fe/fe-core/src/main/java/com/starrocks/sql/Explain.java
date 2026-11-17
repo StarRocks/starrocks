@@ -195,20 +195,6 @@ public class Explain {
             return visit(optExpression.getInputs().get(0), context);
         }
 
-        @Override
-<<<<<<< HEAD
-=======
-        public OperatorStr visitPhysicalAIProject(OptExpression optExpression,
-                                                  OperatorPrinter.ExplainContext context) {
-            PhysicalAIProjectOperator aiProject = optExpression.getOp().cast();
-            String expressions = aiProject.getColumnRefMap().entrySet().stream()
-                    .map(entry -> EXPR_PRINTER.print(entry.getKey()) + " := " + EXPR_PRINTER.print(entry.getValue()))
-                    .collect(Collectors.joining(", "));
-            StringBuilder sb = new StringBuilder("- AI PROJECT [").append(expressions).append("]\n");
-            buildCommonProperty(sb, aiProject, context.step);
-            return new OperatorStr(sb.toString(), context.step, buildChildOperatorStr(optExpression, context.step));
-        }
-
         // Scans without a dedicated printer. The default visitPhysicalScan goes back to visit(),
         // which dispatches to the same scan again and recurses until the stack overflows.
         @Override
@@ -229,7 +215,6 @@ public class Explain {
         }
 
         @Override
->>>>>>> d977809 ([BugFix][RB-545] Fix EXPLAIN LOGICAL stack overflow on scans without a printer (#83469))
         public OperatorStr visitPhysicalOlapScan(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
             PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
 
