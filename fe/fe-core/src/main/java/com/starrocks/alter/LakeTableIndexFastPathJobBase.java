@@ -33,10 +33,12 @@ import com.starrocks.lake.Utils;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LeaderLease;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -46,15 +48,19 @@ import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -79,11 +85,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * flags {@code only_add_index} / {@code only_drop_index} that an old CN/BE
  * (one not carrying this fast-path) will silently ignore. Such a BE would
  * fall into the legacy rewrite path with {@code base==new} and end up
- * duplicating rowsets on the tablet. There is no in-protocol detection for
- * this case; the upgrade contract is that all CN/BE nodes must be upgraded
- * <em>before</em> FE. Operators must not run {@code ALTER TABLE ... ADD/DROP
- * INDEX} on lake tables while CN nodes are mid-rolling-upgrade. See the PR
- * description for the full rationale.
+ * duplicating rowsets on the tablet. Nodes that handle the fast path say so
+ * in their heartbeat ({@code TBackendInfo.support_lake_index_fast_path}):
+ * SchemaChangeHandler takes the fast path only when every node of the
+ * warehouse reports it (see {@link #computeNodesWithoutFastPath}). Dispatch
+ * trusts the flag only once the node has answered a heartbeat of the current
+ * leader: until then it waits, and after that it cancels the job rather than
+ * send the request to a node that does not report the fast path. The task
+ * report resends a lost task under the same rule ({@link #canSendFastPathRequest}),
+ * and the job cancels when a node it sent tasks to stops reporting it.
  */
 public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
 
@@ -238,6 +248,46 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
      */
     protected abstract void copySubclassFields(LakeTableIndexFastPathJobBase copy);
 
+    /**
+     * The nodes of warehouse {@code warehouseId} that have not reported they
+     * handle the fast path, including any that has not sent a heartbeat yet.
+     * Every CN group of the warehouse counts: the job acquires one of them at
+     * every scheduling round ({@link AlterJobV2#run}), so any of them may serve
+     * its dispatch. The fast path may be chosen only when this is empty.
+     */
+    static List<Long> computeNodesWithoutFastPath(long warehouseId) {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+        ComputeResourceProvider resourceProvider = warehouseMgr.getComputeResourceProvider();
+        SystemInfoService clusterInfo = globalStateMgr.getNodeMgr().getClusterInfo();
+        List<Long> unsupported = new ArrayList<>();
+        for (Long workerGroupId : warehouseMgr.getWarehouse(warehouseId).getWorkerGroupIds()) {
+            ComputeResource cnGroup = resourceProvider.ofComputeResource(warehouseId, workerGroupId);
+            for (Long nodeId : warehouseMgr.getAllComputeNodeIds(cnGroup)) {
+                ComputeNode node = clusterInfo.getBackendOrComputeNode(nodeId);
+                if (node == null || !node.isSupportLakeIndexFastPath()) {
+                    unsupported.add(nodeId);
+                }
+            }
+        }
+        return unsupported;
+    }
+
+    /**
+     * Whether a fast-path request may be sent to node {@code nodeId} now: this FE is the active leader, and the
+     * node answered a heartbeat of this leader session after its last failed one, reporting the fast path. Used by
+     * the task report's resend ({@link AlterReplicaTask#shouldResend}), the one send outside the job's dispatch.
+     */
+    public static boolean canSendFastPathRequest(long nodeId) {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        LeaderLease leaderLease = globalStateMgr.captureLeaderLease();
+        if (!globalStateMgr.isLeaderLeaseValid(leaderLease)) {
+            return false;
+        }
+        ComputeNode node = globalStateMgr.getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+        return node != null && node.hasLakeIndexFastPathHeartbeat(leaderLease) && node.isSupportLakeIndexFastPath();
+    }
+
     // ---------------------------------------------------------------------
     // AlterJobV2 lifecycle
     // ---------------------------------------------------------------------
@@ -312,6 +362,12 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     protected void runRunningJob() throws AlterCancelException {
         if (batchTask == null) {
             batchTask = dispatchAllTasks();
+            if (batchTask == null) {
+                // A serving node has not answered a heartbeat of this leader since this FE became leader or since
+                // its last failed heartbeat (see buildAllTasks). Dispatch on a later round; the job timeout still
+                // bounds the wait.
+                return;
+            }
         }
         if (!batchTask.isFinished()) {
             // Cancel promptly when BE reports a permanent failure for any
@@ -328,6 +384,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                 throw new AlterCancelException(
                         "fast-path index alter task failed after retries: " + failed.getErrorMsg());
             }
+            checkDispatchedNodesKeepFastPath();
             if (isTimeout()) {
                 throw new AlterCancelException("alter timeout after "
                         + timeoutMs + " ms, still " + batchTask.getTaskNum() + " task(s) in flight");
@@ -903,10 +960,14 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     // Internals
     // ---------------------------------------------------------------------
 
+    /** Returns null, having sent nothing, when the dispatch must wait for a heartbeat (see buildAllTasks). */
     private AgentBatchTask dispatchAllTasks() throws AlterCancelException {
         List<AgentTask> registeredTasks = new ArrayList<>();
         try {
             AgentBatchTask newBatchTask = buildAllTasks();
+            if (newBatchTask == null) {
+                return null;
+            }
             for (AgentTask task : newBatchTask.getAllTasks()) {
                 if (!AgentTaskQueue.addTask(task)) {
                     throw new AlterCancelException("failed to register alter task for tablet " + task.getTabletId());
@@ -925,8 +986,14 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         }
     }
 
+    /**
+     * Returns null when a node serving a tablet has not answered a heartbeat of this leader since this FE became
+     * leader or since the node's last failed heartbeat.
+     */
     private AgentBatchTask buildAllTasks() throws AlterCancelException {
         AgentBatchTask newBatchTask = new AgentBatchTask();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        LeaderLease leaderLease = globalStateMgr.captureLeaderLease();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("database does not exist, dbId: " + dbId);
@@ -960,6 +1027,28 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                     if (cn == null) {
                         throw new AlterCancelException("no alive backend for tablet " + tabletId);
                     }
+                    // A replayed heartbeat's wall clock can be ahead of this FE's clock, even within the allowed
+                    // clock skew. Trust only a live response from this leader session, published after its flag.
+                    if (!globalStateMgr.isLeaderLeaseValid(leaderLease)
+                            || !cn.hasLakeIndexFastPathHeartbeat(leaderLease)) {
+                        // The node has not answered a heartbeat of this leader since this FE became leader or since
+                        // its last failed heartbeat, so its flag may be stale in either direction. After a leader
+                        // change it comes from an image or journal entry: false for a node that supports the fast
+                        // path when the entry predates the FE version that keeps the flag, true for a node
+                        // downgraded during the change. After a failed heartbeat it is the previous binary's, and
+                        // the node may be restarting on an older one. Send nothing until its next heartbeat.
+                        LOG.info("index fast-path job {} defers dispatch: compute node {} serving tablet {} "
+                                + "has not answered a heartbeat of this leader since this FE became leader or "
+                                + "since its last failed heartbeat", jobId, cn.getId(), tabletId);
+                        return null;
+                    }
+                    if (!cn.isSupportLakeIndexFastPath()) {
+                        // Admission saw every node support the fast path, but this one no longer reports it (it
+                        // joined, or restarted on an older binary, since). It would rewrite the tablet into itself.
+                        throw new AlterCancelException("compute node " + cn.getId() + " serving tablet " + tabletId
+                                + " does not support the lake index fast path; run the ALTER TABLE again to use "
+                                + "the regular schema change");
+                    }
                     Long indexMetaId = tabletToIndexMetaId.get(tabletId);
                     Preconditions.checkNotNull(indexMetaId, tabletId);
                     MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(indexMetaId);
@@ -983,6 +1072,33 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         }
         return newBatchTask;
+    }
+
+    /**
+     * A node can be restarted on an older binary after it was sent its tasks. Its next task report shows them lost,
+     * but {@link AlterReplicaTask#shouldResend} does not resend them to a node without the fast path, so cancel once
+     * its heartbeat to this leader says so instead of waiting for the alter timeout.
+     */
+    private void checkDispatchedNodesKeepFastPath() throws AlterCancelException {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        LeaderLease leaderLease = globalStateMgr.captureLeaderLease();
+        if (!globalStateMgr.isLeaderLeaseValid(leaderLease)) {
+            return;
+        }
+        SystemInfoService clusterInfo = globalStateMgr.getNodeMgr().getClusterInfo();
+        Set<Long> checkedNodeIds = new HashSet<>();
+        for (AgentTask task : batchTask.getAllTasks()) {
+            if (task.isFinished() || !checkedNodeIds.add(task.getBackendId())) {
+                continue;
+            }
+            ComputeNode node = clusterInfo.getBackendOrComputeNode(task.getBackendId());
+            if (node != null && node.hasLakeIndexFastPathHeartbeat(leaderLease)
+                    && !node.isSupportLakeIndexFastPath()) {
+                throw new AlterCancelException("compute node " + node.getId() + " serving tablet "
+                        + task.getTabletId() + " no longer supports the lake index fast path; run the ALTER TABLE "
+                        + "again to use the regular schema change");
+            }
+        }
     }
 
     private static void removeRegisteredTasks(List<AgentTask> registeredTasks) {

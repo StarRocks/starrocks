@@ -49,7 +49,6 @@ import com.starrocks.type.MapType;
 import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
-import com.starrocks.type.UnknownType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.type.VariantType;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
@@ -267,20 +266,16 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         MOCK_TABLE_MAP.putIfAbsent(MOCKED_UNPARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
         Map<String, IcebergTableInfo> icebergTableInfoMap = MOCK_TABLE_MAP.get(MOCKED_UNPARTITIONED_DB_NAME);
 
-        List<Column> schemas = ImmutableList.of(
-                new Column("id", IntegerType.INT, true),
-                new Column("data", StringType.STRING, true),
-                new Column("geo_col", UnknownType.UNKNOWN_TYPE, true),
-                new Column("geography_col", UnknownType.UNKNOWN_TYPE, true),
-                new Column("ts_nano_col", UnknownType.UNKNOWN_TYPE, true));
-        schemas = addMetaColumns(schemas);
-
         Schema schema = new Schema(
-                required(3, "id", Types.IntegerType.get()),
-                required(4, "data", Types.StringType.get()),
-                required(5, "geo_col", Types.GeometryType.of("IGNF:ATI")),
-                required(7, "geography_col", Types.GeographyType.crs84()),
-                required(6, "ts_nano_col", Types.StringType.get()));
+                Types.NestedField.optional(3, "id", Types.IntegerType.get()),
+                Types.NestedField.optional(4, "data", Types.StringType.get()),
+                Types.NestedField.optional(5, "geo_col", Types.GeometryType.of("IGNF:ATI")),
+                Types.NestedField.optional(7, "geography_col", Types.GeographyType.crs84()),
+                Types.NestedField.optional(6, "ts_nano_col", Types.TimestampNanoType.withoutZone()),
+                Types.NestedField.optional(8, "locations", Types.ListType.ofOptional(9, Types.StructType.of(
+                        Types.NestedField.optional(10, "shape", Types.GeographyType.crs84()),
+                        Types.NestedField.optional(11, "label", Types.StringType.get())))));
+        List<Column> schemas = addMetaColumns(IcebergApiConverter.toFullSchemas(schema));
         PartitionSpec spec = PartitionSpec.builderFor(schema).build();
         TestTables.TestTable baseTable = TestTables.create(
                 new File(getStarRocksHome() + "/" + MOCKED_UNPARTITIONED_DB_NAME + "/" +

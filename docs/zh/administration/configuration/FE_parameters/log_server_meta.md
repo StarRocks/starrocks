@@ -1624,6 +1624,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: FE 全局异步调度线程池中的线程数，用于处理来自 Connector 写入路径的 “refresh other FE” 后台任务。这些线程仅负责调度后台刷新任务，不会直接向其他 FE 发送刷新 RPC。修改后可在运行中的 FE 上动态生效，无需重启。
 - 引入版本: -
 
+### `iceberg_commit_invalidate_other_fe_timeout_ms`
+
+- 默认值: 3000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: Iceberg 表提交（INSERT、INSERT OVERWRITE、DELETE、UPDATE、MERGE 或 compaction）返回前，等待其他 FE 删除该表缓存的最长时间，使语句返回后在任意 FE 上查询都能看到这次提交。在该时间内没有响应的 FE 由后台刷新更新。滚动升级期间，旧版本的 FE 会改为刷新该表，因此一次提交最多可能等待这么久。设置为 0 或更小的值表示不等待。
+- 引入版本: -
+
 ### `refresh_other_fe_rpc_executor_thread_num`
 
 - 默认值: 4

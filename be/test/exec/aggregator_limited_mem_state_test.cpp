@@ -15,6 +15,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "common/config_exec_flow_fwd.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_sink_operator.h"
@@ -178,6 +179,93 @@ TEST_F(StreamingAggSinkExecuteModeTest, distinct_sink_floors_zero_usage_budget_t
 
     auto* sink = static_cast<AggregateDistinctStreamingSinkOperator*>(op.get());
     EXPECT_EQ(1u, sink->_limited_mem_state.limited_memory_size);
+}
+
+// Once a LIMITED_MEM sink sets streaming_all_states, the hash table belongs to the source, which drains it and
+// rebuilds it in reset_state() on its own thread. The sink must not read the table until the source clears the
+// flag; reading it from push_chunk's revocable-bytes update was a heap-use-after-free under ASAN.
+//
+// A table the source has released is modelled by a null pointer of a hash-table type whose size and capacity
+// are read through the pointer, so any read by the sink faults deterministically.
+class StreamingAggSinkHandoffTest : public StreamingAggSinkExecuteModeTest {};
+
+TEST_F(StreamingAggSinkHandoffTest, streaming_sink_reads_hash_map_it_owns) {
+    auto aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+    AggregateStreamingSinkOperatorFactory factory(1, 1, aggregator_factory, _no_runtime_filters);
+    auto op = factory.create(1, 0);
+    auto aggregator = aggregator_factory->get_or_create(0);
+    auto* sink = static_cast<AggregateStreamingSinkOperator*>(op.get());
+
+    aggregator->_hash_map_variant.init(&_state, AggHashMapVariant::Type::phase1_int32, &_agg_stat);
+    ASSERT_FALSE(aggregator->is_streaming_all_states());
+
+    sink->_update_revocable_mem_bytes();
+    EXPECT_EQ(aggregator->hash_map_variant().allocated_memory_usage(aggregator->mem_pool()),
+              sink->revocable_mem_bytes());
+
+    sink->_handed_off_hash_table_memory_usage = 12345;
+    sink->_publish_hash_table_memory_usage();
+    EXPECT_EQ(aggregator->hash_map_memory_usage(), sink->_unique_metrics->get_counter("HashTableMemoryUsage")->value());
+
+    // An empty table the sink owns is reported as drained.
+    ASSERT_OK(sink->set_finishing(&_state));
+    EXPECT_TRUE(aggregator->is_ht_eos());
+    EXPECT_TRUE(aggregator->is_sink_complete());
+}
+
+TEST_F(StreamingAggSinkHandoffTest, streaming_sink_skips_hash_map_handed_to_source) {
+    auto aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+    AggregateStreamingSinkOperatorFactory factory(1, 1, aggregator_factory, _no_runtime_filters);
+    auto op = factory.create(1, 0);
+    auto aggregator = aggregator_factory->get_or_create(0);
+    auto* sink = static_cast<AggregateStreamingSinkOperator*>(op.get());
+
+    aggregator->_streaming_preaggregation_mode = TStreamingPreaggregationMode::LIMITED_MEM;
+    aggregator->_hash_map_variant.hash_map_with_key = std::unique_ptr<Int32AggHashMapWithOneNumberKey<PhmapSeed1>>();
+    aggregator->set_streaming_all_states(true);
+
+    sink->set_revocable_mem_bytes(42);
+    sink->_update_revocable_mem_bytes();
+    EXPECT_EQ(42u, sink->revocable_mem_bytes());
+
+    // The profile reports the size measured just before the hand-off, not zero.
+    sink->_handed_off_hash_table_memory_usage = 12345;
+    sink->_publish_hash_table_memory_usage();
+    EXPECT_EQ(12345, sink->_unique_metrics->get_counter("HashTableMemoryUsage")->value());
+
+    op->set_execute_mode(1);
+    EXPECT_EQ(static_cast<size_t>(config::streaming_agg_limited_memory_size),
+              sink->_limited_mem_state.limited_memory_size);
+
+    // The source sets ht_eos when it drains the table; the sink only reports that its input is complete.
+    ASSERT_OK(sink->set_finishing(&_state));
+    EXPECT_FALSE(aggregator->is_ht_eos());
+    EXPECT_TRUE(aggregator->is_sink_complete());
+}
+
+TEST_F(StreamingAggSinkHandoffTest, distinct_sink_skips_hash_set_handed_to_source) {
+    auto aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+    AggregateDistinctStreamingSinkOperatorFactory factory(1, 1, aggregator_factory);
+    auto op = factory.create(1, 0);
+    auto aggregator = aggregator_factory->get_or_create(0);
+    auto* sink = static_cast<AggregateDistinctStreamingSinkOperator*>(op.get());
+
+    aggregator->_streaming_preaggregation_mode = TStreamingPreaggregationMode::LIMITED_MEM;
+    aggregator->_is_only_group_by_columns = true;
+    aggregator->_hash_set_variant.hash_set_with_key = std::unique_ptr<Int32AggHashSetOfOneNumberKey<PhmapSeed1>>();
+    aggregator->set_streaming_all_states(true);
+
+    sink->_handed_off_hash_table_memory_usage = 12345;
+    sink->_publish_hash_table_memory_usage();
+    EXPECT_EQ(12345, sink->_unique_metrics->get_counter("HashTableMemoryUsage")->value());
+
+    op->set_execute_mode(1);
+    EXPECT_EQ(static_cast<size_t>(config::streaming_agg_limited_memory_size),
+              sink->_limited_mem_state.limited_memory_size);
+
+    ASSERT_OK(sink->set_finishing(&_state));
+    EXPECT_FALSE(aggregator->is_ht_eos());
+    EXPECT_TRUE(aggregator->is_sink_complete());
 }
 
 } // namespace starrocks::pipeline

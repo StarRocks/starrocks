@@ -179,6 +179,15 @@ CONF_mBool(lake_enable_del_file_crc_check, "true");
 // legacy reader and cannot parse files written in the new format.
 CONF_mBool(lake_enable_protobuf_file_checksum, "true");
 
+// Write multi-statement version logs as ordered groups instead of the legacy merged TxnLogPB.
+// Disabled by default for a reader-first rollout; the legacy write path and its limitations remain
+// until enabled. Readers accept both formats regardless of this flag. Enable only after every CN
+// that can publish, replay or clean up these logs has the group reader. Before either enabling or
+// disabling, pause affected schema-change/multi-statement publishers and drain in-flight requests;
+// switching concurrently with publish is not supported. Disabling does not make existing groups
+// downgrade-readable: drain and verify them before rolling back to a pre-reader CN.
+CONF_mBool(lake_enable_txn_vlog_group, "false");
+
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 

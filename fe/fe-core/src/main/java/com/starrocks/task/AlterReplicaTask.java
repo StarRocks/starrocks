@@ -37,6 +37,7 @@ package com.starrocks.task;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeTableIndexFastPathJobBase;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -380,6 +381,20 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     public void setOnlyDropIndex(List<com.starrocks.thrift.TDropIndexInfo> drops) {
         this.onlyDropIndex = true;
         this.dropIndexes = drops;
+    }
+
+    /**
+     * A lake index fast-path request (base tablet == new tablet) is resent only to a node that still reports the
+     * fast path. The node may have been restarted on an older binary after the job dispatched this task; such a
+     * node ignores only_add_index / only_drop_index, rewrites the tablet into itself and duplicates its rows. The
+     * job cancels once that node's heartbeat says it lacks the fast path.
+     */
+    @Override
+    public boolean shouldResend(long currentTimeMillis) {
+        if (!super.shouldResend(currentTimeMillis)) {
+            return false;
+        }
+        return !(onlyAddIndex || onlyDropIndex) || LakeTableIndexFastPathJobBase.canSendFastPathRequest(backendId);
     }
 
     /*

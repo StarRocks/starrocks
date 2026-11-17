@@ -421,8 +421,7 @@ public class LakeTableSchemaChangeJobColocateTest {
             job.setSampler(request -> SampleSet.EMPTY);
             job.runPendingJob();
             assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
-            // The first round allocates the watershed; the loads before it are then reported finished.
-            job.runWaitingTxnJob();
+            // The loads before the watershed are reported finished.
             new MockUp<LakeRangeRollupJob>() {
                 @Mock
                 public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {

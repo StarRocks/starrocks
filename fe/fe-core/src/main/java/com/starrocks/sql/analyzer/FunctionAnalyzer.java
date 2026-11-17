@@ -291,9 +291,7 @@ public class FunctionAnalyzer {
             FunctionCallExpr functionCallWithoutIf =
                     new FunctionCallExpr(argFuncNameWithoutIf, functionParamsWithOutIf);
             analyzeBuiltinAggFunction(argFuncNameWithoutIf, functionParamsWithOutIf, functionCallWithoutIf);
-        }
-
-        if (fn != null && fn.isAI()) {
+        } else if (fn != null && fn.isAI()) {
             AIFunctionAnalyzer.analyze(functionCallExpr);
         }
     }

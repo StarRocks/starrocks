@@ -41,6 +41,7 @@
 #include "common/logging.h"
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "fs/remote_read_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
@@ -192,6 +193,85 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
     ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
 
     reader->close();
+}
+
+// With the remote I/O scheduler enabled, a query scan that fills the cache builds a read-ahead window for its segment
+// readers. A file that cannot warm the cache (a local file here) turns the window off at its first warm-up, and the
+// scan reads exactly what it reads without the scheduler; reads without a query context build no window at all.
+TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_window_falls_back_when_file_cannot_warm) {
+    constexpr int kRows = 20000;
+    std::vector<int> k(kRows);
+    std::vector<int> v(kRows);
+    for (int i = 0; i < kRows; ++i) {
+        k[i] = i;
+        v[i] = i * 3;
+    }
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k.data(), k.size() * sizeof(int));
+    c1->append_numbers(v.data(), v.size() * sizeof(int));
+    Chunk chunk({std::move(c0), std::move(c1)}, _schema);
+
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    {
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(chunk));
+        ASSERT_OK(writer->finish());
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_id(1);
+        for (const auto& file : writer->segments()) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
+        }
+        writer->close();
+    }
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    auto read_all = [&](const RemoteReadContext& remote_read, std::vector<std::pair<int, int>>* rows,
+                        OlapReaderStatistics* stats) {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        ASSERT_OK(reader->prepare());
+        TabletReaderParams params;
+        params.reader_type = ReaderType::READER_QUERY;
+        params.lake_io_opts.fill_data_cache = true;
+        params.lake_io_opts.remote_read = remote_read;
+        ASSERT_OK(reader->open(params));
+        auto read_chunk = ChunkFactory::new_chunk(*_schema, 1024);
+        while (true) {
+            read_chunk->reset();
+            auto st = reader->get_next(read_chunk.get());
+            if (st.is_end_of_file()) break;
+            ASSERT_OK(st);
+            for (size_t i = 0; i < read_chunk->num_rows(); ++i) {
+                rows->emplace_back(read_chunk->get(i)[0].get_int32(), read_chunk->get(i)[1].get_int32());
+            }
+        }
+        reader->close();
+        *stats = reader->stats();
+    };
+
+    const auto query = RemoteReadContext::for_query(1, 1, 0, 42);
+    std::vector<std::pair<int, int>> expected;
+    OlapReaderStatistics off_stats;
+    read_all(query, &expected, &off_stats);
+    ASSERT_EQ(kRows, expected.size());
+
+    g_remote_io_scheduler_enabled.store(true);
+    DeferOp restore([] { g_remote_io_scheduler_enabled.store(false); });
+    for (const auto& remote_read : {query, RemoteReadContext{}}) {
+        std::vector<std::pair<int, int>> rows;
+        OlapReaderStatistics stats;
+        read_all(remote_read, &rows, &stats);
+        EXPECT_EQ(expected, rows);
+        // Nothing was warmed: the local file cannot, and an unattributed read does not read ahead.
+        EXPECT_EQ(0, stats.remote_prefetch_ranges);
+        EXPECT_EQ(0, stats.remote_prefetch_blocks);
+        EXPECT_GE(stats.segment_first_chunks, 1);
+    }
 }
 
 // Regression test for issue #75203: a transient object-storage failure while a physical-split scan

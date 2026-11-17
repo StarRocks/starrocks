@@ -935,9 +935,11 @@ v3.1 以降、StarRocks はユーザーが SQL コマンドを実行して手動
 
 共有データクラスタは v3.3.0 以降でこの機能をサポートしています。
 
+共有データの主キーテーブルに対する Base Compaction は v4.1.4 からサポートされています。`ALTER TABLE ... COMPACT` で手動 Compaction を要求でき、`BASE` キーワードの追加は不要です。v4.1.7 以降の `lake_pk_compaction_base_enable_delete_trigger` は自動トリガーだけを制御し、`false` にしても手動要求には影響しません。手動要求は 2 つの削除しきい値も回避します。削除行がないタブレットは通常の Compaction 選択にフォールバックします。要求は非同期で、1 回でタブレット全体がマージされるとは限りません。[主キーテーブルの Base Compaction](../../../administration/management/compaction.md#primary-key-base-compaction)を参照してください。
+
 > **注意**
 >
-> v3.2.13 以降、プロパティ [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#forbid-base-compaction) を使用して、特定の時間範囲内でベースコンパクションを禁止することができます。
+> [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#ベースコンパクションの禁止) の v3.2.13 での対応は、共有なしの非主キーテーブルが対象です。4.1 系列では、共有データテーブルにこのプロパティを設定できません。共有データの自動 Base Compaction の時間帯と最小間隔の制限は v4.2 からサポートされています。手動の `ALTER TABLE ... COMPACT` はこれらの制限を回避します。
 
 構文:
 
@@ -964,7 +966,7 @@ ALTER TABLE <tbl_name> CUMULATIVE COMPACT (<partition1_name>[,<partition2_name>,
 ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 ```
 
-`information_schema` データベースの `be_compactions` テーブルはコンパクション結果を記録します。コンパクション後のデータバージョンをクエリするには、`SELECT * FROM information_schema.be_compactions;` を実行できます。
+共有なしクラスタでは、`information_schema.be_compactions` で Compaction の結果を確認できます。共有データクラスタでは、`SHOW PROC '/compactions'` でタスク状態、`information_schema.be_cloud_native_compactions` でタブレットの実行詳細を確認します。[Compaction タスクの表示](../../../administration/management/compaction.md#compaction-タスクの表示)を参照してください。
 
 ### 主キー永続性インデックスの削除 (v3.3.9 以降)
 

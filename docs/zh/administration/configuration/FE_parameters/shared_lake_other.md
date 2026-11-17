@@ -929,6 +929,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 等待 Iceberg 提交操作完成的超时时间（秒）。当使用提交队列 (`enable_iceberg_commit_queue=true`) 时，每个提交操作必须在此超时时间内完成。如果提交时间超过此超时，它将被取消并引发错误。影响提交时间的因素包括：正在提交的数据文件数量、表的元数据大小、底层存储（例如 S3、HDFS）的性能。
 - 引入版本: v4.1.0
 
+### `iceberg_rewrite_commit_max_retries`
+
+- 默认值: 5
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: Iceberg `rewrite_data_files` 提交时，如果 Iceberg 自身的提交重试（表属性 `commit.retry.num-retries`）全部输给其他写入方的并发提交（例如持续向表中追加数据的流式作业），在重新加载的表上再重试的次数。重试间隔从 1 秒开始指数退避，最长 30 秒。存在冲突的修改（例如对正在重写的文件的并发删除）不会重试。设置为 `0` 关闭此重试。整个提交仍需在 `iceberg_commit_queue_timeout_seconds` 内完成。
+- 引入版本: -
+
 ### `iceberg_commit_queue_max_size`
 
 - 默认值: 1000
