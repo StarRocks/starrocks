@@ -59,11 +59,8 @@ import mockit.Mocked;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-<<<<<<< HEAD
-import org.wildfly.common.Assert;
-=======
 import org.mockito.Mockito;
->>>>>>> dc91cb8a7a4... [BugFix][RB-225] Invalidate other FEs' cached Iceberg table before a commit returns (#70029)
+import org.wildfly.common.Assert;
 
 import java.util.HashMap;
 import java.util.List;
