@@ -168,7 +168,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：上一轮 Base Compaction 距今的间隔。此项为 Base Compaction 触发条件之一。
 - 引入版本：-
 
-此参数早于 v4.1 已存在，不代表当时已支持存算分离的间隔控制。4.1 系列不使用此参数限制存算分离 Base Compaction；上述存算分离间隔控制从 v4.2 开始支持。它是自动 Base Compaction 的最小间隔，不是每天定时执行的周期，手动请求可绕过。详见[版本支持](../../management/compaction.md#primary-key-base-compaction-versions)和[执行时间控制](../../management/compaction.md#base-compaction-time-controls)。
+此参数早于 v4.1 已存在，不代表当时已支持存算分离的间隔控制。4.1 系列不使用此参数限制存算分离 Base Compaction；存算分离间隔控制从 v4.2 开始支持。在支持该能力的版本中，此参数表示自动 Base Compaction 的最小间隔，不是每天定时执行的周期，手动请求可绕过。详见[版本支持](../../management/compaction.md#primary-key-base-compaction-versions)和[执行时间控制](../../management/compaction.md#base-compaction-time-controls)。
 
 ### base_compaction_num_threads_per_disk
 

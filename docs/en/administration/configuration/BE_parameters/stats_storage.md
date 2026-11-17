@@ -161,7 +161,7 @@ This topic introduces the following types of BE configurations:
 - Description: The time interval since the last Base Compaction. This configuration item is one of the conditions that trigger a Base Compaction.
 - Introduced in: -
 
-This parameter predates v4.1; its existence does not imply support for shared-data interval controls in those releases. The 4.1 series does not use it to restrict shared-data Base Compaction. The shared-data interval control described above is supported from v4.2. It is a minimum interval for automatic Base Compaction, not a daily schedule, and manual requests bypass it. See [Version support](../../management/compaction.md#primary-key-base-compaction-versions) and [Time controls](../../management/compaction.md#base-compaction-time-controls).
+This parameter predates v4.1; its existence does not imply support for shared-data interval controls in those releases. The 4.1 series does not use it to restrict shared-data Base Compaction. Shared-data interval control is supported from v4.2. In versions that support it, this parameter sets a minimum interval for automatic Base Compaction rather than a daily schedule; manual requests bypass that interval. See [Version support](../../management/compaction.md#primary-key-base-compaction-versions) and [Time controls](../../management/compaction.md#base-compaction-time-controls).
 
 ### base_compaction_num_threads_per_disk
 

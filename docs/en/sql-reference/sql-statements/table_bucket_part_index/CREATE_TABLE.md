@@ -847,15 +847,9 @@ For cloud-native tables with Fast Schema Evolution v2 enabled, schema change job
 
 ### Forbid Base Compaction
 
-<<<<<<< HEAD
 `base_compaction_forbidden_time_ranges`: The time range within which Base Compaction is forbidden for the table. When this property is set, the system performs Base Compaction on eligible tablets only outside the specified time range. This property is supported from v3.2.13.
-=======
-`base_compaction_forbidden_time_ranges`: The time range used to restrict Base Compaction for the table. Its effect depends on the table architecture and compaction policy, as described below. This property is supported from v3.2.13.
 
-**Version scope:** v3.2.13 is when this property became available for shared-nothing non-Primary Key tables, not for shared-data tables. The 4.1 series does not support setting it on shared-data tables; FE rejects the setting. The shared-data behavior below is supported from v4.2. The property defines when automatic Base Compaction is forbidden; manual `ALTER TABLE ... COMPACT` requests bypass the restriction in versions that support it. See [Version support for shared-data Base Compaction](../../../administration/management/compaction.md#primary-key-base-compaction-versions).
-
-For shared-data Primary Key tables and non-Primary Key tables using the Base and Cumulative policy, the range restricts automatic Base Compaction when compaction is dispatched; Cumulative Compaction can still run. For non-Primary Key tables using the Size Tiered policy, the range only disables the delete-version threshold that forces Base Compaction. Normal Size Tiered level selection can still choose the oldest level during the forbidden period. The BE/CN parameter `base_compaction_interval_seconds_since_last_operation` applies the same restrictions until the minimum interval has elapsed. Manual `ALTER TABLE ... COMPACT` requests override these restrictions.
->>>>>>> 33990b5 ([Doc] Clarify shared-data PK base compaction and version support (#83474))
+**Version scope:** v3.2.13 is when this property became available for shared-nothing non-Primary Key tables, not for shared-data tables. The 4.1 series does not support setting it on shared-data tables; FE rejects the setting. Time-window control for shared-data tables is supported from v4.2. The property defines when automatic Base Compaction is forbidden; manual `ALTER TABLE ... COMPACT` requests bypass the restriction in versions that support it. See [Version support for shared-data Base Compaction](../../../administration/management/compaction.md#primary-key-base-compaction-versions).
 
 :::note
 Make sure that the number of data loading to the table does not exceed 500 during the period when Base Compaction is forbidden.
