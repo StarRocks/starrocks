@@ -34,7 +34,17 @@ Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使�
 
 :::
 
-如果 Iceberg 列的列表、映射或结构体中嵌套了 geography，则整个列显示为 `UNKNOWN_TYPE`，无法查询，包括其中的非地理空间子字段。其他受支持的列和标量 geography 仍可读取。
+## Iceberg 类型映射
+
+| Iceberg 类型 | StarRocks 类型 | 读取条件 |
+| --- | --- | --- |
+| `geometry` | `GEOMETRY` | 支持 Iceberg 格式版本 3 及以上的 Parquet 表中的顶层列。CRS 必须为 `OGC:CRS84`（默认值）或 `EPSG:<n>`，其中 `n` 仅包含 ASCII 数字，且表示一个正的 32 位有符号整数。其他 CRS 标识符映射为 `UNKNOWN_TYPE`。 |
+
+StarRocks 原样保留 CRS 标识符。`OGC:CRS84` 和 `EPSG:4326` 是不同的标识符。使用 `ST_AsText(g)` 或 `ST_AsBinary(g)` 返回 GEOMETRY 值。直接输出 GEOMETRY 列（包括输出包含此列的 `SELECT *`）会在查询分析阶段报错。
+
+如果 Iceberg 列的列表、映射或结构体中嵌套了 geography 或 geometry，则整个列显示为 `UNKNOWN_TYPE`，包括其中的非地理空间子字段在内均无法查询。其他受支持的列和标量 geography 仍可读取。
+
+滚动升级时，请先升级所有 BE 和 CN 节点，再升级 FE 节点。
 
 ## 使用注意事项
 

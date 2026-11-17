@@ -34,7 +34,17 @@ Iceberg クラスターで SQL ワークロードを成功させるためには�
 
 :::
 
-リスト、マップ、構造体に geography を含む Iceberg 列は、列全体が `UNKNOWN_TYPE` と表示され、地理空間型以外のサブフィールドも含めてクエリできません。他のサポート対象列とスカラーの geography は引き続き読み取れます。
+## Iceberg の型マッピング
+
+| Iceberg の型 | StarRocks の型 | 読み取り条件 |
+| --- | --- | --- |
+| `geometry` | `GEOMETRY` | Iceberg フォーマットバージョン 3 以降の Parquet テーブルのトップレベル列に対応します。CRS は `OGC:CRS84`（既定値）または `EPSG:<n>` である必要があります。`n` は ASCII 数字のみで構成され、32 ビット符号付き整数の範囲内の正の値を表します。それ以外の CRS 識別子は `UNKNOWN_TYPE` にマッピングされます。 |
+
+StarRocks は保存された CRS 識別子をそのまま保持します。`OGC:CRS84` と `EPSG:4326` は別の識別子です。GEOMETRY の値を返すには `ST_AsText(g)` または `ST_AsBinary(g)` を使用します。GEOMETRY 列を直接出力するクエリは、その列を含む `SELECT *` も含め、クエリの解析時にエラーになります。
+
+リスト、マップ、構造体に geography または geometry を含む Iceberg 列は、列全体が `UNKNOWN_TYPE` と表示され、地理空間型以外のサブフィールドも含めてクエリできません。他のサポート対象列とスカラーの geography は引き続き読み取れます。
+
+ローリングアップグレードでは、すべての BE と CN ノードを先にアップグレードしてから FE ノードをアップグレードしてください。
 
 ## 使用上の注意
 
