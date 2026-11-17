@@ -177,7 +177,10 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
             }
             status = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
                     getTransactionState(db.getId(), getTransactionId()).getTransactionStatus();
-        } catch (StarRocksException e) {
+        } catch (StarRocksException | RuntimeException e) {
+            // Unchecked failures count too: a commit that cannot get the table lock in time throws
+            // ErrorReportException, and without the abort the transaction stays PREPARED until it times out,
+            // holding back a tablet reshard of the table and vacuum. cancel() leaves a committed one alone.
             if (cancel(DeleteMgr.CancelType.COMMIT_FAIL, e.getMessage())) {
                 throw new DdlException(e.getMessage(), e);
             } else {
