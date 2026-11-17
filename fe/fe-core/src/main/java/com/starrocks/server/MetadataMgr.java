@@ -1080,6 +1080,14 @@ public class MetadataMgr {
         connectorMetadata.ifPresent(metadata -> metadata.invalidateTableForRead(srDbName, table));
     }
 
+    /**
+     * See {@link ConnectorMetadata#invalidateCachedTable}.
+     */
+    public void invalidateCachedTable(String catalogName, String dbName, String tableName) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> metadata.invalidateCachedTable(dbName, tableName));
+    }
+
     public void finishSink(String catalogName, String dbName, String tableName,
                            List<TSinkCommitInfo> sinkCommitInfos, String branch) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
