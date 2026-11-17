@@ -35,8 +35,6 @@ select count(*) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table$fi
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table force;
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 drop catalog iceberg_sql_test_${uuid0};
-<<<<<<< HEAD
-=======
 
 CLEANUP {
 drop table if exists iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table force;
@@ -44,4 +42,3 @@ drop database if exists iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 set catalog default_catalog;
 drop catalog if exists iceberg_sql_test_${uuid0};
 } END CLEANUP
->>>>>>> b6b6a39 ([UT] Purge Iceberg tables and drop leaked databases in SQL cases (#83510))
