@@ -362,6 +362,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         try {
             if (!isPreviousLoadFinished(dbId, tableId, watershedTxnId)) {
                 LOG.info("wait transactions before {} to be finished, rollup job: {}", watershedTxnId, jobId);
+                LakeAlterWaitGuard.cancelIfCommitsRejected(this, watershedTxnId);
                 return;
             }
         } catch (AnalysisException e) {
@@ -416,7 +417,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                             baseTabletId, visibleVersion, jobId, rollupJobV2Params, baseTabletReadSchema, watershedTxnId);
                     rollupBatchTask.addTask(rollupTask);
                 }
-                partition.setMinRetainVersion(visibleVersion);
+                pinVersionForRewrite(partition, visibleVersion);
             }
         }
 
@@ -457,7 +458,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             for (long physicalPartitionId : physicalPartitionIdToRollupIndex.keySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Preconditions.checkNotNull(physicalPartition, physicalPartitionId);
-                physicalPartition.setMinRetainVersion(0);
+                releaseRewriteVersionPin(physicalPartition);
                 long commitVersion = physicalPartition.getNextVersion();
                 commitVersionMap.put(physicalPartitionId, commitVersion);
                 LOG.debug("commit version of partition {} is {}. jobId={}", physicalPartitionId, commitVersion, jobId);
@@ -824,7 +825,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             }
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             partition.deleteMaterializedIndexByMetaId(rollupIndexMetaId);
-            partition.setMinRetainVersion(0);
+            releaseRewriteVersionPin(partition);
         }
         table.deleteIndexInfo(rollupIndexName);
     }
@@ -886,6 +887,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
      */
     @Override
     public void pruneMeta() {
+        super.pruneMeta();
         physicalPartitionIdToRollupIndex = Maps.newHashMap();
         physicalPartitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
         rollupBatchTask = new AgentBatchTask();

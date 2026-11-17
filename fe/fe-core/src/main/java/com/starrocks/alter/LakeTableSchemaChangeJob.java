@@ -522,6 +522,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
      */
     @Override
     protected void onComputeResourceUnavailable() {
+        super.onComputeResourceUnavailable();
         if (jobState != JobState.PENDING || createReplicaLatch == null) {
             return;
         }
@@ -724,6 +725,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         try {
             if (!isPreviousLoadFinished(dbId, tableId, watershedTxnId)) {
                 LOG.info("wait transactions before {} to be finished, schema change job: {}", watershedTxnId, jobId);
+                LakeAlterWaitGuard.cancelIfCommitsRejected(this, watershedTxnId);
                 return;
             }
         } catch (AnalysisException e) {
@@ -879,7 +881,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     }
                 }
 
-                physicalPartition.setMinRetainVersion(visibleVersion);
+                pinVersionForRewrite(physicalPartition, visibleVersion);
 
             } // end for partitions
         }
@@ -924,7 +926,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Preconditions.checkNotNull(physicalPartition, physicalPartitionId);
-                physicalPartition.setMinRetainVersion(0);
+                releaseRewriteVersionPin(physicalPartition);
                 long commitVersion = physicalPartition.getNextVersion();
                 commitVersionMap.put(physicalPartitionId, commitVersion);
                 LOG.debug("commit version of partition {} is {}. jobId={}", physicalPartitionId, commitVersion, jobId);
@@ -1247,6 +1249,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     advanceVisibleVersionForForceSkip(table, commitVersionMap);
                 }
                 removeShadowIndex(table);
+                GlobalStateMgr.getCurrentState().getCompactionMgr().resumeCompactionAfterAlter(dbId, table);
             } else {
                 throw new RuntimeException("unknown job state '{}'" + jobState.name());
             }
@@ -1276,7 +1279,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
             PhysicalPartition partition = table.getPhysicalPartition(physicalPartitionId);
             Preconditions.checkNotNull(partition, physicalPartitionId);
-            partition.setMinRetainVersion(0);
+            releaseRewriteVersionPin(partition);
             for (MaterializedIndex shadowIdx : physicalPartitionIndexMap.row(physicalPartitionId).values()) {
                 partition.deleteMaterializedIndexByMetaId(shadowIdx.getMetaId());
             }
@@ -1461,6 +1464,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                         advanceVisibleVersionForForceSkip(table, commitVersionMap);
                     }
                     removeShadowIndex(table);
+                    GlobalStateMgr.getCurrentState().getCompactionMgr().resumeCompactionAfterAlter(dbId, table);
                 }
             }
         });
@@ -1493,6 +1497,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
      */
     @Override
     public void pruneMeta() {
+        super.pruneMeta();
         physicalPartitionIndexTabletMap = HashBasedTable.create();
         physicalPartitionIndexMap = HashBasedTable.create();
         indexMetaIdToSchema = Maps.newHashMap();
