@@ -807,6 +807,32 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select regexp_extract('1abb 2b 14m', '[a-z]+', 1);";
         assertPlanContains(sql, "<slot 2> : if(regexp_extract('1abb 2b 14m', '[a-z]+', 1) = '', NULL, " +
                 "regexp_extract('1abb 2b 14m', '[a-z]+', 1))");
+
+        sql = "select regexp_extract_all('1a 2b 14m', '\\d+');";
+        assertPlanContains(sql, "regexp_extract_all('1a 2b 14m', '\\\\d+', 0)");
+    }
+
+    @Test
+    public void testTypedLiterals() throws Exception {
+        String sql = "select v1 from t0 where v2 = BIGINT '42'";
+        assertPlanContains(sql, "2: v2 = 42");
+
+        sql = "select DOUBLE '1.5' + v1 from t0";
+        assertPlanContains(sql, "1.5 + CAST(1: v1 AS DOUBLE)");
+
+        // Trino's single-letter and numeric BOOLEAN spellings, in any case
+        sql = "select if(BOOLEAN 't', v1, 0), if(BOOLEAN 'F', 0, v2), if(BOOLEAN '0', 0, v3) from t0";
+        assertPlanContains(sql, "OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3");
+    }
+
+    @Test
+    public void testCountDistinctFilter() throws Exception {
+        String sql = "select count(distinct v2) filter (where v3 > 1) from t0";
+        assertPlanContains(sql, "if(3: v3 > 1, 2: v2, NULL)");
+
+        // count(*) with a filter still becomes count_if
+        sql = "select count(*) filter (where v3 > 1) from t0";
+        assertPlanContains(sql, "count_if(1, 4: expr)", "<slot 4> : 3: v3 > 1");
     }
 
     @Test

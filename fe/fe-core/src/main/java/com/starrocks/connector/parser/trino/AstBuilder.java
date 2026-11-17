@@ -221,6 +221,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -817,12 +818,20 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 orderByElements.forEach(e -> arguments.add(e.getExpr()));
             }
             Optional<Expression> filterExpr = node.getFilter();
-            if (filterExpr.isPresent()) {
+            if (filterExpr.isPresent() && functionName.equalsIgnoreCase(FunctionSet.COUNT) && isDistinct && !isStar) {
+                // count_if has no DISTINCT form, so move the filter into the arguments instead:
+                // count(DISTINCT x) FILTER (WHERE c) -> count(DISTINCT if(c, x, NULL)).
+                // count(DISTINCT ...) skips rows with a NULL argument, which drops exactly the rows the
+                // filter rejects (including those where c is NULL).
+                Expr booleanExpr = (Expr) visit(filterExpr.get(), context);
+                List<Expr> filteredArguments = arguments.stream()
+                        .map(arg -> (Expr) new FunctionCallExpr(FunctionSet.IF,
+                                Lists.newArrayList(booleanExpr.clone(), arg, new NullLiteral())))
+                        .collect(Collectors.toList());
+                callExpr = new FunctionCallExpr(functionName, new FunctionParams(true, filteredArguments, orderByElements));
+            } else if (filterExpr.isPresent()) {
                 // convert agg filter to agg_if
                 boolean isCountFunc = functionName.equalsIgnoreCase(FunctionSet.COUNT);
-                if (isCountFunc && isDistinct) {
-                    throw new ParsingException("Aggregation filter does not support COUNT DISTINCT");
-                }
                 Expr booleanExpr = (Expr) visit(filterExpr.get(), context);
                 arguments.add(booleanExpr);
                 functionName = functionName + FunctionSet.AGG_STATE_IF_SUFFIX;
@@ -1053,6 +1062,28 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             } catch (ParsingException e) {
                 throw new RuntimeException(e);
             }
+        }
+        ScalarType literalType = getTypeByName(node.getType());
+        if (literalType != null && literalType.isBoolean()) {
+            // Trino accepts true/t/1 and false/f/0 in any case and rejects anything else. A StarRocks string
+            // cast does not know 't' and 'f' and would return NULL, so build the literal here.
+            switch (node.getValue().toLowerCase(Locale.ROOT)) {
+                case "true":
+                case "t":
+                case "1":
+                    return new BoolLiteral(true);
+                case "false":
+                case "f":
+                case "0":
+                    return new BoolLiteral(false);
+                default:
+                    throw new ParsingException("'%s' is not a valid BOOLEAN literal", node.getValue());
+            }
+        }
+        // Other typed literals such as BIGINT '42' or DOUBLE '1.5' are casts of the string value.
+        if (literalType != null && (literalType.isNumericType() || literalType.isStringType())) {
+            return new CastExpr(new TypeDef(literalType),
+                    new com.starrocks.sql.ast.expression.StringLiteral(node.getValue()));
         }
         throw new ParsingException("Parse Error : unknown type " + node.getType());
     }
