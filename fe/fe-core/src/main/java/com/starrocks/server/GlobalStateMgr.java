@@ -283,6 +283,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -567,6 +568,8 @@ public class GlobalStateMgr {
     private final ExecutorService queryDeployExecutor;
     private final ThreadPoolExecutor refreshOtherFeDispatchExecutor;
     private final ThreadPoolExecutor refreshOtherFeRpcExecutor;
+    // Kept apart from refreshOtherFeRpcExecutor, whose threads can be held by full refreshes for minutes
+    private final ThreadPoolExecutor invalidateOtherFeRpcExecutor;
     private final WarehouseIdleChecker warehouseIdleChecker;
 
     private final ClusterSnapshotMgr clusterSnapshotMgr;
@@ -932,6 +935,9 @@ public class GlobalStateMgr {
                 Math.max(16, Config.refresh_other_fe_rpc_executor_thread_num * 4),
                 "refresh-other-fe-rpc",
                 true);
+        this.invalidateOtherFeRpcExecutor = ThreadPoolManager.newDaemonFixedThreadPoolWithAbortPolicy(
+                16, 64, "invalidate-other-fe-rpc", true);
+        this.invalidateOtherFeRpcExecutor.allowCoreThreadTimeOut(true);
         getConfigRefreshDaemon().registerListener(this::refreshOtherFeExecutorConfig);
 
         this.warehouseIdleChecker = new WarehouseIdleChecker();
@@ -3521,6 +3527,87 @@ public class GlobalStateMgr {
             LOG.error("Async refresh others fe dispatch rejected on {}.{}.{} with partitions {}",
                     tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), partitionsSnapshot, e);
             return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    /**
+     * Make every other alive FE drop its cached copy of the table, waiting up to {@code timeoutMs} for them.
+     * A connector commit writes no edit log, so this is how the other FEs stop serving the pre-commit table
+     * before the statement returns. Best effort: a peer that fails or does not answer in time is only logged
+     * and keeps its copy until the background refresh reaches it.
+     */
+    public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+        if (timeoutMs <= 0) {
+            return;
+        }
+        try {
+            invalidateOthersFeTableAndWait(tableName, timeoutMs);
+        } catch (Exception e) {
+            // The commit already succeeded: never fail the statement for this
+            LOG.warn("Invalidate {}.{}.{} on other fes failed, it is left to the background refresh",
+                    tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), e);
+        }
+    }
+
+    private void invalidateOthersFeTableAndWait(TableName tableName, int timeoutMs) {
+        String selfHost = getNodeMgr().getSelfNode().first;
+        Map<String, Future<TStatus>> resultMap = Maps.newHashMap();
+        for (Frontend fe : getNodeMgr().getFrontends(null)) {
+            if (fe.getHost().equals(selfHost) || !fe.isAlive()) {
+                continue;
+            }
+            TNetworkAddress thriftAddress = new TNetworkAddress(fe.getHost(), fe.getRpcPort());
+            try {
+                resultMap.put(fe.getHost(), invalidateOtherFeRpcExecutor.submit(
+                        () -> invalidateOtherFeTableRpc(thriftAddress, tableName, timeoutMs)));
+            } catch (RejectedExecutionException e) {
+                LOG.warn("Invalidate {}.{}.{} on fe {} rejected", tableName.getCatalog(), tableName.getDb(),
+                        tableName.getTbl(), fe.getHost());
+            }
+        }
+
+        long deadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+        for (Map.Entry<String, Future<TStatus>> entry : resultMap.entrySet()) {
+            Future<TStatus> future = entry.getValue();
+            String err;
+            try {
+                TStatus status = future.get(Math.max(0, deadlineNs - System.nanoTime()), TimeUnit.NANOSECONDS);
+                if (status.getStatus_code() == TStatusCode.OK) {
+                    continue;
+                }
+                err = String.valueOf(status.getError_msgs());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                resultMap.values().forEach(f -> f.cancel(false));
+                LOG.warn("Interrupted invalidating {}.{}.{} on other fes", tableName.getCatalog(), tableName.getDb(),
+                        tableName.getTbl());
+                return;
+            } catch (TimeoutException e) {
+                future.cancel(false);
+                err = "no response in " + timeoutMs + "ms";
+            } catch (Exception e) {
+                err = e.getMessage();
+            }
+            LOG.warn("Invalidate {}.{}.{} on fe {} failed, it is left to the background refresh: {}",
+                    tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), entry.getKey(), err);
+        }
+    }
+
+    private TStatus invalidateOtherFeTableRpc(TNetworkAddress thriftAddress, TableName tableName, int timeoutMs) {
+        TRefreshTableRequest request = new TRefreshTableRequest();
+        request.setCatalog_name(tableName.getCatalog());
+        request.setDb_name(tableName.getDb());
+        request.setTable_name(tableName.getTbl());
+        request.setInvalidate_only(true);
+        try {
+            TRefreshTableResponse response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool, thriftAddress, timeoutMs, 1,
+                    client -> client.refreshTable(request));
+            return response.getStatus();
+        } catch (Exception e) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            return status;
         }
     }
 

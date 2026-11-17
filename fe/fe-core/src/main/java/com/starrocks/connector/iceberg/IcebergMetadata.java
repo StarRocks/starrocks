@@ -3024,6 +3024,13 @@ public class IcebergMetadata implements ConnectorMetadata {
         icebergCatalog.invalidateTableCache(dbName, tableName);
     }
 
+    // As invalidateTableForRead: the partition and manifest caches are keyed by snapshot and file path.
+    @Override
+    public void invalidateCachedTable(String dbName, String tableName) {
+        tables.remove(TableIdentifier.of(dbName, tableName));
+        icebergCatalog.invalidateTableCache(dbName, tableName);
+    }
+
     private void refreshTableWithResource(Table table) {
         IcebergTable icebergTable = (IcebergTable) table;
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
@@ -3210,6 +3217,12 @@ public class IcebergMetadata implements ConnectorMetadata {
                 throw new RuntimeException(e);
             }
         }
+
+        // The commit writes no edit log, and the refresh the commit dispatched to the other FEs is not waited
+        // for: make them drop the pre-commit table before the statement returns. Outside the commit queue, so
+        // a slow peer does not hold up the next commit to the table.
+        GlobalStateMgr.getCurrentState().invalidateOthersFeTable(new TableName(catalogName, dbName, tableName),
+                Config.iceberg_commit_invalidate_other_fe_timeout_ms);
     }
 
     private void commitWithCleanup(Runnable commitAction, Runnable cleanupAction,
