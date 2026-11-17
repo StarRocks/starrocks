@@ -135,6 +135,16 @@ set query_including_mv_names = "test_mv4";
 function: print_hit_materialized_view("SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;", "test_mv4")
 SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;
 
-DROP DATABASE IF EXISTS mv_iceberg_${uuid0}.mv_db_${uuid0};
+drop table mv_iceberg_${uuid0}.db_${uuid0}.t1 force;
+DROP DATABASE IF EXISTS mv_iceberg_${uuid0}.db_${uuid0};
 drop catalog mv_iceberg_${uuid0};
 drop database db_${uuid0} force;
+
+CLEANUP {
+drop database if exists default_catalog.mv_db_${uuid0} force;
+drop table if exists mv_iceberg_${uuid0}.db_${uuid0}.t1 force;
+drop database if exists mv_iceberg_${uuid0}.db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists mv_iceberg_${uuid0};
+drop database if exists default_catalog.db_${uuid0} force;
+} END CLEANUP

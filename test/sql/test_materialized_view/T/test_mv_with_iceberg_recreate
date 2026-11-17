@@ -48,7 +48,7 @@ SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${
 admin set frontend config('enable_mv_automatic_active_check'='false');
 -- drop base table
 use mv_iceberg_${uuid0}.mv_ice_db_${uuid0};
-DROP TABLE mv_ice_tbl_${uuid0};
+DROP TABLE mv_ice_tbl_${uuid0} FORCE;
 set catalog default_catalog;
 use db_${uuid0};
 
