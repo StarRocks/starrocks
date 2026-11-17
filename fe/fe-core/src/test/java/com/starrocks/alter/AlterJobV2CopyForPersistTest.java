@@ -284,6 +284,53 @@ public class AlterJobV2CopyForPersistTest {
         assertFieldsEqual(dropJob, dropJob.copyForPersist(), "historySchema");
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * The index fast-path jobs copy the fields of their base class one by one into the persisted copy. A commit
+     * gtid missing from the FINISHED_REWRITING journal entry would make a new leader publish the commit
+     * versions under gtid 0.
+     */
+    @Test
+    public void testLakeTableIndexFastPathJobsCopyCommitGtid() throws Exception {
+        LakeTableAddIndexJob addJob = new LakeTableAddIndexJob();
+        setField(addJob, "commitGtid", 77L);
+        assertFieldsEqual(addJob, addJob.copyForPersist(), "commitGtid");
+
+        LakeTableDropIndexJob dropJob = new LakeTableDropIndexJob();
+        setField(dropJob, "commitGtid", 77L);
+        assertFieldsEqual(dropJob, dropJob.copyForPersist(), "commitGtid");
+    }
+
+    /** Every journal entry must retain independent catalog definitions and DROP names. */
+    @Test
+    public void testLakeTableIndexFastPathJobsCopySubclassFields() throws Exception {
+        LakeTableAddIndexJob addJob = newLakeTableAddIndexJob();
+        assertCollectionsEqual(addJob, addJob.copyForPersist(),
+                "newIndexes", "addBfColumns", "indexMetaIdToNewSchema");
+        assertCollectionsIndependent(AlterJobV2CopyForPersistTest::newLakeTableAddIndexJob,
+                "newIndexes", "addBfColumns", "indexMetaIdToNewSchema");
+
+        LakeTableDropIndexJob dropJob = newLakeTableDropIndexJob();
+        assertCollectionsEqual(dropJob, dropJob.copyForPersist(),
+                "dropIndexIds", "dropIndexNames", "dropBfColumns");
+        assertCollectionsIndependent(AlterJobV2CopyForPersistTest::newLakeTableDropIndexJob,
+                "dropIndexIds", "dropIndexNames", "dropBfColumns");
+    }
+
+    private static LakeTableAddIndexJob newLakeTableAddIndexJob() {
+        Index index = new Index(-1L, "ix_bm", List.of(ColumnId.create("c1")), IndexDef.IndexType.BITMAP, "",
+                Maps.newHashMap());
+        LakeTableAddIndexJob job = new LakeTableAddIndexJob(1L, 2L, 3L, "tbl", 1000L, List.of(index), List.of("c2"));
+        job.putNewSchema(10L, 100L, 2L);
+        return job;
+    }
+
+    private static LakeTableDropIndexJob newLakeTableDropIndexJob() {
+        return new LakeTableDropIndexJob(1L, 2L, 3L, "tbl", 1000L, List.of(-1L), List.of("ix_bm"), List.of("c2"));
+    }
+
+>>>>>>> 22ea614 ([BugFix][RB-439] Fix failover, mixed-version and downgrade issues in the lake IDG index fast path (#83414))
     @Test
     public void testLakeTableAlterMetaJobCopyForPersist() throws Exception {
         LakeTableAlterMetaJob job = newLakeTableAlterMetaJob();

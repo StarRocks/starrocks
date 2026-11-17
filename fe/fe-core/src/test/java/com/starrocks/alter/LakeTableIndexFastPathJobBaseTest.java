@@ -30,12 +30,15 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LeaderLease;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -50,6 +53,7 @@ import com.starrocks.transaction.TransactionIdGenerator;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
@@ -97,6 +101,7 @@ import static org.mockito.Mockito.when;
  * abstract base.
  */
 public class LakeTableIndexFastPathJobBaseTest {
+    private static final LeaderLease TEST_LEADER_LEASE = new LeaderLease(10L, 1L);
 
     private LakeTableAddIndexJob newJob() {
         return new LakeTableAddIndexJob(1L, 2L, 3L, "t", 60_000L,
@@ -210,6 +215,8 @@ public class LakeTableIndexFastPathJobBaseTest {
     /** Build a {@link GlobalStateMgr} mock wired up for catalog reads + lock fallback. */
     private GlobalStateMgr buildLockableGsm(Database db, OlapTable table) {
         GlobalStateMgr gsm = mock(GlobalStateMgr.class);
+        when(gsm.captureLeaderLease()).thenReturn(TEST_LEADER_LEASE);
+        when(gsm.isLeaderLeaseValid(TEST_LEADER_LEASE)).thenReturn(true);
         LocalMetastore lm = mock(LocalMetastore.class);
         when(lm.getDb(anyLong())).thenReturn(db);
         when(lm.getTable(anyLong(), anyLong())).thenReturn(table);
@@ -229,6 +236,11 @@ public class LakeTableIndexFastPathJobBaseTest {
         // stubbing if invoked inside another when().thenReturn(...) chain).
         EditLog editLog = mockEditLog();
         when(gsm.getEditLog()).thenReturn(editLog);
+        // runRunningJob looks up the nodes its in-flight tasks went to; by default the cluster knows none of them.
+        SystemInfoService clusterInfo = mock(SystemInfoService.class);
+        NodeMgr nodeMgr = mock(NodeMgr.class);
+        when(nodeMgr.getClusterInfo()).thenReturn(clusterInfo);
+        when(gsm.getNodeMgr()).thenReturn(nodeMgr);
         return gsm;
     }
 
@@ -1120,8 +1132,76 @@ public class LakeTableIndexFastPathJobBaseTest {
         batch.addTask(mockTaskFinished(false, 1L, 1L));
         setField(job, "batchTask", batch);
 
-        invokePrivate(job, "runRunningJob");
+        // The in-flight round also checks the nodes the tasks went to; this cluster knows none of them.
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), mock(OlapTable.class));
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            invokePrivate(job, "runRunningJob");
+        }
         assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+    }
+
+    /**
+     * A node restarted on an older binary loses the tasks it was sent, and the task report does not resend them to a
+     * node without the fast path (AlterReplicaTask#shouldResend). The job waits while the node is uncertified and
+     * cancels once its heartbeat shows the fast path is gone, instead of holding the table until the alter timeout.
+     */
+    @Test
+    public void testRunRunningJob_CancelsWhenDispatchedNodeLosesFastPath() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        AgentBatchTask batch = new AgentBatchTask();
+        batch.addTask(mockTaskFinished(true, 12L, 1L));
+        batch.addTask(mockTaskFinished(false, 11L, 2L));
+        setField(job, "batchTask", batch);
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), mock(OlapTable.class));
+        ComputeNode node = mock(ComputeNode.class);
+        when(node.getId()).thenReturn(11L);
+        when(gsm.getNodeMgr().getClusterInfo().getBackendOrComputeNode(11L)).thenReturn(node);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            when(node.isSupportLakeIndexFastPath()).thenReturn(false);
+            invokePrivate(job, "runRunningJob");
+            assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+
+            when(node.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(true);
+            AlterCancelException thrown = assertThrows(AlterCancelException.class,
+                    () -> invokePrivate(job, "runRunningJob"));
+            assertTrue(thrown.getMessage().contains("compute node 11"), thrown.getMessage());
+        }
+    }
+
+    /**
+     * The job acquires a CN group of its warehouse at every scheduling round, not necessarily the default one, so
+     * admission must see a node without the fast path in any group.
+     */
+    @Test
+    public void testComputeNodesWithoutFastPathCoversEveryCnGroup() {
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), mock(OlapTable.class));
+        WarehouseManager wm = mock(WarehouseManager.class);
+        ComputeResourceProvider provider = mock(ComputeResourceProvider.class);
+        Warehouse warehouse = mock(Warehouse.class);
+        when(gsm.getWarehouseMgr()).thenReturn(wm);
+        when(wm.getComputeResourceProvider()).thenReturn(provider);
+        when(wm.getWarehouse(warehouseId)).thenReturn(warehouse);
+        when(warehouse.getWorkerGroupIds()).thenReturn(List.of(0L, 7L));
+        ComputeResource defaultGroup = mock(ComputeResource.class);
+        ComputeResource otherGroup = mock(ComputeResource.class);
+        when(provider.ofComputeResource(warehouseId, 0L)).thenReturn(defaultGroup);
+        when(provider.ofComputeResource(warehouseId, 7L)).thenReturn(otherGroup);
+        when(wm.getAllComputeNodeIds(defaultGroup)).thenReturn(List.of(11L));
+        when(wm.getAllComputeNodeIds(otherGroup)).thenReturn(List.of(12L));
+        ComputeNode upgraded = mock(ComputeNode.class);
+        when(upgraded.isSupportLakeIndexFastPath()).thenReturn(true);
+        when(gsm.getNodeMgr().getClusterInfo().getBackendOrComputeNode(11L)).thenReturn(upgraded);
+        when(gsm.getNodeMgr().getClusterInfo().getBackendOrComputeNode(12L)).thenReturn(mock(ComputeNode.class));
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            assertEquals(List.of(12L), LakeTableIndexFastPathJobBase.computeNodesWithoutFastPath(warehouseId));
+        }
     }
 
     @Test
@@ -1135,7 +1215,13 @@ public class LakeTableIndexFastPathJobBaseTest {
         batch.addTask(mockTaskFinished(false, 1L, 1L));
         setField(job, "batchTask", batch);
 
-        assertThrows(AlterCancelException.class, () -> invokePrivate(job, "runRunningJob"));
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), mock(OlapTable.class));
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            AlterCancelException thrown = assertThrows(AlterCancelException.class,
+                    () -> invokePrivate(job, "runRunningJob"));
+            assertTrue(thrown.getMessage().contains("timeout"), thrown.getMessage());
+        }
     }
 
     @Test
@@ -1214,6 +1300,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
         WarehouseManager wm = mock(WarehouseManager.class);
         ComputeNode cn = mock(ComputeNode.class);
+        when(cn.isSupportLakeIndexFastPath()).thenReturn(true);
+        when(cn.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(true);
         when(cn.getId()).thenReturn(11L);
         when(wm.getComputeNodeAssignedToTablet(any(), anyLong())).thenReturn(cn);
         when(gsm.getWarehouseMgr()).thenReturn(wm);
@@ -1257,6 +1345,46 @@ public class LakeTableIndexFastPathJobBaseTest {
         }
     }
 
+    /**
+     * Dispatch trusts a node's fast-path flag only once the node has answered a heartbeat of this leader session:
+     * before that the flag may be stale either way (an image older than the field, a downgrade during a leader
+     * change, a restart since a failed heartbeat). An uncertified node defers the dispatch, and a certified node that
+     * lacks the fast path cancels the job; neither sends anything.
+     */
+    @Test
+    public void testRunRunningJob_DispatchTrustsOnlyACertifiedFlag() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L);
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
+        WarehouseManager wm = mock(WarehouseManager.class);
+        ComputeNode node = mock(ComputeNode.class);
+        when(node.getId()).thenReturn(11L);
+        when(wm.getComputeNodeAssignedToTablet(any(), anyLong())).thenReturn(node);
+        when(gsm.getWarehouseMgr()).thenReturn(wm);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<AgentTaskQueue> queueStatic = Mockito.mockStatic(AgentTaskQueue.class);
+                MockedStatic<AgentTaskExecutor> executorStatic = Mockito.mockStatic(AgentTaskExecutor.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+
+            when(node.isSupportLakeIndexFastPath()).thenReturn(true);
+            when(node.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(false);
+            invokePrivate(job, "runRunningJob");
+            assertFailedDispatchLeavesRunning(job, pp, gsm);
+
+            when(node.isSupportLakeIndexFastPath()).thenReturn(false);
+            when(node.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(true);
+            AlterCancelException thrown = assertThrows(AlterCancelException.class,
+                    () -> invokePrivate(job, "runRunningJob"));
+            assertTrue(thrown.getMessage().contains("compute node 11"), thrown.getMessage());
+            assertFailedDispatchLeavesRunning(job, pp, gsm);
+            queueStatic.verify(() -> AgentTaskQueue.addTask(any()), never());
+            executorStatic.verify(() -> AgentTaskExecutor.submit(any()), never());
+        }
+    }
+
     @Test
     public void testRunRunningJob_CleansOnlyOwnedTasksOnRegistrationRefusal() throws Exception {
         LakeTableAddIndexJob job = newJob();
@@ -1266,6 +1394,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
         WarehouseManager wm = mock(WarehouseManager.class);
         ComputeNode cn = mock(ComputeNode.class);
+        when(cn.isSupportLakeIndexFastPath()).thenReturn(true);
+        when(cn.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(true);
         when(cn.getId()).thenReturn(11L);
         when(wm.getComputeNodeAssignedToTablet(any(), anyLong())).thenReturn(cn);
         when(gsm.getWarehouseMgr()).thenReturn(wm);
@@ -1306,6 +1436,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
         WarehouseManager wm = mock(WarehouseManager.class);
         ComputeNode cn = mock(ComputeNode.class);
+        when(cn.isSupportLakeIndexFastPath()).thenReturn(true);
+        when(cn.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(true);
         when(cn.getId()).thenReturn(11L);
         when(wm.getComputeNodeAssignedToTablet(any(), anyLong())).thenReturn(cn);
         when(gsm.getWarehouseMgr()).thenReturn(wm);
@@ -1971,6 +2103,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         GlobalStateMgr gsm = buildLockableGsm(db, table);
         WarehouseManager wm = mock(WarehouseManager.class);
         ComputeNode cn = mock(ComputeNode.class);
+        when(cn.isSupportLakeIndexFastPath()).thenReturn(true);
+        when(cn.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(true);
         when(cn.getId()).thenReturn(11L);
         when(wm.getComputeNodeAssignedToTablet(any(), eq(1L))).thenReturn(cn);
         when(gsm.getWarehouseMgr()).thenReturn(wm);
@@ -2020,6 +2154,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         GlobalStateMgr gsm = buildLockableGsm(db, table);
         WarehouseManager wm = mock(WarehouseManager.class);
         ComputeNode cn = mock(ComputeNode.class);
+        when(cn.isSupportLakeIndexFastPath()).thenReturn(true);
+        when(cn.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(true);
         when(cn.getId()).thenReturn(11L);
         when(wm.getComputeNodeAssignedToTablet(any(), eq(1L))).thenReturn(cn);
         when(gsm.getWarehouseMgr()).thenReturn(wm);
@@ -2252,6 +2388,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         WarehouseManager wm = mock(WarehouseManager.class);
         ComputeNode cn = mock(ComputeNode.class);
         when(cn.getId()).thenReturn(11L);
+        when(cn.isSupportLakeIndexFastPath()).thenReturn(true);
+        when(cn.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(true);
         when(wm.getComputeNodeAssignedToTablet(any(), anyLong())).thenReturn(cn);
         when(wm.acquireComputeResource(any(CRAcquireContext.class))).thenReturn(mock(ComputeResource.class));
         return wm;
