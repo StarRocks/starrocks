@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.Utils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.time.DateTimeException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -88,6 +89,17 @@ public class DateUtilsTest {
         } catch (Exception e) {
             Assertions.fail();
         }
+    }
+
+    @Test
+    public void testParseStrictDateTimeUnpaddedTime() {
+        LocalDateTime midnight = LocalDateTime.of(2026, 9, 27, 0, 0, 0);
+        Assertions.assertEquals(midnight, DateUtils.parseStrictDateTime("2026-9-27 0:0:0"));
+        Assertions.assertEquals(midnight, DateUtils.parseStrictDateTime("2026-09-27 00:00:00"));
+        Assertions.assertEquals(LocalDateTime.of(2026, 9, 27, 1, 2, 3),
+                DateUtils.parseStrictDateTime("2026-9-27 1:2:3"));
+        Assertions.assertThrows(DateTimeException.class,
+                () -> DateUtils.parseStrictDateTime("2026-9-27 24:0:0"));
     }
 
     @Test
