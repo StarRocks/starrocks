@@ -80,6 +80,9 @@ public class Authorizer {
         if (!function.isAI()) {
             return;
         }
+        if (context.getCurrentUserIdentity() == null) {
+            throw new SemanticException("AI functions require a user identity in the execution context", call.getPos());
+        }
         try {
             checkAIFunctionAction(context, function.functionName(), PrivilegeType.USAGE);
         } catch (AccessDeniedException e) {
@@ -89,6 +92,9 @@ public class Authorizer {
     }
 
     public static void checkAIProviderUsage(ConnectContext context, AIProvider provider) {
+        if (context.getCurrentUserIdentity() == null) {
+            throw new SemanticException("AI providers require a user identity in the execution context");
+        }
         try {
             checkAIProviderAction(context, provider, PrivilegeType.USAGE);
         } catch (AccessDeniedException e) {

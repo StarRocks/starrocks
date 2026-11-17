@@ -49,8 +49,7 @@ public enum AIProviderProtocol {
         try {
             return valueOf(s.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException(
-                    "invalid AI provider protocol '" + s + "'; expected one of openai, anthropic, cohere, dashscope");
+            throw new IllegalArgumentException("unsupported AI provider protocol '" + s + "'");
         }
     }
 
