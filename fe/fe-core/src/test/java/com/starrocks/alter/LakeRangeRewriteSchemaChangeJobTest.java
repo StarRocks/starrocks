@@ -57,6 +57,7 @@ import com.starrocks.proto.TabletStatPB;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
@@ -71,6 +72,7 @@ import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.TransactionAlreadyCommitException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
@@ -1414,6 +1416,46 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     }
 
     @Test
+    public void testRunningWaitsForTheRewritePublishAtMostOneSchedulerTick() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        // The rewrite INSERT runs on the scheduler thread, and the next tick checks a committed rewrite again, so it
+        // must wait for its publish at most one tick, even when the global tx_visible_wait_timeout is far longer.
+        SessionVariable globalDefault = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable();
+        long globalVisibleWaitS = globalDefault.getTransactionVisibleWaitTimeout();
+        int schedulerIntervalMs = Config.alter_scheduler_interval_millisecond;
+        AtomicReference<Long> visibleWaitS = new AtomicReference<>();
+        job.setRewriteExecutor((context, insertStmt) ->
+                visibleWaitS.set(context.getSessionVariable().getTransactionVisibleWaitTimeout()));
+        try {
+            globalDefault.setTransactionVisibleWaitTimeout(3600);
+            Config.alter_scheduler_interval_millisecond = 3000;
+            job.runRunningJob();
+        } finally {
+            globalDefault.setTransactionVisibleWaitTimeout(globalVisibleWaitS);
+            Config.alter_scheduler_interval_millisecond = schedulerIntervalMs;
+        }
+        Assertions.assertEquals(3L, visibleWaitS.get());
+    }
+
+    @Test
+    public void testRunningWaitsForTheRewritePublishAtLeastOneSecond() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        // A scheduler interval under one second would round down to a zero-second wait, which returns the INSERT
+        // before even a fast publish can finish, so the rewrite still waits one second.
+        int schedulerIntervalMs = Config.alter_scheduler_interval_millisecond;
+        AtomicReference<Long> visibleWaitS = new AtomicReference<>();
+        job.setRewriteExecutor((context, insertStmt) ->
+                visibleWaitS.set(context.getSessionVariable().getTransactionVisibleWaitTimeout()));
+        try {
+            Config.alter_scheduler_interval_millisecond = 500;
+            job.runRunningJob();
+        } finally {
+            Config.alter_scheduler_interval_millisecond = schedulerIntervalMs;
+        }
+        Assertions.assertEquals(1L, visibleWaitS.get());
+    }
+
+    @Test
     public void testRunningResumePublishedSkipsAndTransitionsToFinishedRewriting() throws Exception {
         LakeRangeRewriteSchemaChangeJob job = jobInRunning();
         long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
@@ -1822,6 +1864,39 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertFalse(abortCalled.get(),
                 "cancelImpl must not abort a txn that is already in a terminal status");
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+    }
+
+    @Test
+    public void testTimeoutWithACommittedRewriteTxnCancelsAndDropsShadow() throws Exception {
+        // The rewrite INSERT returns while its txn is still COMMITTED, so a publish that never finishes meets the job
+        // deadline in that state. That tick must still cancel the job and clean up, although the transaction manager
+        // refuses to abort a committed txn; the txn later publishes as a no-op.
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+        job.setRewriteTxnIdForTest(physicalPartitionId, 777L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(TransactionStatus.COMMITTED);
+                return state;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason)
+                    throws com.starrocks.common.StarRocksException {
+                throw new TransactionAlreadyCommitException("transaction " + transactionId + " is already committed");
+            }
+        };
+        List<Long> shadowTabletIds = job.getShadowIndex(physicalPartitionId).getTablets()
+                .stream().map(Tablet::getId).collect(Collectors.toList());
+        job.createTimeMs = System.currentTimeMillis() - job.timeoutMs - 1;
+
+        job.run();
+
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertTrue(job.errMsg.contains("Timeout"), job.errMsg);
+        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds);
     }
 
     @Test
