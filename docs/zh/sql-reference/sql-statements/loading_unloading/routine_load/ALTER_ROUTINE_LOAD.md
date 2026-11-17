@@ -61,13 +61,17 @@ FROM data_source
 
   目前仅支持修改如下属性：
 
-  - `desired_concurrent_number`
+  - `desired_concurrent_number` 或 `max_concurrency`
 
-  - `max_error_number`
+  - `max_error_number` 或 `max_error_rows`
 
-  - `max_batch_interval`
+  - `max_batch_interval` 或 `load_interval`
 
-  - `max_batch_rows`
+  - `max_batch_rows` 或 `error_window_rows`
+
+  - `task_consume_second` 或 `max_consume_duration`
+
+  - `task_timeout_second` 或 `load_timeout`
 
   - `max_batch_size`
 
