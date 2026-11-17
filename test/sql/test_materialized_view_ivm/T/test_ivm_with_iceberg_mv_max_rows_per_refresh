@@ -58,4 +58,12 @@ SELECT count(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME
 
 admin set frontend config ("mv_max_rows_per_refresh" = "100000000");
 drop materialized view test_mv_batch;
-drop catalog mv_iceberg_${uuid0};
+
+CLEANUP {
+admin set frontend config ("mv_max_rows_per_refresh" = "100000000");
+drop materialized view if exists default_catalog.db_${uuid0}.test_mv_batch;
+drop table if exists mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_batch force;
+drop database if exists mv_iceberg_${uuid0}.mv_ice_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists mv_iceberg_${uuid0};
+} END CLEANUP
