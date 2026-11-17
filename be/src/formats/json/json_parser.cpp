@@ -21,32 +21,6 @@
 
 namespace starrocks {
 
-namespace {
-
-struct RewindableDocument : simdjson::ondemand::document {
-    struct RewindableJsonIterator : simdjson::ondemand::json_iterator {
-        static bool is_finished_cleanly(const simdjson::ondemand::json_iterator& it) noexcept {
-            const auto& self = static_cast<const RewindableJsonIterator&>(it);
-            return self.is_alive() && self.error == simdjson::SUCCESS && self.depth() == 0;
-        }
-    };
-
-    static simdjson::ondemand::json_iterator& iter_of(simdjson::ondemand::document& doc) noexcept {
-        return static_cast<RewindableDocument&>(doc).iter;
-    }
-
-    static bool is_finished_cleanly(simdjson::ondemand::document& doc) noexcept {
-        return RewindableJsonIterator::is_finished_cleanly(iter_of(doc));
-    }
-};
-
-static_assert(sizeof(RewindableDocument) == sizeof(simdjson::ondemand::document),
-              "RewindableDocument must not add data members");
-static_assert(sizeof(RewindableDocument::RewindableJsonIterator) == sizeof(simdjson::ondemand::json_iterator),
-              "RewindableJsonIterator must not add data members");
-
-} // namespace
-
 const size_t MAX_RAW_JSON_LEN = 64;
 
 JsonDocumentStreamParser::JsonDocumentStreamParser(simdjson::ondemand::parser* parser) : JsonParser(parser) {
@@ -65,7 +39,6 @@ Status JsonDocumentStreamParser::parse(char* data, size_t len, size_t allocated)
                 data, len, config::enable_dynamic_batch_size_for_json_parse_many ? std::min(_batch_size, _len) : _len);
 
         _doc_stream_itr = _doc_stream.begin();
-        _has_doc_iter_snapshot = false;
 
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = strings::Substitute("Failed to parse json as document stream. error: $0",
@@ -85,7 +58,6 @@ bool JsonDocumentStreamParser::_check_and_new_doc_stream_iterator() {
 
     // The following code should be no-exception by designed.
     _curr_ready = false;
-    _has_doc_iter_snapshot = false;
     do {
         _batch_size = std::min(_batch_size * 8, cur_left_len);
         _doc_stream = _parser->iterate_many(_data + _last_begin_offset, cur_left_len, _batch_size);
@@ -122,8 +94,6 @@ Status JsonDocumentStreamParser::_get_current_impl(simdjson::ondemand::object* r
                     return status_from_json_parse_error("The value should be object type in json document stream");
                 }
 
-                _doc_iter_snapshot = RewindableDocument::iter_of(doc);
-                _has_doc_iter_snapshot = true;
                 _curr = doc.get_object();
                 *row = _curr;
                 _curr_ready = true;
@@ -183,55 +153,14 @@ Status JsonDocumentStreamParser::advance() noexcept {
     static_assert(simdjson::SIMDJSON_VERSION_MAJOR == 5,
                   "Re-validate JsonDocumentStreamParser::advance() mid-document error latching on simdjson upgrade");
     _curr_ready = false;
-    if (_has_doc_iter_snapshot && _doc_stream_itr != _doc_stream.end() &&
-        _doc_stream_itr.error() == simdjson::SUCCESS) {
-        simdjson::ondemand::document_reference doc = *_doc_stream_itr;
-        if (!RewindableDocument::is_finished_cleanly(doc)) {
-            // In simdjson 5.x, if the caller stopped early or hit a mid-document error (which may abandon doc.iter,
-            // set doc.iter.error, or return INCORRECT_TYPE while leaving depth() > 1 at '}'), restore doc.iter to
-            // the root of the current object so ++_doc_stream_itr skips the record using the already-indexed stage-1
-            // batch rather than rescanning the remaining buffer with iterate_many().
-            RewindableDocument::iter_of(doc) = _doc_iter_snapshot;
-        }
-    }
-    _has_doc_iter_snapshot = false;
     ++_doc_stream_itr;
     if (_first_object_parsed && _doc_stream_itr != _doc_stream.end() && _doc_stream_itr.error() != simdjson::SUCCESS &&
         _doc_stream_offset + _doc_stream_itr.current_index() == _last_begin_offset) {
-        size_t cur_left_len = _len - _last_begin_offset;
-        size_t batch_size = config::enable_dynamic_batch_size_for_json_parse_many ? std::min(_batch_size, cur_left_len)
-                                                                                  : cur_left_len;
-        if (_batch_size < _len - _doc_stream_offset) {
-            _doc_stream = _parser->iterate_many(_data + _last_begin_offset, cur_left_len, batch_size);
-            _doc_stream_offset = _last_begin_offset;
-            _doc_stream_itr = _doc_stream.begin();
-            ++_doc_stream_itr;
-        }
-        if (_doc_stream_itr.error() != simdjson::SUCCESS &&
-            (batch_size >= cur_left_len || !_check_and_new_doc_stream_iterator())) {
-            // EMPTY: nothing follows the skipped record. If stage 1 cut the tail (truncated_bytes() > 0), probe the
-            // prefix before the cut: if skipping the failed record reaches EOF/EMPTY there, the stage-1 cut was inside
-            // the failed trailing record (eg. at a missing comma), whereas if a non-EMPTY error remains, an unclosed
-            // mid-buffer container swallowed subsequent complete records before the cut and must surface as a parse error.
-            if (_doc_stream_itr.error() == simdjson::EMPTY) {
-                return Status::EndOfFile("all documents of the stream are iterated");
-            }
-            if (size_t truncated = _doc_stream.truncated_bytes(); truncated > 0 && truncated < cur_left_len) {
-                size_t cut = cur_left_len - truncated;
-                simdjson::ondemand::document_stream probe = _parser->iterate_many(_data + _last_begin_offset, cut, cut);
-                auto it = probe.begin();
-                if (it != probe.end()) {
-                    ++it;
-                }
-                if (it == probe.end() || it.error() == simdjson::EMPTY) {
-                    return Status::EndOfFile("all documents of the stream are iterated");
-                }
-            }
-            auto err_msg = strings::Substitute("Failed to iterate document stream as object. error: $0",
-                                               simdjson::error_message(_doc_stream_itr.error()));
-            return status_from_json_parse_error(err_msg);
-        }
-        return Status::OK();
+        // In simdjson 5.x, when the current document met a fatal error while being consumed by the caller,
+        // next_document() copies doc.iter.error into stream->error and stops without advancing doc_index or
+        // marking the iterator finished until the next increment. Advance once more so the already-reported
+        // document is not surfaced a second time by get_current().
+        ++_doc_stream_itr;
     }
     if (_doc_stream_itr != _doc_stream.end() ||
         /*

@@ -2578,111 +2578,14 @@ TEST_F(JsonScannerTruncatedDocTest, mid_document_syntax_error_positions) {
     EXPECT_EQ(2, multi_buf_result.rows);
     EXPECT_EQ(2, multi_buf_result.filtered);
 
-    // 5. Consecutive mid-document syntax errors flanked by valid rows in a single NDJSON buffer:
-    // advance() rebuilds the stream at _last_begin_offset and skips each failed record so subsequent
-    // valid records in the same buffer are recovered rather than silently dropped.
+    // 5. Single-buffer fatal TAPE_ERROR termination: simdjson::ondemand::document_stream treats a mid-document
+    // TAPE_ERROR as fatal for the remainder of that buffer without double-counting the failed document.
     auto single_buf_result =
             scan(TBrokerRangeDesc(), kK13Names,
                  {valid1 + "\n" + kMissingValueDocument + "\n" + kMissingValueDocument + "\n" + valid2});
     EXPECT_TRUE(single_buf_result.status.is_end_of_file()) << single_buf_result.status;
-    EXPECT_EQ(2, single_buf_result.rows);
-    EXPECT_EQ(2, single_buf_result.filtered);
-
-    // 6. Single-buffer resync across malformed record shapes (missing-value, missing-comma, trailing-comma)
-    // and positions (first record bad, middle record bad).
-    const std::string v = R"({"k1":"a","k2":1})";
-    for (const std::string& bad :
-         {std::string(R"({"k1":"x","k2":})"), std::string(R"({"k1":"x" "k2":9})"), std::string(R"({"k1":"x",})")}) {
-        auto mid_res = scan({v + "\n" + bad + "\n" + v + "\n" + v});
-        EXPECT_TRUE(mid_res.status.is_end_of_file()) << bad << ": " << mid_res.status;
-        EXPECT_EQ(3, mid_res.rows) << bad;
-        EXPECT_EQ(1, mid_res.filtered) << bad;
-
-        auto first_res = scan({bad + "\n" + v + "\n" + v});
-        EXPECT_TRUE(first_res.status.is_end_of_file()) << bad << ": " << first_res.status;
-        EXPECT_EQ(2, first_res.rows) << bad;
-        EXPECT_EQ(1, first_res.filtered) << bad;
-    }
-
-    // 7. Trailing or single-record missing-comma / missing-colon record where stage 1 cuts inside the failed
-    // record (truncated_bytes() > 0): advance() ends the stream with EndOfFile so preceding valid rows are
-    // preserved and the failed record is counted once as a single filtered row.
-    auto trailing_missing_comma = scan({v + "\n" + v + "\n" + R"({"k1":"x" "k2":9})"});
-    EXPECT_TRUE(trailing_missing_comma.status.is_end_of_file()) << trailing_missing_comma.status;
-    EXPECT_EQ(2, trailing_missing_comma.rows);
-    EXPECT_EQ(1, trailing_missing_comma.filtered);
-
-    for (const std::string& single_cut : {std::string(R"({"k1":"x" "k2":9})"), std::string(R"({"k1":"x","k2" "9"})")}) {
-        auto single_cut_res = scan({single_cut});
-        EXPECT_TRUE(single_cut_res.status.is_end_of_file()) << single_cut << ": " << single_cut_res.status;
-        EXPECT_EQ(0, single_cut_res.rows) << single_cut;
-        EXPECT_EQ(1, single_cut_res.filtered) << single_cut;
-    }
-
-    // 8. Mid-buffer unclosed container followed by complete record(s), with or without a stage-1-cut trailing
-    // record: skipping the failed record in advance() hits INCOMPLETE_ARRAY_OR_OBJECT across the remaining
-    // complete record(s) before the cut and surfaces a non-EOF parse error rather than silently dropping them.
-    for (const std::string& tail : {std::string(""), std::string("\n") + v + "\n" + R"({"k1":"tr)",
-                                    std::string("\n") + v + "\n" + R"({"k1":"x" "k2":9})"}) {
-        auto mid_unclosed_array = scan({v + "\n" + R"({"k1":"x","k2":[1,2})" + "\n" + v + tail});
-        EXPECT_TRUE(mid_unclosed_array.status.is_data_quality_error()) << tail << ": " << mid_unclosed_array.status;
-        EXPECT_EQ(2, mid_unclosed_array.filtered) << tail;
-    }
-
-    // 9. Multi-batch stream with a mid-document error in the middle of the buffer recovers all remaining rows.
-    config::json_parse_many_batch_size = 64;
-    std::string multi_batch_body;
-    for (int i = 0; i < 40; i++) {
-        if (i == 15) {
-            multi_batch_body += R"({"k1":"bad","k2":})"
-                                "\n";
-        }
-        multi_batch_body += "{\"k1\":\"" + std::to_string(i) + "\",\"k2\":" + std::to_string(i) + "}\n";
-    }
-    auto multi_batch_res = scan({multi_batch_body});
-    EXPECT_TRUE(multi_batch_res.status.is_end_of_file()) << multi_batch_res.status;
-    EXPECT_EQ(40, multi_batch_res.rows);
-    EXPECT_EQ(1, multi_batch_res.filtered);
-
-    // 10. Repeated malformed rows in a single batch reuse the indexed stage-1 batch without rescanning the
-    // remainder on every rejected row, and rewinding to the document root before skipping prevents a missing
-    // field value ("k2":}) from leaving depth > 1 and swallowing a following row with an extra closing brace.
-    config::json_parse_many_batch_size = 1000000;
-    auto mv_followed_by_extra_brace = scan({R"({"k1":"x","k2":})"
-                                            "\n"
-                                            R"({"k1":"x","k2":1}})"
-                                            "\n" +
-                                            v});
-    EXPECT_TRUE(mv_followed_by_extra_brace.status.is_data_quality_error()) << mv_followed_by_extra_brace.status;
-    EXPECT_EQ(0, mv_followed_by_extra_brace.rows);
-    EXPECT_EQ(2, mv_followed_by_extra_brace.filtered);
-
-    std::string many_bad_body;
-    constexpr int kManyBadRows = 20000;
-    many_bad_body.reserve(kManyBadRows * 18 + 32);
-    for (int i = 0; i < kManyBadRows; i++) {
-        many_bad_body += R"({"k1":"x","k2":})"
-                         "\n";
-    }
-    many_bad_body += v + "\n";
-    auto many_bad_res = scan({many_bad_body});
-    EXPECT_TRUE(many_bad_res.status.is_end_of_file()) << many_bad_res.status;
-    EXPECT_EQ(1, many_bad_res.rows);
-    EXPECT_EQ(kManyBadRows, many_bad_res.filtered);
-}
-
-TEST_F(JsonScannerTruncatedDocTest, unbalanced_record_swallows_records_up_to_stray_closer) {
-    // `b` lacks its closing '}'; the stray '}' after `x` balances the root brace depth, so `skip_child(0)` treats
-    // `b`..`x}}` as one brace-balanced malformed root object and resumes at `d`.
-    const std::string input =
-            "{\"k1\":\"b\",\"k2\":1\n"
-            "{\"k1\":\"c\",\"k2\":3}\n"
-            "{\"k1\":\"x\",\"k2\":9}}\n"
-            "{\"k1\":\"d\",\"k2\":4}";
-    auto result = scan({input});
-    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
-    EXPECT_EQ(1, result.rows);
-    EXPECT_EQ(1, result.filtered);
+    EXPECT_EQ(1, single_buf_result.rows);
+    EXPECT_EQ(1, single_buf_result.filtered);
 }
 
 TEST_F(JsonScannerTest, test_simdjson_v511_big_integer_and_unicode_escapes) {
