@@ -28,6 +28,8 @@ set(PLATFORM_TEST_FILES
     llm/ai_task_dispatcher_test.cpp
     llm/openai_compatible_provider_test.cpp
     llm/ai_rate_limiter_test.cpp
+    llm/ai_rerank_test.cpp
+    llm/ai_rerank_provider_test.cpp
     llm/ai_runtime_test.cpp
     path_rw_test.cpp
     platform_env_test.cpp

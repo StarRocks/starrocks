@@ -24,6 +24,7 @@
 #include "column/const_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
+#include "platform/llm/ai_rerank.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -110,7 +111,8 @@ AIProviderOptionKind provider_option_kind(rapidjson::Type type) {
 
 StatusOr<AIProviderOptions> build_ai_provider_options(const Column& column, const TypeDescriptor& type, size_t row,
                                                       AICapability capability) {
-    if (type.type != TYPE_JSON || (capability != AICapability::CHAT && capability != AICapability::EMBEDDING)) {
+    if (type.type != TYPE_JSON || (capability != AICapability::CHAT && capability != AICapability::EMBEDDING &&
+                                   capability != AICapability::RERANK)) {
         return invalid_options();
     }
     auto unwrapped = unwrap_value(column, row);
@@ -157,7 +159,9 @@ StatusOr<AIProviderOptions> build_ai_provider_options(const Column& column, cons
                                               .kind = provider_option_kind(member.value.GetType())});
     }
 
-    return AIProviderOptions::create(std::move(members));
+    ASSIGN_OR_RETURN(auto options, AIProviderOptions::create(std::move(members)));
+    if (capability == AICapability::RERANK) RETURN_IF_ERROR(validate_ai_rerank_options(options));
+    return options;
 }
 
 } // namespace starrocks

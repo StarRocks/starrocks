@@ -79,6 +79,9 @@ public final class AIModelConfigs {
             case EMBEDDING -> {
                 return AIProviderType.EMBEDDING;
             }
+            case RERANK -> {
+                return AIProviderType.RERANK;
+            }
             default -> throw new SemanticException("Unsupported AI provider type: " + function.getFunctionId());
         }
     }
@@ -115,11 +118,15 @@ public final class AIModelConfigs {
 
     public static void validateProvider(AIProvider provider) {
         AIProviderType type = provider.getType();
-        if (type != AIProviderType.CHAT && type != AIProviderType.EMBEDDING) {
-            throw new SemanticException("AI functions require a CHAT or EMBEDDING provider, not " + type);
+        if (type != AIProviderType.CHAT && type != AIProviderType.EMBEDDING && type != AIProviderType.RERANK) {
+            throw new SemanticException("AI functions require a CHAT, EMBEDDING or RERANK provider, not " + type);
         }
         AIProviderProtocol protocol = provider.getProtocol();
-        if (protocol != AIProviderProtocol.OPENAI) {
+        if (type == AIProviderType.RERANK) {
+            if (protocol != AIProviderProtocol.COHERE && protocol != AIProviderProtocol.DASHSCOPE_RERANK) {
+                throw new SemanticException("RERANK requires a COHERE or DASHSCOPE_RERANK provider protocol, not " + protocol);
+            }
+        } else if (protocol != AIProviderProtocol.OPENAI) {
             throw new SemanticException("AI functions only support an OPENAI provider protocol now, not " + protocol);
         }
         String endpoint = provider.getEndpoint();
@@ -129,15 +136,24 @@ public final class AIModelConfigs {
         }
         final Integer timeout;
         final Integer dimensions;
+        final Integer maxDocuments;
+        final Integer deadline;
         try {
             timeout = provider.getTimeoutMs();
             dimensions = type == AIProviderType.EMBEDDING ? provider.getDimensions() : null;
+            maxDocuments = type == AIProviderType.RERANK ? provider.getMaxDocuments() : null;
+            deadline = type == AIProviderType.RERANK ? provider.getDeadlineMs() : null;
         } catch (NumberFormatException e) {
-            throw new SemanticException("AI provider timeout_ms and dimensions must be positive integers");
+            throw invalidProviderIntegers();
         }
-        if ((timeout != null && timeout <= 0) || (dimensions != null && dimensions <= 0)) {
-            throw new SemanticException("AI provider timeout_ms and dimensions must be positive integers");
+        if ((timeout != null && timeout <= 0) || (dimensions != null && dimensions <= 0)
+                || (maxDocuments != null && maxDocuments <= 0) || (deadline != null && deadline <= 0)) {
+            throw invalidProviderIntegers();
         }
     }
 
+    private static SemanticException invalidProviderIntegers() {
+        return new SemanticException("AI provider timeout_ms, dimensions, max_documents and deadline_ms"
+                + " must be positive integers");
+    }
 }

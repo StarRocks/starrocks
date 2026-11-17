@@ -80,6 +80,7 @@ struct AIProjectTaskRequest {
     std::string_view provider_id;
     AICapability capability = AICapability::CHAT;
     const AIMediaInput* media = nullptr;
+    const AIRerankInput* rerank = nullptr;
 };
 
 class AIProjectTaskHandle {

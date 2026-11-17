@@ -48,6 +48,8 @@ struct AIProjectModelConfig {
     AICapability capability = AICapability::CHAT;
     std::optional<int64_t> timeout_ms;
     std::optional<int32_t> dimensions;
+    std::optional<int32_t> max_documents;
+    std::optional<int64_t> deadline_ms;
     AIProviderProtocol protocol = AIProviderProtocol::OPENAI;
 };
 

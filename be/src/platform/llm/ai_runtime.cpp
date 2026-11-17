@@ -108,6 +108,9 @@ Status AIRuntimeConfig::validate() const {
     if (rate_limit_qps_chat <= 0) {
         return Status::InvalidArgument("ai_function_rate_limit_qps_chat must be positive");
     }
+    if (rate_limit_qps_rerank <= 0) {
+        return Status::InvalidArgument("ai_function_rate_limit_qps_rerank must be positive");
+    }
     if (rate_limit_qps_embedding <= 0) {
         return Status::InvalidArgument("ai_function_rate_limit_qps_embedding must be positive");
     }
@@ -170,12 +173,20 @@ int64_t AIRuntimeConfigSource::qps(AICapability capability) const noexcept {
         return _load_snapshot()->rate_limit_qps_chat;
     case AICapability::EMBEDDING:
         return _load_snapshot()->rate_limit_qps_embedding;
+    case AICapability::RERANK:
+        return _load_snapshot()->rate_limit_qps_rerank;
     }
     return 0;
 }
 
 int64_t AIRuntimeConfigSource::max_inflight() const {
     return _load_snapshot()->max_inflight;
+}
+
+bool ai_is_local_resource_failure(const Status& status) {
+    return status.is_mem_limit_exceeded() || status.code() == TStatusCode::MEM_ALLOC_FAILED ||
+           status.is_capacity_limit_exceeded() || status.is_resource_busy() || status.is_internal_error() ||
+           status.code() == TStatusCode::RUNTIME_ERROR;
 }
 
 int ai_completion_capacity(int64_t max_inflight, int64_t worker_threads) {

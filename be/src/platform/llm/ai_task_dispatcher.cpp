@@ -220,16 +220,27 @@ AITaskSuccess& AITaskSuccess::operator=(AITaskSuccess&& other) noexcept {
 }
 
 StatusOr<AITaskSuccess> AITaskSuccess::create(AIProviderValue result, AIMemoryContext memory) {
-    const size_t bytes = std::visit(
-            [](const auto& value) -> size_t {
+    const auto bytes_or = std::visit(
+            [](const auto& value) -> StatusOr<size_t> {
                 using Value = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<Value, std::vector<float>>) {
                     return value.capacity() * sizeof(float);
+                } else if constexpr (std::is_same_v<Value, AIRerankResult>) {
+                    if (value.capacity() > std::numeric_limits<size_t>::max() / sizeof(AIRerankHit)) {
+                        return Status::MemoryLimitExceeded("AI rerank result capacity exceeds byte capacity");
+                    }
+                    return value.capacity() * sizeof(AIRerankHit);
                 } else {
                     return value.size();
                 }
             },
             result);
+    if (!bytes_or.ok()) {
+        run_in_physical_scope(
+                memory, [&] { std::visit([](auto& value) { std::decay_t<decltype(value)>().swap(value); }, result); });
+        return bytes_or.status();
+    }
+    const size_t bytes = *bytes_or;
     if (bytes == 0 || !memory) {
         return AITaskSuccess(std::move(result), {}, 0);
     }
@@ -411,7 +422,8 @@ public:
             bytes += value;
             return true;
         };
-        if (!add_bytes(request.url.size()) || !add_bytes(request.body.size())) {
+        if (!add_bytes(request.url.size()) || !add_bytes(request.body.size()) ||
+            !add_bytes(request.response_context.retained_bytes())) {
             return Status::MemoryLimitExceeded("AI provider request template memory limit exceeded");
         }
         // Match AIHttpClient request accounting: each header contributes its stored strings plus ": " and CRLF.
@@ -438,6 +450,7 @@ public:
                 std::string().swap(_request.url);
                 std::vector<AIHttpHeader>().swap(_request.headers);
                 std::string().swap(_request.body);
+                _request.response_context = {};
                 _memory = {};
             });
         } catch (...) {
@@ -771,7 +784,7 @@ private:
                 submit_result = HttpSubmitResult::ACCEPTED;
             } else if (status.is_shutdown() || status.is_service_unavailable()) {
                 submit_result = HttpSubmitResult::SHUTDOWN;
-            } else if (status.is_mem_limit_exceeded()) {
+            } else if (ai_is_local_resource_failure(status)) {
                 submit_result = HttpSubmitResult::LOCAL_RESOURCE;
             } else {
                 submit_result = HttpSubmitResult::LOCAL_REQUEST;
@@ -1292,7 +1305,8 @@ void AITaskState::_classify(AIHttpResult result, AIBucketResolutionGuard guard) 
     if ((response.status_code >= 200 && response.status_code < 300) || response.status_code == 400) {
         try {
             run_in_physical_scope(_memory, [&] {
-                provider_result = _core->provider->parse_response(response.body.data(), _rate_limit_key.capability());
+                provider_result = _core->provider->parse_response(response.body.data(), _rate_limit_key.capability(),
+                                                                  _request_template.request().response_context);
             });
         } catch (...) {
             clear_provider_result();
@@ -1405,7 +1419,8 @@ StatusOr<AITaskHandle> AITaskDispatcher::submit(AIDispatchRequest&& request, AIT
         run_in_physical_scope(request.memory, [&] {
             StatusOr<AIProviderHttpRequest> provider_request = _core->provider->build_request(request.chat_request);
             if (!provider_request.ok()) {
-                submit_result = SubmitResult::LOCAL_REQUEST;
+                submit_result = ai_is_local_resource_failure(provider_request.status()) ? SubmitResult::LOCAL_RESOURCE
+                                                                                        : SubmitResult::LOCAL_REQUEST;
                 return;
             }
 

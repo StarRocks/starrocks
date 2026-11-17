@@ -61,6 +61,9 @@ StatusOr<AIProjectModelConfig> AIProviderConfigParser::parse(std::string_view id
     case TAIProviderType::EMBEDDING:
         config.capability = AICapability::EMBEDDING;
         break;
+    case TAIProviderType::RERANK:
+        config.capability = AICapability::RERANK;
+        break;
     default:
         return invalid_provider();
     }
@@ -71,10 +74,20 @@ StatusOr<AIProjectModelConfig> AIProviderConfigParser::parse(std::string_view id
     config.endpoint = get("endpoint");
     config.model = get("model");
     config.api_key = get("api_key");
-    if (provider.protocol != TAIProviderProtocol::OPENAI) {
+    switch (provider.protocol) {
+    case TAIProviderProtocol::OPENAI:
+        config.protocol = AIProviderProtocol::OPENAI;
+        break;
+    case TAIProviderProtocol::COHERE:
+        config.protocol = AIProviderProtocol::COHERE;
+        break;
+    case TAIProviderProtocol::DASHSCOPE_RERANK:
+        config.protocol = AIProviderProtocol::DASHSCOPE_RERANK;
+        break;
+    default:
         return invalid_provider();
     }
-    config.protocol = AIProviderProtocol::OPENAI;
+    if (!validate_ai_protocol(config.protocol, config.capability).ok()) return invalid_provider();
     if (!is_non_blank(config.endpoint) || contains_control_character(config.endpoint) || !is_non_blank(config.model) ||
         contains_control_character(config.model) || contains_control_character(config.api_key)) {
         return invalid_provider();
@@ -83,6 +96,11 @@ StatusOr<AIProjectModelConfig> AIProviderConfigParser::parse(std::string_view id
     if (timeout.has_value()) config.timeout_ms = *timeout;
     if (config.capability == AICapability::EMBEDDING) {
         ASSIGN_OR_RETURN(config.dimensions, parse_positive_int(get("dimensions")));
+    }
+    if (config.capability == AICapability::RERANK) {
+        ASSIGN_OR_RETURN(config.max_documents, parse_positive_int(get("max_documents")));
+        ASSIGN_OR_RETURN(auto deadline, parse_positive_int(get("deadline_ms")));
+        if (deadline.has_value()) config.deadline_ms = *deadline;
     }
     return config;
 }

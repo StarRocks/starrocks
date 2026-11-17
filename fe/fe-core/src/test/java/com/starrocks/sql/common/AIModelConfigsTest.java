@@ -29,6 +29,39 @@ import java.util.Map;
 
 public class AIModelConfigsTest {
     @Test
+    public void testRerankProviderSupported() {
+        Assertions.assertDoesNotThrow(() -> AIModelConfigs.validateProvider(provider(AIProviderType.RERANK)));
+    }
+
+    @Test
+    public void testRerankNativeProtocolAndLimits() {
+        AIProvider provider = provider(AIProviderType.RERANK);
+        provider.mergeParams(Map.of("protocol", "dashscope_rerank", "max_documents", "12", "deadline_ms", "345"));
+        Assertions.assertDoesNotThrow(() -> AIModelConfigs.validateProvider(provider));
+        Assertions.assertEquals(4, provider.toThrift().getProtocol().getValue());
+        Assertions.assertEquals("12", provider.toThrift().getParams().get("max_documents"));
+        for (String key : new String[] {"timeout_ms", "max_documents", "deadline_ms"}) {
+            for (String invalid : new String[] {"0", "-1", "2147483648", "1.5", "12x", " 1"}) {
+                AIProvider bad = provider(AIProviderType.RERANK);
+                bad.mergeParams(Map.of(key, invalid, "api_key", "secret-test-key"));
+                SemanticException error = Assertions.assertThrows(SemanticException.class,
+                        () -> AIModelConfigs.validateProvider(bad));
+                Assertions.assertFalse(error.getMessage().contains("secret-test-key"));
+            }
+            for (String valid : new String[] {"", "1", "+123", "2147483647"}) {
+                AIProvider good = provider(AIProviderType.RERANK);
+                good.mergeParams(Map.of(key, valid));
+                Assertions.assertDoesNotThrow(() -> AIModelConfigs.validateProvider(good));
+            }
+        }
+        for (String protocol : new String[] {"openai", "anthropic"}) {
+            AIProvider wrong = provider(AIProviderType.RERANK);
+            wrong.mergeParams(Map.of("protocol", protocol));
+            Assertions.assertThrows(SemanticException.class, () -> AIModelConfigs.validateProvider(wrong));
+        }
+    }
+
+    @Test
     public void testProviderTypeMappingAndProtocolNormalization() {
         Map<AIProviderType, TAIProviderType> types = Map.of(
                 AIProviderType.CHAT, TAIProviderType.CHAT,
@@ -55,7 +88,8 @@ public class AIModelConfigsTest {
         Map<AIProviderProtocol, TAIProviderProtocol> protocols = Map.of(
                 AIProviderProtocol.OPENAI, TAIProviderProtocol.OPENAI,
                 AIProviderProtocol.ANTHROPIC, TAIProviderProtocol.ANTHROPIC,
-                AIProviderProtocol.COHERE, TAIProviderProtocol.COHERE);
+                AIProviderProtocol.COHERE, TAIProviderProtocol.COHERE,
+                AIProviderProtocol.DASHSCOPE_RERANK, TAIProviderProtocol.DASHSCOPE_RERANK);
         protocols.forEach((protocol, wireProtocol) -> {
             AIProvider provider = provider(AIProviderType.CHAT);
             provider.mergeParams(Map.of("protocol", protocol.lower()));
@@ -92,11 +126,9 @@ public class AIModelConfigsTest {
 
     @Test
     public void testUnsupportedTypesAndProtocolsFailBeforeExecution() {
-        Assertions.assertThrows(SemanticException.class,
-                () -> AIModelConfigs.validateProvider(provider(AIProviderType.RERANK)));
         for (AIProviderType type : new AIProviderType[] {AIProviderType.CHAT, AIProviderType.EMBEDDING}) {
             AIProvider provider = provider(type);
-            for (String protocol : new String[] {"anthropic", "cohere"}) {
+            for (String protocol : new String[] {"anthropic", "cohere", "dashscope_rerank"}) {
                 provider.mergeParams(Map.of("protocol", protocol, "api_key", "secret-test-key"));
                 SemanticException error = Assertions.assertThrows(SemanticException.class,
                         () -> AIModelConfigs.validateProvider(provider));

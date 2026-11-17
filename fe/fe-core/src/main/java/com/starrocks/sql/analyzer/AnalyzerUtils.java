@@ -2492,7 +2492,7 @@ public class AnalyzerUtils {
             if (functionName == null) {
                 return false;
             }
-            return FunctionSet.allNonDeterministicFunctions.contains(functionName);
+            return FunctionSet.isNonDeterministicFunctionIncludingTime(expr.getFn(), functionName);
         }
 
         @Override

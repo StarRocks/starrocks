@@ -41,6 +41,7 @@ struct AIRuntimeConfig {
     std::string on_error = "ignore";
     int32_t rate_limit_qps_chat = 128;
     int32_t rate_limit_qps_embedding = 128;
+    int32_t rate_limit_qps_rerank = 4;
     int32_t max_inflight = 512;
 
     Status validate() const;
@@ -84,6 +85,9 @@ private:
 
     std::shared_ptr<const AIRuntimeConfig> _snapshot;
 };
+
+// Local allocation, capacity, and execution failures must bypass row-level on_error handling.
+bool ai_is_local_resource_failure(const Status& status);
 
 int ai_completion_capacity(int64_t max_inflight, int64_t worker_threads);
 

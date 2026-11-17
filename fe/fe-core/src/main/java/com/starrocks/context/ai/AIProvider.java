@@ -51,8 +51,7 @@ public class AIProvider implements Writable {
     // Rerank-specific (optional): cap documents sent per rerank request
     public static final String PROPERTY_MAX_DOCUMENTS = "max_documents";
     // Rerank-specific (optional): overall wall-clock budget (ms) for the whole rerank call, across
-    // all retry attempts. Bounds how long a slow/black-holing reranker can stall a synchronous search
-    // before it degrades to fusion order.
+    // all retry attempts, bounded by the query deadline. Expiration is a query error.
     public static final String PROPERTY_DEADLINE_MS = "deadline_ms";
 
     @SerializedName("i")
@@ -100,6 +99,7 @@ public class AIProvider implements Writable {
             case OPENAI -> TAIProviderProtocol.OPENAI;
             case ANTHROPIC -> TAIProviderProtocol.ANTHROPIC;
             case COHERE -> TAIProviderProtocol.COHERE;
+            case DASHSCOPE_RERANK -> TAIProviderProtocol.DASHSCOPE_RERANK;
         });
         result.setParams(getParams());
         return result;

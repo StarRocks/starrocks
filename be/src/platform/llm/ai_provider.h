@@ -27,12 +27,15 @@
 #include "platform/llm/ai_media_input.h"
 #include "platform/llm/ai_provider_options.h"
 #include "platform/llm/ai_rate_limiter.h"
+#include "platform/llm/ai_rerank.h"
 
 namespace starrocks {
 
 enum class AIProviderProtocol {
     OPENAI,
     DASHSCOPE_MULTIMODAL,
+    COHERE,
+    DASHSCOPE_RERANK,
 };
 
 struct AIChatRequest {
@@ -44,12 +47,26 @@ struct AIChatRequest {
     AICapability capability = AICapability::CHAT;
     // Borrowed only for the synchronous build_request call.
     const AIMediaInput* media = nullptr;
+    const AIRerankInput* rerank = nullptr;
+};
+
+// Value-owned request metadata. Shared providers never retain mutable request state.
+class AIProviderResponseContext {
+public:
+    AIProviderResponseContext() = default;
+    explicit AIProviderResponseContext(AIRerankResponseShape shape) : _shape(shape) {}
+    const AIRerankResponseShape* rerank_shape() const { return std::get_if<AIRerankResponseShape>(&_shape); }
+    size_t retained_bytes() const { return 0; }
+
+private:
+    std::variant<std::monostate, AIRerankResponseShape> _shape;
 };
 
 struct AIProviderHttpRequest {
     std::string url;
     std::vector<AIHttpHeader> headers;
     std::string body;
+    AIProviderResponseContext response_context;
 };
 
 enum class AIProviderErrorCode : uint8_t {
@@ -82,7 +99,7 @@ struct AIProviderUsage {
     std::optional<int64_t> total_tokens;
 };
 
-using AIProviderValue = std::variant<std::string, std::vector<float>>;
+using AIProviderValue = std::variant<std::string, std::vector<float>, AIRerankResult>;
 
 struct AIProviderSuccess {
     AIProviderValue value;
@@ -105,8 +122,8 @@ public:
     virtual ~AIProvider() = default;
 
     virtual StatusOr<AIProviderHttpRequest> build_request(const AIChatRequest& request) const = 0;
-    virtual AIProviderParseResult parse_response(std::string_view body,
-                                                 AICapability capability = AICapability::CHAT) const = 0;
+    virtual AIProviderParseResult parse_response(std::string_view body, AICapability capability = AICapability::CHAT,
+                                                 const AIProviderResponseContext& context = {}) const = 0;
 };
 
 Status validate_ai_protocol(AIProviderProtocol protocol, AICapability capability);
