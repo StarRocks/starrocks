@@ -68,10 +68,6 @@ StatusOr<TxnLogPtr> Tablet::get_txn_slog(int64_t txn_id) {
     return _mgr->get_txn_slog(_id, txn_id);
 }
 
-StatusOr<TxnLogPtr> Tablet::get_txn_vlog(int64_t version) {
-    return _mgr->get_txn_vlog(_id, version);
-}
-
 StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int64_t txn_id,
                                                            uint32_t max_rows_per_segment, ThreadPool* flush_pool,
                                                            bool is_compaction) {

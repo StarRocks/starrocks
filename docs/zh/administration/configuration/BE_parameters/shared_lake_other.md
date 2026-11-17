@@ -167,6 +167,21 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群中开启 File Bundling 的表在导入发布（Publish）时，是否保留聚合节点可能未收到的 Tablet 发布结果。某个 Tablet 的 Publish 在请求到达后超过 Publish RPC 超时时间加 3 秒才完成，或者本次 Publish 是重试，就会把结果保存在本节点的 Data Cache 中，不写入对象存储。之后该节点上的重试会直接读取这份结果，不再重新执行事务，因此慢分区每次重试时，已完成的 Tablet 不会被重做。这些缓存条目和其他 Data Cache 数据一样按需淘汰。仅在开启 Data Cache 时生效。所有 BE 和 CN 节点应设置相同的值。
 - 引入版本：v4.2
 
+### lake_enable_txn_vlog_group
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群的 Schema Change Publish 是否将多语句事务按语句顺序保存为日志组，写入独立的 `{tablet}_{version}.group.vlog` 文件。旧格式单日志使用 `{tablet}_{version}.vlog` 文件。无论该配置项如何设置，本版本的读取端始终支持旧单日志格式和新语句组格式。默认 `false` 保留旧的合并日志写入路径，也保留先 DELETE 后 INSERT 时，部分更新元数据不匹配导致 Shadow Publish 失败的已知问题。只有开启后，该问题的修复才生效。开启后不会转换旧写入路径已经写入的版本事务日志。
+
+  请先部署读取支持，再启用新格式写入。统一开启前，必须确认所有可能执行 Publish、回放或清理的 CN 都支持语句组格式，包括后台工作节点和替换节点使用的镜像。仍有旧 CN 时开启语句组写入，可能静默丢失已提交事务中的语句：新写入端删除部分源日志后，旧 CN 重试时可能仅用剩余源日志写出不完整的旧格式日志，而回放会优先读取该旧格式日志。
+
+  无论开启还是关闭，切换前都应暂停相关 Schema Change 和多语句 Publish 工作，排空在途请求，在全部相关 CN 上一致更新配置后再恢复工作。该配置项不协商读取能力，也不提供集群范围的原子切换。
+
+  重新设置为 `false` 只会停止后续语句组写入，不会转换、排空或删除已存在的语句组日志。降级到不支持语句组读取的版本前，必须列举所有相关存储根目录的 `txnlog` 目录，确认不存在任何 `*.group.vlog` 文件，包括与有效旧格式日志并存但未被使用的语句组文件，因为旧版本的 Tablet 清理也会扫描这些文件，且无法解码。ALTER 达到 `FINISHED`、事务达到 `VISIBLE` 或常规 Vacuum 完成，都不能证明这些文件已不存在。开启 File Bundling 时，成功回放后仍会保留这些日志，常规 Vacuum 也不会回收版本事务日志。如果仍有此类文件，应继续使用支持语句组读取的版本，直到完成安全清理。仅关闭该配置项并不代表可以安全降级。
+- 引入版本：-
+
 ### lake_pk_compaction_max_input_rowsets
 
 - 默认值：500
