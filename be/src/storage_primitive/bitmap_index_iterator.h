@@ -31,6 +31,10 @@ public:
     virtual rowid_t current_ordinal() const = 0;
     virtual rowid_t bitmap_nums() const = 0;
 
+    // An optional sidecar may disappear after this iterator was constructed. Such an index cannot prove
+    // either a matching or an empty row set; callers must keep the original range and residual predicates.
+    virtual bool is_file_missing() const { return false; }
+
     virtual Status read_bitmap(rowid_t ordinal, roaring::Roaring* result) = 0;
 
     virtual Status read_null_bitmap(roaring::Roaring* result) {
