@@ -271,8 +271,12 @@ public class DateUtils {
                     case 'e': // %e Day of the month, numeric (0..31)
                         builder.appendValue(ChronoField.DAY_OF_MONTH, 1, 2, SignStyle.NORMAL);
                         break;
-                    case 'H': // %H Hour (00..23)
-                        builder.appendValue(ChronoField.HOUR_OF_DAY, 2);
+                    case 'H': // %H Hour (00..23). 
+                        if (isOutputFormat) {
+                            builder.appendValue(ChronoField.HOUR_OF_DAY, 2);
+                        } else {
+                            builder.appendValue(ChronoField.HOUR_OF_DAY, 1, 2, SignStyle.NORMAL);
+                        }
                         break;
                     case 'k': // %k Hour (0..23)
                         builder.appendValue(ChronoField.HOUR_OF_DAY, 1, 2, SignStyle.NORMAL);
@@ -285,19 +289,33 @@ public class DateUtils {
                         builder.appendValue(ChronoField.CLOCK_HOUR_OF_AMPM, 1, 2, SignStyle.NORMAL);
                         break;
                     case 'i': // %i Minutes, numeric (00..59)
-                        builder.appendValue(ChronoField.MINUTE_OF_HOUR, 2);
+                        if (isOutputFormat) {
+                            builder.appendValue(ChronoField.MINUTE_OF_HOUR, 2);
+                        } else {
+                            builder.appendValue(ChronoField.MINUTE_OF_HOUR, 1, 2, SignStyle.NORMAL);
+                        }
                         break;
                     case 'j': // %j Day of year (001..366)
                         builder.appendValue(ChronoField.DAY_OF_YEAR, 3);
                         break;
                     case 'S': // %S Seconds (00..59)
                     case 's': // %s Seconds (00..59)
-                        builder.appendValue(ChronoField.SECOND_OF_MINUTE, 2);
+                        if (isOutputFormat) {
+                            builder.appendValue(ChronoField.SECOND_OF_MINUTE, 2);
+                        } else {
+                            builder.appendValue(ChronoField.SECOND_OF_MINUTE, 1, 2, SignStyle.NORMAL);
+                        }
                         break;
                     case 'T': // %T Time, 24-hour (hh:mm:ss)
-                        builder.appendValue(ChronoField.HOUR_OF_DAY, 2).appendLiteral(':')
-                                .appendValue(ChronoField.MINUTE_OF_HOUR, 2).appendLiteral(':')
-                                .appendValue(ChronoField.SECOND_OF_MINUTE, 2);
+                        if (isOutputFormat) {
+                            builder.appendValue(ChronoField.HOUR_OF_DAY, 2).appendLiteral(':')
+                                    .appendValue(ChronoField.MINUTE_OF_HOUR, 2).appendLiteral(':')
+                                    .appendValue(ChronoField.SECOND_OF_MINUTE, 2);
+                        } else {
+                            builder.appendValue(ChronoField.HOUR_OF_DAY, 1, 2, SignStyle.NORMAL).appendLiteral(':')
+                                    .appendValue(ChronoField.MINUTE_OF_HOUR, 1, 2, SignStyle.NORMAL).appendLiteral(':')
+                                    .appendValue(ChronoField.SECOND_OF_MINUTE, 1, 2, SignStyle.NORMAL);
+                        }
                         break;
                     case 'v': // %v Week (01..53), where Monday is the first day of the week; used with %x
                         final WeekFields weekFields = WeekFields.of(DayOfWeek.MONDAY, 4);

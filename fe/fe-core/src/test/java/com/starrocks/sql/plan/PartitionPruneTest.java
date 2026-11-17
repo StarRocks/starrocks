@@ -787,6 +787,26 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testUnpaddedDatetimeLiteralPrunesRange() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `t_unpadded_dt` (\n" +
+                "    `dt` datetime NOT NULL,\n" +
+                "    `id` int(11) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`)\n" +
+                "PARTITION BY RANGE(`dt`)(\n" +
+                "    PARTITION p1 VALUES [('2026-09-26 00:00:00'), ('2026-09-27 00:00:00')),\n" +
+                "    PARTITION p2 VALUES [('2026-09-27 00:00:00'), ('2026-09-28 00:00:00')),\n" +
+                "    PARTITION p3 VALUES [('2026-09-28 00:00:00'), ('2026-09-29 00:00:00'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        String plan = getFragmentPlan(
+                "select id from t_unpadded_dt where dt >= '2026-9-27 0:0:0' and dt < '2026-9-27 23:59:59'");
+        assertContains(plan, "partitions=1/3");
+        Assertions.assertFalse(plan.contains("CAST('2026-9-27 0:0:0' AS DATETIME)"), plan);
+    }
+
+    @Test
     public void testDbgDstGuard() throws Exception {
         starRocksAssert.withTable("CREATE TABLE `dst_t` (\n" +
                 "    `dt` bigint NOT NULL,\n" +
