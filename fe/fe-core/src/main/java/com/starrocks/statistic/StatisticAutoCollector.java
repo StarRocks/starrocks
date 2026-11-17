@@ -110,7 +110,7 @@ public class StatisticAutoCollector extends LeaderDaemon {
                     .collect(Collectors.joining(", "));
             LOG.info("[ExternalStats] auto collect start | jobIds={}", jobIds);
             for (ExternalAnalyzeJob externalAnalyzeJob : allExternalAnalyzeJobs) {
-                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContextWithAuth();
                 try (var scope = statsConnectCtx.bindScope()) {
                     List<StatisticsCollectJob> jobs = externalAnalyzeJob.instantiateJobs();
                     result.addAll(jobs);
