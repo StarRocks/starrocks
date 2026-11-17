@@ -1624,6 +1624,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: Long
 * **Introduced in**: v4.2
 
+### optimizer_materialized_view_preprocess_timelimit
+
+* **Scope**: Session
+* **Description**: Specifies the maximum time that the materialized view rewrite preprocessor can spend choosing candidate materialized views for SPJG rewrite. When the threshold is reached, the remaining related materialized views are skipped without being validated, and the materialized views already validated are kept as rewrite candidates. A positive value sets the limit. `0` or a negative value means no limit. This variable takes effect only when its value is less than `new_planner_optimize_timeout`.
+* **Default**: 0
+* **Data type**: Long
+* **Unit**: ms
+
 ### optimizer_materialized_view_timelimit
 
 * **Description**: Specifies the maximum time that one materialized view rewrite rule can consume. When the threshold is reached, this rule will not be used for query rewrite.
