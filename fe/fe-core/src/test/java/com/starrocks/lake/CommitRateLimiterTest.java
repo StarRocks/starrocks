@@ -389,6 +389,49 @@ public class CommitRateLimiterTest {
     }
 
     @Test
+    public void testThrottledExceptionCarriesWarehouse() {
+        long partitionId = 54321;
+        Set<Long> partitions = new HashSet<>(Collections.singletonList(partitionId));
+
+        long currentTimeMs = System.currentTimeMillis();
+        transactionState.setPrepareTime(currentTimeMs - 100);
+        transactionState.setWriteEndTimeMs(currentTimeMs);
+        transactionState.setWriteDurationMs(10_000);
+        compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
+                Quantiles.compute(Lists.newArrayList(threshold + 1.0)));
+
+        // The wait itself is charged to the metrics by the caller that sleeps (GlobalTransactionMgr), labelled
+        // by the warehouse the exception carries.
+        CommitRateExceededException e = Assertions.assertThrows(CommitRateExceededException.class,
+                () -> limiter.check(partitions, currentTimeMs));
+        Assertions.assertTrue(e.getAllowCommitTime() > currentTimeMs);
+        Assertions.assertEquals(transactionState.getWarehouseId(), e.getWarehouseId());
+    }
+
+    @Test
+    public void testIngestSlowdownPartitionCount() {
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        try {
+            Config.lake_enable_ingest_slowdown = true;
+            long now = System.currentTimeMillis();
+            Assertions.assertEquals(0, compactionMgr.getIngestSlowdownPartitionCount());
+            // At the threshold is not throttled, anything above it is.
+            compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, 1), 3, now,
+                    Quantiles.compute(Lists.newArrayList(threshold)));
+            compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, 2), 3, now,
+                    Quantiles.compute(Lists.newArrayList(threshold + 1.0)));
+            compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, 3), 3, now,
+                    Quantiles.compute(Lists.newArrayList(threshold + 50.0)));
+            Assertions.assertEquals(2, compactionMgr.getIngestSlowdownPartitionCount());
+
+            Config.lake_enable_ingest_slowdown = false;
+            Assertions.assertEquals(0, compactionMgr.getIngestSlowdownPartitionCount());
+        } finally {
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+        }
+    }
+
+    @Test
     public void testThrottlesIngestion() {
         boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
         long oldThreshold = Config.lake_ingest_slowdown_threshold;

@@ -14,15 +14,28 @@
 
 package com.starrocks.transaction;
 
+import com.starrocks.server.WarehouseManager;
+
 public class CommitRateExceededException extends TransactionException {
     private final long allowCommitTime;
+    private final long warehouseId;
 
     public CommitRateExceededException(long transactionId, long allowCommitTime) {
+        this(transactionId, allowCommitTime, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+    }
+
+    /** warehouseId is the warehouse the delayed load runs in; the metrics charged for the wait are labelled by it. */
+    public CommitRateExceededException(long transactionId, long allowCommitTime, long warehouseId) {
         super("Commit rate exceeds compaction throughput", transactionId);
         this.allowCommitTime = allowCommitTime;
+        this.warehouseId = warehouseId;
     }
 
     public long getAllowCommitTime() {
         return allowCommitTime;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
     }
 }

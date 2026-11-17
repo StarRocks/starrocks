@@ -14,9 +14,11 @@
 
 #pragma once
 
+#include <bvar/bvar.h>
 #include <google/protobuf/stubs/common.h>
 
 #include <atomic>
+#include <cerrno>
 
 #include "base/brpc/brpc.h"
 #include "base/time/time.h"
@@ -41,8 +43,40 @@ public:
 
     void Run() override {
         _latency = MonotonicNanos() - _start_timestamp;
+        if (_inflight != nullptr) {
+            *_inflight << -1;
+        }
+        // Recorded here rather than by whoever joins the call, so a call the owner never joins (it gave
+        // up after another call failed) still counts once it completes. A call the owner cancelled is
+        // not an outcome of the rpc layer and is left out.
+        if (cntl.ErrorCode() != ECANCELED) {
+            if (_latency_us != nullptr) {
+                *_latency_us << _latency / 1000;
+            }
+            if (_failed != nullptr && cntl.Failed()) {
+                *_failed << 1;
+            }
+        }
         if (unref()) {
             delete this;
+        }
+    }
+
+    // The bvars the calls issued through this closure report to; set once before the first call.
+    // inflight counts calls brpc has not completed yet: the owner calls issued() right before handing
+    // the closure to the stub and Run() takes the count back, so a call that is cancelled or never
+    // joined still leaves it balanced. latency_us gets one sample and failed one increment per
+    // completed call, from Run().
+    void set_rpc_metrics(bvar::Adder<int64_t>* inflight, bvar::LatencyRecorder* latency_us,
+                         bvar::Adder<int64_t>* failed) {
+        _inflight = inflight;
+        _latency_us = latency_us;
+        _failed = failed;
+    }
+
+    void issued() {
+        if (_inflight != nullptr) {
+            *_inflight << 1;
         }
     }
 
@@ -78,6 +112,9 @@ private:
     std::atomic<int> _refs;
     int64_t _start_timestamp;
     int64_t _latency;
+    bvar::Adder<int64_t>* _inflight = nullptr;
+    bvar::LatencyRecorder* _latency_us = nullptr;
+    bvar::Adder<int64_t>* _failed = nullptr;
 };
 
 } // namespace starrocks

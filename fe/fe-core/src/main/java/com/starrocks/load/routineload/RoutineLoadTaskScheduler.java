@@ -47,6 +47,7 @@ import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.routineload.RoutineLoadJob.JobState;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -59,6 +60,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -159,6 +161,11 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
         int idleSlotNum = routineLoadManager.getClusterIdleSlotNum();
         // scheduler will be blocked when there is no slot for task in cluster
         if (idleSlotNum <= 0) {
+            for (Map.Entry<Long, WarehouseTaskSlots> entry : routineLoadManager.getWarehouseSlotNums().entrySet()) {
+                if (entry.getValue().isFull()) {
+                    countScheduleBlocked(entry.getKey());
+                }
+            }
             LOG.warn("no available be slot to scheduler tasks, wait for {} seconds to scheduler again, " +
                             "you can set max_routine_load_task_num_per_be bigger in fe.conf, current value is {}",
                     SLOT_FULL_SLEEP_MS / 1000, Config.max_routine_load_task_num_per_be);
@@ -288,6 +295,7 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
         // allocate BE slot for this task.
         // this should be done before txn begin, or the txn may be begun successfully but failed to be allocated.
         if (!allocateTaskToBe(routineLoadTaskInfo)) {
+            countScheduleBlocked(routineLoadTaskInfo.getWarehouseId());
             // allocate failed, push it back to the queue to wait next scheduling
             delayPutToQueue(routineLoadTaskInfo,
                     String.format("failed to allocate be slot, wait for %s second to schedule again, " +
@@ -419,6 +427,15 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
         } catch (Exception e) {
             throw new LoadException("failed to send task: " + e.getMessage(), e);
         }
+    }
+
+    // One per scheduling attempt that found no free task slot in the warehouse, whether the whole
+    // cluster was full (process) or only the task's warehouse (allocateTaskToBe).
+    private static void countScheduleBlocked(long warehouseId) {
+        if (!MetricRepo.hasInit) {
+            return;
+        }
+        MetricRepo.COUNTER_ROUTINE_LOAD_SCHEDULE_BLOCKED.getMetric(MetricRepo.warehouseLabel(warehouseId)).increase(1L);
     }
 
     // try to allocate a task to BE which has idle slot.
