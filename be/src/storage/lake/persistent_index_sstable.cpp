@@ -93,8 +93,9 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
                 ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
                 opts.encryption_info = std::move(info);
             }
-            ASSIGN_OR_RETURN(rf, fs::new_random_access_file(
-                                         opts, tablet_mgr->sst_location(metadata->id(), sstable_pb.filename())));
+            ASSIGN_OR_RETURN(rf,
+                             open_sstable_file(opts, tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()),
+                                               sstable_pb.filesize()));
             open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), table);
             TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_retry_error", &open_st);
         }
@@ -211,6 +212,7 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     // Catch corrupted data blocks as Corruption (instead of silently returning wrong
     // index values) so the drop-cache-and-retry below can heal a bad local cache.
     options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
+<<<<<<< HEAD
     std::unique_ptr<RandomAccessFile> rf;
     if (config::enable_pk_index_parallel_execution) {
         RandomAccessFileOptions opts;
@@ -220,6 +222,24 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         }
         ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, _rf->filename()));
     }
+=======
+    // Read through a per-call file handle instead of the shared `_rf`: multi_get runs concurrently
+    // on the pk index execution pool, and file-class state must not be shared across those readers.
+    // A fresh handle also starts its IO counters at 0, so the deltas below are the absolute IO done
+    // by this multi_get. The handle is opened with the recorded file size: it is opened on every
+    // call, and a size lookup that misses the star cache is a HEAD request to the object storage.
+    RandomAccessFileOptions opts;
+    opts.remote_read = ScopedRemoteReadContext::current_or_load();
+    if (!_sstable_pb.encryption_meta().empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
+        opts.encryption_info = std::move(info);
+    }
+    ASSIGN_OR_RETURN(auto rf, open_sstable_file(opts, _rf->filename(), _sstable_pb.filesize()));
+    // Test seam: the per-call handle is the only thing the IO-breakdown counters below measure, so a
+    // UT has to be able to wrap it in a stream that reports synthetic local/remote statistics. A
+    // shared-nothing POSIX file exposes none, which would leave the counters pinned at zero.
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::multi_get:opened_file", &rf);
+>>>>>>> 55afc74 ([BugFix][RB-1546] Open shared-data PK index sstables with their recorded size (#83423))
     options.file = rf.get();
     // When parallel execution opens a fresh `rf`, its IO counters start at 0 so the delta below
     // equals the absolute IO done by this multi_get. Otherwise `_rf` is reused across calls and
@@ -344,9 +364,20 @@ StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
         ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
         opts.encryption_info = std::move(info);
     }
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
+    ASSIGN_OR_RETURN(auto rf, open_sstable_file(opts, location, sstable_pb.filesize()));
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, cache, need_filter, delvec, metadata, tablet_mgr));
     return std::move(sstable);
+}
+
+StatusOr<std::unique_ptr<RandomAccessFile>> PersistentIndexSstable::open_sstable_file(
+        const RandomAccessFileOptions& opts, const std::string& location, int64_t file_size) {
+    FileInfo file_info{.path = location};
+    if (file_size > 0) {
+        file_info.size = file_size;
+    }
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::open_sstable_file", &file_info);
+    ASSIGN_OR_RETURN(auto file_system, FileSystemFactory::CreateSharedFromString(location));
+    return file_system->new_random_access_file(opts, file_info);
 }
 
 PersistentIndexSstableStreamBuilder::PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf,

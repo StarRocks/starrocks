@@ -146,8 +146,9 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
                 opts.encryption_info = std::move(info);
             }
 
-            ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
-                                              opts, _tablet_mgr->sst_location(_metadata->id(), sstable_pb.filename())));
+            ASSIGN_OR_RETURN(auto rf, PersistentIndexSstable::open_sstable_file(
+                                              opts, _tablet_mgr->sst_location(_metadata->id(), sstable_pb.filename()),
+                                              sstable_pb.filesize()));
 
             // Create PersistentIndexSstable
             auto sst = std::make_unique<PersistentIndexSstable>();

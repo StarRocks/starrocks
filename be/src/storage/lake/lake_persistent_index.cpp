@@ -238,7 +238,7 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
         ASSIGN_OR_RETURN(opts.encryption_info, KeyCache::instance().unwrap_encryption_meta(sst_meta.encryption_meta()));
     }
     auto location = _tablet_mgr->sst_location(_tablet_id, sst_meta.name());
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
+    ASSIGN_OR_RETURN(auto rf, PersistentIndexSstable::open_sstable_file(opts, location, sst_meta.size()));
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(sst_meta.name());
     sstable_pb.set_filesize(sst_meta.size());
@@ -623,7 +623,7 @@ Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* 
                          KeyCache::instance().unwrap_encryption_meta(del_sst_meta.encryption_meta()));
     }
     auto location = _tablet_mgr->sst_location(_tablet_id, del_sst_meta.name());
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(ropts, location));
+    ASSIGN_OR_RETURN(auto rf, PersistentIndexSstable::open_sstable_file(ropts, location, del_sst_meta.size()));
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(del_sst_meta.name());
     sstable_pb.set_filesize(del_sst_meta.size());
