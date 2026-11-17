@@ -893,9 +893,11 @@ Starting from v3.1, StarRocks offers a SQL interface for users to manually perfo
 
 Shared-data clusters support this feature from v3.3.0 onwards.
 
+Base Compaction for shared-data Primary Key tables is supported from v4.1.4. Use `ALTER TABLE ... COMPACT` to request manual compaction; no additional `BASE` keyword is needed. From v4.1.7, `lake_pk_compaction_base_enable_delete_trigger` only controls automatic triggering: setting it to `false` does not affect manual requests. Manual requests also bypass both delete thresholds. Tablets without deleted rows fall back to ordinary compaction selection. Requests are asynchronous, and a single request does not guarantee a full-tablet merge. See [Base Compaction for Primary Key tables](../../../administration/management/compaction.md#primary-key-base-compaction).
+
 > **NOTE**
 >
-> From v3.2.13 onwards, you can forbid Base Compaction within certain time range using the property [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#forbid-base-compaction).
+> The v3.2.13 support for [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#forbid-base-compaction) applies to shared-nothing non-Primary Key tables. The 4.1 series does not support setting this property on shared-data tables. Time windows and minimum intervals for automatic shared-data Base Compaction are supported from v4.2; manual `ALTER TABLE ... COMPACT` requests bypass these restrictions.
 
 Syntax:
 
@@ -922,7 +924,7 @@ ALTER TABLE <tbl_name> CUMULATIVE COMPACT (<partition1_name>[,<partition2_name>,
 ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 ```
 
-The `be_compactions` table in the `information_schema` database records compaction results. You can run `SELECT * FROM information_schema.be_compactions;` to query data versions after compaction.
+For shared-nothing clusters, query `information_schema.be_compactions` for compaction results. For shared-data clusters, use `SHOW PROC '/compactions'` to inspect task status and `information_schema.be_cloud_native_compactions` for tablet execution details. See [View compaction tasks](../../../administration/management/compaction.md#view-compaction-tasks).
 
 ### Drop Primary Key Persistent Index (From 3.3.9)
 
