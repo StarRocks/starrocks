@@ -876,6 +876,69 @@ INSTANTIATE_TEST_SUITE_P(SchemaChangeModifyColumnTypeTest, SchemaChangeModifyCol
                          to_string_param_name);
 // clang-format on
 
+class SchemaChangeKeyConversionTest : public SchemaChangeModifyColumnTypeTest {
+public:
+    SchemaChangeKeyConversionTest() {
+        auto base_schema = _base_tablet_metadata->mutable_schema();
+        base_schema->mutable_column(0)->set_type("BIGINT");
+        _base_tablet_schema = TabletSchema::create(*base_schema);
+        _base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(_base_tablet_schema));
+        auto new_schema = _new_tablet_metadata->mutable_schema();
+        new_schema->mutable_column(0)->set_type("VARCHAR");
+        new_schema->mutable_column(0)->set_length(32);
+        _new_tablet_schema = TabletSchema::create(*new_schema);
+        _new_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(_new_tablet_schema));
+    }
+};
+
+TEST_P(SchemaChangeKeyConversionTest, test_key_conversion_order) {
+    auto keys = Int64Column::create();
+    auto values = Int32Column::create();
+    for (int64_t key : {9, 10, 90, 100}) {
+        keys->append_datum(Datum(key));
+        values->append_datum(Datum(static_cast<int32_t>(values->size() + 1)));
+    }
+    VChunk chunk({std::move(keys), std::move(values)}, _base_schema);
+    const uint32_t indexes[] = {0, 1, 2, 3};
+    auto base_id = _base_tablet_metadata->id();
+    auto target_id = _new_tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_manager.get())
+                                         .set_tablet_id(base_id)
+                                         .set_txn_id(1000)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_base_tablet_schema->id())
+                                         .build());
+    ASSERT_OK(writer->open());
+    ASSERT_OK(writer->write(chunk, indexes, 4));
+    ASSERT_OK(writer->finish_with_txnlog());
+    writer->close();
+    ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_id, 2, 1000).status());
+
+    TAlterTabletReqV2 request;
+    request.base_tablet_id = base_id;
+    request.new_tablet_id = target_id;
+    request.alter_version = 2;
+    request.txn_id = 1001;
+    SchemaChangeHandler handler(_tablet_manager.get());
+    ASSERT_OK(handler.process_alter_tablet(request));
+    ASSERT_OK(publish_version_for_schema_change(target_id, 3, 1001));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(target_id, 3));
+    auto result = read(tablet, false);
+    ASSERT_EQ(4, result->num_rows());
+    const std::vector<std::string> expected_keys{"10", "100", "9", "90"};
+    const std::vector<int64_t> expected_values{2, 4, 1, 3};
+    for (size_t i = 0; i < expected_keys.size(); ++i) {
+        EXPECT_EQ(expected_keys[i], result->get(i)[0].get_slice().to_string());
+        EXPECT_EQ(expected_values[i], result->get(i)[1].get_int64());
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(SchemaChangeKeyConversionTest, SchemaChangeKeyConversionTest,
+                         ::testing::Values(SchemaChangeParam{DUP_KEYS, 1, 0}, SchemaChangeParam{AGG_KEYS, 1, 0}),
+                         to_string_param_name);
+
 // BEGIN; INSERT INTO t1 ...; INSERT INTO t2 ...; COMMIT on a shared-data cluster while t1 is being altered. Each
 // statement writes its txn logs under its own load id, and FE publishes every tablet of the transaction with the
 // load ids of all statements: the base tablets of t1 through publish_version, its shadow tablets through
