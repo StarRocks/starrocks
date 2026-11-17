@@ -147,6 +147,43 @@ public class MaterializedViewAnalyzerTest {
     }
 
     @Test
+    public void testCreatePartitionedMvOnExternalTableReferencedWithUpperCase() throws Exception {
+        // Hive/Glue-backed tables are named in lower case; the query may spell them otherwise.
+        String[] froms = {
+                "iceberg0.partitioned_db.T1",
+                "iceberg0.PARTITIONED_DB.t1",
+                "(SELECT id, data, date FROM iceberg0.partitioned_db.T1) s",
+                "hive0.partitioned_db.T1",
+        };
+        for (String from : froms) {
+            boolean iceberg = from.contains("iceberg0");
+            String partCol = iceberg ? "date" : "par_col";
+            String cols = iceberg ? "id, data, date" : "c1, c2, par_col";
+            String mvName = "mv_upper_case_ref";
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW test." + mvName + "\n" +
+                            "PARTITION BY " + partCol + "\n" +
+                            "DISTRIBUTED BY HASH(" + (iceberg ? "id" : "c1") + ") BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "AS SELECT " + cols + " FROM " + from);
+            MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", mvName);
+            Assertions.assertNotNull(mv, from);
+            Assertions.assertFalse(mv.getPartitionExprMaps().isEmpty(), from);
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+
+        String windowMv = "CREATE MATERIALIZED VIEW test.mv_upper_case_window\n" +
+                "PARTITION BY date\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "AS SELECT id, date, row_number() over (%s) AS rn FROM iceberg0.partitioned_db.T1";
+        starRocksAssert.withMaterializedView(String.format(windowMv, "partition by date order by id"));
+        starRocksAssert.dropMaterializedView("mv_upper_case_window");
+        analyzeFail(String.format(windowMv, "order by id"),
+                "should contain the partition column date of materialized view");
+    }
+
+    @Test
     public void testCreateIcebergTable2WithAdaptive() throws Exception {
         String mvName = "iceberg_parttbl_mv1";
         starRocksAssert.useDatabase("test")
