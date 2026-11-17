@@ -42,9 +42,13 @@ Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使�
 
 StarRocks 原样保留 CRS 标识符。`OGC:CRS84` 和 `EPSG:4326` 是不同的标识符。使用 `ST_AsText(g)` 或 `ST_AsBinary(g)` 返回 GEOMETRY 值。直接输出 GEOMETRY 列（包括输出包含此列的 `SELECT *`）会在查询分析阶段报错。
 
-如果 Iceberg 列的列表、映射或结构体中嵌套了 geography 或 geometry，则整个列显示为 `UNKNOWN_TYPE`，包括其中的非地理空间子字段在内均无法查询。其他受支持的列和标量 geography 仍可读取。
+对于格式版本 3 及以上且使用 Parquet 数据文件的 Iceberg 表，StarRocks 支持读取数组元素、映射值和结构体字段中的 `GEOGRAPHY`。这些容器可以继续嵌套，例如包含 `GEOGRAPHY` 字段的结构体数组。支持的 CRS 为 `OGC:CRS84`，边算法为球面算法。
 
-滚动升级时，请先升级所有 BE 和 CN 节点，再升级 FE 节点。
+要返回嵌套值，请先访问叶字段，再显式序列化。例如，对数组使用 `ST_AsText(places[1])`，对映射使用 `ST_AsText(places_by_id[42])`，对结构体使用 `ST_AsBinary(location.shape)`。不支持直接输出含 GEO 字段的容器。
+
+如果容器包含 GEO 映射键、嵌套的 `GEOMETRY` 或不受支持的地理空间元数据，则整个容器映射为 `UNKNOWN_TYPE`。仍不支持 GEO 比较、分组、排序、基于空间边界的裁剪、包含嵌套 GEO 的持久化 SQL 定义，以及在内表中存储这些容器。
+
+滚动升级时，请先将所有 BE 和 CN 节点升级到支持读取 Parquet 嵌套 `GEOGRAPHY` 的版本，再升级 FE 节点。
 
 ## 使用注意事项
 
@@ -54,8 +58,6 @@ StarRocks 原样保留 CRS 标识符。`OGC:CRS84` 和 `EPSG:4326` 是不同的�
 | --------------- | ---------------------------------------------- | ------------------------------------------------------------ |
 | Parquet         | SNAPPY, LZ4, ZSTD, GZIP, 和 NO_COMPRESSION      | <ul><li>v1 表：支持。 </li><li>v2 表：从 StarRocks v3.1 开始支持，其中对这些 v2 表的查询支持位置删除。在 v3.1.10、v3.2.5、v3.3 及其更高版本中，对 v2 表的查询还支持等值删除。 </li></ul> |
 | ORC             | ZLIB, SNAPPY, LZO, LZ4, ZSTD, 和 NO_COMPRESSION | <ul><li>v1 表：支持。 </li><li>v2 表：从 StarRocks v3.0 开始支持，其中对这些 v2 表的查询支持位置删除。在 v3.1.8、v3.2.3、v3.3 及其更高版本中，对 v2 表的查询还支持等值删除。 </li></ul> |
-
-升级到支持查询 Iceberg 嵌套 `GEOGRAPHY` 的 FE 版本之前，请先将所有 BE 和 CN 节点升级到支持读取 Parquet 嵌套 `GEOGRAPHY` 的版本。
 
 ## 集成准备
 

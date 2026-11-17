@@ -41,6 +41,7 @@ import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -223,7 +224,7 @@ public class IcebergApiConverterTest {
     }
 
     @Test
-    public void testNestedGeographyIsUnsupported() {
+    public void testNestedGeographyMapping() {
         Schema schema = new Schema(
                 Types.NestedField.optional(1, "array_geo",
                         Types.ListType.ofOptional(2, Types.GeographyType.crs84())),
@@ -235,8 +236,44 @@ public class IcebergApiConverterTest {
                         Types.NestedField.optional(10, "shape", Types.GeographyType.crs84())))),
                 Types.NestedField.optional(11, "geo_key", Types.MapType.ofOptional(
                         12, 13, Types.GeographyType.crs84(), Types.IntegerType.get())));
-        for (Column column : IcebergApiConverter.toFullSchemas(schema)) {
-            assertTrue(column.getType().isUnknown(), column.getName());
+        List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
+        List<Type> leaves = List.of(
+                ((ArrayType) columns.get(0).getType()).getItemType(),
+                ((StructType) columns.get(1).getType()).getField("shape").getType(),
+                ((MapType) columns.get(2).getType()).getValueType(),
+                ((StructType) ((ArrayType) columns.get(3).getType()).getItemType()).getField("shape").getType());
+        List<TIcebergSchemaField> fields = IcebergApiConverter.getTIcebergSchema(schema).getFields();
+        List<TIcebergSchemaField> scanLeaves = List.of(fields.get(0).getChildren().get(0),
+                fields.get(1).getChildren().get(0), fields.get(2).getChildren().get(1),
+                fields.get(3).getChildren().get(0).getChildren().get(0));
+        assertEquals(List.of(2, 4, 7, 10), scanLeaves.stream().map(TIcebergSchemaField::getField_id).toList());
+        for (int i = 0; i < leaves.size(); i++) {
+            assertEquals(PrimitiveType.GEOGRAPHY, leaves.get(i).getPrimitiveType());
+            var descriptor = ((ScalarType) leaves.get(i)).getGeoDescriptor();
+            var metadata = scanLeaves.get(i).getGeo_metadata();
+            assertEquals("GEOGRAPHY", metadata.getKind().name());
+            assertEquals("OGC:CRS84", metadata.getCrs());
+            assertEquals("SPHERICAL", metadata.getEdge_algorithm());
+            assertEquals(metadata.getCrs(), descriptor.crs());
+            assertEquals(metadata.getEdge_algorithm(), descriptor.edgeAlgorithm().name());
+            assertEquals(4326, descriptor.srid());
+        }
+        assertTrue(columns.get(4).getType().isUnknown());
+    }
+
+    @Test
+    public void testUnsupportedNestedGeographyMapsWholeColumnToUnknown() {
+        var badCrs = Types.GeographyType.of("EPSG:4326", EdgeAlgorithm.SPHERICAL);
+        var badEdge = Types.GeographyType.of("OGC:CRS84", EdgeAlgorithm.VINCENTY);
+        var geoKey = Types.MapType.ofOptional(4, 5, Types.GeographyType.crs84(), Types.IntegerType.get());
+        var structKey = Types.StructType.of(Types.NestedField.required(3, "shape", Types.GeographyType.crs84()));
+        for (var type : List.of(
+                Types.ListType.ofOptional(2, badCrs),
+                Types.MapType.ofOptional(2, 3, Types.IntegerType.get(), badEdge),
+                Types.StructType.of(Types.NestedField.optional(2, "readable", Types.IntegerType.get()),
+                        Types.NestedField.optional(3, "bad_map", geoKey)),
+                Types.MapType.ofOptional(2, 4, structKey, Types.GeographyType.crs84()))) {
+            assertTrue(fromIcebergType(type).isUnknown(), type.toString());
         }
     }
 
