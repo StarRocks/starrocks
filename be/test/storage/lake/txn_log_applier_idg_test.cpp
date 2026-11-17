@@ -301,7 +301,7 @@ TEST(TxnLogApplierIdgTest, npk_partial_compaction_retires_sparse_input_idg_entri
     output->mutable_segment_metas(1)->set_segment_idx(1);
 
     auto applier = new_txn_log_applier(tablet, meta, /*new_version=*/4, /*rebuild_pindex=*/false,
-                                       /*skip_write_tablet_metadata=*/true, std::nullopt);
+                                       /*skip_write_tablet_metadata=*/true);
     Status st = applier->apply(log);
     ASSERT_TRUE(st.ok()) << st.to_string();
 
