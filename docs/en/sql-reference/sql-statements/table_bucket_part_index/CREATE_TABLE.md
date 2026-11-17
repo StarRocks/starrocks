@@ -849,6 +849,8 @@ For cloud-native tables with Fast Schema Evolution v2 enabled, schema change job
 
 `base_compaction_forbidden_time_ranges`: The time range within which Base Compaction is forbidden for the table. When this property is set, the system performs Base Compaction on eligible tablets only outside the specified time range. This property is supported from v3.2.13.
 
+**Version scope:** v3.2.13 is when this property became available for shared-nothing non-Primary Key tables, not for shared-data tables. The 4.1 series does not support setting it on shared-data tables; FE rejects the setting. Time-window control for shared-data tables is supported from v4.2. The property defines when automatic Base Compaction is forbidden; manual `ALTER TABLE ... COMPACT` requests bypass the restriction in versions that support it. See [Version support for shared-data Base Compaction](../../../administration/management/compaction.md#primary-key-base-compaction-versions).
+
 :::note
 Make sure that the number of data loading to the table does not exceed 500 during the period when Base Compaction is forbidden.
 :::
