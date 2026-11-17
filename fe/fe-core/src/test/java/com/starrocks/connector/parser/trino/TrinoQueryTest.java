@@ -821,6 +821,15 @@ public class TrinoQueryTest extends TrinoTestBase {
         String sql = "select v1 from t0 where v2 = BIGINT '42'";
         assertPlanContains(sql, "2: v2 = 42");
 
+        // Integers are read as Trino reads them: spaces, a sign and leading zeros are allowed, and the value must fit
+        sql = "select v1 from t0 where v2 = BIGINT ' +042 ' and v3 = TINYINT '-128'";
+        assertPlanContains(sql, "2: v2 = 42", "3: v3 = -128");
+        analyzeFail("select BIGINT 'x'", "'x' is not a valid BIGINT literal");
+        analyzeFail("select BIGINT '4.0'", "'4.0' is not a valid BIGINT literal");
+        analyzeFail("select INT '2147483648'", "'2147483648' is not a valid INTEGER literal");
+        // StarRocks type names that aren't Trino types
+        analyzeFail("select LARGEINT '1'", "unknown type LARGEINT");
+
         sql = "select DOUBLE '1.5' + v1 from t0";
         assertPlanContains(sql, "1.5 + CAST(1: v1 AS DOUBLE)");
 
