@@ -281,6 +281,25 @@ static void BM_SqlSubstr_Ascii(benchmark::State& state) {
 // ---------------------------------------------------------------------------
 // 3. StringFunctions::reverse (SELECT count(reverse(col)))
 // ---------------------------------------------------------------------------
+static inline void ascii_reverse_per_slice(const char* src_begin, const char* src_end, char* dst_curr) {
+    auto src_curr = src_begin;
+#if defined(__SSSE3__) && defined(__SSE2__)
+    auto const size = src_end - src_begin;
+    constexpr auto SSE2_SIZE = sizeof(__m128i);
+    const auto ctrl_masks = _mm_set_epi64((__m64)0x00'01'02'03'04'05'06'07ull, (__m64)0x08'09'0a'0b'0c'0d'0e'0full);
+    const auto sse2_end = src_begin + (size & ~(SSE2_SIZE - 1));
+    for (; src_curr < sse2_end; src_curr += SSE2_SIZE) {
+        dst_curr -= SSE2_SIZE;
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst_curr),
+                         _mm_shuffle_epi8(_mm_loadu_si128(reinterpret_cast<const __m128i*>(src_curr)), ctrl_masks));
+    }
+#endif
+    for (; src_curr < src_end; ++src_curr) {
+        --dst_curr;
+        *dst_curr = *src_curr;
+    }
+}
+
 static void BM_SqlReverse_Ascii(benchmark::State& state) {
     const size_t row_len = static_cast<size_t>(state.range(0));
     MockBinaryColumn col;
@@ -296,11 +315,7 @@ static void BM_SqlReverse_Ascii(benchmark::State& state) {
                 const char* begin = src_base + col.offsets[i];
                 const char* end = src_base + col.offsets[i + 1];
                 dst_curr += (end - begin);
-                char* p = dst_curr;
-                for (const char* s = begin; s < end; ++s) {
-                    --p;
-                    *p = *s;
-                }
+                ascii_reverse_per_slice(begin, end, dst_curr);
             }
         }
         benchmark::DoNotOptimize(is_ascii);
