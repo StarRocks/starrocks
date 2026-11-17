@@ -816,44 +816,8 @@ struct GetContainer {
     }
 };
 
-<<<<<<< HEAD
-#define GET_CONTAINER(ltype)                                                                  \
-    template <>                                                                               \
-    struct GetContainer<ltype> {                                                              \
-        static const auto get_data(const Column* column) {                                    \
-            return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data();       \
-        }                                                                                     \
-        static const auto get_data(const ColumnPtr& column) {                                 \
-            return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data();       \
-        }                                                                                     \
-        static const auto get_data(const MutableColumnPtr& column) {                          \
-            return ColumnHelper::as_raw_column<BinaryColumn>(column.get())->get_proxy_data(); \
-        }                                                                                     \
-    };
-APPLY_FOR_ALL_STRING_TYPE(GET_CONTAINER)
-#undef GET_CONTAINER
-
-#define GET_CONTAINER(ltype)                                                          \
-    template <>                                                                       \
-    struct GetContainer<ltype> {                                                      \
-        using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;             \
-        static const auto get_data(const Column* column) {                            \
-            return ColumnHelper::as_raw_column<ColumnType>(column)->get_data();       \
-        }                                                                             \
-        static const auto get_data(const ColumnPtr& column) {                         \
-            return ColumnHelper::as_raw_column<ColumnType>(column)->get_data();       \
-        }                                                                             \
-        static const auto get_data(const MutableColumnPtr& column) {                  \
-            return ColumnHelper::as_raw_column<ColumnType>(column.get())->get_data(); \
-        }                                                                             \
-    };
-// GET_CONTAINER(TYPE_JSON)
-#undef GET_CONTAINER
-
 using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
 using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
 using SegmentedChunkSlice = ChunkSliceTemplate<SegmentedChunkPtr>;
 
-=======
->>>>>>> d7ec772 ([Refactor] Remove get_proxy_data from BinaryColumn (#69758))
 } // namespace starrocks

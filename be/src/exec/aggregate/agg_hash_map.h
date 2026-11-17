@@ -100,8 +100,17 @@ using SliceAggTwoLevelHashMap =
                                       phmap::priv::Allocator<phmap::priv::Pair<const Slice, AggDataPtr>>, PHMAPN>;
 
 template <typename T>
+concept HasImmutableData = requires(T t) {
+    {t.immutable_data()};
+};
+
+template <typename T>
 auto get_immutable_data(T* obj) {
-    return obj->immutable_data();
+    if constexpr (HasImmutableData<T>) {
+        return obj->immutable_data();
+    } else {
+        return obj->get_proxy_data();
+    }
 }
 
 static_assert(sizeof(AggDataPtr) == sizeof(size_t));
