@@ -541,6 +541,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: The share of the object store reads of queries relative to `remote_read_load_weight`, `remote_read_compaction_weight`, and `remote_read_background_weight` while all of them wait. It must be positive. Takes effect only when `remote_io_scheduler_enable` is `true`.
 - Introduced in: -
 
+### remote_read_retain_prefetched_bytes
+
+- Default: 2147483648
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum total size of finished read-ahead blocks of segment files that a node keeps in memory in a shared-data cluster. When the remote I/O scheduler (`remote_io_scheduler_enable`) reads blocks ahead for a query scan, a finished block stays in memory while the scan still covers it, and the scan copies its pages from memory instead of reading them back from the Data Cache. The block is still written to the Data Cache. Once the blocks kept in memory reach this size, later blocks are not kept. `0` disables this feature. This item has no effect while the remote I/O scheduler is disabled. Only segment files, which are never overwritten, are kept; other files such as metadata are not. The memory is counted toward the process, not toward any query. A raised value applies to the blocks finished afterwards. After the value is lowered, no new blocks are kept until the total falls below it, and a block already kept is released when it is next read while the total is still above the new value, or when the scan no longer covers it. Nothing is evicted in the background. The value must not be negative: with the remote I/O scheduler enabled, the CN refuses to start with a negative value, and a dynamic update to a negative value is rejected.
+- Introduced in: v4.2
+
 ### remote_read_skip_contended_cache_writes
 
 - Default: false
