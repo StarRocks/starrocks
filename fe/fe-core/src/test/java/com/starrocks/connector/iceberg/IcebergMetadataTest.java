@@ -1525,12 +1525,12 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), null);
-        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
-                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        // branch-4.2 has no equality-delete refusal in finishSink, so fail the commit task by having the
+        // table load inside it throw.
         new Expectations(metadata) {
             {
                 metadata.getTable((ConnectContext) any, anyString, anyString);
-                result = icebergTable;
+                result = new StarRocksConnectorException("Failed to load iceberg table");
                 minTimes = 0;
             }
         };
@@ -1541,11 +1541,10 @@ public class IcebergMetadataTest extends TableTestBase {
                 invalidations.incrementAndGet();
             }
         };
-        TSinkCommitInfo eqDelete = appendCommitInfo(mockedNativeTableA, "data_bucket=0");
-        eqDelete.getIceberg_data_file().setFile_content(TIcebergFileContent.EQUALITY_DELETES);
+        TSinkCommitInfo append = appendCommitInfo(mockedNativeTableA, "data_bucket=0");
 
         Assertions.assertThrows(StarRocksConnectorException.class,
-                () -> metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(eqDelete), null));
+                () -> metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(append), null));
         Assertions.assertEquals(0, invalidations.get());
     }
 
