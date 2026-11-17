@@ -82,6 +82,7 @@ private:
     std::shared_ptr<StreamDecompressor> _decompressor;
     CompressedBuffer _compressed_buff;
     bool _stream_end = false;
+    bool _decompress_called = false;
 };
 
 class CompressedSeekableInputStream final : public SeekableInputStream {

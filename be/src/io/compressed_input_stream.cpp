@@ -64,6 +64,10 @@ StatusOr<int64_t> CompressedInputStream::read(void* data, int64_t size) {
             return st;
         } else if (st.is_end_of_file() && _stream_end) {
             break;
+        } else if (st.is_end_of_file() && _compressed_buff.available() == 0 && !_decompress_called) {
+            // Empty source (e.g. merge-commit CSV channel with no data): do not invoke the
+            // decompressor with 0 bytes. LZ4 rejects that as a missing frame header.
+            break;
         }
 
         auto* output = reinterpret_cast<uint8_t*>(data);
@@ -76,6 +80,7 @@ StatusOr<int64_t> CompressedInputStream::read(void* data, int64_t size) {
         // so sometimes input data size is 0, but there is still some data in buffer.
         // DCHECK_GT(compressed_data.size, 0);
 
+        _decompress_called = true;
         RETURN_IF_ERROR(_decompressor->decompress((uint8_t*)compressed_data.data, compressed_data.size,
                                                   &input_bytes_read, output, output_len, &output_bytes_written,
                                                   &_stream_end));
