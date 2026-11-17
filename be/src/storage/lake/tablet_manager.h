@@ -304,6 +304,11 @@ public:
 
     Status put_txn_vlog(const TxnLogPtr& log, int64_t version);
 
+    // Preserve statement-local write metadata and order in a versioned log. A single log keeps the
+    // legacy format at the legacy location; multiple logs go to the separate group file, in a distinct
+    // checksummed format that older readers reject. Neither is ever written over the other's file.
+    Status put_txn_vlog_group(const TxnLogVector& logs, int64_t version);
+
     // |expected_tablet_ids| is the set of tablets this combined txn log must cover. A combined txn
     // log is the only record of those tablets' rowset metadata: publish looks each tablet up inside
     // it and has no per-tablet fallback, so an object written short of an entry leaves the
@@ -329,9 +334,25 @@ public:
 
     StatusOr<TxnLogPtr> get_txn_slog(const std::string& path, bool fill_cache = true);
 
-    StatusOr<TxnLogPtr> get_txn_vlog(int64_t tablet_id, int64_t version);
-
+    // Reads a legacy single-log version file. A version may be stored as a statement group instead, so
+    // read the version log of a tablet with get_txn_vlog_group(tablet_id, version).
     StatusOr<TxnLogPtr> get_txn_vlog(const std::string& path, bool fill_cache = true);
+
+    // Reads both legacy single-log vlogs and ordered statement groups, told apart by the group header,
+    // which a group file must carry. The group is not stored in the single-TxnLog metacache, where
+    // retaining just one statement would lose transaction data. Neither file is ever rewritten in the
+    // other format, so a cached copy stays valid and reads may use the disk cache.
+    StatusOr<TxnLogVector> get_txn_vlog_group(const std::string& path, bool fill_cache = true);
+
+    // Reads the version log of a tablet: the legacy file when it exists, otherwise the statement group.
+    // Both exist only after a retry straddled a writer-flag change; the legacy file then wins unless it
+    // is damaged. Sets |path|, when given, to the file read. With neither file it reports the legacy file's
+    // NotFound and path, as the read did before statement groups existed.
+    StatusOr<TxnLogVector> get_txn_vlog_group(int64_t tablet_id, int64_t version, std::string* path = nullptr);
+    // The rest of get_txn_vlog_group(tablet_id, version) after the legacy file was read: |legacy| is what
+    // get_txn_vlog() returned for it. Probes the group only when the legacy file is missing or damaged.
+    StatusOr<TxnLogVector> resolve_txn_vlog(int64_t tablet_id, int64_t version, StatusOr<TxnLogPtr> legacy,
+                                            std::string* path = nullptr);
 
     StatusOr<TabletSchemaPtr> get_output_rowset_schema(std::vector<uint32_t>& input_rowset,
                                                        const TabletMetadata* metadata);
@@ -407,6 +428,8 @@ public:
     std::string txn_slog_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string txn_vlog_location(int64_t tablet_id, int64_t version) const;
+
+    std::string txn_vlog_group_location(int64_t tablet_id, int64_t version) const;
 
     std::string combined_txn_log_location(int64_t tablet_id, int64_t txn_id) const;
 

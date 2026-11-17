@@ -170,6 +170,21 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: Whether a publish of a shared-data table with file bundling keeps the result of each tablet that the aggregator may not have received. A tablet whose publish finishes more than the publish RPC timeout plus 3 seconds after the request arrived, or whose publish is a retry, keeps its result in the local Data Cache of the node, never in object storage. A later retry on that node reads it back instead of applying the transactions again, so tablets that already finished are not redone on every retry of a slow partition. The entries are evicted like any other Data Cache entry. Takes effect only when Data Cache is enabled. Set the same value on all BE and CN nodes.
 - Introduced in: v4.2
 
+### lake_enable_txn_vlog_group
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether schema-change publish in a shared-data cluster writes an ordered statement group into a separate `{tablet}_{version}.group.vlog` file for a multi-statement transaction. Legacy single logs use `{tablet}_{version}.vlog`. Readers in this version always support both legacy single-log files and statement groups, regardless of this setting. The default `false` retains the legacy merged-log writer, including the known failure when a DELETE followed by an INSERT causes mismatched partial-update metadata during shadow publish. This fix takes effect only after the setting is enabled. Enabling it does not convert versioned transaction logs that the legacy writer has already written.
+
+  Deploy reader support first. Before enabling group writes uniformly, verify that every CN that may perform publish, replay, or cleanup supports the group format, including background workers and images used for replacement nodes. Enabling group writes while older CNs remain can silently lose committed statements: after a group writer deletes some source logs, an older CN can retry using only the remaining sources and write an incomplete legacy log, which replay prefers over the group file.
+
+  Before changing this setting in either direction, pause the relevant schema-change and multi-statement publish work, drain in-flight requests, update all affected CNs consistently, and then resume the work. The setting does not negotiate reader capabilities or provide an atomic cluster-wide switch.
+
+  Setting it back to `false` only stops subsequent group writes; it does not convert, drain, or remove existing grouped logs. Before downgrading to a version without group readers, list every affected storage root's `txnlog` directory and verify that no `*.group.vlog` files remain, including unused group files next to valid legacy logs: older tablet cleanup also scans these files and cannot decode them. ALTER reaching `FINISHED`, transactions becoming `VISIBLE`, or routine vacuum completing does not establish this. With file bundling, successful replay leaves these logs in place, and routine vacuum does not reclaim version logs. If any remain, keep group-capable readers until safe cleanup has been completed. Disabling this setting alone does not make a downgrade safe.
+- Introduced in: -
+
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500
