@@ -806,6 +806,9 @@ Status LakeDataSource::reopen_reader(RuntimeState* /*state*/) {
 
 void LakeDataSource::apply_child_split_context(const pipeline::LakeSplitContext& split_context,
                                                bool use_prepared_state) {
+    // This shares immutable segment objects, not predicates or prepared row-range caches. It remains
+    // valid when late runtime filters rebuild a CLASSIC reader's query-specific iterators.
+    _params.classic_tablet_read_state = split_context.classic_tablet_read_state;
     if (is_pre_refinement_coarse_split(split_context)) {
         ++_lake_prerefinement_coarse_splits;
     } else if (is_initial_coarse_split(split_context)) {
@@ -1527,6 +1530,8 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIOCountRemote", TUnit::UNIT, tablet_prepare_name);
     _lake_tablet_prepare_bytes_read_remote_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareBytesReadRemote", TUnit::BYTES, tablet_prepare_name);
+    _lake_tablet_prepare_cached_segments_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareCachedSegments", TUnit::UNIT, tablet_prepare_name);
     _lake_seed_segment_init_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedSegmentInitTime", "SeedPrepareTime");
 
     const std::string seed_vector_index_name = "SeedVectorIndex";
@@ -1726,6 +1731,7 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_lake_tablet_prepare_io_remote_timer, reader_stats.lake_prepared_tablet_io_remote_ns);
     COUNTER_UPDATE(_lake_tablet_prepare_io_count_remote_counter, reader_stats.lake_prepared_tablet_io_count_remote);
     COUNTER_UPDATE(_lake_tablet_prepare_bytes_read_remote_counter, reader_stats.lake_prepared_tablet_bytes_read_remote);
+    COUNTER_UPDATE(_lake_tablet_prepare_cached_segments_counter, reader_stats.lake_prepared_tablet_cached_segments);
     COUNTER_UPDATE(_lake_seed_io_timer, reader_stats.lake_prepared_seed_io_ns);
     COUNTER_UPDATE(_lake_seed_io_count_counter, reader_stats.lake_prepared_seed_io_count);
     COUNTER_UPDATE(_lake_seed_io_remote_timer, reader_stats.lake_prepared_seed_io_remote_ns);

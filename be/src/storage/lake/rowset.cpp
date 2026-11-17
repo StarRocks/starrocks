@@ -981,6 +981,17 @@ StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked(const LakeI
     return _segments;
 }
 
+Status Rowset::set_segments_for_split(const std::vector<SegmentPtr>& segments) {
+    if (!can_hold_segments() || segments.size() != static_cast<size_t>(num_segments())) {
+        return Status::InvalidArgument("CLASSIC split requires a full metadata-ordered segment set");
+    }
+    std::lock_guard<std::mutex> l(_held_segments_mutex);
+    _segments = segments;
+    _segments_loaded = true;
+    refresh_held_segments_bytes_locked();
+    return Status::OK();
+}
+
 std::vector<SegmentSharedPtr> Rowset::get_segments() {
     // Best-effort shim for callers that tolerate an empty result on a transient failure; callers
     // that must not proceed on failure use get_segments_checked() and check the Status.
@@ -1169,6 +1180,56 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     return _held_segments;
 }
 
+FileInfo Rowset::segment_file_info(int32_t segment_meta_pos, const LakeIOOptions& lake_io_opts,
+                                   std::shared_ptr<FileSystem> fs) const {
+    const auto& segment_meta = metadata().segment_metas(segment_meta_pos);
+    const auto& seg_name = segment_meta.filename();
+    std::string segment_path;
+    if (lake_io_opts.location_provider) {
+        segment_path = lake_io_opts.location_provider->segment_location(tablet_id(), seg_name);
+    } else {
+        segment_path = _tablet_mgr->segment_location(tablet_id(), seg_name);
+    }
+    auto segment_info = FileInfo{.path = segment_path, .fs = std::move(fs)};
+    // RowsetMetaData upgraded from an old version may not have per-segment size.
+    if (LIKELY(segment_meta.has_size())) {
+        segment_info.size = segment_meta.size();
+    }
+    if (segment_meta.has_bundle_file_offset()) {
+        segment_info.bundle_file_offset = segment_meta.bundle_file_offset();
+    }
+    if (segment_meta.has_encryption_meta()) {
+        segment_info.encryption_meta = segment_meta.encryption_meta();
+    }
+    return segment_info;
+}
+
+SegmentPtr Rowset::lookup_opened_segment_at(int32_t segment_meta_pos, const LakeIOOptions& lake_io_opts) const {
+    if (!can_hold_segments() || lake_io_opts.hold_segments) {
+        return nullptr;
+    }
+    return _tablet_mgr->lookup_opened_segment(segment_file_info(segment_meta_pos, lake_io_opts, nullptr),
+                                              _tablet_schema);
+}
+
+StatusOr<SegmentPtr> Rowset::load_segment_at(int32_t segment_meta_pos, const LakeIOOptions& lake_io_opts,
+                                             OlapReaderStatistics* stats) {
+    DCHECK(can_hold_segments());
+    auto segment_info = segment_file_info(segment_meta_pos, lake_io_opts, nullptr);
+    const uint32_t segment_id = get_segment_idx(metadata(), segment_meta_pos);
+    auto segment_or = _tablet_mgr->load_segment(segment_info, segment_id, lake_io_opts,
+                                                lake_io_opts.fill_metadata_cache, _tablet_schema, stats);
+    if (segment_or.status().is_not_found() && config::experimental_lake_ignore_lost_segment) {
+        LOG(WARNING) << "Ignored lost segment " << segment_info.path;
+        return SegmentPtr();
+    }
+    if (!segment_or.ok()) {
+        return segment_or.status().clone_and_prepend(fmt::format("load_segment failed tablet:{} rowset:{} segid:{}",
+                                                                 _tablet_id, metadata().id(), segment_id));
+    }
+    return segment_or;
+}
+
 // Adds the fields Segment::open fills to |to|.
 static void add_segment_open_stats(const OlapReaderStatistics& from, OlapReaderStatistics* to) {
     to->segments_opened += from.segments_opened;
@@ -1311,27 +1372,11 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
             continue;
         }
 
-        std::string segment_path;
         auto lake_io_opts = seg_options.lake_io_opts;
         // A parallel load opens the segment on the load segment pool, where the caller's scoped remote read context
         // does not reach: take it along explicitly.
         lake_io_opts.remote_read = ScopedRemoteReadContext::or_current(lake_io_opts.remote_read);
-        if (lake_io_opts.location_provider) {
-            segment_path = lake_io_opts.location_provider->segment_location(tablet_id(), seg_name);
-        } else {
-            segment_path = _tablet_mgr->segment_location(tablet_id(), seg_name);
-        }
-        auto segment_info = FileInfo{.path = segment_path, .fs = seg_options.fs};
-        // RowsetMetaData upgraded from an old version may not have per-segment size.
-        if (LIKELY(segment_meta.has_size())) {
-            segment_info.size = segment_meta.size();
-        }
-        if (segment_meta.has_bundle_file_offset()) {
-            segment_info.bundle_file_offset = segment_meta.bundle_file_offset();
-        }
-        if (segment_meta.has_encryption_meta()) {
-            segment_info.encryption_meta = segment_meta.encryption_meta();
-        }
+        auto segment_info = segment_file_info(index, lake_io_opts, seg_options.fs);
 
         if (_parallel_load) {
             int captured_idx = current_idx;

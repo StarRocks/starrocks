@@ -264,6 +264,9 @@ struct OlapReaderStatistics {
     int64_t lake_prepared_tablet_io_remote_ns = 0;
     int64_t lake_prepared_tablet_io_count_remote = 0;
     int64_t lake_prepared_tablet_bytes_read_remote = 0;
+    // lake_scan_parallel_segment_open: segments whose footer was already open in the metadata cache, so the
+    // tablet preparation took them as they are without a load task.
+    int64_t lake_prepared_tablet_cached_segments = 0;
     // ------ for lake tablet ------
 
     // ------ for json type, to count flat column ------
@@ -419,6 +422,7 @@ struct OlapReaderStatistics {
         lake_prepared_tablet_io_remote_ns += other.lake_prepared_tablet_io_remote_ns;
         lake_prepared_tablet_io_count_remote += other.lake_prepared_tablet_io_count_remote;
         lake_prepared_tablet_bytes_read_remote += other.lake_prepared_tablet_bytes_read_remote;
+        lake_prepared_tablet_cached_segments += other.lake_prepared_tablet_cached_segments;
         lake_prepared_seed_segment_init_ns += other.lake_prepared_seed_segment_init_ns;
         lake_prepared_seed_vector_index_load_ns += other.lake_prepared_seed_vector_index_load_ns;
         lake_prepared_seed_get_row_ranges_by_vector_index_ns +=
