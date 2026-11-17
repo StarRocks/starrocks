@@ -479,7 +479,14 @@ public:
     }
     void set_root_unsupported_reason(std::string reason) { _top_level.root_unsupported_reason = std::move(reason); }
     void set_root_raw_encoding(ShreddedRawEncoding encoding) { _top_level.root_raw_encoding = encoding; }
+<<<<<<< HEAD
     void set_root_array_node(std::unique_ptr<ShreddedFieldNode> node) { _top_level.root_array_node = std::move(node); }
+=======
+    // Only the outer null mask is used (`v IS [NOT] NULL`): read_range fills it from the metadata column and
+    // appends placeholder rows to the data column, and no other column of the variant group is read.
+    void set_null_only(bool null_only) { _null_only = null_only; }
+    bool null_only() const { return _null_only; }
+>>>>>>> 1046436052e... [Enhancement][RB-1573] Read only the null mask for VARIANT IS [NOT] NULL on Parquet scans (#70060)
 
     Status prepare() override;
 
@@ -532,6 +539,9 @@ private:
     StatusOr<bool> _read_range_skip_base_payload(const Range<uint64_t>& range, const Filter* filter,
                                                  VariantColumn* variant_column, NullableColumn* nullable_column);
 
+    Status _read_range_null_only(const Range<uint64_t>& range, const Filter* filter, VariantColumn* variant_column,
+                                 NullableColumn* nullable_column);
+
     VariantTopLevelReaders _top_level;
     std::vector<ShreddedFieldNode> _shredded_fields;
     std::vector<VariantPath> _requested_shredded_paths;
@@ -539,6 +549,7 @@ private:
     // In that case metadata/value base payload columns are never needed and can be skipped
     // entirely (IO range, offset-index selection, and data read).
     bool _skip_base_payload = false;
+    bool _null_only = false;
 };
 
 // A thin, read-only wrapper ColumnReader that exposes zone-map filtering for a specific

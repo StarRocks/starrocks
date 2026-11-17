@@ -3216,6 +3216,9 @@ void VariantColumnReader::collect_column_io_range(std::vector<SharedBufferedInpu
     if (_top_level.metadata_reader != nullptr && !skip_flags.skip_metadata) {
         _top_level.metadata_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
+    if (_null_only) {
+        return;
+    }
     if (_top_level.value_reader != nullptr && !skip_flags.skip_payload) {
         _top_level.value_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
@@ -3242,6 +3245,9 @@ void VariantColumnReader::select_offset_index(const SparseRange<uint64_t>& range
     if (_top_level.metadata_reader != nullptr && !skip_flags.skip_metadata) {
         _top_level.metadata_reader->select_offset_index(range, rg_first_row);
     }
+    if (_null_only) {
+        return;
+    }
     if (_top_level.value_reader != nullptr && !skip_flags.skip_payload) {
         _top_level.value_reader->select_offset_index(range, rg_first_row);
     }
@@ -3264,7 +3270,18 @@ void VariantColumnReader::select_offset_index(const SparseRange<uint64_t>& range
 
 VariantColumnReader::TopLevelSkipFlags VariantColumnReader::_compute_top_level_skip_flags() const {
     TopLevelSkipFlags flags;
+<<<<<<< HEAD
     flags.skip_payload = _top_level.root_typed_value_reader == nullptr && _top_level.root_array_node == nullptr &&
+=======
+    if (_null_only) {
+        // The outer null mask is the metadata column's null mask; it needs no other column, and when the
+        // statistics prove it has no null, not even the metadata column.
+        flags.skip_payload = true;
+        flags.skip_metadata = _column_chunk_has_no_null(_top_level.metadata_reader.get());
+        return flags;
+    }
+    flags.skip_payload = _top_level.root_typed_value_reader == nullptr &&
+>>>>>>> 1046436052e... [Enhancement][RB-1573] Read only the null mask for VARIANT IS [NOT] NULL on Parquet scans (#70060)
                          _requested_paths_are_scalar_typed_leaves(_shredded_fields, _requested_shredded_paths) &&
                          _requested_scalar_fallback_values_all_null(_shredded_fields, _requested_shredded_paths);
     flags.skip_metadata = flags.skip_payload && _column_chunk_has_no_null(_top_level.metadata_reader.get());
@@ -3362,6 +3379,41 @@ StatusOr<bool> VariantColumnReader::_read_range_skip_base_payload(const Range<ui
     return true;
 }
 
+// Null-mask-only read (`v IS [NOT] NULL`). Metadata null <-> variant row is SQL NULL (shredding spec), so the
+// outer null mask comes from the metadata column alone. The data rows are placeholders: the FE only sends this
+// path when nothing reads the column's values.
+Status VariantColumnReader::_read_range_null_only(const Range<uint64_t>& range, const Filter* filter,
+                                                  VariantColumn* variant_column, NullableColumn* nullable_column) {
+    const size_t num_rows = range.span_size();
+    if (nullable_column == nullptr) {
+        if (!variant_column->append_nulls(num_rows)) {
+            return Status::InternalError("failed to append placeholder rows to the variant column");
+        }
+        return Status::OK();
+    }
+
+    auto& outer_nulls = nullable_column->null_column_raw_ptr()->get_data();
+    if (_column_chunk_has_no_null(_top_level.metadata_reader.get())) {
+        outer_nulls.resize(outer_nulls.size() + num_rows, 0);
+    } else {
+        ColumnPtr metadata_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        RETURN_IF_ERROR(_top_level.metadata_reader->read_range(range, filter, metadata_col));
+        const auto* metadata_nullable = down_cast<const NullableColumn*>(metadata_col.get());
+        if (metadata_nullable->size() != num_rows) {
+            return Status::InternalError(
+                    strings::Substitute("variant metadata rows mismatch in null-only read, expected=$0, actual=$1",
+                                        num_rows, metadata_nullable->size()));
+        }
+        const auto& metadata_nulls = metadata_nullable->null_column()->get_data();
+        outer_nulls.insert(outer_nulls.end(), metadata_nulls.begin(), metadata_nulls.end());
+    }
+    if (!variant_column->append_nulls(num_rows)) {
+        return Status::InternalError("failed to append placeholder rows to the variant column");
+    }
+    nullable_column->update_has_null();
+    return Status::OK();
+}
+
 Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
     auto* dst_mut = dst->as_mutable_raw_ptr();
     VariantColumn* variant_column = nullptr;
@@ -3374,6 +3426,10 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
         DCHECK(dst->is_variant());
         DCHECK(!get_column_parquet_field()->is_nullable);
         variant_column = down_cast<VariantColumn*>(dst_mut);
+    }
+
+    if (_null_only) {
+        return _read_range_null_only(range, filter, variant_column, nullable_column);
     }
 
     // Fast path: all requested paths are SCALAR typed_value leaves and base payload is not needed.
