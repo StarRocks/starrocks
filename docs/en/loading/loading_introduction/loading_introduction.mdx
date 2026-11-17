@@ -203,6 +203,10 @@ This section lists the loading options available for common data sources, helpin
 
 Note that StarRocks provides [unified catalogs](https://docs.starrocks.io/docs/data_source/catalog/unified_catalog/) from v3.2 onwards to help you handle tables from Hive, Iceberg, Hudi, and Delta Lake data sources as a unified data source without ingestion.
 
+:::tip
+To replicate data from operational databases into Iceberg tables that StarRocks can query, you can use [OLake Go](https://olake.io/docs/), an open-source ingestion engine that supports CDC and incremental syncs to Iceberg on S3. See the [OLake query engine compatibility guide](https://olake.io/docs/understanding/compatibility-engines/) for details on StarRocks support.
+:::
+
 ### Internal and external databases
 
 | **Data source**                                              | **Available loading options**                                |

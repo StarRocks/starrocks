@@ -248,6 +248,10 @@ The username and password for MinIO are in the docker-compose.yml file. You will
 ![img](../_assets/quick-start/MinIO-Iceberg-data.png)
 :::
 
+:::tip
+To replicate data from operational databases (such as MySQL, PostgreSQL, or MongoDB) into Iceberg tables, you can use [OLake Go](https://olake.io/docs/), an open-source ingestion engine that supports CDC and incremental syncs to Iceberg on S3. StarRocks can then query the resulting tables directly through an Iceberg catalog. See the [OLake query engine compatibility guide](https://olake.io/docs/understanding/compatibility-engines/) for details on StarRocks support.
+:::
+
 ### Next Steps
 
 #### Adding Iceberg to StarRocks
