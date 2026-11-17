@@ -38,22 +38,22 @@ Compaction Score 反映了分区的数据文件合并状态。分数越高，表
 5. FE 收集所有子任务的结果，然后进行 Compaction 事务提交。
 6. FE 将成功提交的 Compaction 事务进行 Publish。
 
-## 主键表 Base Compaction {#primary-key-base-compaction}
+## 主键表 Base Compaction {/* #primary-key-base-compaction */}
 
 本节介绍存算分离主键表的 Base Compaction。普通 Cumulative Compaction 按 size-tiered 策略选取 Rowset，主要用于合并小文件。Base Compaction 将整个 Tablet 的 Rowset 纳入候选，优先重写删除行数较多的 Rowset，清理失效数据并缩小 Delete Vector。因此，在已有主键持续被更新或删除时，即使后台一直在合并小文件，也可能仍需要 Base Compaction。
 
-### 版本支持 {#primary-key-base-compaction-versions}
+### 版本支持 {/* #primary-key-base-compaction-versions */}
 
 | 版本 | 自动 PK Base Compaction | 手动 PK Base Compaction | 存算分离 Base Compaction 时段和最小间隔控制 |
 | --- | --- | --- | --- |
 | v4.1.0～v4.1.3 | 不支持。 | 不支持 PK Base Compaction；仍可手动触发普通 Compaction。 | 不支持。 |
 | v4.1.4～v4.1.6 | 调度后按删除比例或删除行数判断，没有独立的自动触发开关。 | 支持，不要求达到自动触发阈值。 | 不支持。 |
-| v4.1.7 | 由 `lake_pk_compaction_base_enable_delete_trigger` 控制，默认 `false`。 | 支持，不受该开关和删除阈值限制。 | 不支持。 |
-| 当前 main（发布版本待确认） | 由上述开关控制，默认 `false`。 | 支持，并可绕过自动 Base Compaction 的时段和最小间隔限制。 | 支持，详见[执行时间控制](#base-compaction-time-controls)。 |
+| v4.1.7～v4.1.8 | 由 `lake_pk_compaction_base_enable_delete_trigger` 控制，默认 `false`。 | 支持，不受该开关和删除阈值限制。 | 不支持。 |
+| v4.2 | 由上述开关控制，默认 `false`。 | 支持，并可绕过自动 Base Compaction 的时段和最小间隔限制。 | 支持，详见[执行时间控制](#base-compaction-time-controls)。 |
 
-PK Base Compaction 从 [v4.1.4](../../release_notes/release-4.1.md#414) 开始支持。[v4.1.7](../../release_notes/release-4.1.md#417) 新增的 `lake_pk_compaction_base_enable_delete_trigger` **只控制按删除量自动触发 Base Compaction**，不会禁止手动 Base Compaction，也不会关闭普通 Cumulative Compaction。
+PK Base Compaction 从 v4.1.4 开始支持。v4.1.7 新增的 `lake_pk_compaction_base_enable_delete_trigger` **只控制按删除量自动触发 Base Compaction**，不会禁止手动 Base Compaction，也不会关闭普通 Cumulative Compaction。
 
-### 自动触发 {#automatic-base-compaction}
+### 自动触发 {/* #automatic-base-compaction */}
 
 自动 Compaction 仍由 FE 按分区调度。默认使用 Compaction Score 筛选候选分区；任务下发到 CN 后，CN 再决定某个 Tablet 是否执行 Base Compaction。达到删除阈值不会独立触发一次 FE 调度，因此不保证立即执行。
 
@@ -74,7 +74,7 @@ WHERE NAME = 'lake_pk_compaction_base_enable_delete_trigger';
 
 参数的完整定义见 [BE 参数参考](../configuration/BE_parameters/shared_lake_other.md#lake_pk_compaction_base_enable_delete_trigger)。在持续更新的大 Tablet 上，绝对删除行数可能很快再次达到阈值；开启前应评估反复重写数据的资源开销。
 
-### 手动触发 {#manual-base-compaction}
+### 手动触发 {/* #manual-base-compaction */}
 
 对目标表或分区执行 `ALTER TABLE ... COMPACT` 即可请求手动 Compaction，无需额外指定 `BASE`。SQL 示例见[手动触发 Compaction 任务](#手动触发-compaction-任务)。
 
@@ -85,18 +85,18 @@ WHERE NAME = 'lake_pk_compaction_base_enable_delete_trigger';
 
 手动请求是异步的，SQL 返回成功表示请求已提交，不表示 Compaction 已完成。它仍受任务调度和资源限制，也不保证一次合完整个 Tablet。
 
-### 输入范围与资源开销 {#base-compaction-inputs}
+### 输入范围与资源开销 {/* #base-compaction-inputs */}
 
 Base Compaction 按各 Rowset 的**删除行数绝对值降序**选取输入，而不是按删除比例排序。所有 Rowset 都是候选，因此在预算允许时，无删除行的 Rowset 也可能被合并。
 
 单次选取受 `lake_pk_compaction_max_input_rowsets`（默认 `500`）以及预计保留数据量预算 `max(update_compaction_result_bytes, Tablet 总数据量 × update_compaction_ratio_threshold)` 限制。后两个参数默认分别为 `1 GiB` 和 `0.5`。按 Rowset 选取时，最后一个 Rowset 可能使预计结果超过预算；该预算也不是实际读取字节数的上限。自动和手动 Base Compaction 都受这些输入限制，因此一次执行不保证清理全部删除标记。
 
-### 执行时间控制 {#base-compaction-time-controls}
+### 执行时间控制 {/* #base-compaction-time-controls */}
 
-以下能力已在当前 main 实现，具体发布版本待确认；**截至 v4.1.7 的已发布 4.1 版本不支持这些存算分离限制**：
+以下能力从 v4.2 开始支持；**4.1 系列（包括当前 v4.1.8 分支）不支持这些存算分离限制**：
 
-- 表属性 [`base_compaction_forbidden_time_ranges`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#禁止-base-compaction) 指定的是**禁止自动 Base Compaction** 的时段，其余时段允许。v4.1.6 和 v4.1.7 的 FE 会拒绝为存算分离表设置此属性。
-- CN 参数 [`base_compaction_interval_seconds_since_last_operation`](../configuration/BE_parameters/stats_storage.md#base_compaction_interval_seconds_since_last_operation) 默认 `86400` 秒，表示同一 Tablet 两次成功 Base Compaction 之间的自动选取最小间隔。它不是每天定时触发的周期；没有历史 Base Compaction 时间记录或该值小于等于 `0` 时，不施加间隔限制。此参数早于 v4.1 已存在，但在 v4.1.6、v4.1.7 中不用于限制存算分离 PK Base Compaction。
+- 表属性 [`base_compaction_forbidden_time_ranges`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#禁止-base-compaction) 指定的是**禁止自动 Base Compaction** 的时段，其余时段允许。v4.1.6、v4.1.7 和当前 v4.1.8 分支的 FE 会拒绝为存算分离表设置此属性。
+- CN 参数 [`base_compaction_interval_seconds_since_last_operation`](../configuration/BE_parameters/stats_storage.md#base_compaction_interval_seconds_since_last_operation) 默认 `86400` 秒，表示同一 Tablet 两次成功 Base Compaction 之间的自动选取最小间隔。它不是每天定时触发的周期；没有历史 Base Compaction 时间记录或该值小于等于 `0` 时，不施加间隔限制。此参数早于 v4.1 已存在，但在 4.1 系列（包括当前 v4.1.8 分支）中不用于限制存算分离 PK Base Compaction。
 
 例如，仅在支持上述能力的版本中，可以禁止每天 08:00（含）到 21:00（不含）的自动 Base Compaction：
 
@@ -108,7 +108,7 @@ ALTER TABLE example_db.pk_table SET (
 
 这些限制只控制自动 Base Compaction；普通 Cumulative Compaction 仍可继续，手动 `ALTER TABLE ... COMPACT` 可绕过这些限制。
 
-### 查看执行效果 {#verify-base-compaction}
+### 查看执行效果 {/* #verify-base-compaction */}
 
 使用[查看 Compaction 任务](#查看-compaction-任务)中的 `SHOW PROC '/compactions'` 和 `information_schema.be_cloud_native_compactions` 检查异步任务的状态和执行详情。Compaction Score 用于调度，不能单独用于判断删除标记是否已全部清理。
 

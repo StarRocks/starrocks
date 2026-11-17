@@ -924,7 +924,7 @@ SHOW ALTER TABLE COLUMN FROM test_db WHERE TableName = "test_tbl";
 
 `base_compaction_forbidden_time_ranges`：限制表执行 Base Compaction 的时间范围。具体效果取决于表架构和 Compaction 策略，如下所述。此属性从 v3.2.13 开始支持。
 
-**版本范围：**v3.2.13 是此属性用于存算一体非主键表的起始版本，不是存算分离的支持起点。截至 v4.1.7 的已发布 4.1 版本不支持为存算分离表设置此属性，FE 会拒绝该设置。下述存算分离行为已在当前 main 实现，具体发布版本待确认。该属性定义禁止自动 Base Compaction 的时段；支持该能力的版本仍允许手动 `ALTER TABLE ... COMPACT` 绕过限制。详见[存算分离 Base Compaction 的版本支持](../../../administration/management/compaction.md#primary-key-base-compaction-versions)。
+**版本范围：**v3.2.13 是此属性用于存算一体非主键表的起始版本，不是存算分离的支持起点。4.1 系列（包括当前 v4.1.8 分支）不支持为存算分离表设置此属性，FE 会拒绝该设置。下述存算分离行为从 v4.2 开始支持。该属性定义禁止自动 Base Compaction 的时段；支持该能力的版本仍允许手动 `ALTER TABLE ... COMPACT` 绕过限制。详见[存算分离 Base Compaction 的版本支持](../../../administration/management/compaction.md#primary-key-base-compaction-versions)。
 
 对于存算分离主键表和使用 Base and Cumulative 策略的非主键表，系统在发起自动 Compaction 时检查该时段；禁止时段内仍可执行 Cumulative Compaction。对于使用 Size Tiered 策略的非主键表，此时段仅禁用删除版本数达到阈值后强制触发 Base Compaction 的条件；正常的层级选择仍可能在禁止时段选中最旧的层级。BE/CN 参数 `base_compaction_interval_seconds_since_last_operation` 在最小间隔未到期时施加相同限制。手动 `ALTER TABLE ... COMPACT` 可覆盖这些限制。
 

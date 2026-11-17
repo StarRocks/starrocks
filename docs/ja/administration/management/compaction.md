@@ -40,22 +40,22 @@ StarRocks の各データロード操作は、新しいバージョンのデー�
 5. 結果収集: FE はサブタスクの結果を集約し、compaction トランザクションをコミットします。
 6. 公開: FE は正常にコミットされた compaction トランザクションを公開します。
 
-## 主キーテーブルの Base Compaction {#primary-key-base-compaction}
+## 主キーテーブルの Base Compaction {/* #primary-key-base-compaction */}
 
 この節では、共有データクラスタの主キーテーブルに対する Base Compaction を説明します。通常の Cumulative Compaction は size-tiered ポリシーで Rowset を選択し、主に小さいファイルをマージします。Base Compaction はタブレット内のすべての Rowset を候補とし、削除行数が多い Rowset を優先的に書き換えて、無効なデータを除去し Delete Vector を縮小します。そのため、既存の主キーが継続的に更新または削除される場合、小さいファイルのマージが続いていても Base Compaction が必要になることがあります。
 
-### バージョン別のサポート {#primary-key-base-compaction-versions}
+### バージョン別のサポート {/* #primary-key-base-compaction-versions */}
 
 | バージョン | 自動 PK Base Compaction | 手動 PK Base Compaction | 共有データ Base Compaction の時間帯と最小間隔の制御 |
 | --- | --- | --- | --- |
 | v4.1.0～v4.1.3 | 非対応。 | PK Base Compaction は非対応。通常の Compaction は手動で実行できます。 | 非対応。 |
 | v4.1.4～v4.1.6 | タスク配布後に削除率または削除行数を確認します。自動トリガー専用のスイッチはありません。 | 自動トリガーの削除しきい値に達していなくても実行できます。 | 非対応。 |
-| v4.1.7 | `lake_pk_compaction_base_enable_delete_trigger` で制御します。デフォルトは `false` です。 | スイッチと削除しきい値に関係なく実行できます。 | 非対応。 |
-| 現在の main（リリースバージョン未確定） | 同じスイッチで制御します。デフォルトは `false` です。 | 実行可能。自動 Base Compaction の時間帯と最小間隔の制限も回避します。 | 対応。[実行時間の制御](#base-compaction-time-controls)を参照してください。 |
+| v4.1.7～v4.1.8 | `lake_pk_compaction_base_enable_delete_trigger` で制御します。デフォルトは `false` です。 | スイッチと削除しきい値に関係なく実行できます。 | 非対応。 |
+| v4.2 | 同じスイッチで制御します。デフォルトは `false` です。 | 実行可能。自動 Base Compaction の時間帯と最小間隔の制限も回避します。 | 対応。[実行時間の制御](#base-compaction-time-controls)を参照してください。 |
 
-PK Base Compaction は [v4.1.4](../../release_notes/release-4.1.md#414) からサポートされています。[v4.1.7](../../release_notes/release-4.1.md#417) で追加された `lake_pk_compaction_base_enable_delete_trigger` は、**削除量による自動 Base Compaction だけを制御します**。手動 Base Compaction や通常の Cumulative Compaction を無効にするものではありません。
+PK Base Compaction は v4.1.4 からサポートされています。v4.1.7 で追加された `lake_pk_compaction_base_enable_delete_trigger` は、**削除量による自動 Base Compaction だけを制御します**。手動 Base Compaction や通常の Cumulative Compaction を無効にするものではありません。
 
-### 自動トリガー {#automatic-base-compaction}
+### 自動トリガー {/* #automatic-base-compaction */}
 
 自動 Compaction は引き続き FE がパーティション単位でスケジュールし、デフォルトでは Compaction スコアで候補を選択します。タスクが CN に配布された後、CN が各タブレットに Base Compaction を選択するかを判断します。削除しきい値に達しても、それだけで FE が新しいタスクをスケジュールするわけではなく、即時実行は保証されません。
 
@@ -76,7 +76,7 @@ WHERE NAME = 'lake_pk_compaction_base_enable_delete_trigger';
 
 パラメータの定義は [BE パラメータリファレンス](../configuration/BE_parameters/shared_lake_other.md#lake_pk_compaction_base_enable_delete_trigger)を参照してください。更新が継続する大きなタブレットでは、Compaction 後すぐに絶対削除行数のしきい値へ再到達することがあります。有効化する前に、繰り返しのデータ書き換えによるリソース消費を評価してください。
 
-### 手動トリガー {#manual-base-compaction}
+### 手動トリガー {/* #manual-base-compaction */}
 
 対象のテーブルまたはパーティションに `ALTER TABLE ... COMPACT` を実行すると、手動 Compaction を要求できます。`BASE` キーワードを追加する必要はありません。SQL の例は [Compaction タスクの手動トリガー](#compaction-タスクの手動トリガー)を参照してください。
 
@@ -87,18 +87,18 @@ WHERE NAME = 'lake_pk_compaction_base_enable_delete_trigger';
 
 手動要求は非同期です。SQL が成功しても、要求が送信されたことを示すだけで、Compaction の完了を示すものではありません。スケジューリングとリソースの制限は引き続き適用され、1 回の要求でタブレット全体が Compaction されるとは限りません。
 
-### 入力の選択とリソース消費 {#base-compaction-inputs}
+### 入力の選択とリソース消費 {/* #base-compaction-inputs */}
 
 Base Compaction は削除率ではなく、Rowset の**絶対削除行数の降順**で入力を選択します。すべての Rowset が候補となるため、予算内であれば削除行のない Rowset もマージされます。
 
 1 回の選択は、`lake_pk_compaction_max_input_rowsets`（デフォルト `500`）と、保持データ量の推定予算 `max(update_compaction_result_bytes, タブレットの総データ量 × update_compaction_ratio_threshold)` によって制限されます。後者の 2 つのパラメータのデフォルトは、それぞれ `1 GiB` と `0.5` です。Rowset 単位で選択するため、最後の Rowset によって推定値が予算を超える場合があります。また、この予算は実際の読み取りバイト数の上限ではありません。自動と手動の両方に入力制限が適用されるため、1 回の実行ですべての削除マークが除去されるとは限りません。
 
-### 実行時間の制御 {#base-compaction-time-controls}
+### 実行時間の制御 {/* #base-compaction-time-controls */}
 
-以下の制御は現在の main に実装されていますが、リリースバージョンは未確定です。**v4.1.7 までにリリースされた 4.1 バージョンでは、共有データテーブルに対するこれらの制限はサポートされていません**。
+以下の制御は v4.2 からサポートされています。**現在の v4.1.8 ブランチを含む 4.1 系列では、共有データテーブルに対するこれらの制限はサポートされていません**。
 
-- テーブルプロパティ [`base_compaction_forbidden_time_ranges`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#ベースコンパクションの禁止) は、**自動 Base Compaction を禁止する時間帯**を指定します。それ以外の時間帯は許可されます。v4.1.6 と v4.1.7 の FE は、共有データテーブルへのこのプロパティの設定を拒否します。
-- CN パラメータ [`base_compaction_interval_seconds_since_last_operation`](../configuration/BE_parameters/stats_storage.md#base_compaction_interval_seconds_since_last_operation) は、同じタブレットで Base Compaction が成功した後、次の自動 Base Compaction を選択するまでの最小間隔を指定します。デフォルトは `86400` 秒です。毎日定時に実行する周期ではありません。過去の Base Compaction 時刻が記録されていない場合、または値が `0` 以下の場合は、間隔を制限しません。このパラメータは v4.1 より前から存在しますが、v4.1.6 と v4.1.7 の共有データ PK Base Compaction は制限しません。
+- テーブルプロパティ [`base_compaction_forbidden_time_ranges`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#ベースコンパクションの禁止) は、**自動 Base Compaction を禁止する時間帯**を指定します。それ以外の時間帯は許可されます。v4.1.6、v4.1.7、および現在の v4.1.8 ブランチの FE は、共有データテーブルへのこのプロパティの設定を拒否します。
+- CN パラメータ [`base_compaction_interval_seconds_since_last_operation`](../configuration/BE_parameters/stats_storage.md#base_compaction_interval_seconds_since_last_operation) は、同じタブレットで Base Compaction が成功した後、次の自動 Base Compaction を選択するまでの最小間隔を指定します。デフォルトは `86400` 秒です。毎日定時に実行する周期ではありません。過去の Base Compaction 時刻が記録されていない場合、または値が `0` 以下の場合は、間隔を制限しません。このパラメータは v4.1 より前から存在しますが、現在の v4.1.8 ブランチを含む 4.1 系列の共有データ PK Base Compaction は制限しません。
 
 例えば、これらの制御をサポートするバージョンでのみ、毎日 08:00 以上 21:00 未満の自動 Base Compaction を禁止できます。
 
@@ -110,7 +110,7 @@ ALTER TABLE example_db.pk_table SET (
 
 これらの制限は自動 Base Compaction だけに適用されます。通常の Cumulative Compaction は継続でき、手動の `ALTER TABLE ... COMPACT` は制限を回避します。
 
-### 実行結果の確認 {#verify-base-compaction}
+### 実行結果の確認 {/* #verify-base-compaction */}
 
 [Compaction タスクの表示](#compaction-タスクの表示)で説明する `SHOW PROC '/compactions'` と `information_schema.be_cloud_native_compactions` を使用し、非同期タスクの状態と実行の詳細を確認します。Compaction スコアはスケジューリング用の指標であり、それだけですべての削除マークが除去されたとは判断できません。
 
