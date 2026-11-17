@@ -65,6 +65,10 @@ DECLARE_bool(fslib_s3_multipart_equal_part_size);
 
 DECLARE_bool(fs_enable_buffer_prefetch);
 
+namespace staros::starlet::fslib {
+DECLARE_bool(remote_read_skip_contended_cache_writes);
+} // namespace staros::starlet::fslib
+
 namespace starrocks {
 
 static void add_shard_listener(std::vector<StarOSWorker::ShardId>* shardIds, int* counter, StarOSWorker::ShardId id) {
@@ -1239,6 +1243,47 @@ TEST_F(StarOSWorkerTest, s3_multipart_equal_part_size_applied_at_startup) {
         FLAGS_fslib_s3_multipart_equal_part_size = !value;
         apply_starlet_upload_threshold_configs();
         EXPECT_EQ(value, FLAGS_fslib_s3_multipart_equal_part_size);
+    }
+}
+
+// The BE default must equal starlet's, so that this config alone changes no behavior.
+TEST_F(StarOSWorkerTest, skip_contended_cache_writes_applied_at_startup) {
+    gflags::FlagSaver flag_saver;
+    namespace fslib = staros::starlet::fslib;
+
+    auto configs = config::list_configs();
+    auto it = std::find_if(configs.begin(), configs.end(), [](const config::ConfigInfo& info) {
+        return info.name == "remote_read_skip_contended_cache_writes";
+    });
+    ASSERT_NE(configs.end(), it);
+    EXPECT_EQ("false", it->defval);
+    EXPECT_TRUE(it->valmutable);
+    gflags::CommandLineFlagInfo flag_info;
+    ASSERT_TRUE(gflags::GetCommandLineFlagInfo("remote_read_skip_contended_cache_writes", &flag_info));
+    EXPECT_EQ(flag_info.default_value, it->defval);
+
+    // Start from the opposite value each time, so both directions are really assigned.
+    for (bool value : {true, false}) {
+        SCOPED_UPDATE(bool, config::remote_read_skip_contended_cache_writes, value);
+        fslib::FLAGS_remote_read_skip_contended_cache_writes = !value;
+        apply_remote_read_skip_contended_cache_writes();
+        EXPECT_EQ(value, fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    }
+}
+
+// With the scheduler off, nothing reads the flag, but it still mirrors the config, and starting the scheduler (or
+// declining to) leaves it as the config set it.
+TEST_F(StarOSWorkerTest, skip_contended_cache_writes_kept_with_scheduler_off) {
+    gflags::FlagSaver flag_saver;
+    namespace fslib = staros::starlet::fslib;
+    SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, false);
+    for (bool value : {true, false}) {
+        SCOPED_UPDATE(bool, config::remote_read_skip_contended_cache_writes, value);
+        fslib::FLAGS_remote_read_skip_contended_cache_writes = !value;
+        apply_remote_read_skip_contended_cache_writes();
+        EXPECT_OK(enable_remote_io_scheduler());
+        EXPECT_FALSE(remote_io_scheduler_enabled());
+        EXPECT_EQ(value, fslib::FLAGS_remote_read_skip_contended_cache_writes);
     }
 }
 
