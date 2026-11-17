@@ -14,6 +14,7 @@
 
 #include "formats/parquet/column_reader_factory.h"
 
+#include <algorithm>
 #include <optional>
 
 #include "base/failpoint/fail_point.h"
@@ -92,6 +93,10 @@ Status validate_native_iceberg_geo(const ParquetField& field, const TypeDescript
         }
     }
     return Status::OK();
+}
+
+bool contains_iceberg_geo(const TIcebergSchemaField& field) {
+    return field.__isset.geo_metadata || std::ranges::any_of(field.children, contains_iceberg_geo);
 }
 
 struct VariantNodeFields {
@@ -639,26 +644,40 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
     }
     if (lake_schema_field != nullptr && col_type.is_complex_type()) {
         for (const auto& child : col_type.children) {
-            if (child.is_geo_type()) {
-                return Status::NotSupported(
-                        strings::Substitute("Nested $0 is not supported", logical_type_to_string(child.type)));
+            if (child.type == TYPE_GEOMETRY) {
+                return Status::NotSupported("Nested GEOMETRY is not supported");
             }
         }
     }
     // The Iceberg schema child at a fixed position (list element, map key / value); nullptr off the Iceberg path.
     auto lake_child = [lake_schema_field](size_t idx) -> const TIcebergSchemaField* {
-        return lake_schema_field != nullptr ? &lake_schema_field->children[idx] : nullptr;
+        return lake_schema_field != nullptr && idx < lake_schema_field->children.size()
+                       ? &lake_schema_field->children[idx]
+                       : nullptr;
+    };
+    auto create_child = [&opts](const ParquetField* child, const TypeDescriptor& type,
+                                const TIcebergSchemaField* lake) -> StatusOr<ColumnReaderPtr> {
+        if (type.type == TYPE_GEOGRAPHY && lake != nullptr &&
+            (!lake->__isset.field_id || !child->schema_element.__isset.field_id || child->field_id != lake->field_id)) {
+            return Status::InvalidArgument("Iceberg/Parquet GEOGRAPHY field ID mismatch: " + child->name);
+        }
+        return ColumnReaderFactory::create(opts, child, type, lake);
     };
 
     if (field->type == ColumnType::ARRAY) {
         ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
-                         ColumnReaderFactory::create(opts, &field->children[0], col_type.children[0], lake_child(0)));
+                         create_child(&field->children[0], col_type.children[0], lake_child(0)));
         if (child_reader != nullptr) {
             return std::make_unique<ListColumnReader>(field, std::move(child_reader));
         } else {
             return nullptr;
         }
     } else if (field->type == ColumnType::MAP) {
+        const auto* lake_key = lake_child(0);
+        // Iceberg metadata still describes the key when the projection prunes it.
+        if (col_type.children[0].is_geo_type() || (lake_key != nullptr && contains_iceberg_geo(*lake_key))) {
+            return Status::NotSupported("GEO types are not supported in Parquet MAP keys: " + field->name);
+        }
         std::unique_ptr<ColumnReader> key_reader = nullptr;
         std::unique_ptr<ColumnReader> value_reader = nullptr;
 
@@ -671,12 +690,10 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
                         "Parquet map column '$0' has a $1 key, which cannot be read as table key type $2", field->name,
                         column_type_to_string(key_field.type), logical_type_to_string(col_type.children[0].type)));
             }
-            ASSIGN_OR_RETURN(key_reader, ColumnReaderFactory::create(opts, &(field->children[0]), col_type.children[0],
-                                                                     lake_child(0)));
+            ASSIGN_OR_RETURN(key_reader, ColumnReaderFactory::create(opts, &key_field, col_type.children[0], lake_key));
         }
         if (!col_type.children[1].is_unknown_type()) {
-            ASSIGN_OR_RETURN(value_reader, ColumnReaderFactory::create(opts, &(field->children[1]),
-                                                                       col_type.children[1], lake_child(1)));
+            ASSIGN_OR_RETURN(value_reader, create_child(&field->children[1], col_type.children[1], lake_child(1)));
         }
 
         if (key_reader != nullptr || value_reader != nullptr) {
@@ -717,9 +734,8 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
                 }
                 continue;
             }
-            ASSIGN_OR_RETURN(
-                    ColumnReaderPtr child_reader,
-                    ColumnReaderFactory::create(opts, parquet_child, col_type.children[i], mapping.lake_children[i]));
+            ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
+                             create_child(parquet_child, col_type.children[i], mapping.lake_children[i]));
             children_readers.emplace(col_type.field_names[i], std::move(child_reader));
         }
 
