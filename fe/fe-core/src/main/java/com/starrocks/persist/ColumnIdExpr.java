@@ -18,12 +18,16 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.formatter.AST2StringVisitor;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -144,6 +148,34 @@ public class ColumnIdExpr {
             } else {
                 return node.getColumnId().toSql(node.isBackQuoted());
             }
+        }
+
+        // Keep the explicit element type of array/map literals, e.g. ARRAY<DATE>['2020-01-01'] or
+        // MAP<INT,DATE>{1:'2020-01-01'}. Without it, the expression is re-analyzed with an inferred type
+        // (e.g. ARRAY<VARCHAR>) after replay, which may change the result of the expression.
+        @Override
+        public String visitArrayExpr(ArrayExpr node, Void context) {
+            String literal = super.visitArrayExpr(node, context);
+            Type type = node.getType();
+            if (!hasConcreteType(type)) {
+                return literal;
+            }
+            return AnalyzerUtils.replaceNullType2Boolean(type).toString() + literal;
+        }
+
+        @Override
+        public String visitMapExpr(MapExpr node, Void context) {
+            String literal = super.visitMapExpr(node, context);
+            Type type = node.getType();
+            if (!hasConcreteType(type)) {
+                return literal;
+            }
+            // super returns "map{...}", the typed form is "MAP<K,V>{...}"
+            return AnalyzerUtils.replaceNullType2Boolean(type).toString() + literal.substring("map".length());
+        }
+
+        private static boolean hasConcreteType(Type type) {
+            return type != null && !type.isPseudoType() && !type.isInvalid();
         }
     }
 }
