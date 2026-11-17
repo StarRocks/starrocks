@@ -3506,8 +3506,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllMatchIteration) {
     std::string strs[] = {"abc", "abc", "foo bar baz", "12x\n34x", "aaa", "aé", "日本"};
     std::string ptns[] = {"^.", "\\A.", "\\bba", "(?m)^(\\d+)x", "a", "", "x*"};
     int indexs[] = {0, 0, 0, 1, 0, 0, 0};
-    std::string res[] = {"['a']",         "['a']",       "['ba','ba']", "['12','34']",
-                         "['a','a','a']", "['','','']", "['','','']"};
+    std::string res[] = {"['a']", "['a']", "['ba','ba']", "['12','34']", "['a','a','a']", "['','','']", "['','','']"};
 
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
         str->append(strs[i]);
