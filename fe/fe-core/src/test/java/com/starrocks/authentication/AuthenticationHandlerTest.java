@@ -16,6 +16,8 @@ package com.starrocks.authentication;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.mysql.MysqlProto;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -83,7 +85,7 @@ public class AuthenticationHandlerTest {
             }
 
             @Mock
-            private String findUserDNByRoot(String user) throws Exception {
+            private String findUserDNByRoot(String user, AccessControlContext ctx) throws Exception {
                 return "uid=test,ou=People,dc=starrocks,dc=com";
             }
         };
@@ -106,7 +108,9 @@ public class AuthenticationHandlerTest {
 
         ConnectContext context = new ConnectContext();
         AccessControlContext authCtx = context.getAccessControlContext();
-        AuthenticationHandler.authenticate(context, "ldap_user", "%", "\0".getBytes(StandardCharsets.UTF_8));
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("ldap_user", "\0".getBytes(StandardCharsets.UTF_8),
+                        AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), "%"));
 
         Assertions.assertEquals("ldap_user", authCtx.getQualifiedUser());
         Assertions.assertEquals("uid=ldap_user,ou=company,dc=example,dc=com", authCtx.getDistinguishedName());

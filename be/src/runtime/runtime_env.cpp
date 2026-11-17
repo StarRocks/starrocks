@@ -126,6 +126,17 @@ static int64_t calc_max_load_memory(int64_t process_mem_limit) {
     return std::min<int64_t>(max_load_memory_bytes, config::load_process_max_memory_limit_bytes);
 }
 
+int64_t RuntimeEnv::calc_max_update_memory(int64_t process_mem_limit) {
+    int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
+    return process_mem_limit * update_mem_percent / 100;
+}
+
+void RuntimeEnv::refresh_update_mem_limit() const {
+    if (_update_mem_tracker != nullptr) {
+        _update_mem_tracker->set_limit(calc_max_update_memory(process_mem_limit()));
+    }
+}
+
 static int64_t calc_max_compaction_memory(int64_t process_mem_limit) {
     int64_t limit = config::compaction_max_memory_limit;
     int64_t percent = config::compaction_max_memory_limit_percent;
@@ -227,7 +238,7 @@ void RuntimeEnv::stop() {
 
 Status RuntimeEnv::init_execution_thread_pools(MetricRegistry* metrics) {
     RETURN_IF_ERROR(_thread_pools.init_execution_thread_pools(metrics));
-    return _java_env.init(metrics, config::enable_jvm_metrics);
+    return _java_env.init(metrics, config::enable_jvm_metrics, jvm_mem_tracker());
 }
 
 Status RuntimeEnv::init_lake_thread_pools(MetricRegistry* metrics) {
@@ -265,6 +276,9 @@ Status RuntimeEnv::_init_mem_tracker(MetricRegistry* metrics) {
     // a segment; see the hooks above.
     set_dict_dctx_alloc_scope(&enter_dctx_alloc_scope, &leave_dctx_alloc_scope);
     _jemalloc_metadata_tracker = regist_tracker(MemTrackerType::JEMALLOC, -1, process_mem_tracker());
+    // JVM heap and non-heap memory are mapped by the JVM itself rather than allocated through the
+    // malloc hook, so they are invisible to the other trackers. The JVM metrics hook sets this one.
+    _jvm_mem_tracker = regist_tracker(MemTrackerType::JVM, -1, process_mem_tracker());
     int64_t query_pool_mem_limit =
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker = regist_tracker(MemTrackerType::QUERY_POOL, query_pool_mem_limit, process_mem_tracker());
@@ -302,9 +316,11 @@ Status RuntimeEnv::_init_mem_tracker(MetricRegistry* metrics) {
     _schema_change_mem_tracker = regist_tracker(MemTrackerType::SCHEMA_CHANGE, -1, process_mem_tracker());
     _page_cache_mem_tracker = regist_tracker(MemTrackerType::PAGE_CACHE, -1, process_mem_tracker());
     _jit_cache_mem_tracker = regist_tracker(MemTrackerType::JIT_CACHE, -1, process_mem_tracker());
-    int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
-    _update_mem_tracker = regist_tracker(MemTrackerType::UPDATE, bytes_limit * update_mem_percent / 100, nullptr);
+    _update_mem_tracker = regist_tracker(MemTrackerType::UPDATE, calc_max_update_memory(bytes_limit), nullptr);
     _update_mem_tracker->set_level(2);
+    // Diagnostic only: mirrors the bytes buffered in local pass-through channels. Those bytes are
+    // already accounted on the query tracker (or the process tracker as a fallback), so keep this
+    // tracker out of the tree, or they would be counted twice.
     _passthrough_mem_tracker = regist_tracker(MemTrackerType::PASSTHROUGH, -1, nullptr);
     _passthrough_mem_tracker->set_level(2);
     _brpc_iobuf_mem_tracker = regist_tracker(MemTrackerType::BRPC_IOBUF, -1, nullptr);

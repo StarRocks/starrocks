@@ -114,6 +114,9 @@ Status AIExecutor::_update_integer(ConfigField field, int64_t value) {
             case ConfigField::MAX_RESPONSE_BYTES:
                 candidate.max_response_bytes = value;
                 break;
+            case ConfigField::MAX_INPUT_FILE_BYTES:
+                candidate.max_input_file_bytes = value;
+                break;
             case ConfigField::WORKER_THREAD_NUM:
                 candidate.worker_thread_num = static_cast<int32_t>(value);
                 worker_changed = candidate.worker_thread_num != previous.worker_thread_num;
@@ -162,6 +165,10 @@ Status AIExecutor::update_connect_timeout_ms(int64_t value) {
 
 Status AIExecutor::update_max_response_bytes(int64_t value) {
     return _update_integer(ConfigField::MAX_RESPONSE_BYTES, value);
+}
+
+Status AIExecutor::update_max_input_file_bytes(int64_t value) {
+    return _update_integer(ConfigField::MAX_INPUT_FILE_BYTES, value);
 }
 
 Status AIExecutor::update_worker_thread_num(int32_t value) {

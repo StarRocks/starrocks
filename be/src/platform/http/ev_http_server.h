@@ -42,9 +42,10 @@ public:
     // response body — these HTTP primitives stay format-agnostic.
     struct AuthVerifyFailure {
         HttpStatus http_status = HttpStatus::UNAUTHORIZED;
-        // Value for the response's `WWW-Authenticate` header. Empty means the server
-        // will not add the header (e.g. for 403 where the header is semantically wrong).
-        std::string www_authenticate;
+        // Values for the response's `WWW-Authenticate` header, one header line each (an endpoint
+        // that accepts Basic and Bearer challenges with both). Empty means the server will not add
+        // the header (e.g. for 403 where the header is semantically wrong).
+        std::vector<std::string> www_authenticate;
         // Pre-serialized response body sent to the client as-is (Content-Type: application/json).
         std::string body;
     };

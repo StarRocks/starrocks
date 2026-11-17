@@ -15,7 +15,9 @@
 package com.starrocks.alter;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -26,6 +28,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.WALApplier;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -33,6 +36,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
@@ -45,8 +49,11 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.transaction.TransactionIdGenerator;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
@@ -58,6 +65,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -94,9 +102,11 @@ import static org.mockito.Mockito.when;
  */
 public class LakeTableIndexFastPathJobBaseTest {
 
+    /** An ADD INDEX job with one index to build, so a dispatch has a payload to send. */
     private LakeTableAddIndexJob newJob() {
-        return new LakeTableAddIndexJob(1L, 2L, 3L, "t", 60_000L,
-                new ArrayList<>(), new ArrayList<>());
+        Index index = new Index("idx_c1", List.of(ColumnId.create("c1")), IndexDef.IndexType.BITMAP, "",
+                new HashMap<>());
+        return new LakeTableAddIndexJob(1L, 2L, 3L, "t", 60_000L, List.of(index));
     }
 
     private static void setField(Object o, String name, Object value) throws Exception {
@@ -371,6 +381,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         when(idx.getTablets()).thenReturn(new ArrayList<>());
         when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Collections.singletonList(idx));
+        when(pp.getVisibleVersion()).thenReturn(4L);
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
 
         GlobalStateMgr gsm = buildLockableGsm(db, table);
@@ -386,6 +397,62 @@ public class LakeTableIndexFastPathJobBaseTest {
             assertFalse(job.isForceSkippedAtCommitted());
             verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
             verify(table, never()).setState(OlapTable.OlapTableState.NORMAL);
+        }
+    }
+
+    @Test
+    public void testCancelImpl_FinishedRewriting_ForceRefusedWhileEarlierLoadNotVisible() throws Exception {
+        // Reserved V=5 but visible is 3: a load holding 4 has not finished on FE.
+        // It may already be published on BE, so the no-op publish of 5 would
+        // succeed while the visible bump to 5 is skipped, leaving 5 invisible
+        // forever. The force cancel must be refused before any no-op publish.
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        setField(job, "commitVersionMap", commit);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getVisibleVersion()).thenReturn(3L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+
+            assertFalse(job.cancelImpl("force skip", true));
+
+            assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+            assertFalse(job.isForceSkippedAtCommitted());
+            utilsStatic.verify(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
+                    any(), any(), any(), anyBoolean()), never());
+            verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
+            verify(table, never()).setState(OlapTable.OlapTableState.NORMAL);
+        }
+    }
+
+    @Test
+    public void testReadyToForceSkipPublish_NothingToCheckIsReady() throws Exception {
+        // Nothing reserved, or the db / table / partition is gone: there is no
+        // version to advance, so the check must not block the force cancel.
+        LakeTableAddIndexJob job = newJob();
+        Map<Long, Long> commit = new HashMap<>();
+        assertTrue(job.readyToForceSkipPublish(null));
+        assertTrue(job.readyToForceSkipPublish(commit));
+        commit.put(100L, 5L);
+
+        OlapTable table = mock(OlapTable.class);
+        when(table.getPhysicalPartition(100L)).thenReturn(null);
+        List<GlobalStateMgr> states = List.of(buildLockableGsm(null, null),
+                buildLockableGsm(new Database(2L, "db"), null), buildLockableGsm(new Database(2L, "db"), table));
+        for (GlobalStateMgr gsm : states) {
+            try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+                gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+                assertTrue(job.readyToForceSkipPublish(commit));
+            }
         }
     }
 
@@ -1174,6 +1241,9 @@ public class LakeTableIndexFastPathJobBaseTest {
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
 
         GlobalStateMgr gsm = buildLockableGsm(db, table);
+        GtidGenerator gtidGenerator = mock(GtidGenerator.class);
+        when(gtidGenerator.nextGtid()).thenReturn(42L);
+        when(gsm.getGtidGenerator()).thenReturn(gtidGenerator);
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             invokePrivate(job, "runRunningJob");
@@ -1181,6 +1251,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         @SuppressWarnings("unchecked")
         Map<Long, Long> commitMap = (Map<Long, Long>) getField(job, "commitVersionMap");
         assertEquals(Long.valueOf(5L), commitMap.get(100L));
+        // The commit versions carry the gtid drawn when they were reserved.
+        assertEquals(42L, getField(job, "commitGtid"));
         assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
         // updateNextVersion runnable should have flipped the next version on the partition.
         verify(pp).setNextVersion(6L);
@@ -1342,6 +1414,19 @@ public class LakeTableIndexFastPathJobBaseTest {
         setField(job, "publishVersionFuture", f);
     }
 
+    /**
+     * A table whose physical partition 100 is at {@code visibleVersion}, for a job with commit version 5 on it.
+     */
+    private GlobalStateMgr buildGsmWithPartition(LakeTableAddIndexJob job, PhysicalPartition pp, long visibleVersion)
+            throws Exception {
+        setField(job, "commitVersionMap", new HashMap<>(Map.of(100L, 5L)));
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexes()).thenReturn(new ArrayList<>());
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+        when(pp.getVisibleVersion()).thenReturn(visibleVersion);
+        return buildLockableGsm(new Database(2L, "db"), table);
+    }
+
     @Test
     public void testRunFinishedRewritingJob_PublishVersionPendingReturns() throws Exception {
         LakeTableAddIndexJob job = newJob();
@@ -1349,9 +1434,15 @@ public class LakeTableIndexFastPathJobBaseTest {
         // Future not yet done -> publishVersion() returns false; method returns early.
         CompletableFuture<Boolean> pending = new CompletableFuture<>();
         setField(job, "publishVersionFuture", pending);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        GlobalStateMgr gsm = buildGsmWithPartition(job, pp, 4L);
 
-        invokePrivate(job, "runFinishedRewritingJob");
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            invokePrivate(job, "runFinishedRewritingJob");
+        }
         assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
     }
 
     @Test
@@ -1362,8 +1453,55 @@ public class LakeTableIndexFastPathJobBaseTest {
         setField(job, "timeoutMs", 1L);
         CompletableFuture<Boolean> pending = new CompletableFuture<>();
         setField(job, "publishVersionFuture", pending);
+        GlobalStateMgr gsm = buildGsmWithPartition(job, mock(PhysicalPartition.class), 4L);
 
-        assertThrows(AlterCancelException.class, () -> invokePrivate(job, "runFinishedRewritingJob"));
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            AlterCancelException e = assertThrows(AlterCancelException.class,
+                    () -> invokePrivate(job, "runFinishedRewritingJob"));
+            assertTrue(e.getMessage().contains("publish timeout"), e.getMessage());
+        }
+    }
+
+    /**
+     * A load that committed after the watershed holds version 4, below the job's commit version 5, and is not
+     * visible yet. The job must neither publish on top of version 4 nor make version 5 visible: the load could
+     * then never finish.
+     */
+    @Test
+    public void testRunFinishedRewritingJob_WaitsForVersionBelowCommitVersion() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        GlobalStateMgr gsm = buildGsmWithPartition(job, pp, 3L);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            invokePrivate(job, "runFinishedRewritingJob");
+        }
+        assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        assertNull(getField(job, "publishVersionFuture"));
+        verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
+    }
+
+    /**
+     * An earlier attempt of the finish step made the commit version visible and later loads moved the partition
+     * on before the job reached FINISHED. Finishing now must not move the visible version back.
+     */
+    @Test
+    public void testRunFinishedRewritingJob_DoesNotMoveVisibleVersionBack() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        setPublishFuture(job, true);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        GlobalStateMgr gsm = buildGsmWithPartition(job, pp, 7L);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            invokePrivate(job, "runFinishedRewritingJob");
+        }
+        assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
     }
 
     @Test
@@ -1379,6 +1517,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         OlapTable table = mock(OlapTable.class);
         when(table.getIndexes()).thenReturn(new ArrayList<>());
         PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getVisibleVersion()).thenReturn(4L);
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
 
         GlobalStateMgr gsm = buildLockableGsm(db, table);
@@ -1413,6 +1552,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         OlapTable table = mock(OlapTable.class);
         when(table.getIndexes()).thenReturn(new ArrayList<>());
         PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getVisibleVersion()).thenReturn(4L);
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
         MaterializedIndexMeta retiredMeta = mock(MaterializedIndexMeta.class);
         when(retiredMeta.getSchemaId()).thenReturn(999L);
@@ -1547,14 +1687,17 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            // Utils.publishVersion is a no-op overload accepting (List, TxnInfoPB, long, long, ComputeResource, boolean).
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            // Utils.publishVersion is a no-op overload accepting
+            // (List, TxnInfoPB, long, long, ComputeResource, boolean useAggregatePublish, boolean isRetryPublish).
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(),
+                    anyBoolean()))
                     .thenAnswer(inv -> null);
             assertTrue(job.lakePublishVersion());
             // Per-tablet publish (useAggregatePublish=false); the aggregate path is NOT used.
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), eq(false)),
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), eq(false), anyBoolean()),
                     times(1));
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true)),
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true),
+                    anyBoolean()),
                     never());
         }
     }
@@ -1593,14 +1736,15 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(),
+                    anyBoolean()))
                     .thenAnswer(invocation -> null);
 
             assertTrue(job.lakePublishVersion());
 
             ArgumentCaptor<List<Tablet>> tabletsCaptor = ArgumentCaptor.forClass(List.class);
             utilsStatic.verify(() -> Utils.publishVersion(tabletsCaptor.capture(), any(), eq(4L), eq(5L), any(),
-                    eq(false)), times(2));
+                    eq(false), anyBoolean()), times(2));
             List<List<Tablet>> published = tabletsCaptor.getAllValues();
             assertEquals(List.of(List.of(latestBaseTablet), List.of(latestRollupTablet)), published);
             assertEquals(201L, published.get(0).get(0).getId());
@@ -1641,19 +1785,21 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(),
+                    anyBoolean()))
                     .thenAnswer(invocation -> null);
 
             assertTrue(job.lakePublishVersion());
 
             ArgumentCaptor<List<Tablet>> tabletsCaptor = ArgumentCaptor.forClass(List.class);
             utilsStatic.verify(() -> Utils.publishVersion(tabletsCaptor.capture(), any(), eq(4L), eq(5L), any(),
-                    eq(true)), times(1));
+                    eq(true), anyBoolean()), times(1));
             List<Tablet> published = tabletsCaptor.getValue();
             assertEquals(List.of(latestBaseTablet, latestRollupTablet), published);
             assertEquals(201L, published.get(0).getId());
             assertEquals(202L, published.get(1).getId());
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false)),
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false),
+                    anyBoolean()),
                     never());
         }
     }
@@ -1683,7 +1829,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(),
+                    anyBoolean()))
                     .thenThrow(new RuntimeException("rpc fail"));
             assertFalse(job.lakePublishVersion());
         }
@@ -1729,7 +1876,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(),
+                    anyBoolean()))
                     .thenAnswer(inv -> null);
 
             assertTrue(job.lakePublishVersion());
@@ -1739,8 +1887,9 @@ public class LakeTableIndexFastPathJobBaseTest {
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<Tablet>> tabletsCaptor = ArgumentCaptor.forClass(List.class);
             utilsStatic.verify(() -> Utils.publishVersion(tabletsCaptor.capture(), any(), eq(4L), eq(5L),
-                    any(), eq(true)), times(1));
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false)),
+                    any(), eq(true), anyBoolean()), times(1));
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false),
+                    anyBoolean()),
                     never());
             List<Tablet> published = tabletsCaptor.getValue();
             assertEquals(2, published.size());
@@ -1789,7 +1938,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(),
+                    anyBoolean()))
                     .thenAnswer(inv -> null);
 
             assertTrue(job.lakePublishVersion());
@@ -1797,12 +1947,16 @@ public class LakeTableIndexFastPathJobBaseTest {
             // Exactly one aggregate publish per partition, each carrying only its own
             // tablet at its own base->commit version; no cross-partition mixing.
             utilsStatic.verify(() -> Utils.publishVersion(
-                    argThat(l -> l.size() == 1 && l.contains(tA)), any(), eq(4L), eq(5L), any(), eq(true)), times(1));
+                    argThat(l -> l.size() == 1 && l.contains(tA)), any(), eq(4L), eq(5L), any(), eq(true),
+                    anyBoolean()), times(1));
             utilsStatic.verify(() -> Utils.publishVersion(
-                    argThat(l -> l.size() == 1 && l.contains(tB)), any(), eq(7L), eq(8L), any(), eq(true)), times(1));
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true)),
+                    argThat(l -> l.size() == 1 && l.contains(tB)), any(), eq(7L), eq(8L), any(), eq(true),
+                    anyBoolean()), times(1));
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true),
+                    anyBoolean()),
                     times(2));
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false)),
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false),
+                    anyBoolean()),
                     never());
         }
     }
@@ -1833,9 +1987,57 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true)))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true),
+                    anyBoolean()))
                     .thenThrow(new RuntimeException("rpc fail"));
             assertFalse(job.lakePublishVersion());
+        }
+    }
+
+    @Test
+    public void testLakePublishVersion_RetryIsPerPartition() throws Exception {
+        // Partition 100 fails on the first attempt, so partition 101 is never sent. On the next attempt only
+        // partition 100 is a retry; partition 101 is still a first attempt.
+        LakeTableAddIndexJob job = new LakeTableAddIndexJob(1L, 2L, 3L, "t", 60_000L,
+                new ArrayList<>(), new ArrayList<>());
+        Map<Long, Long> commit = new LinkedHashMap<>();
+        commit.put(100L, 5L);
+        commit.put(101L, 8L);
+        setField(job, "commitVersionMap", commit);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.isFileBundling()).thenReturn(false);
+        for (long partitionId : commit.keySet()) {
+            MaterializedIndex idx = mock(MaterializedIndex.class);
+            when(idx.getTablets()).thenReturn(Collections.singletonList(mock(Tablet.class)));
+            PhysicalPartition pp = mock(PhysicalPartition.class);
+            when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                    .thenReturn(Collections.singletonList(idx));
+            when(table.getPhysicalPartition(partitionId)).thenReturn(pp);
+        }
+
+        GlobalStateMgr gsm = mock(GlobalStateMgr.class);
+        LocalMetastore lm = mock(LocalMetastore.class);
+        when(lm.getDb(anyLong())).thenReturn(db);
+        when(lm.getTable(anyLong(), anyLong())).thenReturn(table);
+        when(gsm.getLocalMetastore()).thenReturn(lm);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), anyBoolean(),
+                    eq(false))).thenThrow(new RuntimeException("rpc fail"));
+            assertFalse(job.lakePublishVersion());
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(7L), eq(8L), any(), anyBoolean(),
+                    anyBoolean()), never());
+
+            assertTrue(job.lakePublishVersion());
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), eq(false),
+                    eq(true)), times(1));
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(7L), eq(8L), any(), eq(false),
+                    eq(false)), times(1));
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(7L), eq(8L), any(), anyBoolean(),
+                    eq(true)), never());
         }
     }
 
@@ -1868,10 +2070,11 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(),
+                    anyBoolean()))
                     .thenAnswer(inv -> null);
             assertTrue(job.lakePublishVersion());
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), eq(true)),
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), eq(true), anyBoolean()),
                     times(1));
         }
     }
@@ -2166,5 +2369,270 @@ public class LakeTableIndexFastPathJobBaseTest {
         // Must not throw despite the missing partition.
         runReplay(target, other, new Database(2L, "db"), table);
         verify(table).setState(OlapTable.OlapTableState.NORMAL);
+    }
+
+    // -------- vacuum pin of the dispatch version --------
+
+    private static PhysicalPartition mockDispatchablePartition(OlapTable table, long ppId, long visibleVersion) {
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getVisibleVersion()).thenReturn(visibleVersion);
+        when(table.getPhysicalPartition(ppId)).thenReturn(pp);
+        MaterializedIndex latestIndex = mock(MaterializedIndex.class);
+        when(latestIndex.getId()).thenReturn(70L);
+        when(latestIndex.getTablet(anyLong())).thenReturn(mock(Tablet.class));
+        when(pp.getLatestIndex(50L)).thenReturn(latestIndex);
+        return pp;
+    }
+
+    private static WarehouseManager warehouseWithComputeNode() {
+        WarehouseManager wm = mock(WarehouseManager.class);
+        ComputeNode cn = mock(ComputeNode.class);
+        when(cn.getId()).thenReturn(11L);
+        when(wm.getComputeNodeAssignedToTablet(any(), anyLong())).thenReturn(cn);
+        when(wm.acquireComputeResource(any(CRAcquireContext.class))).thenReturn(mock(ComputeResource.class));
+        return wm;
+    }
+
+    /**
+     * Runs {@code action} with the catalog, the agent task queue and the executor mocked so that every task of a
+     * dispatch registers and submits cleanly.
+     */
+    private void withDispatchMocks(OlapTable table, WarehouseManager wm, ThrowingRunnable action) throws Exception {
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
+        when(gsm.getWarehouseMgr()).thenReturn(wm);
+        // runRunningJob draws the gtid of the commit versions once the tasks have finished.
+        GtidGenerator gtidGenerator = mock(GtidGenerator.class);
+        when(gtidGenerator.nextGtid()).thenReturn(42L);
+        when(gsm.getGtidGenerator()).thenReturn(gtidGenerator);
+        SchemaInfo schemaInfo = mock(SchemaInfo.class);
+        when(schemaInfo.toTabletSchema()).thenReturn(new TTabletSchema());
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<SchemaInfo> schemaStatic = Mockito.mockStatic(SchemaInfo.class);
+                MockedStatic<AgentTaskQueue> queueStatic = Mockito.mockStatic(AgentTaskQueue.class);
+                MockedStatic<AgentTaskExecutor> executorStatic = Mockito.mockStatic(AgentTaskExecutor.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            schemaStatic.when(() -> SchemaInfo.fromMaterializedIndex(eq(table), eq(50L), any()))
+                    .thenReturn(schemaInfo);
+            queueStatic.when(() -> AgentTaskQueue.addTask(any())).thenReturn(true);
+            action.run();
+        }
+    }
+
+    @FunctionalInterface
+    private interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    private void dispatch(LakeTableAddIndexJob job, OlapTable table) throws Exception {
+        withDispatchMocks(table, warehouseWithComputeNode(), () -> invokePrivate(job, "runRunningJob"));
+    }
+
+    private void cancel(LakeTableAddIndexJob job, OlapTable table) {
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            assertTrue(job.cancelImpl("cancelled by test"));
+        }
+    }
+
+    @Test
+    public void testDispatchPinsTheVersionItsTasksRead() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L, 2L);
+
+        dispatch(job, table);
+
+        assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        verify(pp).setMinRetainVersion(3L);
+        verify(pp, never()).releaseMinRetainVersion(anyLong());
+        AgentBatchTask batch = (AgentBatchTask) getField(job, "batchTask");
+        assertEquals(2, batch.getTaskNum());
+        for (AgentTask task : batch.getAllTasks()) {
+            assertEquals(3L, ((AlterReplicaTask) task).getVersion());
+        }
+    }
+
+    @Test
+    public void testFinishedRewritingReleasesThePin() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L);
+        dispatch(job, table);
+        AgentBatchTask batch = (AgentBatchTask) getField(job, "batchTask");
+        for (AgentTask task : batch.getAllTasks()) {
+            task.setFinished(true);
+        }
+        when(pp.getNextVersion()).thenReturn(5L);
+
+        withDispatchMocks(table, warehouseWithComputeNode(), () -> invokePrivate(job, "runRunningJob"));
+
+        assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        verify(pp).releaseMinRetainVersion(3L);
+    }
+
+    @Test
+    public void testCancelReleasesThePin() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L);
+        dispatch(job, table);
+
+        cancel(job, table);
+
+        assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        verify(pp).releaseMinRetainVersion(3L);
+    }
+
+    @Test
+    public void testCancelReleasesThePinOfATableThatLeftTheCatalog() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L);
+        dispatch(job, table);
+
+        // DROP TABLE without FORCE moves the table to the recycle bin; the catalog no longer finds it.
+        cancel(job, null);
+
+        assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        verify(pp).releaseMinRetainVersion(3L);
+    }
+
+    @Test
+    public void testFailedDispatchReleasesEveryPinItTook() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexMetaByMetaId(50L)).thenReturn(mock(MaterializedIndexMeta.class));
+        Map<Long, List<Long>> partitionToTablets = new LinkedHashMap<>();
+        partitionToTablets.put(100L, Collections.singletonList(1L));
+        partitionToTablets.put(200L, Collections.singletonList(2L));
+        setField(job, "partitionToTablets", partitionToTablets);
+        Map<Long, Long> tabletToIndexMetaId = new HashMap<>();
+        tabletToIndexMetaId.put(1L, 50L);
+        tabletToIndexMetaId.put(2L, 50L);
+        setField(job, "tabletToIndexMetaId", tabletToIndexMetaId);
+        PhysicalPartition pp1 = mockDispatchablePartition(table, 100L, 3L);
+        PhysicalPartition pp2 = mockDispatchablePartition(table, 200L, 4L);
+        WarehouseManager wm = warehouseWithComputeNode();
+        // Partition 200 is pinned before its tablet turns out to have no compute node.
+        when(wm.getComputeNodeAssignedToTablet(any(), eq(2L))).thenReturn(null);
+
+        withDispatchMocks(table, wm,
+                () -> assertThrows(AlterCancelException.class, () -> invokePrivate(job, "runRunningJob")));
+        verify(pp1).setMinRetainVersion(3L);
+        verify(pp2).setMinRetainVersion(4L);
+
+        cancel(job, table);
+
+        verify(pp1).releaseMinRetainVersion(3L);
+        verify(pp2).releaseMinRetainVersion(4L);
+    }
+
+    @Test
+    public void testFailedDispatchReleasesOnlyThePinsItTook() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexMetaByMetaId(50L)).thenReturn(mock(MaterializedIndexMeta.class));
+        Map<Long, List<Long>> partitionToTablets = new LinkedHashMap<>();
+        partitionToTablets.put(100L, Collections.singletonList(1L));
+        partitionToTablets.put(200L, Collections.singletonList(2L));
+        setField(job, "partitionToTablets", partitionToTablets);
+        Map<Long, Long> tabletToIndexMetaId = new HashMap<>();
+        tabletToIndexMetaId.put(1L, 50L);
+        tabletToIndexMetaId.put(2L, 50L);
+        setField(job, "tabletToIndexMetaId", tabletToIndexMetaId);
+        PhysicalPartition pp1 = mockDispatchablePartition(table, 100L, 3L);
+        // Partition 200 is gone, so dispatch fails before pinning it.
+        when(table.getPhysicalPartition(200L)).thenReturn(null);
+
+        withDispatchMocks(table, warehouseWithComputeNode(),
+                () -> assertThrows(AlterCancelException.class, () -> invokePrivate(job, "runRunningJob")));
+        verify(pp1).setMinRetainVersion(3L);
+
+        cancel(job, table);
+
+        verify(pp1).releaseMinRetainVersion(3L);
+        verify(pp1, times(1)).releaseMinRetainVersion(anyLong());
+    }
+
+    @Test
+    public void testDemotionReleasesThePinAndRedispatchPinsTheNewVersion() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L);
+        dispatch(job, table);
+
+        job.resetToLastDurableState();
+
+        assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        verify(pp).releaseMinRetainVersion(3L);
+
+        // Elected again: the job dispatches at the version visible by then.
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        when(pp.getVisibleVersion()).thenReturn(6L);
+        dispatch(job, table);
+
+        verify(pp).setMinRetainVersion(6L);
+        verify(pp, never()).releaseMinRetainVersion(6L);
+    }
+
+    @Test
+    public void testDispatchFailureInRunCancelsAndReleasesThePin() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L);
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
+        WarehouseManager wm = warehouseWithComputeNode();
+        when(gsm.getWarehouseMgr()).thenReturn(wm);
+        // run() builds an internal ConnectContext, which takes a fresh session variable.
+        VariableMgr vm = mock(VariableMgr.class);
+        when(vm.newSessionVariable()).thenReturn(new SessionVariable());
+        when(gsm.getVariableMgr()).thenReturn(vm);
+        SchemaInfo schemaInfo = mock(SchemaInfo.class);
+        when(schemaInfo.toTabletSchema()).thenReturn(new TTabletSchema());
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<SchemaInfo> schemaStatic = Mockito.mockStatic(SchemaInfo.class);
+                MockedStatic<AgentTaskQueue> queueStatic = Mockito.mockStatic(AgentTaskQueue.class);
+                MockedStatic<AgentTaskExecutor> executorStatic = Mockito.mockStatic(AgentTaskExecutor.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            schemaStatic.when(() -> SchemaInfo.fromMaterializedIndex(eq(table), eq(50L), any()))
+                    .thenReturn(schemaInfo);
+            // The queue refuses the task, so the dispatch fails after pinning.
+            queueStatic.when(() -> AgentTaskQueue.addTask(any())).thenReturn(false);
+            job.run();
+        } finally {
+            ConnectContext.remove();
+        }
+
+        assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        verify(pp).setMinRetainVersion(3L);
+        verify(pp).releaseMinRetainVersion(3L);
+    }
+
+    @Test
+    public void testCancelBeforeDispatchLeavesThePartitionPinAlone() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.WAITING_TXN);
+        OlapTable table = mock(OlapTable.class);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        // The tablet snapshot is taken at PENDING, but nothing has been dispatched or pinned yet: a pin on the
+        // partition, e.g. a running compaction's, belongs to someone else.
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L);
+
+        cancel(job, table);
+
+        verify(pp, never()).setMinRetainVersion(anyLong());
+        verify(pp, never()).releaseMinRetainVersion(anyLong());
     }
 }

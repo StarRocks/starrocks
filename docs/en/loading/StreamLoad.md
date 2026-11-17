@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 keywords: ['Stream Load']
 description: "How to load data from a local file system into StarRocks using Stream Load or the curl command, supporting CSV, JSON, Parquet, and ORC formats."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Load data from a local file system
@@ -27,6 +28,11 @@ For CSV data, take note of the following points:
 Stream Load and Broker Load both support data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](./Etl_in_loading.md) and [Change data through loading](./Load_to_Primary_Key_tables.md).
 
 ## Before you begin
+
+:::tip
+Stream Load accepts a Bearer token as well as a username and password, if a JWT or OAuth 2.0 [security integration](../administration/user_privs/authentication/security_integration.md) is configured: send `-H "Authorization: Bearer <token>"` instead of `-u <username>:<password>`. The token must still be valid when the load commits, so use one with enough lifetime for a long load. See [Where each authentication method works](../administration/user_privs/authentication/authentication.mdx#where-each-authentication-method-works).
+:::
+
 
 ### Check privileges
 

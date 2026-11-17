@@ -14,6 +14,8 @@
 
 #include "runtime/runtime_filter_factory.h"
 
+#include <memory>
+
 #include "column/column_helper.h"
 #include "common/object_pool.h"
 #include "common/system/cpu_info.h"
@@ -45,6 +47,25 @@ RuntimeFilter* RuntimeFilterFactory::to_empty_filter(ObjectPool* pool, RuntimeFi
             [&]<LogicalType LT>() -> RuntimeFilter* {
                 return new ComposedRuntimeEmptyFilter<LT>(*down_cast<const MinMaxRuntimeFilter<LT>*>(min_max_filter),
                                                           *membership_filter);
+            });
+
+    if (pool != nullptr && filter != nullptr) {
+        return pool->add(filter);
+    } else {
+        return filter;
+    }
+}
+
+RuntimeFilter* RuntimeFilterFactory::create_pass_all_filter(ObjectPool* pool, LogicalType type, int8_t join_mode) {
+    RuntimeFilter* filter =
+            type_dispatch_filter(type, static_cast<RuntimeFilter*>(nullptr), [&]<LogicalType LT>() -> RuntimeFilter* {
+                auto rf = std::make_unique<ComposedRuntimeEmptyFilter<LT>>();
+                rf->get_membership_filter()->set_join_mode(join_mode);
+                if (!rf->min_max_filter().set_pass_all()) {
+                    return nullptr;
+                }
+                rf->insert_null();
+                return rf.release();
             });
 
     if (pool != nullptr && filter != nullptr) {
@@ -164,16 +185,13 @@ struct TryCreateRuntimeBitsetFilter {
     }
 };
 
-RuntimeFilter* RuntimeFilterFactory::create_join_filter(ObjectPool* pool, LogicalType type, int8_t join_mode,
-                                                        const Columns& columns, size_t column_offset,
-                                                        size_t row_count) {
+RuntimeFilter* RuntimeFilterFactory::try_create_bitset_filter(ObjectPool* pool, LogicalType type,
+                                                              const Columns& columns, size_t column_offset,
+                                                              size_t row_count) {
     RuntimeFilter* filter =
             type_dispatch_bitset_filter(type, static_cast<RuntimeFilter*>(nullptr), TryCreateRuntimeBitsetFilter(),
                                         columns, column_offset, row_count);
-    if (filter == nullptr) {
-        return create_bloom_filter(pool, type, join_mode);
-    }
-    if (pool != nullptr) {
+    if (filter != nullptr && pool != nullptr) {
         return pool->add(filter);
     }
     return filter;

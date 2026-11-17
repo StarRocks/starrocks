@@ -93,6 +93,7 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
                 return Status::InvalidArgument("tablet_mgr is null when loading sst file");
             }
             RandomAccessFileOptions opts;
+            opts.remote_read = ScopedRemoteReadContext::current_or_load();
             if (!sstable_pb.encryption_meta().empty()) {
                 ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
                 opts.encryption_info = std::move(info);
@@ -125,6 +126,7 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
             }
             // otherwise, load delvec from file
             LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
+            lake_io_opts.remote_read = ScopedRemoteReadContext::current_or_load();
             auto delvec_loader =
                     std::make_unique<LakeDelvecLoader>(tablet_mgr, nullptr, true /* fill cache */, lake_io_opts);
             RETURN_IF_ERROR(delvec_loader->load_from_meta(metadata, _sstable_pb.delvec(), &_delvec));
@@ -220,6 +222,7 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     // A fresh handle also starts its IO counters at 0, so the deltas below are the absolute IO done
     // by this multi_get.
     RandomAccessFileOptions opts;
+    opts.remote_read = ScopedRemoteReadContext::current_or_load();
     if (!_sstable_pb.encryption_meta().empty()) {
         ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
         opts.encryption_info = std::move(info);
@@ -270,6 +273,11 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
             std::max<int64_t>(0, io_snap_after.io_count_local_disk - io_snap_before.io_count_local_disk));
     TRACE_COUNTER_INCREMENT("sstable_io_count_remote",
                             std::max<int64_t>(0, io_snap_after.io_count_remote - io_snap_before.io_count_remote));
+    // One message for every key: ParseFromString() clears it but keeps the repeated elements it has
+    // already allocated, so decoding a value costs no heap allocation once the first one is parsed.
+    // A large delete reverse-looks-up millions of keys here, and the per-key allocations otherwise
+    // dominate the lookup.
+    IndexValuesWithVerPB index_value_with_ver_pb;
     size_t i = 0;
     for (auto& key_index : key_indexes) {
         // Index_value_with_vers is empty means key is not found in sst.
@@ -278,7 +286,6 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
             ++i;
             continue;
         }
-        IndexValuesWithVerPB index_value_with_ver_pb;
         if (!index_value_with_ver_pb.ParseFromString(index_value_with_vers[i])) {
             return Status::InternalError("parse index value info failed");
         }
@@ -314,12 +321,12 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         if (index_value_with_ver_pb.values_size() > 0) {
             if (version < 0) {
                 values[key_index] = build_index_value(index_value_with_ver_pb.values(0));
-                found_key_indexes->insert(key_index);
+                found_key_indexes->insert(found_key_indexes->end(), key_index);
             } else {
                 for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
                     if (index_value_with_ver_pb.values(j).version() == version) {
                         values[key_index] = build_index_value(index_value_with_ver_pb.values(j));
-                        found_key_indexes->insert(key_index);
+                        found_key_indexes->insert(found_key_indexes->end(), key_index);
                         break;
                     }
                 }
@@ -330,8 +337,20 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     return Status::OK();
 }
 
+size_t PersistentIndexSstable::index_block_memory_usage() const {
+    return (_sst != nullptr) ? _sst->index_block_memory_usage() : 0;
+}
+
+size_t PersistentIndexSstable::filter_memory_usage() const {
+    return (_sst != nullptr) ? _sst->filter_memory_usage() : 0;
+}
+
 size_t PersistentIndexSstable::memory_usage() const {
     return (_sst != nullptr) ? _sst->memory_usage() : 0;
+}
+
+size_t PersistentIndexSstable::delvec_memory_usage() const {
+    return (_delvec != nullptr) ? _delvec->memory_usage() : 0;
 }
 
 Status PersistentIndexSstable::sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const {
@@ -371,6 +390,7 @@ StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
         const DelVectorPtr& delvec, const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RandomAccessFileOptions opts;
+    opts.remote_read = ScopedRemoteReadContext::current_or_load();
     if (!sstable_pb.encryption_meta().empty()) {
         ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
         opts.encryption_info = std::move(info);

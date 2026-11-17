@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "Symptom-to-fix playbook using StarRocks query profiles to diagnose and resolve slow operators, data skew, spill, and join issues."
 keywords: ['profile', 'query', '调优']
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 查询调优方法
@@ -140,7 +141,7 @@ StarRocks 依赖于向量化、pipeline 友好的哈希 Join 核心，该核心�
 
 **过大的 Shuffle 或 Broadcast** – 如果 `NetworkTime` 超过 30%，且 `BytesSent` 很大，则说明查询传输的数据过多。重新评估 JOIN 策略并减少 Shuffle/Broadcast 的数据量（例如，强制执行 Shuffle 而不是 Broadcast，或者预先过滤上游数据）。
 
-**接收端积压** – 如果接收端的 `WaitTime` 很高，并且发送端队列始终处于满负荷状态，则表明接收端无法跟上。增加接收端线程池 (`brpc_num_threads`)，并确认网卡带宽和 QoS 设置。
+**接收端积压** – 如果发送端的 `BufferFullTime` 很高，并且发送端队列始终处于满负荷状态，则表明接收端无法跟上。增加接收端线程池 (`brpc_num_threads`)，并确认网卡带宽和 QoS 设置。
 
 **启用 Exchange 压缩** – 当网络带宽成为瓶颈时，可以压缩 Exchange 的负载。设置 `SET transmission_compression_type = 'zstd';`，并可以选择增加 `SET transmission_encode_level = 7;` 以启用自适应列编码。预计 CPU 使用率会更高，以换取网络传输字节数的减少。
 
@@ -164,7 +165,7 @@ StarRocks 依赖于向量化、pipeline 友好的哈希 Join 核心，该核心�
             PROCESS
 ```
 
-**排序落盘 (Sort spilling)** – 当 `MaxBufferedBytes` 超过大约 2 GB 或 `SpillBytes` 不为零时，排序阶段将落盘到磁盘。如果机器有足够的内存，可以添加 `LIMIT`，预聚合上游数据，或提高 `sort_spill_threshold`。
+**排序落盘 (Sort spilling)** – 当 `MaxBufferedBytes` 超过大约 2 GB 或 `SpillBytes` 不为零时，排序阶段将落盘到磁盘。可以添加 `LIMIT` 或预聚合上游数据。
 
 **合并饥饿 (Merge starvation)** – 高 `PendingStageTime` 告诉您合并正在等待上游数据块。首先优化生产者 operator 或增大 pipeline 缓冲区。
 

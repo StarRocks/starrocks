@@ -410,6 +410,9 @@ TypeDescriptor variant_typed_desc_from_parquet_field(const ParquetField* field) 
     }
     case ColumnType::SCALAR:
         return variant_scalar_typed_desc_from_parquet_field(field);
+    case ColumnType::VARIANT:
+        // A nested variant group (not produced by shredding) is read back as a whole variant.
+        return k_variant_type;
     }
     return k_variant_type;
 }

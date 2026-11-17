@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the type name of a VARIANT value as a string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # variant_typeof
@@ -24,7 +25,7 @@ VARCHAR variant_typeof(variant_expr)
 Returns a VARCHAR value representing the type name.
 
 Possible return values include:
-- `"Null"` - for NULL values
+- `"Null"` - for a VARIANT null, such as a JSON null. For SQL NULL, including the result of `variant_query` when the path does not exist, the function returns NULL. To test for a VARIANT null, use [is_variant_null](./is_variant_null.md).
 - `"Boolean(true)"` - for boolean true values
 - `"Boolean(false)"` - for boolean false values
 - `"Int8"`, `"Int16"`, `"Int32"`, `"Int64"` - for integer values

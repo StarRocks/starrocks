@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将输入转换为指定的数据类型。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CAST
@@ -10,6 +11,12 @@ description: "将输入转换为指定的数据类型。"
 将 `input` 转换成指定数据类型的值，如 `cast (input as BIGINT)` 将当前 `input` 转换为 BIGINT 类型的值。
 
 从 2.4 版本开始支持将 Array 字符串 和 JSON array 转换为 ARRAY 类型。
+
+:::note
+
+`CAST(input AS CHAR(N))` 会将结果截断为前 `N` 个字符，与 MySQL 一致。例如 `CAST(1775580223839 AS CHAR(10))` 返回 `1775580223`。不带长度的 `CAST(input AS CHAR)` 以及 `CAST(input AS VARCHAR(N))` 不会被截断。
+
+:::
 
 ## 语法
 

@@ -2,6 +2,7 @@
 sidebar_position: 50
 displayed_sidebar: docs
 description: "The StarRocks Cross-cluster Data Migration Tool is provided by StarRocks Community."
+products: [oss, enterprise, anywhere]
 ---
 
 import Tabs from '@theme/Tabs';
@@ -179,11 +180,13 @@ Record the original values of the following FE configurations. For each dynamic 
    enable_execute_script_on_frontend = true
    ```
 
-3. On the target cluster, suppress size-triggered automatic tablet split by setting the target size to a very large value:
+3. On the target cluster, disable automatic tablet split and merge by setting the target size to `0`:
 
    ```SQL
-   ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "9223372036854775807");
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "0");
    ```
+
+   Do not use a very large value instead. The tool creates target tables from the source table definitions, so a source table with the table property `tablet_reshard_target_size` keeps it on the target, and that table property would take the place of the large value for the table. `0` disables automatic split and merge for every table. The splits submitted by the tool use explicit boundaries and do not depend on this configuration.
 
 4. Before starting the tool, run the following query separately on the source and target clusters:
 

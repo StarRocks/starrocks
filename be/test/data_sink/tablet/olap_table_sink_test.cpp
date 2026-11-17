@@ -17,7 +17,10 @@
 #include <gtest/gtest.h>
 
 #include <fstream>
+#include <numeric>
+#include <set>
 #include <sstream>
+#include <vector>
 
 #include "base/string/slice.h"
 #include "base/testutil/assert.h"
@@ -313,6 +316,74 @@ TEST_F(OlapTableSinkTest, test_close_wait_twice_after_cancel) {
 #endif
 }
 
+TEST_F(OlapTableSinkTest, test_close_skipped_after_init_failure) {
+    std::unique_ptr<RuntimeState> runtime_state = _build_runtime_state();
+    DescriptorTbl* desc_tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(runtime_state.get(), _object_pool.get(), _desc_tbl, &desc_tbl,
+                                    config::vector_chunk_size));
+    runtime_state->set_desc_tbl(desc_tbl);
+
+    auto& indexes = _data_sink.olap_table_sink.schema.indexes;
+    indexes.push_back(indexes.front());
+    indexes.back().id = 1;
+
+    auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, runtime_state.get());
+    Status init_status = sink->init(_data_sink, runtime_state.get());
+    ASSERT_ERROR(init_status);
+    ASSERT_FALSE(sink->_is_initialized);
+    ASSERT_EQ(nullptr, sink->_span);
+    ASSERT_EQ(nullptr, sink->ts_profile());
+    ASSERT_EQ(nullptr, sink->_tablet_sink_sender);
+    ASSERT_OK(sink->open(runtime_state.get()));
+    ASSERT_OK(sink->try_open(runtime_state.get()));
+    ASSERT_TRUE(sink->is_open_done());
+    ASSERT_OK(sink->open_wait());
+    ASSERT_FALSE(sink->is_full());
+    ASSERT_OK(sink->try_close(runtime_state.get()));
+    ASSERT_TRUE(sink->is_close_done());
+    EXPECT_STATUS(init_status, sink->close_wait(runtime_state.get(), init_status));
+    EXPECT_STATUS(init_status, sink->close_wait(runtime_state.get(), Status::OK()));
+    EXPECT_STATUS(init_status, sink->close(runtime_state.get(), init_status));
+}
+
+TEST_F(OlapTableSinkTest, test_close_before_prepare) {
+    std::unique_ptr<RuntimeState> runtime_state = _build_runtime_state();
+    auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, runtime_state.get());
+    ASSERT_OK(sink->init(_data_sink, runtime_state.get()));
+    ASSERT_TRUE(sink->_is_initialized);
+    ASSERT_NE(nullptr, sink->_span);
+    ASSERT_EQ(nullptr, sink->ts_profile());
+    ASSERT_EQ(nullptr, sink->_tablet_sink_sender);
+
+    Status close_status = Status::InternalError("prepare failed");
+    ASSERT_OK(sink->try_close(runtime_state.get()));
+    ASSERT_TRUE(sink->is_close_done());
+    EXPECT_STATUS(close_status, sink->close_wait(runtime_state.get(), close_status));
+    EXPECT_STATUS(close_status, sink->close_wait(runtime_state.get(), Status::OK()));
+    EXPECT_STATUS(close_status, sink->close(runtime_state.get(), close_status));
+}
+
+TEST_F(OlapTableSinkTest, test_close_after_prepare_failure) {
+    std::unique_ptr<RuntimeState> runtime_state = _build_runtime_state();
+    DescriptorTbl* desc_tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(runtime_state.get(), _object_pool.get(), _desc_tbl, &desc_tbl,
+                                    config::vector_chunk_size));
+    runtime_state->set_desc_tbl(desc_tbl);
+
+    _data_sink.olap_table_sink.tuple_id = 999;
+    auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, runtime_state.get());
+    ASSERT_OK(sink->init(_data_sink, runtime_state.get()));
+    Status prepare_status = sink->prepare(runtime_state.get());
+    ASSERT_ERROR(prepare_status);
+    ASSERT_NE(nullptr, sink->_span);
+    ASSERT_NE(nullptr, sink->profile());
+    ASSERT_NE(nullptr, sink->ts_profile());
+    ASSERT_EQ(nullptr, sink->_tablet_sink_sender);
+
+    EXPECT_STATUS(prepare_status, sink->close_wait(runtime_state.get(), prepare_status));
+    EXPECT_STATUS(prepare_status, sink->close_wait(runtime_state.get(), Status::OK()));
+}
+
 TEST_F(OlapTableSinkTest, test_decimalv3_error_log) {
     _test_error_log(
             TYPE_DECIMAL64, 2, 2, 1,
@@ -321,6 +392,73 @@ TEST_F(OlapTableSinkTest, test_decimalv3_error_log) {
                 col->append_datum(Datum(static_cast<int64_t>(10000000000LL)));
             },
             "Decimal", "out of range");
+}
+
+// A schema change renames the columns it rewrites to `__starrocks_shadow_<name>` (FE's
+// SchemaChangeHandler.SHADOW_NAME_PREFIX) by setting the NAME only, leaving the ColumnId alone. FE
+// then emits the slot list under the shadow name and TColumn.column_name under the plain ColumnId,
+// so multi-node write's key-slot resolution has to undo the rename to match the two. Getting this
+// wrong does not degrade quietly -- it resolves a shadow KEY column to no slot at all, trips the
+// "index exposes N of M key columns" check, and fails a load during a key-column schema change.
+TEST(StripShadowColumnPrefixTest, strips_only_the_schema_change_prefix) {
+    // The case that was broken: a key column being rewritten by a schema change.
+    EXPECT_EQ("k1", strip_shadow_column_prefix("__starrocks_shadow_k1"));
+
+    // Every ordinary column must come back byte-for-byte, or this "fix" would break the common path
+    // it never had a problem with.
+    EXPECT_EQ("k1", strip_shadow_column_prefix("k1"));
+    EXPECT_EQ("", strip_shadow_column_prefix(""));
+    EXPECT_EQ("__starrocks_k1", strip_shadow_column_prefix("__starrocks_k1"));
+
+    // Only a genuine prefix counts; the same text further along the name is part of the name.
+    EXPECT_EQ("k1___starrocks_shadow_x", strip_shadow_column_prefix("k1___starrocks_shadow_x"));
+
+    // The bare prefix names nothing, so stripping it to the empty string would match every column
+    // with an empty name rather than none. Leave it alone.
+    EXPECT_EQ("__starrocks_shadow_", strip_shadow_column_prefix("__starrocks_shadow_"));
+}
+
+// A tablet's writer nodes must all be reachable. The key hash and the hash that picked the tablet are
+// computed identically (crc32, seed 0, folded per column), so for `PRIMARY KEY(k) DISTRIBUTED BY
+// HASH(k)` they are the same number h: taking the node as h % N against a tablet of h % T confines
+// every row of tablet t to N / gcd(T, N) of the N writers -- 3 of 6 at two buckets, 1 of 6 at six --
+// while the unreachable nodes still cost an open/close, a delta writer and an empty partial txn log,
+// and MultiNodeWriteNodes still reports N.
+//
+// The raw arm is kept deliberately: it is what the bug looked like, so this test fails if the
+// avalanche is ever dropped rather than silently passing on some other property.
+TEST(MultiNodeWriteNodeSlotTest, every_writer_is_reachable_whatever_the_bucket_count) {
+    constexpr size_t kNodes = 6;
+    constexpr uint32_t kSamples = 60000;
+
+    for (size_t buckets : std::vector<size_t>{1, 2, 3, 4, 6}) {
+        std::vector<std::set<uint32_t>> mixed(buckets);
+        std::vector<std::set<uint32_t>> raw(buckets);
+        for (uint32_t h = 0; h < kSamples; ++h) {
+            mixed[h % buckets].insert(multi_node_write_node_slot(h, kNodes));
+            raw[h % buckets].insert(h % kNodes); // what the modulo on the unmixed hash did
+        }
+        for (size_t t = 0; t < buckets; ++t) {
+            EXPECT_EQ(kNodes, mixed[t].size())
+                    << "buckets=" << buckets << " tablet=" << t << " cannot reach every writer";
+        }
+        const size_t expected_raw = kNodes / std::gcd(buckets, kNodes);
+        EXPECT_EQ(expected_raw, raw[0].size())
+                << "buckets=" << buckets << ": the unmixed hash should show the N/gcd(T,N) collapse";
+    }
+}
+
+// The routing exists so that all of a key's rows meet in ONE writer; the mix must not cost that.
+TEST(MultiNodeWriteNodeSlotTest, same_key_always_picks_the_same_writer) {
+    for (uint32_t h = 0; h < 10000; ++h) {
+        EXPECT_EQ(multi_node_write_node_slot(h, 6), multi_node_write_node_slot(h, 6));
+    }
+    // And the slot must stay inside the node list.
+    for (size_t n : std::vector<size_t>{1, 2, 3, 5, 6, 7}) {
+        for (uint32_t h = 0; h < 2000; ++h) {
+            EXPECT_LT(static_cast<size_t>(multi_node_write_node_slot(h, n)), n);
+        }
+    }
 }
 
 } // namespace starrocks

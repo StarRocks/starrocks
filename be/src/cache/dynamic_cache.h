@@ -128,6 +128,14 @@ public:
         return (*v);
     }
 
+    // Size of the object cached under |key|, or 0 if there is none. Unlike get(), it neither pins the
+    // object nor moves it in the LRU list, so monitoring reads do not change what gets evicted next.
+    size_t peek_object_size(const Key& key) const {
+        std::lock_guard<Lock> lg(_lock);
+        auto itr = _map.find(key);
+        return itr == _map.end() ? 0 : (*itr->second)->_size;
+    }
+
     // atomic get_or_create operation, to prevent loading
     // same resource multiple times
     Entry* get_or_create(const Key& key, size_t init_size = 0) {
@@ -174,8 +182,9 @@ public:
             entry->_expire_ms = expire_ms;
             const bool last_external_pin = entry->_ref.load(std::memory_order_relaxed) == 2;
             _release(entry);
-            if (last_external_pin && _size > _capacity) {
-                _evict(_capacity, &victims);
+            const size_t capacity = _capacity.load(std::memory_order_relaxed);
+            if (last_external_pin && _size > capacity) {
+                _evict(capacity, &victims);
             }
         }
 
@@ -268,7 +277,7 @@ public:
             _size += new_size - entry->_size;
             _tracker_consume(new_size - entry->_size);
             entry->_size = new_size;
-            ret = _evict(_capacity, &entry_list);
+            ret = _evict(_capacity.load(std::memory_order_relaxed), &entry_list);
         }
         for (Entry* e : entry_list) {
             delete e;
@@ -331,7 +340,8 @@ public:
     size_t object_size() const { return _object_size; }
     size_t size() const { return _size; }
 
-    size_t capacity() const { return _capacity; }
+    // Read without _lock (e.g. by background eviction) while set_capacity() may run concurrently.
+    size_t capacity() const { return _capacity.load(std::memory_order_relaxed); }
 
     // adjust capacity
     // return false if actual memory usage is larger than capacity
@@ -344,8 +354,8 @@ public:
         bool ret;
         {
             std::lock_guard<Lock> lg(_lock);
-            _capacity = capacity;
-            ret = _evict(_capacity, &entry_list);
+            _capacity.store(capacity, std::memory_order_relaxed);
+            ret = _evict(capacity, &entry_list);
         }
         for (Entry* e : entry_list) {
             delete e;
@@ -434,12 +444,12 @@ private:
                 itr++;
             }
         }
-        return _size <= _capacity;
+        return _size <= _capacity.load(std::memory_order_relaxed);
     }
 
     bool _evict() {
         std::vector<Entry*> entry_list;
-        bool ret = _evict(_capacity, &entry_list);
+        bool ret = _evict(_capacity.load(std::memory_order_relaxed), &entry_list);
         for (Entry* entry : entry_list) {
             delete entry;
         }
@@ -471,7 +481,7 @@ private:
     Map _map;
     size_t _object_size{0};
     std::atomic<size_t> _size;
-    size_t _capacity = 0;
+    std::atomic<size_t> _capacity{0};
 
     MemTracker* _mem_tracker = nullptr;
     bool _tracker_exclude_root = false;

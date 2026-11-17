@@ -15,6 +15,8 @@
 package com.starrocks.system;
 
 import com.google.api.client.util.Maps;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -40,13 +42,15 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -649,22 +653,23 @@ public class SystemInfoServiceTest {
         Assertions.assertTrue(beIP == null);
     }
 
-    @Mocked
-    InetAddress addr;
+    private MockedStatic<InetAddress> mockedInetAddress;
 
+    @AfterEach
+    public void closeMockedInetAddress() {
+        if (mockedInetAddress != null) {
+            mockedInetAddress.close();
+            mockedInetAddress = null;
+        }
+    }
+
+    // Resolve every host name to 127.0.0.1. Mockito is used instead of a JMockit MockUp because
+    // JDK 19+ makes java.net.InetAddress a sealed class, which JMockit 1.x cannot redefine.
     private void mockNet() {
-        new MockUp<InetAddress>() {
-            @Mock
-            public InetAddress getByName(String host) throws UnknownHostException {
-                return addr;
-            }
-        };
-        new Expectations() {
-            {
-                addr.getHostAddress();
-                result = "127.0.0.1";
-            }
-        };
+        InetAddress addr = Mockito.mock(InetAddress.class);
+        Mockito.when(addr.getHostAddress()).thenReturn("127.0.0.1");
+        mockedInetAddress = Mockito.mockStatic(InetAddress.class, Mockito.CALLS_REAL_METHODS);
+        mockedInetAddress.when(() -> InetAddress.getByName(Mockito.anyString())).thenReturn(addr);
     }
 
     @Test
@@ -806,5 +811,25 @@ public class SystemInfoServiceTest {
             // throw not support exception
             service.modifyBackendHost(clause);
         });
+    }
+
+    @Test
+    public void testLocationMatchedBackendIds() {
+        Backend be1 = new Backend(100, "originalHost", 1000);
+        be1.setLocation(Map.of("rack", "data_1"));
+
+        Backend be2 = new Backend(200, "originalHost_2", 1000);
+        be2.setLocation(Map.of("rack", "data_2"));
+
+        service.addBackend(be1);
+        service.addBackend(be2);
+        Multimap<String, String> label = HashMultimap.create();
+        label.put("rack", "data_1");
+        Assertions.assertEquals(1, service.getLocationMatchedBackendIds(label).size());
+        Multimap<String, String> empty = HashMultimap.create();
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> service.getLocationMatchedBackendIds(empty));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> service.getLocationMatchedBackendIds(null));
     }
 }

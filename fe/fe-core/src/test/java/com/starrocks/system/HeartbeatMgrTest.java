@@ -36,6 +36,7 @@ package com.starrocks.system;
 
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.Util;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.rpc.ThriftConnectionPool;
@@ -66,6 +67,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 
 public class HeartbeatMgrTest {
@@ -142,6 +144,36 @@ public class HeartbeatMgrTest {
         Assertions.assertEquals(0, hbResponse.getQueryPort());
         Assertions.assertEquals(HbStatus.BAD, hbResponse.getStatus());
 
+    }
+
+    @Test
+    public void testFrontendHbHandlerReadsLakeIndexPayloadRebuild() {
+        new MockUp<Util>() {
+            @Mock
+            public String getResultForUrl(String urlStr, String encodedAuthInfo, int connectTimeoutMs,
+                                          int readTimeoutMs) {
+                String reply = "{\"replayedJournalId\":191224,\"queryPort\":9131,\"rpcPort\":9121,\"status\":\"OK\","
+                        + "\"msg\":\"Success\",\"feStartTime\":1637288321250,\"feVersion\":\"2.0-ac45651a\"";
+                // An FE from before the rebuild does not send the key.
+                return urlStr.contains("192.168.1.1") ? reply + "}" : reply + ",\"rebuildsLakeIndexPayload\":true}";
+            }
+        };
+
+        HeartbeatResponse olderFe = new FrontendHeartbeatHandler(
+                new Frontend(FrontendNodeType.FOLLOWER, "older", "192.168.1.1", 9010), 0, "abcd").call();
+        Assertions.assertEquals(HbStatus.OK, olderFe.getStatus());
+        Assertions.assertFalse(((FrontendHbResponse) olderFe).rebuildsLakeIndexPayload());
+
+        HeartbeatResponse upgradedFe = new FrontendHeartbeatHandler(
+                new Frontend(FrontendNodeType.FOLLOWER, "upgraded", "192.168.1.2", 9010), 0, "abcd").call();
+        Assertions.assertEquals(HbStatus.OK, upgradedFe.getStatus());
+        Assertions.assertTrue(((FrontendHbResponse) upgradedFe).rebuildsLakeIndexPayload());
+
+        // The heartbeat to the FE itself does not go over HTTP.
+        HeartbeatResponse self = new FrontendHeartbeatHandler(
+                new Frontend(FrontendNodeType.FOLLOWER, "self", "192.168.1.3", 9010), 0, "abcd").call();
+        Assertions.assertEquals(HbStatus.OK, self.getStatus());
+        Assertions.assertTrue(((FrontendHbResponse) self).rebuildsLakeIndexPayload());
     }
 
     @Test
@@ -249,41 +281,65 @@ public class HeartbeatMgrTest {
         };
     }
 
+    // With the mocked GlobalStateMgr (isReady() true, no valid leader lease) a real worker self-stops
+    // right after start() and runs onStopped() on its own thread, shutting down and nulling the executor
+    // while the test thread is still reading it. Park the worker until stopped so that only the test
+    // thread drives start()/onStopped().
+    private static HeartbeatMgr newParkedHeartbeatMgr() {
+        return new HeartbeatMgr(false) {
+            @Override
+            protected void runOneCycle() throws InterruptedException {
+                while (!isStopRequested()) {
+                    Thread.sleep(10);
+                }
+            }
+        };
+    }
+
+    private static void stopAndAwaitQuiesced(HeartbeatMgr mgr) {
+        mgr.setStop();
+        LeaderDaemon.awaitQuiesced(List.of(mgr), 10_000L);
+    }
+
     @Test
     public void testOnStoppedShutsDownAndAwaitsExecutorTermination() {
-        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        HeartbeatMgr mgr = newParkedHeartbeatMgr();
         // start() lazy-inits the executor.
         mgr.start();
-        ExecutorService before = mgr.executor;
-        Assertions.assertNotNull(before, "executor must be initialized after start()");
+        try {
+            ExecutorService before = mgr.executor;
+            Assertions.assertNotNull(before, "executor must be initialized after start()");
 
-        // protected onStopped() is visible from the same package.
-        mgr.onStopped();
+            // protected onStopped() is visible from the same package.
+            mgr.onStopped();
 
-        Assertions.assertTrue(before.isShutdown(), "previous executor must be shut down");
-        Assertions.assertTrue(before.isTerminated(),
-                "previous executor must be terminated after onStopped() awaits drain");
-        // Nulled after the drain for consistency with the other pool-owning daemons
-        // (PublishVersionDaemon, AutovacuumDaemon); start() lazily rebuilds either way.
-        Assertions.assertNull(mgr.executor, "executor reference is dropped after successful drain");
+            Assertions.assertTrue(before.isShutdown(), "previous executor must be shut down");
+            Assertions.assertTrue(before.isTerminated(),
+                    "previous executor must be terminated after onStopped() awaits drain");
+            // Nulled after the drain for consistency with the other pool-owning daemons
+            // (PublishVersionDaemon, AutovacuumDaemon); start() lazily rebuilds either way.
+            Assertions.assertNull(mgr.executor, "executor reference is dropped after successful drain");
+        } finally {
+            stopAndAwaitQuiesced(mgr);
+        }
     }
 
     @Test
     public void testStartRebuildsExecutorAfterOnStopped() {
-        HeartbeatMgr mgr = new HeartbeatMgr(false);
-        mgr.start();
-        ExecutorService originalExecutor = mgr.executor;
-        mgr.onStopped();
-        Assertions.assertTrue(originalExecutor.isTerminated());
-
+        HeartbeatMgr mgr = newParkedHeartbeatMgr();
         mgr.start();
         try {
+            ExecutorService originalExecutor = mgr.executor;
+            mgr.onStopped();
+            Assertions.assertTrue(originalExecutor.isTerminated());
+
+            mgr.start();
             Assertions.assertNotSame(originalExecutor, mgr.executor,
                     "executor must be rebuilt on re-election");
             Assertions.assertFalse(mgr.executor.isShutdown(),
                     "rebuilt executor must accept new heartbeats");
         } finally {
-            mgr.setStop();
+            stopAndAwaitQuiesced(mgr);
         }
     }
 

@@ -15,6 +15,7 @@
 #include "exprs/function_call_expr.h"
 
 #include <cstdint>
+#include <memory>
 
 #include "base/failpoint/fail_point.h"
 #include "base/string/slice.h"
@@ -40,7 +41,8 @@ DEFINE_FAIL_POINT(expr_prepare_fragment_thread_local_call_failed);
 
 VectorizedFunctionCallExpr::VectorizedFunctionCallExpr(const TExprNode& node) : Expr(node) {}
 
-const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function_by_fid(const TFunction& fn) {
+const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function_by_fid(
+        const TFunction& fn, const std::vector<TypeDescriptor>& arg_types) {
     // branch-3.0 is 150102~150104, branch-3.1 is 150103~150105
     // refs: https://github.com/StarRocks/starrocks/pull/17803
     // @todo: remove this code when branch-3.0 is deprecated
@@ -51,6 +53,17 @@ const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function_by_fid(const
         fid = 150104;
     } else if (fn.fid == 150104 && _type.type == TYPE_ARRAY && _type.children[0].type == TYPE_DECIMAL128) {
         fid = 150105;
+    }
+    // Contract 4.3 (#79786) renumbered existing native GEOGRAPHY functions.
+    // Accept plans from the earlier registry without renumbering the current one again.
+    // 120081 is also the current ST_X(GEOMETRY): distinguish it by the native argument type,
+    // never by WKB contents. Normal GEO execution still validates the semantic descriptor.
+    if (arg_types.size() == 1 && arg_types[0].type == TYPE_GEOGRAPHY) {
+        if (fid == 120081) fid = 120090; // ST_Y(GEOGRAPHY)
+        if (fid == 120082) fid = 120170; // ST_GeometryType(GEOGRAPHY)
+    } else if (fid == 120083 && arg_types.size() == 2 && arg_types[0].type == TYPE_GEOGRAPHY &&
+               arg_types[1].type == TYPE_GEOGRAPHY) {
+        fid = 120180; // ST_Distance(GEOGRAPHY, GEOGRAPHY)
     }
     return BuiltinFunctions::find_builtin_function(fid);
 }
@@ -78,7 +91,7 @@ const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function(const TFunct
                                                                     prepare_func, close_func, true, false);
         return _agg_func_desc.get();
     } else {
-        return _get_function_by_fid(fn);
+        return _get_function_by_fid(fn, arg_types);
     }
 }
 
@@ -117,12 +130,19 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
     // todo: varargs use for allocate slice memory, need compute buffer size
     //  for varargs in vectorized engine?
     _fn_context_index = context->register_func(state, return_type, args_types);
+    if (_fn.__isset.cloud_configuration) {
+        // Builtins that act on behalf of a storage volume read its credentials from the FunctionContext.
+        context->fn_context(_fn_context_index)
+                ->set_cloud_configuration(std::make_shared<const TCloudConfiguration>(_fn.cloud_configuration));
+    }
 
-    _is_returning_random_value = _fn.fid == 10300 /* rand */ || _fn.fid == 10301 /* random */ ||
-                                 _fn.fid == 10302 /* rand */ || _fn.fid == 10303 /* random */ ||
-                                 _fn.fid == 100015 /* uuid */ || _fn.fid == 100016 /* uuid_numeric */ ||
-                                 _fn.fid == 100025 /* uuid_v7 */ || _fn.fid == 100026 /* uuid_v7_numeric */ ||
-                                 _fn.fid == 30470 /* http_request */;
+    _is_returning_random_value =
+            _fn.fid == 10300 /* rand */ || _fn.fid == 10301 /* random */ || _fn.fid == 10302 /* rand */ ||
+            _fn.fid == 10303 /* random */ || _fn.fid == 100015 /* uuid */ || _fn.fid == 100016 /* uuid_numeric */ ||
+            _fn.fid == 100025 /* uuid_v7 */ || _fn.fid == 100026 /* uuid_v7_numeric */ ||
+            _fn.fid == 30470 /* http_request */ || _fn.fid == 210016 /* get_presigned_url */ ||
+            _fn.fid == 210017 /* get_presigned_url with expiration */ || _fn.fid == 210018 /* get_presigned_file */ ||
+            _fn.fid == 210019 /* get_presigned_file with expiration */;
 
     return Status::OK();
 }

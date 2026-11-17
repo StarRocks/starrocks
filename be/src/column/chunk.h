@@ -102,12 +102,6 @@ public:
     // Remove all records and reset the delete state.
     void reset();
 
-    Status upgrade_if_overflow();
-
-    Status downgrade();
-
-    bool has_large_column() const;
-
     bool has_rows() const { return num_rows() > 0; }
     bool is_empty() const { return num_rows() == 0; }
     bool has_columns() const { return !_columns.empty(); }
@@ -514,11 +508,7 @@ public:
     // NOTE: After build, the MutableChunk will be in an invalid state and should not be used anymore.
     Chunk to_chunk();
 
-    Status upgrade_if_overflow();
-    Status downgrade();
     void reset();
-
-    bool has_large_column() const;
 
     bool has_rows() const { return num_rows() > 0; }
     bool is_empty() const { return num_rows() == 0; }

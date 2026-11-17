@@ -15,11 +15,13 @@
 package com.starrocks.sql.dump;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 
@@ -29,6 +31,12 @@ import java.io.FileReader;
 import java.io.IOException;
 
 public class ReplayDumpTestBase {
+
+    // Same G3 check as StarRocksTestBase, which this base does not extend.
+    @AfterEach
+    public void assertNoLockInvariantViolations() {
+        LockTestUtils.assertNoLockInvariantViolations();
+    }
     @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();

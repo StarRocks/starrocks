@@ -37,6 +37,7 @@
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 #include "fs/fs_registry.h"
 #endif
+#include "compute_env/staros/starlet_remote_read_context.h"
 #include "compute_env/staros/staros_status.h"
 #include "compute_env/staros/staros_worker.h"
 #include "compute_env/staros/staros_worker_runtime.h"
@@ -66,12 +67,34 @@ bvar::PerSecond<bvar::Adder<int64_t>> g_starlet_num_writes_second("starlet_io_wr
 using FileSystemFactory = staros::starlet::fslib::FileSystemFactory;
 using WriteOptions = staros::starlet::fslib::WriteOptions;
 using ReadOptions = staros::starlet::fslib::ReadOptions;
+using CacheOptions = staros::starlet::fslib::CacheOptions;
 using Configuration = staros::starlet::fslib::Configuration;
 using FileSystemPtr = std::unique_ptr<staros::starlet::fslib::FileSystem>;
 using ReadOnlyFilePtr = std::unique_ptr<staros::starlet::fslib::ReadOnlyFile>;
 using WritableFilePtr = std::unique_ptr<staros::starlet::fslib::WritableFile>;
 using Anchor = staros::starlet::fslib::Stream::Anchor;
 using EntryStat = staros::starlet::fslib::EntryStat;
+
+// The BE gates the two directions of the local disk cache separately -- skip_disk_cache the
+// lookup, skip_fill_local_cache the fill -- while fslib folds them into a single read mode.
+// Skipping the lookup subsumes the fill: a bypassing read is handed straight to the persistent
+// filesystem, which fills nothing. The skip_read_local_cache flag this enum replaced behaved the
+// same way, so the fold costs no behavior that was ever honored.
+//
+// +-----------------+-----------------------+----------------------------+---------------------------+
+// | skip_disk_cache | skip_fill_local_cache | what the BE asks for       | fslib read mode           |
+// +-----------------+-----------------------+----------------------------+---------------------------+
+// | false           | false                 | read cache, fill on miss   | READ_THROUGH              |
+// | false           | true                  | read cache, do not fill    | READ_THROUGH_NO_FILL      |
+// | true            | false                 | skip lookup, still fill    | READ_THROUGH_BYPASS_CACHE |
+// | true            | true                  | do not touch the cache     | READ_THROUGH_BYPASS_CACHE |
+// +-----------------+-----------------------+----------------------------+---------------------------+
+inline CacheOptions::ReadMode to_fslib_read_mode(bool skip_read_cache, bool skip_fill_cache) {
+    if (skip_read_cache) {
+        return CacheOptions::ReadMode::READ_THROUGH_BYPASS_CACHE;
+    }
+    return skip_fill_cache ? CacheOptions::ReadMode::READ_THROUGH_NO_FILL : CacheOptions::ReadMode::READ_THROUGH;
+}
 
 static const std::string kFileTagType = "type";
 static const std::string kFileTagTypeData = "data";
@@ -207,7 +230,7 @@ public:
 
         const auto& read_stats = (*stream_st)->get_io_stats();
         auto stats = std::make_unique<io::NumericStatistics>();
-        stats->reserve(11);
+        stats->reserve(14);
         stats->append(kBytesReadLocalDisk, read_stats.bytes_read_local_disk);
         stats->append(kBytesWriteLocalDisk, read_stats.bytes_write_local_disk);
         stats->append(kBytesReadRemote, read_stats.bytes_read_remote);
@@ -219,6 +242,9 @@ public:
         stats->append(kPrefetchHitCount, read_stats.prefetch_hit_count);
         stats->append(kPrefetchWaitFinishNs, read_stats.prefetch_wait_finish_ns);
         stats->append(kPrefetchPendingNs, read_stats.prefetch_pending_ns);
+        stats->append(kRemoteQueueWaitNs, read_stats.remote_queue_wait_ns);
+        stats->append(kRemoteFillWaitNs, read_stats.remote_fill_wait_ns);
+        stats->append(kRemoteFillJoins, read_stats.remote_fill_joins);
         return std::move(stats);
     }
 
@@ -229,10 +255,10 @@ public:
         }
         const auto& s = (*stream_st)->get_io_stats();
         return {
-                s.bytes_read_local_disk,  s.bytes_read_remote,  s.bytes_write_local_disk, s.bytes_write_remote,
-                s.io_count_local_disk,    s.io_count_remote,    s.io_ns_read_local_disk,  s.io_ns_read_remote,
-                s.io_ns_write_local_disk, s.io_ns_write_remote, s.prefetch_hit_count,     s.prefetch_wait_finish_ns,
-                s.prefetch_pending_ns,
+                s.bytes_read_local_disk,  s.bytes_read_remote,    s.bytes_write_local_disk, s.bytes_write_remote,
+                s.io_count_local_disk,    s.io_count_remote,      s.io_ns_read_local_disk,  s.io_ns_read_remote,
+                s.io_ns_write_local_disk, s.io_ns_write_remote,   s.prefetch_hit_count,     s.prefetch_wait_finish_ns,
+                s.prefetch_pending_ns,    s.remote_queue_wait_ns, s.remote_fill_wait_ns,    s.remote_fill_joins,
         };
     }
 
@@ -345,9 +371,10 @@ public:
             return to_status(fs_st.status());
         }
         auto opt = ReadOptions();
-        opt.skip_fill_local_cache = opts.skip_fill_local_cache;
+        opt.cache.read_mode = to_fslib_read_mode(opts.skip_disk_cache, opts.skip_fill_local_cache);
         opt.buffer_size = opts.buffer_size;
-        opt.skip_read_local_cache = opts.skip_disk_cache;
+        // A file opened without a context of its own takes the work running on this thread, if any.
+        opt.remote_read = to_fslib_remote_read(ScopedRemoteReadContext::or_current(opts.remote_read));
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }
@@ -375,8 +402,10 @@ public:
             return to_status(fs_st.status());
         }
         auto opt = ReadOptions();
-        opt.skip_fill_local_cache = opts.skip_fill_local_cache;
+        opt.cache.read_mode = to_fslib_read_mode(opts.skip_disk_cache, opts.skip_fill_local_cache);
         opt.buffer_size = opts.buffer_size;
+        // A file opened without a context of its own takes the work running on this thread, if any.
+        opt.remote_read = to_fslib_remote_read(ScopedRemoteReadContext::or_current(opts.remote_read));
         auto file_st = (*fs_st)->open(pair.first, opt);
 
         if (!file_st.ok()) {

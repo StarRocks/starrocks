@@ -539,6 +539,15 @@ struct LeadLagState<LT, true> {
     bool default_is_null = false;
     int64_t target_not_null_index = 0; // recored the 'offset' not null value's position
     size_t non_null_count;             // only used for lag
+    int64_t lead_ready_current_row = INT64_MIN;
+    int64_t lead_ready_scan_end = 0;
+    int64_t lead_ready_non_null_count = 0;
+    // First non-null in (lead_ready_current_row, lead_ready_scan_end), valid when count > 0.
+    int64_t lead_ready_first_non_null = 0;
+    // The partition the cursor above was built in, in local coordinates. It tells a
+    // new partition apart from a re-entry into the current one, because `reset()` does not clear the
+    // cursor. See `is_window_result_ready`.
+    int64_t lead_ready_partition_start = 0;
     bool default_value_is_constant = false;
 };
 
@@ -762,7 +771,94 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
         if constexpr (ignoreNulls) {
             this->data(state).target_not_null_index = INT64_MIN;
             this->data(state).non_null_count = 0;
+            // The `lead_ready_*` scan cursor is deliberately NOT cleared here. While the first row of the
+            // first partition waits for a future non-null, `_current_row_position` stays put and the
+            // analytor re-runs PRE_PROCESSING() -> reset() for every arriving chunk
         }
+    }
+
+    // Only `lead ... IGNORE NULLS` can look past the physical frame, so it is the only variant the
+    // analytor has to consult per row.
+    bool needs_window_result_ready_check() const override { return ignoreNulls && !isLag; }
+
+    // `lead ... IGNORE NULLS` needs the offset-th non-null after the current row, which can lie
+    // beyond the physical N FOLLOWING frame. Wait while the partition may still grow and that
+    // non-null is not yet in [current+1, available_end). Once the partition is complete, the
+    // existing update path may emit the default.
+    bool is_window_result_ready(FunctionContext* ctx, AggDataPtr __restrict state, const Columns& columns,
+                                int64_t partition_start, int64_t available_end, int64_t frame_start, int64_t frame_end,
+                                bool partition_is_complete, int64_t* ready_end = nullptr) const override {
+        // The cursor fields below exist only in the IGNORE NULLS state specialization, so the whole
+        // body must sit inside `if constexpr` to stay uninstantiated for the other cases.
+        if constexpr (ignoreNulls && !isLag) { // LEAD .. IGNORE NULLS
+            if (partition_is_complete) {
+                return true;
+            }
+            const int64_t offset = this->data(state).offset;
+            DCHECK_GT(offset, 0);
+            // Same encoding as update_batch_single_state_with_frame: frame_end = current + offset + 1.
+            int64_t current_row = frame_end - 1 - offset;
+            if (current_row < partition_start) {
+                current_row = partition_start;
+            }
+            if (columns.empty() || columns[0] == nullptr) {
+                return false;
+            }
+            const Column* col = columns[0].get();
+            const int64_t search_end = std::min(available_end, static_cast<int64_t>(col->size()));
+            auto& lead_state = this->data(state);
+
+            // Both current_row and search_end move forward within a partition. Keep the number of
+            // non-nulls in (lead_ready_current_row, lead_ready_scan_end). The first-non-null cursor
+            // retracts values that leave the window; the scan-end cursor adds newly available ones.
+            // Both cursors advance monotonically, keeping total scanning linear with constant space.
+            //
+            // The cursor outlives `reset()`, so a new partition must be recognised here. Both
+            // `partition_start` and the stored copy are local, post-eviction positions shifted by the
+            // same amounts (see `reset_state_for_contraction`), and a later partition always starts
+            // after an earlier one, so the comparison cannot alias across partitions.
+            const bool is_cache_not_initialized = lead_state.lead_ready_current_row == INT64_MIN ||
+                                                  lead_state.lead_ready_partition_start != partition_start;
+            if (is_cache_not_initialized) { // Fresh state, or the first row of a new partition
+                lead_state.lead_ready_partition_start = partition_start;
+                lead_state.lead_ready_current_row = current_row;
+                lead_state.lead_ready_scan_end = current_row + 1;
+                lead_state.lead_ready_non_null_count = 0;
+            } else if (current_row > lead_state.lead_ready_current_row) {
+                while (lead_state.lead_ready_non_null_count > 0 &&
+                       lead_state.lead_ready_first_non_null <= current_row) {
+                    --lead_state.lead_ready_non_null_count;
+                    if (lead_state.lead_ready_non_null_count > 0) {
+                        lead_state.lead_ready_first_non_null = ColumnHelper::find_nonnull(
+                                col, lead_state.lead_ready_first_non_null + 1, lead_state.lead_ready_scan_end);
+                    }
+                }
+                lead_state.lead_ready_current_row = current_row;
+                lead_state.lead_ready_scan_end = std::max(lead_state.lead_ready_scan_end, current_row + 1);
+            }
+
+            while (lead_state.lead_ready_non_null_count < offset && lead_state.lead_ready_scan_end < search_end) {
+                const int64_t next = static_cast<int64_t>(
+                        ColumnHelper::find_nonnull(col, lead_state.lead_ready_scan_end, search_end));
+                if (next >= search_end) {
+                    lead_state.lead_ready_scan_end = search_end;
+                    break;
+                }
+                if (lead_state.lead_ready_non_null_count == 0) {
+                    lead_state.lead_ready_first_non_null = next;
+                }
+                lead_state.lead_ready_scan_end = next + 1;
+                ++lead_state.lead_ready_non_null_count;
+            }
+            const bool ready = lead_state.lead_ready_non_null_count >= offset;
+            if (ready && ready_end != nullptr) {
+                // All offset future non-nulls remain available for every row strictly before
+                // the first one. This bound works for every positive offset.
+                *ready_end = lead_state.lead_ready_first_non_null;
+            }
+            return ready;
+        }
+        return true;
     }
 
     // `lag ... IGNORE NULLS` supports streaming eviction. Once at least one non-null value has
@@ -779,11 +875,34 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
     }
 
     // Shift the index after eviction so it stays in the operator's (post-eviction) local indices.
+    // Both lag and lead IGNORE NULLS store `target_not_null_index` in local column coordinates.
     void reset_state_for_contraction(FunctionContext* ctx, AggDataPtr __restrict state, size_t count) const override {
-        if constexpr (ignoreNulls && isLag) {
+        if constexpr (ignoreNulls) {
             if (this->data(state).target_not_null_index >= 0) {
                 this->data(state).target_not_null_index -= count;
                 DCHECK_GE(this->data(state).target_not_null_index, 0);
+            }
+            if constexpr (!isLag) { // LEAD
+                auto& lead_data = this->data(state);
+                if (lead_data.lead_ready_current_row != INT64_MIN) {
+                    lead_data.lead_ready_current_row -= count;
+                    lead_data.lead_ready_scan_end -= count;
+                    if (lead_data.lead_ready_non_null_count > 0) {
+                        lead_data.lead_ready_first_non_null -= count;
+                    }
+                    // Shifted with the cursor so it stays comparable to `Analytor::_partition.start`,
+                    // which the same eviction shifts by the same amount. It may go negative once the
+                    // rows at the start of the partition are gone, exactly as `_partition.start` does.
+                    lead_data.lead_ready_partition_start -= count;
+                    if (lead_data.lead_ready_current_row < 0) {
+                        // The row the cursor is anchored to has been evicted. Eviction never passes the
+                        // row being evaluated, but readiness checks may have skipped that far ahead.
+                        // Drop the old cursor so the next check rebuilds it at the current row.
+                        lead_data.lead_ready_current_row = INT64_MIN;
+                    } else {
+                        DCHECK_GT(lead_data.lead_ready_scan_end, lead_data.lead_ready_current_row);
+                    }
+                }
             }
         }
     }

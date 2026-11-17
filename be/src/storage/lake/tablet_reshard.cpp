@@ -24,12 +24,12 @@
 #include "common/logging.h"
 #include "gutil/strings/join.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_merger.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_splitter.h"
 #include "storage/lake/transactions.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
 #include "storage/storage_env.h"
 
@@ -97,7 +97,7 @@ TabletMetadataPtr lookup_exact_cached_metadata(TabletManager* tablet_manager, in
                                                int64_t gtid) {
     if (gtid <= 0) return nullptr;
     auto metadata = tablet_manager->metacache()->lookup_tablet_metadata(
-            tablet_manager->tablet_metadata_location(tablet_id, version));
+            MetacacheKey::tablet_metadata(tablet_manager->tablet_metadata_location(tablet_id, version)));
     if (metadata != nullptr && metadata->id() == tablet_id && metadata->version() == version &&
         metadata->gtid() == gtid)
         return metadata;
@@ -128,9 +128,9 @@ Status handle_splitting_tablet(TabletManager* tablet_manager, const SplittingTab
                     cached_metadatas.at(splitting_tablet.new_tablet_ids(0))->range().SerializeAsString()) {
             complete = true;
             for (int i = 1; i < splitting_tablet.new_tablet_ids_size(); ++i) {
-                complete &=
-                        tablet_manager->metacache()->lookup_tablet_metadata(tablet_manager->tablet_metadata_location(
-                                splitting_tablet.new_tablet_ids(i), new_version)) == nullptr;
+                complete &= tablet_manager->metacache()->lookup_tablet_metadata(
+                                    MetacacheKey::tablet_metadata(tablet_manager->tablet_metadata_location(
+                                            splitting_tablet.new_tablet_ids(i), new_version))) == nullptr;
             }
         }
         if (complete) {
@@ -345,7 +345,7 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
     // duplicate-key on rebuild or a delvec-inconsistency when a cross-published op_write is applied.
     // flush_pk_memtable is a no-op for non-PK / non-cloud-native-persistent-index tablets.
     auto flushed_old_metadata_or =
-            tablet_manager->update_mgr()->flush_pk_memtable(old_tablet_old_metadata_or.value(), new_version);
+            tablet_manager->primary_key_mgr()->flush_pk_memtable(old_tablet_old_metadata_or.value(), new_version);
     if (!flushed_old_metadata_or.ok()) {
         g_tablet_reshard_identical_failed << 1;
         return flushed_old_metadata_or.status();

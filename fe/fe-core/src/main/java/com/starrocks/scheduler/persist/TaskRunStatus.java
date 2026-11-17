@@ -23,6 +23,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskRun;
@@ -37,6 +38,7 @@ import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -45,7 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class TaskRunStatus implements Writable {
+public class TaskRunStatus implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(TaskRun.class);
 
     // Sort task run status by create time in descending order
@@ -244,12 +246,17 @@ public class TaskRunStatus implements Writable {
     }
 
     public String getDbName() {
-        return ClusterNamespace.getNameFromFullName(dbName);
+        return dbName;
     }
 
     public void setDbName(String dbName) {
-        // // compatible with old version
-        this.dbName = ClusterNamespace.getFullName(dbName);
+        this.dbName = dbName;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        // Images, edit logs and task_run_history rows written by older versions carry the default_cluster prefix.
+        dbName = ClusterNamespace.getNameFromFullName(dbName);
     }
 
     public String getUser() {

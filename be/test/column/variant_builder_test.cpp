@@ -26,6 +26,53 @@ static VariantPath MakePath(const char* s) {
     return VariantPathParser::parse_shredded_path(std::string_view(s)).value();
 }
 
+static VariantRowValue MakeNonmonotonicObject() {
+    // The field-id list is [a, b], but the payload stores b (null) before a ("xyz").
+    // Their offsets are [1, 0], followed by the total payload size, 5.
+    const char metadata[] = {0x11, 2, 0, 1, 2, 'a', 'b'};
+    const char value[] = {2, 2, 0, 1, 1, 0, 5, 0, 13, 'x', 'y', 'z'};
+    return VariantRowValue(std::string_view(metadata, sizeof(metadata)), std::string_view(value, sizeof(value)));
+}
+
+PARALLEL_TEST(VariantBuilderTest, nonmonotonic_object_offsets_in_base) {
+    auto base = MakeNonmonotonicObject();
+    const auto original = base;
+    auto patch = VariantEncoder::encode_json_text_to_variant("false");
+    ASSERT_TRUE(patch.ok()) << patch.status();
+
+    auto out = VariantBuilder::build_row_from_overlays(base.as_ref(),
+                                                       {{.path = MakePath("c"), .value = std::move(patch).value()}});
+    ASSERT_TRUE(out.ok()) << out.status();
+    auto json = out->to_json();
+    ASSERT_TRUE(json.ok()) << json.status();
+    ASSERT_EQ(R"({"a":"xyz","b":null,"c":false})", json.value());
+    ASSERT_EQ(original.get_metadata().raw(), base.get_metadata().raw());
+    ASSERT_EQ(original.get_value().raw(), base.get_value().raw());
+}
+
+PARALLEL_TEST(VariantBuilderTest, nonmonotonic_object_offsets_in_overlay) {
+    auto patch = VariantEncoder::encode_json_text_to_variant("false");
+    ASSERT_TRUE(patch.ok()) << patch.status();
+    auto out = VariantBuilder::build_row_from_overlays(
+            std::nullopt, {{.path = MakePath("nested"), .value = MakeNonmonotonicObject()},
+                           {.path = MakePath("nested.c"), .value = std::move(patch).value()}});
+    ASSERT_TRUE(out.ok()) << out.status();
+    auto json = out->to_json();
+    ASSERT_TRUE(json.ok()) << json.status();
+    ASSERT_EQ(R"({"nested":{"a":"xyz","b":null,"c":false}})", json.value());
+}
+
+PARALLEL_TEST(VariantBuilderTest, nonmonotonic_object_offsets_in_array_element) {
+    VariantArrayBuilder builder;
+    builder.add(MakeNonmonotonicObject());
+    builder.add_null();
+    auto out = builder.build();
+    ASSERT_TRUE(out.ok()) << out.status();
+    auto json = out->to_json();
+    ASSERT_TRUE(json.ok()) << json.status();
+    ASSERT_EQ(R"([{"a":"xyz","b":null},null])", json.value());
+}
+
 // Verifies overlays without base can assemble one object row.
 PARALLEL_TEST(VariantBuilderTest, build_from_overlays_only) {
     VariantBuilder builder;

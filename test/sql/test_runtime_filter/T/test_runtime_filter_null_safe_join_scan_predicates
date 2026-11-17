@@ -1,0 +1,21 @@
+-- name: test_runtime_filter_null_safe_join_scan_predicates
+-- The probe scan applies s <> 'b' first, then the pushed-down runtime filter of a <=> join whose build side holds
+-- NULL. That filter passes NULL keys, but must not bring back the NULL-key rows s <> 'b' already rejected.
+CREATE DATABASE db_${uuid0};
+USE db_${uuid0};
+CREATE TABLE probe_t (id BIGINT NOT NULL, dk INT, s VARCHAR(32))
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 4 PROPERTIES ("replication_num" = "1");
+INSERT INTO probe_t SELECT x, IF(x % 7 = 0, NULL, x % 16), IF(x % 9 = 0, NULL, IF(x % 4 = 0, 'b', concat('s', x % 6)))
+FROM TABLE(generate_series(1, 400)) t(x);
+CREATE TABLE build_t (dk INT) DUPLICATE KEY(dk) DISTRIBUTED BY HASH(dk) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+INSERT INTO build_t VALUES (NULL), (5);
+-- Without a join, as the reference: NULL -> 38 rows, 5 -> 19 rows, none of them rejected by s <> 'b'.
+SELECT dk, COUNT(*) AS c, SUM(IF(s IS NULL OR s = 'b', 1, 0)) AS rejected FROM probe_t
+WHERE s <> 'b' AND (dk IS NULL OR dk = 5) GROUP BY dk ORDER BY dk;
+SELECT x.dk, COUNT(*) AS c, SUM(IF(x.s IS NULL OR x.s = 'b', 1, 0)) AS rejected
+FROM (SELECT * FROM probe_t WHERE s <> 'b') x LEFT SEMI JOIN build_t ON x.dk <=> build_t.dk
+GROUP BY x.dk ORDER BY x.dk;
+SELECT x.dk, COUNT(*) AS c, SUM(IF(x.s IS NULL OR x.s = 'b', 1, 0)) AS rejected
+FROM (SELECT * FROM probe_t WHERE s <> 'b') x JOIN build_t ON x.dk <=> build_t.dk
+GROUP BY x.dk ORDER BY x.dk;
+DROP DATABASE db_${uuid0};

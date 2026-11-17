@@ -20,7 +20,6 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.lang.reflect.RecordComponent;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
@@ -1374,7 +1373,15 @@ public class UDFHelper {
             if (constructor == null) {
                 throw new ExceptionInInitializerError("no compatible java.nio.DirectByteBuffer constructor");
             }
-            constructor.setAccessible(true);
+            try {
+                constructor.setAccessible(true);
+            } catch (RuntimeException e) {
+                // InaccessibleObjectException since JDK 9. Later calls only see "Could not initialize class",
+                // with this message as the cause, so name the fix here.
+                throw new ExceptionInInitializerError("Java UDAF merge needs "
+                        + "--add-opens=java.base/java.nio=ALL-UNNAMED in the BE JVM options (JAVA_OPTS in be.conf): "
+                        + e.getMessage());
+            }
             return new DirectByteBufferFactory(constructor, longCapacity);
         }
 
@@ -1498,35 +1505,14 @@ public class UDFHelper {
     // either the row level (parent NullableColumn) or the field level is honored
     // independently, mirroring StarRocks' StructColumn layout.
     //
-    // The canonical constructor is resolved once per record class via ClassValue
-    // (lock-free thread-local cache), so per-row construction is a single
-    // Constructor.newInstance call.
+    // Per-row record <-> per-field conversion goes through RecordCodec, which
+    // generates direct accessor / canonical-constructor calls once per record
+    // class (falling back to cached reflection if generation is not possible).
     //
     // STRUCT can appear at any position in the type tree (top-level, inside
     // ARRAY, inside MAP, inside another STRUCT). The BE builds a UdfTypeDesc tree
     // mirroring the SQL TypeDescriptor and passes it to the unified writeResult
     // entry point; the recursion happens entirely on the Java side from there.
-
-    private static final ClassValue<Constructor<?>> RECORD_CANONICAL_CTOR = new ClassValue<Constructor<?>>() {
-        @Override
-        protected Constructor<?> computeValue(Class<?> recordClass) {
-            if (!recordClass.isRecord()) {
-                throw new IllegalArgumentException("Class " + recordClass + " is not a record");
-            }
-            RecordComponent[] comps = recordClass.getRecordComponents();
-            Class<?>[] paramTypes = new Class<?>[comps.length];
-            for (int i = 0; i < comps.length; i++) {
-                paramTypes[i] = comps[i].getType();
-            }
-            try {
-                Constructor<?> ctor = recordClass.getDeclaredConstructor(paramTypes);
-                ctor.setAccessible(true);
-                return ctor;
-            } catch (NoSuchMethodException e) {
-                throw new RuntimeException("Canonical constructor not found for record " + recordClass, e);
-            }
-        }
-    };
 
     /**
      * Materialize a STRUCT input column into an array of record instances.
@@ -1545,25 +1531,8 @@ public class UDFHelper {
      */
     public static Object[] createBoxedStructArray(int numRows, ByteBuffer nullBuffer,
                                                   Class<?> recordClass, Object[] fieldArrays) {
-        Constructor<?> ctor = RECORD_CANONICAL_CTOR.get(recordClass);
-        Object[] out = (Object[]) Array.newInstance(recordClass, numRows);
         byte[] nulls = (nullBuffer != null) ? getNullData(nullBuffer, numRows) : null;
-        int numFields = fieldArrays.length;
-        Object[] args = new Object[numFields];
-        try {
-            for (int r = 0; r < numRows; r++) {
-                if (nulls != null && nulls[r] != 0) {
-                    continue;
-                }
-                for (int f = 0; f < numFields; f++) {
-                    args[f] = ((Object[]) fieldArrays[f])[r];
-                }
-                out[r] = ctor.newInstance(args);
-            }
-        } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
-            throw new RuntimeException("Failed to construct record " + recordClass.getName(), e);
-        }
-        return out;
+        return RecordCodec.of(recordClass).build(numRows, nulls, fieldArrays);
     }
 
     /**
@@ -1658,30 +1627,12 @@ public class UDFHelper {
             }
             return;
         }
-        RecordComponent[] comps = recordClass.getRecordComponents();
-        if (comps.length != numFields) {
-            throw new IllegalStateException("Record " + recordClass.getName() + " has " + comps.length
-                    + " components but STRUCT type has " + numFields + " fields");
-        }
-
         Object[][] perField = new Object[numFields][];
         for (int f = 0; f < numFields; f++) {
             Class<?> elemClass = clazzs.getOrDefault(desc.children[f].logicalType, Object.class);
             perField[f] = (Object[]) Array.newInstance(elemClass, numRows);
         }
-        try {
-            for (int r = 0; r < numRows; r++) {
-                Object rec = boxed[r];
-                if (rec == null) {
-                    continue;
-                }
-                for (int f = 0; f < numFields; f++) {
-                    perField[f][r] = comps[f].getAccessor().invoke(rec);
-                }
-            }
-        } catch (IllegalAccessException | InvocationTargetException e) {
-            throw new RuntimeException("Failed to access record components on " + recordClass.getName(), e);
-        }
+        RecordCodec.of(recordClass).drain(numRows, boxed, perField);
 
         for (int f = 0; f < numFields; f++) {
             writeResult(numRows, perField[f], fieldAddrs[f], desc.children[f]);

@@ -80,6 +80,18 @@ public class ErrorReason {
         return "ErrorReason{" + getErrorCodeString() + ", msg='" + msg + '\'' + '}';
     }
 
+    /**
+     * {@code reason}, the {@link #toString} of a reason, without the message, which can quote rows a task failed to
+     * load. Null if {@code reason} is of another form.
+     */
+    public static String withoutMessage(String reason) {
+        int msgStart = reason.indexOf(", msg='");
+        if (!reason.startsWith("ErrorReason{") || msgStart < 0) {
+            return null;
+        }
+        return reason.substring(0, msgStart) + "}";
+    }
+
     private String getErrorCodeString() {
         return code != null ? code.toString() : "errCode = " + errorCode;
     }

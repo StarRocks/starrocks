@@ -56,6 +56,7 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.CredentialMask;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.LogBuilder;
@@ -437,7 +438,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     // otherwise readers (admin RPCs, SHOW ROUTINE LOAD, processTimeoutTasks) stall for the
     // full RPC plus retries. Three phases:
     //   1. Snapshot brokerList/topic/state/configVersion under readLock.
-    //   2. Run convertCustomProperties (self-synchronized) and the brpc with no per-job lock.
+    //   2. Run convertCustomProperties (self-synchronized) and the brpc with no per-job lock,
+    //      routed through a usable compute resource (see resolveFetchComputeResource).
     //   3. Apply under writeLock, discarding the result if configVersion changed mid-flight.
     @Override
     protected void refreshPartitionsIfNeeded() throws StarRocksException {
@@ -468,7 +470,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         Exception fetchError = null;
         try {
             newPartitions = KafkaUtil.getAllKafkaPartitions(snapshot.brokerList, snapshot.topic,
-                    snapshotConvertedCustomProperties(), snapshot.computeResource);
+                    snapshotConvertedCustomProperties(), resolveFetchComputeResource(snapshot.computeResource));
         } catch (Exception e) {
             fetchError = e;
         }
@@ -963,7 +965,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         Map<String, String> maskedProperties = Maps.newHashMap();
         for (Map.Entry<String, String> entry : customProperties.entrySet()) {
             if (entry.getKey().contains("password") || entry.getKey().contains("secret")) {
-                maskedProperties.put(entry.getKey(), "******");
+                maskedProperties.put(entry.getKey(), CredentialMask.LONG);
             } else {
                 maskedProperties.put(entry.getKey(), entry.getValue());
             }

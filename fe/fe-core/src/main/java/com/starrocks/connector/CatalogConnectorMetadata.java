@@ -25,6 +25,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
@@ -274,6 +275,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     }
 
     @Override
+    public Map<String, Pair<Double, Double>> getPartitionSourceColumnRanges(Table table, TvrVersionRange version) {
+        return normal.getPartitionSourceColumnRanges(table, version);
+    }
+
+    @Override
     public Set<DeleteFile> getDeleteFiles(IcebergTable table, Long snapshotId, ScalarOperator predicate, FileContent content) {
         return normal.getDeleteFiles(table, snapshotId, predicate, content);
     }
@@ -286,6 +292,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     @Override
     public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
         normal.refreshTable(srDbName, table, partitionNames, onlyCachedPartitions);
+    }
+
+    @Override
+    public void invalidateTableForRead(String srDbName, Table table) {
+        normal.invalidateTableForRead(srDbName, table);
     }
 
     @Override

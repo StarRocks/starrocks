@@ -9,9 +9,12 @@ on:
     types:
       - opened
       - synchronize
+    # main only. pull_request_target always runs this file from main, but the
+    # job checks out the PR's base branch and runs the checker from there, and
+    # build-support/extract_and_diff_params.py does not exist on the release
+    # branches.
     branches:
       - main
-      - 'branch*'
     paths:
       - 'fe/fe-core/src/main/java/com/starrocks/common/Config.java'
       - 'fe/fe-core/src/main/java/com/starrocks/qe/SessionVariable.java'

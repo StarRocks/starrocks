@@ -2,6 +2,7 @@
 keywords: ['xiugai'] 
 displayed_sidebar: docs
 description: "ALTER LOAD changes the priority of a Broker Load job in QUEUEING or LOADING state."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER LOAD

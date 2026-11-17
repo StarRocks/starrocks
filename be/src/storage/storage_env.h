@@ -32,7 +32,7 @@ class LakePersistentIndexParallelCompactMgr;
 class LocationProvider;
 class ReplicationTxnManager;
 class TabletManager;
-class UpdateManager;
+class PrimaryKeyManager;
 } // namespace lake
 
 namespace spill {
@@ -51,7 +51,8 @@ struct StorageEnvOptions {
     MemTracker* update_mem_tracker = nullptr;
     int64_t process_mem_limit = 0;
     MemTracker* vector_index_mem_tracker = nullptr;
-    int64_t lake_metadata_cache_limit = 0;
+    int64_t lake_tablet_metadata_cache_limit = 0;
+    int64_t lake_segment_metadata_cache_limit = 0;
 };
 
 // Process-scoped storage resource owner. Keep business logic dependencies
@@ -78,7 +79,7 @@ public:
     VectorIndexCache* vector_index_cache() const { return _vector_index_cache.get(); }
     std::shared_ptr<lake::LocationProvider> lake_location_provider() const { return _lake_location_provider; }
     lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager.get(); }
-    lake::UpdateManager* lake_update_manager() const { return _lake_update_manager.get(); }
+    lake::PrimaryKeyManager* lake_primary_key_manager() const { return _lake_primary_key_manager.get(); }
     lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager.get(); }
     lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() const { return _parallel_compact_mgr.get(); }
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr; }
@@ -90,7 +91,7 @@ public:
 
 private:
     std::shared_ptr<lake::LocationProvider> _lake_location_provider;
-    std::unique_ptr<lake::UpdateManager> _lake_update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _lake_primary_key_manager;
     std::unique_ptr<lake::TabletManager> _lake_tablet_manager;
     std::unique_ptr<lake::ReplicationTxnManager> _lake_replication_txn_manager;
     std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;

@@ -14,11 +14,14 @@
 
 package com.starrocks.sql;
 
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.QueryRelation;
@@ -67,7 +70,8 @@ public class PrepareStmtPlanner {
 
     public static ExecPlan plan(ExecuteStmt executeStmt, StatementBase stmt, ConnectContext session) {
         try {
-            if (!(stmt instanceof QueryStatement)) {
+            // Explicit range execution overrides rerun eligibility checks before any cached plan reuse.
+            if (session.getSessionVariable().isRangeScanExecutionOverride() || !(stmt instanceof QueryStatement)) {
                 return StatementPlanner.plan(stmt, session);
             }
             QueryStatement queryStmt = (QueryStatement) stmt;
@@ -75,6 +79,16 @@ public class PrepareStmtPlanner {
                 return StatementPlanner.plan(stmt, session);
             }
             if (ResolvedAIFunctionDetector.contains(queryStmt)) {
+                return StatementPlanner.plan(stmt, session);
+            }
+            // get_query_profile() is authorized at analysis time against the literal query id; a cached plan would
+            // let a later EXECUTE rebind that parameter without the check (Authorizer#checkGetQueryProfileAccess).
+            if (Authorizer.containsGetQueryProfile(queryStmt)) {
+                return StatementPlanner.plan(stmt, session);
+            }
+            // GET_PRESIGNED_URL / GET_PRESIGNED_FILE check the storage volume privilege and snapshot its credentials
+            // at analysis time; a cached plan would skip the check and keep signing with stale credentials.
+            if (AnalyzerUtils.containsPresignedFunction(queryStmt)) {
                 return StatementPlanner.plan(stmt, session);
             }
 
@@ -132,6 +146,13 @@ public class PrepareStmtPlanner {
         QueryStatement queryStmt = (QueryStatement) stmt;
         if (!isRebindable(executeStmt, queryStmt, execPlan)) {
             // reset, not just skip: the needReAnalyze() call site arrives holding a plan built against the old schema
+            prepareStmtContext.reset();
+            return execPlan;
+        }
+        // isRebindable guarantees the physical plan root is an olap scan
+        OlapTable plannedTable = (OlapTable) ((PhysicalOlapScanOperator) execPlan.getPhysicalPlan().getOp()).getTable();
+        if (prepareStmtContext.isPlannedOnLiveTable(queryStmt, session, plannedTable)) {
+            rejectCaching(executeStmt, "the plan scans the live table");
             prepareStmtContext.reset();
             return execPlan;
         }

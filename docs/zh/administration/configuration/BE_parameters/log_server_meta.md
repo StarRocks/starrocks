@@ -4,6 +4,7 @@ displayed_sidebar: docs
 description: "BE configuration parameters for logging, server settings, and metadata management."
 sidebar_label: "日志、服务器和元数据"
 keywords: ['Canshu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -99,7 +100,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：String
 - 单位：-
 - 是否动态：是（自 v3.3.0、v3.2.7 及 v3.1.12 起）
-- 描述：日志级别。有效值：INFO、WARNING、ERROR、FATAL。启动时，若配置文件中的取值不是上述取值之一，BE 会在日志中报告该值并改用 INFO，因此无效取值不会导致日志功能不可用。运行时设置无效取值则会被拒绝并返回错误，当前生效的级别保持不变。自 v3.3.0、v3.2.7 及 v3.1.12 起，该参数变为动态参数。
+- 描述：日志级别。有效值：INFO、WARNING、ERROR、FATAL。启动时，若配置文件中的取值不是上述取值之一，BE 会在日志中报告该值并改用 INFO，因此无效取值不会导致日志功能不可用。运行时设置无效取值则会被拒绝并返回错误，当前生效的级别保持不变。自 v3.3.0、v3.2.7 及 v3.1.12 起，该参数变为动态参数。但仅在 v3.1.12 至 v3.1.13、v3.2.7 至 v3.2.8、v3.3.0，以及自 v4.0.16 和 v4.1.6 起的版本中，运行时修改该参数才会改变当前生效的日志级别。在其他版本中，该参数可以在运行时修改，但当前生效的日志级别不会改变。
 - 引入版本：-
 
 ### sys_log_roll_mode
@@ -242,6 +243,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：否
 - 描述：bRPC 渠道的连接模式。`single`（默认）每个渠道复用一条长连接；`pooled` 为每端点维护连接池以提升并发（增加 FD 占用）；`short` 为短连接，每次 RPC 建连以减少持久连接但会提高延迟和建连开销。
 - 引入版本：v3.2.5
+
+### brpc_failed_channel_reset_interval_s
+
+- 默认值：10
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：BE 检查缓存的 bRPC stub 并重置连接已失败的 stub 的时间间隔。bRPC 会每隔几秒对已失败的连接进行健康检查，直到该连接被释放。如果目标地址不可达（例如 Kubernetes 中重启后的 BE Pod 的旧 IP 地址），每次检查都会打印 `Fail to wait EPOLLOUT` 日志。重置 stub 会释放已失败的连接，stub 在下一次 RPC 时建立新连接。小于或等于 `0` 的值表示关闭该检查。
+- 引入版本：-
 
 ### brpc_max_body_size
 
@@ -396,13 +406,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：该项设置为 `true` 时，BE 会启动一个后台线程（`jemalloc_tracker_daemon`），该线程以每秒一次的频率轮询 Jemalloc 统计信息，并将 Jemalloc 的 "stats.metadata" 值更新到 RuntimeEnv 的 Jemalloc 元数据 MemTracker 中。这可确保 Jemalloc 元数据的消耗被计入 StarRocks 进程的内存统计，防止低报 Jemalloc 内部使用的内存。该 Tracker 仅在非 macOS 构建上编译/启动（#ifndef __APPLE__），并以名为 "jemalloc_tracker_daemon" 的守护线程运行。仅在未使用 Jemalloc 或者 Jemalloc 跟踪被有意以不同方式管理时才禁用，否则请保持启用以维护准确的内存计量和分配保护。
 - 引入版本：v3.2.12
 
+### enable_jvm_memory_tracker
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否将 JVM 使用的内存计入 BE 的内存上限（`mem_limit`）。JVM 的堆内存和非堆内存（例如 Metaspace 和代码缓存）由 JVM 自行映射，不经过 BE 的内存分配器，因此默认不会被计入。该参数为 `true` 时，BE 在每次采集 JVM 指标时（当 `enable_metric_calculator` 为 `true` 时每 15 秒一次），将 `process` Tracker 下的 `jvm` 内存 Tracker 设置为 JVM 已提交的堆内存与非堆内存之和。`jvm` Tracker 会显示在 `/mem_tracker` 页面上。将该参数改为 `false` 后，下一次采集会将 `jvm` Tracker 重置为 0。该参数仅在 `enable_jvm_metrics` 为 `true` 时生效。在 BE 进程中创建 JVM 之前，`jvm` Tracker 的值为 0。
+- 引入版本：-
+
 ### enable_jvm_metrics
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：是否初始化并注册 JVM 相关指标（heap、GC、线程等）。这是预留的兼容开关，未来可能移除；系统级指标由 `enable_system_metrics` 控制。
+- 描述：是否在 BE 上采集 JVM 内存指标。指标包括堆内存和非堆内存的 `jvm_heap_size_bytes`、`jvm_non_heap_size_bytes`，以及各内存池的 `jvm_young_size_bytes`、`jvm_survivor_size_bytes`、`jvm_old_size_bytes` 和 `jvm_perm_size_bytes`（Metaspace）。每个指标的 `type` 标签取值为 `used`、`committed`、`max`、`peak_used` 或 `peak_max`。开启该参数不会启动 JVM。只有当 HDFS 访问、基于 JNI 的读取器、Java UDF 等使用 Java 的功能在 BE 进程中创建了 JVM 之后，BE 才开始采集这些指标，在此之前指标值为 0。当 `enable_metric_calculator` 为 `true` 时，指标每 15 秒刷新一次。当 `enable_jvm_memory_tracker` 为 `true` 时，每次刷新还会将 JVM 的内存计入 BE 的内存上限，详见 `enable_jvm_memory_tracker`。如果未设置 `JAVA_HOME`，则不会注册这些指标。`max` 或 `peak_max` 为 -1 表示该内存池没有定义上限。在默认的 G1 垃圾回收器下，`jvm_young_size_bytes` 和 `jvm_survivor_size_bytes`（Eden 区和 Survivor 区）属于这种情况；未设置 `MaxMetaspaceSize` 时，`jvm_perm_size_bytes`（Metaspace）也是如此。内存池指标仅在使用 Serial、Parallel 和 G1 垃圾回收器时有值。系统级指标由 `enable_system_metrics` 控制。
 - 引入版本：v4.0.0
 
 ### get_pindex_worker_count
@@ -437,9 +456,9 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：`percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false`
 - 类型：string
 - 单位：-
-- 是否动态：是（仅部分选项）
+- 是否动态：是（仅部分选项；自 v4.0.16 和 v4.1.6 起。v4.1.3 和 v4.1.4 中为否）
 - 描述：BE 以普通模式启动时，由 `bin/start_backend.sh` 导出为 `JEMALLOC_CONF` 环境变量的 jemalloc 运行时选项。如果环境中已经设置了 `JEMALLOC_CONF`，或者 BE 以 `--jemalloc_debug`、`--check_mem_leak` 方式启动（这两种模式会强制使用各自的选项），则该配置项不生效。由于 jemalloc 在 BE 解析配置之前就已经读取了 `JEMALLOC_CONF`，运行时修改该配置项只会重新应用 jemalloc 本身允许在初始化之后修改的选项，即 `dirty_decay_ms`、`muzzy_decay_ms` 和 `prof_active`。新增、删除或修改其他任何选项都会报错并回滚配置值，这些选项只能通过重启 BE 生效。只有 BE 启动时带 `prof:true` 才能修改 `prof_active`。将 `dirty_decay_ms` 或 `muzzy_decay_ms` 设置为 `0` 会同步清理所有未使用的页面，本次修改可能因此耗时较长；设置为 `-1` 表示禁用清理。
-- 引入版本：v4.0.15, v4.1.3
+- 引入版本：v4.0.16, v4.1.3
 
 ### large_memory_alloc_report_threshold
 
@@ -474,7 +493,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100G"）。默认的硬限制为服务器内存大小的 90%，软限制为 80%。如果您希望在同一台服务器上同时部署 StarRocks 和其他内存密集型服务，则需要配置此参数。
+- 描述：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100G"）。默认值为服务器内存大小的 90%。BE 使用 `mem_limit` 的 90% 作为进程内存 Tracker 的上限，默认即服务器内存大小的 81%。如果您希望在同一台服务器上同时部署 StarRocks 和其他内存密集型服务，则需要配置此参数。
 - 引入版本：-
 
 ### memory_max_alignment
@@ -488,11 +507,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### num_cores
 
-- 默认值：-1
+- 默认值：0
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：逻辑 CPU 核心数上限。-1 表示使用机器实际核心数；可用于在多租场景下限制 BE 可用核心数。
+- 描述：逻辑 CPU 核心数上限。0 表示使用机器实际核心数；可用于在多租场景下限制 BE 可用核心数。
 - 引入版本：-
 ### memory_urgent_level
 
@@ -500,7 +519,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：long
 - 单位：百分比 (0-100)
 - 是否动态：是
-- 描述：紧急内存水位，以进程内存限制的百分比表示。当进程内存消耗超过 `(limit * memory_urgent_level / 100)` 时，BE 会触发立即的内存回收，强制缩减 data cache、驱逐 update cache，并将 persistent/lake 的 MemTable 视为“已满”，以便尽快刷写/压缩。代码校验此设置必须大于 `memory_high_level`，且 `memory_high_level` 必须大于或等于 `1` 且小于或等于 `100`。较低的值会导致更激进、更早的回收（即更频繁的缓存驱逐和刷写）；较高的值会延迟回收，如果接近 100 则有 OOM 风险。请与 `memory_high_level` 及 Data Cache 相关的自动调整设置一起调优。
+- 描述：紧急内存水位，以进程内存限制的百分比表示。当进程内存消耗超过 `(limit * memory_urgent_level / 100)` 时，BE 会触发立即的内存回收，强制缩减 data cache 和存算分离的元数据缓存、驱逐 update cache，并将 persistent/lake 的 MemTable 视为“已满”，以便尽快刷写/压缩。代码校验此设置必须大于 `memory_high_level`，且 `memory_high_level` 必须大于或等于 `1` 且小于或等于 `100`。较低的值会导致更激进、更早的回收（即更频繁的缓存驱逐和刷写）；较高的值会延迟回收，如果接近 100 则有 OOM 风险。请与 `memory_high_level` 及 Data Cache 相关的自动调整设置一起调优。
 - 引入版本：v3.2.0
 
 ### net_use_ipv6_when_priority_networks_empty
@@ -572,7 +591,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：毫秒
 - 是否动态：是
-- 描述：Thrift Client 默认的重试时间间隔。
+- 描述：BE Thrift RPC 的基础重试间隔。客户端采用带随机抖动的指数退避：每次重试前，从 0 到 `min(1000, base * 2^retry_index)` 毫秒之间均匀随机选择等待时长。`base` 为该配置值限制在 [0, 1000] 范围内后的结果，`retry_index` 从 0 开始计数。每次 RPC 仅在开始时读取一次配置，执行期间不受配置变更影响。设置为 0 或负数时不等待。最后一次尝试失败后也不再等待。
 - 引入版本：-
 
 ### thrift_connect_timeout_seconds

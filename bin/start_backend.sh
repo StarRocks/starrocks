@@ -143,6 +143,18 @@ fi
 
 # Appending the option to avoid "process heaper" stack overflow exceptions.
 final_java_opt="$final_java_opt -Djdk.lang.processReaperUseDefaultStackSize=true"
+
+# JDK 18+ (JEP 411) rejects System.setSecurityManager unless the JVM is started with
+# -Djava.security.manager=allow, which UDFClassLoader needs when java.security.policy is
+# set. JDK 24+ (JEP 486) rejects every value other than 'disallow' and the JVM will not
+# start at all, so only [18,24) gets the flag. Whatever JAVA_OPTS already sets wins,
+# including a deliberate -Djava.security.manager=disallow.
+if [[ "${java_version:-0}" -ge 18 && "${java_version:-0}" -lt 24 ]]; then
+    if [[ "$final_java_opt" != *"-Djava.security.manager="* ]]; then
+        final_java_opt="$final_java_opt -Djava.security.manager=allow"
+    fi
+fi
+
 export LIBHDFS_OPTS=$final_java_opt
 # Prevent JVM from handling any internally or externally generated signals.
 # Otherwise, JVM will overwrite the signal handlers for SIGINT and SIGTERM.

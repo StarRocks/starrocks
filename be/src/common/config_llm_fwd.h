@@ -29,6 +29,9 @@ CONF_mInt64(ai_function_connect_timeout_ms, "10000");
 
 CONF_mInt64(ai_function_max_response_bytes, "8388608");
 
+// Maximum raw inline FILE bytes before copying into the AI payload or encoding. Must be positive.
+CONF_mInt64(ai_function_max_input_file_bytes, "10485760");
+
 CONF_mInt32(ai_function_worker_thread_num, "16");
 
 CONF_mInt32(ai_function_sub_chunk_size, "64");
@@ -44,12 +47,5 @@ CONF_mInt32(ai_function_rate_limit_qps_chat, "128");
 CONF_mInt32(ai_function_rate_limit_qps_embedding, "128");
 
 CONF_mInt32(ai_function_max_inflight, "512");
-
-// Legacy ai_query runtime configuration. It is intentionally independent from the AI function runtime.
-CONF_Int32(llm_max_queue_size, "4096");
-
-CONF_Int32(llm_max_concurrent_queries, "8");
-
-CONF_Int32(llm_cache_size, "131072");
 
 } // namespace starrocks::config

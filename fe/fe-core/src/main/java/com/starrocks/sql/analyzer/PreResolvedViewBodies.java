@@ -20,6 +20,7 @@ import com.starrocks.sql.ast.QueryStatement;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -72,6 +73,23 @@ public class PreResolvedViewBodies {
         }
         entries.pollFirst();
         return entry.body();
+    }
+
+    /**
+     * The bodies pre-resolved for this view, left in place for expansion to take; empty when there are none or the
+     * view changed since. For looking at what the pre-pass resolved inside a view before the lock is taken.
+     */
+    public List<QueryStatement> peek(View view) {
+        Deque<Entry> entries = byViewId.get(view.getId());
+        if (entries == null || entries.isEmpty()) {
+            return List.of();
+        }
+        Entry entry = entries.peekFirst();
+        if (entry.sqlMode() != view.getSqlMode()
+                || !Objects.equals(entry.inlineViewDef(), view.getInlineViewDef())) {
+            return List.of();
+        }
+        return entries.stream().map(Entry::body).toList();
     }
 
     public boolean isEmpty() {

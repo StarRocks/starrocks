@@ -56,13 +56,30 @@ public:
     virtual void terminate_and_wait() {}
     virtual void touch() {}
     virtual bool expired() { return false; }
+
+    // A worker is in use while a call stub is connected to it, and an idle worker that is in use
+    // must not be expired. The idle time counts from when the last stub disconnects.
+    void add_client() { _num_clients.fetch_add(1); }
+    void remove_client() {
+        touch();
+        _num_clients.fetch_sub(1);
+    }
+    int num_clients() const { return _num_clients.load(); }
+
+private:
+    std::atomic<int> _num_clients{0};
 };
 
 // A local Python worker process: PyWorkerManager spawns it, owns its Unix socket, pools it, and
 // reaps it when it dies or expires.
 class LocalPyWorker final : public PyWorker {
 public:
-    explicit LocalPyWorker(pid_t pid) : _pid(pid) {}
+    // sock_path is the worker's unix socket, chosen by PyWorkerManager before the spawn and
+    // kept independent of the pid, so it stays valid even when the worker is not the BE's
+    // direct child. own_pgroup says the child leads its own process group (pgid == pid),
+    // which lets terminate() group-kill and reap its descendants as well.
+    LocalPyWorker(pid_t pid, std::string sock_path, bool own_pgroup)
+            : _sock_path(std::move(sock_path)), _pid(pid), _own_pgroup(own_pgroup) {}
     ~LocalPyWorker() override { terminate_and_wait(); }
 
     void terminate();
@@ -70,8 +87,10 @@ public:
     void terminate_and_wait() override {
         lock_free_call_once(_once, [this]() {
             terminate();
-            remove_unix_socket();
+            // Reap the process (whole group) BEFORE unlinking the socket, so the
+            // path is never removed while a worker is still using it.
             wait();
+            remove_unix_socket();
         });
     }
     void remove_unix_socket();
@@ -80,6 +99,7 @@ public:
     void set_url(std::string url) { _url = std::move(url); }
 
     void touch() override { _last_touch_time = MonotonicSeconds(); }
+    // Unused and idle for longer than python_worker_expire_time_sec.
     bool expired() override;
 
     void mark_dead() override { _is_dead = true; }
@@ -89,8 +109,10 @@ private:
     std::atomic<bool> _once{};
     bool _is_dead{};
     std::string _url;
+    std::string _sock_path;
     pid_t _pid = -1;
-    int64_t _last_touch_time = 0;
+    bool _own_pgroup = false;
+    std::atomic<int64_t> _last_touch_time{0};
 };
 
 // A connection to an external, user-run Arrow Flight worker service (the CREATE FUNCTION
@@ -113,6 +135,29 @@ class PyWorkerManager {
 public:
     using WorkerClientPtr = std::shared_ptr<ArrowFlightWithRW>;
 
+    // How a worker process is launched: the program to exec, its argv, and its whole
+    // environment (an empty envp means an empty environment).
+    struct LaunchSpec {
+        std::string exe;
+        std::vector<std::string> argv;
+        std::vector<std::string> envp;
+    };
+
+    // What a launcher builds a LaunchSpec from. The socket the worker binds is already
+    // chosen and travels in argv, so a launcher may put a wrapper process between the BE
+    // and the worker without breaking the socket handshake.
+    struct LaunchRequest {
+        std::string python_path; // the interpreter to run (its bin/python3)
+        std::string script;      // flight_server.py
+        std::string socket_url;  // grpc+unix:// location the worker binds
+        std::string python_home; // PYTHONHOME for the interpreter
+    };
+
+    // Launches a worker in place of the plain interpreter, for instance inside a sandbox.
+    // Installed at static-init time, before any worker is spawned; null by default.
+    using LaunchHook = StatusOr<LaunchSpec> (*)(const LaunchRequest&);
+    static void set_launch_hook(LaunchHook hook);
+
     static PyWorkerManager& getInstance() {
         static PyWorkerManager instance;
         return instance;
@@ -120,11 +165,8 @@ public:
 
     StatusOr<WorkerClientPtr> get_client(const PyFunctionDescriptor& func_desc);
 
-    static std::string unix_socket(pid_t pid);
-
-    static std::string unix_socket_prefix();
-
-    static std::string unix_socket_path(pid_t pid);
+    // Directory that holds the worker unix sockets (created 0700 on first use).
+    static std::string socket_dir();
 
     static std::string bootstrap() {
         const char* server_main = "flight_server.py";
@@ -134,6 +176,12 @@ public:
     void cleanup_expired_worker();
 
 private:
+    // Ensure socket_dir() exists and is restricted to the BE user (0700).
+    static Status ensure_socket_dir();
+    // A fresh, collision-free unix socket path under socket_dir(). Independent
+    // of pid so BE and worker agree on the name without deriving it from one.
+    static std::string new_socket_path();
+
     Status _fork_py_worker(std::unique_ptr<LocalPyWorker>* child_process);
     StatusOr<std::shared_ptr<PyWorker>> _acquire_worker(int32_t driver_id, size_t reusable, std::string* url);
 

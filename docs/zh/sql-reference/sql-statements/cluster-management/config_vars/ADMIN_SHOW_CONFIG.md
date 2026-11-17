@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN SHOW CONFIG 显示当前集群的 FE 配置项信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SHOW CONFIG
@@ -37,6 +38,8 @@ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"]
 5. IsMutable   是否可以通过 ADMIN SET CONFIG 命令动态设置
 6. Comment     配置项说明
 ```
+
+对于密码、密钥、token 等凭证类配置项，`Value` 不显示实际取值：已设置时显示为 `******`，未设置时为空。打码只影响展示，FE 仍使用实际取值。
 
 ## 示例
 

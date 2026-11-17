@@ -22,7 +22,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.qe.ConnectContext;
@@ -41,7 +40,6 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TUserIdentity;
-import com.starrocks.thrift.TUserRoles;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.NotImplementedException;
@@ -50,7 +48,6 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
 import org.apache.thrift.meta_data.FieldValueMetaData;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -144,12 +141,7 @@ public class TaskRunsSystemTable extends SystemTable {
         }
 
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
-        TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
-        if (context.getCurrentRoleIds() != null) {
-            TUserRoles userRoles = new TUserRoles();
-            userRoles.setRole_id_list(new ArrayList<>(context.getCurrentRoleIds()));
-            userIdentity.setCurrent_role_ids(userRoles);
-        }
+        TUserIdentity userIdentity = UserIdentityUtils.callerToThrift(context);
         params.setCurrent_user_ident(userIdentity);
         // Evaluate result
         TGetTaskRunInfoResult info = query(params);
@@ -206,7 +198,7 @@ public class TaskRunsSystemTable extends SystemTable {
             info.setState(status.getState().toString());
             info.setCatalog(status.getCatalogName());
             info.setWarehouse(status.getWarehouseName());
-            info.setDatabase(ClusterNamespace.getNameFromFullName(status.getDbName()));
+            info.setDatabase(status.getDbName());
             if (!Strings.isEmpty(status.getDefinition())) {
                 if (Config.enable_task_info_mask_credential) {
                     info.setDefinition(SqlCredentialRedactor.redact(status.getDefinition()));

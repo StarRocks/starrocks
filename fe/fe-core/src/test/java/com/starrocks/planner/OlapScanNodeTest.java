@@ -155,4 +155,15 @@ public class OlapScanNodeTest {
         Assertions.assertNotNull(msg.lake_scan_node);
         Assertions.assertFalse(msg.lake_scan_node.isSetUse_prepared_physical_split_scan());
     }
+
+    @Test
+    public void testBucketNumsOfAPartitionDroppedAfterPlanning() {
+        // Planning selected one partition; a TTL or dynamic-partition drop removed it before scheduling
+        // asked for the bucket count.
+        OlapScanNode scanNode = createOlapScanNode(Table.TableType.OLAP);
+        scanNode.setSelectedPartitionIds(Collections.singletonList(PHYSICAL_PARTITION_ID));
+
+        IllegalStateException e = Assertions.assertThrows(IllegalStateException.class, scanNode::getBucketNums);
+        Assertions.assertTrue(e.getMessage().contains("dropped after the query was planned"), e.getMessage());
+    }
 }

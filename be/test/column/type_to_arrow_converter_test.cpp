@@ -18,13 +18,14 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks {
 
 TEST(TypeToArrowConverterTest, MapsScalarAndNestedTypes) {
     std::shared_ptr<arrow::DataType> type;
 
-    ASSERT_OK(convert_to_arrow_type(TypeDescriptor(TYPE_INT), &type));
+    ASSERT_OK(convert_to_arrow_type(TYPE_INT_DESC, &type));
     EXPECT_EQ(arrow::Type::INT32, type->id());
 
     auto decimal = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 20, 4);
@@ -34,21 +35,19 @@ TEST(TypeToArrowConverterTest, MapsScalarAndNestedTypes) {
     EXPECT_EQ(20, decimal_type->precision());
     EXPECT_EQ(4, decimal_type->scale());
 
-    auto array = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT));
-    ASSERT_OK(convert_to_arrow_type(array, &type));
+    ASSERT_OK(convert_to_arrow_type(TYPE_ARRAY_BIGINT_DESC, &type));
     ASSERT_EQ(arrow::Type::LIST, type->id());
     auto list_type = std::static_pointer_cast<arrow::ListType>(type);
     EXPECT_EQ(arrow::Type::INT64, list_type->value_type()->id());
 
-    auto map = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_DOUBLE));
+    auto map = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_DOUBLE_DESC);
     ASSERT_OK(convert_to_arrow_type(map, &type));
     ASSERT_EQ(arrow::Type::MAP, type->id());
     auto map_type = std::static_pointer_cast<arrow::MapType>(type);
     EXPECT_EQ(arrow::Type::STRING, map_type->key_type()->id());
     EXPECT_EQ(arrow::Type::DOUBLE, map_type->item_type()->id());
 
-    auto structure =
-            TypeDescriptor::create_struct_type({"k", "v"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_JSON)});
+    auto structure = TypeDescriptor::create_struct_type({"k", "v"}, {TYPE_INT_DESC, TypeDescriptor(TYPE_JSON)});
     ASSERT_OK(convert_to_arrow_type(structure, &type));
     ASSERT_EQ(arrow::Type::STRUCT, type->id());
     auto struct_type = std::static_pointer_cast<arrow::StructType>(type);
@@ -62,10 +61,10 @@ TEST(TypeToArrowConverterTest, MapsScalarAndNestedTypes) {
 TEST(TypeToArrowConverterTest, MapsFlightSqlSpecialTypes) {
     std::shared_ptr<arrow::DataType> type;
 
-    ASSERT_OK(convert_to_arrow_type_for_flight_sql(TypeDescriptor(TYPE_DATE), &type));
+    ASSERT_OK(convert_to_arrow_type_for_flight_sql(TYPE_DATE_DESC, &type));
     EXPECT_EQ(arrow::Type::DATE32, type->id());
 
-    ASSERT_OK(convert_to_arrow_type_for_flight_sql(TypeDescriptor(TYPE_DATETIME), &type));
+    ASSERT_OK(convert_to_arrow_type_for_flight_sql(TYPE_DATETIME_DESC, &type));
     ASSERT_EQ(arrow::Type::TIMESTAMP, type->id());
     auto timestamp_type = std::static_pointer_cast<arrow::TimestampType>(type);
     EXPECT_EQ(arrow::TimeUnit::MICRO, timestamp_type->unit());
@@ -81,7 +80,8 @@ TEST(TypeToArrowConverterTest, MapsFlightSqlSpecialTypes) {
 TEST(TypeToArrowConverterTest, RejectsInvalidStructShape) {
     TypeDescriptor type(TYPE_STRUCT);
     type.field_names = {"only_name"};
-    type.children = {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_BIGINT)};
+    type.children.emplace_back(TYPE_INT);
+    type.children.emplace_back(TYPE_BIGINT);
 
     std::shared_ptr<arrow::DataType> arrow_type;
     EXPECT_FALSE(convert_to_arrow_type(type, &arrow_type).ok());

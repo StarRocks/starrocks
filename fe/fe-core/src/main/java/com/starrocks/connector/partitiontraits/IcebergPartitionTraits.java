@@ -22,6 +22,7 @@ import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
@@ -33,6 +34,7 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.type.Type;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SnapshotSummary;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -71,18 +73,18 @@ public class IcebergPartitionTraits extends DefaultTraits {
                 getPartitions(icebergTable.getCatalogName(), table, partitionNames);
     }
 
-    // record_count from the PARTITIONS table is pre-delete (live data-file rows), while a MOR read returns
-    // post-delete rows. For POSITION deletes (exactly one row removed per record) a small delete fraction
-    // keeps record_count a trustworthy live-row total; above this fraction the difference can no longer be
-    // attributed to truncation vs. deletes, so the partition falls back to raw sample. EQUALITY deletes are
-    // handled separately: their record count is not a row count, so the ratio is meaningless there.
-    private static final double MAX_DELETE_RATIO_FOR_ROW_COUNT = 0.1;
-
     @Override
     public Map<String, Long> getPartitionRowCounts(List<String> partitionNames) {
         // The Iceberg PARTITIONS metadata table carries per-partition row/delete counts, so one metadata scan
         // yields all totals without opening data files (see IcebergCatalog#getPartitions).
         Map<String, Long> result = new HashMap<>();
+        // An equality delete written under an unpartitioned spec applies to every partition but is counted under
+        // the unpartitioned entry only, so a partition's own counts cannot rule it out: give up on the whole table
+        // when the snapshot read reports equality deletes. A snapshot without the counter falls back to the
+        // per-partition check below.
+        if (snapshotHasEqualityDeletes(readSnapshot())) {
+            return result;
+        }
         List<PartitionInfo> partitions = getPartitions(partitionNames);
         for (int i = 0; i < partitionNames.size() && i < partitions.size(); i++) {
             PartitionInfo info = partitions.get(i);
@@ -99,18 +101,35 @@ public class IcebergPartitionTraits extends DefaultTraits {
         return result;
     }
 
-    // Package-private for unit testing. Returns a trustworthy live-row total for extrapolation, or -1 when it
-    // should not be trusted, in which case the caller stores the raw sample instead.
+    private Snapshot readSnapshot() {
+        Optional<Long> snapshotId = readVersionRange().end();
+        return snapshotId.map(id -> ((IcebergTable) table).getNativeTable().snapshot(id)).orElse(null);
+    }
+
+    // Package-private for unit testing. True only when the snapshot summary reports equality deletes; a missing
+    // snapshot or counter proves nothing either way, so it does not block extrapolation.
+    static boolean snapshotHasEqualityDeletes(Snapshot snapshot) {
+        if (snapshot == null || snapshot.summary() == null) {
+            return false;
+        }
+        String count = snapshot.summary().get(SnapshotSummary.TOTAL_EQ_DELETES_PROP);
+        return count != null && !count.equals("0");
+    }
+
+    // Package-private for unit testing. Returns a lower bound of the live-row total for extrapolation, or -1
+    // when no bound can be derived, in which case the caller stores the raw sample instead.
+    //
+    // record_count from the PARTITIONS table is pre-delete, while a MOR read returns post-delete rows. Each
+    // position delete removes at most one row (a dangling delete, e.g. left behind by compaction, removes
+    // none), so record_count - position_delete_record_count never exceeds the live total, whatever the delete
+    // ratio. Extrapolation only scales a truncated sample up to this total and never above the sample itself,
+    // so a lower bound cannot inflate statistics: an untruncated sample (already >= the bound) is kept as-is,
+    // and a truncated one is raised towards the real total.
     //
     // Returns -1 when:
     //  - record_count is unknown; or
     //  - any equality deletes are present: equality_delete_record_count counts delete predicates, not rows
-    //    removed - one predicate can match many rows - so it yields neither a trustworthy live total nor a
-    //    trustworthy ratio (a tiny count can still hide a huge deletion). No exact live total is available
-    //    cheaply from metadata, so we bail; or
-    //  - position deletes exceed MAX_DELETE_RATIO_FOR_ROW_COUNT of record_count.
-    //
-    // Otherwise position deletes (exactly one row each) are subtracted to give the live-row total.
+    //    removed - one predicate can match many rows - so record_count minus deletes is not a lower bound.
     static long liveRowCountForExtrapolation(long recordCount, long positionDeleteRecordCount,
                                              long equalityDeleteRecordCount) {
         if (recordCount <= 0) {
@@ -120,10 +139,6 @@ public class IcebergPartitionTraits extends DefaultTraits {
             return -1;
         }
         long posDelete = Math.max(0, positionDeleteRecordCount);
-        double deleteRatio = (double) posDelete / recordCount;
-        if (deleteRatio > MAX_DELETE_RATIO_FOR_ROW_COUNT) {
-            return -1;
-        }
         return Math.max(1, recordCount - posDelete);
     }
 
@@ -139,18 +154,30 @@ public class IcebergPartitionTraits extends DefaultTraits {
             return Lists.newArrayList(table.getName());
         }
 
-        IcebergTable icebergTable = (IcebergTable) table;
         ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
         requestContext.setQueryMVRewrite(isQueryMVRewrite());
-        if (pinnedVersionRange != null) {
-            requestContext.setTableVersionRange(pinnedVersionRange);
-        } else {
-            Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
-                    .map(Snapshot::snapshotId);
-            requestContext.setTableVersionRange(TvrTableSnapshot.of(snapshotId));
-        }
+        requestContext.setTableVersionRange(readVersionRange());
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                 table.getCatalogName(), getCatalogDBName(), getTableName(), requestContext);
+    }
+
+    /** The pinned range, else the snapshot this table object is at: an unpinned read follows the object. */
+    private TvrVersionRange readVersionRange() {
+        if (pinnedVersionRange != null) {
+            return pinnedVersionRange;
+        }
+        Optional<Long> snapshotId = Optional.ofNullable(((IcebergTable) table).getNativeTable().currentSnapshot())
+                .map(Snapshot::snapshotId);
+        return TvrTableSnapshot.of(snapshotId);
+    }
+
+    /**
+     * Two equal Iceberg tables can sit at different snapshots: the refresh re-resolves the live table under its
+     * lock, which may be newer than the one prefetched. Key on the snapshot actually read.
+     */
+    @Override
+    protected Object partitionInfoSnapshot() {
+        return readVersionRange();
     }
 
     @Override

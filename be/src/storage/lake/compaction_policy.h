@@ -43,16 +43,27 @@ public:
 
     static StatusOr<CompactionPolicyPtr> create(TabletManager* tablet_mgr,
                                                 std::shared_ptr<const TabletMetadataPB> tablet_metadata,
-                                                bool force_base_compaction, bool is_unshare = false);
+                                                bool force_base_compaction, bool is_unshare = false,
+                                                bool allow_base_compaction = true);
+
+    // Whether a compaction asked for with `is_unshare` runs as UNSHARE on this tablet. ALTER TABLE ... COMPACT asks
+    // every tablet of a range primary-key partition for UNSHARE together with a forced base compaction, and a tablet
+    // that holds nothing an UNSHARE would rewrite runs that manual compaction instead. A split's own UNSHARE does not
+    // force a base compaction and always runs as UNSHARE.
+    static StatusOr<bool> runs_as_unshare(const TabletMetadataPB& metadata, bool is_unshare,
+                                          bool force_base_compaction);
+
+    bool picked_base_compaction() const { return _picked_base_compaction; }
 
     static bool is_real_time_compaction_strategy(const std::shared_ptr<const TabletMetadataPB>& metadata);
 
 protected:
     explicit CompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata,
-                              bool force_base_compaction)
+                              bool force_base_compaction, bool allow_base_compaction = true)
             : _tablet_mgr(tablet_mgr),
               _tablet_metadata(std::move(tablet_metadata)),
-              _force_base_compaction(force_base_compaction) {
+              _force_base_compaction(force_base_compaction),
+              _request_allows_base_compaction(allow_base_compaction) {
         CHECK(_tablet_mgr != nullptr) << "tablet_mgr is null";
         CHECK(_tablet_metadata != nullptr) << "tablet metadata is null";
     }
@@ -60,6 +71,10 @@ protected:
     TabletManager* _tablet_mgr;
     std::shared_ptr<const TabletMetadataPB> _tablet_metadata;
     bool _force_base_compaction;
+    bool _request_allows_base_compaction;
+    bool _picked_base_compaction = false;
+
+    bool base_compaction_allowed() const;
 };
 
 double compaction_score(TabletManager* tablet_mgr, const std::shared_ptr<const TabletMetadataPB>& metadata);

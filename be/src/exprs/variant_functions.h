@@ -53,6 +53,13 @@ public:
      */
     DEFINE_VECTORIZED_FN(variant_typeof);
 
+    /**
+     * @param: [variant]
+     * @paramType: [VariantColumn]
+     * @return: BooleanColumn, true only for a VARIANT null; false for other values and for SQL NULL
+     */
+    DEFINE_VECTORIZED_FN(is_variant_null);
+
     // Preload the variant segments if necessary.
     // This function is called once per query execution
     // The scope indicates whether the state is shared across the plan fragment

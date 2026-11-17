@@ -34,12 +34,6 @@
 namespace starrocks {
 
 template <typename T>
-StatusOr<MutableColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
-    RETURN_IF_ERROR(capacity_limit_reached());
-    return nullptr;
-}
-
-template <typename T>
 void FixedLengthColumnBase<T>::append(const Column& src, size_t offset, size_t count) {
     DCHECK(this != &src);
 

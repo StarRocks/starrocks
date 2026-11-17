@@ -3,6 +3,7 @@ displayed_sidebar: docs
 toc_max_heading_level: 4
 sidebar_position: 50
 description: "How to create and use full-text inverted indexes in StarRocks (from v3.3) to accelerate text keyword searches and LIKE queries by indexing individual words."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
@@ -105,6 +106,9 @@ When a full-text inverted index column is enabled with tokenization (`parser` = 
 - `<col_name> (NOT) MATCH_ALL 'keyword1, keyword2'`
 
 Here, keyword must be a string literal; expressions are not supported.
+
+For a nullable indexed column, rows whose value is `NULL` are not returned by `NOT MATCH`, `NOT MATCH_ANY`, or `NOT MATCH_ALL`.
+
 1. Create a table and insert a few rows of test data.
 
       ```SQL

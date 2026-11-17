@@ -809,7 +809,7 @@ public class MvRewritePreprocessor {
         MaterializedView mv = mvWithPlanContext.getMV();
         MvPlanContext mvPlanContext = mvWithPlanContext.getMvPlanContext();
         PCellSortedSet partitionNamesToRefresh = mvUpdateInfo.getMVToRefreshPCells();
-        if (!checkMvPartitionNamesToRefresh(connectContext, mv, partitionNamesToRefresh, mvPlanContext)) {
+        if (!checkMvPartitionNamesToRefresh(tracers, connectContext, mv, partitionNamesToRefresh, mvPlanContext, timeoutMs)) {
             return;
         }
 
@@ -942,13 +942,23 @@ public class MvRewritePreprocessor {
                                                          MaterializedView mv,
                                                          PCellSortedSet partitionNamesToRefresh,
                                                          MvPlanContext mvPlanContext) {
+        return checkMvPartitionNamesToRefresh(Tracers.get(), context, mv, partitionNamesToRefresh, mvPlanContext,
+                getPrepareTimeoutMsPerMV(context, 1));
+    }
+
+    private static boolean checkMvPartitionNamesToRefresh(Tracers tracers,
+                                                          ConnectContext context,
+                                                          MaterializedView mv,
+                                                          PCellSortedSet partitionNamesToRefresh,
+                                                          MvPlanContext mvPlanContext,
+                                                          long timeoutMs) {
         if (mvPlanContext == null) {
-            logMVPrepare(context, "MV {} plan context is null", mv.getName());
+            logMVPrepare(tracers, context, mv, "MV {} plan context is null", mv.getName());
             return false;
         }
         OptExpression mvPlan = mvPlanContext.getLogicalPlan();
         if (mvPlan == null) {
-            logMVPrepare(context, "MV {} plan is null", mv.getName());
+            logMVPrepare(tracers, context, mv, "MV {} plan is null", mv.getName());
             return false;
         }
         PartitionInfo partitionInfo = mv.getPartitionInfo();
@@ -957,10 +967,28 @@ public class MvRewritePreprocessor {
                 traceOutdatedMVInfo(context, mv, partitionNamesToRefresh);
                 return false;
             }
-        } else if (!mv.getPartitionNames().isEmpty() && partitionNamesToRefresh.containsAllNames(mv.getPartitionNames())) {
-            // if the mv is partitioned, and all partitions need refresh, then it can not be a candidate
-            traceOutdatedMVInfo(context, mv, partitionNamesToRefresh);
-            return false;
+        } else {
+            // Async refresh can add or drop partitions before the MV metadata is copied for planning.
+            // Take one snapshot under the same table lock used by partition mutations.
+            Locker locker = new Locker();
+            if (!locker.tryLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.READ,
+                    timeoutMs, TimeUnit.MILLISECONDS)) {
+                logMVPrepare(tracers, context, mv,
+                        "Failed to lock mv {} for checking partitions to refresh, skip this mv candidate",
+                        mv.getName());
+                return false;
+            }
+            Set<String> mvPartitionNames;
+            try {
+                mvPartitionNames = mv.getPartitionNames();
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.READ);
+            }
+            if (!mvPartitionNames.isEmpty() && partitionNamesToRefresh.containsAllNames(mvPartitionNames)) {
+                // if the mv is partitioned, and all partitions need refresh, then it can not be a candidate
+                traceOutdatedMVInfo(context, mv, partitionNamesToRefresh);
+                return false;
+            }
         }
         return true;
     }

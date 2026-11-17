@@ -14,14 +14,17 @@
 
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <ostream>
 #include <shared_mutex>
 #include <string>
 
 #include "column/vectorized_fwd.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
+#include "storage/lake/sst_seek_range.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
@@ -38,6 +41,7 @@ struct ParallelPublishSlot;
 namespace lake {
 
 class MetaFileBuilder;
+class ParallelTaskRunner;
 class SegmentPKIterator;
 struct SegmentPKChunkRef;
 
@@ -51,9 +55,22 @@ class PersistentIndexSstable;
 class TabletManager;
 class PersistentIndexSstableFileset;
 
+// Resident memory of a LakePersistentIndex, by component.
+struct LakePersistentIndexMemoryStats {
+    size_t memtable_bytes = 0;    // active and inactive memtables
+    size_t index_block_bytes = 0; // sstable index blocks
+    size_t filter_bytes = 0;      // sstable bloom filters
+    // Delete vectors held by ingested sstables, compaction output for example. memory_usage() leaves them
+    // out, so the index cache does not charge them either.
+    size_t delvec_bytes = 0;
+
+    // What LakePersistentIndex::memory_usage() reports.
+    size_t charged_bytes() const { return memtable_bytes + index_block_bytes + filter_bytes; }
+};
+
 // A shared-data tablet's primary-key index: a write-ahead memtable in front of a stack of sstable
 // filesets on shared storage, plus the load state and the lock the publish path serialises on.
-// UpdateManager's index cache holds one of these per tablet, by value.
+// PrimaryKeyManager's index cache holds one of these per tablet, by value.
 //
 // Standalone on purpose. It used to derive from PersistentIndex, the local-disk implementation, but
 // took nothing from it except two scalar members and the vtable -- it overrode 7 of that class's 39
@@ -74,7 +91,7 @@ class LakePersistentIndex {
 public:
     explicit LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id);
 
-    // UpdateManager's index cache stores this class by value and creates an entry from a tablet id
+    // PrimaryKeyManager's index cache stores this class by value and creates an entry from a tablet id
     // alone, so it needs a default-constructible type. lake_load() supplies the tablet.
     //
     // Defined in the .cpp, not defaulted here: a constructor needs its members' destructors for
@@ -212,8 +229,10 @@ public:
     Status ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range, uint32_t rssid,
                       int64_t version, const DelvecPagePB& delvec_page, DelVectorPtr delvec);
 
+    // Major-compact the tablet's index files into txn_log's op_compaction. With unshare, rewrite the filesets the
+    // tablet cannot keep as they are (see pick_unshare_candidates) instead of picking by size.
     static Status parallel_major_compact(LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
-                                         const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
+                                         const TabletMetadataPtr& metadata, TxnLogPB* txn_log, bool unshare = false);
 
     Status apply_opcompaction(const TabletMetadataPtr& metadata, const TxnLogPB_OpCompaction& op_compaction);
 
@@ -223,6 +242,14 @@ public:
                                  const MetaFileBuilder* builder);
 
     size_t memory_usage() const;
+
+    // memory_usage() split by component, plus the sstable delete vectors it leaves out.
+    LakePersistentIndexMemoryStats memory_stats() const;
+
+    // Publish this index's current memory_stats() to the lake_pk_index_cache_* gauges and return
+    // memory_usage(). PrimaryKeyManager calls this whenever it resizes the index's cache entry, so the gauges
+    // track what the cache holds; _reset_index_state() takes the index back out. Caller holds the index lock.
+    size_t refresh_cache_memory_metrics();
 
     int32_t current_fileset_index() const { return (int32_t)_sstable_filesets.size() - 1; }
 
@@ -385,18 +412,36 @@ private:
     Status parallel_reverse_lookup(size_t n, const Slice* keys, IndexValue* old_values, size_t num_tasks,
                                    const std::function<KeyIndexSet(size_t)>& make_subset, bool parallel_worthwhile);
 
+    using DelFilter = std::vector<std::atomic<uint64_t>>;
+    static constexpr size_t kDelFilterBitsPerWord = 64;
+
+    // Submit disjoint filter lookups without waiting. Keep one packed bitmap per file; atomic
+    // words allow batches to share boundary words without allocating a bitmap per tiny batch.
+    // IndexValues are task-local and bounded by the configured batch size. The caller owns keys
+    // and filter_words until runner joins, after all producers sharing its pool have finished.
+    Status parallel_get(ParallelTaskRunner* runner, size_t n, const Slice* keys, uint32_t too_old,
+                        DelFilter* filter_words);
+
     // rebuild delete operation from rowset.
-    Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);
+    // Delete keys outside |tablet_range| (nullptr = no clip) are skipped: they belong to a sibling.
+    Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version,
+                     const SstSeekRange* tablet_range = nullptr);
 
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
 
     Status merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable);
+
+    // The tablet's key range, or nullptr when there is none to clip to (see _tablet_sst_range).
+    const SstSeekRange* tablet_sst_range() const { return _tablet_sst_range ? &*_tablet_sst_range : nullptr; }
 
 private:
     std::shared_ptr<PersistentIndexMemtable> _memtable;
     std::vector<std::shared_ptr<PersistentIndexMemtable>> _inactive_memtables;
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
+    // Key range of a range-distribution tablet, set by load_from_lake_tablet; empty when the tablet
+    // is unbounded (or not range-distributed).
+    std::optional<SstSeekRange> _tablet_sst_range;
     size_t _need_rebuild_file_cnt{0};
     int64_t _need_rebuild_row_cnt{0};
     // Collection of sstable fileset, from old to new.
@@ -411,6 +456,8 @@ private:
     size_t _key_size{0};
     // The version stamped on memtable entries; see set_publish_version().
     int64_t _publish_version{0};
+    // What refresh_cache_memory_metrics() last added to the lake_pk_index_cache_* gauges.
+    LakePersistentIndexMemoryStats _reported_memory_stats;
 
     // Guards the load bookkeeping below, not the index contents -- those are under _mutex.
     mutable std::mutex _load_lock;

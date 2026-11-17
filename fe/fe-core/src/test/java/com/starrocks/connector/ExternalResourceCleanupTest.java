@@ -94,6 +94,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Resource cleanup tests shared by Iceberg and Delta Lake connectors / scan nodes.
  */
 public class ExternalResourceCleanupTest {
+    private static PredicateSearchKey scanKey(TvrVersionRange version, boolean enableColumnStats) {
+        return PredicateSearchKey.of("db", "tbl", GetRemoteFilesParams.newBuilder()
+                .setTableVersionRange(version)
+                .setEnableColumnStats(enableColumnStats)
+                .build());
+    }
+
 
     private TupleDescriptor tupleDescriptor;
 
@@ -419,7 +426,8 @@ public class ExternalResourceCleanupTest {
             internalMock.when(() -> InternalScanFileUtils.getDeletionVectorDescriptorFromRow(row))
                     .thenReturn((DeletionVectorDescriptor) null);
             scanFileMock.when(() -> ScanFileUtils.convertFromRowToFileScanTask(
-                            Mockito.anyBoolean(), Mockito.eq(row), Mockito.eq(meta), Mockito.anyLong(), Mockito.isNull()))
+                            Mockito.anyBoolean(), Mockito.eq(row), Mockito.any(ScanFileUtils.RowContext.class),
+                            Mockito.anyLong(), Mockito.isNull()))
                     .thenReturn(Pair.create(fileTask, serDe));
 
             // invoke iterator
@@ -510,12 +518,12 @@ public class ExternalResourceCleanupTest {
         IcebergTable table = Mockito.mock(IcebergTable.class);
         Method m = IcebergMetadata.class.getDeclaredMethod(
                 "buildFileScanTaskIterator", IcebergTable.class, org.apache.iceberg.expressions.Expression.class,
-                TvrVersionRange.class, com.starrocks.qe.ConnectContext.class, boolean.class, List.class);
+                PredicateSearchKey.class, com.starrocks.qe.ConnectContext.class);
         m.setAccessible(true);
         org.apache.iceberg.io.CloseableIterator<FileScanTask> iter =
                 (org.apache.iceberg.io.CloseableIterator<FileScanTask>) m.invoke(
                         metadata, table, org.apache.iceberg.expressions.Expressions.alwaysTrue(),
-                        TvrTableSnapshot.empty(), null, false, null);
+                        scanKey(TvrTableSnapshot.empty(), false), null);
         Assertions.assertFalse(iter.hasNext());
         iter.close();
     }
@@ -540,11 +548,11 @@ public class ExternalResourceCleanupTest {
 
         Method m = IcebergMetadata.class.getDeclaredMethod(
                 "buildFileScanTaskIterator", IcebergTable.class, org.apache.iceberg.expressions.Expression.class,
-                TvrVersionRange.class, com.starrocks.qe.ConnectContext.class, boolean.class, List.class);
+                PredicateSearchKey.class, com.starrocks.qe.ConnectContext.class);
         m.setAccessible(true);
         Assertions.assertThrows(java.lang.reflect.InvocationTargetException.class, () -> m.invoke(
                 metadata, table, org.apache.iceberg.expressions.Expressions.alwaysTrue(),
-                TvrTableSnapshot.of(Optional.of(1L)), null, false, null));
+                scanKey(TvrTableSnapshot.of(Optional.of(1L)), false), null));
     }
 
     @Test
@@ -581,12 +589,12 @@ public class ExternalResourceCleanupTest {
 
         Method m = IcebergMetadata.class.getDeclaredMethod(
                 "buildFileScanTaskIterator", IcebergTable.class, org.apache.iceberg.expressions.Expression.class,
-                TvrVersionRange.class, com.starrocks.qe.ConnectContext.class, boolean.class, List.class);
+                PredicateSearchKey.class, com.starrocks.qe.ConnectContext.class);
         m.setAccessible(true);
         org.apache.iceberg.io.CloseableIterator<FileScanTask> iter =
                 (org.apache.iceberg.io.CloseableIterator<FileScanTask>) m.invoke(
                         metadata, table, org.apache.iceberg.expressions.Expressions.alwaysTrue(),
-                        TvrTableDelta.of(Optional.of(1L), Optional.of(2L)), null, true, null);
+                        scanKey(TvrTableDelta.of(Optional.of(1L), Optional.of(2L)), true), null);
         // iterator should be created and be consumable without exception
         iter.hasNext();
         iter.close();

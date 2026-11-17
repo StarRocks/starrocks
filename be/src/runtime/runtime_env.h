@@ -96,10 +96,15 @@ public:
     MemTracker* replication_mem_tracker() const { return _replication_mem_tracker.get(); }
     MemTracker* datacache_mem_tracker() const { return _datacache_mem_tracker.get(); }
     MemTracker* jemalloc_metadata_traker() const { return _jemalloc_metadata_tracker.get(); }
+    MemTracker* jvm_mem_tracker() const { return _jvm_mem_tracker.get(); }
     std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type) const;
     std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
 
     static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
+    static int64_t calc_max_update_memory(int64_t process_mem_limit);
+
+    // Re-apply update_memory_limit_percent to the update mem tracker.
+    void refresh_update_mem_limit() const;
 
     int64_t process_mem_limit() const;
 
@@ -121,6 +126,7 @@ public:
     ThreadPool* load_rowset_thread_pool() const { return _thread_pools.load_rowset_thread_pool(); }
     ThreadPool* load_segment_thread_pool() const { return _thread_pools.load_segment_thread_pool(); }
     ThreadPool* put_combined_txn_log_thread_pool() const { return _thread_pools.put_combined_txn_log_thread_pool(); }
+    ThreadPool* load_sink_close_thread_pool() const { return _thread_pools.load_sink_close_thread_pool(); }
     PriorityThreadPool* pipeline_prepare_pool() const { return _thread_pools.pipeline_prepare_pool(); }
     PriorityThreadPool* pipeline_sink_io_pool() const { return _thread_pools.pipeline_sink_io_pool(); }
     PriorityThreadPool* query_rpc_pool() const { return _thread_pools.query_rpc_pool(); }
@@ -157,6 +163,8 @@ private:
 
     // Track usage of jemalloc
     std::shared_ptr<MemTracker> _jemalloc_metadata_tracker;
+    // JVM heap and non-heap committed memory
+    std::shared_ptr<MemTracker> _jvm_mem_tracker;
 
     // Limit the memory used by the query. At present, it can use 90% of the be memory limit
     std::shared_ptr<MemTracker> _query_pool_mem_tracker;

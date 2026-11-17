@@ -17,9 +17,13 @@ package com.starrocks.planner;
 import com.starrocks.analysis.RowPositionDescriptor;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TFetchNode;
+import com.starrocks.thrift.TNodeInfo;
 import com.starrocks.thrift.TNodesInfo;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -87,8 +91,19 @@ public class FetchNode extends PlanNode {
             msg.fetch_node.row_pos_descs.put(tupleId.asInt(), rowPosDescs.toThrift());
         });
         // TODO: only send necessary info to BE, such as host and port, and remove unnecessary info such as node id and node name
-        msg.fetch_node.nodes_info = GlobalStateMgr.getCurrentState().createNodesInfo(computeResource,
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(computeResource, clusterInfo);
+        if (!RunMode.isSharedDataMode()) {
+            // In shared-nothing mode createNodesInfo lists only backends, but an external table scan can run on a
+            // compute node, and the lookup request has to be sent back to the node that produced the row position.
+            for (Long cnId : clusterInfo.getComputeNodeIds(false)) {
+                ComputeNode cn = clusterInfo.getComputeNode(cnId);
+                if (cn != null) {
+                    nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getIP(), cn.getBrpcPort()));
+                }
+            }
+        }
+        msg.fetch_node.nodes_info = nodesInfo;
     }
 
     @Override

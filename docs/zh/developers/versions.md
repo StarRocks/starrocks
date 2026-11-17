@@ -2,11 +2,12 @@
 displayed_sidebar: docs
 description: "版本命名在版本控制文档中详细说明。"
 sidebar_position: 1
+products: [oss]
 ---
 
 # 版本发布指南
 
-版本命名的详细信息请参阅[版本控制](../introduction/versioning.md)文档。首先阅读该页面以了解**主版本**、**次版本**和**补丁**版本的命名规则。
+版本命名的详细信息请参阅[版本控制](../maturity/release_numbering.md)文档。首先阅读该页面以了解**主版本**、**次版本**和**补丁**版本的命名规则。
 
 ## 发布计划
 - 大约每四个月发布一个次版本。

@@ -23,12 +23,12 @@ set(PLATFORM_TEST_FILES
     llm/ai_admission_controller_test.cpp
     llm/ai_http_client_test.cpp
     llm/ai_metrics_test.cpp
+    llm/ai_media_input_test.cpp
+    llm/dashscope_multimodal_provider_test.cpp
     llm/ai_task_dispatcher_test.cpp
     llm/openai_compatible_provider_test.cpp
     llm/ai_rate_limiter_test.cpp
     llm/ai_runtime_test.cpp
-    llm/llm_cache_test.cpp
-    llm/model_config_test.cpp
     path_rw_test.cpp
     platform_env_test.cpp
     platform_http_test.cpp
@@ -43,7 +43,6 @@ set(PLATFORM_TEST_FILES
 if(NOT APPLE)
     list(APPEND PLATFORM_TEST_FILES
         ev_http_server_test.cpp
-        llm/llm_query_service_test.cpp
     )
 else()
     # The libevent-backed HTTP suites can hang on macOS in EvHttpServer::join()

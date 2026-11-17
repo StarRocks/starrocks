@@ -398,13 +398,12 @@ paimon::Status PaimonFileSystem::Delete(const std::string&, bool) const {
 }
 
 paimon::Result<std::unique_ptr<paimon::FileStatus>> PaimonFileSystem::GetFileStatus(const std::string& path) const {
-    const Status exists_status = _file_system->path_exists(path);
-    if (!exists_status.ok()) {
-        if (exists_status.is_not_found()) {
-            return paimon::Status::NotExist(fmt::format("Path {} is not exist.", path));
-        }
-        return paimon::Status::IOError(
-                fmt::format("Get file status for {} failed, reason: {}", path, exists_status.detailed_message()));
+    auto exists = Exists(path);
+    if (!exists.ok()) {
+        return exists.status();
+    }
+    if (!exists.value()) {
+        return paimon::Status::NotExist(fmt::format("Path {} is not exist.", path));
     }
     auto directory_result = _file_system->is_directory(path);
     if (!directory_result.ok()) {
@@ -526,7 +525,10 @@ paimon::Status PaimonFileSystem::ListFileStatus(
 }
 
 paimon::Result<bool> PaimonFileSystem::Exists(const std::string& path) const {
-    const Status status = _file_system->path_exists(path);
+    // Built on is_directory() rather than path_exists(): S3 leaves path_exists() unimplemented, while
+    // is_directory() answers NotFound for a missing path on every file system StarRocks reads Paimon
+    // from (POSIX stat, HDFS getPathInfo, S3 prefix listing).
+    const Status status = _file_system->is_directory(path).status();
     if (status.ok()) {
         return true;
     }

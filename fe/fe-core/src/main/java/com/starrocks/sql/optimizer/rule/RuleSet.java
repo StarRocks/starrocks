@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.rule.implementation.IcebergScanImplementation
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.JDBCScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.KuduScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.LanceScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MergeJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRule;
@@ -204,6 +205,7 @@ public class RuleSet {
             new IcebergMetadataScanImplementationRule(),
             new KuduScanImplementationRule(),
             new FlussScanImplementationRule(),
+            new LanceScanImplementationRule(),
             new SchemaScanImplementationRule(),
             new MysqlScanImplementationRule(),
             new EsScanImplementationRule(),

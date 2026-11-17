@@ -55,8 +55,13 @@ StatusOr<ColumnPtr> project_variant_leaf_column(const ColumnPtr& variant_src, co
 bool collect_variant_leaf_paths(const ColumnAccessPath* node, std::vector<VariantSegment>* segments,
                                 VariantShreddedReadHints* hints);
 
+// Builds the shredded read hints of variant column `column_name` from its access paths.
+// `include_extended` controls whether extended (virtual subfield) access paths are taken into account. They
+// describe the virtual subfield columns, not the variant column itself, so a reader that outputs the full
+// variant column must not be narrowed by them; only a hidden source reader that feeds the virtual columns
+// alone may use them.
 VariantShreddedReadHints build_variant_shredded_hints(const std::vector<ColumnAccessPathPtr>* column_access_paths,
-                                                      std::string_view column_name);
+                                                      std::string_view column_name, bool include_extended);
 
 // ── VariantProjectionHandler: encapsulates variant-specific pipeline phases ──
 //

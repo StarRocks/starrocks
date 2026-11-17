@@ -130,6 +130,10 @@ TEST(PipelineBuilderContextExecRuntimeTest, InheritsSourceProperties) {
     TestSourceOperatorFactory upstream(10, 100, 6);
     upstream.set_could_local_shuffle(false);
     upstream.set_partition_type(TPartitionType::RANDOM);
+    TBucketProperty bucket;
+    bucket.__set_bucket_func(TBucketFunction::MURMUR3_X86_32);
+    bucket.__set_bucket_num(17);
+    upstream.set_bucket_properties({bucket});
 
     TestSourceOperatorFactory downstream(11, 100, 1);
     context.inherit_upstream_source_properties(&downstream, &upstream);
@@ -137,6 +141,8 @@ TEST(PipelineBuilderContextExecRuntimeTest, InheritsSourceProperties) {
     EXPECT_EQ(6, downstream.degree_of_parallelism());
     EXPECT_FALSE(downstream.could_local_shuffle());
     EXPECT_EQ(TPartitionType::RANDOM, downstream.partition_type());
+    // The partition type alone would name plain crc32; the bucket transform has to travel with it.
+    EXPECT_EQ(upstream.get_bucket_properties(), downstream.get_bucket_properties());
 }
 
 } // namespace starrocks::pipeline

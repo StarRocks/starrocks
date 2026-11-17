@@ -510,6 +510,69 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
     ASSERT_FALSE(_mem_table->finalize().ok());
 }
 
+TEST_F(MemTableTest, testWriteBufferRowLimit) {
+    const string path = "./MemTableTest_testWriteBufferRowLimit";
+    MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::PRIMARY_KEYS), "pk int,name varchar,pv int",
+            path);
+    // A load passes the same chunk to every tablet it covers and picks each tablet's rows with a window
+    // of `indexes`. Lay the indexes out that way for 4 tablets and feed all 4 windows to one memtable, so
+    // it holds every row exactly once and the row count it reports can be checked exactly.
+    const uint32_t n = 1000;
+    const uint32_t num_windows = 4;
+    const uint32_t window_rows = n / num_windows;
+    auto pchunk = gen_chunk(*_slots, n);
+    vector<uint32_t> indexes;
+    indexes.reserve(n);
+    for (uint32_t w = 0; w < num_windows; w++) {
+        for (uint32_t i = w; i < n; i += num_windows) {
+            indexes.emplace_back(i);
+        }
+    }
+    _mem_table->set_write_buffer_row(n);
+    struct Expected {
+        size_t buffered_rows;
+        bool full;
+    };
+    const Expected expected[num_windows] = {{250, false}, {500, false}, {750, false}, {1000, true}};
+    for (uint32_t w = 0; w < num_windows; w++) {
+        auto res = _mem_table->insert(*pchunk, indexes.data(), w * window_rows, window_rows);
+        ASSERT_TRUE(res.ok()) << res.status();
+        ASSERT_EQ(expected[w].buffered_rows, _mem_table->write_buffer_rows()) << "window " << w;
+        ASSERT_EQ(expected[w].full, res.value()) << "window " << w;
+    }
+}
+
+// A load whose slots were planned against one version of the table schema and whose write schema against the
+// next, a fast ADD COLUMN having committed in between: the write schema has a column no slot fills. insert()
+// would leave that column empty while the others fill up, and the sort at flush would read rows it does not
+// have (SIGSEGV). prepare() must refuse such a load and accept a consistent one.
+TEST_F(MemTableTest, testPrepareRejectsSlotsThatMissAWriteSchemaColumn) {
+    MemTracker mem_tracker(-1, "root");
+    const std::vector<SlotDescriptor*>* slots =
+            create_tuple_desc_slots(&_runtime_state, "pk int,name varchar,pv int", _obj_pool);
+    for (KeysType keys_type : {KeysType::DUP_KEYS, KeysType::AGG_KEYS, KeysType::UNIQUE_KEYS}) {
+        auto added_column = create_tablet_schema("pk int,name varchar,pv int,extra int", 1, keys_type);
+        Schema added_column_schema = MemTable::convert_schema(added_column, slots);
+        MemTable mismatched(1, &added_column_schema, slots, nullptr, &mem_tracker);
+        Status st = mismatched.prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE);
+        ASSERT_TRUE(st.is_internal_error()) << static_cast<int>(keys_type) << ": " << st;
+        ASSERT_NE(std::string::npos, st.message().find("the load carries 3 columns but its write schema has 4")) << st;
+
+        auto same_columns = create_tablet_schema("pk int,name varchar,pv int", 1, keys_type);
+        Schema same_columns_schema = MemTable::convert_schema(same_columns, slots);
+        MemTable consistent(1, &same_columns_schema, slots, nullptr, &mem_tracker);
+        ASSERT_OK(consistent.prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE));
+    }
+
+    // The "__op" slot of a primary key load has a memtable column of its own.
+    const std::vector<SlotDescriptor*>* slots_with_op =
+            create_tuple_desc_slots(&_runtime_state, "pk int,name varchar,pv int,__op tinyint", _obj_pool);
+    auto primary_key = create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::PRIMARY_KEYS);
+    Schema primary_key_schema = MemTable::convert_schema(primary_key, slots_with_op);
+    MemTable with_op(1, &primary_key_schema, slots_with_op, nullptr, &mem_tracker);
+    ASSERT_OK(with_op.prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+}
+
 TEST_F(MemTableTest, test_metrics) {
     const string path = "./MemTableTest_test_metrics";
     MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::DUP_KEYS), "pk int,name varchar,pv int",

@@ -424,9 +424,12 @@ public class QueryRuntimeProfile {
         // before the isomorphic merge collapses host-level information.
         Optional<RuntimeProfile> perTableScanStats = buildScanStatsByTableAndHost();
 
+        // QueryPeakMemoryUsage, QueryCumulativeCpuTime and QuerySpillBytes are query-level values of one BE,
+        // attached to every fragment instance report of that BE. Take the max per BE, then sum over BEs;
+        // summing over instances would count each BE once per instance.
         Map<String, Long> peakMemoryEachBE = Maps.newHashMap();
-        long sumQueryCumulativeCpuTime = 0;
-        long sumQuerySpillBytes = 0;
+        Map<String, Long> cpuTimeEachBE = Maps.newHashMap();
+        Map<String, Long> spillBytesEachBE = Maps.newHashMap();
         long maxQueryPeakMemoryUsage = 0;
         long maxQueryExecutionWallTime = 0;
 
@@ -457,16 +460,16 @@ public class QueryRuntimeProfile {
                 }
 
                 // Get query level peak memory usage, cpu cost, wall time
+                String beAddress = instanceProfile.getInfoString("Address");
                 Counter toBeRemove = instanceProfile.getCounter(ProfileKeyDictionary.QUERY_CUMULATIVE_CPU_TIME);
                 if (toBeRemove != null) {
-                    sumQueryCumulativeCpuTime += toBeRemove.getValue();
+                    cpuTimeEachBE.merge(beAddress, toBeRemove.getValue(), Long::max);
                 }
                 instanceProfile.removeCounter(ProfileKeyDictionary.QUERY_CUMULATIVE_CPU_TIME);
 
                 toBeRemove = instanceProfile.getCounter("QueryPeakMemoryUsage");
                 if (toBeRemove != null) {
                     maxQueryPeakMemoryUsage = Math.max(maxQueryPeakMemoryUsage, toBeRemove.getValue());
-                    String beAddress = instanceProfile.getInfoString("Address");
                     peakMemoryEachBE.merge(beAddress, toBeRemove.getValue(), Long::max);
                 }
                 instanceProfile.removeCounter("QueryPeakMemoryUsage");
@@ -479,7 +482,7 @@ public class QueryRuntimeProfile {
 
                 toBeRemove = instanceProfile.getCounter(ProfileKeyDictionary.QUERY_SPILL_BYTES);
                 if (toBeRemove != null) {
-                    sumQuerySpillBytes += toBeRemove.getValue();
+                    spillBytesEachBE.merge(beAddress, toBeRemove.getValue(), Long::max);
                 }
                 instanceProfile.removeCounter(ProfileKeyDictionary.QUERY_SPILL_BYTES);
             }
@@ -607,7 +610,7 @@ public class QueryRuntimeProfile {
 
         Counter queryCumulativeCpuTime =
                 newQueryProfile.addCounter(ProfileKeyDictionary.QUERY_CUMULATIVE_CPU_TIME, TUnit.TIME_NS, null);
-        queryCumulativeCpuTime.setValue(sumQueryCumulativeCpuTime);
+        queryCumulativeCpuTime.setValue(cpuTimeEachBE.values().stream().reduce(0L, Long::sum));
         Counter queryPeakMemoryUsage =
                 newQueryProfile.addCounter(ProfileKeyDictionary.QUERY_PEAK_MEMORY_USAGE_PER_NODE, TUnit.BYTES, null);
         queryPeakMemoryUsage.setValue(maxQueryPeakMemoryUsage);
@@ -618,7 +621,7 @@ public class QueryRuntimeProfile {
                 newQueryProfile.addCounter(ProfileKeyDictionary.QUERY_EXECUTION_WALL_TIME, TUnit.TIME_NS, null);
         queryExecutionWallTime.setValue(maxQueryExecutionWallTime);
         Counter querySpillBytes = newQueryProfile.addCounter(ProfileKeyDictionary.QUERY_SPILL_BYTES, TUnit.BYTES, null);
-        querySpillBytes.setValue(sumQuerySpillBytes);
+        querySpillBytes.setValue(spillBytesEachBE.values().stream().reduce(0L, Long::sum));
 
         if (execPlan != null) {
             newQueryProfile.addInfoString(ProfileKeyDictionary.TOPOLOGY, execPlan.getProfilingPlan().toTopologyJson());

@@ -1,0 +1,40 @@
+-- name: test_statistic_auto_collect_table_property
+create database analyze_auto_collect_${uuid0};
+use analyze_auto_collect_${uuid0};
+CREATE TABLE t_collect (k1 int, v1 int)
+DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_statistic_collect_on_first_load' = 'false');
+CREATE TABLE t_skip (k1 int, v1 int)
+DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_statistic_collect_on_first_load' = 'false',
+            'enable_statistic_auto_collect' = 'false');
+insert into t_collect select generate_series, generate_series from table(generate_series(1, 1000));
+insert into t_skip select generate_series, generate_series from table(generate_series(1, 1000));
+function: assert_query_contains("show create table t_skip", '"enable_statistic_auto_collect" = "false"')
+-- Drop the init stats meta: on shared-data it reads as healthy until partition row counts are reported.
+drop stats t_collect;
+drop stats t_skip;
+
+create analyze full database analyze_auto_collect_${uuid0};
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 2, "desc": "wait for the database analyze job to finish"}
+  result=show analyze job where `Database` = 'analyze_auto_collect_${uuid0}';
+  CHECK: re.search("FINISH", ${result}) != None
+} END LOOP
+select count(*) from _statistics_.column_statistics where table_name = 'analyze_auto_collect_${uuid0}.t_collect';
+select count(*) from _statistics_.column_statistics where table_name = 'analyze_auto_collect_${uuid0}.t_skip';
+[UC]first_job=show analyze job where `Database` = 'analyze_auto_collect_${uuid0}';
+drop analyze ${first_job.split()[0]};
+
+alter table t_skip set ('enable_statistic_auto_collect' = 'true');
+function: assert_query_not_contains("show create table t_skip", "enable_statistic_auto_collect")
+create analyze full database analyze_auto_collect_${uuid0};
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 2, "desc": "wait for the database analyze job to finish"}
+  result=show analyze job where `Database` = 'analyze_auto_collect_${uuid0}';
+  CHECK: re.search("FINISH", ${result}) != None
+} END LOOP
+select count(*) from _statistics_.column_statistics where table_name = 'analyze_auto_collect_${uuid0}.t_skip';
+[UC]second_job=show analyze job where `Database` = 'analyze_auto_collect_${uuid0}';
+drop analyze ${second_job.split()[0]};
+drop database analyze_auto_collect_${uuid0};

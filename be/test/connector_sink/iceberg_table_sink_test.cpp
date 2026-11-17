@@ -959,7 +959,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_complex_type
                              .build();
     auto pos_slot =
             slot_desc_builder.type(LogicalType::TYPE_BIGINT).column_name("_pos").column_pos(1).nullable(false).build();
-    auto array_type = TypeDescriptor::create_array_type(TypeDescriptor(LogicalType::TYPE_INT));
+    auto array_type = TypeDescriptor::create_array_type(TYPE_INT_DESC);
     auto c1_slot = slot_desc_builder.type(array_type).column_name("c1").column_pos(2).nullable(true).build();
     TTupleDescriptorBuilder tuple_desc_builder;
     tuple_desc_builder.add_slot(file_slot);

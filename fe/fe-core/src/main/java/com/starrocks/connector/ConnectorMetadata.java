@@ -26,6 +26,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
@@ -62,6 +63,7 @@ import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -276,6 +278,18 @@ public interface ConnectorMetadata {
         return Statistics.builder().build();
     }
 
+    /**
+     * The value range each partition source column covers in the given table version, read from table metadata
+     * without scanning data. Used to widen ANALYZE min/max that predate later ingestion. Values are in the
+     * optimizer's statistics domain (see {@link com.starrocks.statistic.StatisticUtils#convertStatisticsToDouble}).
+     *
+     * @return lower-cased column name to [min, max]; empty when unknown or unsupported
+     */
+    default Map<String, Pair<Double, Double>> getPartitionSourceColumnRanges(Table table,
+                                                                          TvrVersionRange tableVersionRange) {
+        return Map.of();
+    }
+
     default boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
         return true;
     }
@@ -292,6 +306,16 @@ public interface ConnectorMetadata {
     }
 
     default void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
+    }
+
+    /**
+     * Make the statement being planned read this table as it is now, for an INSERT ... SELECT that must not see
+     * stale source data ({@code enable_insert_select_external_auto_refresh}). A connector that can simply drop
+     * what it cached about the table -- no remote I/O -- does that and lets planning load only what it reads.
+     * The default refreshes the whole table, which is what such a statement always did.
+     */
+    default void invalidateTableForRead(String srDbName, Table table) {
+        refreshTable(srDbName, table, new ArrayList<>(), false);
     }
 
     default boolean dbExists(ConnectContext context, String dbName) {

@@ -18,7 +18,12 @@ const isVersioningDisabled = !!process.env.DISABLE_VERSIONING || false;
 // (a redirect stub carries no document content). Keep in sync with the same list
 // in the doc-build repo's docusaurus.config.js.
 const MOVED_DOCS = [
-  { from: "/docs/sql-reference/sql-functions/scalar-functions/ai_complete/", to: "/docs/sql-reference/sql-functions/ai-functions/ai_complete/" },
+  // The introduction and maturity pages, reorganized so that every product has the same pages.
+  { from: "/docs/introduction/StarRocks_intro/", to: "/docs/introduction/" },
+  { from: "/docs/introduction/what_is_starrocks/", to: "/docs/introduction/" },
+  { from: "/docs/introduction/feature_difference/", to: "/docs/introduction/Architecture/" },
+  { from: "/docs/introduction/maturity/", to: "/docs/maturity/features/" },
+  { from: "/docs/introduction/versioning/", to: "/docs/maturity/release_numbering/" },
   // Former `generated-index` category pages, replaced by real DocCardList
   // nav pages so the URL and breadcrumbs follow the directory structure.
   { from: "/docs/category/aggregate/", to: "/docs/sql-reference/sql-functions/aggregate-functions/" },
@@ -98,7 +103,8 @@ const MOVED_DOCS = [
   { from: "/docs/administration/management/FE_parameters/stats_storage/", to: "/docs/administration/configuration/FE_parameters/stats_storage/" },
   { from: "/docs/administration/management/FE_parameters/user_query_loading/", to: "/docs/administration/configuration/FE_parameters/user_query_loading/" },
   { from: "/docs/administration/management/configuration/", to: "/docs/administration/configuration/" },
-  { from: "/docs/administration/management/monitoring/Monitor_and_Alert/", to: "/docs/administration/management/monitoring/" },
+  { from: "/docs/administration/management/monitoring/Monitor_and_Alert/", to: "/docs/administration/management/monitoring/prometheus_grafana/" },
+  { from: "/docs/administration/management/monitoring/metrics/", to: "/docs/administration/management/monitoring/metric_details/" },
   { from: "/docs/cover_pages/batch_loading_integration/", to: "/docs/integrations/batch/" },
   { from: "/docs/cover_pages/bi_tools/", to: "/docs/integrations/BI_integrations/" },
   { from: "/docs/cover_pages/csp_auth/", to: "/docs/integrations/csp_auth/" },
@@ -111,7 +117,9 @@ const MOVED_DOCS = [
   { from: "/docs/cover_pages/manage_deployment/", to: "/docs/deployment/manage_deployment/" },
   { from: "/docs/cover_pages/shared_nothing_deployment/", to: "/docs/deployment/" },
   { from: "/docs/data_source/block_cache_warmup/", to: "/docs/data_source/data_cache/block_cache_warmup/" },
-  { from: "/docs/data_source/catalog/catalog_intro/", to: "/docs/data_source/catalog/" },
+  { from: "/docs/data_source/catalog/catalog_intro/", to: "/docs/data_source/catalog/catalog_overview/" },
+  // The Catalog category opens on its overview page; the DocCardList index page is gone.
+  { from: "/docs/data_source/catalog/", to: "/docs/data_source/catalog/catalog_overview/" },
   { from: "/docs/data_source/catalog/iceberg/iceberg_catalog/", to: "/docs/data_source/catalog/iceberg/" },
   { from: "/docs/data_source/data_cache_observe/", to: "/docs/data_source/data_cache/data_cache_observe/" },
   { from: "/docs/data_source/data_cache_troubleshooting/", to: "/docs/data_source/data_cache/data_cache_troubleshooting/" },
@@ -326,7 +334,6 @@ const config = {
             '/docs/administration/configuration/',
             '/docs/administration/management/',
             '/docs/benchmarking/',
-            '/docs/data_source/catalog/',
             '/docs/deployment/manage_deployment/',
             '/docs/deployment/preparation/',
             '/docs/developers/',
@@ -339,12 +346,12 @@ const config = {
             '/docs/integrations/streaming/',
             '/docs/integrations/streaming/kafka/',
             '/docs/integrations/streaming/pipe/',
-            '/docs/introduction/',
             '/docs/loading/',
             '/docs/loading/kafka/',
             '/docs/loading/loading_introduction/',
             '/docs/loading/objectstorage/',
             '/docs/loading/spark/',
+            '/docs/maturity/',
             '/docs/sql-reference/data-types/',
             '/docs/sql-reference/data-types/date-types/',
             '/docs/sql-reference/sql-functions/',
@@ -432,7 +439,6 @@ const config = {
             '/docs/administration/configuration/',
             '/docs/administration/management/',
             '/docs/benchmarking/',
-            '/docs/data_source/catalog/',
             '/docs/deployment/manage_deployment/',
             '/docs/deployment/preparation/',
             '/docs/developers/',
@@ -445,12 +451,12 @@ const config = {
             '/docs/integrations/streaming/',
             '/docs/integrations/streaming/kafka/',
             '/docs/integrations/streaming/pipe/',
-            '/docs/introduction/',
             '/docs/loading/',
             '/docs/loading/kafka/',
             '/docs/loading/loading_introduction/',
             '/docs/loading/objectstorage/',
             '/docs/loading/spark/',
+            '/docs/maturity/',
             '/docs/sql-reference/data-types/',
             '/docs/sql-reference/data-types/date-types/',
             '/docs/sql-reference/sql-functions/',
@@ -582,7 +588,7 @@ const config = {
             items: [
               {
                 label: "Documentation",
-                to: "/docs/introduction/StarRocks_intro",
+                to: "/docs/introduction/",
               },
             ],
           },

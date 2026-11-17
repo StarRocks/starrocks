@@ -186,14 +186,23 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes, uint32_t 
     // accumulating every tombstone in the persistent-index memtable. This avoids oversized memtables and
     // repeated flushes across large del files; reverse lookup is independently parallelized in both erase
     // paths. Use the eager-build byte threshold, but do not depend on the upsert-side eager writer being
-    // enabled: a pure delete has no upsert spill to enable it. Shared-data primary-key tablets always use the
-    // cloud-native persistent index, so publish can ingest this sstable unconditionally -- except in the
-    // column partial-update modes, whose publish path cannot (see skip_del_tombstone_sstable()). Built
-    // outside the lock (I/O heavy).
+    // enabled: a pure delete has no upsert spill to enable it. Publish ingests this sstable into a cloud-native
+    // persistent index; any other index applies the delete through the memtable and hands the sstable to vacuum
+    // (see PrimaryKeyManager::_do_delete). The column partial-update modes never ingest it, so they skip the
+    // build (see skip_del_tombstone_sstable()). Built outside the lock (I/O heavy).
+    //
+    // The row count is a trigger of its own. What the sstable saves at publish -- one memtable insert per
+    // deleted key -- grows with the rows, not the bytes, and a DELETE statement rarely reaches the byte
+    // threshold: it writes only the key columns, yet its memtable is cut at a row cap derived from the full
+    // row size (row-mode partial update), so a delete of millions of rows arrives as several del files of a
+    // few tens of MB each.
     const int64_t eager_build_threshold_bytes = config::pk_index_eager_build_threshold_bytes;
+    const int64_t del_sst_min_rows = config::pk_index_del_sst_min_rows;
+    const bool reaches_bytes =
+            eager_build_threshold_bytes <= 0 || del_size_bytes >= static_cast<size_t>(eager_build_threshold_bytes);
+    const bool reaches_rows = del_sst_min_rows > 0 && deletes.size() >= static_cast<size_t>(del_sst_min_rows);
     const bool should_build_del_sst =
-            !deletes.empty() && !skip_del_tombstone_sstable() &&
-            (eager_build_threshold_bytes <= 0 || del_size_bytes >= static_cast<size_t>(eager_build_threshold_bytes));
+            !deletes.empty() && !skip_del_tombstone_sstable() && (reaches_bytes || reaches_rows);
     FileInfo del_sst_info; // empty name => no tombstone sstable for this del file (publish uses memtable erase)
     PersistentIndexSstableRangePB del_sst_range;
     if (should_build_del_sst) {
@@ -240,7 +249,7 @@ Status HorizontalPkTabletWriter::build_del_tombstone_sstable(const Column& delet
         std::sort(sorted.begin(), sorted.end(), less);
         sst_keys = sorted.data();
     }
-    auto sst_name = gen_sst_filename();
+    auto sst_name = gen_sst_filename(_txn_id);
     WritableFileOptions sst_wopts;
     std::string sst_encryption_meta;
     if (config::enable_transparent_data_encryption) {
@@ -273,9 +282,10 @@ Status HorizontalPkTabletWriter::reset_segment_writer(bool eos) {
             if (tablet_schema()->has_separate_sort_key()) {
                 // Separate sort key: primary keys arrive in sort-key (not PK) order, so buffer+sort
                 // them in the unsort writer instead of streaming into a sorted SST.
-                _pk_sst_writer = std::make_unique<PkTabletUnsortSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
+                _pk_sst_writer =
+                        std::make_unique<PkTabletUnsortSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id, _txn_id);
             } else {
-                _pk_sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
+                _pk_sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id, _txn_id);
             }
         } else {
             _pk_sst_writer = std::make_unique<DefaultSSTWriter>();
@@ -353,6 +363,7 @@ StatusOr<std::unique_ptr<TabletWriter>> HorizontalPkTabletWriter::clone() const 
                                                              _is_compaction, _bundle_file_context,
                                                              const_cast<GlobalDictByNameMaps*>(_global_dicts));
     RETURN_IF_ERROR(writer->open());
+    writer->set_flat_json_config(_flat_json_config);
     if (enable_pk_index_eager_build()) {
         writer->force_set_enable_pk_index_eager_build();
     }
@@ -392,9 +403,10 @@ Status VerticalPkTabletWriter::write_columns(const Chunk& data, const std::vecto
                 // column group (appended after the sort-key columns), so this writer sees them here
                 // but not at chunk positions [0, num_key). The unsort writer buffers+sorts the PKs
                 // (they arrive in sort-key order) and projects them via `column_indexes`.
-                sst_writer = std::make_unique<PkTabletUnsortSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
+                sst_writer =
+                        std::make_unique<PkTabletUnsortSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id, _txn_id);
             } else {
-                sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
+                sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id, _txn_id);
             }
         } else {
             sst_writer = std::make_unique<DefaultSSTWriter>();

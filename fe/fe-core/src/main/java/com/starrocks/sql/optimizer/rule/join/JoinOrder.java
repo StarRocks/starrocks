@@ -494,9 +494,16 @@ public abstract class JoinOrder {
         BitSet joinBitSet = new BitSet();
         joinBitSet.or(left);
         joinBitSet.or(right);
+        boolean isTopJoin = joinBitSet.cardinality() == atomSize;
         for (int i = 0; i < edgeSize; ++i) {
             Edge edge = edges.get(i);
-            if (contains(joinBitSet, edge.vertexes) &&
+            if (edge.vertexes.isEmpty()) {
+                // A predicate that references no atom column (e.g. rand() > 0.5) never touches both sides,
+                // so put it on the join that covers all atoms, exactly once per reordered tree.
+                if (isTopJoin) {
+                    onPredicates.add(edge.predicate);
+                }
+            } else if (contains(joinBitSet, edge.vertexes) &&
                     left.intersects(edge.vertexes) &&
                     right.intersects(edge.vertexes)) {
                 onPredicates.add(edge.predicate);

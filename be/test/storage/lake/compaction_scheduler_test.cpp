@@ -15,6 +15,7 @@
 #include "storage/lake/compaction_scheduler.h"
 
 #include <atomic>
+#include <limits>
 #include <new>
 #include <system_error>
 #include <thread>
@@ -25,6 +26,8 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/scoped_cleanup.h"
 #include "common/config_compaction_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/config_update_registry.h"
 #include "common/thread/threadpool.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "runtime/descriptors.h"
@@ -139,9 +142,83 @@ TEST_F(LakeCompactionSchedulerTest, test_list_tasks_hides_parallel_merged_contex
     context->RemoveFromList();
 }
 
+TEST_F(LakeCompactionSchedulerTest, test_update_compact_threads_rejects_out_of_range) {
+    auto old_target = _compaction_scheduler._task_queues.target_size();
+    auto old_config = config::compact_threads;
+    SCOPED_CLEANUP({ config::compact_threads = old_config; });
+
+    for (int32_t v : {0, -1, static_cast<int32_t>(std::numeric_limits<int16_t>::max()) + 1}) {
+        config::compact_threads = v;
+        auto st = _compaction_scheduler.update_compact_threads(v);
+        EXPECT_TRUE(st.is_invalid_argument()) << st;
+        EXPECT_EQ(old_target, _compaction_scheduler._task_queues.target_size());
+    }
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_update_compact_threads_while_resizing) {
+    auto& queues = _compaction_scheduler._task_queues;
+    auto size = queues.task_queue_size();
+    // A target above the current size leaves the queues "modifying" without any worker acting on it.
+    queues.set_target_size(size + 2);
+    SCOPED_CLEANUP({ queues.set_target_size(size); });
+
+    auto st = _compaction_scheduler.update_compact_threads(size + 1);
+    EXPECT_TRUE(st.is_service_unavailable()) << st;
+    EXPECT_EQ(size + 2, queues.target_size());
+    EXPECT_EQ(size, queues.task_queue_size());
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_update_compact_threads_concurrent_update) {
+    auto& queues = _compaction_scheduler._task_queues;
+    auto size = queues.task_queue_size();
+    auto* sync_point = SyncPoint::GetInstance();
+    // Another update puts the target back before this one checks it.
+    sync_point->SetCallBack("CompactionScheduler::update_compact_threads:after_set_target_size",
+                            [&](void* /*arg*/) { queues.set_target_size(size); });
+    sync_point->EnableProcessing();
+    SCOPED_CLEANUP({
+        sync_point->ClearCallBack("CompactionScheduler::update_compact_threads:after_set_target_size");
+        sync_point->DisableProcessing();
+    });
+
+    auto st = _compaction_scheduler.update_compact_threads(size + 1);
+    EXPECT_TRUE(st.is_internal_error()) << st;
+    EXPECT_EQ(size, queues.target_size());
+    EXPECT_EQ(size, queues.task_queue_size());
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_update_compact_threads_after_stop) {
+    _compaction_scheduler.stop();
+    auto target = _compaction_scheduler._task_queues.target_size();
+    auto st = _compaction_scheduler.update_compact_threads(target + 1);
+    EXPECT_TRUE(st.is_service_unavailable()) << st;
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_config_registry_rolls_back_rejected_compact_threads) {
+    auto* registry = ConfigUpdateRegistry::instance();
+    auto old_config = config::compact_threads;
+    registry->TEST_reset();
+    SCOPED_CLEANUP({
+        registry->TEST_reset();
+        config::compact_threads = old_config;
+    });
+    registry->register_callback("compact_threads", [this]() {
+        return _compaction_scheduler.update_compact_threads(config::compact_threads);
+    });
+    registry->set_ready();
+
+    auto target = _compaction_scheduler._task_queues.target_size();
+    ASSERT_OK(registry->update_config("compact_threads", std::to_string(target)));
+
+    auto st = registry->update_config("compact_threads", "0");
+    EXPECT_TRUE(st.is_invalid_argument()) << st;
+    EXPECT_EQ(target, config::compact_threads);
+    EXPECT_EQ(target, _compaction_scheduler._task_queues.target_size());
+}
+
 TEST_F(LakeCompactionSchedulerTest, test_abort_all) {
     // set to single thread mode, so all the tasks will be in the same thread
-    _compaction_scheduler.update_compact_threads(1);
+    ASSERT_OK(_compaction_scheduler.update_compact_threads(1));
     std::vector<CompactionTaskInfo> tasks;
     _compaction_scheduler.list_tasks(&tasks);
     EXPECT_EQ(0, tasks.size());
@@ -334,8 +411,8 @@ TEST_F(LakeCompactionSchedulerTest, test_abort_with_not_write_txnlog) {
     SyncPoint::GetInstance()->DisableProcessing();
 
     // A task that failed before producing a txn log must not leave anything behind in the metacache.
-    EXPECT_EQ(nullptr,
-              _tablet_mgr->metacache()->lookup_txn_log(_tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id)));
+    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(
+                               MetacacheKey::txn_log(_tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id))));
 }
 
 // skip_write_txnlog is the aggregate/file-bundling path: the compaction worker returns the txn log
@@ -355,7 +432,7 @@ TEST_F(LakeCompactionSchedulerTest, test_skip_write_txnlog_fills_metacache) {
     request.set_skip_write_txnlog(true);
 
     auto log_path = _tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id);
-    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(log_path));
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(log_path)));
 
     auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
     _compaction_scheduler.compact(nullptr, &request, &response, cb);
@@ -367,7 +444,7 @@ TEST_F(LakeCompactionSchedulerTest, test_skip_write_txnlog_fills_metacache) {
     // The log was not written to object storage ...
     EXPECT_FALSE(fs::path_exist(log_path));
     // ... but the publish path can still find it without a remote read.
-    auto cached = _tablet_mgr->metacache()->lookup_txn_log(log_path);
+    auto cached = _tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(log_path));
     ASSERT_NE(nullptr, cached);
     EXPECT_EQ(_tablet_metadata->id(), cached->tablet_id());
     EXPECT_EQ(txn_id, cached->txn_id());
@@ -772,7 +849,7 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_exception_after_reg
 // rescheduled for a worker that holds one instead -- and still complete its RPC exactly once.
 TEST_F(LakeCompactionSchedulerTest, test_parallel_planning_token_loss_reschedules) {
     // Single worker, single token: the token freed for planning cannot go anywhere but to the drain below.
-    _compaction_scheduler.update_compact_threads(1);
+    ASSERT_OK(_compaction_scheduler.update_compact_threads(1));
 
     std::atomic<bool> drained_once{false};
     std::atomic<int> tokens_held{0};

@@ -18,6 +18,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -25,6 +26,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
@@ -121,6 +123,80 @@ public class TaskRunTest {
         assertEquals("PARTITION_START", TaskRun.PARTITION_START);
         assertEquals("PARTITION_END", TaskRun.PARTITION_END);
         assertEquals("FORCE", TaskRun.FORCE);
+        assertEquals("MV_REFRESH_JOB_PROCESS_START_TIME", TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME);
+        assertFalse(TaskRun.MV_UNCOPYABLE_PROPERTIES.contains(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME),
+                "must copy to the next batch or the duration start never reaches the terminal run");
+        assertFalse(TaskRun.MV_COMPARABLE_PROPERTIES.contains(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME),
+                "must not participate in pending-run merge equality");
+    }
+
+    @Test
+    public void seedRefreshJobProcessStartTimeWritesPositiveTimestamp() {
+        Map<String, String> newProperties = new HashMap<>();
+        TaskRunStatus status = new TaskRunStatus();
+        status.setProcessStartTime(1718000000123L);
+
+        TaskRun.seedRefreshJobProcessStartTime(newProperties, status);
+
+        assertEquals("1718000000123", newProperties.get(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME));
+    }
+
+    @Test
+    public void seedRefreshJobProcessStartTimeSkipsUnknownZero() {
+        Map<String, String> newProperties = new HashMap<>();
+        TaskRunStatus status = new TaskRunStatus();
+        status.setProcessStartTime(0L);
+
+        TaskRun.seedRefreshJobProcessStartTime(newProperties, status);
+
+        assertFalse(newProperties.containsKey(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME));
+    }
+
+    @Test
+    public void seedRefreshJobProcessStartTimeDoesNotOverwrite() {
+        Map<String, String> newProperties = new HashMap<>();
+        newProperties.put(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME, "111");
+        TaskRunStatus status = new TaskRunStatus();
+        status.setProcessStartTime(1718000000123L);
+
+        TaskRun.seedRefreshJobProcessStartTime(newProperties, status);
+
+        assertEquals("111", newProperties.get(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME));
+    }
+
+    @Test
+    public void testRunsFromBothSidesOfAVersionMapResetDoNotMerge() {
+        Map<String, String> range = new HashMap<>();
+        range.put(TaskRun.MV_ID, "1");
+        range.put(TaskRun.PARTITION_START, "p1");
+        range.put(TaskRun.PARTITION_END, "p2");
+        Map<String, String> beforeReset = new HashMap<>(range);
+        beforeReset.put(TaskRun.MV_VERSION_MAP_RESET_EPOCH, "2");
+        Map<String, String> afterReset = new HashMap<>(range);
+        afterReset.put(TaskRun.MV_VERSION_MAP_RESET_EPOCH, "4");
+        ExecuteOption staleBatch = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, beforeReset);
+
+        assertFalse(staleBatch.isMergeableWith(
+                new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, afterReset)));
+        assertFalse(staleBatch.isMergeableWith(
+                new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, new HashMap<>(range))));
+        // The batches of one job carry the same epoch and still merge.
+        assertTrue(staleBatch.isMergeableWith(
+                new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, new HashMap<>(beforeReset))));
+        assertFalse(TaskRun.MV_UNCOPYABLE_PROPERTIES.contains(TaskRun.MV_VERSION_MAP_RESET_EPOCH),
+                "must copy to the next batch, which is fenced by its job's epoch");
+    }
+
+    @Test
+    public void testSeedVersionMapResetEpoch() {
+        Map<String, String> newProperties = new HashMap<>();
+        TaskRun.seedVersionMapResetEpoch(newProperties, -1);
+        assertFalse(newProperties.containsKey(TaskRun.MV_VERSION_MAP_RESET_EPOCH));
+        TaskRun.seedVersionMapResetEpoch(newProperties, 2);
+        assertEquals("2", newProperties.get(TaskRun.MV_VERSION_MAP_RESET_EPOCH));
+        // A later batch keeps the epoch its job's first run read.
+        TaskRun.seedVersionMapResetEpoch(newProperties, 4);
+        assertEquals("2", newProperties.get(TaskRun.MV_VERSION_MAP_RESET_EPOCH));
     }
 
     @Test

@@ -16,12 +16,14 @@
 
 #include <algorithm>
 #include <limits>
+#include <unordered_set>
 
 #include "base/status.h"
 #include "base/status_fmt.hpp"
 #include "base/statusor.h"
 #include "common/config_lake_fwd.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/query/query_remote_read.h"
 #include "connector/lake/lake_global_late_materialization_context.h"
 #include "exec/exec_env.h"
 #include "exec/olap_scan_node.h"
@@ -108,6 +110,19 @@ Status init_read_schema(const TabletSchemaCSPtr& tablet_schema, const std::vecto
     std::sort(scanner_columns.begin(), scanner_columns.end());
     *read_schema = ChunkHelper::convert_schema(tablet_schema, scanner_columns);
     return Status::OK();
+}
+
+// Set up the encoded and output schema of a lookup iterator the way TabletReader does for a scan.
+// Without it, output_schema() still types a global-dict column as the string. The plain dict path
+// gets away with that because it swaps its own code column into the chunk, but the force-encode
+// path builds its global-id column from output_schema() and then writes codes into it as a
+// LowCardDictColumn. A string column there gets its offsets overwritten, and the corruption only
+// surfaces later, e.g. as std::length_error when the fetched chunk is appended.
+Status init_iterator_schema(ChunkIterator* iter, ColumnIdToGlobalDictMap* global_dicts) {
+    static const std::unordered_set<uint32_t> kNoUnusedOutputColumns;
+    DCHECK(global_dicts != nullptr);
+    RETURN_IF_ERROR(iter->init_encoded_schema(*global_dicts));
+    return iter->init_output_schema(kNoUnusedOutputColumns);
 }
 
 } // namespace detail
@@ -272,6 +287,7 @@ auto OlapScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     if (iters.size() != 1) {
         return Status::InternalError("unexpected iterators from rowset");
     }
+    RETURN_IF_ERROR(detail::init_iterator_schema(iters[0].get(), _global_dicts));
 
     return iters[0];
 }
@@ -287,6 +303,9 @@ Status LakeScanTabletAdaptor::init_schema(RuntimeState* state) {
     _lake_io_opts.fill_data_cache = cache_options.fill_data_cache;
     _lake_io_opts.fill_metadata_cache = cache_options.fill_metadata_cache;
     _lake_io_opts.skip_disk_cache = cache_options.skip_disk_cache;
+    // The rows are fetched for this query: its remote reads, here and in the lookups that follow, are the query's.
+    _lake_io_opts.remote_read = query_remote_read_context(state);
+    ScopedRemoteReadContext remote_read_scope(_lake_io_opts.remote_read);
     auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     const auto& lake_scan_node = _glm_ctx->scan_node();
 
@@ -402,6 +421,7 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     if (iters.size() != 1) {
         return Status::InternalError("unexpected iterators from lake rowset");
     }
+    RETURN_IF_ERROR(detail::init_iterator_schema(iters[0].get(), _global_dicts));
 
     return iters[0];
 }

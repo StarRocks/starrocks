@@ -407,7 +407,11 @@ class ForeignKlassImpl : public ForeignKlass {
 public:
     ForeignKlassImpl(std::string name) : ForeignKlass(std::move(name)) {
         allocators.allocate = nullptr;
-        allocators.finalize = nullptr;
+        // finalize() only destroys the ForeignObject<T> header, so it does not depend on the
+        // constructor argument types. Register it up front: a class without a Wren-visible ctor
+        // is still instantiated by pushAsPtr()/pushAsConstRef()/pushAsMove(), and leaving the
+        // finalizer null leaks the ForeignObject (and whatever shared_ptr it owns) on every push.
+        allocators.finalize = &detail::ForeignKlassAllocator<T>::finalize;
     }
 
     ~ForeignKlassImpl() = default;

@@ -168,19 +168,16 @@ public:
     // create suitable column to hold encoded key
     //   schema: schema of the table
     //   pcolumn: output column
-    //   large_column: some usage may fill the column with more than uint32_max elements, set true to support this
     //   encoding_type: encoding type of the primary key
-    static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, PrimaryKeyEncodingType encoding_type,
-                                bool large_column = false);
+    static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, PrimaryKeyEncodingType encoding_type);
 
     // create suitable column to hold encoded key
     //   schema: schema of the table
     //   pcolumn: output column
     //   key_idxes: indexes of columns for encoding
     //   encoding_type: encoding type of the primary key
-    //   large_column: some usage may fill the column with more than uint32_max elements, set true to support this
     static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, const std::vector<ColumnId>& key_idxes,
-                                PrimaryKeyEncodingType encoding_type, bool large_column = false);
+                                PrimaryKeyEncodingType encoding_type);
 
     // Check that an encoded primary-key column can be persisted by delete files
     // without overflowing the BinaryColumn size fields.

@@ -20,6 +20,7 @@
 #include "column/fixed_length_column.h"
 #include "compute_env/query_cache/cache_manager.h"
 #include "compute_env/query_cache/lane_arbiter.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -49,8 +50,7 @@ TEST(ComputeEnvQueryCacheTest, cache_manager_populates_probes_and_invalidates) {
     query_cache::CacheManager cache_mgr(1024 * 1024);
 
     auto chunk = std::make_shared<Chunk>();
-    auto column = Int8Column::create();
-    column->append(1);
+    auto column = ColumnTestHelper::build_column<int8_t>({1});
     chunk->append_column(std::move(column), 1);
 
     query_cache::CacheValue value(100, 7, {chunk});
@@ -102,8 +102,7 @@ TEST(ComputeEnvQueryCacheTest, cache_manager_installs_updates_and_removes_metric
         assert_metric_value(&registry, "query_cache_hit_ratio", "0.000000");
 
         auto chunk = std::make_shared<Chunk>();
-        auto column = Int8Column::create();
-        column->append(1);
+        auto column = ColumnTestHelper::build_column<int8_t>({1});
         chunk->append_column(std::move(column), 1);
 
         query_cache::CacheValue value(100, 7, {chunk});

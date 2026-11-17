@@ -72,6 +72,7 @@ public:
 
     virtual bool releaseable() const { return false; }
     virtual void enter_release_memory_mode() {}
+    virtual bool has_pending_io_tasks() const { return false; }
 
     PipeObservable& observable() { return _observable; }
 
@@ -148,6 +149,7 @@ public:
     bool is_all_sources_finished() const override;
     bool releaseable() const override { return true; }
     void enter_release_memory_mode() override;
+    bool has_pending_io_tasks() const override;
 
 private:
     std::shared_ptr<MemLimitedChunkQueue> _queue;

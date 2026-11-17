@@ -26,6 +26,7 @@
 #include "storage/lake/delta_writer_finish_mode.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/rowset/segment_file_info.h"
+#include "storage_primitive/flat_json_config.h"
 
 namespace starrocks {
 class MemTracker;
@@ -308,11 +309,27 @@ public:
         return *this;
     }
 
+    // See TOlapTableSink.enable_multi_node_write. Marks this writer as holding only part of the tablet's
+    // rows for the transaction, which keeps its (partial) txn log out of the metacache.
+    DeltaWriterBuilder& set_multi_node_write(bool multi_node_write) {
+        _multi_node_write = multi_node_write;
+        return *this;
+    }
+
     // Force the internal TabletWriter to build the vector index inline, overriding async
     // index_build_mode. Used by lake schema-change conversions (SortedSchemaChange) so the
     // shadow tablet's existing data is fully indexed within the ALTER, matching DirectSchemaChange.
     DeltaWriterBuilder& set_force_build_vector_index_inline(bool force_build_vector_index_inline) {
         _force_build_vector_index_inline = force_build_vector_index_inline;
+        return *this;
+    }
+
+    // The destination table's flat_json.* properties carried by the load request. Decides the shape
+    // of the JSON columns this writer produces. Without it (a table that sets none, or a request from
+    // a sender that predates the field) the writer consults the tablet metadata cache and, on a miss,
+    // follows the be.conf globals.
+    DeltaWriterBuilder& set_flat_json_config(std::shared_ptr<FlatJsonConfig> flat_json_config) {
+        _flat_json_config = std::move(flat_json_config);
         return *this;
     }
 
@@ -339,8 +356,10 @@ private:
     BundleWritableFileContext* _bundle_writable_file_context{nullptr};
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
+    bool _multi_node_write = false;
     std::shared_ptr<const TabletSchema> _tablet_schema;
     bool _force_build_vector_index_inline = false;
+    std::shared_ptr<FlatJsonConfig> _flat_json_config;
 };
 
 } // namespace starrocks::lake

@@ -24,8 +24,8 @@ namespace starrocks {
 namespace {
 
 AggStateDesc make_desc() {
-    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_SMALLINT)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    std::vector<TypeDescriptor> arg_types = {TYPE_SMALLINT_DESC};
+    auto return_type = TYPE_DOUBLE_DESC;
     return AggStateDesc("avg", return_type, arg_types, true, 3);
 }
 
@@ -49,8 +49,7 @@ TEST(AggStateDescTest, basicAccessorsAndCopies) {
     auto copied = desc;
     expect_equal(copied, desc);
 
-    auto assigned = AggStateDesc("avg", TypeDescriptor::from_logical_type(TYPE_DOUBLE),
-                                 {TypeDescriptor::from_logical_type(TYPE_SMALLINT)}, false, 1);
+    auto assigned = AggStateDesc("avg", TYPE_DOUBLE_DESC, {TYPE_SMALLINT_DESC}, false, 1);
     assigned = desc;
     expect_equal(assigned, desc);
 }

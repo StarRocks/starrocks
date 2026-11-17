@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "common/column_id.h"
@@ -95,10 +97,27 @@ public:
     // Precondition: the last method called must have been `prepare()`.
     Status open(const TabletReaderParams& read_params);
 
+    // Adds what the reused segment iterators of the scans since the last call have read to stats(): they are not
+    // closed between the scans they serve. Only the slots those scans used are visited; the others have not read since
+    // their own last flush.
+    void flush_reusable_iterator_io_stats();
+
     void close() override;
 
-    const OlapReaderStatistics& stats() const { return _stats; }
+    const OlapReaderStatistics& stats() const;
+    // Snapshot only the counters consumed by CompactionTaskStats::collect().
+    const OlapReaderStatistics& compaction_stats() const;
     OlapReaderStatistics* mutable_stats() { return &_stats; }
+    void reset_stats();
+
+    struct RealtimeStats {
+        int64_t raw_rows_read = 0;
+        int64_t bytes_read = 0;
+        int64_t decompress_ns = 0;
+        int64_t vec_cond_ns = 0;
+        int64_t del_filter_ns = 0;
+    };
+    RealtimeStats realtime_stats() const;
 
     size_t merged_rows() const override { return _collect_iter->merged_rows(); }
 
@@ -128,9 +147,12 @@ private:
     using PredicateList = std::vector<const ColumnPredicate*>;
     using PredicateMap = std::unordered_map<ColumnId, PredicateList>;
 
-    Status build_prepared_tablet_read_state(const TabletReaderParams& params, PreparedTabletReadState* state);
+    // Both add the reads they make to |prepare_stats|.
+    Status build_prepared_tablet_read_state(const TabletReaderParams& params, PreparedTabletReadState* state,
+                                            OlapReaderStatistics* prepare_stats);
     Status build_initial_coarse_split_tasks(const TabletReaderParams& params,
-                                            const PreparedTabletReadStatePtr& prepared_tablet_read_state);
+                                            const PreparedTabletReadStatePtr& prepared_tablet_read_state,
+                                            OlapReaderStatistics* prepare_stats);
     Status refine_initial_coarse_split_and_append_refined_tasks(const TabletReaderParams& params,
                                                                 RowidRangeOptionPtr* local_rowid_range);
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
@@ -156,12 +178,19 @@ private:
     std::vector<RowsetPtr> _rowsets;
     std::vector<SegmentSharedPtr> _segments;
     std::vector<std::vector<ChunkIteratorPtr>> _reusable_rowset_iterators;
+    // (rowset, segment) of the reusable slots used since the last flush_reusable_iterator_io_stats().
+    std::vector<std::pair<size_t, size_t>> _used_reusable_slots;
     std::shared_ptr<ChunkIterator> _collect_iter;
 
     DeletePredicates _delete_predicates;
     PredicateList _predicate_free_list;
 
     OlapReaderStatistics _stats;
+    // A SegmentIterator retains its stats pointer after rowset->read() returns. Keep each parallel
+    // rowset's statistics alive until the reader and its iterators are finished.
+    std::vector<std::unique_ptr<OlapReaderStatistics>> _parallel_rowset_stats;
+    mutable OlapReaderStatistics _combined_stats;
+    mutable OlapReaderStatistics _compaction_stats;
 
     MemPool _mempool;
     ObjectPool _obj_pool;

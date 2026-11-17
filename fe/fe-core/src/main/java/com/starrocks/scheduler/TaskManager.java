@@ -74,6 +74,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -111,11 +112,21 @@ public class TaskManager implements MemoryTrackable {
     // The dispatchTaskScheduler is responsible for periodically checking whether the running TaskRun is completed
     // and updating the status. It is also responsible for placing pending TaskRun in the running TaskRun queue.
     // This operation need to consider concurrency.
+    // The period is Config.task_runs_dispatch_interval_ms. After each cycle, compare the live
+    // config with the interval this future was created with; a change cancels the future and
+    // starts a new scheduleAtFixedRate. The next run waits the new interval (same as
+    // LeaderDaemon.setInterval: a decrease takes effect after the current period).
+    // Do not reschedule until dispatchFuture is published: scheduleAtFixedRate(delay=0) can
+    // run the first cycle before the assignment returns, and a replacement then would leave
+    // two periodic tasks with only one handle.
     // This scheduler can use notify/wait to optimize later.
     //
     // Not final: same rebuild-on-restart contract as periodScheduler.
     // Package-private for same reasons as periodScheduler above.
     volatile ScheduledExecutorService dispatchScheduler = Executors.newScheduledThreadPool(1);
+    // Package-private so tests can inspect cancel/reschedule without reflection.
+    volatile ScheduledFuture<?> dispatchFuture;
+    volatile int scheduledDispatchIntervalMs;
     // Use to concurrency control
     private final QueryableReentrantLock taskLock;
 
@@ -139,29 +150,77 @@ public class TaskManager implements MemoryTrackable {
             if (periodScheduler.isShutdown()) {
                 periodScheduler = Executors.newScheduledThreadPool(1);
             }
-            if (dispatchScheduler.isShutdown()) {
-                dispatchScheduler = Executors.newScheduledThreadPool(1);
-            }
             taskRunManager.getTaskRunExecutor().rebuildIfShutdown();
             clearUnfinishedTaskRun();
             registerPeriodicalTask();
-            dispatchScheduler.scheduleAtFixedRate(() -> {
-                if (!GlobalStateMgr.getCurrentState().isLeader()) {
-                    return;
-                }
-                if (!taskRunManager.tryTaskRunLock()) {
-                    LOG.warn("TaskRun scheduler cannot acquire the lock");
-                    return;
-                }
-                try {
-                    taskRunManager.checkRunningTaskRun();
-                    taskRunManager.scheduledPendingTaskRun();
-                } catch (Exception ex) {
-                    LOG.warn("failed to dispatch task.", ex);
-                } finally {
-                    taskRunManager.taskRunUnlock();
-                }
-            }, 0, 1, TimeUnit.SECONDS);
+            startDispatchScheduler();
+        }
+    }
+
+    private void startDispatchScheduler() {
+        if (dispatchScheduler.isShutdown()) {
+            dispatchScheduler = Executors.newScheduledThreadPool(1);
+        }
+        int intervalMs = getTaskRunsDispatchIntervalMs();
+        scheduledDispatchIntervalMs = intervalMs;
+        dispatchFuture = dispatchScheduler.scheduleAtFixedRate(
+                this::dispatchPendingAndRunningTaskRuns, 0, intervalMs, TimeUnit.MILLISECONDS);
+    }
+
+    private void dispatchPendingAndRunningTaskRuns() {
+        try {
+            if (!GlobalStateMgr.getCurrentState().isLeader()) {
+                return;
+            }
+            if (!taskRunManager.tryTaskRunLock()) {
+                LOG.warn("TaskRun scheduler cannot acquire the lock");
+                return;
+            }
+            try {
+                taskRunManager.checkRunningTaskRun();
+                taskRunManager.scheduledPendingTaskRun();
+            } catch (Exception ex) {
+                LOG.warn("failed to dispatch task.", ex);
+            } finally {
+                taskRunManager.taskRunUnlock();
+            }
+        } finally {
+            rescheduleDispatchIfIntervalChanged();
+        }
+    }
+
+    @VisibleForTesting
+    static int getTaskRunsDispatchIntervalMs() {
+        int intervalMs = Config.task_runs_dispatch_interval_ms;
+        if (intervalMs < 0) {
+            return 1000;
+        }
+        return Math.max(1, intervalMs);
+    }
+
+    @VisibleForTesting
+    void rescheduleDispatchIfIntervalChanged() {
+        int intervalMs = getTaskRunsDispatchIntervalMs();
+        if (intervalMs == scheduledDispatchIntervalMs) {
+            return;
+        }
+        ScheduledFuture<?> old = dispatchFuture;
+        if (old == null) {
+            // First cycle can run before startDispatchScheduler() stores the future.
+            // Scheduling a replacement here would orphan that in-flight fixed-rate task.
+            return;
+        }
+        ScheduledExecutorService scheduler = dispatchScheduler;
+        if (scheduler.isShutdown()) {
+            return;
+        }
+        old.cancel(false);
+        scheduledDispatchIntervalMs = intervalMs;
+        try {
+            dispatchFuture = scheduler.scheduleAtFixedRate(
+                    this::dispatchPendingAndRunningTaskRuns, intervalMs, intervalMs, TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException e) {
+            LOG.debug("skip rescheduling TaskRun dispatch, scheduler is shutdown");
         }
     }
 
@@ -207,6 +266,10 @@ public class TaskManager implements MemoryTrackable {
         }
         periodFutureMap.clear();
         periodScheduler.shutdownNow();
+        if (dispatchFuture != null) {
+            dispatchFuture.cancel(false);
+            dispatchFuture = null;
+        }
         dispatchScheduler.shutdownNow();
         // Stop the task-run pool like every other leader-session pool: shutdownNow interrupts in-flight
         // MV-refresh / INSERT task runs (their transactions abort) so a previous term's run cannot race
@@ -603,6 +666,34 @@ public class TaskManager implements MemoryTrackable {
      * NOTE: this method will write edit log.
      */
     public void suspendTask(Task task, boolean isReplay) {
+        suspendTask(task, isReplay, RunsOnSuspend.KILL);
+    }
+
+    // What suspending a task does with its runs.
+    private enum RunsOnSuspend {
+        KILL,
+        DROP_PENDING,
+        // Both of the above take the task run lock.
+        LEAVE,
+    }
+
+    /**
+     * Suspends a task and drops its queued runs, but lets its running one finish: a run that suspends its own task as
+     * it fails would otherwise be killed, and report "TaskRun killed" instead of its failure.
+     */
+    public void suspendTaskWithoutKilling(Task task) {
+        suspendTask(task, false, RunsOnSuspend.DROP_PENDING);
+    }
+
+    /**
+     * Suspends a task and leaves its runs as they are, for a caller that has just failed to take the task run lock,
+     * which killing or dropping them takes, and must not wait for it again.
+     */
+    public void suspendTaskLeavingRuns(Task task) {
+        suspendTask(task, false, RunsOnSuspend.LEAVE);
+    }
+
+    private void suspendTask(Task task, boolean isReplay, RunsOnSuspend runs) {
         if (task == null) {
             return;
         }
@@ -612,13 +703,13 @@ public class TaskManager implements MemoryTrackable {
                     wal -> task.setState(Constants.TaskState.PAUSE)
             );
         }
-        suspendTaskInternal(task);
+        suspendTaskInternal(task, runs);
     }
 
     /**
      * Internal method to suspend a task without writing edit log.
      */
-    private void suspendTaskInternal(Task task) {
+    private void suspendTaskInternal(Task task, RunsOnSuspend runs) {
         if (task == null) {
             return;
         }
@@ -635,15 +726,30 @@ public class TaskManager implements MemoryTrackable {
                 }
             }
 
-            // kill running task run
-            if (!killTask(task.getName(), true)) {
-                LOG.warn("kill task failed: {}", task.getName());
+            if (runs == RunsOnSuspend.KILL) {
+                if (!killTask(task.getName(), true)) {
+                    LOG.warn("kill task failed: {}", task.getName());
+                }
+            } else if (runs == RunsOnSuspend.DROP_PENDING && !removePendingTaskRuns(task)) {
+                LOG.warn("remove pending task runs failed: {}", task.getName());
             }
             // remove task from scheduler
             periodFutureMap.remove(task.getId());
         } finally {
             taskUnlock();
         }
+    }
+
+    private boolean removePendingTaskRuns(Task task) {
+        if (!taskRunManager.tryTaskRunLock()) {
+            return false;
+        }
+        try {
+            taskRunScheduler.removePendingTask(task);
+        } finally {
+            taskRunManager.taskRunUnlock();
+        }
+        return true;
     }
 
     /**
@@ -985,7 +1091,12 @@ public class TaskManager implements MemoryTrackable {
                 LOG.warn("failed to execute periodical task: {}", task, e);
             }
         }, initialDelay, periodSeconds, TimeUnit.SECONDS);
-        periodFutureMap.put(task.getId(), future);
+        // Registering a task that is still scheduled must not leave the replaced submitter firing: no later
+        // suspend, alter or drop could reach it.
+        ScheduledFuture<?> replaced = periodFutureMap.put(task.getId(), future);
+        if (replaced != null) {
+            replaced.cancel(false);
+        }
     }
 
     private boolean tryTaskLock() {
@@ -1088,26 +1199,53 @@ public class TaskManager implements MemoryTrackable {
         writer.close();
     }
 
+    /**
+     * Collect the matched task runs from every source a run may live in: the pending queue, the
+     * running map, the in-memory history and the archived history table.
+     *
+     * Migrations between those sources are not atomic with respect to this method -- pending and
+     * running are snapshotted before the history is looked up, and the in-memory history before the
+     * archived table -- so a run migrating while the sources are walked is collected twice, from the
+     * one it left and the one it entered, and every per-run aggregation over
+     * information_schema.task_runs then counts it twice.
+     *
+     * Collapse by query id, which identifies a run across all four sources, keeping the record from
+     * the last source it was found in: a run only migrates forward, so the later source carries the
+     * more advanced state (SUCCESS from the history, not RUNNING from the running map).
+     */
     public List<TaskRunStatus> getMatchedTaskRunStatus(TGetTasksParams params) {
-        List<TaskRunStatus> taskRunList = Lists.newArrayList();
+        // Re-putting a key keeps the position of its first occurrence and takes the latest value,
+        // which is exactly the precedence above.
+        Map<String, TaskRunStatus> matchedByQueryId = Maps.newLinkedHashMap();
+        Consumer<TaskRunStatus> collector = status -> {
+            // null and "" both mean "no query id" and must share one key, not take one each.
+            String queryId = Strings.nullToEmpty(status.getQueryId());
+            if (queryId.isEmpty()) {
+                // Unreachable for a run this version creates: initStatus, the only place a status is
+                // built, always gets a uuid. Only a record restored from persisted state could lack one.
+                LOG.warn("task run has no query id and cannot be told apart from another one: {}", status);
+            }
+            matchedByQueryId.put(queryId, status);
+        };
+
         // pending task runs
         List<TaskRun> pendingTaskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
         pendingTaskRuns.stream()
                 .map(TaskRun::getStatus)
                 .filter(t -> t.match(params))
-                .forEach(taskRunList::add);
+                .forEach(collector);
 
         // running task runs
         Set<TaskRun> runningTaskRuns = taskRunScheduler.getCopiedRunningTaskRuns();
         runningTaskRuns.stream()
                 .map(TaskRun::getStatus)
                 .filter(t -> t.match(params))
-                .forEach(taskRunList::add);
+                .forEach(collector);
 
         // history task runs
-        taskRunList.addAll(taskRunManager.getTaskRunHistory().lookupHistory(params));
+        taskRunManager.getTaskRunHistory().lookupHistory(params).forEach(collector);
 
-        return taskRunList;
+        return Lists.newArrayList(matchedByQueryId.values());
     }
 
     /**
@@ -1259,6 +1397,7 @@ public class TaskManager implements MemoryTrackable {
             if (toStatus == Constants.TaskRunState.RUNNING) {
                 if (status.getQueryId().equals(statusChange.getQueryId())) {
                     status.setState(Constants.TaskRunState.RUNNING);
+                    status.setProcessStartTime(statusChange.getProcessStartTime());
                     taskRunScheduler.addRunningTaskRun(pendingTaskRun);
                 }
             } else if (toStatus == Constants.TaskRunState.MERGED) {

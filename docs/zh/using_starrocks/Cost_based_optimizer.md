@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "How to configure StarRocks CBO (Cost-based Optimizer) with statistics collection and histograms to optimize query execution plans."
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CBO 统计信息
@@ -63,7 +64,7 @@ partition_name: p06
 
 StarRocks 采用等深直方图 (Equi-height Histogram)，即选定若干个 bucket，每个 bucket 中的数据量几乎相等。对于出现频次较高、对选择率（selectivity）影响较大的数值，StarRocks 会分配单独的桶进行存储。桶数量越多时，直方图的估算精度就越高，但是也会增加统计信息的内存使用。您可以根据业务情况调整直方图的桶个数和单个采集任务的 MCV（most common value）个数。
 
-**直方图适用于有明显数据倾斜，并且有频繁查询请求的列。如果您的表数据分布比较均匀，可以不使用直方图。直方图支持的列类型为数值类型、DATE、DATETIME 或字符串类型。**
+**直方图适用于有明显数据倾斜，并且有频繁查询请求的列。如果您的表数据分布比较均匀，可以不使用直方图。直方图支持的列类型为数值类型、DATE、DATETIME 或字符串类型。对于字符串类型，StarRocks 仅收集 MCV（most common value），不收集直方图桶。**
 
 直方图统计信息存储在 StarRocks 集群 `_statistics_` 数据库的 `histogram_statistics` 表中。查询时会返回类似如下信息：
 
@@ -146,7 +147,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 
 对于基础统计信息，StarRocks 默认自动进行全表全量统计信息采集，无需人工操作。对于从未采集过统计信息的表，会在一个调度周期内自动进行统计信息采集。对于已经采集过统计信息的表，StarRocks 会自动更新表的总行数以及修改的行数，将这些信息定期持久化下来，作为是否触发自动采集的判断条件。当前自动采集任务不会对直方图和多列联合统计信息进行采集。
 
-从 2.4.5 版本开始，支持用户配置自动全量采集的时间段，防止因集中采集而导致的集群性能抖动。采集时间段可通过 `statistic_auto_analyze_start_time` 和 `statistic_auto_analyze_end_time` 这两个 FE 配置项来配置。
+从 2.4.5 版本开始，支持用户配置自动全量采集的时间段，防止因集中采集而导致的集群性能抖动。采集时间段可通过 `statistic_auto_analyze_start_time` 和 `statistic_auto_analyze_end_time` 这两个 FE 配置项来配置。开始时间和结束时间都按秒计算并包含在采集时间段内。例如，结束时间为 `17:00:00` 时，`17:00:00` 这一秒结束前都允许采集。如果开始时间晚于结束时间，则采集时间段跨越午夜。
 
 在调度周期内，触发新的自动采集任务的条件：
 
@@ -193,8 +194,8 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 | **FE配置项**                                   | **类型**  | **默认值**      | **说明**                                              |
 |---------------------------------------------|---------|--------------|-----------------------------------------------------|
 | enable_statistic_collect                    | BOOLEAN | TRUE         | 是否开启默认的自动采集任务和用户自定义自动采任务。该参数默认打开。                                   |
-| enable_auto_collect_statistics              | BOOLEAN | TRUE         | 是否开启默认的自动采集任务。该参数默认打开。                                   |
-| enable_collect_full_statistic               | BOOLEAN | TRUE         | 是否开启自动全量统计信息采集。该参数默认打开。                             |
+| enable_auto_collect_statistics              | BOOLEAN | TRUE         | 是否开启默认的自动采集任务。该参数默认打开。自 v3.5.0 起支持。                                   |
+| enable_collect_full_statistic               | BOOLEAN | TRUE         | 默认的自动采集任务是否使用全量采集。设置为 `false` 时使用抽样采集。该参数默认打开。在 v3.3.11 和 v3.4.1 之前的版本中，设置为 `false` 会关闭默认的自动采集任务。 |
 | statistic_collect_interval_sec              | LONG    | 600          | 自动定期任务中，检测数据更新的间隔，默认 10 分钟。单位：秒。                     |
 | statistic_auto_analyze_start_time           | STRING  | 00:00:00     | 用于配置自动全量采集的起始时间。取值范围：`00:00:00` ~ `23:59:59`。       |
 | statistic_auto_analyze_end_time             | STRING  | 23:59:59     | 用于配置自动全量采集的结束时间。取值范围：`00:00:00` ~ `23:59:59`。       |
@@ -383,7 +384,7 @@ CREATE ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
 - 采集类型
   - FULL：全量采集。
   - SAMPLE：抽样采集。
-  - 如果不指定采集类型，默认为抽样采集。
+  - 如果不指定采集类型，`CREATE ANALYZE TABLE` 默认为全量采集，`CREATE ANALYZE ALL` 和 `CREATE ANALYZE DATABASE` 默认为抽样采集。
 
 - `col_name`: 要采集统计信息的列，多列使用逗号 (,)分隔。如果不指定，表示采集整张表的信息。
 
@@ -402,10 +403,7 @@ CREATE ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
 
 ```SQL
 -- 定期全量采集所有数据库的统计信息。
-CREATE ANALYZE ALL;
-
--- 定期全量采集指定数据库下所有表的统计信息。
-CREATE ANALYZE DATABASE db_name;
+CREATE ANALYZE FULL ALL;
 
 -- 定期全量采集指定数据库下所有表的统计信息。
 CREATE ANALYZE FULL DATABASE db_name;
@@ -445,9 +443,15 @@ CREATE ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON c1,c2;
 ```sql
 ADMIN SET FRONTEND CONFIG("enable_auto_collect_statistics"="false");
 DROP ALL ANALYZE JOB;
-CREATE ANALYZE FULL ALL db_name PROPERTIES (
+CREATE ANALYZE FULL ALL PROPERTIES (
    "statistic_exclude_pattern" = "db_name.tbl_name"
 );
+```
+
+**保留 StarRocks 提供的自动采集任务，但不采集 `db_name.tbl_name` 表**
+
+```sql
+ALTER TABLE db_name.tbl_name SET ("enable_statistic_auto_collect" = "false");
 ```
 
 ### 导入数据时采集统计信息
@@ -738,13 +742,13 @@ partition_name:
 - 描述：FE 中处于 Pending 状态的查询触发 ANALYZE 任务的最大数量。
 - 引入版本：v3.4.0
 
-##### connector_table_query_trigger_analyze_schedule_interval
+##### connector_table_query_trigger_task_schedule_interval
 
 - 默认值：30
 - 类型：Int
 - 单位：秒
 - 是否动态：是
-- 描述：Schedule 线程调度查询触发 ANALYZE 任务的周期。
+- 描述：Schedule 线程调度查询触发 ANALYZE 任务的周期。在 v3.4.0 和 v3.4.1 中，该参数名为 `connector_table_query_trigger_analyze_schedule_interval`。
 - 引入版本：v3.4.0
 
 ##### connector_table_query_trigger_analyze_max_running_task_num
@@ -842,13 +846,13 @@ KILL ANALYZE <ID>
 
 ### 自动采集
 
-对于外部数据源中的表，需要创建一个自动采集任务，StarRocks 会根据采集任务中指定的属性，周期性检查采集任务是否需要执行，默认检查时间为 5 min。Hive 和 Iceberg 仅在发现有数据更新时，才会自动执行一次采集任务。
+对于外部数据源中的表，需要创建一个自动采集任务，StarRocks 会根据采集任务中指定的属性，周期性检查采集任务是否需要执行，默认检查时间为 10 min（v3.5.0 之前的版本为 5 min）。Hive 和 Iceberg 仅在发现有数据更新时，才会自动执行一次采集任务。
 
 StarRocks 目前不支持感知 Hudi 数据更新，所以只能周期性采集统计数据。您可以指定以下 FE 配置项来控制收集行为：
 
 - statistic_collect_interval_sec
 
-  自动定期任务中，检查是否需要采集统计信息的间隔周期，默认 5 分钟。
+  自动定期任务中，检查是否需要采集统计信息的间隔周期，默认 10 分钟（v3.5.0 之前的版本为 5 分钟）。
 
 - statistic_auto_collect_small_table_rows
 

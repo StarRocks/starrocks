@@ -2,18 +2,21 @@
 displayed_sidebar: docs
 sidebar_position: 30
 description: "Enable Group Provider in StarRocks to authenticate, and authorize user groups from external authentication systems."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Authenticate User Groups
 
-import UnixFileIntro from '../../_assets/user_priv/unix_file_intro.mdx'
-import UnixFileSyntax from '../../_assets/user_priv/unix_file_syntax.mdx'
-import UnixFileParam from '../../_assets/user_priv/unix_file_param.mdx'
-import GroupProviderRangerLink from '../../_assets/user_priv/group_provider_ranger_link.mdx'
 
 Enable Group Provider in StarRocks to authenticate, and authorize user groups from external authentication systems.
 
 From v3.5.0 onwards, StarRocks supports Group Provider to collect group information from external authentication systems for user group management.
+
+:::note A group provider is not the only source of groups
+
+A security integration can also take a login's groups from the identity provider that authenticated it, without any group provider: an LDAP integration from the group membership attribute of the user's own entry, and a JWT or OAuth 2.0 integration from a claim of the verified token. Set `group_source` on the integration; see [Authenticate with Security Integration](./authentication/security_integration.md). Groups resolved that way are used for exactly the same things as the groups of a group provider.
+
+:::
 
 ## Overview
 
@@ -31,7 +34,10 @@ The following flow chart uses LDAP and Apache Ranger as an example to explain th
 
 ## Create a group provider
 
-<UnixFileIntro />
+StarRocks supports three types of group providers: 
+- **LDAP group provider**: Search and match users with groups in your LDAP service
+- **Unix group provider**: Search and match users with groups in your operating system
+- **File group provider**: Search and match users with groups defined by a file
 
 ### Syntax
 
@@ -68,14 +74,49 @@ ldap_search_user_arg ::=
     "ldap_user_search_attr" = ""
 
 ldap_cache_arg ::= 
-    "ldap_cache_refresh_interval" = ""
+    ["ldap_cache_refresh_interval" = "",]
+    ["ldap_cache_max_stale_time" = ""]
 ```
 
-<UnixFileSyntax />
+- Unix group provider:
+
+```SQL
+CREATE GROUP PROVIDER <group_provider_name> 
+PROPERTIES (
+    "type" = "unix"
+)
+```
+
+- File group provider:
+
+```SQL
+CREATE GROUP PROVIDER <group_provider_name> 
+PROPERTIES (
+    "type" = "file",
+    "group_file_url" = ""
+)
+```
 
 ### Parameters
 
-<UnixFileParam />
+#### `type`
+
+The type of the group provider to create. Valid values:
+- `ldap`: Creates an LDAP group provider. When this value is set, you need to specify `ldap_info`, `ldap_search_group_arg`, `ldap_search_user_arg`, and optionally `ldap_cache_arg`.
+- `unix`: Creates a Unix group provider.
+- `file`: Creates a File group provider. When this value is set, you need to specify `group_file_url`.
+
+#### `group_file_url`
+
+The URL or relative path (under `fe/conf`) to the file that defines the user groups.
+
+:::note
+
+A group file contains a list of groups and their members. You can define a group in each line where the group name and members are separated by a colon. Multiple users are separated by commas. Example: `group_name:user_1,user_2,user_3`.
+
+An `http://` or `https://` URL is fetched with the connect and read timeouts set by the FE configuration items `group_provider_http_connect_timeout_ms` (default 5000) and `group_provider_http_read_timeout_ms` (default 30000). If the server does not answer within them, the statement fails and the group provider keeps its previous configuration.
+
+:::
 
 #### `ldap_info` parameter group
 
@@ -177,7 +218,17 @@ The argument used to define the cache behavior for the LDAP group information.
 
 ##### `ldap_cache_refresh_interval`
 
-Optional. The interval at which StarRocks automatically refreshes the cached LDAP group information. Unit: Seconds. Default: `900`.
+Optional. The interval at which StarRocks automatically refreshes the cached LDAP group information. Unit: Seconds. Default: `300`.
+
+##### `ldap_cache_max_stale_time`
+
+Optional. How long the last successfully built cache keeps being served while refreshes keep failing. Unit: Seconds. Default: `3600`.
+
+If a refresh cannot reach the LDAP server, StarRocks keeps serving the previous cache until it has been stale for longer than this value, after which the cache is dropped and every user resolves to an empty group set. Set this item to `0` to drop the cache as soon as a refresh fails.
+
+:::note
+Dropping the cache immediately turns a brief LDAP outage into a cluster-wide login failure when `permitted_groups` is configured, because an empty group set can never intersect the allowed list. Raising this value trades a longer window of stale group information for tolerance of directory downtime.
+:::
 
 ### Example
 
@@ -265,6 +316,71 @@ In this example, since `ldap_user_search_attr` is not configured, the system wil
 
 This approach is particularly suitable for Microsoft AD environments, as group members in AD may lack simple username attributes.
 
+## Alter a group provider
+
+You can update the properties of an existing group provider without dropping and recreating it. The new configuration is validated and warmed up before it takes effect: the old instance keeps serving requests until the new one is ready, so group lookups never return empty during the change.
+
+### Syntax
+
+```SQL
+ALTER GROUP PROVIDER <group_provider_name> SET
+(
+    "<property_key>" = "<property_value>"
+    [, "<property_key>" = "<property_value>" ...]
+)
+```
+
+### Notes
+
+- Only the listed properties are changed; properties that are not listed keep their previous values.
+- The `type` property cannot be changed. Drop and recreate the provider if you need to switch its type.
+- `SET` adds or overwrites a property, but it cannot remove one. Two properties that are not allowed to coexist therefore cannot be swapped with `ALTER`: an LDAP group provider accepts exactly one of `ldap_group_dn` and `ldap_group_filter`, so moving from one to the other means dropping and recreating the provider.
+- A property that the provider type does not define and that the provider does not already have is rejected. Property names are matched without regard to case, so `SET ("LDAP_BIND_ROOT_PWD" = ...)` updates `ldap_bind_root_pwd`; a misspelled name fails the statement instead of being stored beside the property you meant to change.
+- The new configuration is verified synchronously. If it is not usable (for example, the LDAP bind credentials are wrong or the server is unreachable), the statement fails and the provider keeps its previous configuration.
+- Credentials are never echoed back. `SHOW CREATE GROUP PROVIDER` prints `***` instead of the values of `ldap_bind_root_pwd` and `ldap_ssl_conn_trust_store_pwd`, and the statement recorded in the audit log has them redacted.
+
+### Example
+
+```SQL
+-- Rotate the LDAP bind password
+ALTER GROUP PROVIDER ldap_group_provider SET ("ldap_bind_root_pwd" = "<new_password>");
+
+-- Adjust the cache refresh interval
+ALTER GROUP PROVIDER ldap_group_provider SET ("ldap_cache_refresh_interval" = "10");
+
+-- Update multiple properties at once
+ALTER GROUP PROVIDER ldap_group_provider SET (
+    "ldap_conn_url" = "ldaps://new-host:636",
+    "ldap_ssl_conn_trust_store_path" = "/etc/ssl/new-truststore.jks"
+);
+```
+
+## View group providers
+
+```SQL
+-- List every group provider with its type. The Comment column is always NULL: no statement sets a comment.
+SHOW GROUP PROVIDERS;
+
+-- Show the statement that would recreate one group provider. Credentials such as
+-- `ldap_bind_root_pwd` and `ldap_ssl_conn_trust_store_pwd` are printed as `***`, so the output cannot be
+-- replayed as-is - fill the passwords back in before reusing it.
+SHOW CREATE GROUP PROVIDER <group_provider_name>;
+```
+
+Both statements require the `SECURITY` privilege on the SYSTEM level.
+
+## Drop a group provider
+
+```SQL
+DROP GROUP PROVIDER [IF EXISTS] <group_provider_name>;
+```
+
+Dropping a group provider takes effect immediately: users who log in afterwards no longer carry the groups
+it resolved, so any role that was granted `TO EXTERNAL GROUP` for those groups stops applying. Security
+integrations keep the dropped name in their `group_provider` property, and simply resolve no groups through
+it. To change the properties of a group provider, use [ALTER GROUP PROVIDER](#alter-a-group-provider)
+instead of dropping and recreating it.
+
 ## Combine group provider with a security integration
 
 After creating the group provider, you can combine it with a security integration to allow users specified by the group provider to log in to StarRocks. For more information on creating a security integration, see [Authenticate with Security Integration](./authentication/security_integration.md).
@@ -284,6 +400,8 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 #### `group_provider`
 
 The name of the group provider(s) to be combined with the security integration. Multiple group providers are separated by commas. Once set, StarRocks will record the user's group information under each specified provider upon login.
+
+When this property is not set, the security integration falls back to the FE configuration item `group_provider`, the cluster-wide default list. Note that versions earlier than v4.2 consulted no group provider at all in that case, so setting the FE configuration item takes effect for such an integration only from v4.2 onwards.
 
 #### `permitted_groups`
 
@@ -309,8 +427,13 @@ The following example grants the role `example_role` to the user group `analysts
 GRANT example_role TO EXTERNAL GROUP analysts;
 ```
 
+Roles granted to an external group also apply to tasks that run as the user who created them, such as asynchronous materialized view refreshes and tasks submitted with [SUBMIT TASK](../../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md). Each time such a task runs, StarRocks resolves the creator's groups again. Note the following points:
+
+- Groups that only a login credential carries, such as groups read from a claim of a JWT or OAuth 2.0 token, cannot be resolved for a task.
+- For a user who logs in through a JWT or OAuth 2.0 security integration, a task consults the group providers in the FE configuration item `group_provider`, not the `group_provider` property of the integration.
+
 ## Combine group provider with external authorization system (Apache Ranger)
 
 Once you configure the associated group provider in the security integration, StarRocks will record the user's group information upon login. This group information will then be automatically included in the authorization process with Ranger, eliminating the need for additional configuration.
 
-<GroupProviderRangerLink />
+For more instructions on integrating StarRocks with Ranger, see [Manage permissions with Apache Ranger](./authorization/ranger_plugin.md).

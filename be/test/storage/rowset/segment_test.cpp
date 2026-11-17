@@ -51,10 +51,12 @@
 #include "platform/key_cache.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/memory/process_memory.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/rowset/page_io.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
@@ -120,6 +122,219 @@ protected:
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
 };
+
+// The per-column page size has to survive the whole way from the table property to the
+// column writer: the page is what a point lookup decompresses, and a schema that loses
+// the size on the way silently writes the column at the BE default instead. Assert on
+// what the segment actually contains rather than on the schema that produced it.
+TEST_F(SegmentReaderWriterTest, per_column_zstd_page_size_changes_the_pages_written) {
+    constexpr size_t kRows = 2000;
+    constexpr size_t kValueBytes = 1024;
+
+    auto make_schema = [](uint32_t page_size) {
+        TabletSchemaPB pb;
+        pb.set_keys_type(DUP_KEYS);
+        pb.set_num_short_key_columns(1);
+        auto* k = pb.add_column();
+        k->set_unique_id(1);
+        k->set_name("k");
+        k->set_type("INT");
+        k->set_is_key(true);
+        k->set_is_nullable(false);
+        k->set_length(4);
+        k->set_index_length(4);
+        k->set_aggregation("NONE");
+        auto* v = pb.add_column();
+        v->set_unique_id(2);
+        v->set_name("v");
+        v->set_type("VARCHAR");
+        v->set_is_key(false);
+        v->set_is_nullable(false);
+        v->set_length(65535);
+        v->set_aggregation("NONE");
+        v->set_use_zstd_compression(true);
+        v->set_zstd_compression_page_size(page_size);
+        return TabletSchema::create(pb);
+    };
+
+    // values are unique and incompressible enough not to be dictionary-encoded, so the
+    // page size is what decides how many pages the column takes.
+    auto write = [&](const TabletSchemaCSPtr& schema, int32_t* value_pages) {
+        static int seg_id = 0;
+        std::string filename = strings::Substitute("$0/page_size_$1.dat", kSegmentDir, seg_id++);
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(filename));
+        SegmentWriterOptions opts;
+        SegmentWriter writer(std::move(wfile), 0, schema, opts);
+        ASSERT_OK(writer.init());
+
+        auto chunk_schema = ChunkHelper::convert_schema(schema);
+        auto chunk = ChunkFactory::new_chunk(chunk_schema, kRows);
+        for (size_t rid = 0; rid < kRows; ++rid) {
+            // every value must be distinct, or the writer speculates DICT encoding and the
+            // column collapses into a single data page whatever the page size is.
+            std::string value(kValueBytes, ' ');
+            uint64_t state = rid * 6364136223846793005ULL + 1442695040888963407ULL;
+            for (size_t i = 0; i < kValueBytes; ++i) {
+                state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+                value[i] = static_cast<char>('a' + ((state >> 33) % 26));
+            }
+            auto cols = chunk->columns();
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(rid)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(Slice(value)));
+        }
+        ASSERT_OK(writer.append_chunk(*chunk));
+        uint64_t file_size, index_size, footer_position;
+        ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+
+        ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, FileInfo{filename}, 0, schema));
+        ASSERT_EQ(kRows, segment->num_rows());
+        ASSIGN_OR_ABORT(auto iter, segment->new_column_iterator(schema->column(1), nullptr));
+        ColumnIteratorOptions iter_opts;
+        ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(filename));
+        OlapReaderStatistics stats;
+        iter_opts.stats = &stats;
+        iter_opts.read_file = rfile.get();
+        ASSERT_OK(iter->init(iter_opts));
+        *value_pages = segment->column(1)->num_data_pages();
+    };
+
+    int32_t default_pages = 0;
+    int32_t big_page_pages = 0;
+    write(make_schema(0), &default_pages);
+    write(make_schema(1024 * 1024), &big_page_pages);
+
+    // ~2 MB of values: roughly 32 pages at the 64 KB default, a couple at 1 MB.
+    ASSERT_GT(default_pages, 8);
+    ASSERT_LT(big_page_pages, default_pages / 4);
+}
+
+// Actual PageIO/footer entry points, not a replacement of their IO routing.
+// BE_TEST verifies scope contracts here; byte accounting needs production hooks.
+TEST_F(SegmentReaderWriterTest, ProcessOwnedMetadataKeepsBorrowedIOUnderCaller) {
+    auto* process = process_memory_tracker();
+    ASSERT_NE(process, nullptr);
+    MemTracker task(-1, "borrowed-io", process);
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&task);
+    struct BorrowedStream final : public io::SeekableInputStream {
+        MemTracker* expected;
+        size_t reads = 0;
+        bool throw_on_read = false;
+        std::unique_ptr<char[]> buffer;
+        explicit BorrowedStream(MemTracker* tracker) : expected(tracker) {}
+        StatusOr<int64_t> read(void*, int64_t) override { return Status::NotSupported("unused"); }
+        Status seek(int64_t) override { return Status::OK(); }
+        StatusOr<int64_t> position() override { return 0; }
+        StatusOr<int64_t> get_size() override {
+            EXPECT_EQ(CurrentThread::mem_tracker(), expected);
+            return 64;
+        }
+        Status read_at_fully(int64_t, void*, int64_t) override {
+            EXPECT_EQ(CurrentThread::mem_tracker(), expected);
+            ++reads;
+            buffer = std::make_unique<char[]>(4096);
+            if (throw_on_read) throw std::bad_alloc();
+            return Status::IOError("borrowed stream read failed");
+        }
+    };
+    auto stream = std::make_shared<BorrowedStream>(&task);
+    RandomAccessFile file(stream, "accounting-test");
+    auto status = with_process_memory(true, [&]() -> Status {
+        SegmentFooterPB footer;
+        return Segment::parse_segment_footer(&file, &footer, nullptr, nullptr, &task).status();
+    });
+    EXPECT_TRUE(status.is_io_error());
+    EXPECT_EQ(CurrentThread::mem_tracker(), &task);
+    EXPECT_EQ(stream->reads, 1);
+
+    PageReadOptions opts;
+    opts.read_file = stream.get();
+    opts.read_file_mem_tracker = &task;
+    opts.use_page_cache = false;
+    opts.page_pointer.size = 64;
+    OlapReaderStatistics stats;
+    opts.stats = &stats;
+    const auto load_page = [&] {
+        return with_process_memory(true, [&] {
+            PageHandle handle;
+            Slice body;
+            PageFooterPB footer;
+            return PageIO::read_and_decompress_page(opts, &handle, &body, &footer);
+        });
+    };
+    status = load_page();
+    EXPECT_TRUE(status.is_io_error());
+    EXPECT_EQ(stream->reads, 2);
+    EXPECT_EQ(CurrentThread::mem_tracker(), &task);
+    stream->throw_on_read = true;
+    EXPECT_THROW(load_page(), std::bad_alloc);
+    EXPECT_EQ(CurrentThread::mem_tracker(), &task);
+    EXPECT_EQ(stream->reads, 3);
+    // The stream, its retained buffer, and the original opts die under task.
+    ASSERT_TRUE(opts.read_file_mem_tracker.has_value());
+    EXPECT_EQ(*opts.read_file_mem_tracker, &task);
+}
+
+TEST_F(SegmentReaderWriterTest, ProcessOwnedFactoryReleasesExternalDependenciesUnderCaller) {
+    auto* process = process_memory_tracker();
+    ASSERT_NE(process, nullptr);
+    MemTracker consumer(-1, "segment consumer", process);
+    MemTracker* fs_released_under = nullptr;
+    MemTracker* schema_released_under = nullptr;
+    std::shared_ptr<Segment> segment;
+    std::weak_ptr<Segment> weak;
+    {
+        auto fs = std::shared_ptr<FileSystem>(new MemoryFileSystem(), [&](FileSystem* p) {
+            fs_released_under = CurrentThread::mem_tracker();
+            delete p;
+        });
+        auto schema = TabletSchemaCSPtr(new TabletSchema(), [&](const TabletSchema* p) {
+            schema_released_under = CurrentThread::mem_tracker();
+            delete p;
+        });
+        FileInfo info{.path = std::string(1024, 'p'), .fs = fs};
+        segment = Segment::create(fs, info, 0, schema, nullptr);
+        weak = segment;
+        ASSERT_TRUE(segment->uses_process_memory());
+    }
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&consumer);
+        segment.reset();
+        EXPECT_EQ(fs_released_under, &consumer);
+        EXPECT_EQ(schema_released_under, &consumer);
+        EXPECT_EQ(CurrentThread::mem_tracker(), &consumer);
+        EXPECT_TRUE(weak.expired());
+        weak.reset();
+        EXPECT_EQ(CurrentThread::mem_tracker(), &consumer);
+    }
+}
+
+TEST_F(SegmentReaderWriterTest, ProcessOwnedSegmentReadsRealFooterAndLazyIndex) {
+    TabletSchemaCSPtr schema = TabletSchemaHelper::create_tablet_schema({create_int_key_pb(1), create_int_value_pb(2)});
+    SegmentWriterOptions options;
+    std::shared_ptr<Segment> original;
+    build_segment(options, schema, schema, 32, DefaultIntGenerator, &original);
+    ASSERT_FALSE(original->uses_process_memory());
+
+    auto* process = process_memory_tracker();
+    ASSERT_NE(process, nullptr);
+    MemTracker producer(-1, "producer", process);
+    MemTracker consumer(-1, "consumer", process);
+    std::shared_ptr<Segment> segment;
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&producer);
+        segment = Segment::create(_fs, original->file_info(), 0, schema, nullptr);
+        ASSERT_OK(segment->open(nullptr, nullptr, {}));
+        EXPECT_EQ(CurrentThread::mem_tracker(), &producer);
+    }
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&consumer);
+        ASSERT_OK(segment->load_index({.use_page_cache = false}));
+        EXPECT_TRUE(segment->has_loaded_index());
+        EXPECT_EQ(segment->num_rows(), 32);
+        segment.reset();
+        EXPECT_EQ(CurrentThread::mem_tracker(), &consumer);
+    }
+}
 
 TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
     size_t num_rows_per_block = 10;
@@ -573,6 +788,70 @@ TEST_F(SegmentReaderWriterTest, TestTypeConversion) {
         EXPECT_EQ(9, read_chunk->get(0)[0].get_int32());
         EXPECT_EQ(10, read_chunk->get(0)[1].get_int64());
     }
+}
+
+// A Segment builds its column readers from the schema it was constructed with, so a column that the
+// construction schema omits is unreachable even when the footer carries it: the read falls back to
+// the column's default value with no error. This is why any cache shared between readers must only
+// ever hold Segments built from the full tablet schema -- see the `allow_segment_cache` argument in
+// lake::UpdateManager::get_column_values.
+TEST_F(SegmentReaderWriterTest, TestNarrowConstructionSchemaHidesColumnPresentInFooter) {
+    auto full_schema = std::shared_ptr<TabletSchema>{TabletSchemaHelper::create_tablet_schema(
+            {create_int_key_pb(0), create_int_value_pb(1),
+             create_int_value_pb(2, "SUM", /*is_nullable=*/true, /*default_value=*/"77")})};
+    // Same file, opened through a schema that stops at column 1.
+    auto narrow_schema = std::shared_ptr<TabletSchema>{
+            TabletSchemaHelper::create_tablet_schema({create_int_key_pb(0), create_int_value_pb(1)})};
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    constexpr size_t kNumRows = 20;
+
+    // DefaultIntGenerator writes column c of row r as r * 10 + c, so column 2 holds 2, 12, 22 -- well
+    // away from the default value the read must not fall back to.
+    std::shared_ptr<Segment> narrow_segment;
+    build_segment(opts, full_schema, narrow_schema, kNumRows, DefaultIntGenerator, &narrow_segment);
+
+    ColumnIteratorOptions iter_opts;
+    OlapReaderStatistics stats;
+    iter_opts.stats = &stats;
+    ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(narrow_segment->file_name()));
+    iter_opts.read_file = read_file.get();
+    const std::vector<rowid_t> rowids{0, 1, 2};
+
+    auto read_column_2 = [&](Segment* segment) {
+        auto read_schema = ChunkHelper::convert_schema(full_schema, std::vector<ColumnId>{2});
+        auto values = ChunkFactory::column_from_field(*read_schema.field(0).get())->clone_empty();
+        auto iter = segment->new_column_iterator_or_default(full_schema->column(2), nullptr);
+        CHECK(iter.ok()) << iter.status();
+        CHECK(iter.value()->init(iter_opts).ok());
+        CHECK(iter.value()->fetch_values_by_rowid(rowids.data(), rowids.size(), values.get()).ok());
+        std::vector<int32_t> out;
+        for (size_t i = 0; i < values->size(); ++i) {
+            out.push_back(values->get(i).get_int32());
+        }
+        return out;
+    };
+
+    // Column 1 is in the construction schema, so it reads through to the stored data.
+    {
+        auto read_schema = ChunkHelper::convert_schema(full_schema, std::vector<ColumnId>{1});
+        auto values = ChunkFactory::column_from_field(*read_schema.field(0).get())->clone_empty();
+        ASSIGN_OR_ABORT(auto iter, narrow_segment->new_column_iterator_or_default(full_schema->column(1), nullptr));
+        ASSERT_OK(iter->init(iter_opts));
+        ASSERT_OK(iter->fetch_values_by_rowid(rowids.data(), rowids.size(), values.get()));
+        ASSERT_EQ(rowids.size(), values->size());
+        for (size_t i = 0; i < rowids.size(); ++i) {
+            EXPECT_EQ(static_cast<int32_t>(rowids[i] * 10 + 1), values->get(i).get_int32());
+        }
+    }
+
+    // Column 2 is not, so the same file silently yields its default value instead of 2, 12, 22.
+    EXPECT_EQ(std::vector<int32_t>({77, 77, 77}), read_column_2(narrow_segment.get()));
+
+    // Opened through the full schema the same file returns the stored values.
+    ASSIGN_OR_ABORT(auto full_segment, Segment::open(_fs, FileInfo{narrow_segment->file_name()}, 0, full_schema));
+    EXPECT_EQ(std::vector<int32_t>({2, 12, 22}), read_column_2(full_segment.get()));
 }
 
 TEST_F(SegmentReaderWriterTest, TestCheckColumnUniqueIdUniqueness) {

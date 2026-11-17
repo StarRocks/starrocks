@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <thread>
 
 #include "agent/agent_server.h"
 #include "base/path/file_util.h"
@@ -30,6 +31,7 @@
 #include "common/config_exec_env_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_path_fwd.h"
+#include "common/config_runtime_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/glog_init.h"
 #include "common/metrics/process_metrics_registry.h"
@@ -55,6 +57,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
@@ -96,6 +99,12 @@ int init_test_env(int argc, char** argv, std::unique_ptr<SchemaScannerFactory> s
     config::l0_snapshot_size = 1048576;
     config::storage_flood_stage_left_capacity_bytes = 10485600;
     config::spill_local_storage_dir = spill_path.value();
+    // Dozens of thread pools size themselves from CpuInfo::num_cores() (global_thread_pools.cpp
+    // alone has ~10 such sites), so on a big host a unit-test process builds pools sized for the whole
+    // machine and then tears them down again -- pure overhead for tests that run almost no concurrent
+    // work. CpuInfo::init() below honours config::num_cores when it is > 0, so cap it here. Never raise
+    // it above what the host actually has.
+    config::num_cores = std::min<int32_t>(8, std::max(1U, std::thread::hardware_concurrency()));
 
     FLAGS_alsologtostderr = true;
     init_glog(argv[0], true);
@@ -199,7 +208,10 @@ int init_test_env(int argc, char** argv, std::unique_ptr<SchemaScannerFactory> s
     storage_env_options.update_mem_tracker = runtime_env->update_mem_tracker();
     storage_env_options.process_mem_limit = runtime_env->process_mem_limit();
     storage_env_options.vector_index_mem_tracker = runtime_env->vector_index_mem_tracker();
-    storage_env_options.lake_metadata_cache_limit = config::lake_metadata_cache_limit;
+    storage_env_options.lake_tablet_metadata_cache_limit = lake::metacache_capacity(
+            runtime_env->process_mem_limit(), config::lake_tablet_metadata_cache_limit_percent);
+    storage_env_options.lake_segment_metadata_cache_limit = lake::metacache_capacity(
+            runtime_env->process_mem_limit(), config::lake_segment_metadata_cache_limit_percent);
 #if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
     storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kStarlet;
 #elif defined(BE_TEST)

@@ -24,6 +24,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.MetadataMgr;
@@ -263,6 +264,42 @@ public class ExternalDbTablePrivTest {
     }
 
     @Test
+    public void testShowDatabasesOnExternalCatalog() throws Exception {
+        // show databases from an external catalog needs a catalog-level privilege, the same as set catalog,
+        // before ShowExecutor lists databases from the catalog's metastore (issue #81396).
+        verifyGrantRevoke(
+                "show databases from hive0",
+                "grant usage on catalog hive0 to test",
+                "revoke usage on catalog hive0 from test",
+                "you need (at least one of) the ANY privilege(s) on CATALOG hive0 for this operation");
+
+        // without an explicit FROM, the current catalog (hive0 in this test) is used for the same check.
+        verifyGrantRevoke(
+                "show databases",
+                "grant usage on catalog hive0 to test",
+                "revoke usage on catalog hive0 from test",
+                "you need (at least one of) the ANY privilege(s) on CATALOG hive0 for this operation");
+    }
+
+    @Test
+    public void testShowTablesOnExternalCatalog() throws Exception {
+        // show tables from an external catalog needs the same catalog-level privilege as show databases,
+        // before ShowExecutor resolves the database and lists tables from the catalog's metastore (issue #81396).
+        verifyGrantRevoke(
+                "show tables from hive0.tpch",
+                "grant usage on catalog hive0 to test",
+                "revoke usage on catalog hive0 from test",
+                "you need (at least one of) the ANY privilege(s) on CATALOG hive0 for this operation");
+
+        // without an explicit catalog, the current catalog (hive0 in this test) is used for the same check.
+        verifyGrantRevoke(
+                "show tables from tpch",
+                "grant usage on catalog hive0 to test",
+                "revoke usage on catalog hive0 from test",
+                "you need (at least one of) the ANY privilege(s) on CATALOG hive0 for this operation");
+    }
+
+    @Test
     public void testTruncateTableChecksStatementCatalog() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         // The session sits in the internal catalog while the statement names hive0 explicitly.
@@ -301,5 +338,20 @@ public class ExternalDbTablePrivTest {
 
         ctxToTestUser();
         Assertions.assertThrows(Exception.class, () -> Authorizer.check(stmt, ctx));
+    }
+
+    @Test
+    public void testDropTableIfExistsChecksPrivWhenTableCannotBeLoaded() throws Exception {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
+                throw new StarRocksConnectorException("metadata file is missing");
+            }
+        };
+        verifyGrantRevoke(
+                "drop table if exists hive0.tpch.region",
+                "grant drop on tpch.region to test",
+                "revoke drop on tpch.region from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) on TABLE region for this operation");
     }
 }

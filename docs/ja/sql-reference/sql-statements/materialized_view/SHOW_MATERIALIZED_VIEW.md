@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "すべてまたは特定の非同期マテリアライズドビューを表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW MATERIALIZED VIEWS

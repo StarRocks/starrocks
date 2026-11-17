@@ -19,6 +19,7 @@ import com.starrocks.authentication.GroupProvider;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.parser.NodePosition;
@@ -285,6 +286,105 @@ public class GroupProviderStatementAnalyzerTest {
 
         // Should not throw exception during analysis (name validation happens elsewhere)
         GroupProviderStatementAnalyzer.analyze(stmt, ctx);
+    }
+
+    /**
+     * Test case: Analyze ALTER GROUP PROVIDER when the provider does not exist
+     * Test point: Should throw SemanticException reporting the provider was not found
+     */
+    @Test
+    public void testAnalyzeAlterGroupProviderNotFound() {
+        Map<String, String> alterProps = new HashMap<>();
+        alterProps.put("ldap_cache_refresh_interval", "5");
+        AlterGroupProviderStmt stmt =
+                new AlterGroupProviderStmt(NON_EXISTENT_PROVIDER_NAME, alterProps, NodePosition.ZERO);
+
+        SemanticException exception = Assertions.assertThrows(SemanticException.class,
+                () -> GroupProviderStatementAnalyzer.analyze(stmt, ctx));
+        Assertions.assertTrue(
+                exception.getMessage().contains("Group Provider '" + NON_EXISTENT_PROVIDER_NAME + "' not found"),
+                "Error message should indicate provider not found: " + exception.getMessage());
+    }
+
+    /**
+     * Test case: Analyze ALTER GROUP PROVIDER that attempts to change the 'type' property
+     * Test point: Should throw SemanticException because 'type' is immutable
+     */
+    @Test
+    public void testAnalyzeAlterGroupProviderRejectTypeChange() throws Exception {
+        CreateGroupProviderStmt createStmt =
+                new CreateGroupProviderStmt(TEST_PROVIDER_NAME, createUnixGroupProviderProperties(), false, NodePosition.ZERO);
+        authenticationMgr.createGroupProviderStatement(createStmt, ctx);
+
+        Map<String, String> alterProps = new HashMap<>();
+        alterProps.put("type", "file");
+        AlterGroupProviderStmt stmt = new AlterGroupProviderStmt(TEST_PROVIDER_NAME, alterProps, NodePosition.ZERO);
+
+        SemanticException exception = Assertions.assertThrows(SemanticException.class,
+                () -> GroupProviderStatementAnalyzer.analyze(stmt, ctx));
+        Assertions.assertTrue(exception.getMessage().contains("'type' property cannot be changed"),
+                "Error message should indicate 'type' cannot be changed: " + exception.getMessage());
+    }
+
+    /**
+     * Test case: Analyze ALTER GROUP PROVIDER changing a non-type property on an existing provider
+     * Test point: Should pass analysis without error
+     */
+    @Test
+    public void testAnalyzeAlterGroupProviderValid() throws Exception {
+        CreateGroupProviderStmt createStmt =
+                new CreateGroupProviderStmt(TEST_PROVIDER_NAME, createUnixGroupProviderProperties(), false, NodePosition.ZERO);
+        authenticationMgr.createGroupProviderStatement(createStmt, ctx);
+
+        Map<String, String> alterProps = new HashMap<>();
+        alterProps.put("some_property", "value");
+        AlterGroupProviderStmt stmt = new AlterGroupProviderStmt(TEST_PROVIDER_NAME, alterProps, NodePosition.ZERO);
+
+        // Should not throw exception
+        GroupProviderStatementAnalyzer.analyze(stmt, ctx);
+    }
+
+    /**
+     * Test case: Analyze ALTER GROUP PROVIDER that spells the immutable property as "TYPE"
+     * Test point: the guard compares ignoring case. An exact-match check would let this through, and the
+     *             statement would then report success while storing a property no implementation reads.
+     */
+    @Test
+    public void testAnalyzeAlterGroupProviderRejectTypeChangeIgnoringCase() throws Exception {
+        CreateGroupProviderStmt createStmt =
+                new CreateGroupProviderStmt(TEST_PROVIDER_NAME, createUnixGroupProviderProperties(), false, NodePosition.ZERO);
+        authenticationMgr.createGroupProviderStatement(createStmt, ctx);
+
+        for (String key : new String[] {"TYPE", "Type", "tYpE"}) {
+            Map<String, String> alterProps = new HashMap<>();
+            alterProps.put(key, "file");
+            AlterGroupProviderStmt stmt = new AlterGroupProviderStmt(TEST_PROVIDER_NAME, alterProps, NodePosition.ZERO);
+
+            SemanticException exception = Assertions.assertThrows(SemanticException.class,
+                    () -> GroupProviderStatementAnalyzer.analyze(stmt, ctx),
+                    "'" + key + "' should be rejected like 'type'");
+            Assertions.assertTrue(exception.getMessage().contains("'type' property cannot be changed"),
+                    "Error message should be the same as for 'type': " + exception.getMessage());
+        }
+    }
+
+    /**
+     * Test case: Analyze ALTER GROUP PROVIDER with an empty property list
+     * Test point: SET () parses (the statement has its own property list for exactly this reason) and the
+     *             analyzer reports what is actually wrong instead of leaving the user with a syntax error.
+     */
+    @Test
+    public void testAnalyzeAlterGroupProviderRejectEmptyPropertyList() throws Exception {
+        CreateGroupProviderStmt createStmt =
+                new CreateGroupProviderStmt(TEST_PROVIDER_NAME, createUnixGroupProviderProperties(), false, NodePosition.ZERO);
+        authenticationMgr.createGroupProviderStatement(createStmt, ctx);
+
+        AlterGroupProviderStmt stmt =
+                new AlterGroupProviderStmt(TEST_PROVIDER_NAME, new HashMap<>(), NodePosition.ZERO);
+        SemanticException exception = Assertions.assertThrows(SemanticException.class,
+                () -> GroupProviderStatementAnalyzer.analyze(stmt, ctx));
+        Assertions.assertTrue(exception.getMessage().contains("no property is specified"),
+                "Error message should say no property was given: " + exception.getMessage());
     }
 
     /**

@@ -1,6 +1,8 @@
 ---
 displayed_sidebar: docs
-description: "将 Array、Map 或 Struct 值转换为 JSON 值。"
+description: "将 Map、Array 或 Struct 值转换为 JSON 字符串。"
+products: [oss, enterprise, cloud, anywhere]
+
 ---
 
 # to_json
@@ -26,6 +28,8 @@ to_json(any_value)
 ## 参数
 
 `any_value`：需要转换的 Array、Map 或 Struct 表达式。如果输入值无效，则返回错误。Array 的元素以及 Map 或 Struct 值中的每个键值对的值均可为空。
+
+输入中任何层级的 `GEOGRAPHY` 和 `GEOMETRY` 均不受支持，包括这些类型的 NULL 值。若要在 JSON 中包含地理空间值的 WKT，请先使用 `ST_AsText` 转换这些值，再构造 Map 或 Struct。
 
 ## 返回值
 

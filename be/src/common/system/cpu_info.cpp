@@ -17,75 +17,19 @@
 
 #include "common/system/cpu_info.h"
 
-#if defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
-/* GCC-compatible compiler, targeting x86/x86-64 */
-#include <x86intrin.h>
-#elif defined(__GNUC__) && defined(__ARM_NEON)
-/* GCC-compatible compiler, targeting ARM with NEON */
-#include <arm_neon.h>
-#elif defined(__GNUC__) && defined(__IWMMXT__)
-/* GCC-compatible compiler, targeting ARM with WMMX */
-#include <mmintrin.h>
-#elif (defined(__GNUC__) || defined(__xlC__)) && (defined(__VEC__) || defined(__ALTIVEC__))
-/* XLC or GCC-compatible compiler, targeting PowerPC with VMX/VSX */
-#include <altivec.h>
-#elif defined(__GNUC__) && defined(__SPE__)
-/* GCC-compatible compiler, targeting PowerPC with SPE */
-#include <spe.h>
-#endif
-
-// CGROUP2_SUPER_MAGIC is the indication for cgroup v2
-// It is defined in kernel 4.5+
-// I copy the defintion from linux/magic.h in higher kernel
-#ifndef CGROUP2_SUPER_MAGIC
-#define CGROUP2_SUPER_MAGIC 0x63677270
-#endif
-
-#ifdef __linux__
-#include <linux/magic.h>
-#endif
-#include <sched.h>
-#ifdef __linux__
-#include <sys/sysinfo.h>
-#include <sys/vfs.h>
-#endif
-#include <unistd.h>
-#ifdef __APPLE__
-#include <sys/mount.h>
-#include <sys/param.h>
-#include <sys/sysctl.h>
-#include <sys/types.h>
-#ifndef TMPFS_MAGIC
-#define TMPFS_MAGIC 0x01021994
-#endif
-#endif
-
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
-#include <cctype>
-#include <cstdlib>
-#include <cstring>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-#include <system_error>
+#include <sstream>
+#include <string_view>
 
-#include "base/path/file_util.h"
 #include "base/string/string_parser.hpp"
-#include "base/system/errno.h"
 #include "common/config_runtime_fwd.h"
-#include "common/logging.h"
 #include "gflags/gflags.h"
 #include "gutil/strings/split.h"
-#include "gutil/strings/substitute.h"
 
-using boost::algorithm::contains;
 using boost::algorithm::trim;
-
-using std::max;
 using std::string;
 
-DECLARE_bool(abort_on_config_error);
 DEFINE_int32(num_cores, 0,
              "(Advanced) If > 0, it sets the number of cores available to"
              " Impala. Setting it to 0 means Impala will use all available cores on the machine"
@@ -110,148 +54,100 @@ std::vector<int> CpuInfo::numa_node_core_idx_;
 std::vector<long> CpuInfo::cache_sizes;
 std::vector<long> CpuInfo::cache_line_sizes;
 
-const std::vector<CpuInfo::FlagMapping>& CpuInfo::_flag_mappings() {
-    static const std::vector<FlagMapping> mappings = {
-            {"ssse3", CpuInfo::SSSE3},     {"sse4_1", CpuInfo::SSE4_1},     {"sse4_2", CpuInfo::SSE4_2},
-            {"popcnt", CpuInfo::POPCNT},   {"avx", CpuInfo::AVX},           {"avx2", CpuInfo::AVX2},
-            {"avx512f", CpuInfo::AVX512F}, {"avx512bw", CpuInfo::AVX512BW},
-    };
-    return mappings;
-}
-
-int64_t CpuInfo::_parse_cpu_flags(const string& values) {
+int64_t CpuInfo::_parse_flags(const string& values, const std::vector<FlagMapping>& mappings) {
     int64_t flags = 0;
-    for (const auto& flag_mapping : _flag_mappings()) {
-        if (contains(values, flag_mapping.name)) {
-            flags |= flag_mapping.flag;
+    for (StringPiece token : strings::Split(values, " ", strings::SkipWhitespace())) {
+        const std::string_view token_view(token.data(), token.size());
+        for (const auto& flag_mapping : mappings) {
+            if (token_view == flag_mapping.name) {
+                flags |= flag_mapping.flag;
+                break;
+            }
         }
     }
     return flags;
 }
 
-void CpuInfo::init() {
-    if (initialized_) return;
-    string line;
-    string name;
-    string value;
-
-    float max_mhz = 0;
-    int num_cores = 0;
-
-    // Read from /proc/cpuinfo
-    std::ifstream cpuinfo("/proc/cpuinfo");
-    while (cpuinfo) {
-        getline(cpuinfo, line);
+int64_t CpuInfo::_parse_procfs_flags(const std::string& cpuinfo_content) {
+    int64_t flags = 0;
+    std::istringstream cpuinfo(cpuinfo_content);
+    std::string line;
+    while (getline(cpuinfo, line)) {
         size_t colon = line.find(':');
-        if (colon != string::npos) {
-            name = line.substr(0, colon - 1);
-            value = line.substr(colon + 1, string::npos);
+        if (colon == std::string::npos) continue;
+        std::string name = line.substr(0, colon);
+        trim(name);
+        if (name == "flags") {
+            std::string value = line.substr(colon + 1);
+            trim(value);
+            flags |= _parse_flags(value, _flag_mappings());
+        }
+    }
+    return flags;
+}
+
+int64_t CpuInfo::_intersect_procfs_features(std::istream& stream, const std::vector<FlagMapping>& mappings) {
+    std::string line;
+    std::string name;
+    std::string value;
+    int64_t intersection_flags = 0;
+    bool first_features_line = true;
+
+    while (getline(stream, line)) {
+        size_t colon = line.find(':');
+        if (colon != std::string::npos) {
+            name = line.substr(0, colon);
+            value = line.substr(colon + 1);
             trim(name);
             trim(value);
-            if (name.compare("flags") == 0) {
-                hardware_flags_ |= _parse_cpu_flags(value);
-            } else if (name.compare("cpu MHz") == 0) {
-                // Every core will report a different speed.  We'll take the max, assuming
-                // that when impala is running, the core will not be in a lower power state.
-                // TODO: is there a more robust way to do this, such as
-                // Window's QueryPerformanceFrequency()
-                float mhz = atof(value.c_str());
-                max_mhz = max(mhz, max_mhz);
-            } else if (name.compare("processor") == 0) {
-                ++num_cores;
-            } else if (name.compare("model name") == 0) {
-                model_name_ = value;
+            if (name == "Features") {
+                int64_t core_flags = _parse_flags(value, mappings);
+                if (first_features_line) {
+                    intersection_flags = core_flags;
+                    first_features_line = false;
+                } else {
+                    intersection_flags &= core_flags;
+                }
             }
         }
     }
-
-    if (max_mhz != 0) {
-        cycles_per_ms_ = max_mhz * 1000;
-    } else {
-        cycles_per_ms_ = 1000000;
+    if (stream.bad() || (stream.fail() && !stream.eof())) {
+        return 0; // Fail closed on truncated or corrupted stream
     }
+    return intersection_flags;
+}
 
-    if (num_cores > 0) {
-        num_cores_ = num_cores;
+bool CpuInfo::_hwcap_available(unsigned long hwcap) {
+    // glibc's getauxval() special-cases AT_HWCAP/AT_HWCAP2: it reads GLRO(dl_hwcap) directly
+    // and never sets errno for these two auxv types (verified against glibc 2.39 in PR #79278
+    // review), so an errno==0 check can never observe "unavailable" -- it is always true.
+    // NEON/ASIMD is mandatory on every conforming AArch64 core, so a genuinely all-zero HWCAP
+    // is the only signal we can trust that the auxv vector could not be populated (non-glibc
+    // libc, sandboxed/emulated environment).
+    return hwcap != 0;
+}
+
+int64_t CpuInfo::_resolve_arm_flags(bool aux_available, int64_t aux_flags, int64_t procfs_flags) {
+    if (aux_available) {
+        return aux_flags;
     }
+    return procfs_flags;
+}
+
+void CpuInfo::init() {
+    if (initialized_) return;
+
+    _init_cpu_info();
     _init_offline_cores();
     _init_num_cores_with_cgroup();
     if (num_cores_ <= 0) {
         num_cores_ = 1;
     }
     if (config::num_cores > 0) num_cores_ = config::num_cores;
-#ifdef __linux__
-    max_num_cores_ = get_nprocs_conf();
-#else
-    // On macOS, use sysctl to get number of configured cores
-    int mib[2];
-    size_t len = sizeof(max_num_cores_);
-    mib[0] = CTL_HW;
-    mib[1] = HW_NCPU;
-    sysctl(mib, 2, &max_num_cores_, &len, NULL, 0);
-#endif
-
-    // Print a warning if something is wrong with sched_getcpu().
-#ifdef HAVE_SCHED_GETCPU
-    if (sched_getcpu() == -1) {
-        std::cerr << "Kernel does not support sched_getcpu(). Performance may be impacted.";
-    }
-#else
-    std::cerr << "Built on a system without sched_getcpu() support. Performance may be impacted.";
-#endif
-
+    _init_max_num_cores();
     _init_numa();
     _init_cache_info();
     initialized_ = true;
-}
-
-void CpuInfo::_init_numa() {
-    // Use the NUMA info in the /sys filesystem. which is part of the Linux ABI:
-    // see https://www.kernel.org/doc/Documentation/ABI/stable/sysfs-devices-node and
-    // https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-devices-system-cpu
-    // The filesystem entries are only present if the kernel was compiled with NUMA support.
-    core_to_numa_node_.reset(new int[max_num_cores_]);
-
-    if (!std::filesystem::is_directory("/sys/devices/system/node")) {
-#ifndef __APPLE__
-        LOG(WARNING) << "/sys/devices/system/node is not present - no NUMA support";
-#endif
-        // Assume a single NUMA node.
-        max_num_numa_nodes_ = 1;
-        std::fill_n(core_to_numa_node_.get(), max_num_cores_, 0);
-        _init_numa_node_to_cores();
-        return;
-    }
-
-    // Search for node subdirectories - node0, node1, node2, etc to determine possible
-    // NUMA nodes.
-    max_num_numa_nodes_ = 0;
-    for (const auto& item : std::filesystem::directory_iterator("/sys/devices/system/node")) {
-        const string filename = item.path().filename().string();
-        if (filename.find("node") == 0) ++max_num_numa_nodes_;
-    }
-    if (max_num_numa_nodes_ == 0) {
-        LOG(WARNING) << "Could not find nodes in /sys/devices/system/node";
-        max_num_numa_nodes_ = 1;
-    }
-
-    // Check which NUMA node each core belongs to based on the existence of a symlink
-    // to the node subdirectory.
-    for (int core = 0; core < max_num_cores_; ++core) {
-        bool found_numa_node = false;
-        for (int node = 0; node < max_num_numa_nodes_; ++node) {
-            if (std::filesystem::exists(strings::Substitute("/sys/devices/system/cpu/cpu$0/node$1", core, node))) {
-                core_to_numa_node_[core] = node;
-                found_numa_node = true;
-                break;
-            }
-        }
-        if (!found_numa_node) {
-            LOG(WARNING) << "Could not determine NUMA node for core " << core << " from /sys/devices/system/cpu/";
-            core_to_numa_node_[core] = 0;
-        }
-    }
-    _init_numa_node_to_cores();
 }
 
 std::vector<size_t> CpuInfo::parse_cpus(const std::string& cpus_str) {
@@ -288,80 +184,6 @@ std::vector<size_t> CpuInfo::parse_cpus(const std::string& cpus_str) {
     return cpuids;
 }
 
-void CpuInfo::_init_num_cores_with_cgroup() {
-    std::error_code ec;
-    bool running_in_docker = std::filesystem::exists("/.dockerenv", ec);
-    if (!running_in_docker) {
-        return;
-    }
-    struct statfs fs;
-    if (statfs("/sys/fs/cgroup", &fs) < 0) {
-        LOG(WARNING) << "Fail to get file system statistics. err: " << errno_to_string(errno);
-        return;
-    }
-
-    std::string cfs_period_us_str;
-    std::string cfs_quota_us_str;
-    std::string cpuset_str;
-    if (fs.f_type == TMPFS_MAGIC) {
-        // cgroup v1
-        if (!FileUtil::read_whole_content("/sys/fs/cgroup/cpu/cpu.cfs_period_us", cfs_period_us_str)) {
-            return;
-        }
-
-        if (!FileUtil::read_whole_content("/sys/fs/cgroup/cpu/cpu.cfs_quota_us", cfs_quota_us_str)) {
-            return;
-        }
-
-        if (!FileUtil::read_whole_content("/sys/fs/cgroup/cpuset/cpuset.cpus", cpuset_str)) {
-            return;
-        }
-    } else if (fs.f_type == CGROUP2_SUPER_MAGIC) {
-        // cgroup v2
-        if (!FileUtil::read_contents("/sys/fs/cgroup/cpu.max", cfs_quota_us_str, cfs_period_us_str)) {
-            return;
-        }
-
-        if (!FileUtil::read_whole_content("/sys/fs/cgroup/cpuset.cpus", cpuset_str)) {
-            return;
-        }
-    }
-
-    int32_t cfs_num_cores = num_cores_;
-    {
-        StringParser::ParseResult result;
-        auto cfs_period_us =
-                StringParser::string_to_int<int64_t>(cfs_period_us_str.data(), cfs_period_us_str.size(), &result);
-        if (result != StringParser::PARSE_SUCCESS) {
-            cfs_period_us = -1;
-        }
-        auto cfs_quota_us =
-                StringParser::string_to_int<int64_t>(cfs_quota_us_str.data(), cfs_quota_us_str.size(), &result);
-        if (result != StringParser::PARSE_SUCCESS) {
-            cfs_quota_us = -1;
-        }
-        if (cfs_quota_us > 0 && cfs_period_us > 0) {
-            cfs_num_cores = cfs_quota_us / cfs_period_us;
-            is_cgroup_with_cpu_quota_ = true;
-        }
-    }
-
-    int32_t cpuset_num_cores = num_cores_;
-    if (!cpuset_str.empty() &&
-        std::any_of(cpuset_str.begin(), cpuset_str.end(), [](char c) { return !std::isspace(c); })) {
-        cpuset_cores_ = parse_cpus(cpuset_str);
-        std::erase_if(cpuset_cores_, [&](const size_t core) { return offline_cores_.contains(core); });
-        cpuset_num_cores = cpuset_cores_.size();
-        is_cgroup_with_cpuset_ = true;
-    }
-
-    if (cfs_num_cores < num_cores_ || cpuset_num_cores < num_cores_) {
-        num_cores_ = std::max(1, std::min(cfs_num_cores, cpuset_num_cores));
-        LOG(INFO) << "Init docker hardware cores by cgroup's config, cfs_num_cores=" << cfs_num_cores
-                  << ", cpuset_num_cores=" << cpuset_num_cores << ", final num_cores=" << num_cores_;
-    }
-}
-
 void CpuInfo::_init_numa_node_to_cores() {
     DCHECK(numa_node_to_cores_.empty());
     numa_node_to_cores_.resize(max_num_numa_nodes_);
@@ -373,69 +195,10 @@ void CpuInfo::_init_numa_node_to_cores() {
     }
 }
 
-void CpuInfo::_init_offline_cores() {
-    offline_cores_.clear();
-    std::string offline_cores_str;
-    if (!FileUtil::read_whole_content("/sys/devices/system/cpu/offline", offline_cores_str)) {
-        return;
-    }
-
-    std::vector<size_t> offline_cores = parse_cpus(offline_cores_str);
-    offline_cores_.insert(offline_cores.begin(), offline_cores.end());
-}
-
-int CpuInfo::get_current_core() {
-    // sched_getcpu() is not supported on some old kernels/glibcs (like the versions that
-    // shipped with CentOS 5). In that case just pretend we're always running on CPU 0
-    // so that we can build and run with degraded perf.
-#ifdef HAVE_SCHED_GETCPU
-    int cpu = sched_getcpu();
-    if (cpu < 0) return 0;
-    if (cpu >= max_num_cores_) {
-        LOG_FIRST_N(WARNING, 5) << "sched_getcpu() return value " << cpu
-                                << ", which is greater than get_nprocs_conf() retrun value " << max_num_cores_
-                                << ", now is " << get_nprocs_conf();
-        cpu %= max_num_cores_;
-    }
-    return cpu;
-#else
-    return 0;
-#endif
-}
-
 void CpuInfo::_init_cache_info() {
     cache_sizes.resize(NUM_CACHE_LEVELS);
     cache_line_sizes.resize(NUM_CACHE_LEVELS);
     _get_cache_info(cache_sizes.data(), cache_line_sizes.data());
-}
-
-void CpuInfo::_get_cache_info(long cache_sizes[NUM_CACHE_LEVELS], long cache_line_sizes[NUM_CACHE_LEVELS]) {
-#ifdef __APPLE__
-    // On Mac OS X use sysctl() to get the cache sizes
-    size_t len = 0;
-    sysctlbyname("hw.cachesize", NULL, &len, NULL, 0);
-    uint64_t* data = static_cast<uint64_t*>(malloc(len));
-    sysctlbyname("hw.cachesize", data, &len, NULL, 0);
-    DCHECK(len / sizeof(uint64_t) >= 3);
-    for (size_t i = 0; i < NUM_CACHE_LEVELS; ++i) {
-        cache_sizes[i] = data[i];
-    }
-    size_t linesize;
-    size_t sizeof_linesize = sizeof(linesize);
-    sysctlbyname("hw.cachelinesize", &linesize, &sizeof_linesize, NULL, 0);
-    for (size_t i = 0; i < NUM_CACHE_LEVELS; ++i) cache_line_sizes[i] = linesize;
-#else
-    // Call sysconf to query for the cache sizes
-    // Note: on some systems (e.g. RHEL 5 on AWS EC2), this returns 0 instead of the
-    // actual cache line size.
-    cache_sizes[L1_CACHE] = sysconf(_SC_LEVEL1_DCACHE_SIZE);
-    cache_sizes[L2_CACHE] = sysconf(_SC_LEVEL2_CACHE_SIZE);
-    cache_sizes[L3_CACHE] = sysconf(_SC_LEVEL3_CACHE_SIZE);
-
-    cache_line_sizes[L1_CACHE] = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
-    cache_line_sizes[L2_CACHE] = sysconf(_SC_LEVEL2_CACHE_LINESIZE);
-    cache_line_sizes[L3_CACHE] = sysconf(_SC_LEVEL3_CACHE_LINESIZE);
-#endif
 }
 
 std::vector<size_t> CpuInfo::get_core_ids() {
@@ -455,46 +218,10 @@ std::vector<size_t> CpuInfo::get_core_ids() {
 
 std::vector<std::string> CpuInfo::unsupported_cpu_flags_from_current_env() {
     std::vector<std::string> unsupported_flags;
+    const int64_t required_flags = _compiled_hardware_flags();
     for (const auto& flag_mapping : _flag_mappings()) {
-        if (!is_supported(flag_mapping.flag)) {
-            // AVX is skipped due to there is no condition compile flags for it
-            // case CpuInfo::AVX:
-            bool unsupported = false;
-            switch (flag_mapping.flag) {
-#if defined(__x86_64__) && defined(__SSSE3__)
-            case CpuInfo::SSSE3:
-                unsupported = true;
-                break;
-#endif
-#if defined(__x86_64__) && defined(__SSE4_1__)
-            case CpuInfo::SSE4_1:
-                unsupported = true;
-                break;
-#endif
-#if defined(__x86_64__) && defined(__SSE4_2__)
-            case CpuInfo::SSE4_2:
-                unsupported = true;
-                break;
-#endif
-#if defined(__x86_64__) && defined(__AVX2__)
-            case CpuInfo::AVX2:
-                unsupported = true;
-                break;
-#endif
-#if defined(__x86_64__) && defined(__AVX512F__)
-            case CpuInfo::AVX512F:
-                unsupported = true;
-                break;
-#endif
-#if defined(__x86_64__) && defined(__AVX512BW__)
-            case CpuInfo::AVX512BW:
-                unsupported = true;
-                break;
-#endif
-            }
-            if (unsupported) {
-                unsupported_flags.push_back(flag_mapping.name);
-            }
+        if (!is_supported(flag_mapping.flag) && (required_flags & flag_mapping.flag) != 0) {
+            unsupported_flags.emplace_back(flag_mapping.name);
         }
     }
     return unsupported_flags;

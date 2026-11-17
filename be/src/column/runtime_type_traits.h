@@ -19,6 +19,7 @@
 #include "base/types/int256.h"
 #include "column/binary_column.h"
 #include "column/decimalv3_column.h"
+#include "column/file_column.h"
 #include "column/geo_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
@@ -89,6 +90,8 @@ template <>
 inline constexpr bool isArithmeticLT<TYPE_VARBINARY> = false;
 template <>
 inline constexpr bool isArithmeticLT<TYPE_VARIANT> = false;
+template <>
+inline constexpr bool isArithmeticLT<TYPE_FILE> = false;
 template <>
 inline constexpr bool isArithmeticLT<TYPE_GEOGRAPHY> = false;
 template <>
@@ -250,7 +253,6 @@ template <>
 struct RunTimeTypeTraits<TYPE_CHAR> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
-    using LargeColumnType = LargeBinaryColumn;
     using ImmContainerType = ColumnType::ImmContainer;
 };
 
@@ -258,7 +260,6 @@ template <>
 struct RunTimeTypeTraits<TYPE_VARCHAR> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
-    using LargeColumnType = LargeBinaryColumn;
     using ImmContainerType = ColumnType::ImmContainer;
 };
 
@@ -322,7 +323,6 @@ template <>
 struct RunTimeTypeTraits<TYPE_BINARY> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
-    using LargeColumnType = LargeBinaryColumn;
     using ImmContainerType = ColumnType::ImmContainer;
 };
 
@@ -330,7 +330,6 @@ template <>
 struct RunTimeTypeTraits<TYPE_VARBINARY> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
-    using LargeColumnType = LargeBinaryColumn;
     using ImmContainerType = ColumnType::ImmContainer;
 };
 
@@ -339,6 +338,12 @@ struct RunTimeTypeTraits<TYPE_STRUCT> {
     using CppType = DatumStruct;
     using ColumnType = StructColumn;
     using ImmContainerType = ColumnType::Container;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_FILE> {
+    using CppType = DatumStruct;
+    using ColumnType = FileColumn;
 };
 
 template <>
@@ -370,9 +375,6 @@ using RunTimeCppType = typename RunTimeTypeTraits<Type>::CppType;
 
 template <LogicalType Type>
 using RunTimeColumnType = typename RunTimeTypeTraits<Type>::ColumnType;
-
-template <LogicalType Type>
-using RunTimeLargeColumnType = typename RunTimeTypeTraits<Type>::LargeColumnType;
 
 template <LogicalType Type>
 using RunTimeImmContainerType = typename RunTimeTypeTraits<Type>::ImmContainerType;

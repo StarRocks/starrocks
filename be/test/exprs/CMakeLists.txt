@@ -20,16 +20,17 @@ endif()
 set(EXPR_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     agg/aggregate_factory_core_test.cpp
+    agg/coverage_window_test.cpp
     ai/ai_function_call_expr_test.cpp
     ai/ai_function_result_test.cpp
     ai/ai_provider_options_builder_test.cpp
-    ai_functions_test.cpp
     arithmetic_expr_test.cpp
     arithmetic_operation_test.cpp
     array_functions_test.cpp
     array_expr_test.cpp
     case_expr_test.cpp
     cast_expr_core_test.cpp
+    cast_geo_null_test.cpp
     cast_expr_test.cpp
     function_context_core_test.cpp
     expr_test.cpp
@@ -40,6 +41,9 @@ set(EXPR_TEST_FILES
     binary_predicate_test.cpp
     bitmap_functions_test.cpp
     geography_functions_test.cpp
+    geo_overlay_test.cpp
+    geo_buffer_function_test.cpp
+    geo_topology_simplify_function_test.cpp
     hash_functions_test.cpp
     http_request_functions_test.cpp
     hyperloglog_functions_test.cpp
@@ -72,6 +76,7 @@ set(EXPR_TEST_FILES
     decimal_cast_expr_decimalv2_test.cpp
     decimal_cast_expr_integer_test.cpp
     decimal_cast_expr_time_test.cpp
+    decimal_null_row_report_error_test.cpp
     encryption_functions_test.cpp
     function_call_expr_test.cpp
     generate_series_core_test.cpp
@@ -98,13 +103,20 @@ set(EXPR_TEST_FILES
     string_fn_test.cpp
     string_fn_trim_test.cpp
     string_fn_url_extract_parameter_test.cpp
+    file_functions_test.cpp
     struct_functions_test.cpp
     subfield_expr_test.cpp
     table_function/multi_unnest_core_test.cpp
+    table_function/unnest_bitmap_core_test.cpp
+    table_function/unnest_core_test.cpp
+    table_function/unnest_geo_test.cpp
+    table_function/subdivide_bitmap_core_test.cpp
     udf/python/env_test.cpp
+    udf/udf_call_stub_test.cpp
     unary_function_test.cpp
     unnest_core_test.cpp
     unnest_variant_test.cpp
+    variant_functions_test.cpp
     vectorized_literal_test.cpp
 )
 if (STARROCKS_JIT_ENABLE)

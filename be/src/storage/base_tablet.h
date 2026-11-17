@@ -127,13 +127,12 @@ public:
 protected:
     virtual void on_shutdown() {}
 
-protected:
     void _gen_tablet_path();
 
-    TabletState _state;
+    TabletState _state = TABLET_NOTREADY;
     TabletMetaSharedPtr _tablet_meta;
 
-    DataDir* _data_dir;
+    DataDir* _data_dir = nullptr;
     std::string _tablet_path; // TODO: remove this variable for less memory occupation
 };
 

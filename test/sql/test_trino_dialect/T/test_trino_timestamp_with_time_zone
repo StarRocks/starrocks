@@ -1,0 +1,51 @@
+-- name: test_trino_timestamp_with_time_zone
+CREATE DATABASE db_${uuid0};
+USE db_${uuid0};
+CREATE TABLE t1 (c1 int, c2 datetime)
+    DUPLICATE KEY(c1)
+    DISTRIBUTED BY HASH(c1) BUCKETS 1
+    PROPERTIES ("replication_num" = "1");
+INSERT INTO t1 VALUES (1, '2024-01-01 00:00:00'), (2, '2024-01-01 08:00:00'), (3, '2024-01-01 09:00:00');
+
+set sql_dialect='trino';
+set time_zone='UTC';
+select TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo';
+select TIMESTAMP '2020-05-01 12:34:56.123456 Asia/Kathmandu';
+select TIMESTAMP '2020-05-01 12:34:56 -00:35';
+select TIMESTAMP '2001-1-2 3:4:5+07:09';
+select TIMESTAMP '2001-08-22 03:04:05.321 GMT-08:30';
+select TIMESTAMP '2001-08-22 03:04:05 UT', TIMESTAMP '2001-08-22 03:04:05 Z', TIMESTAMP '2001-08-22 03:04:05 GMT';
+select TIMESTAMP '2001-01-02 Europe/Berlin';
+select TIMESTAMP '2024-11-03 01:30:00 America/Los_Angeles';
+select TIMESTAMP '2024-03-10 02:30:00 America/Los_Angeles';
+select TIMESTAMP '2024-01-01 09:00:00' AT TIME ZONE 'Asia/Tokyo';
+select c1 from t1 where c2 = TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo' order by c1;
+
+set time_zone='Asia/Shanghai';
+select TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo';
+select TIMESTAMP '2024-01-01 09:00:00 UTC';
+select to_unixtime(TIMESTAMP '2020-05-10 12:34:56 Asia/Kathmandu');
+select TIMESTAMP '2020-05-10 04:00:00 America/New_York' = TIMESTAMP '2020-05-10 01:00:00 America/Los_Angeles';
+select TIMESTAMP '2012-10-31 01:00 UTC' AT TIME ZONE 'America/Los_Angeles';
+select c1 from t1 where c2 = TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo' order by c1;
+
+-- evaluate in BE instead of FE constant folding
+set disable_function_fold_constants=true;
+set time_zone='UTC';
+select TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo';
+select TIMESTAMP '2020-05-01 12:34:56.123456 Asia/Kathmandu';
+select TIMESTAMP '2020-05-01 12:34:56 -00:35';
+select TIMESTAMP '2001-1-2 3:4:5+07:09';
+select TIMESTAMP '2001-08-22 03:04:05.321 GMT-08:30';
+select TIMESTAMP '2001-08-22 03:04:05 UT', TIMESTAMP '2001-08-22 03:04:05 Z', TIMESTAMP '2001-08-22 03:04:05 GMT';
+select TIMESTAMP '2001-01-02 Europe/Berlin';
+select TIMESTAMP '2024-11-03 01:30:00 America/Los_Angeles';
+select c1 from t1 where c2 = TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo' order by c1;
+set time_zone='Asia/Shanghai';
+select TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo';
+select to_unixtime(TIMESTAMP '2020-05-10 12:34:56 Asia/Kathmandu');
+select TIMESTAMP '2020-05-10 04:00:00 America/New_York' = TIMESTAMP '2020-05-10 01:00:00 America/Los_Angeles';
+select c1 from t1 where c2 = TIMESTAMP '2024-01-01 09:00:00 Asia/Tokyo' order by c1;
+
+set sql_dialect='StarRocks';
+DROP DATABASE db_${uuid0};

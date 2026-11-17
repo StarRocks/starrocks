@@ -2,11 +2,9 @@
 displayed_sidebar: docs
 description: "複数ワークロード（短いクエリ、アドホッククエリ、ETL等）を単一クラスターで並行実行し、リソース分離・干渉低減を実現します。"
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
-import ScopeParam from '../../../_assets/commonMarkdown/rg_scope_param.mdx'
-import WhSyntaxExample from '../../../_assets/commonMarkdown/rg_wh_syntax_example.mdx'
-import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.mdx'
 
 # リソースグループ
 
@@ -49,7 +47,7 @@ BE 上のリソースグループに対して、次のパラメータを使用�
 | exclusive_cpu_percent      | このリソースグループの CPU ハードアイソレーションのパーセンテージ。v4.1 以降でサポートされます。 | [0, 100] (0 より大きい場合に有効) | 0       |
 | mem_limit                  | 現在の BE ノード上でこのリソースグループがクエリに利用できるメモリの割合。 | (0, 1] (必須)               | -       |
 | mem_pool | リソースグループをグループ化して、メモリ制限を共有します。 | 文字列 | default_mem_pool |
-| spill_mem_limit_threshold  | ディスクへのスピリングをトリガーするメモリ使用量のしきい値。         | (0, 1]                                                         | 1.0     |
+| spill_mem_limit_threshold  | ディスクへのスピリングをトリガーするメモリ使用量のしきい値。         | (0, 1)                                                         | 1.0     |
 | concurrency_limit          | このリソースグループでの同時クエリの最大数。   | 整数 (0 より大きい場合に有効)                     | 0       |
 | mem_used_pct_limit         | このリソースグループのメモリ使用率の上限。`enable_group_level_query_queue` を有効にする必要があります。`enable_query_queue_v2` が `false` の場合にのみ使用できます。 | [0, 1] (0 より大きい場合に有効) | 0 |
 | big_query_cpu_second_limit | 各 BE ノードでの大規模クエリタスクの最大 CPU 時間（秒単位）。   | 整数 (0 より大きい場合に有効)               | 0       |
@@ -65,9 +63,9 @@ BE 上のリソースグループに対して、次のパラメータを使用�
 CPU スケジューリングの重みは、次のいずれかのパラメータで設定できます。
 
 - `cpu_weight`: CPU スケジューリングの重みを直接設定します。値の範囲は (0, `avg_be_cpu_cores`] で、`avg_be_cpu_cores` はすべての BE ノードにおける CPU コアの平均数です。このパラメータは、0 より大きい値に設定された場合にのみ有効です。
-- `cpu_weight_percent`: v4.1 以降でサポートされます。CPU スケジューリングの重みをパーセンテージで設定します。値の範囲は [0, 100] です。このパラメータは、0 より大きい値に設定された場合にのみ有効です。`min_be_cpu_cores * cpu_weight_percent / 100 < 1` の場合、システムはエラーを返します。ここで、`min_be_cpu_cores` はすべての BE ノードにおける CPU コアの最小数です。
+- `cpu_weight_percent`: v4.1 以降でサポートされます。CPU スケジューリングの重みをパーセンテージで設定します。値の範囲は [0, 100] です。このパラメータは、0 より大きい値に設定された場合にのみ有効です。
 
-実行時、各 BE は自身の CPU コア数 `be_cpu_cores` に基づいて、`cpu_weight_percent` を実際の `cpu_weight` に変換します: `cpu_weight = be_cpu_cores * cpu_weight_percent / 100`。
+実行時、各 BE は自身の CPU コア数 `be_cpu_cores` に基づいて、`cpu_weight_percent` を実際の `cpu_weight` に変換します: `cpu_weight = max(1, be_cpu_cores * cpu_weight_percent / 100)`。ここで、除算の結果は切り捨てられます。
 
 `cpu_weight`、`cpu_weight_percent`、`exclusive_cpu_cores`、`exclusive_cpu_percent` のうち、0 より大きい値を設定できるのは 1 つだけです。
 
@@ -104,8 +102,6 @@ CPU ハードアイソレーションは、次のいずれかのパラメータ�
 UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_resource_group_cpu_borrowing";
 ```
 
-<ScopeParam />
-
 #### メモリリソースパラメータ
 
 ##### `mem_limit`
@@ -138,12 +134,12 @@ WITH (
 
 ##### `spill_mem_limit_threshold`
 
-ディスクへのスピリングをトリガーするメモリ使用量のしきい値を定義します。値の範囲は (0,1] で、デフォルトは 1（非アクティブ）です。v3.1.7 で導入されました。
+ディスクへのスピリングをトリガーするメモリ使用量のしきい値を定義します。値の範囲は (0,1) で、デフォルトは 1（非アクティブ）です。v3.1.7 で導入されました。
 
-- 自動スピリングが有効（`spill_mode` が `auto` に設定）で、リソースグループが無効な場合、クエリのメモリ使用量が `query_mem_limit` の 80% を超えると、システムは中間結果をディスクにスピルします。
+- 自動スピリングが有効（`spill_mode` が `auto` に設定）で、リソースグループが無効な場合、クエリのメモリ使用量が有効なメモリ上限の 80% を超えると、システムは中間結果をディスクにスピルします。有効なメモリ上限は、`query_mem_limit`（設定されている場合）と、クエリが BE から継承するメモリ上限のうち小さい方です。v4.0.16 および v4.1.6 より前のバージョンでは、`query_mem_limit` は考慮されず、80% は BE から継承するメモリ上限のみに基づいて計算されます。
 - リソースグループが有効な場合、次の場合にスピリングが発生します:
   - グループ内のすべてのクエリのメモリ使用量が `current BE memory limit * mem_limit * spill_mem_limit_threshold` を超える場合、または
-  - 現在のクエリのメモリ使用量が `query_mem_limit` の 80% を超える場合。
+  - 現在のクエリのメモリ使用量が有効なメモリ上限の 80% を超える場合。有効なメモリ上限は、`query_mem_limit`（設定されている場合）、`big_query_mem_limit`（設定されている場合）、およびリソースグループのメモリ上限のうち最小の値です。v4.0.16 および v4.1.6 より前のバージョンでは、リソースグループのメモリ上限のみが考慮されます。
 
 #### クエリ同時実行パラメータ
 
@@ -189,7 +185,7 @@ v3.3.5 以前は、StarRocks はリソースグループの `type` を `short_qu
 
 `default_wg` は、リソースグループの管理下にあるが、どのクラシファイアにも一致しない通常のクエリに割り当てられます。`default_wg` のデフォルトのリソース制限は次のとおりです。
 
-- `cpu_weight`: BE の CPU コア数。
+- `cpu_weight_percent`: 100、つまり各 BE の CPU コア数。（`default_wg` が v4.1 より前に作成された場合、アップグレード後も `cpu_weight` が保持され、その値は作成時のすべての BE の平均 CPU コア数です。）
 - `mem_limit`: 100%。
 - `concurrency_limit`: 0。
 - `big_query_cpu_second_limit`: 0。
@@ -202,7 +198,7 @@ v3.3.5 以前は、StarRocks はリソースグループの `type` を `short_qu
 
 `default_mv_wg` は、マテリアライズドビューの作成時にプロパティ `resource_group` で対応するマテリアライズドビューにリソースグループが割り当てられていない場合、非同期マテリアライズドビューのリフレッシュタスクに割り当てられます。`default_mv_wg` のデフォルトのリソース制限は次のとおりです。
 
-- `cpu_weight`: 1。
+- `cpu_weight_percent`: 1。CPU コア数が 200 未満の BE では CPU の重みは 1 になります。（`default_mv_wg` が v4.1 より前に作成された場合、アップグレード後も `cpu_weight` の 1 が保持されます。）
 - `mem_limit`: 80%。
 - `concurrency_limit`: 0。
 - `spill_mem_limit_threshold`: 80%。
@@ -218,9 +214,9 @@ v3.3.5 以前は、StarRocks はリソースグループの `type` を `short_qu
 - `role`: ユーザーの役割。
 - `query_type`: クエリのタイプ。`SELECT` と `INSERT`（v2.5 以降）がサポートされています。INSERT INTO または BROKER LOAD タスクが `query_type` を `insert` とするリソースグループにヒットした場合、BE ノードはタスクのために指定された CPU リソースを予約します。
 - `source_ip`: クエリが開始された CIDR ブロック。
-- `db`: クエリがアクセスするデータベース。カンマ `,` で区切られた文字列で指定できます。
-- `plan_cpu_cost_range`: クエリの推定 CPU コスト範囲。形式は `(DOUBLE, DOUBLE]` です。デフォルト値は NULL で、そのような制限がないことを示します。`PlanCpuCost` 列は、クエリの CPU コストに対するシステムの推定値を表します。このパラメータは v3.1.4 以降でサポートされています。
-- `plan_mem_cost_range`: クエリのシステム推定メモリコスト範囲。形式は `(DOUBLE, DOUBLE]` です。デフォルト値は NULL で、そのような制限がないことを示します。`PlanMemCost` 列は、クエリのメモリコストに対するシステムの推定値を表します。このパラメータは v3.1.4 以降でサポートされています。
+- `db`: クエリがアクセスするデータベース。カンマ `,` で区切られた文字列で指定できます。`db` を持つクラシファイアは、クエリがアクセスするすべてのデータベースを含む場合にのみ、そのクエリに一致します。
+- `plan_cpu_cost_range`: クエリの推定 CPU コスト範囲。形式は `[DOUBLE, DOUBLE)` です。デフォルト値は NULL で、そのような制限がないことを示します。`PlanCpuCost` 列は、クエリの CPU コストに対するシステムの推定値を表します。このパラメータは v3.1.4 以降でサポートされています。
+- `plan_mem_cost_range`: クエリのシステム推定メモリコスト範囲。形式は `[DOUBLE, DOUBLE)` です。デフォルト値は NULL で、そのような制限がないことを示します。`PlanMemCost` 列は、クエリのメモリコストに対するシステムの推定値を表します。このパラメータは v3.1.4 以降でサポートされています。
 
 クラシファイアは、クラシファイアの条件のいずれかまたはすべてがクエリの情報と一致する場合にのみクエリに一致します。複数のクラシファイアがクエリに一致する場合、StarRocks はクエリと各クラシファイアの一致度を計算し、一致度が最も高いクラシファイアを特定します。
 
@@ -232,9 +228,9 @@ StarRocks は、次のルールを使用してクエリとクラシファイア�
 
 - クラシファイアがクエリと同じ `user` 値を持っている場合、クラシファイアの一致度は 1 増加します。
 - クラシファイアがクエリと同じ `role` 値を持っている場合、クラシファイアの一致度は 1 増加します。
-- クラシファイアがクエリと同じ `query_type` 値を持っている場合、クラシファイアの一致度は 1 増加し、次の計算から得られる数値も加算されます: 1/クラシファイア内の `query_type` フィールドの数。
-- クラシファイアがクエリと同じ `source_ip` 値を持っている場合、クラシファイアの一致度は 1 増加し、次の計算から得られる数値も加算されます: (32 - `cidr_prefix`)/64。
-- クラシファイアがクエリと同じ `db` 値を持っている場合、クラシファイアの一致度は 10 増加します。
+- クラシファイアがクエリと同じ `query_type` 値を持っている場合、クラシファイアの一致度は 1 増加し、次の計算から得られる数値も加算されます: 0.1/クラシファイア内の `query_type` フィールドの数。
+- クラシファイアがクエリと同じ `source_ip` 値を持っている場合、クラシファイアの一致度は 1 増加し、次の計算から得られる数値も加算されます: `cidr_prefix`/64。
+- クラシファイアがクエリと同じ `db` 値を持っている場合、クラシファイアの一致度は 10 にクラシファイアで指定されたデータベースの数を掛けた値だけ増加します。
 - クエリの CPU コストが `plan_cpu_cost_range` 内にある場合、クラシファイアの一致度は 1 増加します。
 - クエリのメモリコストが `plan_mem_cost_range` 内にある場合、クラシファイアの一致度は 1 増加します。
 
@@ -260,14 +256,6 @@ StarRocks は、次のルールを使用してクエリとクラシファイア�
 クラシファイア D (user='Alice', query_type in ('insert','select'))
 ```
 
-複数のクラシファイアが同じ一致度を持つ場合、クラシファイアのいずれかがランダムに選択されます。
-
-```Plain
--- クエリが同時に db1 と db2 をクエリし、クラシファイア E と F がヒットしたクラシファイアの中で最も一致度が高い場合、E と F のいずれかがランダムに選択されます。
-クラシファイア E (db='db1')
-クラシファイア F (db='db2')
-```
-
 ## 計算リソースの分離
 
 リソースグループとクラシファイアを設定することで、クエリ間の計算リソースを分離できます。
@@ -291,7 +279,40 @@ SET GLOBAL enable_pipeline_engine = true;
 
 次のステートメントを実行して、リソースグループを作成し、クラシファイアと関連付け、リソースグループに計算リソースを割り当てます。
 
-<WhSyntaxExample />
+```SQL
+CREATE RESOURCE GROUP <group_name> 
+TO (
+    user='string', 
+    role='string', 
+    query_type in ('select'), 
+    source_ip='cidr'
+) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (`,`).
+WITH (
+    "{ cpu_weight | exclusive_cpu_cores }" = "INT",
+    "mem_limit" = "m%",
+    "concurrency_limit" = "INT",
+    "type" = "str" --The type of the resource group. Set the value to normal.
+);
+```
+
+例:
+
+```SQL
+CREATE RESOURCE GROUP rg1
+TO 
+    (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.x.x/24'),
+    (user='rg1_user2', query_type in ('select'), source_ip='192.168.x.x/24'),
+    (user='rg1_user3', source_ip='192.168.x.x/24'),
+    (user='rg1_user4'),
+    (db='db1')
+WITH (
+    'exclusive_cpu_cores' = '10',
+    'mem_limit' = '20%',
+    'big_query_cpu_second_limit' = '100',
+    'big_query_scan_rows_limit' = '100000',
+    'big_query_mem_limit' = '1073741824'
+);
+```
 
 ### リソースグループを指定する（オプション）
 
@@ -354,7 +375,12 @@ SHOW VERBOSE RESOURCE GROUP group_name;
 
 既存のリソースグループのリソースクォータを変更するには、次のステートメントを実行します。
 
-<WhAlterSyntax />
+```SQL
+ALTER RESOURCE GROUP group_name WITH (
+    'cpu_core_limit' = 'INT',
+    'mem_limit' = 'm%'
+);
+```
 
 リソースグループを削除するには、次のステートメントを実行します。
 
@@ -395,7 +421,7 @@ ALTER RESOURCE GROUP <group_name> DROP ALL;
 
 ### リソースグループの監視
 
-リソースグループの[監視とアラート](../monitoring/monitoring.md)を設定できます。
+リソースグループの[監視とアラート](../monitoring/prometheus_grafana.md)を設定できます。
 
 リソースグループ関連の FE および BE メトリクスは次のとおりです。以下のすべてのメトリクスには、対応するリソースグループを示す `name` ラベルがあります。
 

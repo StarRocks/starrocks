@@ -111,6 +111,14 @@ public class MultiJoinNode {
             return;
         }
 
+        // A non-deterministic predicate must stay on its join (see JoinReorderHelper#hasNonDeterministicPredicate).
+        // JoinOrder keeps a column-less predicate of the multi-join root on the new root, so only that one is safe.
+        if (isMultiJoinRoot ? hasNonDeterministicConjunctUsingColumns(joinOperator)
+                : JoinReorderHelper.hasNonDeterministicPredicate(joinOperator)) {
+            atoms.add(node);
+            return;
+        }
+
         if (joinOperator.getProjection() != null) {
             Projection projection = joinOperator.getProjection();
             if (hasUnsafeProjectionForJoinReorder(node, isMultiJoinRoot)) {
@@ -129,6 +137,11 @@ public class MultiJoinNode {
         predicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
         Preconditions.checkState(!Utils.isEqualBinaryPredicate(joinPredicate));
         predicates.addAll(Utils.extractConjuncts(joinPredicate));
+    }
+
+    private static boolean hasNonDeterministicConjunctUsingColumns(LogicalJoinOperator joinOperator) {
+        return JoinReorderHelper.hasNonDeterministicConjunct(joinOperator.getOnPredicate(), false) ||
+                JoinReorderHelper.hasNonDeterministicConjunct(joinOperator.getPredicate(), false);
     }
 
     static boolean hasProjectRelyOnTwoChildren(OptExpression node) {

@@ -40,6 +40,7 @@
 #include <thrift/transport/TServerSocket.h>
 #include <thrift/transport/TSocket.h>
 
+#include "base/auth/credential_mask.h"
 #include "base/time/monotime.h"
 #include "common/config_thrift_server_fwd.h"
 #include "common/util/thrift_server.h"
@@ -65,12 +66,10 @@ void redact_plan_credentials(TPlanNode& node) {
     if (!node.__isset.ai_project_node) {
         return;
     }
-    for (auto& [id, config] : node.ai_project_node.ai_model_configs) {
-        if (config.__isset.chat && config.chat.__isset.api_key) {
-            config.chat.__set_api_key("******");
-        }
-        if (config.__isset.embedding && config.embedding.__isset.api_key) {
-            config.embedding.__set_api_key("******");
+    for (auto& [id, provider] : node.ai_project_node.ai_provider_mapping) {
+        auto key = provider.params.find("api_key");
+        if (key != provider.params.end()) {
+            key->second = std::string(kCredentialMask);
         }
     }
 }

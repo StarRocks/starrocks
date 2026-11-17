@@ -74,6 +74,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.roaringbitmap.RoaringBitmap;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -103,6 +105,11 @@ import static java.util.function.Function.identity;
 
 public class Utils {
     private static final Logger LOG = LogManager.getLogger(Utils.class);
+
+    // The bounds of the DATETIME domain, in epoch seconds, used to reject a statistic bound that
+    // cannot be converted back into a datetime.
+    private static final double MIN_DATETIME_EPOCH_SECOND = getLongFromDateTime(ConstantOperator.MIN_DATETIME);
+    private static final double MAX_DATETIME_EPOCH_SECOND = getLongFromDateTime(ConstantOperator.MAX_DATETIME);
 
     public static List<ScalarOperator> extractConjuncts(ScalarOperator root) {
         LinkedList<ScalarOperator> list = new LinkedList<>();
@@ -473,6 +480,26 @@ public class Utils {
         return LocalDateTime.ofInstant(Instant.ofEpochSecond(dateTime), ZoneId.systemDefault());
     }
 
+    /**
+     * Converts a column statistic's min/max bound, which is a plain double of epoch seconds, into a
+     * datetime.
+     *
+     * <p>Nothing keeps such a bound inside the DATETIME domain. It can come from a derived expression
+     * statistic, or from a non-date column that an implicit cast dragged into a date context, and then
+     * {@code (long) bound} saturates to {@code Long.MAX_VALUE} and {@link Instant#ofEpochSecond} throws
+     * {@link java.time.DateTimeException}. That exception escapes statistics derivation and fails the
+     * whole query, so a caller converting a statistic bound must use this and treat an empty result as
+     * "no usable bound" rather than calling {@link #getDatetimeFromLong} directly.
+     */
+    public static Optional<LocalDateTime> getDatetimeFromStatistic(double epochSecond) {
+        if (!Double.isFinite(epochSecond)
+                || epochSecond < MIN_DATETIME_EPOCH_SECOND
+                || epochSecond > MAX_DATETIME_EPOCH_SECOND) {
+            return Optional.empty();
+        }
+        return Optional.of(getDatetimeFromLong((long) epochSecond));
+    }
+
     public static long convertBitSetToLong(BitSet bitSet, int length) {
         long gid = 0;
         for (int b = 0; b < length; ++b) {
@@ -540,14 +567,18 @@ public class Utils {
             return Optional.of(ConstantOperator.createNull(descType));
         }
 
-        Optional<ConstantOperator> result = ((ConstantOperator) op).castToStrictly(descType);
+        boolean exactNumeric = op.getType().isExactNumericType() && descType.isExactNumericType()
+                && !op.getType().isDecimalV2() && !descType.isDecimalV2();
+        Optional<ConstantOperator> result = exactNumeric
+                ? tryCastExactNumericConstant((ConstantOperator) op, descType, true)
+                : ((ConstantOperator) op).castToStrictly(descType);
         if (result.isEmpty()) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("invalid value: {} to type {}", op, descType);
             }
             return Optional.empty();
         }
-        if (result.get().toString().equalsIgnoreCase(op.toString())) {
+        if (exactNumeric || result.get().toString().equalsIgnoreCase(op.toString())) {
             return Optional.of(result.get());
         } else if (descType.isDate() && (op.getType().isIntegerType() || op.getType().isStringType())) {
             if (op.toString().equalsIgnoreCase(result.get().toString().replaceAll("-", ""))) {
@@ -557,10 +588,38 @@ public class Utils {
         return Optional.empty();
     }
 
+    private static Optional<ConstantOperator> tryCastExactNumericConstant(
+            ConstantOperator constant, Type targetType, boolean strictDecimalPrecision) {
+        BigDecimal value = new BigDecimal(constant.getValue().toString());
+        try {
+            Optional<ConstantOperator> result;
+            if (targetType.isFixedPointType()) {
+                // Decimal display text can contain a scale or exponent, even for an exact integer.
+                // Do not route it through the string-based integer parser or truncate a fraction.
+                BigInteger integer = value.toBigIntegerExact();
+                if (integer.bitLength() > 127) {
+                    return Optional.empty();
+                }
+                result = ConstantOperator.createLargeInt(integer).castToStrictly(targetType);
+            } else {
+                // An implicit cast respects declared decimal precision. Cast reduction also permits
+                // exact constants within the decimal's physical range, preserving its existing behavior.
+                result = strictDecimalPrecision ? constant.castToStrictly(targetType) : constant.castTo(targetType);
+            }
+            if (result.isPresent() && !result.get().isNull()
+                    && value.compareTo(new BigDecimal(result.get().getValue().toString())) == 0) {
+                return result;
+            }
+        } catch (ArithmeticException ignored) {
+            // A fractional or overflowing value cannot be folded into the column's integer type.
+        }
+        return Optional.empty();
+    }
+
     // tryDecimalCastConstant is employed by ReduceCastRule to reduce BinaryPredicateOperator involving DecimalV3
     // ReduceCastRule try to reduce 'CAST(Expr<T> as U) BINOP LITERAL<S>' to
-    // 'EXPR<T> BINOP CAST(LITERAL<S> as T>', only T->U casting and S->T casting are both legal, then this
-    // reduction is legal, so for numerical types, S is not wider than T and T is not wider than U. for examples:
+    // 'EXPR<T> BINOP CAST(LITERAL<S> as T>'. The column's T->U cast must be lossless for its entire domain,
+    // while the particular S literal only needs to be exactly representable in T. For examples:
     //     CAST(IntLiteral(100,TINYINT) as DECIMAL32(9,9)) < IntLiteral(0x7f50, SMALLINT) cannot be reduced.
     //     CAST(IntLiteral(100,SMALLINT) as DECIMAL64(13,10)) < IntLiteral(101, TINYINT) can be reduced.
     public static Optional<ScalarOperator> tryDecimalCastConstant(CastOperator lhs, ConstantOperator rhs) {
@@ -584,14 +643,14 @@ public class Utils {
             return Optional.of(ConstantOperator.createNull(childType));
         }
 
-        Optional<ConstantOperator> result = rhs.castTo(childType);
-        if (result.isEmpty()) {
-            return Optional.empty();
+        if (!lhsType.isDecimalV2() && !rhsType.isDecimalV2() && !childType.isDecimalV2()) {
+            return tryCastExactNumericConstant(rhs, childType, false).map(result -> result);
         }
-        if (TypeManager.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
-            return Optional.of(result.get());
-        } else if (result.get().toString().equalsIgnoreCase(rhs.toString())) {
-            // check lossless
+
+        // Preserve legacy DECIMALV2 folding: its FE BigDecimal does not model the BE's fixed scale.
+        Optional<ConstantOperator> result = rhs.castTo(childType);
+        if (result.isPresent() && (TypeManager.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)
+                || result.get().toString().equalsIgnoreCase(rhs.toString()))) {
             return Optional.of(result.get());
         }
         return Optional.empty();
@@ -754,9 +813,11 @@ public class Utils {
             return true;
         }
 
-        // 2. Respect user hint
-        int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
+        // 2. Respect the requested stage and grouped mode's single finalized consumer.
+        var variables = ConnectContext.get().getSessionVariable();
+        int aggStage = variables.getNewPlannerAggStage();
         if (aggStage == ONE_STAGE.ordinal() ||
+                (aggStage == AUTO.ordinal() && variables.isGroupedRangeScan()) ||
                 (aggStage == AUTO.ordinal() && inputLogicalProperty.oneTabletProperty().supportOneTabletOpt)) {
             return false;
         }

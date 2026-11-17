@@ -16,6 +16,15 @@
 
 #include <gtest/gtest.h>
 
+#include "common/object_pool.h"
+#include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/runtime_state.h"
+#include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
+#include "storage/txn_manager.h"
+
 namespace starrocks {
 
 TEST(DeltaWriterTest, test_partial_update_sort_key_conflict_check) {
@@ -125,6 +134,111 @@ TEST(DeltaWriterTest, test_partial_update_sort_key_conflict_check) {
         ASSERT_TRUE(DeltaWriter::is_partial_update_with_sort_key_conflict(
                 PartialUpdateMode::UNKNOWN_MODE, referenced_column_ids, sort_key_idxes, num_key_columns));
     }
+}
+
+class DeltaWriterMergeConditionTest : public testing::Test {
+public:
+    void SetUp() override {
+        TCreateTabletReq request;
+        request.tablet_id = kTabletId;
+        request.__set_version(1);
+        request.__set_version_hash(0);
+        request.tablet_schema.schema_hash = kSchemaHash;
+        request.tablet_schema.short_key_column_count = 1;
+        request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+        request.tablet_schema.storage_type = TStorageType::COLUMN;
+        for (size_t i = 0; i < kColumnNames.size(); i++) {
+            TColumn column;
+            column.column_name = kColumnNames[i];
+            column.__set_is_key(i == 0);
+            column.column_type.type = TPrimitiveType::BIGINT;
+            request.tablet_schema.columns.emplace_back(column);
+        }
+        auto st = StorageEngine::instance()->create_tablet(request);
+        ASSERT_TRUE(st.ok()) << st;
+        _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(kTabletId, false);
+        ASSERT_TRUE(_tablet != nullptr);
+    }
+
+    void TearDown() override {
+        if (_tablet != nullptr) {
+            (void)StorageEngine::instance()->tablet_manager()->drop_tablet(kTabletId);
+            _tablet.reset();
+        }
+    }
+
+protected:
+    // Slots for the first `num_columns` columns of the tablet, in schema order.
+    const std::vector<SlotDescriptor*>& create_slots(size_t num_columns) {
+        TDescriptorTableBuilder table_builder;
+        TTupleDescriptorBuilder tuple_builder;
+        for (size_t i = 0; i < num_columns; i++) {
+            TSlotDescriptorBuilder slot_builder;
+            tuple_builder.add_slot(slot_builder.type(LogicalType::TYPE_BIGINT)
+                                           .column_name(kColumnNames[i])
+                                           .column_pos(static_cast<int>(i))
+                                           .nullable(false)
+                                           .build());
+        }
+        tuple_builder.build(&table_builder);
+        DescriptorTbl* tbl = nullptr;
+        CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, /*chunk_size=*/4096).ok());
+        return tbl->get_tuple_descriptor(0)->slots();
+    }
+
+    StatusOr<std::unique_ptr<DeltaWriter>> open_writer(int64_t txn_id, const std::vector<SlotDescriptor*>& slots,
+                                                       PartialUpdateMode mode, const std::string& merge_condition) {
+        DeltaWriterOptions options{};
+        options.tablet_id = kTabletId;
+        options.schema_hash = kSchemaHash;
+        options.txn_id = txn_id;
+        options.partition_id = kPartitionId;
+        options.slots = &slots;
+        options.replica_state = ReplicaState::Primary;
+        options.partial_update_mode = mode;
+        options.merge_condition = merge_condition;
+        return DeltaWriter::open(options, &_mem_tracker);
+    }
+
+    bool has_txn(int64_t txn_id) {
+        return StorageEngine::instance()->txn_manager()->has_txn(kPartitionId, txn_id, kTabletId,
+                                                                 _tablet->schema_hash(), _tablet->tablet_uid());
+    }
+
+    static constexpr int64_t kTabletId = 20321;
+    static constexpr int32_t kSchemaHash = 20321;
+    static constexpr int64_t kPartitionId = 20321;
+    inline static const std::vector<std::string> kColumnNames = {"k", "v1", "v2"};
+
+    TabletSharedPtr _tablet;
+    MemTracker _mem_tracker;
+    RuntimeState _runtime_state;
+    ObjectPool _pool;
+};
+
+TEST_F(DeltaWriterMergeConditionTest, test_column_mode_rejects_merge_condition) {
+    const auto& partial_slots = create_slots(2);
+    const auto& all_slots = create_slots(3);
+
+    // Applying a column-mode partial update never evaluates merge_condition, so the writer must refuse the
+    // combination when it opens, and roll back the transaction it has already prepared.
+    int64_t txn_id = 1;
+    for (auto mode : {PartialUpdateMode::COLUMN_UPSERT_MODE, PartialUpdateMode::COLUMN_UPDATE_MODE}) {
+        auto writer = open_writer(txn_id, partial_slots, mode, "v1");
+        ASSERT_TRUE(writer.status().is_not_supported()) << writer.status();
+        ASSERT_FALSE(has_txn(txn_id));
+        txn_id++;
+    }
+
+    // Row mode evaluates merge_condition when it applies the update.
+    auto row_mode = open_writer(txn_id++, partial_slots, PartialUpdateMode::ROW_MODE, "v1");
+    ASSERT_TRUE(row_mode.ok()) << row_mode.status();
+    // Column mode without merge_condition has no condition to drop.
+    auto no_condition = open_writer(txn_id++, partial_slots, PartialUpdateMode::COLUMN_UPSERT_MODE, "");
+    ASSERT_TRUE(no_condition.ok()) << no_condition.status();
+    // A load that writes every column is a full upsert, which evaluates merge_condition.
+    auto all_columns = open_writer(txn_id++, all_slots, PartialUpdateMode::COLUMN_UPSERT_MODE, "v1");
+    ASSERT_TRUE(all_columns.ok()) << all_columns.status();
 }
 
 } // namespace starrocks

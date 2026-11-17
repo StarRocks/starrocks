@@ -2,11 +2,12 @@
 displayed_sidebar: docs
 description: "バージョン命名規則、マイナーバージョンのリリース周期・保持期間。"
 sidebar_position: 1
+products: [oss]
 ---
 
 # Version Release Guide
 
-バージョン命名については、[versioning](../introduction/versioning.md) ドキュメントで詳しく説明されています。**major**、**minor**、**patch** バージョニングを理解するために、まずそのページを読んでください。
+バージョン命名については、[versioning](../maturity/release_numbering.md) ドキュメントで詳しく説明されています。**major**、**minor**、**patch** バージョニングを理解するために、まずそのページを読んでください。
 
 ## Release Plan
 - マイナーバージョンは、およそ  ヶ月ごとにリリースします。

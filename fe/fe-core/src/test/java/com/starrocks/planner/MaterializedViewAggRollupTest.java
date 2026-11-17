@@ -44,6 +44,56 @@ public class MaterializedViewAggRollupTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testArrayAggDistinctRollupKeepsDecimalType() throws Exception {
+        // array_agg_distinct rolls up to array_unique_agg, which is registered as ARRAY<DECIMAL128(-1, -1)>.
+        // The rewritten function must keep the concrete decimal type of the MV column.
+        starRocksAssert.withTable("CREATE TABLE t_rollup_decimal (\n" +
+                "  k1 int NULL,\n" +
+                "  k2 int NULL,\n" +
+                "  d decimal(38, 10) NULL\n" +
+                ") DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        try {
+            String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                    "select k1, k2, array_agg_distinct(d) as ad from t_rollup_decimal group by k1, k2";
+            starRocksAssert.withMaterializedView(mv, () -> {
+                List<String> queries = ImmutableList.of(
+                        "select k1, count(distinct d) from t_rollup_decimal group by k1",
+                        "select k1, sum(distinct d) from t_rollup_decimal group by k1",
+                        "select k1, array_agg_distinct(d) from t_rollup_decimal group by k1");
+                for (String query : queries) {
+                    sql(query).contains("mv0");
+                    String thrift = getThriftPlan(query);
+                    if (!query.contains("array_agg_distinct")) {
+                        // count/sum(distinct) roll up through array_unique_agg(ARRAY<DECIMAL128(-1, -1)>).
+                        Assertions.assertTrue(thrift.contains("function_name:array_unique_agg"), thrift);
+                    }
+                    // BE builds aggregate results from each function's ret_type and intermediate_type.
+                    List<String> aggFns = getAggregateFunctionSignatures(thrift);
+                    Assertions.assertFalse(aggFns.isEmpty(), thrift);
+                    for (String fn : aggFns) {
+                        Assertions.assertFalse(fn.contains("precision:-1"), query + "\n" + fn);
+                    }
+                }
+            });
+        } finally {
+            starRocksAssert.dropTable("t_rollup_decimal");
+        }
+    }
+
+    private static List<String> getAggregateFunctionSignatures(String thrift) {
+        List<String> result = Lists.newArrayList();
+        String aggMarker = "aggregate_fn:TAggregateFunction(";
+        for (int pos = thrift.indexOf(aggMarker); pos >= 0; pos = thrift.indexOf(aggMarker, pos + 1)) {
+            int start = thrift.lastIndexOf("fn:TFunction(", pos);
+            int end = thrift.indexOf("is_distinct:", pos);
+            result.add(thrift.substring(start, end));
+        }
+        return result;
+    }
+
+    @Test
     public void testAggPushDown_RollupFunctions_Simple() {
         String mvAggArg = "LO_REVENUE";
         String queryAggArg = "LO_REVENUE";

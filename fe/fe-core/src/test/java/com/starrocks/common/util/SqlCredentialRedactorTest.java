@@ -212,6 +212,45 @@ public class SqlCredentialRedactorTest {
     }
 
     @Test
+    public void testRedactIcebergCatalogCredentials() {
+        String sql = "CREATE EXTERNAL CATALOG iceberg_rest PROPERTIES (\n" +
+                "    \"type\" = \"iceberg\",\n" +
+                "    \"iceberg.catalog.type\" = \"rest\",\n" +
+                "    \"iceberg.catalog.uri\" = \"https://rest.example.com/catalog\",\n" +
+                "    \"iceberg.catalog.security\" = \"oauth2\",\n" +
+                "    \"iceberg.catalog.oauth2.server-uri\" = \"https://idp.example.com/oauth2/token\",\n" +
+                "    \"iceberg.catalog.oauth2.credential\" = \"client-id:oauth2-client-secret\",\n" +
+                "    'iceberg.catalog.oauth2.token' = 'oauth2-bearer-token',\n" +
+                "    \"ICEBERG.CATALOG.REST.ACCESS-KEY-ID\" = \"rest-access-key-id\",\n" +
+                "    \"iceberg.catalog.rest.secret-access-key\" = \"rest-secret-access-key\",\n" +
+                "    \"iceberg.catalog.jdbc.password\" = \"jdbc-password\",\n" +
+                "    \"iceberg.catalog.s3.access-key-id\" = \"s3-access-key-id\",\n" +
+                "    \"iceberg.catalog.s3.secret-access-key\" = \"s3-secret-access-key\",\n" +
+                "    \"iceberg.catalog.s3.session-token\" = \"s3-session-token\",\n" +
+                "    \"iceberg.catalog.gcs.oauth2.token\" = \"gcs-oauth2-token\",\n" +
+                "    \"iceberg.catalog.adls.sas-token.account.dfs.core.windows.net\" = \"adls-sas-token\",\n" +
+                "    \"iceberg.catalog.oauth2.scope\" = \"catalog-scope\"\n" +
+                ")";
+
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(sql));
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("oauth2-client-secret"), "OAuth2 credential should be redacted");
+        Assertions.assertFalse(redacted.contains("client-id"), "OAuth2 credential should be redacted");
+        Assertions.assertFalse(redacted.contains("oauth2-bearer-token"), "OAuth2 token should be redacted");
+        Assertions.assertFalse(redacted.contains("rest-access-key-id"), "REST SigV4 access key should be redacted");
+        Assertions.assertFalse(redacted.contains("rest-secret-access-key"), "REST SigV4 secret key should be redacted");
+        Assertions.assertFalse(redacted.contains("jdbc-password"), "JDBC password should be redacted");
+        Assertions.assertFalse(redacted.contains("s3-access-key-id"), "S3FileIO access key should be redacted");
+        Assertions.assertFalse(redacted.contains("s3-secret-access-key"), "S3FileIO secret key should be redacted");
+        Assertions.assertFalse(redacted.contains("s3-session-token"), "S3FileIO session token should be redacted");
+        Assertions.assertFalse(redacted.contains("gcs-oauth2-token"), "GCSFileIO token should be redacted");
+        Assertions.assertFalse(redacted.contains("adls-sas-token"), "ADLSFileIO SAS token should be redacted");
+        Assertions.assertTrue(redacted.contains("https://rest.example.com/catalog"), "Catalog URI should remain");
+        Assertions.assertTrue(redacted.contains("https://idp.example.com/oauth2/token"), "OAuth2 server URI should remain");
+        Assertions.assertTrue(redacted.contains("catalog-scope"), "OAuth2 scope should remain");
+    }
+
+    @Test
     public void testRedactHdfsCredentials() {
         String sql = "LOAD LABEL test_load\n" +
                 "(\n" +
@@ -418,6 +457,50 @@ public class SqlCredentialRedactorTest {
         String alterLdapDoubleQuotedSql = "ALTER USER 'u1' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE "
                 + "BY \"uid=test,dc=example,dc=io\"";
         Assertions.assertEquals(alterLdapDoubleQuotedSql, SqlCredentialRedactor.redact(alterLdapDoubleQuotedSql));
+    }
+
+    @Test
+    public void testRedactGroupProviderAndSecurityIntegrationCredentials() {
+        // ALTER GROUP PROVIDER is the statement used to rotate an LDAP bind password, so the plain-text
+        // password must not survive into the audit log.
+        String alterSql = "ALTER GROUP PROVIDER ldap_gp SET (\"ldap_bind_root_pwd\" = \"rotated_secret\")";
+        String alterRedacted = SqlCredentialRedactor.redact(alterSql);
+        Assertions.assertFalse(alterRedacted.contains("rotated_secret"), "Bind password should be redacted");
+        Assertions.assertTrue(alterRedacted.contains("***"), "Should contain redacted marker");
+
+        String createSql = "CREATE GROUP PROVIDER ldap_gp PROPERTIES (\n" +
+                "        \"type\" = \"ldap\",\n" +
+                "        \"ldap_conn_url\" = \"ldaps://ldap.example.com:636\",\n" +
+                "        \"ldap_bind_root_dn\" = \"cn=admin,dc=example,dc=com\",\n" +
+                "        \"ldap_bind_root_pwd\" = \"bind_secret\",\n" +
+                "        \"ldap_ssl_conn_trust_store_pwd\" = \"store_secret\",\n" +
+                "        \"ldap_bind_base_dn\" = \"dc=example,dc=com\"\n" +
+                ")";
+        String createRedacted = SqlCredentialRedactor.redact(createSql);
+        Assertions.assertFalse(createRedacted.contains("bind_secret"), "Bind password should be redacted");
+        Assertions.assertFalse(createRedacted.contains("store_secret"), "Trust store password should be redacted");
+        Assertions.assertTrue(createRedacted.contains("ldaps://ldap.example.com:636"),
+                "Non-sensitive values should remain");
+        Assertions.assertTrue(createRedacted.contains("cn=admin,dc=example,dc=com"),
+                "Non-sensitive values should remain");
+
+        // Security integrations carry their own key names - not the group provider's. Asserting on
+        // ldap_bind_root_pwd here would pass even with security-integration coverage entirely absent,
+        // because that key is the group provider's and is already covered above.
+        String siSql = "CREATE SECURITY INTEGRATION ldap_si PROPERTIES("
+                + "\"type\" = \"authentication_ldap_simple\","
+                + "\"authentication_ldap_simple_bind_root_pwd\" = \"si_secret\","
+                + "\"authentication_ldap_simple_ssl_conn_trust_store_pwd\" = \"si_store_secret\")";
+        String siRedacted = SqlCredentialRedactor.redact(siSql);
+        Assertions.assertFalse(siRedacted.contains("si_secret"),
+                "Bind password should be redacted for security integrations too");
+        Assertions.assertFalse(siRedacted.contains("si_store_secret"),
+                "Trust store password should be redacted for security integrations too");
+
+        String oauthSql = "CREATE SECURITY INTEGRATION oauth_si PROPERTIES("
+                + "\"type\" = \"authentication_oauth2\", \"client_secret\" = \"oauth_secret\")";
+        Assertions.assertFalse(SqlCredentialRedactor.redact(oauthSql).contains("oauth_secret"),
+                "OAuth2 client_secret should be redacted");
     }
 
     @Test

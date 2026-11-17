@@ -36,6 +36,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/concurrency/once.h"
@@ -63,6 +64,8 @@ class IndexReadOptions;
 class Schema;
 class SegmentIterator;
 class SegmentReadOptions;
+struct OlapReaderStatistics;
+class MemTracker;
 
 class BitmapIndexIterator;
 class ColumnReader;
@@ -84,6 +87,15 @@ class TabletManager;
 // change finished, client should disable all cached Segment for old TabletSchema.
 class Segment : public std::enable_shared_from_this<Segment> {
 public:
+    // Lake segments and their owned metadata can outlive any one task. The
+    // factory accounts owned allocations (including the shared_ptr control
+    // block) to the process, while referenced fs/schema objects keep their own
+    // destruction context. Callers must not move task-owned FileInfo strings
+    // into this factory: it deliberately copies them under the process owner.
+    static std::shared_ptr<Segment> create(const std::shared_ptr<FileSystem>& fs, const FileInfo& segment_file_info,
+                                           uint32_t segment_id, const TabletSchemaCSPtr& tablet_schema,
+                                           lake::TabletManager* tablet_manager);
+
     // Like above but share the ownership of |unsafe_tablet_schema_ref|.
     static StatusOr<std::shared_ptr<Segment>> open(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info,
                                                    uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
@@ -92,9 +104,12 @@ public:
                                                    const LakeIOOptions& lake_io_opts = {},
                                                    lake::TabletManager* tablet_manager = nullptr);
 
+    // The optional tracker is borrowed only for this synchronous call, never
+    // retained by the footer. IO and corruption-cache invalidation use it.
     static StatusOr<size_t> parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
                                                  size_t* footer_length_hint,
-                                                 const FooterPointerPB* partial_rowset_footer);
+                                                 const FooterPointerPB* partial_rowset_footer,
+                                                 std::optional<MemTracker*> read_file_mem_tracker = std::nullopt);
 
     static Status write_segment_footer(WritableFile* write_file, const SegmentFooterPB& footer);
 
@@ -103,8 +118,9 @@ public:
 
     ~Segment();
 
+    // If |stats| is not null and this call reads the footer, the read is added to it.
     Status open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                const LakeIOOptions& lake_io_opts);
+                const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats = nullptr);
 
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
@@ -112,8 +128,13 @@ public:
                                                      const SegmentReadOptions& read_options,
                                                      ChunkIteratorPtr* reusable_slot);
 
+    // Opens the `.cols` file |idx| of |dcg|. The result is not cached, so every caller reads the
+    // footer again: |lake_io_opts| decides whether that read fills the local data cache, and the
+    // read is added to |stats| when it is not null.
     StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
-                                                       const TabletSchemaCSPtr& read_tablet_schema);
+                                                       const TabletSchemaCSPtr& read_tablet_schema,
+                                                       const LakeIOOptions& lake_io_opts = {},
+                                                       OlapReaderStatistics* stats = nullptr);
 
     uint64_t id() const { return _segment_id; }
 
@@ -216,7 +237,8 @@ public:
 
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
-    Status load_index(const LakeIOOptions& lake_io_opts = {});
+    // If |stats| is not null, the read of the index page is added to it; only the call that loads counts.
+    Status load_index(const LakeIOOptions& lake_io_opts = {}, OlapReaderStatistics* stats = nullptr);
     bool has_loaded_index() const;
 
     Status new_inverted_index_iterator(uint32_t cid, InvertedIndexIterator** iter, const SegmentReadOptions& opts,
@@ -229,6 +251,8 @@ public:
     StatusOr<int64_t> get_data_size() const;
 
     lake::TabletManager* lake_tablet_manager() { return _tablet_manager; }
+
+    bool uses_process_memory() const { return _uses_process_memory; }
 
     // read short_key_index, for data check, just used in unit test now
     Status get_short_key_index(std::vector<std::string>* sk_index_values);
@@ -264,6 +288,8 @@ public:
 private:
     friend struct SegmentZoneMapPruner;
 
+    static void _delete_process_owned(Segment* segment);
+
     struct DummyDeleter {
         void operator()(const TabletSchema*) {}
     };
@@ -287,11 +313,13 @@ private:
 
         const TabletSchemaCSPtr& schema() { return _schema; };
 
+        TabletSchemaCSPtr release() { return std::move(_schema); }
+
     private:
         TabletSchemaCSPtr _schema;
     };
 
-    Status _load_index(const LakeIOOptions& lake_io_opts);
+    Status _load_index(const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats);
 
     void _reset();
 
@@ -309,7 +337,7 @@ private:
 
     // open segment file and read the minimum amount of necessary information (footer)
     Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                 const LakeIOOptions& lake_io_opts);
+                 const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats);
     Status _create_column_readers(SegmentFooterPB* footer);
 
     Status _check_column_unique_id_uniqueness(SegmentFooterPB* footer,
@@ -326,6 +354,9 @@ private:
 
     friend class SegmentIterator;
 
+    // Only Segment::create enables this; directly constructed/shared-nothing
+    // segments retain their original task-local accounting behavior.
+    bool _uses_process_memory = false;
     std::shared_ptr<FileSystem> _fs;
     FileInfo _segment_file_info;
     TabletSchemaWrapper _tablet_schema;

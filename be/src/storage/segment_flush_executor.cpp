@@ -14,14 +14,18 @@
 
 #include "storage/segment_flush_executor.h"
 
+#include <butil/time.h>
 #include <fmt/format.h>
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <utility>
 
 #include "base/brpc/brpc.h"
 #include "common/config_compaction_fwd.h"
+#include "common/config_diagnostic_fwd.h"
+#include "common/config_ingest_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -30,6 +34,14 @@
 #include "storage/delta_writer.h"
 
 namespace starrocks {
+
+timespec add_segment_lock_deadline() {
+    int64_t timeout_ms = config::tablet_writer_add_segment_lock_timeout_ms;
+    if (timeout_ms <= 0) {
+        timeout_ms = static_cast<int64_t>(config::be_exit_after_disk_write_hang_second) * 1000;
+    }
+    return butil::milliseconds_from_now(timeout_ms);
+}
 
 // A task responsible for flushing the segment received the primary tablet. It will also
 // respond to the brpc BackendInternalServiceImpl<T>::tablet_writer_add_segment if release()
@@ -140,6 +152,10 @@ private:
                     rowset_global_dicts->find(item.first) != rowset_global_dicts->end()) {
                     tablet_info->add_valid_dict_cache_columns(item.first);
                     tablet_info->add_valid_dict_collected_version(rowset_global_dicts->at(item.first).version);
+                    const auto& identity = rowset_global_dicts->at(item.first).content_identity;
+                    if (identity.has_value()) {
+                        tablet_info->add_valid_dict_content_identities(*identity);
+                    }
                 } else {
                     tablet_info->add_invalid_dict_cache_columns(item.first);
                 }

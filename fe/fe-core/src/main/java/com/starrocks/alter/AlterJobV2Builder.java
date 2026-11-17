@@ -40,12 +40,18 @@ public abstract class AlterJobV2Builder {
     protected boolean bloomFilterColumnsChanged = false;
     protected Set<ColumnId> bloomFilterColumns;
     protected double bloomFilterFpp;
+    protected boolean zstdCompressionColumnsChanged = false;
+    protected Set<ColumnId> zstdCompressionColumns;
+    protected Map<ColumnId, Integer> zstdCompressionPageSizes;
     protected boolean hasIndexChanged = false;
     protected List<Index> indexes;
     protected Map<Long, List<Column>> newIndexMetaIdToSchema = new HashMap<>();
     protected Map<Long, Short> newIndexMetaIdToShortKeyCount = new HashMap<>();
     protected List<Integer> sortKeyIdxes;
     protected List<Integer> sortKeyUniqueIds;
+    // origin index meta id -> sort key of a non-base index that keeps its own sort key
+    protected Map<Long, List<Integer>> indexSortKeyIdxes = new HashMap<>();
+    protected Map<Long, List<Integer>> indexSortKeyUniqueIds = new HashMap<>();
     protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
     protected boolean disableReplicatedStorageForGIN = false;
 
@@ -152,6 +158,21 @@ public abstract class AlterJobV2Builder {
         return this;
     }
 
+    public AlterJobV2Builder withZstdCompressionColumnsChanged(boolean changed) {
+        this.zstdCompressionColumnsChanged = changed;
+        return this;
+    }
+
+    public AlterJobV2Builder withZstdCompressionPageSizes(@Nullable Map<ColumnId, Integer> zstdCompressionPageSizes) {
+        this.zstdCompressionPageSizes = zstdCompressionPageSizes;
+        return this;
+    }
+
+    public AlterJobV2Builder withZstdCompressionColumns(@Nullable Set<ColumnId> zstdCompressionColumns) {
+        this.zstdCompressionColumns = zstdCompressionColumns;
+        return this;
+    }
+
     public AlterJobV2Builder withAlterIndexInfo(boolean hasIndexChanged, @NotNull List<Index> indexes) {
         this.hasIndexChanged = hasIndexChanged;
         this.indexes = indexes;
@@ -190,6 +211,13 @@ public abstract class AlterJobV2Builder {
 
     public AlterJobV2Builder withSortKeyUniqueIds(@Nullable List<Integer> sortKeyUniqueIds) {
         this.sortKeyUniqueIds = sortKeyUniqueIds;
+        return this;
+    }
+
+    public AlterJobV2Builder withIndexSortKeys(@NotNull Map<Long, List<Integer>> indexSortKeyIdxes,
+                                               @NotNull Map<Long, List<Integer>> indexSortKeyUniqueIds) {
+        this.indexSortKeyIdxes.putAll(indexSortKeyIdxes);
+        this.indexSortKeyUniqueIds.putAll(indexSortKeyUniqueIds);
         return this;
     }
 

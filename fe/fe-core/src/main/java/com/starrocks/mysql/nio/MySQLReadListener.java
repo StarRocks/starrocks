@@ -16,6 +16,8 @@ package com.starrocks.mysql.nio;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.util.SqlUtils;
+import com.starrocks.mysql.MysqlCompressedPacketDecoder;
+import com.starrocks.mysql.MysqlCompression;
 import com.starrocks.mysql.MysqlPackageDecoder;
 import com.starrocks.mysql.RequestPackage;
 import com.starrocks.mysql.ssl.SSLDecoder;
@@ -37,7 +39,9 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
     private static final Logger LOG = LogManager.getLogger(MySQLReadListener.class);
     private final ConnectContext ctx;
     private final ConnectProcessor connectProcessor;
-    private final MysqlPackageDecoder packageDecoder = new MysqlPackageDecoder();
+    private final MysqlPackageDecoder packageDecoder;
+    // null unless the connection uses the compressed protocol
+    private final MysqlCompressedPacketDecoder compressedDecoder;
 
     protected static final int DEFAULT_BUFFER_SIZE = 16 * 1024;
     private final ByteBuffer readBuffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE);
@@ -49,6 +53,9 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
         this.ctx = connectContext;
         this.connectProcessor = connectProcessor;
         this.sslDecoder = this.ctx.getMysqlChannel().getSSLDecoder();
+        MysqlCompression compression = this.ctx.getMysqlChannel().getCompression();
+        this.compressedDecoder = compression == null ? null : new MysqlCompressedPacketDecoder(compression);
+        this.packageDecoder = new MysqlPackageDecoder(compression == null);
     }
 
     @Override
@@ -81,28 +88,45 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
 
                 readBuffer.flip();
 
+                ByteBuffer plain;
                 if (sslDecoder != null) {
                     sslDecoder.feed(readBuffer);
-                    packageDecoder.consume(sslDecoder.decode());
+                    plain = sslDecoder.decode();
                 } else {
-                    packageDecoder.consume(readBuffer);
+                    plain = readBuffer;
+                }
+
+                if (compressedDecoder == null) {
+                    packageDecoder.consume(plain);
+                    dispatchRequests(channel, -1);
+                } else {
+                    compressedDecoder.consume(plain);
+                    MysqlCompressedPacketDecoder.Packet packet;
+                    while ((packet = compressedDecoder.poll()) != null) {
+                        packageDecoder.consume(packet.payload());
+                        dispatchRequests(channel, packet.sequenceId());
+                    }
                 }
 
                 readBuffer.compact();
-
-                RequestPackage pkg;
-                while ((pkg = packageDecoder.poll()) != null) {
-                    final RequestPackage req = pkg;
-                    pendingTasks.incrementAndGet();
-                    channel.getWorker().execute(() -> {
-                        handleRequest(req);
-                    });
-                }
             }
         } catch (Throwable t) {
             LOG.error("Unexpected error in MySQLReadListener", t);
             ctx.setKilled();
             ctx.cleanup();
+        }
+    }
+
+    // compressedSequenceId: id of the compressed packet the polled requests ended in, -1 without compression
+    private void dispatchRequests(ConduitStreamSourceChannel channel, int compressedSequenceId) {
+        RequestPackage pkg;
+        while ((pkg = packageDecoder.poll()) != null) {
+            final RequestPackage req = compressedSequenceId < 0 ? pkg :
+                    new RequestPackage(pkg.packageId(), pkg.byteBuffer(), compressedSequenceId);
+            pendingTasks.incrementAndGet();
+            channel.getWorker().execute(() -> {
+                handleRequest(req);
+            });
         }
     }
 

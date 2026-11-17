@@ -120,8 +120,9 @@ public final class RangeColocateScanDispatch {
     /**
      * Fails closed unless every {@link MaterializedIndex} actually scanned in the supplied physical
      * partitions is aligned with the colocate group AND {@code builtBucketSeq} — the bucket assignment
-     * the scan actually built — contains the current aligned mapping. Throws {@link IllegalStateException}
-     * on the first index that is unaligned, or whose built assignment does not match.
+     * the scan actually built — contains the current aligned mapping. Throws
+     * {@link RangeColocateUnalignedException} on the first index that is unaligned, or whose built
+     * assignment does not match.
      *
      * <p>The containment check closes a fill→dispatch TOCTOU without any sticky per-scan state: the bucketSeq
      * fill falls back to a position-based assignment when the group is momentarily unaligned (so a
@@ -142,9 +143,9 @@ public final class RangeColocateScanDispatch {
             MaterializedIndex selectedIndex = physicalPartition.getQueryableIndex(indexMetaId);
             Map<Long, Integer> aligned = computeBucketSeq(selectedIndex);
             if (aligned == null) {
-                throw new IllegalStateException(String.format(
+                throw new RangeColocateUnalignedException(String.format(
                         "range colocate group %d is in an unaligned state in physical partition %d; "
-                                + "cannot dispatch colocate join until alignment is restored",
+                                + "cannot dispatch a colocate plan until alignment is restored",
                         colocateGroupId, physicalPartition.getId()));
             }
             // Containment, not equality: builtBucketSeq is the whole-scan map and can legitimately hold
@@ -153,10 +154,10 @@ public final class RangeColocateScanDispatch {
             // rather than the two maps being equal. A stale/position assignment fails a value comparison; a
             // reshard that replaced tablets fails because the new tablet ids are absent from builtBucketSeq.
             if (!builtBucketSeq.entrySet().containsAll(aligned.entrySet())) {
-                throw new IllegalStateException(String.format(
+                throw new RangeColocateUnalignedException(String.format(
                         "range colocate group %d has a stale bucket assignment in physical partition %d "
                                 + "(the scan's built bucketSeq does not match the aligned mapping); cannot "
-                                + "dispatch colocate join until the assignment is rebuilt",
+                                + "dispatch a colocate plan until the assignment is rebuilt",
                         colocateGroupId, physicalPartition.getId()));
             }
         }
@@ -286,6 +287,11 @@ public final class RangeColocateScanDispatch {
      * every ColocateRange has at least one covering tablet (the colocate group
      * is fully aligned).
      *
+     * <p>The ColocateRanges are expanded with the sort key of
+     * {@code selectedIndex} itself: every index routes its rows by its own sort
+     * key, which starts with the colocate columns but can be shorter or longer
+     * than the base index's.
+     *
      * <p>Returns {@code null} when the colocate group is in a transient
      * unaligned state — a spanning tablet, or a missing range. The caller
      * falls back to position-based bucketSeq; {@link #requireAligned} is the
@@ -301,7 +307,7 @@ public final class RangeColocateScanDispatch {
         List<ColocateRange> colocateRanges = colocateTableIndex.getColocateRanges(colocateGroupId);
         Preconditions.checkState(!colocateRanges.isEmpty(),
                 "range colocate group %s has no colocate ranges", colocateGroupId);
-        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable);
+        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable, selectedIndex.getMetaId());
 
         // Pre-expand each ColocateRange once.
         List<Range<Tuple>> expandedRanges = new ArrayList<>(colocateRanges.size());

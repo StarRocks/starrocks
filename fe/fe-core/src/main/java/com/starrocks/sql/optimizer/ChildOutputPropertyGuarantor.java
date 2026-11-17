@@ -240,30 +240,24 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         return pair.first;
     }
 
-    // Convert a RangeDistributionSpec child into a hash-shuffle child using
-    // SourceType SHUFFLE_JOIN (NOT SHUFFLE_ENFORCE). SHUFFLE_JOIN is what the
-    // downstream hash/hash compatibility branch expects — HashDistributionDesc.isShuffle()
-    // only returns true for SHUFFLE_JOIN / SHUFFLE_AGG; SHUFFLE_ENFORCE would
-    // fall through to checkState(false, "Children output property distribution error").
+    // Put a RangeDistributionSpec child behind a hash exchange on shuffleColumns. The exchange is SHUFFLE_ENFORCE,
+    // not SHUFFLE_JOIN: a range spec natively satisfies a SHUFFLE_JOIN requirement on columns covering its colocate
+    // columns (RangeDistributionSpec.isSatisfyHashShuffle), so an enforcer registered under a null-strict SHUFFLE_JOIN
+    // property would compete with the bare range child for the same property of the child group, the cheaper bare
+    // child would win, and the extracted plan would lose the exchange. This is the case for set operations and
+    // null-safe join keys, whose required columns are null-strict. No range spec satisfies SHUFFLE_ENFORCE, so the
+    // bare range child cannot replace the exchange; the join dispatch below accepts it through
+    // HashDistributionDesc.isShuffleLike(). The enforcer is published into childrenBestExprList because later
+    // readers of that list — transToBucketShuffle*, transToRoundRobinUnion, and the set-operation enforce loop —
+    // need the converted child.
     private GroupExpression convertRangeToHashShuffle(List<DistributionCol> shuffleColumns,
                                                      GroupExpression child,
                                                      PhysicalPropertySet childOutputProperty,
                                                      int childIndex) {
-        DistributionSpec enforceDistributionSpec =
-                DistributionSpec.createHashDistributionSpec(new HashDistributionDesc(enforceNullStrict(shuffleColumns),
-                        HashDistributionDesc.SourceType.SHUFFLE_JOIN));
-
-        Pair<GroupExpression, PhysicalPropertySet> pair =
-                enforceChildDistribution(enforceDistributionSpec, child, childOutputProperty);
-        PhysicalPropertySet newChildInputProperty = pair.second;
-
-        requiredChildrenProperties.set(childIndex, newChildInputProperty);
-        childrenOutputProperties.set(childIndex, newChildInputProperty);
-        // Publish the enforcer into childrenBestExprList; downstream enforcements
-        // (transToBucketShuffleJoin) read this list directly and need the converted
-        // child whose lowestCostTable contains the new hash output property.
-        childrenBestExprList.set(childIndex, pair.first);
-        return pair.first;
+        GroupExpression enforcer =
+                enforceChildShuffleDistribution(shuffleColumns, child, childOutputProperty, childIndex);
+        childrenBestExprList.set(childIndex, enforcer);
+        return enforcer;
     }
 
     // enforce child round-robin type distribution
@@ -450,13 +444,12 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
             return transToRoundRobinUnion(node, context);
         }
 
-        // Range-normalization pass: before any `isShuffle()` precondition or
-        // HashDistributionSpec cast, convert every RangeDistributionSpec child
-        // to a hash SHUFFLE_JOIN child. RangeDistributionSpec has type RANGE;
-        // it would fail the isShuffle() precondition at line
-        // `firstChildDistProperty.isShuffle()` below, so normalize first.
+        // Range-normalization pass: before any isShuffle() precondition or HashDistributionSpec cast, put every
+        // RangeDistributionSpec child behind a hash exchange on the set-operation columns (see
+        // convertRangeToHashShuffle). A range child is never colocated with a set operation.
         List<PhysicalPropertySet> setOpRequiredPropertySets =
                 PropertyDeriverBase.computeShuffleSetRequiredProperties(node);
+        boolean[] rangeChildExchanged = new boolean[childrenOutputProperties.size()];
         for (int i = 0; i < childrenOutputProperties.size(); i++) {
             DistributionSpec childSpec = childrenOutputProperties.get(i).getDistributionProperty().getSpec();
             if (childSpec instanceof RangeDistributionSpec) {
@@ -465,6 +458,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                                 .getShuffleColumns();
                 convertRangeToHashShuffle(setShuffleCols, childrenBestExprList.get(i),
                         childrenOutputProperties.get(i), i);
+                rangeChildExchanged[i] = true;
             }
         }
 
@@ -509,7 +503,8 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                 List<DistributionCol> shuffleColumns =
                         ((HashDistributionSpec) childPropertySet.getDistributionProperty()
                                 .getSpec()).getShuffleColumns();
-                if (childPropertySet.getDistributionProperty()
+                // rangeChildExchanged[i]: already behind a hash exchange on the set-operation columns.
+                if (rangeChildExchanged[i] || childPropertySet.getDistributionProperty()
                         .equals(childrenOutputProperties.get(i).getDistributionProperty())) {
                     continue;
                 }
@@ -564,10 +559,10 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         // - both children range + canRangeColocateJoin → skip exchange (return).
         // - both children range but NOT colocate → force a full (PARTITIONED)
         //   shuffle on both sides and return (see below).
-        // - exactly one range child (range × hash) → normalize the range child to
-        //   hash SHUFFLE_JOIN via convertRangeToHashShuffle, then fall through to the
-        //   existing hash/hash compatibility path unchanged (the hash side is a valid
-        //   crc32 bucket-shuffle stay side).
+        // - exactly one range child (range × hash) → put the range child behind a hash exchange via
+        //   convertRangeToHashShuffle (SHUFFLE_ENFORCE), then fall through to the hash/hash dispatch: absent a
+        //   [shuffle] / [skew] hint, a LOCAL hash side on the left stays and the range side is re-exchanged as
+        //   BUCKET; otherwise both sides are shuffled.
         DistributionSpec leftRawSpec = leftChildOutputProperty.getDistributionProperty().getSpec();
         DistributionSpec rightRawSpec = rightChildOutputProperty.getDistributionProperty().getSpec();
         boolean leftIsRange = leftRawSpec instanceof RangeDistributionSpec;
@@ -585,15 +580,9 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
             // (stay) side of a bucket-shuffle, because bucket-shuffle re-buckets the
             // other side with crc32 which does not match the range tablet layout.
             //
-            // We must NOT use convertRangeToHashShuffle (SourceType.SHUFFLE_JOIN) here:
-            // a range scan natively satisfies a SHUFFLE_JOIN requirement
-            // (RangeDistributionSpec.isSatisfyHashShuffle), so for a null-safe key (<=>)
-            // — whose required distribution is already null-strict, matching the enforced
-            // one — the memo discards the shuffle enforcer and reuses the un-exchanged
-            // range scan, yielding a SHUFFLE_HASH_BUCKET join that silently drops all
-            // matches. enforceChildShuffleDistribution uses SourceType.SHUFFLE_ENFORCE,
-            // which a range scan does not satisfy, so the shuffle exchange is guaranteed
-            // on both sides and the join is PARTITIONED.
+            // Both sides go through enforceChildShuffleDistribution (SHUFFLE_ENFORCE), which a range scan does not
+            // satisfy — the same reason convertRangeToHashShuffle enforces SHUFFLE_ENFORCE — so neither exchange can
+            // be dropped in favour of the bare scan.
             enforceChildShuffleDistribution(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);
             enforceChildShuffleDistribution(rightShuffleColumns, rightChild, rightChildOutputProperty, 1);
             return visitOperator(node, context);
@@ -650,16 +639,16 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                     transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
                 }
                 return visitOperator(node, context);
-            } else if (leftDistributionDesc.isLocal() && rightDistributionDesc.isShuffle()) {
+            } else if (leftDistributionDesc.isLocal() && rightDistributionDesc.isShuffleLike()) {
                 // bucket join
                 transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
                 return visitOperator(node, context);
-            } else if (leftDistributionDesc.isShuffle() && rightDistributionDesc.isLocal()) {
+            } else if (leftDistributionDesc.isShuffleLike() && rightDistributionDesc.isLocal()) {
                 // coordinator can not bucket shuffle data from left to right, so we need to adjust to shuffle join
                 enforceChildSatisfyShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns,
                         rightChild, rightChildOutputProperty);
                 return visitOperator(node, context);
-            } else if (leftDistributionDesc.isShuffle() && rightDistributionDesc.isShuffle()) {
+            } else if (leftDistributionDesc.isShuffleLike() && rightDistributionDesc.isShuffleLike()) {
                 // shuffle join
                 if (!checkChildDistributionSatisfyShuffle(leftDistributionSpec, rightDistributionSpec,
                         leftShuffleColumns,

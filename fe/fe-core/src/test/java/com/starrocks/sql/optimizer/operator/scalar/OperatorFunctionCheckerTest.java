@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.operator.scalar;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
@@ -55,6 +56,57 @@ public class OperatorFunctionCheckerTest {
         assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(cast(DateType.DATE, DateType.DATETIME)).first);
         assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(cast(DateType.DATETIME, DateType.DATE)).first);
         assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(cast(IntegerType.BIGINT, IntegerType.BIGINT)).first);
+    }
+
+    /**
+     * DATE and DATETIME render as fixed-width, zero-padded text, so the text sorts the way the
+     * instant does. str2date(dt, '%Y-%m-%d') over a DATE column is cast(dt as varchar) underneath.
+     */
+    @Test
+    public void testDateToTextCastIsMonotonic() {
+        assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(cast(DateType.DATE, VarcharType.VARCHAR)).first);
+        assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(
+                cast(DateType.DATETIME, VarcharType.VARCHAR)).first);
+
+        CallOperator str2date = new CallOperator(FunctionSet.STR2DATE, DateType.DATE,
+                ImmutableList.of(cast(DateType.DATE, VarcharType.VARCHAR), ConstantOperator.createVarchar("%Y-%m-%d")));
+        assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(str2date).first);
+
+        // a number rendered as text still does not keep its order
+        assertFalse(OperatorFunctionChecker.onlyContainMonotonicFunctions(cast(IntegerType.INT, VarcharType.VARCHAR)).first);
+    }
+
+    /**
+     * A retention condition only needs the order where it compares a range. Under an (in)equality or
+     * an IN list any deterministic cast maps soundly, so the cast check applies to range comparisons
+     * alone -- while the calls are still checked everywhere.
+     */
+    @Test
+    public void testCastOrderMattersOnlyUnderRangeComparison() {
+        CastOperator textOfInt = cast(IntegerType.INT, VarcharType.VARCHAR);
+        ConstantOperator text = ConstantOperator.createVarchar("20200707");
+
+        assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctionsWhereOrderMatters(
+                new BinaryPredicateOperator(BinaryType.EQ, textOfInt, text)).first);
+        assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctionsWhereOrderMatters(
+                new BinaryPredicateOperator(BinaryType.NE, textOfInt, text)).first);
+        assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctionsWhereOrderMatters(
+                new InPredicateOperator(false, textOfInt, text)).first);
+
+        BinaryPredicateOperator range = new BinaryPredicateOperator(BinaryType.GE, textOfInt, text);
+        Pair<Boolean, String> result = OperatorFunctionChecker.onlyContainMonotonicFunctionsWhereOrderMatters(range);
+        assertFalse(result.first);
+        assertTrue(result.second.contains("cast"), result.second);
+        // a range next to an equality is still checked
+        assertFalse(OperatorFunctionChecker.onlyContainMonotonicFunctionsWhereOrderMatters(
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                        new BinaryPredicateOperator(BinaryType.EQ, textOfInt, text), range)).first);
+
+        // a non-monotonic call is refused even under an equality
+        CallOperator substr = new CallOperator(FunctionSet.SUBSTR, VarcharType.VARCHAR,
+                ImmutableList.of(textOfInt, ConstantOperator.createInt(1), ConstantOperator.createInt(4)));
+        assertFalse(OperatorFunctionChecker.onlyContainMonotonicFunctionsWhereOrderMatters(
+                new BinaryPredicateOperator(BinaryType.EQ, substr, ConstantOperator.createVarchar("2020"))).first);
     }
 
     /**
@@ -166,5 +218,44 @@ public class OperatorFunctionCheckerTest {
         assertTrue(OperatorFunctionChecker.onlyContainFEConstantFunctions(cast(VarcharType.VARCHAR, IntegerType.BIGINT)).first);
         assertTrue(OperatorFunctionChecker.onlyContainFEConstantFunctions(cast(IntegerType.BIGINT, IntegerType.INT)).first);
         assertTrue(OperatorFunctionChecker.onlyContainFEConstantFunctions(cast(VarcharType.VARCHAR, DateType.DATE)).first);
+    }
+
+    /**
+     * A drop condition on a source column can only be mapped onto its generated partition column when
+     * the expression never sends two values of the column to one partition value.
+     */
+    @Test
+    public void testIsOneToOne() {
+        ColumnRefOperator intCol = new ColumnRefOperator(1, IntegerType.INT, "c1", true);
+        ColumnRefOperator dtCol = new ColumnRefOperator(2, DateType.DATETIME, "dt", true);
+        ColumnRefOperator strCol = new ColumnRefOperator(3, VarcharType.VARCHAR, "s", true);
+        CastOperator widened = new CastOperator(IntegerType.BIGINT, intCol);
+
+        assertTrue(OperatorFunctionChecker.isOneToOne(intCol));
+        assertTrue(OperatorFunctionChecker.isOneToOne(widened));
+        assertTrue(OperatorFunctionChecker.isOneToOne(cast(DateType.DATE, DateType.DATETIME)));
+        // 100 - c1 and c1 + 1: adding or subtracting a constant is a bijection even when it wraps
+        assertTrue(OperatorFunctionChecker.isOneToOne(new CallOperator(FunctionSet.SUBTRACT, IntegerType.BIGINT,
+                ImmutableList.of(ConstantOperator.createBigint(100), widened))));
+        assertTrue(OperatorFunctionChecker.isOneToOne(new CallOperator(FunctionSet.ADD, IntegerType.BIGINT,
+                ImmutableList.of(widened, ConstantOperator.createBigint(1)))));
+
+        // many-to-one, whether or not they preserve the order
+        assertFalse(OperatorFunctionChecker.isOneToOne(new CallOperator(FunctionSet.DATE_TRUNC, DateType.DATETIME,
+                ImmutableList.of(ConstantOperator.createVarchar("day"), dtCol))));
+        assertFalse(OperatorFunctionChecker.isOneToOne(new CallOperator(FunctionSet.STR2DATE, DateType.DATE,
+                ImmutableList.of(strCol, ConstantOperator.createVarchar("%Y-%m-%d")))));
+        assertFalse(OperatorFunctionChecker.isOneToOne(new CallOperator(FunctionSet.FROM_UNIXTIME, VarcharType.VARCHAR,
+                ImmutableList.of(widened))));
+        assertFalse(OperatorFunctionChecker.isOneToOne(new CallOperator(FunctionSet.MULTIPLY, IntegerType.BIGINT,
+                ImmutableList.of(widened, ConstantOperator.createBigint(2)))));
+        assertFalse(OperatorFunctionChecker.isOneToOne(new CallOperator("int_divide", IntegerType.BIGINT,
+                ImmutableList.of(widened, ConstantOperator.createBigint(10)))));
+        assertFalse(OperatorFunctionChecker.isOneToOne(cast(DateType.DATETIME, DateType.DATE)));
+        assertFalse(OperatorFunctionChecker.isOneToOne(cast(IntegerType.BIGINT, IntegerType.INT)));
+        assertFalse(OperatorFunctionChecker.isOneToOne(cast(VarcharType.VARCHAR, IntegerType.BIGINT)));
+        // two columns, or none
+        assertFalse(OperatorFunctionChecker.isOneToOne(new CallOperator(FunctionSet.ADD, IntegerType.BIGINT,
+                ImmutableList.of(widened, widened))));
     }
 }

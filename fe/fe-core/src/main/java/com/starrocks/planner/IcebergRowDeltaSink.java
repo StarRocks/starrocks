@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
@@ -86,6 +87,8 @@ public class IcebergRowDeltaSink extends DataSink {
     private final TIcebergWriteMode writeMode;
     private CloudConfiguration cloudConfiguration;
     private com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra sinkExtraInfo;
+    // the branch the commit goes to, or null for the main branch
+    private String targetBranch;
 
     /**
      * Constructor for IcebergRowDeltaSink
@@ -99,6 +102,7 @@ public class IcebergRowDeltaSink extends DataSink {
                                SessionVariable sessionVariable, TIcebergWriteMode writeMode) {
         this.icebergTable = icebergTable;
         Table nativeTable = icebergTable.getNativeTable();
+        IcebergApiConverter.checkPartitionTransformsWritable(nativeTable.spec());
         this.desc = desc;
         this.tableLocation = nativeTable.location();
         this.dataLocation = IcebergUtil.tableDataLocation(nativeTable);
@@ -236,6 +240,14 @@ public class IcebergRowDeltaSink extends DataSink {
      */
     public com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra getSinkExtraInfo() {
         return sinkExtraInfo;
+    }
+
+    public String getTargetBranch() {
+        return targetBranch;
+    }
+
+    public void setTargetBranch(String targetBranch) {
+        this.targetBranch = targetBranch;
     }
 
     public boolean isUnpartitionedTable() {

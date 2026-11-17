@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
@@ -282,7 +283,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             return sqlBuilder.toString();
         }
 
-        if (relation.getColumnOutputNames() != null) {
+        if (relation.getColumnOutputNames() != null && !options.isHideCteColumnNames()) {
             sqlBuilder.append(" (")
                     .append(Joiner.on(", ").join(
                             relation.getColumnOutputNames().stream().map(c -> "`" + c + "`").collect(toList())))
@@ -385,6 +386,15 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         return sqlBuilder.toString();
     }
 
+    // "AS OF <expr>" is the only typed form that exists: QueryPeriod's constructor always takes an end and
+    // never a start, and the StarRocks parser records the BETWEEN/FROM..TO/ALL forms as raw text instead of
+    // building a period. Fail loudly rather than emit SQL that has quietly lost the clause.
+    private String buildQueryPeriod(QueryPeriod queryPeriod) {
+        Expr end = queryPeriod.getEnd().orElseThrow(
+                () -> new IllegalStateException("Cannot render a query period without an end bound"));
+        return "FOR " + queryPeriod.getPeriodType().name() + " AS OF " + visit(end);
+    }
+
     @Override
     public String visitTable(TableRelation node, Void outerScope) {
         StringBuilder sqlBuilder = new StringBuilder();
@@ -393,6 +403,12 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         if (StringUtils.isNotEmpty(node.getQueryPeriodString())) {
             sqlBuilder.append(" ");
             sqlBuilder.append(StringUtils.trim(node.getQueryPeriodString()));
+        } else if (node.getQueryPeriod() != null) {
+            // The raw clause text is only recorded by the StarRocks parser (it is also what gets pushed
+            // down to MySQL external tables). Other producers - the Trino dialect - build the typed period
+            // alone, so render that here: without it a serialize/reparse round trip would drop the time
+            // travel clause and silently read the latest snapshot.
+            sqlBuilder.append(" ").append(buildQueryPeriod(node.getQueryPeriod()));
         }
 
         if (node.getPartitionNames() != null) {
@@ -498,13 +514,18 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     @Override
     public String visitArrayExpr(ArrayExpr node, Void context) {
         StringBuilder sb = new StringBuilder();
-        Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
-        // The type prefix exists to preserve an element type the literal alone would not reproduce, as in
-        // ARRAY<DATE>['2020-01-01']. When the element type is still NULL the literal never carried a type
-        // of its own -- it was inferred from context -- and printing the BOOLEAN stand-in freezes a type
-        // the original did not have, which changes function overload resolution on the way back in.
-        if (type.equals(node.getType())) {
-            sb.append(type.toString());
+        Type nodeType = node.getType();
+        // An unanalyzed [...] has no type yet (the parser leaves it null), e.g. a generated column expression
+        // rendered by SHOW CREATE TABLE. Print the bare literal and let analysis infer the type on the way back in.
+        if (nodeType != null) {
+            Type type = AnalyzerUtils.replaceNullType2Boolean(nodeType);
+            // The type prefix exists to preserve an element type the literal alone would not reproduce, as in
+            // ARRAY<DATE>['2020-01-01']. When the element type is still NULL the literal never carried a type
+            // of its own -- it was inferred from context -- and printing the BOOLEAN stand-in freezes a type
+            // the original did not have, which changes function overload resolution on the way back in.
+            if (type.equals(nodeType)) {
+                sb.append(type.toString());
+            }
         }
         sb.append('[');
         sb.append(node.getChildren().stream().map(this::visit).collect(Collectors.joining(", ")));
@@ -515,8 +536,15 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     @Override
     public String visitMapExpr(MapExpr node, Void context) {
         StringBuilder sb = new StringBuilder();
-        Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
-        sb.append(type.toString());
+        Type nodeType = node.getType();
+        if (nodeType != null && nodeType.isMapType()) {
+            sb.append(AnalyzerUtils.replaceNullType2Boolean(nodeType).toString());
+        } else {
+            // An unanalyzed map{...} / map(k, v) only carries the ANY_MAP placeholder from the parser, whose
+            // toString() is not valid SQL. Print the untyped MAP{...} constructor (uppercase, like the other
+            // keywords and type names printed here) and let analysis infer the type.
+            sb.append("MAP");
+        }
         sb.append("{");
         for (int i = 0; i < node.getChildren().size(); i = i + 2) {
             if (i > 0) {

@@ -1,0 +1,17 @@
+{
+  "index_order": {
+    "mappings": {
+      "properties": {
+        "order_id": {
+          "type": "long"
+        },
+        "order_time": {
+          "type": "date"
+        },
+        "order_amount": {
+          "type": "double"
+        }
+      }
+    }
+  }
+}

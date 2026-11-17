@@ -51,6 +51,10 @@ CONF_Int64(send_runtime_filter_via_http_rpc_min_size, "67108864");
 // -1: unlimited, 0: limit by memory use, >0: limit by queue_size
 CONF_mInt64(runtime_filter_queue_limit, "-1");
 
+// number of threads that merge and deliver global runtime filters on a BE. All events of one runtime filter are
+// handled by the same thread. <= 1 means a single thread.
+CONF_Int32(runtime_filter_worker_thread_num, "4");
+
 CONF_Bool(enable_resource_group_bind_cpus, "true");
 
 CONF_mBool(enable_resource_group_cpu_borrowing, "true");

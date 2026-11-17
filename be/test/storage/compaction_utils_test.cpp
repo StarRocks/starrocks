@@ -146,6 +146,10 @@ TEST(CompactionUtilsTest, test_choose_compaction_algorithm) {
     ASSERT_EQ(HORIZONTAL_COMPACTION, choice);
     choice = CompactionUtils::choose_compaction_algorithm(5, max_columns_per_group, source_num);
     ASSERT_EQ(HORIZONTAL_COMPACTION, choice);
+    choice = CompactionUtils::choose_compaction_algorithm(num_columns, max_columns_per_group, 32767);
+    ASSERT_EQ(VERTICAL_COMPACTION, choice);
+    choice = CompactionUtils::choose_compaction_algorithm(num_columns, max_columns_per_group, 32768);
+    ASSERT_EQ(HORIZONTAL_COMPACTION, choice);
 }
 
 } // namespace starrocks

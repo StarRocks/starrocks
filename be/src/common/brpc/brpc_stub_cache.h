@@ -59,6 +59,9 @@ class MetricRegistry;
 constexpr int TIMER_TASK_RUNNING = 1;
 
 template <typename StubCacheT>
+class FailedChannelResetTask;
+
+template <typename StubCacheT>
 class EndpointCleanupTask : public BthreadTimerTask {
 public:
     // ttl_seconds is the cache-wide expire window (config::brpc_stub_expire_s).
@@ -126,6 +129,7 @@ public:
 
 private:
     friend class EndpointCleanupTask<BrpcStubCache>;
+    friend class FailedChannelResetTask<BrpcStubCache>;
 
     template <typename CacheT, typename ExtractFn>
     friend void wait_clean_tasks_terminate(CacheT* cache, ExtractFn extract);
@@ -141,6 +145,8 @@ private:
 
     bool replace_cleanup_task_locked(const butil::EndPoint& endpoint,
                                      std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> task);
+
+    void reset_failed_channels();
 
     struct Metrics;
     struct StubPool {
@@ -158,6 +164,7 @@ private:
     BthreadTimer* _timer;
     std::unique_ptr<Metrics> _metrics;
     bool _stopping{false};
+    std::shared_ptr<FailedChannelResetTask<BrpcStubCache>> _channel_reset_task;
 };
 
 class HttpBrpcStubCache {
@@ -218,6 +225,7 @@ private:
     ~LakeServiceBrpcStubCache();
     void bind_timer(BthreadTimer* timer);
     friend class EndpointCleanupTask<LakeServiceBrpcStubCache>;
+    friend class FailedChannelResetTask<LakeServiceBrpcStubCache>;
 
     template <typename CacheT, typename ExtractFn>
     friend void wait_clean_tasks_terminate(CacheT* cache, ExtractFn extract);
@@ -234,6 +242,8 @@ private:
     bool replace_cleanup_task_locked(const butil::EndPoint& endpoint,
                                      std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>> task);
 
+    void reset_failed_channels();
+
     struct StubEntry {
         std::shared_ptr<LakeService_RecoverableStub> stub;
         std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>> cleanup_task;
@@ -243,6 +253,7 @@ private:
     butil::FlatMap<butil::EndPoint, StubEntry> _stub_map;
     BthreadTimer* _timer;
     bool _stopping{false};
+    std::shared_ptr<FailedChannelResetTask<LakeServiceBrpcStubCache>> _channel_reset_task;
 };
 #endif
 

@@ -28,6 +28,7 @@
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/predicate_parser.h"
 #include "testutil/exprs_test_helper.h"
+#include "testutil/global_dict_test_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -45,6 +46,7 @@ protected:
     const TypeDescriptor TYPE_DECIMAL32_DESC = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 4);
 
     ObjectPool _pool;
+    MemPool _mem_pool;
     RuntimeState _runtime_state;
     TPlanNodeId _node_id = 0;
 };
@@ -240,7 +242,7 @@ TEST_F(RuntimeRangePrunerTest, multiplicative_probe_expr_emits_no_predicate) {
 
 // The predicates built for a dict encoded column must carry decoded strings, not dict codes.
 TEST_F(RuntimeRangePrunerTest, dict_encoded_slot_ref_decodes_codes) {
-    SlotDescriptor slot(0, "c0", TypeDescriptor::create_varchar_type(10));
+    SlotDescriptor slot(0, "c0", TYPE_VARCHAR_DESC);
     std::vector<SlotDescriptor*> slot_descs{&slot};
     ConnectorPredicateParser predicate_parser(&slot_descs);
 
@@ -252,7 +254,7 @@ TEST_F(RuntimeRangePrunerTest, dict_encoded_slot_ref_decodes_codes) {
     rf.insert(200);
     runtime_filter_desc->set_runtime_filter(&rf);
 
-    GlobalDictMap dict{{Slice("apple"), 100}, {Slice("melon"), 200}};
+    GlobalDictMap dict = PaddedGlobalDictBuilder::build(&_mem_pool, {{"apple", 100}, {"melon", 200}});
     ColumnIdToGlobalDictMap dict_maps;
     dict_maps[0] = &dict;
 
@@ -277,7 +279,7 @@ TEST_F(RuntimeRangePrunerTest, dict_encoded_slot_ref_decodes_codes) {
 
 // No index filtering for a monotonic expr over a dict encoded column.
 TEST_F(RuntimeRangePrunerTest, monotonic_expr_on_dict_column_falls_back) {
-    SlotDescriptor slot(0, "c0", TypeDescriptor::create_varchar_type(10));
+    SlotDescriptor slot(0, "c0", TYPE_VARCHAR_DESC);
     std::vector<SlotDescriptor*> slot_descs{&slot};
     ConnectorPredicateParser predicate_parser(&slot_descs);
 
@@ -313,7 +315,7 @@ TEST_F(RuntimeRangePrunerTest, monotonic_expr_on_dict_column_falls_back) {
     rf.insert(200);
     runtime_filter_desc->set_runtime_filter(&rf);
 
-    GlobalDictMap dict{{Slice("apple"), 100}, {Slice("melon"), 200}};
+    GlobalDictMap dict = PaddedGlobalDictBuilder::build(&_mem_pool, {{"apple", 100}, {"melon", 200}});
     ColumnIdToGlobalDictMap dict_maps;
     dict_maps[0] = &dict;
 

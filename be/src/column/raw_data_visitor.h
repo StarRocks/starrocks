@@ -21,6 +21,7 @@
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
+#include "column/file_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
@@ -129,7 +130,7 @@ private:
 // the resulting pointer for the caller to retrieve via result().
 // Supported column types:
 //   - FixedLengthColumn<T>, DecimalV3Column<T>: returns the raw element buffer
-//   - BinaryColumn, LargeBinaryColumn: returns the flat bytes buffer (not the Slice cache)
+//   - BinaryColumn: returns the flat bytes buffer (not the Slice cache)
 //   - NullableColumn, ConstColumn: recurses into the inner data column
 //   - ArrayColumn: recurses into the elements column
 //   - AdaptiveNullableColumn: materializes first, then recurses into the data column
@@ -151,11 +152,6 @@ public:
     }
 
     Status do_visit(const BinaryColumn& column) {
-        _result = column.raw_bytes();
-        return Status::OK();
-    }
-
-    Status do_visit(const LargeBinaryColumn& column) {
         _result = column.raw_bytes();
         return Status::OK();
     }

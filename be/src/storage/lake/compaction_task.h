@@ -41,6 +41,18 @@ public:
     // stops holding. See chunk_size_with_held_segments().
     static constexpr int32_t kMaxHeldChunkShrink = 8;
 
+    // Floor for the per-stream read buffer chosen by stream_buffer_size(). Below this a remote read
+    // spends more on request overhead than it saves in memory.
+    static constexpr int64_t kMinStreamBufferSize = 64 * 1024;
+
+    // Read buffer for each of the `num_streams` (input source, column) streams one read pass keeps
+    // open at once. Every stream gets its own buffer, so with the configured
+    // lake_compaction_stream_buffer_size_bytes a backlog of hundreds of input segments alone costs
+    // gigabytes -- far past compaction_memory_limit_per_worker, which only sizes the read chunk. The
+    // buffers are shrunk to share half of that budget, but never below kMinStreamBufferSize and never
+    // above the configured size. A non-positive budget or configured size is returned unchanged.
+    static int64_t stream_buffer_size(int64_t num_streams);
+
     // CancelFunc is a function that used to tell the compaction task whether the task
     // should be cancelled.
     using CancelFunc = std::function<Status()>;
@@ -82,6 +94,12 @@ public:
     int64_t sst_output_bytes() const { return _sst_output_bytes; }
 
 protected:
+    // Remote reads of this task are one background flow of the remote I/O scheduler.
+    RemoteReadContext remote_read_context() const {
+        return RemoteReadContext::for_background(RemoteReadContext::Workload::COMPACTION,
+                                                 static_cast<uint64_t>(_txn_id));
+    }
+
     // Read chunk size for this phase, deciding at the same time whether the held input set may stay.
     // The held set is resident for the whole task, so it comes out of the same per-worker budget the
     // read buffers are sized from -- but only up to a point: past it, holding starves the chunk
@@ -92,8 +110,15 @@ protected:
     // the behaviour from before hold_segments existed. Segments retained by the flat-JSON memo
     // remain charged after this fallback and on subsequent passes; only released bytes become
     // available to the read buffers.
+    // `stream_buffer_bytes` is what the pass's read buffers take (streams * stream buffer size); it
+    // comes off the budget before anything else is sized from it.
     int32_t chunk_size_with_held_segments(int64_t held_segments_bytes, int64_t total_num_rows,
-                                          int64_t total_mem_footprint, size_t source_num);
+                                          int64_t total_mem_footprint, size_t source_num,
+                                          int64_t stream_buffer_bytes = 0);
+
+    // stream_buffer_size() for a pass over `num_streams` streams; also counts in the task stats the
+    // passes that had to shrink below the configured size.
+    int64_t stream_buffer_size_for_pass(int64_t num_streams);
 
     int64_t _txn_id;
     VersionedTablet _tablet;
@@ -103,6 +128,9 @@ protected:
     // leave the remaining phases with neither the held segments nor a filled metadata cache.
     // chunk_size_with_held_segments() may clear it -- see there.
     bool _hold_input_segments = false;
+    // Read buffer for every stream of the current read pass, chosen by stream_buffer_size_for_pass()
+    // when the pass sizes its chunk, so the chunk sizing and the reader it feeds agree.
+    int64_t _stream_buffer_size = 0;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     CompactionTaskContext* _context;
     std::shared_ptr<const TabletSchema> _tablet_schema;

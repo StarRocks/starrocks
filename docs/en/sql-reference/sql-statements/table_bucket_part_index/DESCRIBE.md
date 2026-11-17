@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Views the schema of a StarRocks table or external table, including its sort key and materialized view information."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DESC

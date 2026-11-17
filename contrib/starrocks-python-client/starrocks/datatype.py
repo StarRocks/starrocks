@@ -13,13 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from inspect import isclass
 import json
 import re
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 
+from sqlalchemy import func
 import sqlalchemy.dialects.mysql.types as mysql_types
 from sqlalchemy.engine import Dialect
 from sqlalchemy.sql import sqltypes
@@ -100,6 +101,53 @@ class DATETIME(mysql_types.DATETIME):
                 return value
 
         return process
+
+
+class TIME(mysql_types.TIME):
+    """StarRocks ``TIME``, a signed duration rather than a time of day.
+
+    StarRocks holds a TIME as a signed number of seconds and renders it as
+    ``[-]HH:MM:SS`` with no day part, so the hour field is unbounded and may be
+    negative: ``timediff('1000-01-02 01:01:01', '1000-01-01 01:01:01')`` is
+    ``24:00:00``, and reversing the arguments gives ``-24:00:00``.
+
+    Values are therefore returned as :class:`datetime.timedelta`, which spans
+    that whole range. :class:`sqlalchemy.dialects.mysql.TIME` instead maps the
+    driver's ``timedelta`` onto :class:`datetime.time` and drops
+    ``timedelta.days`` in the process, turning ``24:00:00`` into ``00:00:00``
+    and ``-00:00:01`` into ``23:59:59``. Past 999 hours the value never reaches
+    that processor at all -- PyMySQL's parser allows at most three hour digits
+    and hands back the undecoded string, which then raises ``AttributeError``.
+    """
+
+    __visit_name__ = "TIME"
+
+    _reg = re.compile(r"(-)?(\d+):(\d{1,2}):(\d{1,2})(?:\.(\d{1,6}))?$")
+
+    @property
+    def python_type(self) -> Type[timedelta]:
+        return timedelta
+
+    def result_processor(self, dialect: Dialect, coltype: object):
+        def process(value: Any) -> Optional[timedelta]:
+            if value is None or isinstance(value, timedelta):
+                return value
+            if isinstance(value, (bytes, bytearray)):
+                value = value.decode("ascii")
+            m = self._reg.match(value)
+            if not m:
+                raise ValueError("could not parse %r as a time value" % (value,))
+            sign, hours, minutes, seconds, fraction = m.groups()
+            elapsed = timedelta(
+                hours=int(hours),
+                minutes=int(minutes),
+                seconds=int(seconds),
+                microseconds=int((fraction or "").ljust(6, "0")),
+            )
+            return -elapsed if sign else elapsed
+
+        return process
+
 
 class DATE(sqltypes.DATE):
     __visit_name__ = "DATE"
@@ -362,3 +410,40 @@ class STRUCT(StructuredType):
 
 class JSON(sqltypes.JSON):
     __visit_name__ = "JSON"
+
+
+class VARIANT(sqltypes.TypeEngine):
+    """Semi-structured type, available from StarRocks 4.1.
+
+    Supported on Iceberg catalog tables (Iceberg format-version 3), where it
+    maps to Iceberg's ``variant`` type.
+
+    A bound value is serialised to JSON text and parsed back into a VARIANT
+    server-side by ``PARSE_JSON``. That round trip is the reason this does not
+    subclass :class:`sqlalchemy.types.JSON`: JSON suppresses ``bind_expression``
+    on INSERT, so the text would reach the column as a ``VARCHAR`` bind and
+    StarRocks would store the whole document as a VARIANT *string* — indexing
+    into it then yields NULL and reading it back returns JSON text rather than
+    the original structure.
+    """
+
+    __visit_name__ = "VARIANT"
+
+    def bind_expression(self, bindparam):
+        return func.parse_json(bindparam)
+
+    def bind_processor(self, dialect: Dialect):
+        def process(value: Any) -> Optional[str]:
+            return None if value is None else json.dumps(value)
+
+        return process
+
+    def result_processor(self, dialect: Dialect, coltype: object):
+        def process(value: Any) -> Any:
+            if value is None:
+                return None
+            if isinstance(value, (bytes, bytearray)):
+                value = value.decode("utf-8")
+            return json.loads(value)
+
+        return process

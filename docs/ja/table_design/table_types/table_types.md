@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks テーブルタイプ概要: 重複キー、集計、ユニークキー、主キーテーブルは異なるデータ分析シナリオに対応します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # テーブルタイプの概要

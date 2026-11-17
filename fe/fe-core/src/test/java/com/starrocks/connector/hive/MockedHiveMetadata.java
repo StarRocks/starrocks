@@ -412,6 +412,12 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("col_struct", "struct<c0: int, c1: struct<c11: int>>", null));
         cols.add(new FieldSchema("col_map", "map<int,int>", null));
         cols.add(new FieldSchema("col_arr", "array<struct<c0: int, c1: int>>", null));
+        // An array of structs that holds another array of structs, for nested lambdas.
+        cols.add(new FieldSchema("col_nested", "array<struct<c0: int, items: array<struct<a: int, b: int>>>>", null));
+        cols.add(new FieldSchema("col_map_struct", "map<int,struct<a: int, b: int>>", null));
+        cols.add(new FieldSchema("col_struct_arr", "struct<id: int, items: array<struct<a: int, b: int>>>", null));
+        cols.add(new FieldSchema("col_two_arrs",
+                "array<struct<items: array<struct<a: int, b: int>>, other: array<struct<c: int, d: int>>>>", null));
         StorageDescriptor sd =
                 new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
                         -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
@@ -421,6 +427,10 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         stats.put("col_struct", ColumnStatistic.unknown());
         stats.put("col_map", ColumnStatistic.unknown());
         stats.put("col_arr", ColumnStatistic.unknown());
+        stats.put("col_nested", ColumnStatistic.unknown());
+        stats.put("col_map_struct", ColumnStatistic.unknown());
+        stats.put("col_struct_arr", ColumnStatistic.unknown());
+        stats.put("col_two_arrs", ColumnStatistic.unknown());
 
         Table tbl =
                 new Table("subfield_map", MOCKED_SUBFIELD_DB, null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(),

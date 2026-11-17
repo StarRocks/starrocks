@@ -1,5 +1,5 @@
-position: 100 # float position is supported
-label: 'General metrics'
+position: 10
+label: 'General Monitoring Metrics'
 collapsible: true
 collapsed: true
 link:

@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.operator.operator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
@@ -31,6 +32,48 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 public class ConstantOperatorTest {
+    @Test
+    public void testCastToCharTruncatesToLength() {
+        // POST-1335 / QuickSight: CAST(1775580223839 AS CHAR(10)) -> "1775580223" (first 10 chars).
+        ConstantOperator bigint = ConstantOperator.createBigint(1775580223839L);
+        ConstantOperator asChar10 = bigint.castToExplicitly(new CharType(10)).get();
+        Assertions.assertEquals("1775580223", asChar10.getVarchar());
+        Assertions.assertEquals(10, asChar10.getVarchar().length());
+
+        // Chained: CAST(CAST(1775580223839 AS CHAR(10)) AS DECIMAL) -> 1775580223.
+        ConstantOperator asDecimal = asChar10.castTo(DecimalType.DEFAULT_DECIMAL128).get();
+        Assertions.assertEquals(1775580223L, asDecimal.getDecimal().longValue());
+
+        // String source truncates too.
+        Assertions.assertEquals("hello",
+                ConstantOperator.createVarchar("hello world").castToExplicitly(new CharType(5)).get().getVarchar());
+    }
+
+    @Test
+    public void testCastToVarcharAndWildcardCharDoNotTruncate() {
+        ConstantOperator bigint = ConstantOperator.createBigint(1775580223839L);
+        // VARCHAR(N) is not truncated.
+        Assertions.assertEquals("1775580223839", bigint.castTo(new VarcharType(10)).get().getVarchar());
+        // Wildcard CHAR (no length, len == -1) is not truncated.
+        Assertions.assertEquals("1775580223839", bigint.castTo(CharType.CHAR).get().getVarchar());
+    }
+
+    @Test
+    public void testGenericCharConversionPreservesOversizedValues() {
+        Assertions.assertEquals("1775580223839",
+                ConstantOperator.createBigint(1775580223839L).castTo(new CharType(10)).get().getVarchar());
+        Assertions.assertEquals("hello world",
+                ConstantOperator.createVarchar("hello world").castTo(new CharType(5)).get().getVarchar());
+    }
+
+    @Test
+    public void testExplicitCharCastCountsCodePoints() {
+        ConstantOperator value = ConstantOperator.createVarchar("中😀文abc");
+        Assertions.assertEquals("中😀", value.castToExplicitly(new CharType(2)).get().getVarchar());
+        Assertions.assertEquals("", value.castToExplicitly(new CharType(0)).get().getVarchar());
+        Assertions.assertEquals("中😀文abc", value.castToExplicitly(new CharType(6)).get().getVarchar());
+    }
+
     @Test
     public void testCastToDateValid() throws Exception {
         String[][] testCases = {
@@ -156,6 +199,17 @@ public class ConstantOperatorTest {
         ConstantOperator time = ConstantOperator.createTime(now.getHour() * 3600D + now.getMinute() * 60D + now.getSecond());
         ConstantOperator datetime = ConstantOperator.createDatetime(now);
         Assertions.assertEquals(datetime, time.castTo(DateType.DATETIME).get());
+    }
+
+    @Test
+    public void testExplicitBinaryCharCastTruncatesDecodedUtf8() {
+        ConstantOperator binary = ConstantOperator.createBinary("中😀文".getBytes(StandardCharsets.UTF_8),
+                VarbinaryType.VARBINARY);
+        Assertions.assertEquals("中😀", binary.castToExplicitly(new CharType(2)).get().getVarchar());
+        Assertions.assertEquals("中😀文", binary.castTo(new CharType(2)).get().getVarchar());
+        ConstantOperator invalid = ConstantOperator.createBinary(new byte[] {(byte) 0xe4, (byte) 0xb8},
+                VarbinaryType.VARBINARY);
+        Assertions.assertTrue(invalid.castToExplicitly(new CharType(1)).isEmpty());
     }
 
     @Test

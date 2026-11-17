@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -43,11 +44,16 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.txn.BeginStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TPartialUpdateMode;
+import com.starrocks.transaction.TransactionStmtExecutor;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
@@ -59,6 +65,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.encryption.PlaintextEncryptionManager;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
@@ -973,6 +980,15 @@ public class InsertPlanTest extends PlanTestBase {
                 nativeTable.spec();
                 result = PartitionSpec.unpartitioned();
                 minTimes = 0;
+                // IcebergTableSink's constructor calls nativeTable.encryption() to decide whether to
+                // signal Parquet Modular Encryption to the BE. These fixtures build
+                // `new BaseTable(null, null)`, and BaseTable.encryption() is exactly `ops.encryption()`,
+                // so without this stub the real method NPEs on the null TableOperations before the
+                // plan is ever produced. Table.encryption() is abstract in Iceberg (no default), and a
+                // catalog-backed table always has operations, so plaintext is the faithful stub here.
+                nativeTable.encryption();
+                result = PlaintextEncryptionManager.instance();
+                minTimes = 0;
             }
         };
 
@@ -1092,6 +1108,15 @@ public class InsertPlanTest extends PlanTestBase {
                 nativeTable.spec();
                 result = PartitionSpec.unpartitioned();
                 minTimes = 0;
+                // IcebergTableSink's constructor calls nativeTable.encryption() to decide whether to
+                // signal Parquet Modular Encryption to the BE. These fixtures build
+                // `new BaseTable(null, null)`, and BaseTable.encryption() is exactly `ops.encryption()`,
+                // so without this stub the real method NPEs on the null TableOperations before the
+                // plan is ever produced. Table.encryption() is abstract in Iceberg (no default), and a
+                // catalog-backed table always has operations, so plaintext is the faithful stub here.
+                nativeTable.encryption();
+                result = PlaintextEncryptionManager.instance();
+                minTimes = 0;
             }
         };
 
@@ -1129,6 +1154,111 @@ public class InsertPlanTest extends PlanTestBase {
         Assertions.assertTrue(actualRes.contains(IcebergTable.ROW_ID), actualRes);
         Assertions.assertTrue(actualRes.contains(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER), actualRes);
         Assertions.assertFalse(actualRes.contains(IcebergTable.FILE_PATH), actualRes);
+    }
+
+    @Test
+    public void testInsertIcebergStaticPartitionColumnInMiddle() throws Exception {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.LongType.get()),
+                Types.NestedField.optional(2, "dt", Types.DateType.get()),
+                Types.NestedField.optional(3, "v", Types.LongType.get()));
+        PartitionSpec spec = PartitionSpec.builderFor(schema).identity("dt").build();
+        Column id = new Column("id", IntegerType.BIGINT);
+        Column dt = new Column("dt", DateType.DATE);
+        Column v = new Column("v", IntegerType.BIGINT);
+
+        String plan = getIcebergStaticPartitionInsertExecPlan("iceberg_catalog_static_mid", "t_mid", 12345601L,
+                schema, spec, Lists.newArrayList(id, dt, v), Lists.newArrayList(dt), Lists.newArrayList(1),
+                "partition(dt='2026-07-02') values (101, 1001)");
+        // The partition constant must land in the dt slot (middle of the schema), not be appended last.
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: column_0 | 3: expr | 2: column_1\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  Iceberg TABLE SINK\n" +
+                "    TABLE: 12345601\n" +
+                "    TUPLE ID: 2\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: column_0\n" +
+                "  |  <slot 2> : 2: column_1\n" +
+                "  |  <slot 3> : '2026-07-02'\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         101 | 1001\n";
+        Assertions.assertEquals(expected, plan);
+    }
+
+    @Test
+    public void testInsertIcebergStaticPartitionColumnInMiddleWithSelect() throws Exception {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.LongType.get()),
+                Types.NestedField.optional(2, "dt", Types.DateType.get()),
+                Types.NestedField.optional(3, "v", Types.LongType.get()));
+        PartitionSpec spec = PartitionSpec.builderFor(schema).identity("dt").build();
+        Column id = new Column("id", IntegerType.BIGINT);
+        Column dt = new Column("dt", DateType.DATE);
+        Column v = new Column("v", IntegerType.BIGINT);
+
+        String plan = getIcebergStaticPartitionInsertExecPlan("iceberg_catalog_static_mid_sel", "t_mid_sel",
+                12345602L, schema, spec, Lists.newArrayList(id, dt, v), Lists.newArrayList(dt),
+                Lists.newArrayList(1), "partition(dt='2026-07-02') select 101, 1001");
+        // The partition constant must land in the dt slot (middle of the schema), not be appended last.
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:5: id | 4: expr | 6: v\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  Iceberg TABLE SINK\n" +
+                "    TABLE: 12345602\n" +
+                "    TUPLE ID: 2\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : '2026-07-02'\n" +
+                "  |  <slot 5> : 101\n" +
+                "  |  <slot 6> : 1001\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL\n";
+        Assertions.assertEquals(expected, plan);
+    }
+
+    @Test
+    public void testInsertIcebergStaticPartitionColumnAtLast() throws Exception {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.LongType.get()),
+                Types.NestedField.optional(2, "v", Types.LongType.get()),
+                Types.NestedField.optional(3, "dt", Types.DateType.get()));
+        PartitionSpec spec = PartitionSpec.builderFor(schema).identity("dt").build();
+        Column id = new Column("id", IntegerType.BIGINT);
+        Column v = new Column("v", IntegerType.BIGINT);
+        Column dt = new Column("dt", DateType.DATE);
+
+        String plan = getIcebergStaticPartitionInsertExecPlan("iceberg_catalog_static_last", "t_last",
+                12345603L, schema, spec, Lists.newArrayList(id, v, dt), Lists.newArrayList(dt),
+                Lists.newArrayList(2), "partition(dt='2026-07-02') values (101, 1001)");
+        // Regression case: partition column at the last position keeps the constant appended last.
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: column_0 | 2: column_1 | 3: expr\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  Iceberg TABLE SINK\n" +
+                "    TABLE: 12345603\n" +
+                "    TUPLE ID: 2\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: column_0\n" +
+                "  |  <slot 2> : 2: column_1\n" +
+                "  |  <slot 3> : '2026-07-02'\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         101 | 1001\n";
+        Assertions.assertEquals(expected, plan);
     }
 
     @Test
@@ -1556,6 +1686,15 @@ public class InsertPlanTest extends PlanTestBase {
                 nativeTable.schema();
                 result = icebergSchema;
                 minTimes = 0;
+                // IcebergTableSink's constructor calls nativeTable.encryption() to decide whether to
+                // signal Parquet Modular Encryption to the BE. These fixtures build
+                // `new BaseTable(null, null)`, and BaseTable.encryption() is exactly `ops.encryption()`,
+                // so without this stub the real method NPEs on the null TableOperations before the
+                // plan is ever produced. Table.encryption() is abstract in Iceberg (no default), and a
+                // catalog-backed table always has operations, so plaintext is the faithful stub here.
+                nativeTable.encryption();
+                result = PlaintextEncryptionManager.instance();
+                minTimes = 0;
             }
         };
 
@@ -1600,6 +1739,111 @@ public class InsertPlanTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setEnableMaterializedViewRewrite(enableMaterializedViewRewrite);
         }
+    }
+
+    private String getIcebergStaticPartitionInsertExecPlan(String catalogName, String tableName, long tableId,
+                                                           Schema icebergSchema, PartitionSpec partitionSpec,
+                                                           List<Column> fullSchema, List<Column> partitionColumns,
+                                                           List<Integer> partitionColumnIndexes, String insertSuffix)
+            throws Exception {
+        String createIcebergCatalogStmt = String.format(
+                "create external catalog %s properties (\"type\"=\"iceberg\", " +
+                        "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")",
+                catalogName);
+        starRocksAssert.withCatalog(createIcebergCatalogStmt);
+        MetadataMgr metadata = starRocksAssert.getCtx().getGlobalStateMgr().getMetadataMgr();
+
+        Table nativeTable = new BaseTable(null, null);
+        IcebergTable.Builder builder = IcebergTable.builder();
+        builder.setCatalogName(catalogName);
+        builder.setCatalogDBName("iceberg_db");
+        builder.setCatalogTableName(tableName);
+        builder.setSrTableName(tableName);
+        builder.setFullSchema(fullSchema);
+        builder.setNativeTable(nativeTable);
+        IcebergTable icebergTable = builder.build();
+
+        new Expectations(icebergTable) {
+            {
+                icebergTable.getUUID();
+                result = tableId;
+                minTimes = 0;
+
+                icebergTable.isUnPartitioned();
+                result = false;
+                minTimes = 0;
+
+                icebergTable.getPartitionColumns();
+                result = partitionColumns;
+                minTimes = 0;
+
+                icebergTable.partitionColumnIndexes();
+                result = partitionColumnIndexes;
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(nativeTable) {
+            {
+                nativeTable.sortOrder();
+                result = SortOrder.unsorted();
+                minTimes = 0;
+
+                nativeTable.location();
+                result = "hdfs://fake_location";
+                minTimes = 0;
+
+                nativeTable.properties();
+                result = new HashMap<String, String>();
+                minTimes = 0;
+
+                nativeTable.io();
+                result = new HadoopFileIO();
+                minTimes = 0;
+
+                nativeTable.spec();
+                result = partitionSpec;
+                minTimes = 0;
+
+                nativeTable.schema();
+                result = icebergSchema;
+                minTimes = 0;
+
+                // IcebergTableSink's constructor calls nativeTable.encryption(); BaseTable(null, null)
+                // would NPE on its null TableOperations, so stub the plaintext manager.
+                nativeTable.encryption();
+                result = PlaintextEncryptionManager.instance();
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, catalogName, "iceberg_db");
+                result = new Database(tableId, "iceberg_db");
+                minTimes = 0;
+
+                metadata.getTable((ConnectContext) any, catalogName, "iceberg_db", tableName);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Database getDatabase(String currentCatalogName, String dbName) {
+                return new Database(tableId, "iceberg_db");
+            }
+
+            @Mock
+            public com.starrocks.catalog.Table getSessionAwareTable(
+                    ConnectContext context, Database database, TableName currentTableName) {
+                return icebergTable;
+            }
+        };
+
+        return getInsertExecPlan(String.format(
+                "explain insert into %s.iceberg_db.%s %s", catalogName, tableName, insertSuffix));
     }
 
     private void assertHashPartitionedByExpression(String actualRes, String expectedExpr) {
@@ -1699,6 +1943,16 @@ public class InsertPlanTest extends PlanTestBase {
                 "     constant exprs: \n" +
                 "         NULL\n";
         Assertions.assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testInsertFilesCsvWithDuplicateColumnNames() throws Exception {
+        String actual = getInsertExecPlan("insert into files " +
+                "(\"path\" = \"hdfs://127.0.0.1:9000/files/\", \"format\" = \"csv\", \"partition_by\" = \"V2\") " +
+                "select a.v1, a.v2, b.v1 from t0 a join t0 b on a.v1 = b.v1");
+        Assertions.assertTrue(actual.contains(" OUTPUT EXPRS:1: v1 | 2: v2 | 4: v1\n"), actual);
+        Assertions.assertTrue(actual.contains("    PARTITION BY: [v2]\n"), actual);
+        Assertions.assertTrue(actual.contains("  PARTITION: HASH_PARTITIONED: 2: v2\n"), actual);
     }
 
     @Test
@@ -1813,5 +2067,105 @@ public class InsertPlanTest extends PlanTestBase {
         } catch (SemanticException e) {
             // ignore.
         }
+    }
+
+    @Test
+    public void testColumnSubsetInsertOnEmptyPartitionsIsPlainInsert() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE tpk_defaults (\n" +
+                "  pk bigint NOT NULL,\n" +
+                "  v1 int NOT NULL DEFAULT \"0\",\n" +
+                "  v2 varchar(16) NULL\n" +
+                ") PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.withTable("CREATE TABLE tpk_strict (\n" +
+                "  pk bigint NOT NULL,\n" +
+                "  v1 int NOT NULL,\n" +
+                "  v2 int NOT NULL\n" +
+                ") PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(connectContext.getDatabase()).getTable("tpk_defaults");
+        PhysicalPartition partition = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        Assertions.assertEquals(PhysicalPartition.PARTITION_INIT_VERSION + 1, partition.getNextVersion());
+        String sql = "insert into tpk_defaults (pk, v1) values (1, 2)";
+
+        // No transaction has ever committed to the partition: a plain insert, not a partial update.
+        ExecPlan plan = getExecPlan(sql);
+        Assertions.assertTrue(plan.isPlainInsertOnEmptyPartitions());
+        Assertions.assertEquals(TPartialUpdateMode.UNKNOWN_MODE,
+                ((OlapTableSink) plan.getFragments().get(0).getSink()).getPartialUpdateMode());
+
+        // A missing NOT NULL column without a default cannot be filled: stays a partial update.
+        plan = getExecPlan("insert into tpk_strict (pk, v1) values (1, 2)");
+        Assertions.assertFalse(plan.isPlainInsertOnEmptyPartitions());
+        Assertions.assertNotEquals(TPartialUpdateMode.UNKNOWN_MODE,
+                ((OlapTableSink) plan.getFragments().get(0).getSink()).getPartialUpdateMode());
+
+        // Once any transaction has committed to the partition, back to a partial update.
+        partition.setNextVersion(PhysicalPartition.PARTITION_INIT_VERSION + 2);
+        try {
+            plan = getExecPlan(sql);
+            Assertions.assertFalse(plan.isPlainInsertOnEmptyPartitions());
+            Assertions.assertNotEquals(TPartialUpdateMode.UNKNOWN_MODE,
+                    ((OlapTableSink) plan.getFragments().get(0).getSink()).getPartialUpdateMode());
+        } finally {
+            partition.setNextVersion(PhysicalPartition.PARTITION_INIT_VERSION + 1);
+        }
+
+        // Inside an explicit transaction the shortcut is off: an earlier statement of the same
+        // transaction may already have written rows that the partition version cannot show yet.
+        TransactionStmtExecutor.beginStmt(connectContext, new BeginStmt(NodePosition.ZERO));
+        try {
+            Assertions.assertNotEquals(0, connectContext.getTxnId());
+            plan = getExecPlan(sql);
+            Assertions.assertFalse(plan.isPlainInsertOnEmptyPartitions());
+        } finally {
+            TransactionStmtExecutor.rollbackStmt(connectContext, new RollbackStmt(NodePosition.ZERO));
+        }
+        Assertions.assertEquals(0, connectContext.getTxnId());
+
+        // The decision belongs to the plan, not the statement: planning the same statement again after
+        // the partition advanced must not inherit an earlier attempt's decision.
+        plan = getExecPlan(sql);
+        Assertions.assertTrue(plan.isPlainInsertOnEmptyPartitions());
+
+        // INSERT OVERWRITE never takes the shortcut.
+        plan = getExecPlan("insert overwrite tpk_defaults (pk, v1) values (1, 2)");
+        Assertions.assertFalse(plan.isPlainInsertOnEmptyPartitions());
+        // Nor the statement the overwrite job runs: InsertOverwriteJobRunner.prepareInsert clears the
+        // overwrite flag and marks the statement as coming from an overwrite before planning it again
+        // onto the temporary partitions it just created, which are at the initial version.
+        InsertStmt fromOverwrite = (InsertStmt) SqlParser.parseSingleStatement(
+                "insert overwrite tpk_defaults (pk, v1) values (1, 2)", connectContext.getSessionVariable().getSqlMode());
+        fromOverwrite.setOverwrite(false);
+        fromOverwrite.setIsFromOverwrite(true);
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+        plan = StatementPlanner.plan(fromOverwrite, connectContext);
+        Assertions.assertFalse(plan.isPlainInsertOnEmptyPartitions());
+
+        // A missing auto increment column is left to the partial update path.
+        starRocksAssert.withTable("CREATE TABLE tpk_autoinc (\n" +
+                "  pk bigint NOT NULL,\n" +
+                "  id bigint AUTO_INCREMENT,\n" +
+                "  v1 int NULL\n" +
+                ") PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        plan = getExecPlan("insert into tpk_autoinc (pk, v1) values (1, 2)");
+        Assertions.assertFalse(plan.isPlainInsertOnEmptyPartitions());
+        Assertions.assertNotEquals(TPartialUpdateMode.UNKNOWN_MODE,
+                ((OlapTableSink) plan.getFragments().get(0).getSink()).getPartialUpdateMode());
+
+        // An automatic-partition table with no partition yet: nothing has ever been committed to it, the
+        // partitions this load creates start at the initial version and the commit check covers them.
+        starRocksAssert.withTable("CREATE TABLE tpk_autopart (\n" +
+                "  pk bigint NOT NULL,\n" +
+                "  dt date NOT NULL,\n" +
+                "  v1 int NULL\n" +
+                ") PRIMARY KEY(pk, dt) PARTITION BY date_trunc('day', dt)\n" +
+                "DISTRIBUTED BY HASH(pk) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        plan = getExecPlan("insert into tpk_autopart (pk, dt) values (1, '2026-10-15')");
+        Assertions.assertTrue(plan.isPlainInsertOnEmptyPartitions());
     }
 }

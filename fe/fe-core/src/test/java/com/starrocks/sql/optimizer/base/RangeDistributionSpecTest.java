@@ -60,6 +60,11 @@ class RangeDistributionSpecTest {
         return new HashDistributionSpec(desc);
     }
 
+    private static HashDistributionSpec hashShuffleAgg(DistributionCol... cols) {
+        HashDistributionDesc desc = new HashDistributionDesc(List.of(cols), HashDistributionDesc.SourceType.SHUFFLE_AGG);
+        return new HashDistributionSpec(desc);
+    }
+
     @Test
     void emptyColocateColumnsRejected() {
         EquivalentDescriptor descriptor = new EquivalentDescriptor(1L, Collections.emptyList());
@@ -88,18 +93,110 @@ class RangeDistributionSpecTest {
     }
 
     @Test
-    void isSatisfyRejectsHashLocalAndShuffleAgg() {
+    void isSatisfyRejectsHashLocalAndShuffleEnforce() {
         RangeDistributionSpec spec = build(100L, new DistributionCol(1, true));
         List<DistributionCol> cols = List.of(new DistributionCol(1, true));
         HashDistributionSpec localHash = new HashDistributionSpec(
                 new HashDistributionDesc(cols, HashDistributionDesc.SourceType.LOCAL));
-        HashDistributionSpec aggShuffle = new HashDistributionSpec(
-                new HashDistributionDesc(cols, HashDistributionDesc.SourceType.SHUFFLE_AGG));
         HashDistributionSpec enforceShuffle = new HashDistributionSpec(
                 new HashDistributionDesc(cols, HashDistributionDesc.SourceType.SHUFFLE_ENFORCE));
         assertFalse(spec.isSatisfy(localHash));
-        assertFalse(spec.isSatisfy(aggShuffle));
         assertFalse(spec.isSatisfy(enforceShuffle));
+    }
+
+    // SHUFFLE_AGG satisfaction also needs the table's colocate group to be stable; record that lookup.
+    private static void expectGroupStability(GlobalStateMgr globalStateMgr, ColocateTableIndex colocateTableIndex,
+                                             long tableId, boolean unstable) {
+        ColocateTableIndex.GroupId groupId = new ColocateTableIndex.GroupId(1L, 1L);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getColocateTableIndex();
+                result = colocateTableIndex;
+                colocateTableIndex.getGroup(tableId);
+                result = groupId;
+                colocateTableIndex.isGroupUnstable(groupId);
+                result = unstable;
+            }
+        };
+    }
+
+    @Test
+    void isSatisfyHashShuffleAggCoverage(@Mocked GlobalStateMgr globalStateMgr,
+                                         @Mocked ColocateTableIndex colocateTableIndex) {
+        expectGroupStability(globalStateMgr, colocateTableIndex, 100L, false);
+        // Colocate cols = [1, 2]. Grouping on both keeps every group inside one ColocateRange.
+        RangeDistributionSpec spec = build(100L, new DistributionCol(1, true), new DistributionCol(2, true));
+        assertTrue(spec.isSatisfy(hashShuffleAgg(new DistributionCol(1, true), new DistributionCol(2, true))));
+        // Order-independent.
+        assertTrue(spec.isSatisfy(hashShuffleAgg(new DistributionCol(2, true), new DistributionCol(1, true))));
+        // Extra grouping columns beyond the colocate set are fine.
+        assertTrue(spec.isSatisfy(hashShuffleAgg(new DistributionCol(1, true), new DistributionCol(2, true),
+                new DistributionCol(3, true))));
+    }
+
+    @Test
+    void isSatisfyHashShuffleAggPartialCoverageRejected() {
+        // Colocate cols = [1, 2]; GROUP BY 1 alone spans ColocateRanges.
+        RangeDistributionSpec spec = build(100L, new DistributionCol(1, true), new DistributionCol(2, true));
+        assertFalse(spec.isSatisfy(hashShuffleAgg(new DistributionCol(1, true))));
+    }
+
+    @Test
+    void isSatisfyHashShuffleAggNullRelaxedRequirementCovered(@Mocked GlobalStateMgr globalStateMgr,
+                                                              @Mocked ColocateTableIndex colocateTableIndex) {
+        expectGroupStability(globalStateMgr, colocateTableIndex, 100L, false);
+        // A parent join may relax the grouping requirement; a null-strict colocate column still covers it.
+        RangeDistributionSpec spec = build(100L, new DistributionCol(1, true));
+        assertTrue(spec.isSatisfy(hashShuffleAgg(new DistributionCol(1, false))));
+    }
+
+    @Test
+    void isSatisfyHashShuffleAggRejectsNullRelaxedColocateColumns() {
+        // Null-relaxed colocate columns (a full-outer-join output) carry NULL-padded rows in every bucket,
+        // so they cannot satisfy a null-strict grouping requirement.
+        RangeDistributionSpec spec = build(100L, new DistributionCol(1, false));
+        assertFalse(spec.isSatisfy(hashShuffleAgg(new DistributionCol(1, true))));
+    }
+
+    @Test
+    void isSatisfyHashShuffleAggRejectsNullRelaxedColocateColumnsUnderRelaxedRequirement() {
+        // A relaxed grouping requirement (under an anti join, which keeps the NULL groups) does not make NULL-padded
+        // colocate columns safe to aggregate per bucket.
+        RangeDistributionSpec spec = build(100L, new DistributionCol(1, false));
+        assertFalse(spec.isSatisfy(hashShuffleAgg(new DistributionCol(1, false))));
+    }
+
+    @Test
+    void isSatisfyHashShuffleJoinAcceptsNullRelaxedColocateColumnsUnderRelaxedRequirement() {
+        // NULL keys never match an equi-join, so a join may still read NULL-padded columns in place.
+        RangeDistributionSpec spec = build(100L, new DistributionCol(1, false));
+        assertTrue(spec.isSatisfy(new HashDistributionSpec(new HashDistributionDesc(
+                List.of(new DistributionCol(1, false)), HashDistributionDesc.SourceType.SHUFFLE_JOIN))));
+    }
+
+    @Test
+    void isSatisfyHashShuffleAggRejectsUnstableGroup(@Mocked GlobalStateMgr globalStateMgr,
+                                                     @Mocked ColocateTableIndex colocateTableIndex) {
+        // A group mid-reshard has no aligned bucket assignment to dispatch on.
+        expectGroupStability(globalStateMgr, colocateTableIndex, 100L, true);
+        RangeDistributionSpec spec = build(100L, new DistributionCol(1, true));
+        assertFalse(spec.isSatisfy(hashShuffleAgg(new DistributionCol(1, true))));
+    }
+
+    @Test
+    void isSatisfyHashShuffleAggRejectsEmptyPartition(@Mocked GlobalStateMgr globalStateMgr,
+                                                      @Mocked ColocateTableIndex colocateTableIndex) {
+        RangeDistributionSpec spec = buildEmptyPartitions(100L, new DistributionCol(1, true));
+        assertFalse(spec.isSatisfy(hashShuffleAgg(new DistributionCol(1, true))));
+    }
+
+    @Test
+    void isSatisfyHashShuffleJoinDoesNotConsultGroupStability() {
+        // The join path checks stability in canColocate; SHUFFLE_JOIN satisfaction stays a pure coverage check.
+        RangeDistributionSpec spec = buildEmptyPartitions(100L, new DistributionCol(1, true));
+        assertTrue(spec.isSatisfy(hashShuffleJoin(1)));
     }
 
     @Test

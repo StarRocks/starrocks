@@ -52,6 +52,7 @@ TabletColumn::TabletColumn(const TabletColumn& rhs)
           _aggregation(rhs._aggregation),
           _type(rhs._type),
           _index_length(rhs._index_length),
+          _zstd_compression_page_size(rhs._zstd_compression_page_size),
           _precision(rhs._precision),
           _scale(rhs._scale),
           _extended_info(rhs._extended_info ? std::make_unique<ExtendedColumnInfo>(*rhs._extended_info) : nullptr),
@@ -71,6 +72,7 @@ TabletColumn::TabletColumn(TabletColumn&& rhs) noexcept
           _aggregation(rhs._aggregation),
           _type(rhs._type),
           _index_length(rhs._index_length),
+          _zstd_compression_page_size(rhs._zstd_compression_page_size),
           _precision(rhs._precision),
           _scale(rhs._scale),
           _extended_info(std::move(rhs._extended_info)),
@@ -105,6 +107,7 @@ void TabletColumn::swap(TabletColumn* rhs) {
     swap(_precision, rhs->_precision);
     swap(_scale, rhs->_scale);
     swap(_flags, rhs->_flags);
+    swap(_zstd_compression_page_size, rhs->_zstd_compression_page_size);
     swap(_extra_fields, rhs->_extra_fields);
     swap(_agg_state_desc, rhs->_agg_state_desc);
     swap(_extended_info, rhs->_extended_info);
@@ -152,6 +155,8 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
     _set_flag(kHasPrecisionShift, column.has_precision());
     _set_flag(kHasScaleShift, column.has_frac());
     _set_flag(kHasAutoIncrementShift, column.is_auto_increment());
+    _set_flag(kUseZstdCompressionShift, column.use_zstd_compression());
+    _zstd_compression_page_size = column.zstd_compression_page_size();
 
     if (column.has_precision()) {
         DCHECK_LE(column.precision(), UINT8_MAX);
@@ -213,6 +218,14 @@ void TabletColumn::to_schema_pb(ColumnPB* column) const {
     column->set_length(_length);
     column->set_index_length(_index_length);
     column->set_is_bf_column(is_bf_column());
+    // only set when true so non-compression dict columns serialize byte-identically
+    // (proto2 optional default false).
+    if (_zstd_compression_page_size > 0) {
+        column->set_zstd_compression_page_size(static_cast<int32_t>(_zstd_compression_page_size));
+    }
+    if (use_zstd_compression()) {
+        column->set_use_zstd_compression(true);
+    }
     column->set_aggregation(get_string_by_aggregation_type(_aggregation));
     column->set_has_bitmap_index(has_bitmap_index());
     for (int i = 0; i < subcolumn_count(); i++) {
@@ -266,6 +279,7 @@ bool operator==(const TabletColumn& a, const TabletColumn& b) {
     }
     if (a._length != b._length) return false;
     if (a._index_length != b._index_length) return false;
+    if (a._zstd_compression_page_size != b._zstd_compression_page_size) return false;
     return true;
 }
 

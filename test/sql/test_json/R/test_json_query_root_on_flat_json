@@ -1,0 +1,58 @@
+-- name: test_json_query_root_on_flat_json
+-- A subfield access through `->'$'` makes the scan deliver the JSON column as flat sub-columns, and json_query
+-- with the root path then has to rebuild the document from them. It matched none of them and returned NULL.
+CREATE TABLE t_json_root_${uuid0} (k INT, j JSON)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_json_root_${uuid0} VALUES
+    (1, parse_json('{"a": 1, "b": {"c": true}}')),
+    (2, parse_json('{"a": "str"}')),
+    (3, parse_json('{"b": {"c": false}, "d": [1, 2]}')),
+    (4, NULL);
+-- result:
+-- !result
+SELECT k, get_json_string(j->'$', '$.a') FROM t_json_root_${uuid0} ORDER BY k;
+-- result:
+1	1
+2	str
+3	None
+4	None
+-- !result
+SELECT k, get_json_string(cast(j as json)->'$', '$.a') FROM t_json_root_${uuid0} ORDER BY k;
+-- result:
+1	1
+2	str
+3	None
+4	None
+-- !result
+SELECT k, get_json_bool(j->'$', '$.b.c') FROM t_json_root_${uuid0} ORDER BY k;
+-- result:
+1	1
+2	None
+3	0
+4	None
+-- !result
+SELECT k, json_exists(j->'$', '$.a'), json_length(j->'$', '$.d') FROM t_json_root_${uuid0} ORDER BY k;
+-- result:
+1	1	0
+2	1	0
+3	0	2
+4	None	None
+-- !result
+SELECT k, json_query(j->'$.b', '$') FROM t_json_root_${uuid0} ORDER BY k;
+-- result:
+1	{"c": true}
+2	None
+3	{"c": false}
+4	None
+-- !result
+SELECT count(*) FROM t_json_root_${uuid0} WHERE get_json_string(j->'$', '$.a') = 'str';
+-- result:
+1
+-- !result
+DROP TABLE t_json_root_${uuid0};
+-- result:
+-- !result

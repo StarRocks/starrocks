@@ -325,4 +325,138 @@ TEST_F(AggregateParentViewTest, test_aggregate_publish_builds_query_parent_in_sa
     server.Join();
 }
 
+// A split marks every child's persistent-index sstable shared before cross-publish (see
+// set_non_segment_files_shared in tablet_reshard_helper.cpp), so this alias build's real children
+// always carry shared SST files. The virtual merge owns no data and so has no reason to object;
+// this pins that, because a real merge over the same children could not splice them.
+TEST_F(AggregateParentViewTest, test_parent_alias_over_children_with_shared_sstables_succeeds) {
+    brpc::Server server;
+    MockParentViewLakeService mock_service;
+    int port = 0;
+    init_server_with_mock(&mock_service, &server, &port);
+
+    const int64_t kParentTabletId = next_id();
+    const int64_t kChildTabletId1 = next_id();
+    const int64_t kChildTabletId2 = next_id();
+    constexpr int64_t kVersion = 81;
+    auto request = build_default_agg_request(port);
+    auto* publish_req = request.mutable_publish_reqs(0);
+    publish_req->set_new_version(kVersion);
+    publish_req->add_tablet_ids(kChildTabletId1);
+    publish_req->add_tablet_ids(kChildTabletId2);
+    publish_req->add_txn_infos()->set_txn_id(12345);
+    auto* parent_info = request.add_parent_tablet_publish_infos();
+    parent_info->set_parent_tablet_id(kParentTabletId);
+    parent_info->add_child_tablet_ids(kChildTabletId1);
+    parent_info->add_child_tablet_ids(kChildTabletId2);
+
+    auto child1 = make_child(kChildTabletId1, kVersion);
+    auto* shared_sst1 = child1->mutable_sstable_meta()->add_sstables();
+    shared_sst1->set_filename("shared.sst");
+    shared_sst1->set_filesize(1);
+    shared_sst1->set_shared(true);
+    auto child2 = std::make_shared<TabletMetadataPB>(*child1);
+    child2->set_id(kChildTabletId2);
+    child2->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(10));
+    child2->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(20));
+
+    EXPECT_CALL(mock_service, publish_version(_, _, _, _))
+            .WillOnce(Invoke([&](::google::protobuf::RpcController*, const PublishVersionRequest*,
+                                 PublishVersionResponse* resp, ::google::protobuf::Closure* done) {
+                resp->mutable_status()->set_status_code(0);
+                (*resp->mutable_tablet_metas())[kChildTabletId1].CopyFrom(*child1);
+                (*resp->mutable_tablet_metas())[kChildTabletId2].CopyFrom(*child2);
+                done->Run();
+            }));
+
+    PublishVersionResponse response;
+    brpc::Controller cntl;
+    google::protobuf::Closure* done = brpc::NewCallback([]() {});
+    _lake_service.aggregate_publish_version(&cntl, &request, &response, done);
+
+    EXPECT_EQ(0, response.status().status_code())
+            << "a parent alias built over children carrying shared sstables must still succeed";
+
+    server.Stop(0);
+    server.Join();
+}
+
+// ERROR_MESSAGE in information_schema.tablet_reshard_jobs is VARCHAR(2048); a sub-request
+// description long enough to fill that window on its own must not be allowed to push the BE's own
+// error message past where the FE-side truncation can still see it.
+TEST_F(AggregateParentViewTest, test_aggregate_publish_be_error_keeps_the_diagnostic_ahead_of_long_desc) {
+    brpc::Server server;
+    MockParentViewLakeService mock_service;
+    int port = 0;
+    init_server_with_mock(&mock_service, &server, &port);
+
+    auto request = build_default_agg_request(port);
+    auto* publish_req = request.mutable_publish_reqs(0);
+    publish_req->set_new_version(81);
+    publish_req->add_txn_infos()->set_txn_id(12345);
+    // Inflates the sub-request description (host:port txns=.. tablets=..) past 2048 characters by
+    // itself, so a description-first format would already have pushed the BE's message out.
+    for (int i = 0; i < 500; ++i) {
+        publish_req->add_tablet_ids(100000 + i);
+    }
+
+    const std::string kDiagnostic = "tablet 10001 parent alias build failed: missing child metadata";
+    EXPECT_CALL(mock_service, publish_version(_, _, _, _))
+            .WillOnce(Invoke([&](::google::protobuf::RpcController*, const PublishVersionRequest*,
+                                 PublishVersionResponse* resp, ::google::protobuf::Closure* done) {
+                resp->mutable_status()->set_status_code(1);
+                resp->mutable_status()->add_error_msgs(kDiagnostic);
+                done->Run();
+            }));
+
+    PublishVersionResponse response;
+    brpc::Controller cntl;
+    google::protobuf::Closure* done = brpc::NewCallback([]() {});
+    _lake_service.aggregate_publish_version(&cntl, &request, &response, done);
+
+    ASSERT_NE(0, response.status().status_code());
+    ASSERT_FALSE(response.status().error_msgs().empty());
+    EXPECT_EQ(0u, response.status().error_msgs(0).rfind(kDiagnostic, 0))
+            << "the BE diagnostic must lead the message so it survives truncation to the 2048-char "
+               "ERROR_MESSAGE column: "
+            << response.status().error_msgs(0);
+
+    server.Stop(0);
+    server.Join();
+}
+
+// Same hazard on the RPC-failure branch, where the diagnostic an operator needs is the brpc
+// errcode rather than a BE-returned message: it has to lead too.
+TEST_F(AggregateParentViewTest, test_aggregate_publish_rpc_failure_keeps_errcode_ahead_of_long_desc) {
+    brpc::Server server;
+    MockParentViewLakeService mock_service;
+    int port = 0;
+    init_server_with_mock(&mock_service, &server, &port);
+    // Stop the server before dispatching so the sub-request's RPC fails to connect, driving
+    // aggregate_publish_cb's cntl->Failed() branch instead of the BE-returned-error branch above.
+    server.Stop(0);
+    server.Join();
+
+    auto request = build_default_agg_request(port);
+    auto* publish_req = request.mutable_publish_reqs(0);
+    publish_req->set_new_version(81);
+    publish_req->add_txn_infos()->set_txn_id(12345);
+    for (int i = 0; i < 500; ++i) {
+        publish_req->add_tablet_ids(100000 + i);
+    }
+
+    PublishVersionResponse response;
+    brpc::Controller cntl;
+    google::protobuf::Closure* done = brpc::NewCallback([]() {});
+    _lake_service.aggregate_publish_version(&cntl, &request, &response, done);
+
+    ASSERT_NE(0, response.status().status_code());
+    ASSERT_FALSE(response.status().error_msgs().empty());
+    const std::string& msg = response.status().error_msgs(0);
+    EXPECT_EQ(0u, msg.rfind("rpc failed: errcode=", 0))
+            << "errcode must lead the message so it survives truncation to the 2048-char "
+               "ERROR_MESSAGE column even with a long sub-request description: "
+            << msg;
+}
+
 } // namespace starrocks

@@ -15,6 +15,7 @@
 package com.starrocks.qe.scheduler;
 
 import com.starrocks.common.util.Counter;
+import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
@@ -288,6 +289,35 @@ public class QueryRuntimeProfileTest {
         profile.getFragmentProfiles().get(0).addChild(instance);
 
         Assertions.assertFalse(profile.buildScanStatsByTableAndHost().isPresent());
+    }
+
+    @Test
+    public void testQueryLevelCountersMergedPerBackend() {
+        // Every instance carries its BE's query-level cumulative value at report time,
+        // so the query total is the max per BE summed over BEs, not the sum over instances.
+        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
+        profile.initFragmentProfiles(2);
+        RuntimeProfile fragment0 = profile.getFragmentProfiles().get(0);
+        RuntimeProfile fragment1 = profile.getFragmentProfiles().get(1);
+        fragment0.addChild(withQueryCounters(buildInstanceProfile("inst-1", "10.0.0.1:9060"), 10, 100, 1000));
+        fragment0.addChild(withQueryCounters(buildInstanceProfile("inst-2", "10.0.0.1:9060"), 30, 300, 3000));
+        fragment0.addChild(withQueryCounters(buildInstanceProfile("inst-3", "10.0.0.2:9060"), 5, 50, 500));
+        fragment1.addChild(withQueryCounters(buildInstanceProfile("inst-4", "10.0.0.1:9060"), 20, 200, 2000));
+
+        RuntimeProfile queryProfile = profile.buildQueryProfile(true);
+        Assertions.assertEquals(35, queryProfile.getCounter(ProfileKeyDictionary.QUERY_CUMULATIVE_CPU_TIME).getValue());
+        Assertions.assertEquals(350, queryProfile.getCounter(ProfileKeyDictionary.QUERY_SPILL_BYTES).getValue());
+        Assertions.assertEquals(3000,
+                queryProfile.getCounter(ProfileKeyDictionary.QUERY_PEAK_MEMORY_USAGE_PER_NODE).getValue());
+        Assertions.assertEquals(3500, queryProfile.getCounter(ProfileKeyDictionary.QUERY_SUM_MEMORY_USAGE).getValue());
+    }
+
+    private static RuntimeProfile withQueryCounters(RuntimeProfile instance, long cpuTime, long spillBytes,
+                                                    long peakMemory) {
+        instance.addCounter(ProfileKeyDictionary.QUERY_CUMULATIVE_CPU_TIME, TUnit.TIME_NS, null).setValue(cpuTime);
+        instance.addCounter(ProfileKeyDictionary.QUERY_SPILL_BYTES, TUnit.BYTES, null).setValue(spillBytes);
+        instance.addCounter("QueryPeakMemoryUsage", TUnit.BYTES, null).setValue(peakMemory);
+        return instance;
     }
 
     private static final class ScanLeaf {

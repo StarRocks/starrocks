@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include "base/string/slice.h"
@@ -46,10 +47,12 @@
 namespace starrocks {
 
 namespace compression {
+class ZstdCDict;
 class ZstdDDict;
 } // namespace compression
 
 class BlockCompressionCodec;
+class MemTracker;
 class RandomAccessFile;
 class WritableFile;
 struct OlapReaderStatistics;
@@ -58,6 +61,10 @@ struct PageReadOptions {
     // block to read page
     //RandomAccessFile* read_file = nullptr;
     io::SeekableInputStream* read_file = nullptr;
+    // Optional owner of the borrowed stream's lazy IO buffers. Page payloads
+    // and decoded metadata continue to use the surrounding tracker. Borrowed
+    // only for the synchronous read; PageIO never retains this pointer.
+    std::optional<MemTracker*> read_file_mem_tracker;
     // location of the page
     PagePointer page_pointer;
     // decompressor for page body (null means page body is not compressed)
@@ -95,8 +102,11 @@ public:
     // Compress `body' using `codec' into `compressed_body'.
     // The size of returned `compressed_body' is 0 when the body is not compressed, this
     // could happen when `codec' is null or space saving is less than `min_space_saving'.
+    // `cdict` references the per-column ZSTD compression dictionary when the writer has one.
+    // Null -- every caller other than the dictionary write path -- compresses exactly as before.
     static Status compress_page_body(const BlockCompressionCodec* codec, double min_space_saving,
-                                     const std::vector<Slice>& body, faststring* compressed_body);
+                                     const std::vector<Slice>& body, faststring* compressed_body,
+                                     const compression::ZstdCDict* cdict = nullptr);
 
     // Encode page from `body' and `footer' and write to `file'.
     // `body' could be either uncompressed or compressed.
@@ -107,10 +117,11 @@ public:
     // Convenient function to compress page body and write page in one go.
     static Status compress_and_write_page(const BlockCompressionCodec* codec, double min_space_saving,
                                           WritableFile* wfile, const std::vector<Slice>& body,
-                                          const PageFooterPB& footer, PagePointer* result) {
+                                          const PageFooterPB& footer, PagePointer* result,
+                                          const compression::ZstdCDict* cdict = nullptr) {
         DCHECK_EQ(footer.uncompressed_size(), Slice::compute_total_size(body));
         faststring compressed_body;
-        RETURN_IF_ERROR(compress_page_body(codec, min_space_saving, body, &compressed_body));
+        RETURN_IF_ERROR(compress_page_body(codec, min_space_saving, body, &compressed_body, cdict));
         if (compressed_body.size() == 0) { // uncompressed
             return write_page(wfile, body, footer, result);
         }

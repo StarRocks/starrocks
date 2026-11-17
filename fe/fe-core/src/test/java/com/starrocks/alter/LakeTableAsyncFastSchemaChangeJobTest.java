@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.NullVariant;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
@@ -28,10 +29,15 @@ import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.Range;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TTabletMetaInfo;
@@ -41,7 +47,9 @@ import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockGenericPool;
 import com.starrocks.utframe.MockedBackend;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -50,12 +58,19 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class LakeTableAsyncFastSchemaChangeJobTest extends LakeFastSchemaChangeTestBase {
 
     @Override
     public boolean isFastSchemaEvolutionV2() {
         return false;
+    }
+
+    @BeforeEach
+    public void resetFollowerJournalQueue() throws Exception {
+        // Only the tests that read the journal drain the follower queue, so start every test from an empty one.
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
     }
 
     @Test
@@ -435,5 +450,243 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends LakeFastSchemaChangeT
         for (Tablet tablet : tablets) {
             Assertions.assertNull(tablet.getRange());
         }
+    }
+
+    @Test
+    public void testLeaderPrunesFinishedJob() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        LakeTable table = createDupTableWithBuckets("t_prune_finished", 2);
+        LakeTableAsyncFastSchemaChangeJob job = newRangeFlipJob(db, table);
+
+        // The first round sends the tablet meta updates and submits the publish.
+        job.run();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        assertHasTabletData(job);
+        Assertions.assertFalse(partitionsWithSchemaFile(job).isEmpty());
+        runToFinished(job);
+
+        assertPruned(job);
+        Assertions.assertTrue(partitionsWithSchemaFile(job).isEmpty());
+        Assertions.assertEquals(1, job.getSchemaInfoList().size());
+        Assertions.assertTrue(job.getHistorySchema().isPresent());
+        Assertions.assertFalse(job.getCommitVersionMap().isEmpty());
+        List<LakeTableAsyncFastSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
+        // The first entry is journaled before the job collects the partition indexes.
+        for (LakeTableAsyncFastSchemaChangeJob entry : entries.subList(1, entries.size())) {
+            assertHasTabletData(entry);
+        }
+        LakeTableAsyncFastSchemaChangeJob finishedEntry = entries.get(entries.size() - 1);
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, finishedEntry.getJobState());
+        assertShowAlterUnchangedByPrune(finishedEntry);
+    }
+
+    @Test
+    public void testLeaderPrunesCancelledJob() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        LakeTable table = createDupTableWithBuckets("t_prune_cancelled", 2);
+        LakeTableAsyncFastSchemaChangeJob job = newRangeFlipJob(db, table);
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        assertHasTabletData(job);
+        Assertions.assertNotNull(job.batchTask);
+
+        Assertions.assertTrue(job.cancel("cancel"));
+
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        assertPruned(job);
+        Assertions.assertTrue(partitionsWithSchemaFile(job).isEmpty());
+        LakeTableAsyncFastSchemaChangeJob cancelledEntry = lastJournaledEntry(job.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, cancelledEntry.getJobState());
+        assertHasTabletData(cancelledEntry);
+        assertShowAlterUnchangedByPrune(cancelledEntry);
+    }
+
+    @Test
+    public void testFollowerReplayPrunesFinishedJob() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        LakeTable table = createDupTableWithBuckets("t_prune_follower", 2);
+        LakeTableAsyncFastSchemaChangeJob job = newRangeFlipJob(db, table);
+        Map<Long, TabletRange> targetRanges = job.getTargetRanges();
+        // The follower starts from the catalog as it was before the alter.
+        UtFrameUtils.PseudoImage initialImage = saveMetastore();
+        runToFinished(job);
+        List<LakeTableAsyncFastSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
+
+        LocalMetastore followerMetastore = loadMetastore(initialImage);
+        LakeTable followerTable = (LakeTable) followerMetastore.getTable(DB_NAME, table.getName());
+        Assertions.assertNotEquals(columnNames(table), columnNames(followerTable));
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        for (LakeTableAsyncFastSchemaChangeJob entry : entries) {
+            replayOn(followerMetastore, followerHandler, entry);
+        }
+
+        // The handler keeps the first replayed entry and copies the data of each later one into it.
+        LakeTableAsyncFastSchemaChangeJob retained = entries.get(0);
+        Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(job.getJobId()));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, retained.getJobState());
+        assertPruned(retained);
+        for (LakeTableAsyncFastSchemaChangeJob entry : entries.subList(1, entries.size())) {
+            assertHasTabletData(entry);
+        }
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, followerTable.getState());
+        Assertions.assertEquals(columnNames(table), columnNames(followerTable));
+        for (Tablet tablet : baseTablets(followerTable)) {
+            Assertions.assertEquals(targetRanges.get(tablet.getId()), tablet.getRange());
+        }
+        OlapTableHistorySchema historySchema = retained.getHistorySchema().orElseThrow();
+        Assertions.assertEquals(job.getHistorySchema().orElseThrow().getHistoryTxnIdThreshold(),
+                historySchema.getHistoryTxnIdThreshold());
+        Assertions.assertTrue(historySchema.getSchemaByIndexMetaId(table.getBaseIndexMetaId()).isPresent());
+    }
+
+    @Test
+    public void testLoadPrunesDoneJobFromImage() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        LakeTable table = createDupTableWithBuckets("t_prune_image", 2);
+        LakeTableAsyncFastSchemaChangeJob job = newRangeFlipJob(db, table);
+        runToFinished(job);
+        // Images written by older versions hold the done job with its per-tablet data, as the journal entry does.
+        LakeTableAsyncFastSchemaChangeJob doneJob = lastJournaledEntry(job.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, doneJob.getJobState());
+        assertHasTabletData(doneJob);
+        AlterJobMgr alterJobMgr = new AlterJobMgr(new SchemaChangeHandler(), new MaterializedViewHandler(),
+                new SystemHandler());
+        alterJobMgr.getSchemaChangeHandler().addAlterJobV2(doneJob);
+        // SHOW ALTER of the loaded job must match that of a job that went through the same serialization.
+        List<List<Comparable>> expectedRows = new ArrayList<>();
+        gsonCopy(doneJob).getInfo(expectedRows);
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        alterJobMgr.save(image.getImageWriter());
+        AlterJobMgr restoredMgr = new AlterJobMgr(new SchemaChangeHandler(), new MaterializedViewHandler(),
+                new SystemHandler());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        restoredMgr.load(reader);
+        reader.close();
+
+        LakeTableAsyncFastSchemaChangeJob restored = (LakeTableAsyncFastSchemaChangeJob)
+                restoredMgr.getSchemaChangeHandler().getAlterJobsV2().get(job.getJobId());
+        assertPruned(restored);
+        Assertions.assertTrue(restored.getHistorySchema().isPresent());
+        List<List<Comparable>> restoredRows = new ArrayList<>();
+        restored.getInfo(restoredRows);
+        Assertions.assertFalse(expectedRows.isEmpty());
+        Assertions.assertEquals(expectedRows, restoredRows);
+    }
+
+    /**
+     * A metadata-only trailing key add whose job carries a target range for every tablet of the table.
+     */
+    private LakeTableAsyncFastSchemaChangeJob newRangeFlipJob(Database db, LakeTable table) {
+        Column newKey = newTrailingKeyColumn(table);
+        Map<Long, TabletRange> targetRanges = new HashMap<>();
+        int i = 0;
+        for (Tablet tablet : baseTablets(table)) {
+            TabletRange old = oneColRange(i * 10);
+            tablet.setRange(old);
+            targetRanges.put(tablet.getId(),
+                    new TabletRange(TrailingSortKeyRangeReprojection.appendTrailing(old.getRange(), List.of(newKey))));
+            i++;
+        }
+        LakeTableAsyncFastSchemaChangeJob job = newJob(db, table, buildTrailingKeyTargetSchema(table, newKey));
+        job.setTargetRanges(targetRanges);
+        return job;
+    }
+
+    private static List<String> columnNames(OlapTable olapTable) {
+        return olapTable.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList());
+    }
+
+    private static void runToFinished(LakeTableAsyncFastSchemaChangeJob job) throws Exception {
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (!job.isDone()) {
+            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + job.getJobState());
+            job.run();
+            Thread.sleep(10);
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState(), job.errMsg);
+    }
+
+    /**
+     * Reads the journal entries of the job, from its first one to the one of its final state.
+     */
+    private static List<LakeTableAsyncFastSchemaChangeJob> readJournaledEntries(long jobId) throws Exception {
+        List<LakeTableAsyncFastSchemaChangeJob> entries = new ArrayList<>();
+        AlterJobV2 entry;
+        do {
+            entry = (AlterJobV2) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_JOB_V2);
+            Assertions.assertEquals(jobId, entry.getJobId());
+            entries.add((LakeTableAsyncFastSchemaChangeJob) entry);
+        } while (!entry.isDone());
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, entries.get(0).getJobState());
+        return entries;
+    }
+
+    private static LakeTableAsyncFastSchemaChangeJob lastJournaledEntry(long jobId) throws Exception {
+        List<LakeTableAsyncFastSchemaChangeJob> entries = readJournaledEntries(jobId);
+        return entries.get(entries.size() - 1);
+    }
+
+    private static AlterJobV2 gsonCopy(AlterJobV2 job) {
+        return GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(job, AlterJobV2.class), AlterJobV2.class);
+    }
+
+    private static UtFrameUtils.PseudoImage saveMetastore() throws Exception {
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(image.getImageWriter());
+        return image;
+    }
+
+    private static LocalMetastore loadMetastore(UtFrameUtils.PseudoImage image) throws Exception {
+        LocalMetastore metastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        metastore.load(reader);
+        reader.close();
+        return metastore;
+    }
+
+    /**
+     * Replays the journal entry into the handler against the given catalog, as a follower does.
+     */
+    private static void replayOn(LocalMetastore metastore, SchemaChangeHandler handler, AlterJobV2 entry) {
+        LocalMetastore leaderMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        GlobalStateMgr.getCurrentState().setLocalMetastore(metastore);
+        try {
+            handler.replayAlterJobV2(entry);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(leaderMetastore);
+        }
+    }
+
+    /**
+     * SHOW ALTER of a done job reads none of the data the prune drops.
+     */
+    private static void assertShowAlterUnchangedByPrune(LakeTableAsyncFastSchemaChangeJob doneJob) {
+        List<List<Comparable>> rowsBefore = new ArrayList<>();
+        doneJob.getInfo(rowsBefore);
+        doneJob.pruneMeta();
+        assertPruned(doneJob);
+        List<List<Comparable>> rowsAfter = new ArrayList<>();
+        doneJob.getInfo(rowsAfter);
+        Assertions.assertFalse(rowsBefore.isEmpty());
+        Assertions.assertEquals(rowsBefore, rowsAfter);
+    }
+
+    private static Set<String> partitionsWithSchemaFile(LakeTableAsyncFastSchemaChangeJob job) {
+        return Deencapsulation.getField(job, "partitionsWithSchemaFile");
+    }
+
+    /**
+     * The job's per-tablet data: the partition indexes it updates and the target range of every tablet.
+     */
+    private static void assertHasTabletData(LakeTableAsyncFastSchemaChangeJob job) {
+        Assertions.assertFalse(job.getPartitionIndexMap().isEmpty());
+        Assertions.assertFalse(job.getTargetRanges().isEmpty());
+    }
+
+    private static void assertPruned(LakeTableAsyncFastSchemaChangeJob job) {
+        Assertions.assertTrue(job.getPartitionIndexMap().isEmpty());
+        Assertions.assertNull(job.batchTask);
+        Assertions.assertNull(job.getTargetRanges());
     }
 }

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW USAGE RESOURCE GROUPS shows resource usage information of resource groups on each BE."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW USAGE RESOURCE GROUPS

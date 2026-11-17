@@ -294,6 +294,11 @@ void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
 
 #define CONVERT_TO_TWO_LEVEL_MAP(DST, SRC)                                                                            \
     if (_type == AggHashMapVariant::Type::SRC) {                                                                      \
+        static_assert(                                                                                                \
+                agg_key_state_is_convertible<detail::AggHashMapVariantTypeTraits<Type::SRC>::HashMapWithKeyType,      \
+                                             detail::AggHashMapVariantTypeTraits<Type::DST>::HashMapWithKeyType>,     \
+                "the destination cannot hold the source's out-of-table key state (NULL group, "                       \
+                "has_null_column/fixed_byte_size, or the bit-compression context)");                                  \
         auto dst = std::make_unique<detail::AggHashMapVariantTypeTraits<Type::DST>::HashMapWithKeyType>(              \
                 state->chunk_size(), _agg_stat);                                                                      \
         std::visit(                                                                                                   \
@@ -306,6 +311,7 @@ void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
                         if (null_data_ptr != nullptr) {                                                               \
                             dst->set_null_key_data(null_data_ptr);                                                    \
                         }                                                                                             \
+                        copy_agg_key_state(*hash_map_with_key, *dst);                                                 \
                     }                                                                                                 \
                 },                                                                                                    \
                 hash_map_with_key);                                                                                   \
@@ -325,6 +331,22 @@ void AggHashMapVariant::convert_to_two_level(RuntimeState* state) {
     CONVERT_TO_TWO_LEVEL_MAP(phase1_null_string_two_level, phase1_null_string);
     CONVERT_TO_TWO_LEVEL_MAP(phase2_null_string_two_level, phase2_null_string);
 }
+
+#define AGG_VARIANT_TYPE_NAME_CASE(NAME) \
+    case Type::NAME:                     \
+        return #NAME;
+
+const char* AggHashMapVariant::type_name() const {
+    switch (_type) { APPLY_FOR_AGG_VARIANT_ALL(AGG_VARIANT_TYPE_NAME_CASE) }
+    return "unknown";
+}
+
+const char* AggHashSetVariant::type_name() const {
+    switch (_type) { APPLY_FOR_AGG_VARIANT_ALL(AGG_VARIANT_TYPE_NAME_CASE) }
+    return "unknown";
+}
+
+#undef AGG_VARIANT_TYPE_NAME_CASE
 
 void AggHashMapVariant::reset() {
     detail::AggHashMapWithKeyPtr ptr;
@@ -398,6 +420,11 @@ void AggHashSetVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
 
 #define CONVERT_TO_TWO_LEVEL_SET(DST, SRC)                                                                            \
     if (_type == AggHashSetVariant::Type::SRC) {                                                                      \
+        static_assert(                                                                                                \
+                agg_key_state_is_convertible<detail::AggHashSetVariantTypeTraits<Type::SRC>::HashSetWithKeyType,      \
+                                             detail::AggHashSetVariantTypeTraits<Type::DST>::HashSetWithKeyType>,     \
+                "the destination cannot hold the source's out-of-table key state (NULL group, "                       \
+                "has_null_column/fixed_byte_size, or the bit-compression context)");                                  \
         auto dst = std::make_unique<detail::AggHashSetVariantTypeTraits<Type::DST>::HashSetWithKeyType>(              \
                 state->chunk_size(), _agg_stat);                                                                      \
         std::visit(                                                                                                   \
@@ -411,6 +438,7 @@ void AggHashSetVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
                         if constexpr (SrcType::has_single_null_key && DstType::has_single_null_key) {                 \
                             dst->has_null_key = hash_set_with_key->has_null_key;                                      \
                         }                                                                                             \
+                        copy_agg_key_state(*hash_set_with_key, *dst);                                                 \
                     }                                                                                                 \
                 },                                                                                                    \
                 hash_set_with_key);                                                                                   \

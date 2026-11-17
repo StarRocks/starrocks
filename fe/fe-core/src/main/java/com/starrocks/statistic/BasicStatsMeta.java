@@ -155,8 +155,13 @@ public class BasicStatsMeta implements Writable {
     public double getHealthy() {
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
-        TableHealthyMetrics metrics = getTableHealthyMetrics(table);
-        LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
+        return getHealthy(getTableHealthyMetrics(table), StatisticUtils.getTableLastUpdateTime(table));
+    }
+
+    /**
+     * Same as {@link #getHealthy()}, but reuses metrics and update time the caller already computed.
+     */
+    public double getHealthy(TableHealthyMetrics metrics, LocalDateTime tableUpdateTime) {
         double updateRatio;
         // 1. If none updated partitions, health is 1
         // 2. If there are few updated partitions, the health only to calculated on rows
@@ -217,6 +222,16 @@ public class BasicStatsMeta implements Writable {
     public void increaseDeltaRows(Long delta) {
         totalRows += delta;
         deltaRows += delta;
+    }
+
+    // Records rows changed without growing the table, e.g. a delete. Only the health check uses deltaRows,
+    // so the row count used by the optimizer is not inflated.
+    public void increaseChangedRows(long changed) {
+        deltaRows += changed;
+    }
+
+    public long getDeltaRows() {
+        return deltaRows;
     }
 
     public void increaseStatsCollectionCount(AnalyzeStatus status) {

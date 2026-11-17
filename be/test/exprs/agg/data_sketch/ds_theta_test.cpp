@@ -290,8 +290,8 @@ TEST_F(DataSketchsThetaTest, TestANotBSerializedEmptySketchLhs) {
 // corruption completely invisible.  After the fix ctx->has_error() must be true.
 
 TEST_F(DataSketchsThetaTest, TestCombineRejectsMalformedInput) {
-    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<TypeDescriptor> arg_types = {TYPE_VARBINARY_DESC};
+    auto return_type = TYPE_VARBINARY_DESC;
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("ds_theta_combine", TYPE_VARBINARY, TYPE_VARBINARY, false);
@@ -308,8 +308,8 @@ TEST_F(DataSketchsThetaTest, TestCombineRejectsMalformedInput) {
 
 TEST_F(DataSketchsThetaTest, TestCombineAcceptsValidInput) {
     // Regression: valid input must not trip the error path.
-    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<TypeDescriptor> arg_types = {TYPE_VARBINARY_DESC};
+    auto return_type = TYPE_VARBINARY_DESC;
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("ds_theta_combine", TYPE_VARBINARY, TYPE_VARBINARY, false);
@@ -328,9 +328,8 @@ TEST_F(DataSketchsThetaTest, TestCombineAcceptsValidInput) {
 }
 
 TEST_F(DataSketchsThetaTest, TestIntersectCondAggRejectsMalformedInput) {
-    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY),
-                                             TypeDescriptor::from_logical_type(TYPE_INT)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    std::vector<TypeDescriptor> arg_types = {TYPE_VARBINARY_DESC, TYPE_INT_DESC};
+    auto return_type = TYPE_DOUBLE_DESC;
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func =
@@ -402,8 +401,8 @@ TEST_F(DataSketchsThetaTest, TestANotBNullInput) {
 // ---- ds_theta_combine: reset / serialize / merge round-trip ---------------
 
 TEST_F(DataSketchsThetaTest, TestCombineReset) {
-    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<TypeDescriptor> arg_types = {TYPE_VARBINARY_DESC};
+    auto return_type = TYPE_VARBINARY_DESC;
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("ds_theta_combine", TYPE_VARBINARY, TYPE_VARBINARY, false);
@@ -424,8 +423,8 @@ TEST_F(DataSketchsThetaTest, TestCombineReset) {
 }
 
 TEST_F(DataSketchsThetaTest, TestCombineSerializeMergeRoundTrip) {
-    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<TypeDescriptor> arg_types = {TYPE_VARBINARY_DESC};
+    auto return_type = TYPE_VARBINARY_DESC;
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("ds_theta_combine", TYPE_VARBINARY, TYPE_VARBINARY, false);
@@ -471,8 +470,8 @@ TEST_F(DataSketchsThetaTest, TestCombineSerializeMergeRoundTrip) {
 }
 
 TEST_F(DataSketchsThetaTest, TestCombineConvertToSerializeFormat) {
-    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<TypeDescriptor> arg_types = {TYPE_VARBINARY_DESC};
+    auto return_type = TYPE_VARBINARY_DESC;
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("ds_theta_combine", TYPE_VARBINARY, TYPE_VARBINARY, false);
@@ -542,9 +541,8 @@ TEST_F(DataSketchsThetaTest, TestScalarANotBOverlapping) {
 
 // Helper: build a FunctionContext and aggregate function for ds_theta_intersect_cond_agg.
 static std::unique_ptr<FunctionContext> make_cond_agg_ctx() {
-    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY),
-                                             TypeDescriptor::from_logical_type(TYPE_INT)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    std::vector<TypeDescriptor> arg_types = {TYPE_VARBINARY_DESC, TYPE_INT_DESC};
+    auto return_type = TYPE_DOUBLE_DESC;
     return std::unique_ptr<FunctionContext>(FunctionContext::create_test_context(std::move(arg_types), return_type));
 }
 

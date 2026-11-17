@@ -99,6 +99,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     private static final String DB_KEY = "db";
     private static final String TABLE_KEY = "table";
     private static final String LABEL_KEY = "label";
+    private static final String TIMEOUT_KEY = "timeout";
     private static final String CHANNEL_NUM_STR = "channel_num";
     private static final String CHANNEL_ID_STR = "channel_id";
     private static final String SOURCE_TYPE = "source_type";
@@ -769,6 +770,49 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 assertEquals(label, body.get(TransactionResult.LABEL_KEY));
                 assertEquals(txnId, Long.parseLong(Objects.toString(body.get(TransactionResult.TXN_ID_KEY))));
             }
+        }
+    }
+
+    @Test
+    public void beginTransactionForBypassWriteTimeoutTest() throws Exception {
+        // the timeout header is in seconds and must reach GlobalTransactionMgr#beginTransaction as is
+        assertBypassWriteBeginTimeout("1800", 1800L);
+        assertBypassWriteBeginTimeout("1", 1L);
+        // TransactionLoadAction#DEFAULT_TXN_TIMEOUT_MILLIS (20s) if the timeout header is absent
+        assertBypassWriteBeginTimeout(null, 20L);
+    }
+
+    private void assertBypassWriteBeginTimeout(String timeoutHeader, long expectedTimeoutSecond) throws Exception {
+        long txnId = RandomUtils.nextLong(1, Integer.MAX_VALUE);
+        new Expectations() {
+            {
+                globalTransactionMgr.beginTransaction(
+                        anyLong,
+                        (List<Long>) any,
+                        anyString,
+                        (TxnCoordinator) any,
+                        LoadJobSourceType.BYPASS_WRITE,
+                        withEqual(expectedTimeoutSecond));
+                times = 1;
+                result = txnId;
+            }
+        };
+        String label = RandomStringUtils.randomAlphanumeric(32);
+        Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+            reqBuilder.addHeader(LABEL_KEY, label);
+            if (timeoutHeader != null) {
+                reqBuilder.addHeader(TIMEOUT_KEY, timeoutHeader);
+            }
+
+            uriBuilder.addParameter(SOURCE_TYPE, Objects.toString(LoadJobSourceType.BYPASS_WRITE.getFlag()));
+        });
+        try (Response response = networkClient.newCall(request).execute()) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertEquals(label, body.get(TransactionResult.LABEL_KEY));
+            assertEquals(txnId, Long.parseLong(Objects.toString(body.get(TransactionResult.TXN_ID_KEY))));
         }
     }
 

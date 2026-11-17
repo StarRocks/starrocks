@@ -1,0 +1,54 @@
+--- a/NetSSL_OpenSSL/src/SecureSocketImpl.cpp
++++ b/NetSSL_OpenSSL/src/SecureSocketImpl.cpp
+@@ -196,7 +196,12 @@
+ 	{
+ 		if (performHandshake && _pSocket->getBlocking())
+ 		{
+-			int ret = SSL_connect(_pSSL);
++			int ret;
++			do
++			{
++				ret = SSL_connect(_pSSL);
++			}
++			while (mustRetry(ret));
+ 			handleError(ret);
+ 			verifyPeerCertificate();
+ 		}
+@@ -504,22 +509,31 @@
+ 		case SSL_ERROR_WANT_READ:
+ 			if (_pSocket->getBlocking())
+ 			{
+-				if (_pSocket->poll(_pSocket->getReceiveTimeout(), Poco::Net::Socket::SELECT_READ))
++				// A blocking socket reports a retryable SSL error only because the
++				// underlying read was interrupted, or because SO_RCVTIMEO expired and
++				// the socket returned EAGAIN. In the latter case the receive timeout
++				// has already been spent, so polling for another full receive timeout
++				// hands the peer a second one: a peer that accepts the connection and
++				// then never answers costs twice the configured timeout instead of once.
++				if (socketError == POCO_EINTR)
+ 					return true;
+-				else
+-					throw Poco::TimeoutException();
++				throw Poco::TimeoutException();
+ 			}
+ 			break;
+ 		case SSL_ERROR_WANT_WRITE:
+ 			if (_pSocket->getBlocking())
+ 			{
+-				if (_pSocket->poll(_pSocket->getSendTimeout(), Poco::Net::Socket::SELECT_WRITE))
++				if (socketError == POCO_EINTR)
+ 					return true;
+-				else
+-					throw Poco::TimeoutException();
++				throw Poco::TimeoutException();
+ 			}
+ 			break;
+ 		case SSL_ERROR_SYSCALL:
++			// Same reasoning: on a blocking socket EAGAIN means the timeout expired.
++			// Retrying also risks spinning here, because errno may be left over from
++			// an earlier call when the peer closed the connection (rc == 0).
++			if (socketError == POCO_EAGAIN && _pSocket->getBlocking())
++				throw Poco::TimeoutException();
+ 			return socketError == POCO_EAGAIN || socketError == POCO_EINTR;
+ 		default:
+ 			return socketError == POCO_EINTR;

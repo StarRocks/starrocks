@@ -28,6 +28,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -37,6 +38,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TStatisticData;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
@@ -48,10 +50,14 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class StatisticsExecutorTest extends PlanTestBase {
     @BeforeAll
@@ -136,6 +142,12 @@ public class StatisticsExecutorTest extends PlanTestBase {
         collectJob.collectStatisticSync(sql, context, analyzeStatus);
     }
 
+    private static final String GROWTH_SUBSETS =
+            "hll_union_agg(if(abs(cast(murmur_hash3_32(partition_name) as bigint)) % 3 < 1, ndv, NULL)), " +
+            "hll_union_agg(if(abs(cast(murmur_hash3_32(partition_name) as bigint)) % 3 < 2, ndv, NULL)), " +
+            "cast(sum(if(abs(cast(murmur_hash3_32(partition_name) as bigint)) % 3 < 1, 1, 0)) as bigint), " +
+            "cast(sum(if(abs(cast(murmur_hash3_32(partition_name) as bigint)) % 3 < 2, 1, 0)) as bigint)";
+
     @Test
     public void testQueryStatisticSync() throws AnalysisException {
         String tableUUID = connectContext.getGlobalStateMgr().getMetadataMgr()
@@ -149,19 +161,23 @@ public class StatisticsExecutorTest extends PlanTestBase {
             @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
                 Assertions.assertEquals(
-                        "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
+                        "SELECT cast(22 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
                                 "hll_union_agg(ndv), sum(null_count),  " +
                                 "cast(max(cast(nullif(max, '') as string)) as string), " +
                                 "cast(min(cast(nullif(min, '') as string)) as string), " +
-                                "max(update_time) FROM (SELECT *, row_number() " +
+                                "max(update_time), cast(count(distinct partition_name) as bigint), " +
+                                "cast(sum(hll_cardinality(ndv)) as bigint), " + GROWTH_SUBSETS +
+                                " FROM (SELECT *, row_number() " +
                                 "over ( partition by partition_name, column_name order by update_time desc) as rn " +
                                 "FROM external_column_statistics WHERE " + tableUUIDPredicate +
                                 " and column_name in (\"c2\")) dedup_t WHERE rn = 1 GROUP BY column_name UNION ALL " +
-                                "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
+                                "SELECT cast(22 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
                                 "hll_union_agg(ndv), sum(null_count),  " +
                                 "cast(max(cast(nullif(max, '') as bigint)) as string), " +
                                 "cast(min(cast(nullif(min, '') as bigint)) as string), " +
-                                "max(update_time) FROM (SELECT *, row_number() " +
+                                "max(update_time), cast(count(distinct partition_name) as bigint), " +
+                                "cast(sum(hll_cardinality(ndv)) as bigint), " + GROWTH_SUBSETS +
+                                " FROM (SELECT *, row_number() " +
                                 "over ( partition by partition_name, column_name order by update_time desc) as rn " +
                                 "FROM external_column_statistics WHERE " + tableUUIDPredicate +
                                 " and column_name in (\"c1\")) dedup_t WHERE rn = 1 GROUP BY column_name", sql);
@@ -174,6 +190,91 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 "t1");
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         statisticExecutor.queryStatisticSync(context, tableUUID, table, ImmutableList.of("c1", "c2"));
+    }
+
+    @Test
+    public void testFallsBackWhenABackendCannotSerializeTheCoverageCounts() {
+        // A backend that predates the result shape fills nothing in and leaves the version unset, which
+        // reaches the frontend as an unreadable result rather than an empty one. Treating that as "no
+        // statistics" would send the optimizer back to connector metadata for every external table until
+        // the last backend is restarted, so the query is re-asked in the shape that backend does know.
+        StatisticExecutor.resetExternalQueryShapeProbe();
+        List<String> askedFor = Lists.newArrayList();
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
+                askedFor.add(sql);
+                if (sql.contains("count(distinct partition_name)")) {
+                    throw new StatisticExecutor.UnsupportedStatisticsVersionException(0);
+                }
+                return Lists.newArrayList(new TStatisticData());
+            }
+        };
+
+        try {
+            String tableUUID = connectContext.getGlobalStateMgr().getMetadataMgr()
+                    .getTable(connectContext, "hive0", "partitioned_db", "t1").getUUID();
+            Table table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                    .getTable(connectContext, "hive0", "partitioned_db", "t1");
+            ConnectContext context = StatisticUtils.buildConnectContext();
+            StatisticExecutor statisticExecutor = new StatisticExecutor();
+
+            List<TStatisticData> result =
+                    statisticExecutor.queryStatisticSync(context, tableUUID, table, ImmutableList.of("c1"));
+
+            // V4, then V3 (both carry the coverage counts), then the shape every backend knows.
+            Assertions.assertEquals(1, result.size());
+            Assertions.assertEquals(3, askedFor.size());
+            Assertions.assertTrue(askedFor.get(0).contains("murmur_hash3_32(partition_name)"));
+            Assertions.assertTrue(askedFor.get(1).contains("count(distinct partition_name)"));
+            Assertions.assertFalse(askedFor.get(1).contains("murmur_hash3_32(partition_name)"));
+            Assertions.assertFalse(askedFor.get(2).contains("count(distinct partition_name)"));
+
+            // The rejection is remembered, so the next load does not pay for a query it knows will fail.
+            askedFor.clear();
+            statisticExecutor.queryStatisticSync(context, tableUUID, table, ImmutableList.of("c1"));
+            Assertions.assertEquals(1, askedFor.size());
+            Assertions.assertFalse(askedFor.get(0).contains("count(distinct partition_name)"));
+        } finally {
+            StatisticExecutor.resetExternalQueryShapeProbe();
+        }
+    }
+
+    @Test
+    public void testFallsBackOneShapeAtATime() {
+        // A backend from the release that added the coverage counts but not the growth checkpoints keeps
+        // the coverage-based scaling during the upgrade instead of dropping to the oldest shape.
+        StatisticExecutor.resetExternalQueryShapeProbe();
+        List<String> askedFor = Lists.newArrayList();
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
+                askedFor.add(sql);
+                if (sql.contains("murmur_hash3_32(partition_name)")) {
+                    throw new StatisticExecutor.UnsupportedStatisticsVersionException(0);
+                }
+                return Lists.newArrayList(new TStatisticData());
+            }
+        };
+
+        try {
+            Table table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                    .getTable(connectContext, "hive0", "partitioned_db", "t1");
+            ConnectContext context = StatisticUtils.buildConnectContext();
+            StatisticExecutor statisticExecutor = new StatisticExecutor();
+
+            statisticExecutor.queryStatisticSync(context, table.getUUID(), table, ImmutableList.of("c1"));
+            Assertions.assertEquals(2, askedFor.size());
+            Assertions.assertTrue(askedFor.get(1).contains("count(distinct partition_name)"));
+
+            askedFor.clear();
+            statisticExecutor.queryStatisticSync(context, table.getUUID(), table, ImmutableList.of("c1"));
+            Assertions.assertEquals(1, askedFor.size());
+            Assertions.assertTrue(askedFor.get(0).contains("count(distinct partition_name)"));
+            Assertions.assertFalse(askedFor.get(0).contains("murmur_hash3_32(partition_name)"));
+        } finally {
+            StatisticExecutor.resetExternalQueryShapeProbe();
+        }
     }
 
     public static StatementBase parseSql(String originStmt) {
@@ -331,5 +432,141 @@ public class StatisticsExecutorTest extends PlanTestBase {
         // Should not throw any exception for the overloaded version with catalog/db/table names
         statisticExecutor.dropExternalHistogram(context, "catalog", "db", "table", Lists.newArrayList());
         statisticExecutor.dropExternalHistogram(context, "catalog", "db", "table", null);
+    }
+
+    private static class RawKeyedCleanupRecorder extends StatisticExecutor {
+        private final Optional<Boolean> existsResult;
+        private final List<String> checks = new ArrayList<>();
+        private final List<String> dmls = new ArrayList<>();
+
+        RawKeyedCleanupRecorder(Optional<Boolean> existsResult) {
+            this.existsResult = existsResult;
+        }
+
+        @Override
+        protected Optional<Boolean> rawKeyedRowExists(ConnectContext statsConnectCtx, String existsSql) {
+            checks.add(existsSql);
+            return existsResult;
+        }
+
+        @Override
+        protected boolean executeRawKeyedCleanupDML(ConnectContext statsConnectCtx, String sql) {
+            dmls.add(sql);
+            return true;
+        }
+    }
+
+    // In shared-data mode every DELETE on the UNIQUE KEY external statistics tables adds a delete-predicate rowset
+    // that later forces a compaction of the whole table, even when it matches nothing. The raw-keyed cleanup that
+    // runs after every collection must therefore only DELETE when a raw-keyed row exists in that scope.
+    @Test
+    public void testRawKeyedCleanupSkipsDeleteWhenNoRawRowExists() {
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        RawKeyedCleanupRecorder executor = new RawKeyedCleanupRecorder(Optional.of(false));
+
+        Assertions.assertTrue(executor.dropExternalStatRawPartitions(context, "hive.db.tbl.1", List.of("p1"),
+                List.of("c1")));
+        Assertions.assertTrue(executor.dropExternalHistogramRawColumns(context, "hive.db.tbl.1", List.of("c1")));
+        Assertions.assertEquals(2, executor.checks.size());
+        Assertions.assertTrue(executor.checks.get(0).startsWith("SELECT 1 FROM _statistics_.external_column_statistics"),
+                executor.checks.get(0));
+        Assertions.assertTrue(
+                executor.checks.get(1).startsWith("SELECT 1 FROM _statistics_.external_histogram_statistics"),
+                executor.checks.get(1));
+        Assertions.assertTrue(executor.dmls.isEmpty(), executor.dmls.toString());
+    }
+
+    @Test
+    public void testRawKeyedCleanupDeletesWhenRawRowExists() {
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        RawKeyedCleanupRecorder executor = new RawKeyedCleanupRecorder(Optional.of(true));
+
+        Assertions.assertTrue(executor.dropExternalStatRawPartitions(context, "hive.db.tbl.1", List.of("p1"),
+                List.of("c1")));
+        Assertions.assertTrue(executor.dropExternalHistogramRawColumns(context, "hive.db.tbl.1", List.of("c1")));
+        Assertions.assertEquals(List.of(
+                StatisticSQLBuilder.buildDropExternalStatSQLForPartitions("hive.db.tbl.1", List.of("p1"), List.of("c1")),
+                StatisticSQLBuilder.buildDropExternalHistogramSQLForRawUuid("hive.db.tbl.1", List.of("c1"))),
+                executor.dmls);
+    }
+
+    @Test
+    public void testRawKeyedCleanupSkipsDeleteWhenCheckFails() {
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        RawKeyedCleanupRecorder executor = new RawKeyedCleanupRecorder(Optional.empty());
+
+        Assertions.assertFalse(executor.dropExternalStatRawPartitions(context, "hive.db.tbl.1", List.of("p1"),
+                List.of("c1")));
+        Assertions.assertFalse(executor.dropExternalHistogramRawColumns(context, "hive.db.tbl.1", List.of("c1")));
+        Assertions.assertTrue(executor.dmls.isEmpty(), executor.dmls.toString());
+    }
+
+    @Test
+    public void testRawKeyedCleanupWithEmptyScopeDoesNothing() {
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        RawKeyedCleanupRecorder executor = new RawKeyedCleanupRecorder(Optional.of(true));
+
+        Assertions.assertTrue(executor.dropExternalStatRawPartitions(context, "hive.db.tbl.1", List.of(), List.of("c1")));
+        Assertions.assertTrue(executor.dropExternalStatRawPartitions(context, "hive.db.tbl.1", List.of("p1"), null));
+        Assertions.assertTrue(executor.dropExternalHistogramRawColumns(context, "hive.db.tbl.1", List.of()));
+        Assertions.assertTrue(executor.checks.isEmpty());
+        Assertions.assertTrue(executor.dmls.isEmpty());
+    }
+
+    // The guard tests above stub rawKeyedRowExists; this one runs its real result handling. Treating an empty
+    // result as "exists" would silently bring back a DELETE after every collection. The check must run on the
+    // caller's statistics context (the one KILL ANALYZE cancels, carrying the job's query timeout) with a fresh
+    // statement start time, and must leave that context's pipeline dop as it was.
+    @Test
+    public void testRawKeyedRowExistsReadsQueryResult() {
+        Object[] next = new Object[1];
+        List<ConnectContext> usedContexts = new ArrayList<>();
+        long[] notBeforeMs = new long[1];
+        new MockUp<SimpleExecutor>() {
+            @Mock
+            public List<TResultBatch> executeDQL(String sql) {
+                throw new AssertionError("existence check must run on the caller's statistics context");
+            }
+
+            @Mock
+            public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                usedContexts.add(context);
+                Assertions.assertTrue(context.getStartTime() >= notBeforeMs[0],
+                        "probe ran with a stale statement start time");
+                context.getSessionVariable().setPipelineDop(0);
+                if (next[0] instanceof RuntimeException) {
+                    throw (RuntimeException) next[0];
+                }
+                @SuppressWarnings("unchecked")
+                List<TResultBatch> result = (List<TResultBatch>) next[0];
+                return result;
+            }
+        };
+        StatisticExecutor executor = new StatisticExecutor();
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        context.getSessionVariable().setPipelineDop(3);
+        // As if the previous statement on this context started 10 minutes ago.
+        context.setStartTime(Instant.now().minusSeconds(600));
+        notBeforeMs[0] = System.currentTimeMillis();
+
+        next[0] = null;
+        Assertions.assertEquals(Optional.of(false), executor.rawKeyedRowExists(context, "SELECT 1"));
+        next[0] = List.of();
+        Assertions.assertEquals(Optional.of(false), executor.rawKeyedRowExists(context, "SELECT 1"));
+        next[0] = List.of(new TResultBatch());
+        Assertions.assertEquals(Optional.of(false), executor.rawKeyedRowExists(context, "SELECT 1"));
+        next[0] = List.of(new TResultBatch().setRows(new ArrayList<>()));
+        Assertions.assertEquals(Optional.of(false), executor.rawKeyedRowExists(context, "SELECT 1"));
+        next[0] = List.of(new TResultBatch().setRows(new ArrayList<>()), new TResultBatch().setRows(
+                List.of(ByteBuffer.wrap("{\"data\":[\"1\"]}".getBytes(StandardCharsets.UTF_8)))));
+        Assertions.assertEquals(Optional.of(true), executor.rawKeyedRowExists(context, "SELECT 1"));
+        next[0] = new RuntimeException("statistics query failed");
+        Assertions.assertEquals(Optional.empty(), executor.rawKeyedRowExists(context, "SELECT 1"));
+
+        Assertions.assertEquals(6, usedContexts.size());
+        for (ConnectContext used : usedContexts) {
+            Assertions.assertSame(context, used);
+        }
+        Assertions.assertEquals(3, context.getSessionVariable().getPipelineDop());
     }
 }

@@ -32,6 +32,7 @@
 #include "parquet/schema.h"
 #include "runtime/byte_buffer.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 // ====================================================================================================================
@@ -137,6 +138,21 @@ std::shared_ptr<arrow::ArrayData> rectify_int96_array_data(const std::shared_ptr
     return new_data;
 }
 
+// ParquetChunkFile::ReadAt() fails with arrow Cancelled once the query is cancelled. Return that as
+// Status::Cancelled, not as a failed parquet read, so a cancelled scan is not reported as a read error.
+Status cancelled_read_status(const arrow::Status& status, const std::string& filename) {
+    return Status::Cancelled(fmt::format("{}. filename: {}", status.message(), filename));
+}
+
+// Arrow statuses raised inside the parquet reader surface as ParquetStatusException.
+const arrow::Status* cancelled_status_of(const ::parquet::ParquetException& e) {
+    const auto* status_exception = dynamic_cast<const ::parquet::ParquetStatusException*>(&e);
+    if (status_exception != nullptr && status_exception->status().IsCancelled()) {
+        return &status_exception->status();
+    }
+    return nullptr;
+}
+
 } // namespace
 
 ParquetReaderWrap::~ParquetReaderWrap() {
@@ -212,15 +228,17 @@ Status ParquetReaderWrap::_init_parquet_reader() {
         arrow_reader_properties.set_cache_options(cache_options);
 
         // new file reader for parquet file
-        auto st = ::parquet::arrow::FileReader::Make(arrow::default_memory_pool(),
-                                                     ::parquet::ParquetFileReader::Open(_parquet, _properties),
-                                                     arrow_reader_properties, &_reader);
-        if (!st.ok()) {
+        auto reader_result = ::parquet::arrow::FileReader::Make(
+                arrow::default_memory_pool(), ::parquet::ParquetFileReader::Open(_parquet, _properties),
+                arrow_reader_properties);
+        if (!reader_result.ok()) {
             std::ostringstream oss;
-            oss << "Failed to create parquet file reader. error: " << st.ToString() << ", filename: " << _filename;
+            oss << "Failed to create parquet file reader. error: " << reader_result.status().ToString()
+                << ", filename: " << _filename;
             LOG(INFO) << oss.str();
             return Status::InternalError(oss.str());
         }
+        _reader = std::move(reader_result).ValueOrDie();
 
         if (!_reader || !_reader->parquet_reader()) {
             LOG(INFO) << "Ignore the parquet file because of unexpected nullptr ParquetReader";
@@ -264,6 +282,9 @@ Status ParquetReaderWrap::_init_parquet_reader() {
 
         return Status::OK();
     } catch (::parquet::ParquetException& e) {
+        if (const auto* cancelled = cancelled_status_of(e); cancelled != nullptr) {
+            return cancelled_read_status(*cancelled, _filename);
+        }
         std::stringstream str_error;
         str_error << "Init parquet reader fail. " << e.what() << ", filename: " << _filename;
         LOG(WARNING) << str_error.str();
@@ -276,18 +297,25 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
     try {
         if (_current_line_of_group == 0) { // the first read
             RETURN_IF_ERROR(column_indices(tuple_slot_descs));
-            arrow::Status status = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids, &_rb_batch);
-
-            if (!status.ok()) {
+            auto rb_result = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids);
+            if (rb_result.status().IsCancelled()) {
+                return cancelled_read_status(rb_result.status(), _filename);
+            }
+            if (!rb_result.ok()) {
+                const auto& status = rb_result.status();
                 LOG(WARNING) << "Get RecordBatch Failed. error: " << status.ToString() << ", filename: " << _filename;
                 return Status::InternalError(fmt::format("{}. filename: {}", status.ToString(), _filename));
             }
+            _rb_batch = std::move(rb_result).ValueOrDie();
             if (!_rb_batch) {
                 LOG(INFO) << "Ignore the parquet file because of an unexpected nullptr "
                              "RecordBatchReader";
                 return Status::EndOfFile("Unexpected nullptr RecordBatchReader");
             }
-            status = _rb_batch->ReadNext(&_batch);
+            arrow::Status status = _rb_batch->ReadNext(&_batch);
+            if (status.IsCancelled()) {
+                return cancelled_read_status(status, _filename);
+            }
             if (!status.ok()) {
                 LOG(WARNING) << "The first read record. error: " << status.ToString() << ", filename: " << _filename;
                 return Status::InternalError(fmt::format("{}. filename: {}", status.ToString(), _filename));
@@ -306,6 +334,9 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
         }
         return Status::OK();
     } catch (::parquet::ParquetException& e) {
+        if (const auto* cancelled = cancelled_status_of(e); cancelled != nullptr) {
+            return cancelled_read_status(*cancelled, _filename);
+        }
         std::stringstream str_error;
         str_error << "Init parquet reader fail. " << e.what();
         LOG(WARNING) << str_error.str() << " filename: " << _filename;
@@ -388,11 +419,18 @@ Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& 
         _current_line_of_group = 0;
         _rows_of_group = _file_metadata->RowGroup(_current_group)->num_rows(); //get rows of the current row group
         // read batch
-        arrow::Status status = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids, &_rb_batch);
-        if (!status.ok()) {
+        auto rb_result = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids);
+        if (rb_result.status().IsCancelled()) {
+            return cancelled_read_status(rb_result.status(), _filename);
+        }
+        if (!rb_result.ok()) {
             return Status::InternalError(fmt::format("Get RecordBatchReader Failed. filename: {}", _filename));
         }
-        status = _rb_batch->ReadNext(&_batch);
+        _rb_batch = std::move(rb_result).ValueOrDie();
+        arrow::Status status = _rb_batch->ReadNext(&_batch);
+        if (status.IsCancelled()) {
+            return cancelled_read_status(status, _filename);
+        }
         if (!status.ok()) {
             return Status::InternalError(fmt::format("Read Batch Error With Libarrow. filename: {}", _filename));
         }
@@ -411,6 +449,9 @@ Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& 
                 << " current line of batch:" << _current_line_of_batch
                 << " is larger than batch size:" << _batch->num_rows() << ". start to read next batch";
         arrow::Status status = _rb_batch->ReadNext(&_batch);
+        if (status.IsCancelled()) {
+            return cancelled_read_status(status, _filename);
+        }
         if (!status.ok()) {
             return Status::InternalError(fmt::format("Read Batch Error With Libarrow. filename: {}", _filename));
         }
@@ -546,8 +587,8 @@ using StarRocksStatus = ::starrocks::Status;
 using ArrowStatus = ::arrow::Status;
 
 ParquetChunkFile::ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos,
-                                   ScannerCounter* counter)
-        : _file(std::move(file)), _pos(pos), _counter(counter) {}
+                                   ScannerCounter* counter, RuntimeState* state)
+        : _file(std::move(file)), _pos(pos), _counter(counter), _state(state) {}
 
 ParquetChunkFile::~ParquetChunkFile() {
     [[maybe_unused]] auto st = Close();
@@ -567,6 +608,10 @@ arrow::Result<int64_t> ParquetChunkFile::Read(int64_t nbytes, void* buffer) {
 }
 
 arrow::Result<int64_t> ParquetChunkFile::ReadAt(int64_t position, int64_t nbytes, void* out) {
+    // A cancelled query should not start another remote read.
+    if (_state != nullptr && _state->is_cancelled()) {
+        return arrow::Status::Cancelled("query cancelled, skip parquet range read");
+    }
     _pos += nbytes;
     ++_counter->file_read_count;
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
@@ -574,6 +619,18 @@ arrow::Result<int64_t> ParquetChunkFile::ReadAt(int64_t position, int64_t nbytes
     return status.ok()
                    ? nbytes
                    : arrow::Result<int64_t>(arrow::Status(arrow::StatusCode::IOError, std::string(status.message())));
+}
+
+// Arrow's default ReadAsync() runs ReadAt() on its process-wide IO pool (8 threads unless
+// arrow_io_thread_pool_size or ARROW_IO_THREADS says otherwise), so every connector scan thread
+// on the node queues behind those threads. The lazy read cache waits on the result right away, so read here, on the scan
+// thread. IO concurrency then follows the connector scan pool, and the buffer is charged to
+// the query's mem tracker.
+arrow::Future<std::shared_ptr<arrow::Buffer>> ParquetChunkFile::ReadAsync(const arrow::io::IOContext& /*ctx*/,
+                                                                          int64_t position, int64_t nbytes) {
+    // Qualified call: the base ReadAt(position, nbytes) is hidden by the ReadAt override above.
+    return arrow::Future<std::shared_ptr<arrow::Buffer>>::MakeFinished(
+            arrow::io::RandomAccessFile::ReadAt(position, nbytes));
 }
 
 arrow::Result<int64_t> ParquetChunkFile::GetSize() {

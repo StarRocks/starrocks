@@ -25,7 +25,7 @@ import com.starrocks.common.QueryPlanLog;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.SqlCredentialRedactor;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
@@ -36,6 +36,7 @@ import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.RangeColocateUnalignedException;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SlotId;
 import com.starrocks.rpc.RpcException;
@@ -80,6 +81,8 @@ public class ExecuteExceptionHandler {
             handleGlobalDictNotMatchException((GlobalDictNotMatchException) e, context);
         } else if (e instanceof LakeMetaVersionNotFoundException) {
             handleLakeMetaVersionNotFound((LakeMetaVersionNotFoundException) e, context);
+        } else if (e instanceof RangeColocateUnalignedException) {
+            handleRangeColocateUnaligned((RangeColocateUnalignedException) e, context);
         } else {
             throw e;
         }
@@ -115,10 +118,11 @@ public class ExecuteExceptionHandler {
             try {
                 String sql = originStmt != null ? originStmt.originStmt : "";
                 String queryId = DebugUtil.printId(connectContext.getQueryId());
-                String plan = execPlan.getExplainString(TExplainLevel.COSTS);
+                String plan = execPlan.getExplainStringForLog(TExplainLevel.COSTS);
                 QueryPlanLog.getQueryPlan().log(String.format(
                         "Query failed. queryId=%s, errType=%s, error=%s, sql=%s\n%s",
-                        queryId, errType, errorMsg, SqlCredentialRedactor.redact(sql), plan));
+                        queryId, errType, LogUtil.desensitizeText(errorMsg),
+                        LogUtil.redactSqlForLog(sql, null), plan));
             } catch (Exception e) {
                 LOG.warn("Failed to write plan to fe.plan.log", e);
             }
@@ -356,6 +360,21 @@ public class ExecuteExceptionHandler {
         return value.isPresent() ? String.valueOf(value.getAsLong()) : "unknown";
     }
 
+    /**
+     * A range-colocate scan's tablet-to-bucket assignment went stale between planning and scheduling (a tablet split
+     * or merge published in between). The attempt failed before anything was deployed; a new plan uses the current
+     * tablets, or a shuffle while the group is realigned. If the layout is still unaligned when the statement is
+     * re-planned, the retries fail with the same error.
+     */
+    private static void handleRangeColocateUnaligned(RangeColocateUnalignedException e, RetryContext context)
+            throws Exception {
+        rebuildExecPlan(e, context);
+        LOG.warn("Range colocate bucket assignment is stale, replanned. queryId={}, attempt={}, error={}",
+                DebugUtil.printId(context.connectContext.getExecutionId()), context.retryTime + 1, e.getMessage());
+        Tracers.record(Tracers.Module.SCHEDULER, "RangeColocate.REPLAN",
+                String.format("attempt=%d, error=%s", context.retryTime + 1, e.getMessage()));
+    }
+
     private static void handleRpcException(RpcException e, RetryContext context) throws Exception {
         ConnectContext connectContext = context.connectContext;
         // Log only on the first attempt to avoid duplicate entries during retries.
@@ -365,8 +384,10 @@ public class ExecuteExceptionHandler {
         if (context.retryTime == 0) {
             LOG.warn("Query cancelled by crash of backends or RpcException, [QueryId={}] [SQL={}]",
                     DebugUtil.printId(connectContext.getExecutionId()),
-                    context.parsedStmt.getOrigStmt() == null ? "" : context.parsedStmt.getOrigStmt().originStmt,
-                    e);
+                    LogUtil.desensitizeSql(
+                            context.parsedStmt.getOrigStmt() == null ? "" : context.parsedStmt.getOrigStmt().originStmt,
+                            context.parsedStmt),
+                    LogUtil.desensitize(e));
             logFailedQueryPlan(context.execPlan, connectContext,
                     context.parsedStmt.getOrigStmt(), e.getMessage(), QueryState.ErrType.INTERNAL_ERR);
         }

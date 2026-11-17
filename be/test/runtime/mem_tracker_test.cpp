@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <thread>
+
 namespace starrocks {
 
 class MemTrackerTest : public testing::Test {
@@ -39,6 +42,60 @@ protected:
     ObjectPool _pool;
 };
 
+TEST_F(MemTrackerTest, transfer_preserves_common_ancestors) {
+    _query_1->consume(100);
+    _query_1->transfer_to(_query_2.get(), 60);
+    EXPECT_EQ(40, _query_1->consumption());
+    EXPECT_EQ(60, _query_2->consumption());
+    EXPECT_EQ(100, _query_pool_mem_tracker->consumption());
+    EXPECT_EQ(100, _process_mem_tracker->consumption());
+    EXPECT_EQ(100, _query_pool_mem_tracker->peak_consumption());
+    _query_2->transfer_to(_process_mem_tracker.get(), 60);
+    EXPECT_EQ(40, _query_pool_mem_tracker->consumption());
+    EXPECT_EQ(100, _process_mem_tracker->consumption());
+    _process_mem_tracker->transfer_to(_query_2.get(), 60);
+    _query_2->transfer_to(_query_2.get(), 60);
+    EXPECT_EQ(60, _query_2->consumption());
+    EXPECT_EQ(100, _process_mem_tracker->peak_consumption());
+    _query_1->release(40);
+    _query_2->release(60);
+}
+
+TEST_F(MemTrackerTest, transfer_does_not_open_common_ancestor_limit_window) {
+    MemTracker process(1024, "process");
+    MemTracker pool(1024, "pool", &process);
+    MemTracker sender(-1, "sender", &pool);
+    MemTracker receiver(-1, "receiver", &pool);
+    sender.consume(1024);
+    std::atomic<bool> started = false;
+    std::atomic<bool> done = false;
+    std::atomic<int> admitted = 0;
+    std::thread checker([&] {
+        started.store(true);
+        do {
+            if (pool.try_consume(1) == nullptr) {
+                admitted.fetch_add(1);
+                pool.release(1);
+            }
+        } while (!done.load());
+    });
+    while (!started.load()) {
+        std::this_thread::yield();
+    }
+    for (int i = 0; i < 100000; ++i) {
+        sender.transfer_to(&receiver, 1024);
+        receiver.transfer_to(&sender, 1024);
+    }
+    done.store(true);
+    checker.join();
+    EXPECT_EQ(0, admitted.load());
+    EXPECT_EQ(1024, process.consumption());
+    EXPECT_EQ(1024, process.peak_consumption());
+    EXPECT_EQ(1024, pool.consumption());
+    EXPECT_EQ(1024, pool.peak_consumption());
+    sender.release(1024);
+}
+
 TEST_F(MemTrackerTest, label_type_convert) {
     const auto& mem_types = MemTracker::mem_types();
     ASSERT_GT(mem_types.size(), 0);
@@ -53,6 +110,9 @@ TEST_F(MemTrackerTest, label_type_convert) {
     // Verify builtin_inverted_index is registered
     ASSERT_EQ(MemTracker::type_to_label(MemTrackerType::BUILTIN_INVERTED_INDEX), "builtin_inverted_index");
     ASSERT_EQ(MemTracker::label_to_type("builtin_inverted_index"), MemTrackerType::BUILTIN_INVERTED_INDEX);
+
+    ASSERT_EQ(MemTracker::type_to_label(MemTrackerType::JVM), "jvm");
+    ASSERT_EQ(MemTracker::label_to_type("jvm"), MemTrackerType::JVM);
 }
 
 TEST_F(MemTrackerTest, get_snapshot) {
@@ -294,6 +354,36 @@ TEST_F(MemTrackerTest, has_enough_reserved_memory) {
 TEST_F(MemTrackerTest, err_msg_with_fragment_instance_id) {
     std::string err_msg = _query_1->err_msg("mock msg", "abc-fragment-id");
     ASSERT_NE(err_msg.find("fragment: abc-fragment-id"), std::string::npos);
+}
+
+// FE matches these closing sentences to decide whether a memory-limit failure is worth retrying
+// (StatisticsCollectJob#isSharedMemoryExhausted): the shared budgets retry, a statement's own limit does not.
+// A wording change here must be mirrored there.
+TEST_F(MemTrackerTest, err_msg_closing_sentence_per_type) {
+    auto err_msg_of = [](MemTrackerType type, const std::string& label) {
+        MemTracker tracker(type, 1, label);
+        return tracker.err_msg("mock msg");
+    };
+    auto contains = [](const std::string& msg, const std::string& part) { return msg.find(part) != std::string::npos; };
+
+    // Shared with other queries.
+    ASSERT_TRUE(contains(err_msg_of(MemTrackerType::PROCESS, "process"), "Memory of process exceed limit"));
+    ASSERT_TRUE(contains(err_msg_of(MemTrackerType::PROCESS, "process"), "Mem usage has exceed the limit of BE"));
+    ASSERT_TRUE(contains(err_msg_of(MemTrackerType::QUERY_POOL, "query_pool"),
+                         "Mem usage has exceed the limit of query pool"));
+    ASSERT_TRUE(contains(err_msg_of(MemTrackerType::RESOURCE_GROUP, "default_wg"),
+                         "Mem usage has exceed the limit of query pool"));
+    ASSERT_TRUE(contains(err_msg_of(MemTrackerType::RESOURCE_GROUP, "rg1"),
+                         "Mem usage has exceed the limit of the resource group [rg1]"));
+    ASSERT_TRUE(contains(err_msg_of(MemTrackerType::RESOURCE_GROUP_SHARED_MEMORY_POOL, "pool1"),
+                         "Mem usage has exceed the limit of resource group memory pool [pool1]"));
+
+    // The statement's own limit.
+    std::string big_query = err_msg_of(MemTrackerType::RESOURCE_GROUP_BIG_QUERY, "rg1");
+    ASSERT_TRUE(contains(big_query, "Mem usage has exceed the big query limit of the resource group [rg1]"));
+    ASSERT_FALSE(contains(big_query, "exceed the limit of the resource group ["));
+    ASSERT_TRUE(
+            contains(err_msg_of(MemTrackerType::QUERY, "query_1"), "Mem usage has exceed the limit of single query"));
 }
 
 } // namespace starrocks

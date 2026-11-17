@@ -2,6 +2,7 @@
 sidebar_position: 120
 displayed_sidebar: docs
 description: "StarRocks 共有データクラスタで Compaction を管理・監視し、クエリ効率を向上させる方法。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 共有データクラスタの Compaction
@@ -237,16 +238,16 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
 - 導入バージョン: v3.1.0
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_tables" = "11111;22222");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "11111;22222");
 ```
 
-##### lake_compaction_disable_tables
+##### lake_compaction_disable_ids
 
 - デフォルト：""
 - タイプ：String
 - 単位：-
 - 変更可能：はい
-- 説明：特定のテーブルの compaction を無効にします。これにより、すでに開始された compaction には影響しません。この項目の値はテーブル ID です。複数の値は ';' で区切られます。
+- 説明：特定のテーブルまたはパーティションの compaction を無効にします。これにより、すでに開始された compaction には影響しません。この項目の値はテーブル ID またはパーティション ID です。複数の値は ';' で区切られます。v3.4.5 および v3.5.0 より前のバージョンでは、この項目の名前は `lake_compaction_disable_tables` で、テーブル ID のみをサポートします。旧名は引き続きエイリアスとして使用できます。
 - 導入バージョン：v3.2.7
 
 #### CN パラメータ
@@ -297,6 +298,15 @@ WHERE name = "compact_threads";
 >
 > 本番環境では、`max_cumulative_compaction_num_singleton_deltas` を `100` に設定して、Compaction タスクを加速し、そのリソース消費を減らすことを推奨します。
 
+##### lake_pk_compaction_max_rowsets_per_level
+
+- デフォルト: 20
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタ内の Primary Key テーブルで、あるサイズレベルの compaction 待ちの rowset がこの数に達すると、そのレベルのスコアが最高でなくてもマージされます。Size-tiered Compaction ポリシーは各ラウンドでスコアが最も高いレベルのみをマージします。ロードが継続している間は、最新の小さな rowset のレベルが毎回最高スコアとなるため、より大きな rowset（以前の compaction の出力や中規模のロード）からなるレベルは増え続けます。その結果、クエリが読み取る segment 数が増え、compaction の完了直後に compaction スコアのスパイクとして現れます。選択されていないレベルの compaction 待ちの rowset がこの数に達し、かつそれらが選択済みの rowset と同じ compaction タスクに収まる場合、そのレベルはその compaction タスクでマージされます。`0` に設定するとこの動作は無効になります。
+- 導入バージョン: -
+
 ### Compaction タスクの手動トリガー
 
 ```SQL
@@ -336,7 +346,9 @@ Compaction はクエリパフォーマンスにとって重要であるため、
 
 ### クエリの遅延
 
-タイムリーでない Compaction によって引き起こされるクエリの遅延を特定するには、SQL プロファイル内で `SegmentsReadCount` を `TabletCount` で割った値を確認します。これが 10 以上の大きな値である場合、タイムリーでない Compaction がクエリの遅延の原因である可能性があります。
+共有データクラスタでタイムリーでない Compaction によって引き起こされるクエリの遅延を特定するには、SQL プロファイルの単一の Fragment 内で `PhySegmentsCount` を `TabletCount` で割った値を確認します。これが数十以上の大きな値である場合、タイムリーでない Compaction がクエリの遅延の原因である可能性があります。
+
+`PhySegmentsCount` は共有データスキャンでのみ提供されます。共有なしクラスタ、または `PhySegmentsCount` を含まない旧バージョンのプロファイルでは、代わりに単一の Fragment 内で `SegmentsReadCount` を `TabletCount` で割った値を使用します。共有データスキャンと共有なしスキャンの両方で、Tablet 内並列スキャンにより、複数の split reader が `SegmentsReadCount` で同じセグメントを重複してカウントする可能性があります。`PhySegmentsCount` がある場合は優先して使用してください。どちらのアーキテクチャでも、並列スキャンで代替カウンターを使用する場合、比率が高いことだけでは Compaction の問題があると判断できません。
 
 ### クラスタ内の高い Max Compaction スコア
 

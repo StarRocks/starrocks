@@ -1,0 +1,36 @@
+-- name: test_colocate_range_varchar_widen @cloud
+-- Widening the VARCHAR length of a colocate column of a range colocate table is rejected, so the colocate
+-- group keeps the type its members have and ADD PARTITION keeps working.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t_all (k1 varchar(10) not null, k2 varchar(10) not null, p int not null, v int)
+    duplicate key(k1, k2, p)
+    partition by range(p) (partition p1 values less than ('100'), partition p2 values less than ('200'))
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_all_${uuid0}');
+
+create table t_prefix (k1 varchar(10) not null, k2 varchar(10) not null, v int)
+    duplicate key(k1, k2)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_prefix_${uuid0}:k1');
+
+-- colocate column: rejected
+alter table t_all modify column k1 varchar(20) key not null;
+alter table t_prefix modify column k1 varchar(20) key not null;
+
+-- sort-key column after the colocate prefix: allowed
+alter table t_prefix modify column k2 varchar(20) key not null;
+function: wait_alter_table_finish()
+select character_maximum_length from information_schema.columns where table_schema = 'db_${uuid0}' and table_name = 't_prefix' and column_name = 'k2';
+
+-- the group still matches the table, so ADD PARTITION works
+alter table t_all add partition p3 values less than ('300');
+insert into t_all values ('a', 'b', 250, 1);
+select count(*) from t_all where p = 250;
+
+drop table t_all;
+drop table t_prefix;
+drop database db_${uuid0};

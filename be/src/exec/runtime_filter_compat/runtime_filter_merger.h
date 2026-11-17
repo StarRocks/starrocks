@@ -48,6 +48,7 @@ public:
               max_size(other.max_size),
               stop(other.stop),
               is_skew_join(other.is_skew_join),
+              rf_version(other.rf_version),
               recv_first_filter_ts(other.recv_first_filter_ts),
               recv_last_filter_ts(other.recv_last_filter_ts),
               broadcast_filter_ts(other.broadcast_filter_ts) {}
@@ -65,6 +66,8 @@ public:
     bool stop = false;
     bool exceeded = true;
     bool is_skew_join;
+    // serialize version of the partial filters that are deserialized.
+    int rf_version = 0;
 
     // only set when skew join optimization is used
     SkewBroadcastRfMaterial* skew_broadcast_rf_material = nullptr;
@@ -86,10 +89,18 @@ public:
     RuntimeFilterMerger(const RuntimeServices* runtime_services, const RpcServices* rpc_services,
                         const UniqueId& query_id, const TQueryOptions& query_options, bool is_pipeline);
     Status init(const TRuntimeFilterParams& params);
+    // Size limit of the merged filters; runtime_filter_max_size <= 0 or unset means no limit.
+    static size_t resolve_max_size(const TRuntimeFilterParams& params);
     void merge_runtime_filter(PTransmitRuntimeFilterParams& params);
     void store_skew_broadcast_join_runtime_filter(PTransmitRuntimeFilterParams& params);
 
 private:
+    // Send the merged filter once all the partial filters (and the skew broadcast material) have arrived.
+    void _try_send_total_runtime_filter(int32_t filter_id, RuntimeFilterMergerStatus* status,
+                                        bool apply_size_limit = true);
+    // Add to the merged filter one of the min/max of the skew broadcast join keys. Return false if it can not.
+    bool _add_skew_broadcast_min_max_filter(RuntimeFilterMergerStatus* status, const RuntimeFilter* first,
+                                            const ColumnPtr& keys);
     void _send_total_runtime_filter(int rf_version, int32_t filter_id);
     // filter_id -> where this filter should send to
     std::map<int32_t, std::vector<TRuntimeFilterProberParams>> _targets;

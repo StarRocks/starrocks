@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.starrocks.authorization.ranger.hive.RangerHiveCatalogProperties;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.qe.ConnectContext;
@@ -72,6 +73,8 @@ public class CatalogAnalyzer {
             if (!ConnectorType.isSupport(catalogType)) {
                 throw new SemanticException("[type : %s] is not supported", catalogType);
             }
+            // throws on a value other than true/false
+            RangerHiveCatalogProperties.parseCatalogPrefixEnabled(properties);
             return null;
         }
 
@@ -123,6 +126,8 @@ public class CatalogAnalyzer {
                         throw new SemanticException("Not support alter catalog property " + property.getKey());
                     }
                 }
+                // throws on a value other than true/false
+                RangerHiveCatalogProperties.parseCatalogPrefixEnabled(properties);
             }
             return null;
         }

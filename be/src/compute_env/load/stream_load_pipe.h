@@ -37,6 +37,7 @@
 #include <condition_variable>
 #include <deque>
 #include <mutex>
+#include <type_traits>
 #include <utility>
 
 #include "base/bit/bit_util.h"
@@ -58,6 +59,10 @@ public:
     StreamLoadPipe(size_t max_buffered_bytes = DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES,
                    size_t min_chunk_size = DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE)
             : StreamLoadPipe(false, -1, max_buffered_bytes, min_chunk_size) {}
+
+    // A lone bool would silently bind to max_buffered_bytes above: a 1-byte buffer with blocking reads.
+    template <typename T, typename = std::enable_if_t<std::is_same_v<T, bool>>>
+    explicit StreamLoadPipe(T non_blocking_read) = delete;
 
     StreamLoadPipe(bool non_blocking_read, int32_t non_blocking_wait_us, size_t max_buffered_bytes,
                    size_t min_chunk_size)

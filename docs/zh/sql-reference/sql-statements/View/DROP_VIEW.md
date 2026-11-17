@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "DROP VIEW is used to drop a logical view."
 keywords: ['shitu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP VIEW

@@ -273,7 +273,9 @@ Status AIProjectProcessor::try_process(RuntimeState* state, int32_t driver_seque
         return lane->terminal_status;
     }
     const size_t rows = std::min(static_cast<size_t>(_config.sub_chunk_size), total_rows - offset);
-    ChunkPtr slice = input->clone_empty_with_slot(rows);
+    // The scan's empty last chunk has no slot map, so clone by the chunk's own layout.
+    // Non-empty chunks are slot-mapped and still take the slot path.
+    ChunkPtr slice = input->clone_empty(rows);
     if (rows > 0) {
         slice->append(*input, offset, rows);
     }
@@ -445,8 +447,9 @@ Status AIProjectProcessor::_prepare_and_submit(RuntimeState* state, int32_t driv
                                          .model = row.model,
                                          .prompt = row.prompt,
                                          .options = output.input.options.get(),
-                                         .model_config_id = output.model_config_id,
-                                         .capability = output.capability};
+                                         .provider_id = output.provider_id,
+                                         .capability = output.capability,
+                                         .media = row.media ? &*row.media : nullptr};
             AITaskCallback callback;
             auto build_callback = [&] {
                 // Lane is the process-scoped async completion state. It keeps

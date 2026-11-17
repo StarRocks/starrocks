@@ -26,6 +26,7 @@ set(RUNTIME_TEST_FILES
     diagnose_daemon_test.cpp
     exception_stack_test.cpp
     runtime_chunk_helper_test.cpp
+    process_memory_test.cpp
     mem_tracker_test.cpp
     mem_pool_test.cpp
     message_body_sink_test.cpp
@@ -42,6 +43,7 @@ set(RUNTIME_TEST_FILES
     jvm_helper_test.cpp
     native_method_helper_test.cpp
     runtime_state_core_test.cpp
+    bucket_aware_partition_test.cpp
     runtime_filter_core_test.cpp
     serde_core_test.cpp
     geo_transport_test.cpp

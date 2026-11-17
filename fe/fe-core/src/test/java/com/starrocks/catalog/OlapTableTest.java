@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Table.TableType;
@@ -46,19 +47,35 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnitTestUtil;
+import com.starrocks.persist.OriginStatementInfo;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TPrimaryKeyEncodingType;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.threeten.extra.PeriodDuration;
@@ -75,6 +92,247 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class OlapTableTest {
+    private static boolean definitionJournalStarted;
+
+    @AfterAll
+    public static void tearDownDefinitionJournal() {
+        if (definitionJournalStarted) {
+            UtFrameUtils.tearDownForPersisTest();
+        }
+    }
+
+
+    @Test
+    public void testShadowValueWideningPreservesDefinition() throws Exception {
+        OlapTable table = definitionTable("definition_widen");
+        MaterializedIndexMeta original = table.getIndexMetaByMetaId(100);
+        List<Column> target = original.getSchema().stream().map(Column::new).collect(Collectors.toList());
+        Column value = target.get(1);
+        value.setName("__starrocks_shadow_projected");
+        value.setType(IntegerType.BIGINT);
+        value.setDefineExpr(null);
+        MaterializedIndexMeta shadow = new MaterializedIndexMeta(101, target, 1, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null);
+        new DefinitionSchemaChangeJob().reconstruct(original, shadow);
+        Assertions.assertEquals(original.getDbId(), shadow.getDbId());
+        Assertions.assertEquals(73, shadow.getSyncMvRequiredTxnId());
+        MaterializedIndexMeta recovered = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(shadow), MaterializedIndexMeta.class);
+        table.analyzeRollupIndexMeta(recovered);
+        Assertions.assertEquals(IntegerType.BIGINT, recovered.getSchema().get(1).getType());
+        Assertions.assertEquals(original.getSchema().get(1).getUniqueId(), recovered.getSchema().get(1).getUniqueId());
+        Assertions.assertNotNull(recovered.getSchema().get(1).getDefineExpr());
+        Assertions.assertEquals(AstToSQLBuilder.toSQL(original.getSchema().get(1).getDefineExpr()),
+                AstToSQLBuilder.toSQL(recovered.getSchema().get(1).getDefineExpr()));
+        Assertions.assertNotNull(recovered.getWhereClause());
+    }
+
+    @Test
+    public void testDropProjectionValuePreservesDefinitionAfterReload() throws Exception {
+        OlapTable table = definitionTable("definition_drop");
+        MaterializedIndexMeta original = table.getIndexMetaByMetaId(100);
+        int keyUid = original.getSchema().get(0).getUniqueId();
+        int valueUid = original.getSchema().get(1).getUniqueId();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("definition_catalog");
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        AlterTableStmt drop = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE definition_catalog.definition_drop DROP COLUMN dropped FROM definition_mv", context);
+        DDLStmtExecutor.execute(drop, context);
+        long changedSchemaId = table.getIndexMetaByMetaId(100).getSchemaId();
+        Assertions.assertNotEquals(original.getSchemaId(), changedSchemaId);
+        OlapTable recovered = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(table), OlapTable.class);
+        recovered.onReload();
+        MaterializedIndexMeta meta = recovered.getIndexMetaByMetaId(100);
+        Assertions.assertEquals(2, meta.getSchema().size());
+        Assertions.assertEquals(keyUid, meta.getSchema().get(0).getUniqueId());
+        Assertions.assertEquals(valueUid, meta.getSchema().get(1).getUniqueId());
+        Assertions.assertEquals(73, meta.getSyncMvRequiredTxnId());
+        Assertions.assertEquals(changedSchemaId, meta.getSchemaId());
+        Assertions.assertNotNull(meta.getWhereClause());
+        Assertions.assertEquals(AstToSQLBuilder.toSQL(original.getSchema().get(1).getDefineExpr()),
+                AstToSQLBuilder.toSQL(meta.getSchema().get(1).getDefineExpr()));
+        db.dropTable(table.getName());
+        db.registerTableUnlocked(recovered);
+        Assertions.assertNotNull(UtFrameUtils.getPlanAndFragment(UtFrameUtils.createDefaultCtx(),
+                "INSERT INTO definition_catalog.definition_drop VALUES (1, 2)").second);
+    }
+
+    @Test
+    public void testAddedSourceColumnSurvivesCatalogUpdate() throws Exception {
+        OlapTable table = definitionTable("definition_add");
+        Column added = new Column("new_source", IntegerType.INT, false, null, "7", "");
+        added.setUniqueId(table.incAndGetMaxColUniqueId());
+        List<Column> newBase = new ArrayList<>(table.getBaseSchema());
+        newBase.add(added);
+        List<Column> newMv = new ArrayList<>(table.getIndexMetaByMetaId(100).getSchema());
+        newMv.add(new Column(added));
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("definition_catalog");
+        GlobalStateMgr.getCurrentState().getSchemaChangeHandler().applyFastSchemaEvolutionMetaChange(
+                db, table, Map.of(table.getBaseIndexMetaId(), newBase, 100L, newMv), table.getCopiedIndexes(),
+                GlobalStateMgr.getCurrentState().getNextId(), Map.of(table.getBaseIndexMetaId(), 201L, 100L, 202L));
+        OlapTable recovered = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(table), OlapTable.class);
+        recovered.onReload();
+        Column recoveredSource = recovered.getIndexMetaByMetaId(100).getSchema().get(3);
+        Assertions.assertEquals("new_source", recoveredSource.getName());
+        Assertions.assertNull(recoveredSource.getDefineExpr(), "the default must not become a permanent MV expression");
+        Assertions.assertEquals("7", recoveredSource.getDefaultValue());
+        Assertions.assertEquals(added.getUniqueId(), recoveredSource.getUniqueId());
+        Assertions.assertEquals(73, recovered.getIndexMetaByMetaId(100).getSyncMvRequiredTxnId());
+    }
+
+    @Test
+    public void testVisibleMvKeepsBaseTypesWhileShadowTargetUsesShadowTypes() throws Exception {
+        OlapTable table = definitionTable("definition_scope");
+        MaterializedIndexMeta original = table.getIndexMetaByMetaId(100);
+        original.getSchema().get(1).setDefineExpr(SqlParser.parseSqlToExpr("ifnull(v, cast(0 as int))",
+                SqlModeHelper.MODE_DEFAULT));
+        original.getSchema().get(2).setDefineExpr(SqlParser.parseSqlToExpr("abs(v)", SqlModeHelper.MODE_DEFAULT));
+        original.getSchema().get(2).setType(IntegerType.BIGINT);
+        original.setSyncMvDefinition(SyncMaterializedViewDefinition.capture(original.getSchema(),
+                SqlParser.parseSqlToExpr("k > 0", SqlModeHelper.MODE_DEFAULT)));
+        table.analyzeRollupIndexMeta(original);
+        assertDefinitionSourceType(original, IntegerType.INT);
+
+        List<Column> targetBase = table.getBaseSchema().stream().map(Column::new).collect(Collectors.toList());
+        targetBase.get(1).setName("__starrocks_shadow_v");
+        targetBase.get(1).setType(IntegerType.BIGINT);
+        table.setIndexMeta(102, "__starrocks_shadow_" + table.getName(), targetBase, 1, 0,
+                (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS, null);
+        List<Column> target = original.getSchema().stream().map(Column::new).collect(Collectors.toList());
+        target.get(1).setName("__starrocks_shadow_projected");
+        target.get(1).setType(IntegerType.BIGINT);
+        target.get(2).setType(IntegerType.LARGEINT);
+        table.setIndexMeta(101, "__starrocks_shadow_definition_mv", target, 1, 0,
+                (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS, null);
+        new DefinitionSchemaChangeJob().reconstruct(original, table.getIndexMetaByMetaId(101));
+
+        List<Column> legacySchema = original.getSchema().stream().map(Column::new).collect(Collectors.toList());
+        legacySchema.get(1).setName("mv_projected");
+        legacySchema.get(2).setName("mv_dropped");
+        table.setIndexMeta(103, "legacy_mv", legacySchema,
+                0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS,
+                new OriginStatementInfo("CREATE MATERIALIZED VIEW legacy_mv AS SELECT k, " +
+                        "ifnull(v, cast(0 as int)) AS projected, abs(v) AS dropped " +
+                        "FROM definition_scope WHERE k > 0", 0));
+        OlapTable recovered = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(table), OlapTable.class);
+        recovered.onReload();
+        assertDefinitionSourceType(recovered.getIndexMetaByMetaId(100), IntegerType.INT);
+        assertDefinitionSourceType(recovered.getIndexMetaByMetaId(103), IntegerType.INT);
+        assertDefinitionSourceType(recovered.getIndexMetaByMetaId(101), IntegerType.BIGINT);
+
+        // Cancellation removes the shadows; it must not leave the surviving expressions rebound to future types.
+        recovered.deleteIndexInfo("__starrocks_shadow_definition_mv");
+        recovered.deleteIndexInfo("__starrocks_shadow_" + recovered.getName());
+        assertDefinitionSourceType(recovered.getIndexMetaByMetaId(100), IntegerType.INT);
+        assertDefinitionSourceType(recovered.getIndexMetaByMetaId(103), IntegerType.INT);
+        recovered.onReload();
+        assertDefinitionSourceType(recovered.getIndexMetaByMetaId(100), IntegerType.INT);
+        assertDefinitionSourceType(recovered.getIndexMetaByMetaId(103), IntegerType.INT);
+    }
+
+    private static void assertDefinitionSourceType(MaterializedIndexMeta meta, Type expected) {
+        Expr expr = meta.getSchema().get(1).getDefineExpr();
+        Assertions.assertEquals(expected, expr.getType());
+        List<SlotRef> slots = new ArrayList<>();
+        expr.collect(SlotRef.class, slots);
+        Assertions.assertEquals(1, slots.size());
+        Assertions.assertEquals(expected, slots.get(0).getType());
+        Expr abs = meta.getSchema().get(2).getDefineExpr();
+        Assertions.assertEquals(expected.equals(IntegerType.INT) ? IntegerType.BIGINT : IntegerType.LARGEINT, abs.getType());
+        slots.clear();
+        abs.collect(SlotRef.class, slots);
+        Assertions.assertEquals(1, slots.size());
+        Assertions.assertEquals(expected, slots.get(0).getType());
+        slots.clear();
+        meta.getWhereClause().collect(SlotRef.class, slots);
+        Assertions.assertEquals(1, slots.size());
+        Assertions.assertEquals(IntegerType.INT, slots.get(0).getType());
+    }
+
+    @Test
+    public void testStrictRecoveryUsesRegisteredBaseShadowSchema() throws Exception {
+        OlapTable table = definitionTable("definition_shadow_source");
+        List<Column> targetBase = new ArrayList<>(table.getBaseSchema());
+        targetBase.add(new Column("__starrocks_shadow_new_source", IntegerType.INT));
+        table.setIndexMeta(102, "__starrocks_shadow_" + table.getName(), targetBase, 1, 0,
+                (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS, null);
+        MaterializedIndexMeta original = table.getIndexMetaByMetaId(100);
+        List<Column> schema = new ArrayList<>(original.getSchema());
+        schema.add(new Column("__starrocks_shadow_new_source", IntegerType.INT));
+        MaterializedIndexMeta visibleCopy = original.shallowCopy();
+        visibleCopy.setSchema(schema);
+        Assertions.assertThrows(SemanticException.class, () -> table.analyzeRollupIndexMeta(visibleCopy),
+                "a future base-shadow source must not be accepted in an original MV");
+        table.setIndexMeta(101, "__starrocks_shadow_definition_mv", schema, 1, 0,
+                (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS, null);
+        MaterializedIndexMeta meta = table.getIndexMetaByMetaId(101);
+        new DefinitionSchemaChangeJob().reconstruct(original, meta);
+        table.analyzeRollupIndexMeta(meta);
+        Assertions.assertNull(meta.getSchema().get(3).getDefineExpr());
+        table.deleteIndexInfo("__starrocks_shadow_" + table.getName());
+        Assertions.assertThrows(SemanticException.class, () -> table.analyzeRollupIndexMeta(meta));
+    }
+
+    @Test
+    public void testNewDefinitionAnalysisFailurePropagatesOnReload() throws Exception {
+        OlapTable table = definitionTable("definition_strict");
+        MaterializedIndexMeta meta = table.getIndexMetaByMetaId(100);
+        meta.getSchema().get(1).setDefineExpr(SqlParser.parseSqlToExpr("missing + 1", SqlModeHelper.MODE_DEFAULT));
+        meta.setSyncMvDefinition(SyncMaterializedViewDefinition.capture(meta.getSchema(), null));
+        OlapTable recovered = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(table), OlapTable.class);
+        Assertions.assertThrows(SemanticException.class, recovered::onReload);
+        // Legacy definitions retain the previous best-effort reload policy.
+        meta.setSyncMvDefinition(null);
+        Assertions.assertDoesNotThrow(table::onReload);
+    }
+
+    private static OlapTable definitionTable(String tableName) throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        if (!definitionJournalStarted) {
+            UtFrameUtils.setUpForPersistTest();
+            definitionJournalStarted = true;
+        }
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        new StarRocksAssert(context).withDatabase("definition_catalog").useDatabase("definition_catalog")
+                .withTable("CREATE TABLE " + tableName + " (k INT, v INT) DUPLICATE KEY(k) " +
+                        "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1','fast_schema_evolution'='true')");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("definition_catalog");
+        OlapTable table = (OlapTable) db.getTable(tableName);
+        Column projected = new Column("projected", IntegerType.INT);
+        projected.setUniqueId(table.incAndGetMaxColUniqueId());
+        projected.setDefineExpr(SqlParser.parseSqlToExpr("v + 1", SqlModeHelper.MODE_DEFAULT));
+        Column dropped = new Column("dropped", IntegerType.INT);
+        dropped.setUniqueId(table.incAndGetMaxColUniqueId());
+        dropped.setDefineExpr(SqlParser.parseSqlToExpr("v + 2", SqlModeHelper.MODE_DEFAULT));
+        table.setIndexMeta(100, "definition_mv", Lists.newArrayList(new Column(table.getBaseSchema().get(0)), projected, dropped),
+                0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS, null);
+        MaterializedIndexMeta meta = table.getIndexMetaByMetaId(100);
+        meta.setSortKeyIdxes(Lists.newArrayList(0));
+        meta.setSortKeyUniqueIds(Lists.newArrayList(meta.getSchema().get(0).getUniqueId()));
+        meta.setDbId(db.getId());
+        meta.setSyncMvRequiredTxnId(73);
+        Expr where = SqlParser.parseSqlToExpr("v > 0", SqlModeHelper.MODE_DEFAULT);
+        meta.setSyncMvDefinition(SyncMaterializedViewDefinition.capture(meta.getSchema(), where));
+        table.analyzeRollupIndexMeta(meta);
+        for (Partition partition : table.getPartitions()) {
+            for (PhysicalPartition physical : partition.getSubPartitions()) {
+                MaterializedIndex index = new MaterializedIndex(100, MaterializedIndex.IndexState.NORMAL);
+                physical.getLatestBaseIndex().getTablets().forEach(tablet -> index.addTablet(tablet, null, false));
+                physical.createRollupIndex(index);
+            }
+        }
+        table.rebuildFullSchema();
+        return table;
+    }
+
+    private static class DefinitionSchemaChangeJob extends SchemaChangeJobV2 {
+        DefinitionSchemaChangeJob() {
+            super(0, 0, 0, "definition", 1000);
+        }
+
+        public void reconstruct(MaterializedIndexMeta original, MaterializedIndexMeta target) {
+            rebuildMaterializedIndexMeta(original, target);
+        }
+    }
 
     @Test
     public void testSetIdForRestore() {

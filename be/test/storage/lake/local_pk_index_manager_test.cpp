@@ -142,7 +142,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     auto pk_path = data_dir->get_persistent_index_path();
     std::set<std::string> tablet_ids;
     ASSERT_OK(fs::list_dirs_files(pk_path, &tablet_ids, nullptr));
-    LocalPkIndexManager::gc(StorageEnv::GetInstance()->lake_update_manager(), data_dir, tablet_ids);
+    LocalPkIndexManager::gc(StorageEnv::GetInstance()->lake_primary_key_manager(), data_dir, tablet_ids);
 
     ASSERT_ERROR(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
                                                     std::to_string(_tablet_metadata->id())));
@@ -232,7 +232,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc_while_index_dir_changed) {
         // lock acquire failed
         SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager:index_dir_changed:3",
                                               [](void* arg) { *(bool*)arg = false; });
-        LocalPkIndexManager::gc(StorageEnv::GetInstance()->lake_update_manager(), data_dir, tablet_ids);
+        LocalPkIndexManager::gc(StorageEnv::GetInstance()->lake_primary_key_manager(), data_dir, tablet_ids);
         // no index dir removed
         ASSERT_OK(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
                                                      std::to_string(_tablet_metadata->id())));
@@ -243,7 +243,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc_while_index_dir_changed) {
         // lock acquire succeed
         SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager:index_dir_changed:3",
                                               [](void* arg) { *(bool*)arg = true; });
-        LocalPkIndexManager::gc(StorageEnv::GetInstance()->lake_update_manager(), data_dir, tablet_ids);
+        LocalPkIndexManager::gc(StorageEnv::GetInstance()->lake_primary_key_manager(), data_dir, tablet_ids);
         // index dir removed
         ASSERT_ERROR(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
                                                         std::to_string(_tablet_metadata->id())));
@@ -331,7 +331,7 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     auto pk_path = data_dir->get_persistent_index_path();
     std::set<std::string> tablet_ids;
     ASSERT_OK(fs::list_dirs_files(pk_path, &tablet_ids, nullptr));
-    LocalPkIndexManager::evict(StorageEnv::GetInstance()->lake_update_manager(), data_dir, tablet_ids);
+    LocalPkIndexManager::evict(StorageEnv::GetInstance()->lake_primary_key_manager(), data_dir, tablet_ids);
 
     ASSERT_ERROR(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
                                                     std::to_string(_tablet_metadata->id())));

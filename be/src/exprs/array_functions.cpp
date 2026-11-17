@@ -33,9 +33,16 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks {
+
+// Upper bound on what a selective-copy index buffer reserves up front. Collecting the surviving
+// element indices and copying them with one append_selective() beats one append() per element, but
+// the survivor count is only known after the scan - so reserve for the common case and let the
+// buffer grow past this when a chunk really does keep that much.
+static constexpr size_t kSelectiveIndexReserveCap = 16 * 1024; // 64 KiB of indexes
 
 StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(1, columns.size());
@@ -1402,14 +1409,32 @@ StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx
     result_offsets->reserve(offsets->size());
     result_offsets->append(0);
 
+    // Which elements survive is decided per row, but copying them does not have to be: collect the
+    // surviving indices for the whole chunk and hand them to append_selective() once at the end.
+    // append_selective() sizes the destination in one pass and then copies in bulk, while
+    // append(src, i, 1) redoes the per-element offset bookkeeping on every call - the same trade
+    // that MapFunctions::_filter_map_items() already makes.
+    // Capped so that a chunk whose elements nearly all deduplicate away does not pay four bytes per
+    // input element for a small result; the buffer still grows on demand past the cap.
+    Buffer<uint32_t> kept;
+    kept.reserve(std::min<size_t>(elements->size(), kSelectiveIndexReserveCap));
+
     phmap::flat_hash_set<uint32_t> sets;
 
-    // TODO: Maybe consume large memory, need optimized later.
-    std::vector<uint32_t> hash(elements->size(), 0);
-    elements->fnv_hash(hash.data(), 0, elements->size());
+    // A hash is only ever consulted while deduplicating the row it belongs to: `sets` is cleared
+    // per row and the collision fallback rescans `[offset, elements_idx)`. So hash one block of
+    // rows at a time instead of the whole elements column, which would size a single allocation
+    // as 4 bytes * chunk_size * array_length rather than as what a row actually needs. A row
+    // longer than the budget forms a block on its own, keeping the buffer bounded by
+    // max(kHashBlockElements, longest array).
+    constexpr size_t kHashBlockElements = 4096;
+    std::vector<uint32_t> hash;
+    // Element index the current block covers; `block_end == 0` means no block has been built yet.
+    size_t block_begin = 0;
+    size_t block_end = 0;
 
     size_t rows = columns[0]->size();
-    for (auto i = 0; i < rows; i++) {
+    for (size_t i = 0; i < rows; i++) {
         size_t offset = offsets_ptr[i];
         int64_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
 
@@ -1417,41 +1442,62 @@ StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx
             // append offsets directly
         } else if (array_size <= 1) {
             for (size_t j = 0; j < array_size; j++) {
-                result_elements->append(*elements, offset + j, 1);
+                kept.emplace_back(offset + j);
             }
         } else {
+            if (offsets_ptr[i + 1] > block_end) {
+                // Offsets are non-decreasing, so a row whose end is past the block starts a new
+                // one. Extend it over the following rows to amortize the hashing of short arrays.
+                size_t last_row = i;
+                while (last_row + 1 < rows && offsets_ptr[last_row + 2] - offset <= kHashBlockElements) {
+                    last_row++;
+                }
+                block_begin = offset;
+                block_end = offsets_ptr[last_row + 1];
+                // The hash functions seed each slot with its previous value, so zero the buffer.
+                hash.assign(block_end - block_begin, 0);
+                // fnv_hash_rebased() writes element i to hash[i - block_begin], which is what lets
+                // the buffer cover the block alone.
+                elements->fnv_hash_rebased(hash.data(), block_begin, block_end);
+            }
+            // Element indices below are chunk-absolute; the buffer holds the block only.
+            const auto* hashes = hash.data();
+
             // put first
-            result_elements->append(*elements, offset, 1);
+            kept.emplace_back(offset);
 
             sets.clear();
-            sets.emplace(hash[offset]);
+            sets.emplace(hashes[offset - block_begin]);
 
             for (size_t j = 1; j < array_size; j++) {
                 auto elements_idx = offset + j;
+                const uint32_t elements_hash = hashes[elements_idx - block_begin];
                 // hash check
-                if (!sets.contains(hash[elements_idx])) {
-                    result_elements->append(*elements, elements_idx, 1);
-                    sets.emplace(hash[elements_idx]);
+                if (!sets.contains(elements_hash)) {
+                    kept.emplace_back(elements_idx);
+                    sets.emplace(elements_hash);
                     continue;
                 }
 
                 // find same hash
                 bool is_contains = false;
                 for (size_t k = offset; k < elements_idx; k++) {
-                    if (hash[k] == hash[elements_idx] && elements->equals(k, *elements, elements_idx)) {
+                    if (hashes[k - block_begin] == elements_hash && elements->equals(k, *elements, elements_idx)) {
                         is_contains = true;
                         break;
                     }
                 }
 
                 if (!is_contains) {
-                    result_elements->append(*elements, elements_idx, 1);
+                    kept.emplace_back(elements_idx);
                 }
             }
         }
 
-        result_offsets->append(result_elements->size());
+        result_offsets->append(static_cast<uint32_t>(kept.size()));
     }
+
+    result_elements->append_selective(*elements, kept);
 
     return NullableColumn::create(ArrayColumn::create(std::move(result_elements), std::move(result_offsets)),
                                   std::move(array_null));
@@ -1711,6 +1757,16 @@ StatusOr<ColumnPtr> ArrayFunctions::array_sortby_multi(FunctionContext* ctx, con
     return std::move(dest_column);
 }
 
+// Column::reserve(n) means "n rows of flat storage" only for the leaf column types. A nested type
+// forwards the same n to its children -- ArrayColumn reserves n inner elements, StructColumn
+// reserves n per field -- so pre-sizing an ARRAY-of-ARRAY result by its row count would reserve
+// inner elements the result may not contain at all: array_repeat([], n) is n offsets and zero inner
+// elements. Only pre-size where the reservation is proportional to what actually gets written.
+static bool reserve_is_row_proportional(const Column& column) {
+    const Column* data = column.is_nullable() ? down_cast<const NullableColumn&>(column).data_column().get() : &column;
+    return !data->is_array() && !data->is_map() && !data->is_struct();
+}
+
 StatusOr<ColumnPtr> ArrayFunctions::repeat(FunctionContext* ctx, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     DCHECK(columns.size() == 2);
@@ -1724,25 +1780,48 @@ StatusOr<ColumnPtr> ArrayFunctions::repeat(FunctionContext* ctx, const Columns& 
     const bool src_is_const = src_column->is_constant();
     const ColumnPtr& src_data_column =
             src_is_const ? down_cast<const ConstColumn*>(src_column.get())->data_column() : src_column;
-    MutableColumnPtr dest_column_elements = src_data_column->clone_empty();
-    auto dest_offsets = UInt32Column::create(1);
+    // The size of the elements column is decided by the data, so count it before allocating
+    // anything. This pass is O(num_rows) against the O(total elements) copy that follows, and it
+    // buys two things: a result that the uint32 element offsets cannot address fails before the
+    // allocation rather than truncating the offsets after it, and a flat element column can be
+    // sized once instead of grown geometrically -- Buffer<T> is a std::vector, so its capacity can
+    // overshoot the result by up to 2x and a reallocation holds the old and new buffer at once.
     size_t total_repeated_rows = 0;
-    for (int cur_row = 0; cur_row < num_rows; cur_row++) {
-        if (repeat_count_viewer.is_null(cur_row)) {
-            dest_offsets->append(total_repeated_rows);
-        } else {
-            auto repeat_count = repeat_count_viewer.value(cur_row);
+    for (size_t cur_row = 0; cur_row < num_rows; cur_row++) {
+        if (!repeat_count_viewer.is_null(cur_row)) {
+            const auto repeat_count = repeat_count_viewer.value(cur_row);
+            if (repeat_count > 0) {
+                total_repeated_rows += repeat_count;
+            }
+        }
+    }
+    if (total_repeated_rows >= Column::MAX_CAPACITY_LIMIT) {
+        return Status::CapacityLimitExceed(
+                strings::Substitute("array_repeat would produce $0 elements, exceeding the limit: $1",
+                                    total_repeated_rows, Column::MAX_CAPACITY_LIMIT - 1));
+    }
+
+    MutableColumnPtr dest_column_elements = src_data_column->clone_empty();
+    if (reserve_is_row_proportional(*dest_column_elements)) {
+        TRY_CATCH_BAD_ALLOC(dest_column_elements->reserve(total_repeated_rows));
+    }
+    auto dest_offsets = UInt32Column::create(1);
+    dest_offsets->reserve(num_rows + 1);
+
+    size_t cur_offset = 0;
+    for (size_t cur_row = 0; cur_row < num_rows; cur_row++) {
+        if (!repeat_count_viewer.is_null(cur_row)) {
+            const auto repeat_count = repeat_count_viewer.value(cur_row);
             if (repeat_count > 0) {
                 const size_t source_row = src_is_const ? 0 : cur_row;
                 TRY_CATCH_BAD_ALLOC(
                         dest_column_elements->append_value_multiple_times(*src_data_column, source_row, repeat_count));
-                total_repeated_rows = total_repeated_rows + repeat_count;
-                dest_offsets->append(total_repeated_rows);
-            } else {
-                dest_offsets->append(total_repeated_rows);
+                cur_offset += repeat_count;
             }
         }
+        dest_offsets->append(cur_offset);
     }
+    DCHECK_EQ(total_repeated_rows, cur_offset);
 
     ColumnPtr dest_column = nullptr;
     if (dest_column_elements->is_nullable()) {
@@ -1825,6 +1904,16 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
     const Column* elements_column = array_column->elements_column().get();
     auto& array_offsets = const_cast<ArrayColumn*>(array_column)->offsets().get_data();
 
+    // Which elements win is decided per row, but copying them is not: collect the winning indices
+    // for the whole chunk and hand them to append_selective() once at the end, instead of one
+    // append(src, i, 1) per element. The sort scratch is hoisted for the same reason - it used to
+    // be a fresh allocation on every row.
+    // Capped: a small n over long arrays keeps only a handful of elements per row, so reserving one
+    // index per input element would dwarf the result. The buffer still grows on demand past the cap.
+    Buffer<uint32_t> kept;
+    kept.reserve(std::min<size_t>(elements_column->size(), kSelectiveIndexReserveCap));
+    std::vector<uint32_t> indices;
+
     // Process each row
     for (size_t i = 0; i < chunk_size; i++) {
         int32_t n = count_column->get(i).get_int32();
@@ -1850,7 +1939,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
         }
 
         // Create indices for sorting
-        std::vector<uint32_t> indices(array_size);
+        indices.resize(array_size);
         std::iota(indices.begin(), indices.end(), 0);
 
         // Sort indices based on values in descending order using Column's compare_at
@@ -1874,17 +1963,17 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
         // Take top n elements (or all if n > array_size)
         size_t result_size = std::min(static_cast<size_t>(n), array_size);
 
-        // Append the top n elements to destination
-        auto* dest_data = dest_data_column->elements_column_raw_ptr();
+        // Record the top n elements; they are copied in one pass after the loop.
         for (size_t j = 0; j < result_size; j++) {
-            size_t src_idx = array_start + indices[j];
-            dest_data->append(*elements_column, src_idx, 1);
+            kept.emplace_back(static_cast<uint32_t>(array_start + indices[j]));
         }
 
         // Update offsets
         auto& dest_offsets = dest_data_column->offsets_column_raw_ptr()->get_data();
         dest_offsets.emplace_back(dest_offsets.back() + result_size);
     }
+
+    dest_data_column->elements_column_raw_ptr()->append_selective(*elements_column, kept);
     return dest_column;
 }
 

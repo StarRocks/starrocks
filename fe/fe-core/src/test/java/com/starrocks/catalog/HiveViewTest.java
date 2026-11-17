@@ -40,4 +40,52 @@ public class HiveViewTest {
         assertEquals("hive_catalog", tableRelation.getName().getCatalog());
         assertEquals("sample_db", tableRelation.getName().getDb());
     }
+
+    @Test
+    public void testKeepsExplicitCatalog() {
+        // A Trino view can reference a table in another catalog, e.g. a view stored in a Hive catalog
+        // with the body: SELECT * FROM iceberg_catalog.other_db.t
+        HiveView view = trinoView("SELECT * FROM iceberg_catalog.other_db.t", "iceberg_catalog");
+        TableRelation relation = new TableRelation(new TableName("iceberg_catalog", "other_db", "t"));
+
+        view.formatRelations(Lists.newArrayList(relation), Collections.emptyList());
+
+        assertEquals("iceberg_catalog", relation.getName().getCatalog());
+        assertEquals("other_db", relation.getName().getDb());
+    }
+
+    @Test
+    public void testRebindsCatalogUnknownToStarRocks() {
+        // The source engine may name the view's own catalog differently, e.g. Trino calls it "hive"
+        // while StarRocks registers the same metastore as "hive_catalog".
+        HiveView view = trinoView("SELECT * FROM hive.other_db.t", "iceberg_catalog");
+        TableRelation relation = new TableRelation(new TableName("hive", "other_db", "t"));
+
+        view.formatRelations(Lists.newArrayList(relation), Collections.emptyList());
+
+        assertEquals("hive_catalog", relation.getName().getCatalog());
+        assertEquals("other_db", relation.getName().getDb());
+    }
+
+    @Test
+    public void testFillsOwnCatalogWhenCatalogOmitted() {
+        HiveView view = new HiveView(1L, "hive_catalog", "sample_db", "test_view",
+                Collections.emptyList(), "SELECT * FROM other_db.t", HiveView.Type.Trino);
+        TableRelation relation = new TableRelation(new TableName(null, "other_db", "t"));
+
+        view.formatRelations(Lists.newArrayList(relation), Collections.emptyList());
+
+        assertEquals("hive_catalog", relation.getName().getCatalog());
+        assertEquals("other_db", relation.getName().getDb());
+    }
+
+    private static HiveView trinoView(String definition, String knownCatalog) {
+        return new HiveView(1L, "hive_catalog", "sample_db", "test_view",
+                Collections.emptyList(), definition, HiveView.Type.Trino) {
+            @Override
+            protected boolean catalogExists(String catalog) {
+                return catalog.equals(knownCatalog) || catalog.equals("hive_catalog");
+            }
+        };
+    }
 }

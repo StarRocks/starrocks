@@ -57,8 +57,7 @@ static void init_avro_value(std::string schema_path, AvroHelper& avro_helper) {
 }
 
 TEST_F(AvroAddNullableColumnTest, test_add_numeric) {
-    TypeDescriptor t(TYPE_FLOAT);
-    auto column = ColumnHelper::create_column(t, true);
+    auto column = ColumnHelper::create_column(TYPE_FLOAT_DESC, true);
     std::string schema_path = "./be/test/formats/test_data/avro/single_float_schema.json";
     AvroHelper avro_helper;
     init_avro_value(schema_path, avro_helper);
@@ -70,7 +69,7 @@ TEST_F(AvroAddNullableColumnTest, test_add_numeric) {
 
     avro_value_set_float(&avro_helper.avro_val, 3.14);
 
-    auto st = add_nullable_column(column.get(), t, "f_float", avro_helper.avro_val, false);
+    auto st = add_nullable_column(column.get(), TYPE_FLOAT_DESC, "f_float", avro_helper.avro_val, false);
     ASSERT_TRUE(st.ok());
 
     ASSERT_EQ("[3.14]", column->debug_string());
@@ -227,8 +226,7 @@ TEST_F(AvroAddNullableColumnTest, test_add_multi_dimension_array) {
 }
 
 TEST_F(AvroAddNullableColumnTest, test_add_invalid_as_null) {
-    TypeDescriptor t{TYPE_INT};
-    auto column = ColumnHelper::create_column(t, true);
+    auto column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     std::string schema_path = "./be/test/formats/test_data/avro/single_array_schema.json";
     AvroHelper avro_helper;
@@ -247,15 +245,14 @@ TEST_F(AvroAddNullableColumnTest, test_add_invalid_as_null) {
     avro_value_append(&avro_helper.avro_val, &ele2, NULL);
     avro_value_set_long(&ele2, 4294967298);
 
-    auto st = add_nullable_column(column.get(), t, "f_object", avro_helper.avro_val, true);
+    auto st = add_nullable_column(column.get(), TYPE_INT_DESC, "f_object", avro_helper.avro_val, true);
     ASSERT_TRUE(st.ok());
 
     ASSERT_EQ("[NULL]", column->debug_string());
 }
 
 TEST_F(AvroAddNullableColumnTest, test_add_invalid) {
-    TypeDescriptor t{TYPE_INT};
-    auto column = ColumnHelper::create_column(t, true);
+    auto column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     std::string schema_path = "./be/test/formats/test_data/avro/single_array_schema.json";
     AvroHelper avro_helper;
@@ -274,7 +271,7 @@ TEST_F(AvroAddNullableColumnTest, test_add_invalid) {
     avro_value_append(&avro_helper.avro_val, &ele2, NULL);
     avro_value_set_long(&ele2, 4294967298);
 
-    auto st = add_nullable_column(column.get(), t, "f_object", avro_helper.avro_val, false);
+    auto st = add_nullable_column(column.get(), TYPE_INT_DESC, "f_object", avro_helper.avro_val, false);
     ASSERT_TRUE(st.is_invalid_argument());
 }
 

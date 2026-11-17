@@ -263,7 +263,14 @@ public class SplitJoinORToUnionRule extends TransformationRule {
             if (isFirst) {
                 OptExpression branchOpt = OptExpression.create(branchJoin, input.getInputs());
                 unionChildren.add(branchOpt);
-                outputColumns = context.getColumnRefFactory().getColumnRefs(input.getOutputColumns()).stream().toList();
+                // The union pairs its branches by position, so every branch must be listed in the same
+                // order. The branches below are built from RowOutputInfo, so this one has to be too:
+                // getOutputColumns() is a ColumnRefSet and iterates in column-id order, while
+                // RowOutputInfo of a projected operator follows the projection map's iteration order.
+                // Those two agree only while the column ids stay inside one hash bucket range.
+                outputColumns = input.getRowOutputInfo().getColumnOutputInfo().stream()
+                        .map(ColumnOutputInfo::getColumnRef)
+                        .collect(Collectors.toList());
                 childOutputColumns.add(outputColumns);
                 isFirst = false;
                 continue;

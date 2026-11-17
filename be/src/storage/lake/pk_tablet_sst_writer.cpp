@@ -80,11 +80,11 @@ Status PkTabletSSTWriter::reset_sst_writer(const std::shared_ptr<LocationProvide
     }
     std::unique_ptr<WritableFile> sst_wf;
     if (location_provider && fs) {
-        ASSIGN_OR_RETURN(sst_wf,
-                         fs->new_writable_file(wopts, location_provider->sst_location(_tablet_id, gen_sst_filename())));
+        ASSIGN_OR_RETURN(sst_wf, fs->new_writable_file(wopts, location_provider->sst_location(
+                                                                      _tablet_id, gen_sst_filename(_txn_id))));
     } else {
-        ASSIGN_OR_RETURN(sst_wf,
-                         fs::new_writable_file(wopts, _tablet_mgr->sst_location(_tablet_id, gen_sst_filename())));
+        ASSIGN_OR_RETURN(
+                sst_wf, fs::new_writable_file(wopts, _tablet_mgr->sst_location(_tablet_id, gen_sst_filename(_txn_id))));
     }
     _pk_sst_builder = std::make_unique<PersistentIndexSstableStreamBuilder>(std::move(sst_wf), encryption_meta);
     return Status::OK();

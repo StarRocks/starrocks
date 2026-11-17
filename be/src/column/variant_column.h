@@ -61,6 +61,7 @@ public:
               _path_index(std::move(rhs._path_index)),
               _shredded_types(std::move(rhs._shredded_types)),
               _typed_columns(std::move(rhs._typed_columns)),
+              _fallback_columns(std::move(rhs._fallback_columns)),
               _metadata_column(std::move(rhs._metadata_column)),
               _remain_value_column(std::move(rhs._remain_value_column)) {}
 
@@ -87,6 +88,7 @@ public:
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
     void append_value_multiple_times(const void* value, size_t count) override;
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
+    bool append_strings(const Slice* data, size_t size) override;
 
     void append(const VariantRowValue* object);
     void append(const VariantRowValue& object);
@@ -96,10 +98,17 @@ public:
     bool append_nulls(size_t count) override;
     void append_default() override;
     void append_default(size_t count) override;
+    void fill_default(const Filter& filter) override;
+    void update_rows(const Column& src, const uint32_t* indexes) override;
 
     size_t size() const override;
     size_t capacity() const override;
+    size_t container_memory_usage() const override;
+    size_t reference_memory_usage() const override;
+    size_t reference_memory_usage(size_t from, size_t size) const override;
     size_t byte_size(size_t from, size_t size) const override;
+    Datum get(size_t n) const override;
+    void reserve(size_t n) override;
     void resize(size_t n) override;
     void assign(size_t n, size_t idx) override;
     void remove_first_n_values(size_t count) override;
@@ -108,6 +117,7 @@ public:
     int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
     void swap_column(Column& rhs) override;
     void reset_column() override;
+    Status capacity_limit_reached() const override;
     void check_or_die() const override;
 
     bool is_variant() const override { return true; }
@@ -127,6 +137,11 @@ public:
     void set_shredded_columns(std::vector<std::string> paths, std::vector<TypeDescriptor> type_descs,
                               MutableColumns columns, BinaryColumn::MutablePtr metadata_column,
                               BinaryColumn::MutablePtr remain_value_column);
+    // Same as above, plus one fallback column per typed path (see _fallback_columns). `fallback_columns` is either
+    // empty (no fallback values) or has one entry per path, where a nullptr entry means "no fallback values".
+    void set_shredded_columns(std::vector<std::string> paths, std::vector<TypeDescriptor> type_descs,
+                              MutableColumns columns, MutableColumns fallback_columns,
+                              BinaryColumn::MutablePtr metadata_column, BinaryColumn::MutablePtr remain_value_column);
     static Status validate_shredded_schema(const std::vector<std::string>& paths,
                                            const std::vector<TypeDescriptor>& type_descs, const MutableColumns& columns,
                                            const BinaryColumn::MutablePtr& metadata_column,
@@ -150,6 +165,23 @@ public:
     int find_shredded_path(std::string_view path) const;
     const Column* typed_column_by_index(size_t idx) const;
 
+    // Fallback values of typed path `idx`: a nullable binary column of Variant value bytes (decoded with the row's
+    // metadata) for rows whose value at that path does not fit the typed column type. nullptr means the path has no
+    // fallback values. See _fallback_columns.
+    const Column* fallback_column_by_index(size_t idx) const;
+    const MutableColumns& fallback_columns() const { return _fallback_columns; }
+    MutableColumns& mutable_fallback_columns() { return _fallback_columns; }
+    // True when typed path `idx` has a fallback value at `row`.
+    bool has_fallback_value(size_t idx, size_t row) const;
+    // True when typed path `idx` has a fallback value in any row.
+    bool has_any_fallback_value(size_t idx) const;
+    // Fallback value of typed path `idx` at `row`, decoded with the row's metadata. Requires has_fallback_value().
+    StatusOr<VariantRowValue> fallback_value(size_t idx, size_t row) const;
+    // Creates an all-null fallback column for typed path `idx` if it has none yet, and returns it.
+    Column* ensure_fallback_column(size_t idx);
+    // Creates an empty fallback column, the type every fallback column has.
+    static MutableColumnPtr create_fallback_column();
+
     const BinaryColumn::MutablePtr& metadata_column() const { return _metadata_column; }
 
     const BinaryColumn::MutablePtr& remain_value_column() const { return _remain_value_column; }
@@ -163,6 +195,11 @@ public:
     void mutate_each_subcolumn() override {
         for (auto& column : _typed_columns) {
             column = (std::move(*column)).mutate();
+        }
+        for (auto& column : _fallback_columns) {
+            if (column != nullptr) {
+                column = (std::move(*column)).mutate();
+            }
         }
         if (_metadata_column != nullptr) {
             _metadata_column = BinaryColumn::static_pointer_cast((std::move(*_metadata_column)).mutate());
@@ -225,6 +262,11 @@ private:
     std::unordered_map<std::string, int> _path_index;
     std::vector<TypeDescriptor> _shredded_types;
     MutableColumns _typed_columns;
+    // Parallel to _typed_columns (Parquet shredding `value` next to `typed_value`). For a row, the value at a typed
+    // path lives in exactly one place: the typed cell (non-null), the fallback cell (non-null, a value whose type does
+    // not fit the typed column), or nowhere (both null: the path is missing in that row). It is never also in remain.
+    // A nullptr entry means the path has no fallback values; fallback values require the metadata column.
+    MutableColumns _fallback_columns;
     // base variant column. Always BinaryColumn: nulls are encoded as binary sentinel payloads,
     // not as NullableColumn null flags.
     BinaryColumn::MutablePtr _metadata_column;

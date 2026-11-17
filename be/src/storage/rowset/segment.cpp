@@ -43,6 +43,8 @@
 #include "base/failpoint/fail_point.h"
 #include "base/hash/crc32c.h"
 #include "base/string/slice.h"
+#include "base/testutil/sync_point.h"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
 #include "column/flat_json/json_flat_path.h"
@@ -54,6 +56,7 @@
 #include "gutil/strings/substitute.h"
 #include "platform/key_cache.h"
 #include "runtime/current_thread.h"
+#include "runtime/memory/process_memory.h"
 #include "runtime/runtime_env.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
@@ -87,23 +90,67 @@ bool Segment::_s_allow_batch_update_mode = true;
 
 using strings::Substitute;
 
+std::shared_ptr<Segment> Segment::create(const std::shared_ptr<FileSystem>& fs, const FileInfo& segment_file_info,
+                                         uint32_t segment_id, const TabletSchemaCSPtr& tablet_schema,
+                                         lake::TabletManager* tablet_manager) {
+    Segment* segment;
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(process_memory_tracker());
+        // Copy FileInfo here: moving strings allocated by the caller would
+        // transfer storage without transferring its accounting. Keep the
+        // caller's fs/schema references alive through constructor failure.
+        segment = new Segment(fs, segment_file_info, segment_id, tablet_schema, tablet_manager);
+        segment->_uses_process_memory = true;
+    }
+    return std::shared_ptr<Segment>(segment, _delete_process_owned, ProcessMemoryAllocator<Segment>());
+}
+
+void Segment::_delete_process_owned(Segment* segment) {
+    // These shared objects were NOT allocated by Segment. Detach them before
+    // entering the owner scope so their last release still runs in the caller's
+    // context. Do not assume another reference exists in a cache or a rowset.
+    auto fs = std::move(segment->_fs);
+    auto file_info_fs = std::move(segment->_segment_file_info.fs);
+    auto tablet_schema = segment->_tablet_schema.release();
+    for (auto& [id, reader] : segment->_column_readers) {
+        if (reader != nullptr) {
+            reader->release_inverted_index();
+        }
+    }
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(process_memory_tracker());
+    // The scope includes operator delete and ALL member destructors, notably
+    // ColumnReader/index/page storage, not just the ~Segment function body.
+    delete segment;
+}
+
 StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info,
                                                  uint32_t segment_id, std::shared_ptr<const TabletSchema> tablet_schema,
                                                  size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer,
                                                  const LakeIOOptions& lake_io_opts,
                                                  lake::TabletManager* tablet_manager) {
-    auto segment = std::make_shared<Segment>(std::move(fs), std::move(segment_file_info), segment_id,
-                                             std::move(tablet_schema), tablet_manager);
+    auto segment = tablet_manager != nullptr
+                           ? create(fs, segment_file_info, segment_id, tablet_schema, tablet_manager)
+                           : std::make_shared<Segment>(std::move(fs), std::move(segment_file_info), segment_id,
+                                                       std::move(tablet_schema), tablet_manager);
     RETURN_IF_ERROR(segment->open(footer_length_hint, partial_rowset_footer, lake_io_opts));
     return std::move(segment);
 }
 
 StatusOr<size_t> parse_segment_footer_internal(RandomAccessFile* read_file, SegmentFooterPB* footer,
-                                               size_t* footer_length_hint,
-                                               const FooterPointerPB* partial_rowset_footer) {
+                                               size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
+                                               std::optional<MemTracker*> read_file_mem_tracker) {
+    // The file is borrowed from the caller. Its lazy IO buffers and shared FS
+    // caches must not inherit the retained footer metadata's owner.
+    const auto with_read_file = [&](auto&& operation) {
+        return read_file_mem_tracker.has_value() ? with_memory_tracker(*read_file_mem_tracker, operation) : operation();
+    };
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
-    ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
+    int64_t file_size;
+    RETURN_IF_ERROR(with_read_file([&]() -> Status {
+        ASSIGN_OR_RETURN(file_size, read_file->get_size());
+        return Status::OK();
+    }));
 
     if (file_size < 12) {
         return Status::Corruption(
@@ -125,7 +172,7 @@ StatusOr<size_t> parse_segment_footer_internal(RandomAccessFile* read_file, Segm
     raw::stl_string_resize_uninitialized(&buff, footer_read_size);
     size_t read_pos = partial_rowset_footer ? partial_rowset_footer->position() : file_size - buff.size();
 
-    RETURN_IF_ERROR(read_file->read_at_fully(read_pos, buff.data(), buff.size()));
+    RETURN_IF_ERROR(with_read_file([&] { return read_file->read_at_fully(read_pos, buff.data(), buff.size()); }));
 
     const uint32_t footer_length = UNALIGNED_LOAD32(buff.data() + buff.size() - 12);
     const uint32_t checksum = UNALIGNED_LOAD32(buff.data() + buff.size() - 8);
@@ -166,7 +213,9 @@ StatusOr<size_t> parse_segment_footer_internal(RandomAccessFile* read_file, Segm
         int left_size = (int)footer_length - buff.size();
         std::string buff_2;
         raw::stl_string_resize_uninitialized(&buff_2, left_size);
-        RETURN_IF_ERROR(read_file->read_at_fully(file_size - footer_length - 12, buff_2.data(), buff_2.size()));
+        RETURN_IF_ERROR(with_read_file([&] {
+            return read_file->read_at_fully(file_size - footer_length - 12, buff_2.data(), buff_2.size());
+        }));
         actual_checksum = crc32c::Extend(actual_checksum, buff_2.data(), buff_2.size());
         actual_checksum = crc32c::Extend(actual_checksum, buff.data(), buff.size());
 
@@ -191,19 +240,23 @@ StatusOr<size_t> parse_segment_footer_internal(RandomAccessFile* read_file, Segm
 }
 
 StatusOr<size_t> Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
-                                               size_t* footer_length_hint,
-                                               const FooterPointerPB* partial_rowset_footer) {
-    auto s = parse_segment_footer_internal(read_file, footer, footer_length_hint, partial_rowset_footer);
+                                               size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
+                                               std::optional<MemTracker*> read_file_mem_tracker) {
+    auto s = parse_segment_footer_internal(read_file, footer, footer_length_hint, partial_rowset_footer,
+                                           read_file_mem_tracker);
     if (s.ok()) {
         return s;
     }
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
     if (s.status().is_corruption()) {
-        auto drop_status = drop_local_cache_data(read_file->filename());
+        const auto drop_cache = [&] { return drop_local_cache_data(read_file->filename()); };
+        auto drop_status = read_file_mem_tracker.has_value() ? with_memory_tracker(*read_file_mem_tracker, drop_cache)
+                                                             : drop_cache();
         if (!drop_status.ok()) {
             return s; // return first read error
         }
-        return parse_segment_footer_internal(read_file, footer, footer_length_hint, partial_rowset_footer);
+        return parse_segment_footer_internal(read_file, footer, footer_length_hint, partial_rowset_footer,
+                                             read_file_mem_tracker);
     } else {
         return s;
     }
@@ -247,13 +300,30 @@ Segment::~Segment() {
     MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->short_key_index_mem_tracker(), _short_key_index_mem_usage());
 }
 
+// Adds what |file| has read to |stats|, under the fields SegmentIterator::_update_stats fills for the column files.
+static void add_read_file_io_stats(const RandomAccessFile& file, OlapReaderStatistics* stats) {
+    const auto io = file.get_io_stats_snapshot();
+    stats->compressed_bytes_read_local_disk += io.bytes_read_local_disk;
+    stats->compressed_bytes_read_remote += io.bytes_read_remote;
+    stats->compressed_bytes_read += io.bytes_read_local_disk + io.bytes_read_remote;
+    stats->io_count_local_disk += io.io_count_local_disk;
+    stats->io_count_remote += io.io_count_remote;
+    stats->io_count += io.io_count_local_disk + io.io_count_remote;
+    stats->io_ns_read_local_disk += io.io_ns_read_local_disk;
+    stats->io_ns_remote += io.io_ns_read_remote;
+    stats->remote_io_queue_wait_ns += io.remote_queue_wait_ns;
+    stats->remote_io_fill_wait_ns += io.remote_fill_wait_ns;
+    stats->remote_io_fill_joins += io.remote_fill_joins;
+}
+
 Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                     const LakeIOOptions& lake_io_opts) {
+                     const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats) {
     if (invoked(_open_once)) {
         return Status::OK();
     }
 
-    auto res = success_once(_open_once, [&] { return _open(footer_length_hint, partial_rowset_footer, lake_io_opts); });
+    auto res = success_once(_open_once,
+                            [&] { return _open(footer_length_hint, partial_rowset_footer, lake_io_opts, stats); });
     if (res.status().is_not_found()) {
         StorageMetrics::instance()->segment_file_not_found_total.increment(1);
     }
@@ -267,25 +337,52 @@ Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_
 }
 
 Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                      const LakeIOOptions& lake_io_opts) {
-    SegmentFooterPB footer;
+                      const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats) {
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                  .buffer_size = lake_io_opts.buffer_size};
+    opts.remote_read = lake_io_opts.remote_read;
 
     if (!_segment_file_info.encryption_meta.empty()) {
         ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_segment_file_info.encryption_meta));
         opts.encryption_info = std::move(info);
-        _encryption_info = std::make_unique<FileEncryptionInfo>(opts.encryption_info);
     }
 
+#ifdef BE_TEST
+    {
+        // Lets a test check which cache options a given file's footer read was opened with.
+        std::pair<const std::string*, const RandomAccessFileOptions*> path_and_opts{&_segment_file_info.path, &opts};
+        TEST_SYNC_POINT_CALLBACK("Segment::_open:footer_file_options", &path_and_opts);
+    }
+#endif
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
-    RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
-    RETURN_IF_ERROR(_create_column_readers(&footer));
-    _num_rows = footer.num_rows();
-    _short_key_index_page = PagePointer(footer.short_key_index_page());
-    _skip_vector_index =
-            footer.has_vector_index_storage_type() && footer.vector_index_storage_type() == VECTOR_INDEX_STORAGE_NONE;
-    return Status::OK();
+    std::optional<MemTracker*> read_file_mem_tracker;
+    if (_uses_process_memory) read_file_mem_tracker = CurrentThread::mem_tracker();
+    return with_process_memory(_uses_process_memory, [&]() -> Status {
+        SegmentFooterPB footer;
+        if (!_segment_file_info.encryption_meta.empty()) {
+            _encryption_info = std::make_unique<FileEncryptionInfo>(opts.encryption_info);
+        }
+        {
+            const int64_t footer_start_ns = stats != nullptr ? MonotonicNanos() : 0;
+            DeferOp record_footer_reads([&] {
+                if (stats != nullptr) {
+                    stats->io_ns += MonotonicNanos() - footer_start_ns;
+                    add_read_file_io_stats(*read_file, stats);
+                }
+            });
+            RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint,
+                                                          partial_rowset_footer, read_file_mem_tracker));
+        }
+        if (stats != nullptr) {
+            stats->segments_opened++;
+        }
+        RETURN_IF_ERROR(_create_column_readers(&footer));
+        _num_rows = footer.num_rows();
+        _short_key_index_page = PagePointer(footer.short_key_index_page());
+        _skip_vector_index = footer.has_vector_index_storage_type() &&
+                             footer.vector_index_storage_type() == VECTOR_INDEX_STORAGE_NONE;
+        return Status::OK();
+    });
 }
 
 bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_options) {
@@ -339,6 +436,7 @@ struct SegmentZoneMapPruner {
 };
 
 Status Segment::_prune_by_segment_zone_map(const SegmentReadOptions& read_options) {
+    SCOPED_RAW_TIMER(&read_options.stats->segment_zone_map_filter_ns);
     const auto pruned = config::enable_index_segment_level_zonemap_filter &&
                         read_options.pred_tree_for_zone_map.visit(SegmentZoneMapPruner{this, read_options});
     if (pruned) {
@@ -389,21 +487,25 @@ Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator
     return Status::OK();
 }
 
-Status Segment::load_index(const LakeIOOptions& lake_io_opts) {
+Status Segment::load_index(const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats) {
     auto res = success_once(_load_index_once, [&] {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
 
-        Status st = _load_index(lake_io_opts);
+        Status st = _load_index(lake_io_opts, stats);
         if (st.ok()) {
             const auto index_mem_usage = _short_key_index_mem_usage();
             MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->short_key_index_mem_tracker(), index_mem_usage);
             _loaded_key_index_mem_usage.store(index_mem_usage, std::memory_order_relaxed);
-            update_cache_size();
         } else {
             _reset();
         }
         return st;
     });
+    if (res.ok() && *res) {
+        // Eviction may release unrelated cached payloads: preserve the caller's
+        // context rather than inheriting this Segment's metadata owner.
+        update_cache_size();
+    }
     return res.status();
 }
 
@@ -412,6 +514,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> Segment::new_segment_read_file(const
     // the right offset on bundled/encrypted segments. Don't cache into _encryption_info here (OnceFlag owns it).
     RandomAccessFileOptions file_opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                       .buffer_size = lake_io_opts.buffer_size};
+    file_opts.remote_read = lake_io_opts.remote_read;
     if (_encryption_info) {
         file_opts.encryption_info = *_encryption_info;
     } else if (!_segment_file_info.encryption_meta.empty()) {
@@ -421,39 +524,50 @@ StatusOr<std::unique_ptr<RandomAccessFile>> Segment::new_segment_read_file(const
     return _fs->new_random_access_file_with_bundling(file_opts, _segment_file_info);
 }
 
-Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
+Status Segment::_load_index(const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats) {
     // read and parse short key index page
     RandomAccessFileOptions file_opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                       .buffer_size = lake_io_opts.buffer_size};
+    file_opts.remote_read = lake_io_opts.remote_read;
     if (_encryption_info) {
         file_opts.encryption_info = *_encryption_info;
     } else if (!_segment_file_info.encryption_meta.empty()) {
         ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_segment_file_info.encryption_meta));
         file_opts.encryption_info = std::move(info);
-        _encryption_info = std::make_unique<FileEncryptionInfo>(file_opts.encryption_info);
     }
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(file_opts, _segment_file_info));
 
     PageReadOptions opts;
     opts.use_page_cache = lake_io_opts.use_page_cache;
     opts.read_file = read_file.get();
+    if (_uses_process_memory) {
+        opts.read_file_mem_tracker = CurrentThread::mem_tracker();
+    }
     opts.page_pointer = _short_key_index_page;
     opts.codec = nullptr; // short key index page uses NO_COMPRESSION for now
     OlapReaderStatistics tmp_stats;
-    opts.stats = &tmp_stats;
+    opts.stats = stats != nullptr ? stats : &tmp_stats;
 
-    Slice body;
-    PageFooterPB footer;
-    RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &_sk_index_handle, &body, &footer));
+    return with_process_memory(_uses_process_memory, [&]() -> Status {
+        if (!_encryption_info && !_segment_file_info.encryption_meta.empty()) {
+            _encryption_info = std::make_unique<FileEncryptionInfo>(file_opts.encryption_info);
+        }
+        Slice body;
+        PageFooterPB footer;
+        DeferOp record_index_reads([&] { add_read_file_io_stats(*read_file, opts.stats); });
+        RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &_sk_index_handle, &body, &footer));
 
-    DCHECK_EQ(footer.type(), SHORT_KEY_PAGE);
-    DCHECK(footer.has_short_key_page_footer());
+        DCHECK_EQ(footer.type(), SHORT_KEY_PAGE);
+        DCHECK(footer.has_short_key_page_footer());
 
-    _sk_index_decoder = std::make_unique<ShortKeyIndexDecoder>();
-    return _sk_index_decoder->parse(body, footer.short_key_page_footer());
+        _sk_index_decoder = std::make_unique<ShortKeyIndexDecoder>();
+        return _sk_index_decoder->parse(body, footer.short_key_page_footer());
+    });
 }
 
 void Segment::_reset() {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_uses_process_memory ? process_memory_tracker()
+                                                                : CurrentThread::mem_tracker());
     _sk_index_handle.reset();
     _sk_index_decoder.reset();
 }
@@ -538,8 +652,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
         } else {
             auto nullable = _column_readers[id]->is_nullable();
             auto source_type = TypeDescriptor::from_logical_type(_column_readers[id]->column_type());
-            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(), column.precision(),
-                                                                 column.scale());
+            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.precision(), column.scale());
             return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
         }
     }
@@ -607,8 +720,8 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
                 } else {
                     auto nullable = sub_reader->is_nullable();
                     auto source_type = TypeDescriptor::from_logical_type(reader_type);
-                    auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(),
-                                                                         column.precision(), column.scale());
+                    auto target_type =
+                            TypeDescriptor::from_logical_type(column.type(), column.precision(), column.scale());
                     return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type,
                                                                 nullable);
                 }
@@ -665,8 +778,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(const Tab
         } else {
             auto nullable = iter->second->is_nullable();
             auto source_type = TypeDescriptor::from_logical_type(iter->second->column_type());
-            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(), column.precision(),
-                                                                 column.scale());
+            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.precision(), column.scale());
             return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
         }
     } else {
@@ -689,7 +801,9 @@ Status Segment::new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& 
 }
 
 StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
-                                                            const TabletSchemaCSPtr& read_tablet_schema) {
+                                                            const TabletSchemaCSPtr& read_tablet_schema,
+                                                            const LakeIOOptions& lake_io_opts,
+                                                            OlapReaderStatistics* stats) {
     std::shared_ptr<TabletSchema> tablet_schema;
     if (read_tablet_schema != nullptr) {
         tablet_schema = TabletSchema::create_with_uid(read_tablet_schema, dcg.column_ids()[idx]);
@@ -706,7 +820,9 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     if (idx < dcg.encryption_metas().size()) {
         info.encryption_meta = dcg.encryption_metas()[idx];
     }
-    return Segment::open(_fs, info, 0, tablet_schema, nullptr);
+    auto segment = std::make_shared<Segment>(_fs, std::move(info), 0, std::move(tablet_schema), nullptr);
+    RETURN_IF_ERROR(segment->open(nullptr, nullptr, lake_io_opts, stats));
+    return segment;
 }
 
 Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
@@ -739,7 +855,7 @@ void Segment::turn_off_batch_update_cache_size() {
                 // a path-only key would miss for bundled slices (non-zero bundle_file_offset) and
                 // their cache entries would never get the post-open memory cost, defeating
                 // metacache capacity control.
-                _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost, this);
+                _tablet_manager->update_segment_cache_size(_segment_file_info, mem_cost, this);
             }
         }
     }
@@ -750,7 +866,7 @@ void Segment::update_cache_size() {
         // could be race condition on this `_batch_on_flags_counter` check, but it is ok to be inaccurate in such case.
         if (_batch_on_flags_counter.load(std::memory_order_relaxed) == 0) {
             auto mem_cost = mem_usage();
-            _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost, this);
+            _tablet_manager->update_segment_cache_size(_segment_file_info, mem_cost, this);
         } else {
             // under batch mode, only increase the _dirty_cache_counter
             _dirty_cache_counter.fetch_add(1, std::memory_order_relaxed);

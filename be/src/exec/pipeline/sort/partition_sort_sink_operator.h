@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <utility>
 
@@ -78,7 +79,8 @@ public:
     Status set_finishing(RuntimeState* state) override;
 
 protected:
-    bool _is_finished = false;
+    // The spill flush callback writes this flag from an IO thread.
+    std::atomic<bool> _is_finished{false};
 
     std::shared_ptr<ChunksSorter> _chunks_sorter;
 

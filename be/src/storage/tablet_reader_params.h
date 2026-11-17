@@ -33,6 +33,7 @@
 
 namespace starrocks {
 
+struct RangeGroupTask;
 class RuntimeProfile;
 class RuntimeState;
 
@@ -58,6 +59,9 @@ struct TabletReaderParams {
     enum class RangeEndOperation { LT = 0, LE, EQ };
 
     TabletReaderParams();
+
+    // Immutable query ownership clip, independent of the query range union.
+    std::shared_ptr<const RangeGroupTask> grouped_range_task;
 
     ReaderType reader_type = READER_QUERY;
 

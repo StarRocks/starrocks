@@ -1,0 +1,57 @@
+-- name: test_colocate_range_set_operation @cloud
+-- SQL integration: a range-colocate table that feeds an INTERSECT / EXCEPT, or a null-safe join with a
+-- hash table, returns the same rows as the same query over non-colocate copies of the data. Before the
+-- fix the range side lost its exchange: INTERSECT returned no rows, EXCEPT and <=> joins were wrong.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (k1 int, k2 int, v int)
+    duplicate key(k1, k2)
+    partition by range(k2) (partition p1 values less than ('100'), partition p2 values less than ('200'))
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_setop_${uuid0}:k1');
+create table u (k1 int, k2 int, v int)
+    duplicate key(k1, k2)
+    partition by range(k2) (partition p1 values less than ('100'), partition p2 values less than ('200'))
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_setop_${uuid0}:k1');
+create table w (k1 int, k2 int, v int)
+    duplicate key(k1, k2)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_setop2_${uuid0}:k1');
+create table h (k1 int, k2 int, v int)
+    duplicate key(k1, k2)
+    distributed by hash(k1) buckets 3
+    properties('replication_num' = '1');
+create table t_ref (k1 int, k2 int, v int) duplicate key(k1, k2) distributed by hash(k2) buckets 3
+    properties('replication_num' = '1');
+create table u_ref (k1 int, k2 int, v int) duplicate key(k1, k2) distributed by hash(k2) buckets 3
+    properties('replication_num' = '1');
+create table w_ref (k1 int, k2 int, v int) duplicate key(k1, k2) distributed by hash(k2) buckets 3
+    properties('replication_num' = '1');
+
+insert into t select cast(x % 50 as int), cast(x % 200 as int), x from table(generate_series(1, 2000)) as g(x);
+insert into u select cast(x % 30 as int), cast(x % 200 as int), x from table(generate_series(1, 2000)) as g(x);
+insert into w select cast(x % 40 as int), cast(x % 200 as int), x from table(generate_series(1, 2000)) as g(x);
+insert into h select cast(x % 60 as int), cast(x % 200 as int), x from table(generate_series(1, 600)) as g(x);
+insert into h values (null, 1, 1);
+insert into t values (null, 1, 1);
+insert into t_ref select * from t;
+insert into u_ref select * from u;
+insert into w_ref select * from w;
+
+function: assert_equal_result("select k1 from t intersect select k1 from u order by k1", "select k1 from t_ref intersect select k1 from u_ref order by k1")
+function: assert_equal_result("select k1 from t except select k1 from w order by k1", "select k1 from t_ref except select k1 from w_ref order by k1")
+function: assert_equal_result("select k1 from h intersect select k1 from t order by k1", "select k1 from h intersect select k1 from t_ref order by k1")
+-- The [shuffle] hint keeps the small tables from being broadcast, which would bypass the shuffle path.
+function: assert_explain_contains("select count(*) from t join [shuffle] h on t.k1 <=> h.k1", "INNER JOIN (PARTITIONED)")
+function: assert_equal_result("select count(*), sum(t.v), sum(h.v) from t join [shuffle] h on t.k1 <=> h.k1", "select count(*), sum(t_ref.v), sum(h.v) from t_ref join [shuffle] h on t_ref.k1 <=> h.k1")
+function: assert_equal_result("select count(*), sum(t.v), sum(h.v) from t left join [shuffle] h on t.k1 <=> h.k1", "select count(*), sum(t_ref.v), sum(h.v) from t_ref left join [shuffle] h on t_ref.k1 <=> h.k1")
+function: assert_equal_result("select count(*), sum(t.v), sum(h.v) from h join [shuffle] t on h.k1 <=> t.k1", "select count(*), sum(t_ref.v), sum(h.v) from h join [shuffle] t_ref on h.k1 <=> t_ref.k1")
+
+select count(*) from (select k1 from t intersect select k1 from u) x;
+select count(*), sum(t.v), sum(h.v) from t join [shuffle] h on t.k1 <=> h.k1;
+
+drop database db_${uuid0} force;

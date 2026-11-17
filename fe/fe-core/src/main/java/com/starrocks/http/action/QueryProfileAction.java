@@ -36,17 +36,19 @@ package com.starrocks.http.action;
 
 import com.github.vertical_blank.sqlformatter.SqlFormatter;
 import com.google.common.base.Strings;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ExplainAnalyzer;
+import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.owasp.encoder.Encode;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -85,6 +87,18 @@ public class QueryProfileAction extends WebBaseAction {
 
         ProfileManager.ProfileElement queryProfile = ProfileManager.getInstance().getProfileElement(queryId);
         if (queryProfile != null) {
+            // Same rule as ANALYZE PROFILE. The web gate admits NODE holders, who are not thereby OPERATE
+            // holders, so the owner-or-OPERATE rule has to be applied here too.
+            try {
+                Authorizer.checkQueryProfileAccess(ConnectContext.get(), queryProfile);
+            } catch (AccessDeniedException e) {
+                // appendContent encodes every line, so pass the raw query id.
+                appendContent(response.getContent(), "Access denied: the profile of query " + queryId
+                        + " belongs to another user and reading it requires the OPERATE privilege.");
+                getPageFooter(response.getContent());
+                writeResponse(request, response, HttpResponseStatus.FORBIDDEN);
+                return;
+            }
             String content;
             String contentType = request.getSingleParameter("content_type");
             if ("sql".equalsIgnoreCase(contentType)) {
@@ -103,9 +117,8 @@ public class QueryProfileAction extends WebBaseAction {
             getPageFooter(response.getContent());
             writeResponse(request, response);
         } else {
-            // HTML encode the queryId to prevent XSS
-            String encodedQueryId = Encode.forHtml(queryId);
-            appendContent(response.getContent(), "query id " + encodedQueryId + " not found.");
+            // appendContent encodes every line, so pass the raw query id.
+            appendContent(response.getContent(), "query id " + queryId + " not found.");
             getPageFooter(response.getContent());
             writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
         }
@@ -144,12 +157,10 @@ public class QueryProfileAction extends WebBaseAction {
         BufferedReader reader = new BufferedReader(new StringReader(content));
         String line;
         try {
+            // Every line may carry user-controlled text: a multi-line SQL statement continues past the
+            // "Sql Statement" line, the formatted SQL view has no such line, and the analyze view echoes literals.
             while ((line = reader.readLine()) != null) {
-                if (line.contains(ProfileManager.SQL_STATEMENT)) {
-                    buffer.append(escapeHtmlInPreTag(line)).append("\n");
-                } else {
-                    buffer.append(line).append("\n");
-                }
+                buffer.append(escapeHtmlInPreTag(line)).append("\n");
             }
         } catch (IOException e) {
             LOG.warn("transform profile content error", e);
