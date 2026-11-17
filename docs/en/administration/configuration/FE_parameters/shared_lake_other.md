@@ -806,6 +806,15 @@ This topic introduces the following types of FE configurations:
 - Description: The timeout in seconds for waiting for an Iceberg commit operation to complete. When using the commit queue (`enable_iceberg_commit_queue=true`), each commit operation must complete within this timeout. If a commit takes longer than this timeout, it will be cancelled and an error will be raised. Factors that affect commit time include: number of data files being committed, metadata size of the table, performance of the underlying storage (e.g., S3, HDFS).
 - Introduced in: v4.1.0
 
+### `iceberg_rewrite_commit_max_retries`
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: How many more times the commit of an Iceberg `rewrite_data_files` is retried on a freshly loaded table after Iceberg's own commit retries (table property `commit.retry.num-retries`) all lose to concurrent commits from other writers, for example a streaming job that keeps appending to the table. The retries back off exponentially from 1 second up to 30 seconds. Conflicting changes, such as a concurrent delete on a file being rewritten, are never retried. `0` disables these retries. The whole commit must still finish within `iceberg_commit_queue_timeout_seconds`.
+- Introduced in: -
+
 ### `iceberg_commit_queue_max_size`
 
 - Default: 1000
