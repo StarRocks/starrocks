@@ -15,8 +15,10 @@
 #include "storage/lake/tablet_reader.h"
 
 #include <algorithm>
+#include <functional>
 #include <future>
 #include <limits>
+#include <memory>
 #include <unordered_set>
 #include <utility>
 
@@ -32,6 +34,7 @@
 #include "common/thread/threadpool.h"
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "fs/fs_factory.h"
+#include "fs/remote_read_context.h"
 #include "gutil/stl_util.h"
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
@@ -72,6 +75,125 @@ static Status check_cancelled(const TabletReaderParams& params, int64_t tablet_i
         return Status::Cancelled(fmt::format("cancelled while opening tablet:{}", tablet_id));
     }
     return Status::OK();
+}
+
+static bool cancel_requested(const std::atomic<bool>* flag) {
+    return flag != nullptr && flag->load(std::memory_order_acquire);
+}
+
+// lake_scan_parallel_segment_open applies to the query scans of a tablet while the remote I/O scheduler is on.
+// Loads, compaction and the other readers keep following enable_load_segment_parallel.
+static bool should_open_segments_in_parallel(ReaderType reader_type) {
+    return config::lake_scan_parallel_segment_open && reader_type == ReaderType::READER_QUERY &&
+           remote_io_scheduler_enabled();
+}
+
+// Runs every task on the load segment thread pool, or on this thread when the pool refuses it, and waits for all of
+// them, also when it returns early. The tasks read on behalf of the query of |query_remote_read|, or of the scan
+// running on this thread when it is not set: the pool threads do not see this thread's scoped context. A task still
+// queued once |is_cancelled| is set does not start its IO. Returns the first error in task order.
+static Status run_on_load_segment_pool(std::vector<std::function<Status()>>& tasks,
+                                       const RemoteReadContext& query_remote_read,
+                                       const std::atomic<bool>* is_cancelled) {
+    const RemoteReadContext remote_read = ScopedRemoteReadContext::or_current(query_remote_read);
+    std::vector<std::future<Status>> futures;
+    futures.reserve(tasks.size());
+    // The tasks refer to |tasks| and |remote_read|: none may outlive this call.
+    DeferOp wait_futures([&futures]() {
+        for (auto& future : futures) {
+            if (future.valid()) {
+                future.wait();
+            }
+        }
+    });
+    for (auto& task : tasks) {
+        auto packaged = std::make_shared<std::packaged_task<Status()>>([&task, &remote_read, is_cancelled]() {
+            if (cancel_requested(is_cancelled)) {
+                return Status::Cancelled("cancelled while opening segments");
+            }
+            ScopedRemoteReadContext remote_read_scope(remote_read);
+            return task();
+        });
+        futures.emplace_back(packaged->get_future());
+        Status submit_st;
+        TEST_SYNC_POINT_CALLBACK("TabletReader::open_segments_in_parallel::submit", &submit_st);
+        if (submit_st.ok()) {
+            submit_st =
+                    RuntimeEnv::GetInstance()->load_segment_thread_pool()->submit_func([packaged]() { (*packaged)(); });
+        }
+        if (!submit_st.ok()) {
+            (*packaged)();
+        }
+    }
+    Status first_error;
+    for (auto& future : futures) {
+        auto st = future.get();
+        if (first_error.ok() && !st.ok()) {
+            first_error = std::move(st);
+        }
+    }
+    return first_error;
+}
+
+// Adds the fields the tablet preparation reports to |to|.
+static void add_tablet_prepare_io_stats(const OlapReaderStatistics& from, OlapReaderStatistics* to) {
+    to->segments_opened += from.segments_opened;
+    to->io_ns += from.io_ns;
+    to->io_count += from.io_count;
+    to->io_ns_remote += from.io_ns_remote;
+    to->io_count_remote += from.io_count_remote;
+    to->compressed_bytes_read_remote += from.compressed_bytes_read_remote;
+}
+
+// lake_scan_parallel_segment_open: opens the segments of all |rowsets| at once, one task per segment, and puts
+// them in metadata order whatever order the tasks finish in. A segment whose footer is already open in the metadata
+// cache is taken as it is, without a task.
+static Status open_rowset_segments_in_parallel(const std::vector<RowsetPtr>& rowsets, const LakeIOOptions& lake_io_opts,
+                                               const std::atomic<bool>* is_cancelled,
+                                               OlapReaderStatistics* prepare_stats,
+                                               std::vector<std::vector<SegmentPtr>>* rowset_segments) {
+    rowset_segments->resize(rowsets.size());
+    std::vector<std::function<Status()>> tasks;
+    std::vector<std::unique_ptr<OlapReaderStatistics>> task_stats;
+    for (size_t rowset_idx = 0; rowset_idx < rowsets.size(); ++rowset_idx) {
+        const RowsetPtr& rowset = rowsets[rowset_idx];
+        auto& segments = (*rowset_segments)[rowset_idx];
+        if (lake_io_opts.hold_segments || !rowset->can_hold_segments()) {
+            // Such a rowset loads its segments by its own rules: open it in one task.
+            auto* stats = task_stats.emplace_back(std::make_unique<OlapReaderStatistics>()).get();
+            tasks.emplace_back([rowset, segments = &segments, &lake_io_opts, stats, is_cancelled]() -> Status {
+                ASSIGN_OR_RETURN(*segments, rowset->segments(lake_io_opts, stats, is_cancelled));
+                return Status::OK();
+            });
+            continue;
+        }
+        segments.resize(rowset->metadata().segment_metas_size());
+        for (int32_t pos = 0; pos < static_cast<int32_t>(segments.size()); ++pos) {
+            // Keeps the opened cache entry through iterator construction, even if the LRU evicts it.
+            // An entry whose open has not finished goes through a task, which waits for that open.
+            segments[pos] = rowset->lookup_opened_segment_at(pos, lake_io_opts);
+            if (segments[pos] != nullptr) {
+                prepare_stats->lake_prepared_tablet_cached_segments++;
+                continue;
+            }
+            auto* stats = task_stats.emplace_back(std::make_unique<OlapReaderStatistics>()).get();
+            tasks.emplace_back([rowset, segment = &segments[pos], &lake_io_opts, stats, pos]() -> Status {
+#ifdef BE_TEST
+                Status injected_st;
+                TEST_SYNC_POINT_CALLBACK("TabletReader::open_segment_task", &injected_st);
+                RETURN_IF_ERROR(injected_st);
+#endif
+                ASSIGN_OR_RETURN(*segment, rowset->load_segment_at(pos, lake_io_opts, stats));
+                return Status::OK();
+            });
+        }
+    }
+    auto st = run_on_load_segment_pool(tasks, lake_io_opts.remote_read, is_cancelled);
+    // Every task that ran may have read a footer, including the ones after the first error.
+    for (const auto& stats : task_stats) {
+        add_tablet_prepare_io_stats(*stats, prepare_stats);
+    }
+    return st;
 }
 
 using ConjunctivePredicates = starrocks::ConjunctivePredicates;
@@ -526,14 +648,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             OlapReaderStatistics prepare_stats;
             {
                 // Keep reads already performed even if a later preparation step fails.
-                DeferOp record_prepare_stats([&] {
-                    _stats.lake_prepared_tablet_segments_opened += prepare_stats.segments_opened;
-                    _stats.lake_prepared_tablet_io_ns += prepare_stats.io_ns;
-                    _stats.lake_prepared_tablet_io_count += prepare_stats.io_count;
-                    _stats.lake_prepared_tablet_io_remote_ns += prepare_stats.io_ns_remote;
-                    _stats.lake_prepared_tablet_io_count_remote += prepare_stats.io_count_remote;
-                    _stats.lake_prepared_tablet_bytes_read_remote += prepare_stats.compressed_bytes_read_remote;
-                });
+                DeferOp record_prepare_stats([&] { record_tablet_prepare_stats(prepare_stats); });
                 SCOPED_RAW_TIMER(&_stats.lake_prepared_tablet_prepare_ns);
                 RETURN_IF_ERROR(build_prepared_tablet_read_state(read_params, prepared_tablet_read_state.get(),
                                                                  &prepare_stats));
@@ -545,6 +660,25 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
                 return init_collector(read_params);
             }
             return Status::OK();
+        }
+
+        // lake_scan_parallel_segment_open: open the segments of every rowset at once before the splitter loads
+        // them one rowset after another, and let the splits read those very Segment objects. A grouped range task
+        // has already opened them above.
+        PreparedTabletReadStatePtr classic_state;
+        if (_could_split_physically && read_params.grouped_range_task == nullptr &&
+            should_open_segments_in_parallel(read_params.reader_type) &&
+            std::all_of(_rowsets.begin(), _rowsets.end(),
+                        [](const RowsetPtr& rowset) { return rowset->can_hold_segments(); })) {
+            classic_state = std::make_shared<PreparedTabletReadState>();
+            OlapReaderStatistics prepare_stats;
+            // Keep reads already performed even if a later preparation step fails.
+            DeferOp record_prepare_stats([&] { record_tablet_prepare_stats(prepare_stats); });
+            SCOPED_RAW_TIMER(&_stats.lake_prepared_tablet_prepare_ns);
+            RETURN_IF_ERROR(build_prepared_tablet_read_state(read_params, classic_state.get(), &prepare_stats));
+            for (size_t i = 0; i < classic_state->rowsets.size(); ++i) {
+                RETURN_IF_ERROR(classic_state->rowsets[i]->set_segments_for_split(classic_state->rowset_segments[i]));
+            }
         }
 
         pipeline::Morsels morsels;
@@ -597,6 +731,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
                     ctx->short_key_range = logical_split->get_short_key_ranges_option();
                 }
                 ctx->split_morsel_queue = split_morsel_queue;
+                ctx->classic_tablet_read_state = classic_state;
                 _split_tasks.emplace_back(std::move(ctx));
             } else {
                 break;
@@ -788,6 +923,16 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
     return Status::OK();
 }
 
+void TabletReader::record_tablet_prepare_stats(const OlapReaderStatistics& prepare_stats) {
+    _stats.lake_prepared_tablet_segments_opened += prepare_stats.segments_opened;
+    _stats.lake_prepared_tablet_cached_segments += prepare_stats.lake_prepared_tablet_cached_segments;
+    _stats.lake_prepared_tablet_io_ns += prepare_stats.io_ns;
+    _stats.lake_prepared_tablet_io_count += prepare_stats.io_count;
+    _stats.lake_prepared_tablet_io_remote_ns += prepare_stats.io_ns_remote;
+    _stats.lake_prepared_tablet_io_count_remote += prepare_stats.io_count_remote;
+    _stats.lake_prepared_tablet_bytes_read_remote += prepare_stats.compressed_bytes_read_remote;
+}
+
 Status TabletReader::build_prepared_tablet_read_state(const TabletReaderParams& params, PreparedTabletReadState* state,
                                                       OlapReaderStatistics* prepare_stats) {
     if (state == nullptr) {
@@ -809,17 +954,31 @@ Status TabletReader::build_prepared_tablet_read_state(const TabletReaderParams& 
     SCOPED_RAW_TIMER(&_stats.lake_prepared_tablet_segment_open_ns);
     const std::atomic<bool>* is_cancelled =
             params.runtime_state != nullptr ? &params.runtime_state->cancelled_ref() : nullptr;
-    for (const auto& rowset : rowsets) {
+    if (should_open_segments_in_parallel(params.reader_type)) {
         RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
-        // Include the failing rowset's candidate slots even if only some footers can be opened.
-        _stats.lake_prepared_tablet_segments += rowset->num_segments();
-        ASSIGN_OR_RETURN(auto segments, rowset->segments(params.lake_io_opts, prepare_stats, is_cancelled));
+        // Include the candidate slots of every rowset even if only some footers can be opened.
+        for (const auto& rowset : rowsets) {
+            _stats.lake_prepared_tablet_segments += rowset->num_segments();
+        }
+        RETURN_IF_ERROR(open_rowset_segments_in_parallel(rowsets, params.lake_io_opts, is_cancelled, prepare_stats,
+                                                         &rowset_segments));
+        // The tasks that had started their IO when the query was cancelled may all have succeeded.
+        RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
+    } else {
+        for (const auto& rowset : rowsets) {
+            RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
+            // Include the failing rowset's candidate slots even if only some footers can be opened.
+            _stats.lake_prepared_tablet_segments += rowset->num_segments();
+            ASSIGN_OR_RETURN(auto segments, rowset->segments(params.lake_io_opts, prepare_stats, is_cancelled));
+            rowset_segments.emplace_back(std::move(segments));
+        }
+    }
+    for (const auto& segments : rowset_segments) {
         std::vector<PreparedSegmentReadStatePtr> prepared_states;
         prepared_states.reserve(segments.size());
         for (size_t i = 0; i < segments.size(); ++i) {
             prepared_states.emplace_back(std::make_shared<PreparedSegmentReadState>());
         }
-        rowset_segments.emplace_back(std::move(segments));
         rowset_prepared_states.emplace_back(std::move(prepared_states));
     }
 
@@ -1182,15 +1341,46 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     if (use_prepared_segments) {
         return Status::InvalidArgument("prepared tablet read state requires a prepared segment target");
     }
+    const auto& classic_state = params.classic_tablet_read_state;
+    if (classic_state != nullptr) {
+        if (classic_state->rowsets.size() != _rowsets.size() ||
+            classic_state->rowset_segments.size() != _rowsets.size()) {
+            return Status::InvalidArgument("CLASSIC tablet read state does not match reader rowsets");
+        }
+        for (size_t i = 0; i < _rowsets.size(); ++i) {
+            if (classic_state->rowsets[i] == nullptr ||
+                classic_state->rowsets[i]->rowset_id() != _rowsets[i]->rowset_id()) {
+                return Status::InvalidArgument("CLASSIC tablet read state rowset order mismatch");
+            }
+        }
+    }
+    auto read_rowset = [&](size_t rowset_idx, const RowsetReadOptions& options) {
+        if (classic_state != nullptr) {
+            return _rowsets[rowset_idx]->read(schema(), options, classic_state->rowset_segments[rowset_idx]);
+        }
+        return _rowsets[rowset_idx]->read(schema(), options);
+    };
+    // A query scan under the remote I/O scheduler builds its rowsets' iterators in parallel with
+    // lake_scan_parallel_segment_open; every other reader follows enable_load_segment_parallel.
+    const bool parallel_rowset_read =
+            config::enable_load_segment_parallel || should_open_segments_in_parallel(params.reader_type);
 
-    std::vector<std::future<StatusOr<std::vector<ChunkIteratorPtr>>>> futures;
+    // One entry per rowset read, in rowset order: its iterators, or the future that builds them. They are appended
+    // to |iters| in this order whatever order the tasks finish in, because the order of the iterators is the merge
+    // precedence of the key models that merge.
+    struct RowsetIterators {
+        std::vector<ChunkIteratorPtr> iters;
+        std::future<StatusOr<std::vector<ChunkIteratorPtr>>> future;
+    };
+    std::vector<RowsetIterators> rowset_iters;
+    rowset_iters.reserve(_rowsets.size());
     // The parallel tasks capture local variables and |this| by reference.
     // Must wait for all tasks to complete before returning, otherwise
     // dangling references to |rs_opts| and |this| cause use-after-free.
-    DeferOp wait_futures([&futures]() {
-        for (auto& future : futures) {
-            if (future.valid()) {
-                future.wait();
+    DeferOp wait_futures([&rowset_iters]() {
+        for (auto& entry : rowset_iters) {
+            if (entry.future.valid()) {
+                entry.future.wait();
             }
         }
     });
@@ -1203,12 +1393,12 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         }
         _stats.rowsets_read_count++;
 
-        if (config::enable_load_segment_parallel) {
+        if (parallel_rowset_read) {
             _parallel_rowset_stats.emplace_back(std::make_unique<OlapReaderStatistics>());
             RowsetReadOptions rowset_opts = rs_opts;
             rowset_opts.stats = _parallel_rowset_stats.back().get();
             auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>(
-                    [&, rowset, rowset_opts]() {
+                    [&, rowset_idx, rowset_opts]() {
 #ifdef BE_TEST
                         Status injected_st;
                         TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
@@ -1216,7 +1406,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                             return StatusOr<std::vector<ChunkIteratorPtr>>(injected_st);
                         }
 #endif
-                        return enhance_error_prompt(rowset->read(schema(), rowset_opts));
+                        return enhance_error_prompt(read_rowset(rowset_idx, rowset_opts));
                     });
 
             auto packaged_func = [task]() { (*task)(); };
@@ -1229,23 +1419,26 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                 // Try this rowset serially if submission failed; other rowsets may still be running.
                 LOG(WARNING) << "submit_func failed: " << submit_st.code_as_string()
                              << ", try to load rowset serially, rowset_id: " << rowset->id();
-                ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rowset_opts)));
-                iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
+                ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(read_rowset(rowset_idx, rowset_opts)));
+                rowset_iters.push_back(RowsetIterators{.iters = std::move(seg_iters)});
             } else {
-                futures.push_back(task->get_future());
+                rowset_iters.push_back(RowsetIterators{.future = task->get_future()});
             }
         } else {
-            ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
-            iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
+            ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(read_rowset(rowset_idx, rs_opts)));
+            rowset_iters.push_back(RowsetIterators{.iters = std::move(seg_iters)});
         }
     }
 
-    for (auto& future : futures) {
-        auto seg_iters_or = future.get();
-        if (!seg_iters_or.ok()) {
-            return seg_iters_or.status();
+    for (auto& entry : rowset_iters) {
+        if (entry.future.valid()) {
+            auto seg_iters_or = entry.future.get();
+            if (!seg_iters_or.ok()) {
+                return seg_iters_or.status();
+            }
+            entry.iters = std::move(seg_iters_or).value();
         }
-        iters->insert(iters->end(), seg_iters_or.value().begin(), seg_iters_or.value().end());
+        iters->insert(iters->end(), entry.iters.begin(), entry.iters.end());
     }
     return Status::OK();
 }
