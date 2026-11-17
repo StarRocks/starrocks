@@ -1689,6 +1689,14 @@ CONF_mInt32(remote_prefetch_window_blocks, "128");
 // share of the pages they span, these columns are read ahead like the predicate columns. Above 1, never. Applies to
 // the segment readers opened afterwards; only used while the remote I/O scheduler is enabled.
 CONF_mDouble(remote_prefetch_late_read_ahead_ratio, "0.5");
+// Bytes of finished read-ahead blocks of segment data files kept in memory while the reader that warmed them still
+// covers them, when the remote I/O scheduler is enabled: a reader of such a block copies it from memory instead of
+// reading it back from the local cache, which is still written. Once this many bytes are held, later blocks are not
+// kept. 0 turns it off. Has no effect while the remote I/O scheduler is disabled. A raise applies to the blocks
+// finished afterwards; a lowered value keeps new blocks out at once, and a block already held is released when it is
+// next read while the total is still over the budget, or when no reader covers it any more. The buffers are charged
+// to the process, not to a query. Must not be negative.
+CONF_mInt64(remote_read_retain_prefetched_bytes, "2147483648");
 CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");
 CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");
 CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");

@@ -65,6 +65,10 @@ struct RandomAccessFileOptions {
     bool skip_disk_cache = false;
     // Who the remote reads of this file are for; only the starlet filesystem uses it.
     RemoteReadContext remote_read;
+    // The object at this path is never rewritten in place, as with a uniquely named segment file, so a filesystem
+    // may keep blocks of it in memory beyond its own cache (see remote_read_retain_prefetched_bytes) without them
+    // going stale. Leave it false for anything that can be overwritten, such as metadata.
+    bool remote_read_retainable = false;
 };
 
 struct DirEntry {

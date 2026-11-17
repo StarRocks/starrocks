@@ -70,6 +70,11 @@ DECLARE_int32(fs_buffer_prefetch_threadpool_size);
 // switch to turn on/off buffer prefetch when read
 DECLARE_bool(fs_enable_buffer_prefetch);
 
+namespace staros::starlet::fslib {
+// Budget of the finished read-ahead blocks starlet keeps in memory. No installed starlet header declares it.
+DECLARE_int64(remote_read_retain_prefetched_bytes);
+} // namespace staros::starlet::fslib
+
 namespace starrocks {
 
 namespace {
@@ -113,6 +118,16 @@ void apply_starlet_upload_threshold_configs() {
 
     // Shared with the BE S3 filesystem, hence no `starlet_` prefix on the BE config.
     FLAGS_fslib_s3_multipart_equal_part_size = config::s3_multipart_equal_part_size;
+}
+
+Status update_remote_read_retain_prefetched_bytes() {
+    const int64_t bytes = config::remote_read_retain_prefetched_bytes;
+    if (bytes < 0) {
+        return Status::InvalidArgument(
+                fmt::format("remote_read_retain_prefetched_bytes must not be negative, got {}", bytes));
+    }
+    staros::starlet::fslib::FLAGS_remote_read_retain_prefetched_bytes = bytes;
+    return Status::OK();
 }
 
 namespace fslib = staros::starlet::fslib;
@@ -189,6 +204,10 @@ Status validate_remote_io_scheduler_config() {
                 "remote_read_weight_decay_min in (0, 1] (got {}, {} and {})",
                 config::remote_read_adaptive_min_inflight, config::remote_read_weight_decay_ios,
                 config::remote_read_weight_decay_min));
+    }
+    if (config::remote_read_retain_prefetched_bytes < 0) {
+        return Status::InvalidArgument(fmt::format("remote_read_retain_prefetched_bytes must not be negative (got {})",
+                                                   config::remote_read_retain_prefetched_bytes));
     }
     return Status::OK();
 }
@@ -271,6 +290,7 @@ Status enable_remote_io_scheduler() {
               << config::remote_read_load_weight << ":" << config::remote_read_compaction_weight << ":"
               << config::remote_read_background_weight
               << " remote_prefetch_window_blocks=" << config::remote_prefetch_window_blocks
+              << " remote_read_retain_prefetched_bytes=" << config::remote_read_retain_prefetched_bytes
               << "; effective starlet_fs_read_prefetch_enable=false (configured "
               << config::starlet_fs_read_prefetch_enable << "), io_coalesce_lake_read_enable set to false (configured "
               << configured_io_coalesce_lake_read << ")";
@@ -328,6 +348,12 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
     }
     fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
     apply_starlet_upload_threshold_configs();
+    // Before the scheduler starts, so that the budget holds from the first fill. It only matters to the scheduler's
+    // block fills, so a failure here, which validate_remote_io_scheduler_config() has already ruled out when the
+    // scheduler runs, only leaves an unused flag at starlet's default.
+    if (auto st = update_remote_read_retain_prefetched_bytes(); !st.ok()) {
+        LOG(WARNING) << st << "; not applied, starlet keeps no finished read-ahead block in memory";
+    }
 
     // Goes through UpdateFlagValue rather than a typed FLAGS_ assignment: starlet registers an update
     // hook on this flag that resolves the string to the enum its heartbeat path actually reads, and
