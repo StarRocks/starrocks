@@ -182,7 +182,20 @@ SchemaScanner::ColumnDesc SchemaLoadsScanner::_s_tbls_columns[] = {
         {"ERROR_MSG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"TRACKING_SQL", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"REJECTED_RECORD_PATH", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
-        {"JOB_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false}};
+        {"JOB_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TXN_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"LOAD_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"TABLE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"PARENT_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"STATEMENT", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"ERROR_CODE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"VISIBLE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"SINK_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"CLIENT_IP", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"BE_IDS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"COMMIT_THROTTLE_MS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"CPU_NS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"PEAK_MEM_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true}};
 
 SchemaLoadsScanner::SchemaLoadsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -225,6 +238,23 @@ bool SchemaLoadsScanner::_fill_datetime_column_from_ms(Column* column, bool is_s
     t.from_unixtime(epoch_ms / 1000, (epoch_ms % 1000) * 1000, _runtime_state->timezone_obj());
     fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
     return true;
+}
+
+void SchemaLoadsScanner::_fill_nullable_bigint(Column* column, bool is_set, int64_t value) {
+    if (is_set) {
+        fill_column_with_slot<TYPE_BIGINT>(column, (void*)&value);
+    } else {
+        down_cast<NullableColumn*>(column)->append_nulls(1);
+    }
+}
+
+void SchemaLoadsScanner::_fill_nullable_varchar(Column* column, bool is_set, const std::string& value) {
+    if (is_set) {
+        Slice slice(value);
+        fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&slice);
+    } else {
+        down_cast<NullableColumn*>(column)->append_nulls(1);
+    }
 }
 
 Status SchemaLoadsScanner::start(RuntimeState* state) {
@@ -322,7 +352,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
     if (_cur_idx < _result.loads.size()) {
         auto& info = _result.loads[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 26) {
+            if (slot_id < 1 || slot_id > 39) {
                 return Status::InternalError(fmt::format("invalid slot id:{}", slot_id));
             }
             auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
@@ -551,6 +581,73 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
             case 26: {
                 // job id
                 fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.job_id);
+                break;
+            }
+            case 27: {
+                // txn id; older FEs send 0 or -1 while no transaction exists yet
+                _fill_nullable_bigint(column, info.__isset.txn_id && info.txn_id > 0, info.txn_id);
+                break;
+            }
+            case 28: {
+                // load id
+                _fill_nullable_varchar(column, info.__isset.load_id, info.load_id);
+                break;
+            }
+            case 29: {
+                // table id
+                _fill_nullable_bigint(column, info.__isset.table_id, info.table_id);
+                break;
+            }
+            case 30: {
+                // parent id
+                _fill_nullable_bigint(column, info.__isset.parent_id, info.parent_id);
+                break;
+            }
+            case 31: {
+                // statement
+                _fill_nullable_varchar(column, info.__isset.statement, info.statement);
+                break;
+            }
+            case 32: {
+                // error code
+                _fill_nullable_varchar(column, info.__isset.error_code, info.error_code);
+                break;
+            }
+            case 33: {
+                // visible time
+                if (!_fill_datetime_column_from_ms(column, info.__isset.visible_time_ms, info.visible_time_ms)) {
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
+                }
+                break;
+            }
+            case 34: {
+                // sink bytes
+                _fill_nullable_bigint(column, info.__isset.sink_bytes, info.sink_bytes);
+                break;
+            }
+            case 35: {
+                // client ip
+                _fill_nullable_varchar(column, info.__isset.client_ip, info.client_ip);
+                break;
+            }
+            case 36: {
+                // be ids
+                _fill_nullable_varchar(column, info.__isset.be_ids, info.be_ids);
+                break;
+            }
+            case 37: {
+                // commit throttle ms
+                _fill_nullable_bigint(column, info.__isset.commit_throttle_ms, info.commit_throttle_ms);
+                break;
+            }
+            case 38: {
+                // cpu ns
+                _fill_nullable_bigint(column, info.__isset.cpu_ns, info.cpu_ns);
+                break;
+            }
+            case 39: {
+                // peak mem bytes
+                _fill_nullable_bigint(column, info.__isset.peak_mem_bytes, info.peak_mem_bytes);
                 break;
             }
             default:

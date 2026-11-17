@@ -3730,6 +3730,8 @@ public class StmtExecutor {
         long estimateScanFileSize = 0;
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
         boolean insertError = false;
+        // why the statement was rejected after the load ran, recorded on the insert load job
+        String insertErrorReason = "";
         String trackingSql = "";
         try {
             coord = getCoordinatorFactory().createInsertScheduler(
@@ -3784,7 +3786,9 @@ public class StmtExecutor {
                         getExecTimeout(),
                         context.getCurrentWarehouseId(),
                         coord,
-                        insertLoadTxnCallback);
+                        insertLoadTxnCallback,
+                        InsertLoadJob.statementKindOf(stmt, execPlan),
+                        context.getRemoteIP());
                 loadJob.setJobProperties(stmt.getProperties());
                 jobId = loadJob.getId();
                 if (txnState != null) {
@@ -3894,6 +3898,7 @@ public class StmtExecutor {
                         TransactionCommitFailedException.FILTER_DATA_ERR + ", txn_id = " + transactionId +
                                 ", tracking sql = " + trackingSql);
                 insertError = true;
+                insertErrorReason = TransactionCommitFailedException.FILTER_DATA_ERR;
                 return;
             }
             // An Iceberg rewrite writes no row when every row of its files is deleted; it still has to commit
@@ -3915,6 +3920,7 @@ public class StmtExecutor {
                     }
                     context.getState().setOk();
                     insertError = true;
+                    insertErrorReason = ERR_NO_ROWS_IMPORTED.formatErrorMsg();
                     return;
                 }
             }
@@ -4146,7 +4152,8 @@ public class StmtExecutor {
                     if (jobId != -1) {
                         context.getGlobalStateMgr().getLoadMgr()
                                 .recordFinishedOrCancelledLoadJob(jobId, EtlJobType.INSERT,
-                                        "Cancelled", coord.getTrackingUrl());
+                                        insertErrorReason.isEmpty() ? "Cancelled" : "Cancelled, msg: " + insertErrorReason,
+                                        coord.getTrackingUrl());
                         jobId = -1;
                     }
                 } catch (Exception abortTxnException) {

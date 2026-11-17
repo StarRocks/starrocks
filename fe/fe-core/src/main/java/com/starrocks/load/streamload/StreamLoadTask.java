@@ -44,6 +44,8 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.LoadConstants;
+import com.starrocks.load.LoadErrorCode;
+import com.starrocks.load.LoadErrorCodeMapper;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -77,6 +79,7 @@ import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseIdleChecker;
@@ -141,6 +144,9 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     private String clientIp = "";
     @SerializedName(value = "errorMsg")
     private String errorMsg;
+    // Classification of errorMsg once the task is CANCELLED, derived lazily on first read and
+    // kept together with the message it belongs to.
+    private transient volatile LoadErrorCodeMapper.CachedCode cachedErrorCode;
     @SerializedName(value = "trackingUrl")
     private String trackingUrl;
     @SerializedName(value = "timeoutMs")
@@ -186,6 +192,20 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     private long planTimeMs;
     @SerializedName(value = "receiveDataTimeMs")
     private long receiveDataTimeMs;
+    // When the transaction became VISIBLE; -1 until then and for cancelled tasks.
+    @SerializedName(value = "visibleTimeMs")
+    private long visibleTimeMs = -1;
+    // Backend a routine load task runs on. Its transaction is FE-coordinated, so the
+    // transaction state does not carry the backend; plain stream loads leave this at -1.
+    @SerializedName(value = "beId")
+    private long beId = -1;
+    // Routine load job this task belongs to; -1 for plain stream loads.
+    @SerializedName(value = "routineLoadJobId")
+    private long routineLoadJobId = -1;
+    // Captured when the transaction commits: the transaction only keeps the value in memory and
+    // may be purged before the task is. -1 when ingestion slowdown never evaluated the commit.
+    @SerializedName(value = "commitThrottleMs")
+    private long commitThrottleMs = -1;
 
     // used for sync stream load and routine load
     private boolean isSyncStreamLoad = false;
@@ -300,8 +320,15 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         return endTimeMs();
     }
 
-    public void beginTxnFromBackend(TUniqueId requestId, String clientIp, long backendId, TransactionResult resp) {
-        beginTxn(0, 1, requestId, TxnCoordinator.fromBackend(clientIp, backendId), resp);
+    /**
+     * @param backendIp the address of the backend that runs the load and coordinates the transaction
+     */
+    public void beginTxnFromBackend(TUniqueId requestId, String backendIp, long backendId, TransactionResult resp) {
+        if (backendId >= 0) {
+            // kept on the task: the coordinator of the transaction does not persist its backend id
+            this.beId = backendId;
+        }
+        beginTxn(0, 1, requestId, TxnCoordinator.fromBackend(backendIp, backendId), resp);
     }
 
     @Override
@@ -1065,6 +1092,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                     this.channels.set(i, State.CANCELLED);
                 }
                 this.state = State.CANCELLED;
+                this.errorMsg = reason;
                 writeUnlock();
             }
         } catch (Exception e) {
@@ -1207,6 +1235,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             }
             this.state = State.COMMITED;
             commitTimeMs = System.currentTimeMillis();
+            captureCommitThrottle(txnState);
             isCommitting = false;
         } finally {
             writeUnlock();
@@ -1365,6 +1394,8 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             }
             state = State.FINISHED;
             endTimeMs = System.currentTimeMillis();
+            visibleTimeMs = txnState.getFinishTime() > 0 ? txnState.getFinishTime() : endTimeMs;
+            captureCommitThrottle(txnState);
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
             gcObject();
         } finally {
@@ -1384,6 +1415,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             this.preparedChannelNum = this.channelNum;
             state = State.FINISHED;
             endTimeMs = txnState.getFinishTime();
+            visibleTimeMs = txnState.getFinishTime();
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         } finally {
             writeUnlock();
@@ -1420,6 +1452,15 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
      * (the transaction became visible after the commit returned).
      */
     public void markCommittedByParent(boolean visible, long finishTimeMs) {
+        markCommittedByParent(visible, finishTimeMs, -1L);
+    }
+
+    /**
+     * @param finishTimeMs       when the parent observed the state, which ends the task
+     * @param txnVisibleTimeMs   when the transaction became visible, or a non-positive value
+     *                           when the parent does not know it; the observation time is used then
+     */
+    public void markCommittedByParent(boolean visible, long finishTimeMs, long txnVisibleTimeMs) {
         boolean becameVisible = false;
         writeLock();
         try {
@@ -1440,6 +1481,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             this.isCommitting = false;
             if (visible) {
                 this.endTimeMs = finishTimeMs;
+                this.visibleTimeMs = txnVisibleTimeMs > 0 ? txnVisibleTimeMs : finishTimeMs;
                 gcObject();
                 becameVisible = true;
             }
@@ -1595,6 +1637,22 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         return id;
     }
 
+    /**
+     * Returns the failure reason once the task is cancelled, or null while it is running or has succeeded.
+     */
+    public LoadErrorCode getErrorCode() {
+        if (state != State.CANCELLED) {
+            return null;
+        }
+        String message = errorMsg;
+        LoadErrorCodeMapper.CachedCode cached = cachedErrorCode;
+        if (cached == null || cached.source() != message) {
+            cached = new LoadErrorCodeMapper.CachedCode(message, LoadErrorCodeMapper.fromMessage(message));
+            cachedErrorCode = cached;
+        }
+        return cached.code();
+    }
+
     public String getStateName() {
         return state.name();
     }
@@ -1613,6 +1671,28 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
+    }
+
+    private void captureCommitThrottle(TransactionState txnState) {
+        if (txnState != null && txnState.getCommitThrottleMs() >= 0) {
+            commitThrottleMs = txnState.getCommitThrottleMs();
+        }
+    }
+
+    public long getBeId() {
+        return beId;
+    }
+
+    public void setBeId(long beId) {
+        this.beId = beId;
+    }
+
+    public long getRoutineLoadJobId() {
+        return routineLoadJobId;
+    }
+
+    public void setRoutineLoadJobId(long routineLoadJobId) {
+        this.routineLoadJobId = routineLoadJobId;
     }
 
     public void setType(Type type) {
@@ -1762,18 +1842,34 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     public List<TLoadInfo> toThrift() {
+        // Looked up before taking the task lock. On a follower, replaying a transaction holds the
+        // transaction manager lock while it takes the task lock, so the columns added here do not
+        // enter the transaction manager with the task lock held.
+        long lookedUpTxnId = txnId;
+        TransactionState txnState =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, lookedUpTxnId);
         readLock();
         try {
+            if (lookedUpTxnId != txnId) {
+                // the task began its transaction in between
+                txnState = null;
+            }
             TLoadInfo info = new TLoadInfo();
             info.setJob_id(id);
             info.setLabel(label);
             info.setLoad_id(DebugUtil.printId(loadId));
-            info.setTxn_id(txnId);
+            if (txnId > 0) {
+                info.setTxn_id(txnId);
+            }
             info.setDb(dbName);
             info.setTable(tableName);
             info.setUser(user);
             info.setState(state.name());
             info.setError_msg(errorMsg);
+            LoadErrorCode errorCode = getErrorCode();
+            if (errorCode != null) {
+                info.setError_code(errorCode.name());
+            }
             info.setRuntime_details(toRuntimeDetails());
             info.setProperties(toProperties());
             if (state == State.FINISHED) {
@@ -1829,6 +1925,45 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 }
             } else {
                 info.setWarehouse("");
+            }
+
+            info.setTable_id(tableId);
+            if (routineLoadJobId >= 0) {
+                info.setParent_id(routineLoadJobId);
+            }
+            if (visibleTimeMs > 0) {
+                info.setVisible_time_ms(visibleTimeMs);
+            } else if (state == State.FINISHED) {
+                // A task that finished before visibleTimeMs existed. The transaction knows while it
+                // is kept; after that the end time stands in, which such a task took from it.
+                if (txnState != null && txnState.getTransactionStatus() == TransactionStatus.VISIBLE
+                        && txnState.getFinishTime() > 0) {
+                    info.setVisible_time_ms(txnState.getFinishTime());
+                } else if (txnState == null && endTimeMs > 0) {
+                    info.setVisible_time_ms(endTimeMs);
+                }
+            }
+            // The bytes the sink wrote, which is what the backend reports as loaded bytes.
+            if (numLoadBytesTotal >= 0) {
+                info.setSink_bytes(numLoadBytesTotal);
+            }
+            if (clientIp != null && !clientIp.isEmpty()) {
+                info.setClient_ip(clientIp);
+            }
+            // A BE-driven stream load records the executing backend as the transaction coordinator;
+            // routine load tasks are FE-coordinated and carry the backend on the task instead.
+            TxnCoordinator coordinator = txnState == null ? null : txnState.getCoordinator();
+            if (beId >= 0) {
+                info.setBe_ids(String.valueOf(beId));
+            } else if (coordinator != null && coordinator.sourceType == TransactionState.TxnSourceType.BE
+                    && coordinator.getBackendId() >= 0) {
+                // a task created before the backend id was kept on it
+                info.setBe_ids(String.valueOf(coordinator.getBackendId()));
+            }
+            if (commitThrottleMs >= 0) {
+                info.setCommit_throttle_ms(commitThrottleMs);
+            } else if (txnState != null && txnState.getCommitThrottleMs() >= 0) {
+                info.setCommit_throttle_ms(txnState.getCommitThrottleMs());
             }
 
             return Lists.newArrayList(info);

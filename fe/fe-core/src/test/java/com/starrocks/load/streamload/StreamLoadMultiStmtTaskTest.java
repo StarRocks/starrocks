@@ -22,6 +22,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.load.LoadErrorCode;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -509,6 +510,26 @@ public class StreamLoadMultiStmtTaskTest {
         boolean result = multiTask.checkNeedRemove(System.currentTimeMillis(), false);
         Assertions.assertFalse(result);
         Assertions.assertEquals("CANCELLED", multiTask.getStateName());
+    }
+
+    // The rows of a multi-statement load are its sub-tasks, so a timeout of the parent must
+    // reach them as a reason that says what timed out.
+    @Test
+    public void testCancelOnTimeoutGivesSubTasksTimeoutErrorCode() {
+        new MockUp<TransactionStmtExecutor>() {
+            @Mock
+            public void rollbackStmt(com.starrocks.qe.ConnectContext ctx,
+                                     com.starrocks.sql.ast.txn.RollbackStmt stmt) {
+            }
+        };
+        Deencapsulation.setField(multiTask, "txnId", 500L);
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.LOADING);
+
+        multiTask.cancelOnTimeout();
+
+        Assertions.assertEquals("CANCELLED", multiTask.getStateName());
+        Assertions.assertEquals(StreamLoadTask.State.CANCELLED, Deencapsulation.getField(sub, "state"));
+        Assertions.assertEquals(LoadErrorCode.TIMEOUT, sub.getErrorCode());
     }
 
     @Test
@@ -1133,6 +1154,21 @@ public class StreamLoadMultiStmtTaskTest {
         // CANCELLED/FINISHED are never overridden
         sub.markCommittedByParent(false, now + 3);
         Assertions.assertEquals("FINISHED", sub.getStateName());
+        // the parent did not know when the transaction became visible: the observation time stands in
+        Assertions.assertEquals(now + 2, Deencapsulation.<Long>getField(sub, "visibleTimeMs").longValue());
+    }
+
+    // ---- The visible time is the transaction's, the end time is when the parent observed it ----
+    @Test
+    public void testMarkCommittedByParentKeepsTheTransactionVisibleTime() {
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+        long visibleMs = 1_700_000_000_000L;
+        long observedMs = visibleMs + 600_000L;
+
+        sub.markCommittedByParent(true, observedMs, visibleMs);
+        Assertions.assertEquals("FINISHED", sub.getStateName());
+        Assertions.assertEquals(observedMs, sub.endTimeMs());
+        Assertions.assertEquals(visibleMs, Deencapsulation.<Long>getField(sub, "visibleTimeMs").longValue());
     }
 
     // ---- The cleaner thread converges COMMITED sub-tasks once the txn is visible ----
@@ -1140,6 +1176,9 @@ public class StreamLoadMultiStmtTaskTest {
     public void testCheckNeedRemoveUpgradesCommittedSubTasksWhenVisible() {
         TransactionState visibleTxn = new TransactionState();
         visibleTxn.setTransactionStatus(TransactionStatus.VISIBLE);
+        // The transaction became visible ten minutes before the cleaner got to it.
+        long visibleMs = System.currentTimeMillis() - 600_000L;
+        visibleTxn.setFinishTime(visibleMs);
         new MockUp<GlobalTransactionMgr>() {
             @Mock
             public TransactionState getTransactionState(long dbId, long transactionId) {
@@ -1152,6 +1191,9 @@ public class StreamLoadMultiStmtTaskTest {
 
         Assertions.assertFalse(multiTask.checkNeedRemove(System.currentTimeMillis(), false));
         Assertions.assertEquals("FINISHED", sub.getStateName());
+        // VISIBLE_TIME is when the transaction became visible, not when the cleaner noticed.
+        Assertions.assertEquals(visibleMs, Deencapsulation.<Long>getField(sub, "visibleTimeMs").longValue());
+        Assertions.assertTrue(sub.endTimeMs() > visibleMs);
     }
 
     // ---- Multi-table commit must dispatch every table's channel (prepareChannel)

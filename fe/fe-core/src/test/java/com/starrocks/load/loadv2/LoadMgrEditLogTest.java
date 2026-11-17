@@ -270,7 +270,8 @@ public class LoadMgrEditLogTest {
         InsertLoadJob loadJob = masterLoadMgr.registerInsertLoadJob(
                 label, dbName, tableId, txnId, loadId, user,
                 EtlJobType.INSERT, createTimestamp, estimateStats,
-                timeout, warehouseId, coordinator, insertLoadTxnCallback);
+                timeout, warehouseId, coordinator, insertLoadTxnCallback,
+                "INSERT_SELECT", "127.0.0.1");
 
         // 4. Verify master state
         Assertions.assertNotNull(loadJob);
@@ -350,7 +351,8 @@ public class LoadMgrEditLogTest {
             exceptionLoadMgr.registerInsertLoadJob(
                     label, dbName, tableId, txnId, loadId, user,
                     EtlJobType.INSERT, createTimestamp, estimateStats,
-                    timeout, warehouseId, coordinator, insertLoadTxnCallback);
+                    timeout, warehouseId, coordinator, insertLoadTxnCallback,
+                    "INSERT_SELECT", "127.0.0.1");
         });
         Assertions.assertEquals("EditLog write failed", exception.getMessage());
 
@@ -409,7 +411,7 @@ public class LoadMgrEditLogTest {
         InsertLoadJob runningJob = leaderLoadMgr.registerInsertLoadJob("running_label", dbName, tableId,
                 txnMgr.getTransactionIDGenerator().getNextTransactionId(), "load_id", "test_user", EtlJobType.INSERT,
                 System.currentTimeMillis(), new LoadMgr.EstimateStats(0L, 0, 0L), 3600L, 0L,
-                mock(Coordinator.class), null);
+                mock(Coordinator.class), null, "INSERT_SELECT", "127.0.0.1");
         replayTxnState(runningJob, TransactionStatus.COMMITTED);
         replayTxnState(runningJob, TransactionStatus.VISIBLE);
 
@@ -444,7 +446,7 @@ public class LoadMgrEditLogTest {
         long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
                 .getNextTransactionId();
         InsertLoadJob job = new InsertLoadJob(label, dbId, tableId, txnId, "load_id", "test_user",
-                System.currentTimeMillis(), 3600L, 0L, mock(Coordinator.class), null);
+                System.currentTimeMillis(), 3600L, 0L, mock(Coordinator.class), null, "INSERT_SELECT", "127.0.0.1");
         GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(job, wal -> {
         });
         loadMgr.replayCreateLoadJob(

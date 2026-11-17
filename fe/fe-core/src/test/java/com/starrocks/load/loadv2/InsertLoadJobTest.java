@@ -36,11 +36,14 @@ package com.starrocks.load.loadv2;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.load.LoadErrorCode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.TransactionCommitFailedException;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -137,5 +140,29 @@ public class InsertLoadJobTest {
             Assertions.assertTrue(loadJob.getTabletCommitInfos().isEmpty());
             Assertions.assertTrue(loadJob.getTabletFailInfos().isEmpty());
         }
+    }
+
+    @Test
+    public void testErrorCode(@Mocked GlobalStateMgr globalStateMgr) throws MetaNotFoundException {
+        InsertLoadJob finished = new InsertLoadJob("label", 1L, 1L, 1000, "", "", null);
+        Assertions.assertNull(finished.getErrorCode());
+
+        // The fail messages are the ones StmtExecutor records: the rejection reason for filtered
+        // rows, and the thrown error behind "Cancelled, msg: " otherwise.
+        InsertLoadJob filtered = new InsertLoadJob("label", 1L, 1L, 1000,
+                "Cancelled, msg: " + TransactionCommitFailedException.FILTER_DATA_ERR, "", null);
+        Assertions.assertEquals(JobState.CANCELLED, filtered.getState());
+        Assertions.assertEquals(LoadErrorCode.FILTER_RATIO_EXCEEDED, filtered.getErrorCode());
+
+        InsertLoadJob timedOut = new InsertLoadJob("label", 1L, 1L, 1000,
+                "Cancelled, msg: " + ErrorCode.ERR_TIMEOUT.formatErrorMsg("Insert", 3600,
+                        "please increase the 'insert_timeout' session variable or the 'timeout' property for "
+                                + "insert statement and retry"), "", null);
+        Assertions.assertEquals(LoadErrorCode.TIMEOUT, timedOut.getErrorCode());
+
+        InsertLoadJob killed = new InsertLoadJob("label", 1L, 1L, 1000,
+                "Cancelled, msg: " + ErrorCode.ERR_FAILED_WHEN_INSERT.formatErrorMsg("killed manually: KILL 42"),
+                "", null);
+        Assertions.assertEquals(LoadErrorCode.USER_CANCELLED, killed.getErrorCode());
     }
 }
