@@ -3270,9 +3270,6 @@ void VariantColumnReader::select_offset_index(const SparseRange<uint64_t>& range
 
 VariantColumnReader::TopLevelSkipFlags VariantColumnReader::_compute_top_level_skip_flags() const {
     TopLevelSkipFlags flags;
-<<<<<<< HEAD
-    flags.skip_payload = _top_level.root_typed_value_reader == nullptr && _top_level.root_array_node == nullptr &&
-=======
     if (_null_only) {
         // The outer null mask is the metadata column's null mask; it needs no other column, and when the
         // statistics prove it has no null, not even the metadata column.
@@ -3280,8 +3277,7 @@ VariantColumnReader::TopLevelSkipFlags VariantColumnReader::_compute_top_level_s
         flags.skip_metadata = _column_chunk_has_no_null(_top_level.metadata_reader.get());
         return flags;
     }
-    flags.skip_payload = _top_level.root_typed_value_reader == nullptr &&
->>>>>>> 1046436052e... [Enhancement][RB-1573] Read only the null mask for VARIANT IS [NOT] NULL on Parquet scans (#70060)
+    flags.skip_payload = _top_level.root_typed_value_reader == nullptr && _top_level.root_array_node == nullptr &&
                          _requested_paths_are_scalar_typed_leaves(_shredded_fields, _requested_shredded_paths) &&
                          _requested_scalar_fallback_values_all_null(_shredded_fields, _requested_shredded_paths);
     flags.skip_metadata = flags.skip_payload && _column_chunk_has_no_null(_top_level.metadata_reader.get());

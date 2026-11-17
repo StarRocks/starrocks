@@ -865,11 +865,8 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
     reader->set_root_presence(std::move(root_presence));
     reader->set_root_unsupported_reason(std::move(root_unsupported_reason));
     reader->set_root_raw_encoding(root_raw_encoding);
-<<<<<<< HEAD
     reader->set_root_array_node(std::move(root_array_node));
-=======
     reader->set_null_only(hints.null_only && hints.parsed_shredded_paths.empty());
->>>>>>> 1046436052e... [Enhancement][RB-1573] Read only the null mask for VARIANT IS [NOT] NULL on Parquet scans (#70060)
     return ColumnReaderPtr(std::move(reader));
 }
 

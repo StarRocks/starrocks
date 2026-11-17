@@ -479,14 +479,11 @@ public:
     }
     void set_root_unsupported_reason(std::string reason) { _top_level.root_unsupported_reason = std::move(reason); }
     void set_root_raw_encoding(ShreddedRawEncoding encoding) { _top_level.root_raw_encoding = encoding; }
-<<<<<<< HEAD
     void set_root_array_node(std::unique_ptr<ShreddedFieldNode> node) { _top_level.root_array_node = std::move(node); }
-=======
     // Only the outer null mask is used (`v IS [NOT] NULL`): read_range fills it from the metadata column and
     // appends placeholder rows to the data column, and no other column of the variant group is read.
     void set_null_only(bool null_only) { _null_only = null_only; }
     bool null_only() const { return _null_only; }
->>>>>>> 1046436052e... [Enhancement][RB-1573] Read only the null mask for VARIANT IS [NOT] NULL on Parquet scans (#70060)
 
     Status prepare() override;
 
