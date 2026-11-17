@@ -872,9 +872,13 @@ TEST(GeoMetadataTest, NativeGeometryValidatesIcebergAndParquetDescriptors) {
     spherical = crs84;
     spherical.coordinate_system = GEO_COORDINATE_SYSTEM_SPHERICAL;
     EXPECT_TRUE(validate(geometry, spherical, &lake).is_invalid_argument());
-    auto wrong_kind = crs84;
-    wrong_kind.logical_type = GEO_LOGICAL_TYPE_GEOGRAPHY;
-    EXPECT_TRUE(validate(geometry, wrong_kind, &lake).is_invalid_argument());
+    // create_geo_type() requires the kind to match the primitive, but a type deserialized from thrift is not
+    // checked, so build the mismatched type directly.
+    TypeDescriptor wrong_kind_type(TYPE_GEOMETRY);
+    wrong_kind_type.geo_type = crs84;
+    wrong_kind_type.geo_type->logical_type = GEO_LOGICAL_TYPE_GEOGRAPHY;
+    SlotDescriptor wrong_kind(1, "shape", wrong_kind_type);
+    EXPECT_TRUE(validate_scan(schema_of(geometry), &lake, {{0, &wrong_kind, true}}, true).is_invalid_argument());
     EXPECT_TRUE(validate(geo_element(), crs84, &lake).is_invalid_argument());
     auto both = geometry;
     both.logicalType.__set_GEOGRAPHY(tparquet::GeographyType());
