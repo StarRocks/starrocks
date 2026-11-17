@@ -20,18 +20,30 @@ package com.starrocks.fs;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.hdfs.HdfsFs;
 import com.starrocks.fs.hdfs.HdfsFsManager;
+import com.starrocks.fs.hdfs.HdfsService;
+import com.starrocks.thrift.TBrokerCloseWriterRequest;
+import com.starrocks.thrift.TBrokerFD;
+import com.starrocks.thrift.TBrokerOpenWriterRequest;
+import com.starrocks.thrift.TBrokerPWriteRequest;
 import com.starrocks.thrift.THdfsProperties;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class HdfsUtilTest {
+    @TempDir
+    Path tempDir;
+
     @Test
     public void testColumnFromPath() {
         try {
@@ -79,5 +91,95 @@ public class HdfsUtilTest {
 
         Assertions.assertThrows(StarRocksException.class, () ->
                 fileSystemManager.openWriter("hdfs://abc/dbf", new HashMap<>()));
+    }
+
+    /**
+     * Mocks the writer side of HdfsService. A null message means the call succeeds.
+     */
+    private static void mockWriter(String pwriteError, String closeError, AtomicInteger closeCalls) {
+        new MockUp<HdfsService>() {
+            @Mock
+            public TBrokerFD openWriter(TBrokerOpenWriterRequest request) {
+                return new TBrokerFD(1L, 2L);
+            }
+
+            @Mock
+            public void pwrite(TBrokerPWriteRequest request) throws StarRocksException {
+                if (pwriteError != null) {
+                    throw new StarRocksException(pwriteError);
+                }
+            }
+
+            @Mock
+            public void closeWriter(TBrokerCloseWriterRequest request) throws StarRocksException {
+                closeCalls.incrementAndGet();
+                if (closeError != null) {
+                    throw new StarRocksException(closeError);
+                }
+            }
+        };
+    }
+
+    @Test
+    public void testWriteFileReportsCloseFailure() {
+        // S3A uploads on close, so a close failure (e.g. 403 on PutObject) is a failed write.
+        AtomicInteger closeCalls = new AtomicInteger();
+        mockWriter(null, "Forbidden (Service: Amazon S3; Status Code: 403)", closeCalls);
+
+        StarRocksException e = Assertions.assertThrows(StarRocksException.class, () ->
+                HdfsUtil.writeFile("data".getBytes(), "s3://bucket/path/file", new HashMap<>()));
+        Assertions.assertTrue(e.getMessage().contains("403"), e.getMessage());
+        // The failed close already released the stream; the finally block must not close it again.
+        Assertions.assertEquals(1, closeCalls.get());
+    }
+
+    @Test
+    public void testWriteFileKeepsWriteFailureAndClosesOnce() {
+        AtomicInteger closeCalls = new AtomicInteger();
+        mockWriter("pwrite failed", "close failed", closeCalls);
+
+        StarRocksException e = Assertions.assertThrows(StarRocksException.class, () ->
+                HdfsUtil.writeFile("data".getBytes(), "s3://bucket/path/file", new HashMap<>()));
+        Assertions.assertEquals("pwrite failed", e.getMessage());
+        Assertions.assertEquals(1, closeCalls.get());
+    }
+
+    @Test
+    public void testWriteFileSucceeds() throws Exception {
+        AtomicInteger closeCalls = new AtomicInteger();
+        mockWriter(null, null, closeCalls);
+
+        HdfsUtil.writeFile("data".getBytes(), "s3://bucket/path/file", new HashMap<>());
+        Assertions.assertEquals(1, closeCalls.get());
+    }
+
+    @Test
+    public void testWriteLocalFileReportsCloseFailure() throws Exception {
+        AtomicInteger closeCalls = new AtomicInteger();
+        mockWriter(null, "close failed", closeCalls);
+
+        Path src = Files.write(tempDir.resolve("src.dat"), "data".getBytes());
+
+        StarRocksException e = Assertions.assertThrows(StarRocksException.class, () ->
+                HdfsUtil.writeFile(src.toString(), "s3://bucket/path/file", new HashMap<>()));
+        Assertions.assertEquals("close failed", e.getMessage());
+        Assertions.assertEquals(1, closeCalls.get());
+    }
+
+    @Test
+    public void testWriterCloseIsIdempotent() throws Exception {
+        AtomicInteger closeCalls = new AtomicInteger();
+        mockWriter(null, "close failed", closeCalls);
+
+        HdfsUtil.HdfsWriter writer = new HdfsUtil.HdfsWriter("s3://bucket/path/file", new HashMap<>());
+        // Never opened: nothing to close.
+        writer.close();
+        Assertions.assertEquals(0, closeCalls.get());
+
+        writer.open();
+        Assertions.assertThrows(StarRocksException.class, writer::close);
+        writer.close();
+        writer.closeQuietly();
+        Assertions.assertEquals(1, closeCalls.get());
     }
 }

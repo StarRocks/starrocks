@@ -608,8 +608,16 @@ public class BlobStorage implements Writable {
         } catch (IOException e1) {
             return new Status(ErrCode.COMMON_ERROR, "encounter io exception: " + e1.getMessage());
         } finally {
-            // close write
-            writer.close();
+            // A failed close is a failed upload (see HdfsWriter.close()); an earlier error stays the reported cause.
+            try {
+                writer.close();
+            } catch (StarRocksException e) {
+                LOG.warn("failed to close writer for {}", remotePath, e);
+                if (status.ok()) {
+                    status = new Status(ErrCode.COMMON_ERROR,
+                            "failed to close writer for " + remotePath + ": " + e.getMessage());
+                }
+            }
         }
 
         if (status.ok()) {
