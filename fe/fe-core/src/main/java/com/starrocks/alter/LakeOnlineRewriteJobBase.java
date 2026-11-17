@@ -914,8 +914,7 @@ public abstract class LakeOnlineRewriteJobBase
                 // metadata) is rejected at commit by LakeTableTxnStateListener#checkShadowIndexesLoaded if it
                 // misses the shadow and commits before this job makes the shadow NORMAL.
                 watershedTxnId = getNextTransactionId();
-                // Only for an older FE taking the job over after a downgrade; this FE redraws it when reserving versions.
-                commitGtid = getNextGtid();
+                watershedGtid = getNextGtid();
 
                 // Journal the durable job state (the watershed, and the shadow index id, K, boundaries and shadow
                 // tablet ids recorded in partitionStates above) FIRST, then install the shadow in the applier,
@@ -1116,47 +1115,6 @@ public abstract class LakeOnlineRewriteJobBase
     }
 
     /**
-<<<<<<< HEAD
-     * First {@code WAITING_TXN} run: allocate the watershed transaction id and expose every
-     * partition's shadow index to the catalog so post-watershed loads double-write it. Mirrors the
-     * standard lake schema-change watershed; a writer that resolved tablets before the exposure is
-     * rejected at commit by LakeTableTxnStateListener rather than detected here.
-     */
-    private void allocateWatershedAndExposeShadow() throws AlterCancelException {
-        long nextTxnId;
-        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
-            OlapTable table = getTableOrThrow();
-            Preconditions.checkState(table.getState() == jobTableState(), table.getState());
-            watershedTxnId = getNextTransactionId();
-            watershedGtid = getNextGtid();
-            exposeShadowIndexToCatalog(table);
-
-            // Getting the watershed and exposing the shadow are not atomic, and the id generator is shared
-            // by the whole cluster, so other ids are routinely drawn in between. That is safe without a
-            // check here: a writer that begins its transaction before resolving tablets does so under the
-            // table READ lock, which this WRITE lock excludes, so any such transaction with an id above the
-            // watershed sees the shadow and writes it. A writer that resolves tablets first (replication, a
-            // bypass-write client with cached metadata) is rejected at commit by
-            // LakeTableTxnStateListener#checkShadowIndexesLoaded if it misses the shadow and commits before
-            // this job makes the shadow NORMAL. The next id is kept only as a breadcrumb for the log line below.
-            nextTxnId = peekNextTransactionId();
-
-            // Re-journal WAITING_TXN so the allocated watershed and the exposure are durable; the
-            // exposure is idempotent, so a leader transfer re-runs it harmlessly.
-            persistStateChange(this, JobState.WAITING_TXN);
-        }
-
-        if (span != null) {
-            span.setAttribute("watershedTxnId", this.watershedTxnId);
-            span.addEvent("exposeShadow");
-        }
-        LOG.info("online rewrite job {} allocated watershed txn id {} and exposed shadow index, next txn id"
-                + " after exposing it: {}", jobId, watershedTxnId, nextTxnId);
-    }
-
-    /**
-=======
->>>>>>> 3c46bf7 ([BugFix][RB-96] Install a range online rewrite's shadow index together with its meta (#83450))
      * Idempotently expose every partition's shadow {@link MaterializedIndex} to the catalog index map
      * with {@code visibleTxnId = watershedTxnId}, so loads after the watershed double-write the shadow
      * while loads before it ignore it. A partition already carrying the shadow (e.g. a replay re-run)
