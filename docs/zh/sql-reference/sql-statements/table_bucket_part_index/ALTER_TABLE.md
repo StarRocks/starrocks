@@ -934,9 +934,11 @@ StarRocks使用 Compaction 机制来合并已加载数据的不同版本。此�
 
 存算分离集群从v3.3.0起支持此功能。
 
+存算分离主键表的 Base Compaction 从 v4.1.4 开始支持。直接使用 `ALTER TABLE ... COMPACT` 即可请求手动 Compaction，无需额外写 `BASE`。从 v4.1.7 开始，`lake_pk_compaction_base_enable_delete_trigger` 只控制自动触发，设置为 `false` 也不影响手动请求；手动请求同样不要求达到两个删除阈值。Tablet 没有删除行时，会回退到普通 Compaction 选取。请求是异步的，且一次不保证合完整个 Tablet。详见[主键表 Base Compaction](../../../administration/management/compaction.md#primary-key-base-compaction)。
+
 > **注意**
 >
-> 从v3.2.13起，可以使用属性[`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#forbid-base-compaction)在特定时间范围内禁止基础合并。
+> [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#禁止-base-compaction) 的 v3.2.13 支持起点适用于存算一体非主键表。4.1 系列不支持给存算分离表设置此属性。存算分离的自动 Base Compaction 时段和最小间隔限制从 v4.2 开始支持；手动 `ALTER TABLE ... COMPACT` 可绕过这些限制。
 
 语法：
 
@@ -963,7 +965,7 @@ ALTER TABLE <tbl_name> CUMULATIVE COMPACT (<partition1_name>[,<partition2_name>,
 ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 ```
 
-`information_schema`数据库中的`be_compactions`表记录 Compaction 结果。可以运行`SELECT * FROM information_schema.be_compactions;`查询 Compaction 后的数据版本。
+存算一体集群可以通过 `information_schema.be_compactions` 查询 Compaction 结果。存算分离集群使用 `SHOW PROC '/compactions'` 查看任务状态，并通过 `information_schema.be_cloud_native_compactions` 查看 Tablet 执行详情，参见[查看 Compaction 任务](../../../administration/management/compaction.md#查看-compaction-任务)。
 
 ### 删除主键索引 (3.3.9 版本起)
 

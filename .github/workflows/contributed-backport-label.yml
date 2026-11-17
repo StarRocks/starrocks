@@ -48,19 +48,32 @@ jobs:
           if [[ -z "$src" ]]; then
             echo "not a backport PR; nothing to do"; exit 0
           fi
+          # A transient GitHub error (e.g. a 504) must not drop the label: the backport would
+          # then be read as an SR-native PR that CD has not synced.
+          retry() {
+            local i
+            for i in 1 2 3 4; do
+              "$@" && return 0
+              echo "::warning::attempt $i of 4 failed: $*" >&2
+              [[ $i -lt 4 ]] && sleep $((i * 10))
+            done
+            return 1
+          }
+          add_label() {
+            gh label create "$1" -R "$REPO" -c 5319e7 -f >/dev/null 2>&1 || true
+            retry gh pr edit "$PR_NUMBER" -R "$REPO" --add-label "$1"
+            echo "added $1 to #$PR_NUMBER (source main #$src)"
+          }
+          labels=$(retry gh pr view "$src" -R "$REPO" --json labels -q '.labels[].name')
           # Does the source (main) PR carry the contributed marker? Accept the old
           # `cd-contributed` or the new `PAI-contributed` during the rename transition.
-          if gh pr view "$src" -R "$REPO" --json labels -q '.labels[].name' | grep -qxE 'cd-contributed|PAI-contributed'; then
-            gh label create PAI-contributed -R "$REPO" -c 5319e7 -f >/dev/null 2>&1 || true
-            gh pr edit "$PR_NUMBER" -R "$REPO" --add-label PAI-contributed
-            echo "added PAI-contributed to #$PR_NUMBER (source main #$src)"
+          if grep -qxE 'cd-contributed|PAI-contributed' <<< "$labels"; then
+            add_label PAI-contributed
           else
             echo "source main #$src has no contributed marker; skip"
           fi
-          if gh pr view "$src" -R "$REPO" --json labels -q '.labels[].name' | grep -qx 'MS-contributed'; then
-            gh label create MS-contributed -R "$REPO" -c 5319e7 -f >/dev/null 2>&1 || true
-            gh pr edit "$PR_NUMBER" -R "$REPO" --add-label MS-contributed
-            echo "added MS-contributed to #$PR_NUMBER (source main #$src)"
+          if grep -qx 'MS-contributed' <<< "$labels"; then
+            add_label MS-contributed
           else
             echo "source main #$src has no MS-contributed marker; skip"
           fi

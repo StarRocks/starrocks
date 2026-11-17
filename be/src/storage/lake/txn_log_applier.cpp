@@ -1413,6 +1413,23 @@ private:
         trim_partial_compaction_last_input_rowset(_metadata, op_compaction, last_input_rowset);
 
         const auto end_input_pos = pre_input_pos + 1;
+
+        // No read finds the IDG entries of the input segments any more: their rssids leave the tablet.
+        // Rewritten segments build the indexes declared by their output schema inline. Segments kept by partial
+        // compaction move into the output rowset under new rssids and read without the index until a later compaction
+        // rewrites them under an indexed schema, since nothing moves their entries to the new rssids. Retire the
+        // entries as the PK path does in MetaFileBuilder::apply_opcompaction; otherwise idg_meta keeps
+        // their .idx files referenced and vacuum never reclaims them.
+        if (_metadata->has_idg_meta()) {
+            std::unordered_set<uint32_t> input_rssids;
+            for (auto iter = first_input_pos; iter != end_input_pos; ++iter) {
+                for (int i = 0; i < iter->segment_metas_size(); ++i) {
+                    input_rssids.insert(get_rssid(*iter, i));
+                }
+            }
+            retire_idg_entries(_metadata.get(), input_rssids);
+        }
+
         for (auto iter = first_input_pos; iter != end_input_pos; ++iter) {
             if (iter != last_input_pos) {
                 // Drop the delete_predicate before archiving into compaction_inputs; it is consumed

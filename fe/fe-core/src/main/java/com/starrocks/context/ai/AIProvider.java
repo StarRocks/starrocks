@@ -100,6 +100,7 @@ public class AIProvider implements Writable {
             case OPENAI -> TAIProviderProtocol.OPENAI;
             case ANTHROPIC -> TAIProviderProtocol.ANTHROPIC;
             case COHERE -> TAIProviderProtocol.COHERE;
+            case DASHSCOPE -> TAIProviderProtocol.DASHSCOPE;
         });
         result.setParams(getParams());
         return result;

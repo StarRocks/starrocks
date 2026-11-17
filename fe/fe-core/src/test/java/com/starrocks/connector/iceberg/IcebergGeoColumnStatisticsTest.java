@@ -89,14 +89,17 @@ class IcebergGeoColumnStatisticsTest {
     }
 
     static Stream<Arguments> geoTables() {
-        return Stream.of(Types.GeographyType.crs84(), Types.GeometryType.crs84())
+        return Stream.of(Types.GeographyType.crs84(), Types.GeometryType.crs84(),
+                        Types.StructType.of(Types.NestedField.optional(3, "point", Types.GeographyType.crs84())))
                 .flatMap(type -> Stream.of(Arguments.of(type, 3, 3), Arguments.of(type, 4, 4), Arguments.of(type, 3, 4)));
     }
 
     @ParameterizedTest(name = "{0}, v{1} to v{2}")
     @MethodSource("geoTables")
-    void testGeoBounds(Type.PrimitiveType geoType, int firstVersion, int secondVersion) throws Exception {
-        BaseTable table = writeTable(geoType, firstVersion, secondVersion);
+    void testGeoBounds(Type shapeType, int firstVersion, int secondVersion) throws Exception {
+        boolean nested = shapeType.isStructType();
+        BaseTable table = writeTable(shapeType, firstVersion, secondVersion);
+        int geoId = table.schema().findField(nested ? "shape.point" : "shape").fieldId();
         List<Column> columns = IcebergApiConverter.toFullSchemas(table.schema());
         IcebergTable srTable = new IcebergTable(1, table.name(), CATALOG, "resource_name", "test_db",
                 table.name(), "", columns, table, new HashMap<>());
@@ -115,8 +118,8 @@ class IcebergGeoColumnStatisticsTest {
                         assertEquals(Double.NEGATIVE_INFINITY, geo.getMinValue());
                         assertEquals(Double.POSITIVE_INFINITY, geo.getMaxValue());
                         assertEquals(ColumnStatistic.StatisticType.ESTIMATE, geo.getType());
-                        assertEquals(0.5, geo.getNullsFraction());
-                        assertFileStatistics(metadata, table.schema().findField("shape").fieldId());
+                        assertEquals(nested ? 0.0 : 0.5, geo.getNullsFraction());
+                        assertFileStatistics(metadata, geoId, nested);
                     },
                     // The stats requests for SELECT id and SELECT count(*) omit the geo column.
                     () -> assertIdBounds(planStatistics(newMetadata(executor), srTable, Map.of(id, columns.get(0)))
@@ -134,7 +137,8 @@ class IcebergGeoColumnStatisticsTest {
         assertEquals(0.0, id.getNullsFraction());
     }
 
-    private static void assertFileStatistics(IcebergMetadata metadata, int shapeId) throws IllegalAccessException {
+    private static void assertFileStatistics(IcebergMetadata metadata, int shapeId, boolean nested)
+            throws IllegalAccessException {
         // Verify the retained GEO counts and sizes alongside the absence of GEO bounds.
         Object provider = FieldUtils.readField(metadata, "statisticProvider", true);
         Map<?, ?> aggregates = (Map<?, ?>) FieldUtils.readField(provider, "icebergFileStatistics", true);
@@ -144,7 +148,9 @@ class IcebergGeoColumnStatisticsTest {
         assertFalse(stats.getMaxValues().containsKey(shapeId));
         assertEquals(4, stats.getRecordCount());
         assertEquals(2L, stats.getNullCounts().get(shapeId));
-        assertEquals(4, stats.getColumnSizeRecordCount(shapeId));
+        if (!nested) {
+            assertEquals(4, stats.getColumnSizeRecordCount(shapeId));
+        }
         assertTrue(stats.getColumnSizes().get(shapeId) > 0);
     }
 
@@ -166,15 +172,16 @@ class IcebergGeoColumnStatisticsTest {
                         Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, "true")), null);
     }
 
-    private BaseTable writeTable(Type.PrimitiveType geoType, int firstVersion, int secondVersion) throws Exception {
+    private BaseTable writeTable(Type shapeType, int firstVersion, int secondVersion) throws Exception {
         Schema schema = new Schema(Types.NestedField.required(1, "id", Types.IntegerType.get()),
-                Types.NestedField.optional(2, "shape", geoType));
+                Types.NestedField.optional(2, "shape", shapeType));
         var ops = new TestTables.TestTableOperations(CATALOG, tableDir.toFile());
         ops.commit(null, TableMetadata.newTableMetadata(schema, PartitionSpec.unpartitioned(), SortOrder.unsorted(),
                 tableDir.toUri().toString(), Map.of(TableProperties.FORMAT_VERSION, Integer.toString(firstVersion))));
         BaseTable table = new BaseTable(ops, CATALOG);
         Path dataDir = Files.createDirectory(tableDir.resolve("data"));
-        int shapeId = table.schema().findField("shape").fieldId();
+        int shapeId = table.schema().findField(shapeType.isStructType() ? "shape.point" : "shape").fieldId();
+        Type.PrimitiveType geoType = table.schema().findType(shapeId).asPrimitiveType();
         table.newFastAppend().appendFile(writeFile(table, dataDir, geoType, shapeId, 1)).commit();
         if (firstVersion != secondVersion) {
             table.updateProperties().set(TableProperties.FORMAT_VERSION, Integer.toString(secondVersion)).commit();
@@ -210,8 +217,15 @@ class IcebergGeoColumnStatisticsTest {
             ByteBuffer point = ByteBuffer.allocate(1 + Integer.BYTES + 2 * Double.BYTES).order(ByteOrder.LITTLE_ENDIAN);
             point.put((byte) 1).putInt(1).putDouble(firstId).putDouble(10).flip();
             GenericRecord row = GenericRecord.create(table.schema());
-            writer.write(row.copy("id", firstId, "shape", point));
-            writer.write(row.copy("id", firstId + 1));
+            Type shapeType = table.schema().findType("shape");
+            if (shapeType.isStructType()) {
+                GenericRecord shape = GenericRecord.create(shapeType.asStructType());
+                writer.write(row.copy("id", firstId, "shape", shape.copy("point", point)));
+                writer.write(row.copy("id", firstId + 1, "shape", shape));
+            } else {
+                writer.write(row.copy("id", firstId, "shape", point));
+                writer.write(row.copy("id", firstId + 1));
+            }
         }
         DataFile file = writer.toDataFile();
         if (geoType.typeId() == Type.TypeID.GEOGRAPHY) {

@@ -150,6 +150,8 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         heartbeat_result.backend_info.__set_version(get_short_version());
         heartbeat_result.backend_info.__set_num_hardware_cores(num_hardware_cores);
         heartbeat_result.backend_info.__set_mem_limit_bytes(RuntimeEnv::GetInstance()->process_mem_tracker()->limit());
+        // Lets FE send this node the lake ADD/DROP INDEX fast path. See TBackendInfo.
+        heartbeat_result.backend_info.__set_support_lake_index_fast_path(true);
         if (reboot_time == 0) {
             std::time_t currTime = std::time(nullptr);
             reboot_time = static_cast<int64_t>(currTime);

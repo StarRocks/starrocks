@@ -47,6 +47,7 @@
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/exec_env.h"
 #include "fs/fs_util.h"
+#include "fs/remote_read_context.h"
 #include "gen_cpp/Types_types.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
@@ -70,6 +71,7 @@ DECLARE_int64(fslib_gs_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_min_upload_part_size);
 DECLARE_bool(fslib_s3_multipart_equal_part_size);
+DECLARE_bool(fs_enable_buffer_prefetch);
 #endif
 
 namespace brpc {
@@ -633,6 +635,41 @@ TEST_F(ConfigUpdateHooksTest, update_s3_multipart_equal_part_size) {
         EXPECT_EQ(value, config::s3_multipart_equal_part_size);
         EXPECT_EQ(value, FLAGS_fslib_s3_multipart_equal_part_size);
     }
+}
+
+// While the remote I/O scheduler runs, the read-ahead strategies it replaces cannot be turned back on and the cache
+// it needs cannot be turned off: the update is rejected and rolled back. Without the scheduler they update as before.
+TEST_F(ConfigUpdateHooksTest, remote_io_scheduler_rejects_conflicting_updates) {
+    gflags::FlagSaver flag_saver;
+    DeferOp restore([] {
+        g_remote_io_scheduler_enabled.store(false);
+        EXPECT_OK(config::set_config("io_coalesce_lake_read_enable", "false"));
+        EXPECT_OK(config::set_config("starlet_fs_read_prefetch_enable", "false"));
+    });
+    auto* registry = ConfigUpdateRegistry::instance();
+
+    g_remote_io_scheduler_enabled.store(true);
+    EXPECT_TRUE(registry->update_config("io_coalesce_lake_read_enable", "true").is_not_supported());
+    EXPECT_FALSE(config::io_coalesce_lake_read_enable);
+    EXPECT_OK(registry->update_config("io_coalesce_lake_read_enable", "false"));
+
+    EXPECT_TRUE(registry->update_config("starlet_fs_read_prefetch_enable", "true").is_not_supported());
+    EXPECT_FALSE(config::starlet_fs_read_prefetch_enable);
+    // Turning it off is accepted, and the starlet flag stays off.
+    FLAGS_fs_enable_buffer_prefetch = true;
+    EXPECT_OK(registry->update_config("starlet_fs_read_prefetch_enable", "false"));
+    EXPECT_FALSE(FLAGS_fs_enable_buffer_prefetch);
+
+    const bool use_star_cache = config::starlet_use_star_cache;
+    EXPECT_TRUE(registry->update_config("starlet_use_star_cache", "false").is_not_supported());
+    EXPECT_EQ(use_star_cache, config::starlet_use_star_cache);
+
+    g_remote_io_scheduler_enabled.store(false);
+    EXPECT_OK(registry->update_config("io_coalesce_lake_read_enable", "true"));
+    EXPECT_TRUE(config::io_coalesce_lake_read_enable);
+    EXPECT_OK(registry->update_config("starlet_fs_read_prefetch_enable", "true"));
+    EXPECT_TRUE(config::starlet_fs_read_prefetch_enable);
+    EXPECT_TRUE(FLAGS_fs_enable_buffer_prefetch);
 }
 
 #endif // USE_STAROS
