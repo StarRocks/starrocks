@@ -1000,14 +1000,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             throw new MetaNotFoundException("table " + this.tableId + " does not exist");
         }
 
+        StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+        TExecPlanFragmentParams planParams = null;
+        StreamLoadTask streamLoadTask;
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(this);
             info.setTxnId(txnId);
-            StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
-            TExecPlanFragmentParams planParams = null;
             Coordinator coord = null;
             if (Config.enable_pipeline_routine_load && beId != RoutineLoadTaskInfo.INVALID_BE_ID) {
                 // Run this routine load task on the pipeline engine. Reuse LoadPlanner (ROUTINE_LOAD)
@@ -1077,20 +1078,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             // Register the task only after planning succeeded, so a plan failure (schema change in
             // flight, no available replica, pinned BE unavailable, ...) does not leave an orphan
             // StreamLoadTask registered in StreamLoadMgr.
-            StreamLoadTask streamLoadTask = streamLoadManager.createLoadTaskWithoutLock(db, table, label, "", "",
+            streamLoadTask = streamLoadManager.createLoadTaskWithoutLock(db, table, label, "", "",
                     taskTimeoutSecond * 1000, true, computeResource);
             streamLoadTask.setTxnId(txnId);
             streamLoadTask.setLabel(label);
             streamLoadTask.setTUniqueId(loadId);
-            streamLoadManager.addLoadTask(streamLoadTask);
             streamLoadTask.setCoordinator(coord);
 
             QeProcessorImpl.INSTANCE.registerQuery(loadId, coord);
-
-            LOG.info(new LogBuilder("routine load task create stream load task success").
-                    add("transactionId", txnId).
-                    add("label", label).
-                    add("streamLoadTaskId", streamLoadTask.getId()));
 
             TransactionState txnState =
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
@@ -1101,11 +1096,21 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             planParams.setImport_label(txnState.getLabel());
             planParams.setDb_name(db.getFullName());
             planParams.setLoad_job_id(txnId);
-
-            return planParams;
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
+
+        // Register the task after releasing the table lock. addLoadTask waits for the StreamLoadMgr write lock, whose
+        // holder may wait for this table's lock (aborting a transaction takes it); with a table writer queued behind
+        // the READ lock held here, neither could proceed.
+        streamLoadManager.addLoadTask(streamLoadTask);
+
+        LOG.info(new LogBuilder("routine load task create stream load task success").
+                add("transactionId", txnId).
+                add("label", label).
+                add("streamLoadTaskId", streamLoadTask.getId()));
+
+        return planParams;
     }
 
     // if task not exists, before aborted will reset the txn attachment to null, task will not be updated
