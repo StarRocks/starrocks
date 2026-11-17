@@ -32,6 +32,10 @@ struct VariantShreddedReadHints {
     // This is what column readers consume for segment-level path pruning.
     // Empty means no restriction: the reader auto-discovers paths from the shredded schema.
     std::vector<VariantPath> parsed_shredded_paths;
+    // True when the only use of the column is its outer null mask (`v IS [NOT] NULL`, sent by the FE as the
+    // access path /v/OFFSET) and no shredded path is requested. The reader then fills the null mask from the
+    // metadata column and reads nothing else.
+    bool null_only = false;
 
     // Appends a path in both string and parsed form, keeping the two vectors in sync.
     Status add_path(std::string path);

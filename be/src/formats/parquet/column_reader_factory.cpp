@@ -626,6 +626,7 @@ Status VariantShreddedReadHints::add_path(std::string path) {
 void VariantShreddedReadHints::clear() {
     shredded_paths.clear();
     parsed_shredded_paths.clear();
+    null_only = false;
 }
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
@@ -865,6 +866,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
     reader->set_root_unsupported_reason(std::move(root_unsupported_reason));
     reader->set_root_raw_encoding(root_raw_encoding);
     reader->set_root_array_node(std::move(root_array_node));
+    reader->set_null_only(hints.null_only && hints.parsed_shredded_paths.empty());
     return ColumnReaderPtr(std::move(reader));
 }
 
