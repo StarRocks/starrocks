@@ -784,7 +784,8 @@ public class MvRewritePreprocessorTest extends MVTestBase {
      */
     @Test
     public void testCachedInvalidPlanSkipsBaseTableResolution() {
-        String sql = "create materialized view invalid_plan_mv distributed by random " +
+        // deferred: no refresh task run in the background, it would resolve t1 while the mock below counts
+        String sql = "create materialized view invalid_plan_mv distributed by random refresh deferred manual " +
                 "as select count(distinct cnt) from (select count(v1) as cnt from t1 group by k1) t";
         starRocksAssert.withMaterializedView(sql, (obj) -> {
             String mvName = (String) obj;
@@ -803,12 +804,16 @@ public class MvRewritePreprocessorTest extends MVTestBase {
             Set<Table> queryTables = MvUtils.getAllTables(result.second).stream().collect(Collectors.toSet());
             Assertions.assertFalse(queryTables.isEmpty());
 
-            // JMockit reverts MockUps created inside a test method automatically when the test ends
+            // JMockit reverts MockUps created inside a test method automatically when the test ends.
+            // The mock is JVM-wide, so only count calls made by this thread, not by background daemons.
+            Thread testThread = Thread.currentThread();
             AtomicInteger getTableCheckedCalls = new AtomicInteger();
             new MockUp<MvUtils>() {
                 @Mock
                 public Table getTableChecked(Invocation invocation, BaseTableInfo baseTableInfo) {
-                    getTableCheckedCalls.incrementAndGet();
+                    if (Thread.currentThread() == testThread) {
+                        getTableCheckedCalls.incrementAndGet();
+                    }
                     return invocation.proceed(baseTableInfo);
                 }
             };
