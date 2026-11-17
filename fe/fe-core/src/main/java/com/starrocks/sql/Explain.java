@@ -58,6 +58,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitConsumeOperator;
@@ -194,6 +195,40 @@ public class Explain {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public OperatorStr visitPhysicalAIProject(OptExpression optExpression,
+                                                  OperatorPrinter.ExplainContext context) {
+            PhysicalAIProjectOperator aiProject = optExpression.getOp().cast();
+            String expressions = aiProject.getColumnRefMap().entrySet().stream()
+                    .map(entry -> EXPR_PRINTER.print(entry.getKey()) + " := " + EXPR_PRINTER.print(entry.getValue()))
+                    .collect(Collectors.joining(", "));
+            StringBuilder sb = new StringBuilder("- AI PROJECT [").append(expressions).append("]\n");
+            buildCommonProperty(sb, aiProject, context.step);
+            return new OperatorStr(sb.toString(), context.step, buildChildOperatorStr(optExpression, context.step));
+        }
+
+        // Scans without a dedicated printer. The default visitPhysicalScan goes back to visit(),
+        // which dispatches to the same scan again and recurses until the stack overflows.
+        @Override
+        public OperatorStr visitPhysicalScan(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
+            PhysicalScanOperator scan = (PhysicalScanOperator) optExpression.getOp();
+            String scanName = scan.getOpType().name().replaceFirst("^PHYSICAL_", "").replace('_', '-');
+
+            StringBuilder sb = new StringBuilder("- ").append(scanName).append(" [")
+                    .append(scan.getTable().getName())
+                    .append("]")
+                    .append(buildOutputColumns(scan,
+                            "[" + scan.getOutputColumns().stream().map(EXPR_PRINTER::print)
+                                    .collect(Collectors.joining(", ")) + "]"))
+                    .append("\n");
+            buildCostEstimate(sb, optExpression, context.step);
+            buildCommonProperty(sb, scan, context.step);
+            return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
+        }
+
+        @Override
+>>>>>>> d977809 ([BugFix][RB-545] Fix EXPLAIN LOGICAL stack overflow on scans without a printer (#83469))
         public OperatorStr visitPhysicalOlapScan(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
             PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
 
