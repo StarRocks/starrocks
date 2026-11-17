@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include "column/column_helper.h"
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
@@ -54,30 +56,54 @@ protected:
     static constexpr double MAX_COMPRESSION = 10000.0;
     static constexpr double DEFAULT_COMPRESSION_FACTOR = 10000.0;
 
+    static double compression_or_default(double compression) {
+        if (compression < MIN_COMPRESSION || compression > MAX_COMPRESSION) {
+            LOG(WARNING) << "Compression factor out of range. Using default compression factor: "
+                         << DEFAULT_COMPRESSION_FACTOR;
+            return DEFAULT_COMPRESSION_FACTOR;
+        }
+        return compression;
+    }
+
+    // nullopt when the call has a compression argument but `ctx` does not carry its constant, as in the nested
+    // context of <fn>_state_merge/_state_union.
+    virtual std::optional<double> compression_argument(FunctionContext* ctx) const = 0;
+
+    // A serialized PercentileValue is a one-byte type tag followed by a TDigest whose first field is its compression.
+    static double serialized_compression(const char* serialized) {
+        Value compression;
+        memcpy(&compression, serialized + 1, sizeof(compression));
+        return compression;
+    }
+
+    void merge_serialized_digest(FunctionContext* ctx, AggDataPtr __restrict state, const char* serialized) const {
+        if (UNLIKELY(!data(state).compression_initialized)) {
+            // Prefer the call's argument: a never-updated state, or a digest from an older BE's streaming
+            // path, carries TDigest's default compression.
+            data(state).reinit_with_compression(compression_argument(ctx).value_or(serialized_compression(serialized)));
+        }
+        PercentileValue src_percentile;
+        src_percentile.deserialize(serialized);
+        int64_t prev_memory = data(state).percentile->mem_usage();
+        data(state).percentile->merge(&src_percentile);
+        ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
+    }
+
 public:
-    virtual double get_compression_factor(FunctionContext* ctx) const = 0;
+    double get_compression_factor(FunctionContext* ctx) const {
+        return compression_argument(ctx).value_or(DEFAULT_COMPRESSION_FACTOR);
+    }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        double compression = get_compression_factor(ctx);
-        // Lazy initialization of compression factor on first merge
-        if (UNLIKELY(!data(state).compression_initialized)) {
-            data(state).reinit_with_compression(compression);
-        }
-
         const auto* binary_column = down_cast<const BinaryColumn*>(column);
         Slice src = binary_column->get_slice(row_num);
         double quantile;
         memcpy(&quantile, src.data, sizeof(double));
 
-        PercentileApproxState src_percentile(compression);
-        src_percentile.percentile->deserialize((char*)src.data + sizeof(double));
-
-        int64_t prev_memory = data(state).percentile->mem_usage();
-        data(state).percentile->merge(src_percentile.percentile.get());
+        merge_serialized_digest(ctx, state, src.data + sizeof(double));
         if (data(state).targetQuantiles.empty()) {
             data(state).targetQuantiles.push_back(quantile);
         }
-        ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -101,17 +127,15 @@ public:
 // PercentileApproxAggregateFunction: percentile_approx(expr, DOUBLE p[, DOUBLE compression])
 class PercentileApproxAggregateFunction : public PercentileApproxAggregateFunctionBase {
 public:
-    double get_compression_factor(FunctionContext* ctx) const override {
-        double compression = DEFAULT_COMPRESSION_FACTOR;
-        if (ctx->get_num_args() > 2) {
-            compression = ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(2));
-            if (compression < MIN_COMPRESSION || compression > MAX_COMPRESSION) {
-                LOG(WARNING) << "Compression factor out of range. Using default compression factor: "
-                             << DEFAULT_COMPRESSION_FACTOR;
-                compression = DEFAULT_COMPRESSION_FACTOR;
-            }
+    std::optional<double> compression_argument(FunctionContext* ctx) const override {
+        if (ctx->get_num_args() <= 2) {
+            return DEFAULT_COMPRESSION_FACTOR;
         }
-        return compression;
+        auto const_col = ctx->get_constant_column(2);
+        if (const_col == nullptr) {
+            return std::nullopt;
+        }
+        return compression_or_default(ColumnHelper::get_const_value<TYPE_DOUBLE>(const_col));
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
@@ -138,6 +162,7 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
+        double compression = get_compression_factor(ctx);
         // argument 0
         const auto* data_column = down_cast<const DoubleColumn*>(src[0].get());
         // argument 1
@@ -153,7 +178,7 @@ public:
         // serialize percentile one by one
         size_t old_size = bytes.size();
         for (size_t i = 0; i < chunk_size; ++i) {
-            PercentileValue percentile;
+            PercentileValue percentile(compression);
             percentile.add(implicit_cast<float>(data_column->immutable_data()[i]));
 
             size_t new_size = old_size + sizeof(double) + percentile.serialize_size();
@@ -173,25 +198,19 @@ class PercentileApproxWeightedAggregateFunction : public PercentileApproxAggrega
 public:
     // SplitAggregateRule pass the const args to merge phase aggregator for performance.
     // Compression parameter is always the last constant parameter (if provided)
-    double get_compression_factor(FunctionContext* ctx) const override {
-        double compression = DEFAULT_COMPRESSION_FACTOR;
+    std::optional<double> compression_argument(FunctionContext* ctx) const override {
         int num_args = ctx->get_num_args();
-        if (num_args > 3) {
-            for (int i = num_args - 1; i >= 0; i--) {
-                auto const_col = ctx->get_constant_column(i);
-                if (const_col != nullptr) {
-                    // Found the last constant column, this should be compression
-                    compression = ColumnHelper::get_const_value<TYPE_DOUBLE>(const_col);
-                    if (compression < MIN_COMPRESSION || compression > MAX_COMPRESSION) {
-                        LOG(WARNING) << "Compression factor out of range. Using default compression factor: "
-                                     << DEFAULT_COMPRESSION_FACTOR;
-                        compression = DEFAULT_COMPRESSION_FACTOR;
-                    }
-                    break;
-                }
+        if (num_args <= 3) {
+            return DEFAULT_COMPRESSION_FACTOR;
+        }
+        for (int i = num_args - 1; i >= 0; i--) {
+            auto const_col = ctx->get_constant_column(i);
+            if (const_col != nullptr) {
+                // Found the last constant column, this should be compression
+                return compression_or_default(ColumnHelper::get_const_value<TYPE_DOUBLE>(const_col));
             }
         }
-        return compression;
+        return std::nullopt;
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
@@ -223,6 +242,7 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
+        double compression = get_compression_factor(ctx);
         // argument 0
         const auto* data_column = down_cast<const DoubleColumn*>(src[0].get());
         // argument 2
@@ -241,7 +261,7 @@ public:
             int64_t weight = src[1]->get(0).get_int64();
             if (LIKELY(weight != 0)) {
                 for (size_t i = 0; i < chunk_size; ++i) {
-                    PercentileValue percentile;
+                    PercentileValue percentile(compression);
                     double value = data_column->immutable_data()[i];
                     percentile.add(implicit_cast<float>(value), weight);
                     size_t new_size = old_size + sizeof(double) + percentile.serialize_size();
@@ -253,7 +273,7 @@ public:
                 }
             } else {
                 // TODO: optimize for empty weight but should not happen frequently
-                PercentileValue empty_percentile;
+                PercentileValue empty_percentile(compression);
                 static size_t delta_size = sizeof(double) + empty_percentile.serialize_size();
                 for (size_t i = 0; i < chunk_size; ++i) {
                     size_t new_size = old_size + delta_size;
@@ -268,7 +288,7 @@ public:
             const auto* weight_column = down_cast<const Int64Column*>(src[1].get());
             for (size_t i = 0; i < chunk_size; ++i) {
                 int64_t weight = weight_column->immutable_data()[i];
-                PercentileValue percentile;
+                PercentileValue percentile(compression);
                 double value = data_column->immutable_data()[i];
                 if (LIKELY(weight != 0)) {
                     percentile.add(implicit_cast<float>(value), weight);
@@ -320,12 +340,6 @@ public:
 
     // Override merge method, deserialize using new format: [count(4 bytes), q1...qn(8*n bytes), TDigest_data]
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        double compression = get_compression_factor(ctx);
-        // Lazy initialization of compression factor on first merge
-        if (UNLIKELY(!data(state).compression_initialized)) {
-            data(state).reinit_with_compression(compression);
-        }
-
         const auto* binary_column = down_cast<const BinaryColumn*>(column);
         Slice src = binary_column->get_slice(row_num);
 
@@ -339,14 +353,7 @@ public:
             memcpy(data(state).targetQuantiles.data(), (char*)src.data + sizeof(uint32_t), count * sizeof(double));
         }
 
-        // Deserialize TDigest (skip quantiles array, only need TDigest for merging)
-        PercentileApproxState src_percentile(compression);
-        src_percentile.percentile->deserialize((char*)src.data + sizeof(uint32_t) + count * sizeof(double));
-
-        // Merge into current state
-        int64_t prev_memory = data(state).percentile->mem_usage();
-        data(state).percentile->merge(src_percentile.percentile.get());
-        ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
+        merge_serialized_digest(ctx, state, src.data + sizeof(uint32_t) + count * sizeof(double));
     }
 
     // Override serialize_to_column method, serialize using new format: [count(4 bytes), q1...qn(8*n bytes), TDigest_data]
@@ -386,6 +393,7 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
+        double compression = get_compression_factor(ctx);
         // argument 0
         const auto* data_column = down_cast<const DoubleColumn*>(src[0].get());
         // argument 1: ARRAY<DOUBLE>
@@ -418,7 +426,7 @@ public:
         // serialize percentile one by one
         size_t old_size = bytes.size();
         for (size_t i = 0; i < chunk_size; ++i) {
-            PercentileValue percentile;
+            PercentileValue percentile(compression);
             percentile.add(implicit_cast<float>(data_column->immutable_data()[i]));
 
             size_t new_size = old_size + sizeof(uint32_t) + count * sizeof(double) + percentile.serialize_size();
@@ -478,12 +486,6 @@ public:
 
     // Override merge method, deserialize using new format: [count(4 bytes), q1...qn(8*n bytes), TDigest_data]
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        double compression = get_compression_factor(ctx);
-        // Lazy initialization of compression factor on first merge
-        if (UNLIKELY(!data(state).compression_initialized)) {
-            data(state).reinit_with_compression(compression);
-        }
-
         const auto* binary_column = down_cast<const BinaryColumn*>(column);
         Slice src = binary_column->get_slice(row_num);
 
@@ -497,14 +499,7 @@ public:
             memcpy(data(state).targetQuantiles.data(), (char*)src.data + sizeof(uint32_t), count * sizeof(double));
         }
 
-        // Deserialize TDigest (skip quantiles array, only need TDigest for merging)
-        PercentileApproxState src_percentile(compression);
-        src_percentile.percentile->deserialize((char*)src.data + sizeof(uint32_t) + count * sizeof(double));
-
-        // Merge into current state
-        int64_t prev_memory = data(state).percentile->mem_usage();
-        data(state).percentile->merge(src_percentile.percentile.get());
-        ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
+        merge_serialized_digest(ctx, state, src.data + sizeof(uint32_t) + count * sizeof(double));
     }
 
     // Override serialize_to_column method, serialize using new format: [count(4 bytes), q1...qn(8*n bytes), TDigest_data]
@@ -544,6 +539,7 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
+        double compression = get_compression_factor(ctx);
         // argument 0
         const auto* data_column = down_cast<const DoubleColumn*>(src[0].get());
         // argument 2: ARRAY<DOUBLE>
@@ -580,7 +576,7 @@ public:
             int64_t weight = src[1]->get(0).get_int64();
             if (LIKELY(weight != 0)) {
                 for (size_t i = 0; i < chunk_size; ++i) {
-                    PercentileValue percentile;
+                    PercentileValue percentile(compression);
                     double value = data_column->immutable_data()[i];
                     percentile.add(implicit_cast<float>(value), weight);
 
@@ -600,7 +596,7 @@ public:
                 }
             } else {
                 // TODO: optimize for empty weight but should not happen frequently
-                PercentileValue empty_percentile;
+                PercentileValue empty_percentile(compression);
                 size_t delta_size = sizeof(uint32_t) + count * sizeof(double) + empty_percentile.serialize_size();
                 for (size_t i = 0; i < chunk_size; ++i) {
                     size_t new_size = old_size + delta_size;
@@ -621,7 +617,7 @@ public:
             const auto* weight_column = down_cast<const Int64Column*>(src[1].get());
             for (size_t i = 0; i < chunk_size; ++i) {
                 int64_t weight = weight_column->immutable_data()[i];
-                PercentileValue percentile;
+                PercentileValue percentile(compression);
                 double value = data_column->immutable_data()[i];
                 if (LIKELY(weight != 0)) {
                     percentile.add(implicit_cast<float>(value), weight);
