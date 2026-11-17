@@ -18,7 +18,33 @@
 #include <unordered_map>
 #include <unordered_set>
 
+<<<<<<< HEAD:be/src/exec/pipeline/fragment_executor.cpp
 #include "common/config.h"
+=======
+#include "base/failpoint/fail_point.h"
+#include "base/time/time.h"
+#include "base/uid_util.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/runtime_profile.h"
+#include "common/util/thrift_util.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_context_mgr.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/stream_load_context_handle.h"
+#include "compute_env/load/stream_load_pipe_attachment.h"
+#include "compute_env/pipeline/driver_limiter.h"
+#include "compute_env/query/query_remote_read.h"
+#include "compute_env/workgroup/pipeline_executor_set.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
+#include "connector_primitive/data_source_provider.h"
+#include "data_sink/exchange/data_stream_sender.h"
+#include "data_workflows/load/batch_write/batch_write_mgr.h"
+>>>>>>> 6506f99 ([BugFix] Propagate fragment cancellation to stream load pipes (#82741)):be/src/orchestration/fragment_executor.cpp
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
@@ -42,6 +68,7 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
+<<<<<<< HEAD:be/src/exec/pipeline/fragment_executor.cpp
 #include "runtime/exec_env.h"
 #include "runtime/result_sink.h"
 #include "runtime/stream_load/stream_load_context.h"
@@ -51,6 +78,11 @@
 #include "util/runtime_profile.h"
 #include "util/time.h"
 #include "util/uid_util.h"
+=======
+#include "runtime/descriptors_ext.h"
+#include "runtime/fragment_attachment.h"
+#include "runtime/runtime_filter_query_lifecycle.h"
+>>>>>>> 6506f99 ([BugFix] Propagate fragment cancellation to stream load pipes (#82741)):be/src/orchestration/fragment_executor.cpp
 
 namespace starrocks::pipeline {
 
@@ -619,6 +651,55 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
 Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     const TExecPlanFragmentParams& unique_request = request.unique();
+    if (request.common().query_options.query_type == TQueryType::LOAD) {
+        std::vector<std::unique_ptr<FragmentAttachment>> attachments;
+        auto bind_pipes = [&](const std::vector<TScanRangeParams>& scan_ranges) -> Status {
+            for (const auto& scan_range : scan_ranges) {
+                if (!scan_range.scan_range.__isset.broker_scan_range) {
+                    continue;
+                }
+                const auto& broker_range = scan_range.scan_range.broker_scan_range;
+                // Channel and merge-commit inputs are prepared below with StreamLoadContextHandle.
+                if (broker_range.__isset.channel_id) {
+                    continue;
+                }
+                for (const auto& range : broker_range.ranges) {
+                    if (range.file_type != TFileType::FILE_STREAM) {
+                        continue;
+                    }
+                    auto pipe = exec_env->load_stream_mgr()->get(range.load_id);
+                    if (pipe == nullptr) {
+                        auto status = Status::InternalError("Invalid or outdated load id " + print_id(range.load_id));
+                        for (const auto& attachment : attachments) {
+                            attachment->close(status);
+                        }
+                        return status;
+                    }
+                    attachments.emplace_back(std::make_unique<StreamLoadPipeAttachment>(std::move(pipe)));
+                }
+            }
+            return Status::OK();
+        };
+        for (const auto& [node_id, scan_ranges] : unique_request.params.per_node_scan_ranges) {
+            if (request.per_driver_seq_scan_ranges_of_node(node_id).empty()) {
+                RETURN_IF_ERROR(bind_pipes(scan_ranges));
+            }
+        }
+        if (unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
+            for (const auto& [node_id, per_driver_ranges] : unique_request.params.node_to_per_driver_seq_scan_ranges) {
+                for (const auto& [driver_seq, scan_ranges] : per_driver_ranges) {
+                    RETURN_IF_ERROR(bind_pipes(scan_ranges));
+                }
+            }
+        }
+        // FE creates one input mode per fragment: existing BE-local pipes or channel inputs.
+        // Channel-only fragments fall through to StreamLoadContextHandle preparation below.
+        if (!attachments.empty()) {
+            _fragment_ctx->set_fragment_attachments(std::move(attachments));
+            return Status::OK();
+        }
+    }
+
     if (!unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
         return Status::OK();
     }

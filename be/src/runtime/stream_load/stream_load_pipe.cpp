@@ -99,7 +99,7 @@ StatusOr<ByteBufferPtr> StreamLoadPipe::read() {
 
     // cancelled
     if (_cancelled) {
-        return Status::EndOfFile("all data has been read");
+        return _err_st;
     }
 
     // finished
