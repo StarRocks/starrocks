@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 
 #include <cstring>
+#include <memory>
 #include <vector>
 
 #include "base/time/timezone_utils.h"
@@ -278,6 +279,26 @@ TEST(VariantRowValueTest, ToJsonNanosecondTimestamps) {
     EXPECT_EQ(R"("1969-12-31 23:59:59.999999999")", to_json(VariantType::TIMESTAMP_NTZ_NANOS, -1, shanghai));
     EXPECT_EQ(R"("2025-01-02 03:04:05+00:00")",
               to_json(VariantType::TIMESTAMP_TZ_NANOS, 1735787045LL * 1000000000, cctz::utc_time_zone()));
+}
+
+TEST(VariantMetadataTest, GetKeyRejectsTruncatedOffsetTable) {
+    // The dictionary size says 255 keys, but the metadata has no offset table: reading key 254 must fail, not read past
+    // the buffer.
+    // The bytes sit in a heap buffer of exactly their size, so that ASAN sees any read past them.
+    const char truncated_bytes[] = {'\x01', '\xff', '\x00'};
+    const std::unique_ptr<char[]> truncated(new char[sizeof(truncated_bytes)]);
+    memcpy(truncated.get(), truncated_bytes, sizeof(truncated_bytes));
+    VariantMetadata truncated_metadata(std::string_view(truncated.get(), sizeof(truncated_bytes)));
+    EXPECT_FALSE(truncated_metadata.get_key(254).ok());
+
+    const std::string valid(
+            "\x01\x01\x00\x05"
+            "extra",
+            9);
+    VariantMetadata valid_metadata(valid);
+    auto key = valid_metadata.get_key(0);
+    ASSERT_TRUE(key.ok()) << key.status();
+    EXPECT_EQ("extra", key.value());
 }
 
 TEST(VariantRowValueTest, CompareFallbackToRawWhenToJsonFails) {
