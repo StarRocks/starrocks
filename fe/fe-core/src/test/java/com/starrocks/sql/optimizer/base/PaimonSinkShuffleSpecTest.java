@@ -45,6 +45,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -77,6 +78,7 @@ public class PaimonSinkShuffleSpecTest {
         for (DataPartition sourcePartition : List.of(DataPartition.RANDOM, DataPartition.UNPARTITIONED)) {
             ExecPlan plan = inputPlan(sourcePartition);
             PlanNode oldRoot = plan.getTopFragment().getPlanRoot();
+            List<Expr> sourceExprs = List.copyOf(plan.getOutputExprs());
             oldRoot.setLimit(5); // Existing LIMIT/gather remains BELOW the mandatory native calculation.
             TPaimonTableSink sink = sink(7);
             int bucket = PaimonSinkShuffleSpec.installBucketRouting(plan, sink);
@@ -99,11 +101,19 @@ public class PaimonSinkShuffleSpecTest {
             PlanFragment sender = plan.getFragments().get(1);
             Assertions.assertEquals(3, sender.getOutputExprs().size());
             ProjectNode routing = (ProjectNode) sender.getPlanRoot();
-            Assertions.assertSame(oldRoot, routing.getChild(0).getChild(0));
+            Assertions.assertSame(oldRoot, routing.getChild(0));
+            for (int i = 0; i < sourceExprs.size(); ++i) {
+                SlotRef outputSlot = (SlotRef) plan.getOutputExprs().get(i);
+                SlotRef input = (SlotRef) routing.getSlotMap().get(outputSlot.getSlotId());
+                Assertions.assertEquals(((SlotRef) sourceExprs.get(i)).getSlotId(), input.getSlotId());
+            }
             Assertions.assertEquals(5, oldRoot.getLimit());
             FunctionCallExpr function = (FunctionCallExpr) routing.getSlotMap().get(new SlotId(bucket));
             Assertions.assertEquals("__paimon_bucket", function.getFunctionName());
             Assertions.assertFalse(function.isNullable());
+            FunctionCallExpr row = (FunctionCallExpr) function.getChild(1);
+            Assertions.assertEquals(((SlotRef) sourceExprs.get(1)).getSlotId(),
+                    ((SlotRef) row.getChild(0)).getSlotId());
             var config = JsonParser.parseString(((StringLiteral) function.getChild(0)).getStringValue()).getAsJsonObject();
             Assertions.assertEquals(1, config.getAsJsonArray("fields").size());
             Assertions.assertEquals("id", config.getAsJsonArray("fields").get(0).getAsJsonObject().get("name").getAsString());
@@ -116,6 +126,40 @@ public class PaimonSinkShuffleSpecTest {
             Assertions.assertEquals(170500, functionNodes.get(2).getFn().getFid());
             Assertions.assertFalse(sink.isSetBucket_routed()); // No premature promise to the writer.
         }
+    }
+
+    @Test
+    public void testRoutingPreservesExistingProjectAndNullableInputSlots() {
+        ExecPlan plan = inputPlan(DataPartition.RANDOM);
+        PlanFragment source = plan.getTopFragment();
+        List<Expr> inputExprs = List.copyOf(plan.getOutputExprs());
+        TupleDescriptor tuple = plan.getDescTbl().createTupleDescriptor();
+        Map<SlotId, Expr> projection = new LinkedHashMap<>();
+        plan.getOutputExprs().clear();
+        for (int i = 0; i < inputExprs.size(); ++i) {
+            SlotDescriptor slot = plan.getDescTbl().addSlotDescriptor(tuple, new SlotId(200 + i));
+            slot.setType(IntegerType.INT);
+            slot.setIsNullable(i == 0);
+            slot.setIsMaterialized(true);
+            projection.put(slot.getId(), inputExprs.get(i));
+            plan.getOutputExprs().add(new SlotRef(slot));
+        }
+        tuple.computeMemLayout();
+        ProjectNode upstream = new ProjectNode(plan.getNextNodeId(), tuple, source.getPlanRoot(), projection, Map.of());
+        upstream.setLimit(3);
+        source.setPlanRoot(upstream);
+        source.setOutputExprs(plan.getOutputExprs());
+
+        int bucket = PaimonSinkShuffleSpec.installBucketRouting(plan, sink(7));
+        ProjectNode routing = (ProjectNode) source.getPlanRoot();
+        Assertions.assertSame(upstream, routing.getChild(0));
+        Assertions.assertEquals(3, upstream.getLimit());
+        SlotRef partition = (SlotRef) plan.getOutputExprs().get(0);
+        Assertions.assertTrue(partition.isNullable());
+        Assertions.assertEquals(new SlotId(200), ((SlotRef) routing.getSlotMap().get(partition.getSlotId())).getSlotId());
+        FunctionCallExpr fn = (FunctionCallExpr) routing.getSlotMap().get(new SlotId(bucket));
+        FunctionCallExpr row = (FunctionCallExpr) fn.getChild(1);
+        Assertions.assertEquals(new SlotId(201), ((SlotRef) row.getChild(0)).getSlotId());
     }
 
     @Test

@@ -26,6 +26,8 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.planner.PaimonTableSink;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.ProjectNode;
+import com.starrocks.planner.SlotId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -34,6 +36,8 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -214,6 +218,38 @@ public class PaimonInsertPlanTest extends PlanTestBase {
         Assertions.assertTrue(fixed.sink().getThriftTableSink().getRouting_bucket_slot_id() >= 0);
         Assertions.assertTrue(fixed.plan().getExplainString(TExplainLevel.NORMAL).contains("BUCKET ROUTING: NATIVE"));
         Assertions.assertEquals(3, fixed.plan().getOutputExprs().size());
+    }
+
+    @Test
+    public void testBucketProjectionReadsMaterializedOutputsAcrossInsertSources() throws Exception {
+        String fixed = target("fixed");
+        for (String sql : List.of(
+                "insert into " + fixed + " values ('2026-10-29', 1, 'a')",
+                "insert into " + fixed + " select cast('2026-10-29' as date), v1, cast(v2 as varchar) from t0",
+                "insert into " + fixed + " select cast('2026-10-29' as date), v1 + 1, 'a' from t0 limit 5",
+                "insert into " + fixed + " select cast('2026-10-29' as date), cast(rand() * 1000 as int), 'a' from t0",
+                "insert into " + fixed + " partition(p='2026-10-29') (id) values (7)",
+                "insert into " + fixed + " partition(p='2026-10-29') (value, id) select cast(v2 as varchar), v1 from t0")) {
+            Planned planned = plan(sql);
+            ExecPlan execPlan = planned.plan();
+            PlanFragment sender = execPlan.getFragments().get(1);
+            ProjectNode routing = (ProjectNode) sender.getPlanRoot();
+            for (int i = 0; i < execPlan.getOutputColumns().size(); ++i) {
+                SlotRef source = (SlotRef) execPlan.getColRefToExpr().get(execPlan.getOutputColumns().get(i));
+                SlotRef output = (SlotRef) execPlan.getOutputExprs().get(i);
+                SlotRef actualInput = (SlotRef) routing.getSlotMap().get(output.getSlotId());
+                Assertions.assertEquals(source.getSlotId(), actualInput.getSlotId(), sql);
+                Assertions.assertEquals(source.getType(), output.getType(), sql);
+                Assertions.assertEquals(source.isNullable(), output.isNullable(), sql);
+            }
+            int bucket = planned.sink().getThriftTableSink().getRouting_bucket_slot_id();
+            FunctionCallExpr function = (FunctionCallExpr) routing.getSlotMap().get(new SlotId(bucket));
+            FunctionCallExpr row = (FunctionCallExpr) function.getChild(1);
+            SlotRef id = (SlotRef) execPlan.getColRefToExpr().get(execPlan.getOutputColumns().get(1));
+            Assertions.assertEquals(id.getSlotId(), ((SlotRef) row.getChild(0)).getSlotId(), sql);
+            Assertions.assertEquals(4, sender.getOutputExprs().size(), sql);
+            Assertions.assertEquals(3, execPlan.getOutputExprs().size(), sql);
+        }
     }
 
     @Test

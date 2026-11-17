@@ -127,32 +127,16 @@ public final class PaimonSinkShuffleSpec implements ConnectorSinkShuffleSpec {
             projection.put(slot.getId(), expression);
             schemaExprs.add(new SlotRef(slot));
         }
-        tuple.computeMemLayout();
-        PlanFragment input = plan.getTopFragment();
-        ProjectNode materialize = new ProjectNode(plan.getNextNodeId(), tuple,
-                input.getPlanRoot(), projection, Collections.emptyMap());
-        TupleDescriptor routedTuple = descriptors.createTupleDescriptor("Paimon bucket function");
-        Map<SlotId, Expr> routedProjection = new LinkedHashMap<>();
-        List<Expr> routedSchemaExprs = new ArrayList<>();
-        for (int i = 0; i < schemaExprs.size(); ++i) {
-            Expr expression = schemaExprs.get(i);
-            SlotDescriptor slot = descriptors.addSlotDescriptor(routedTuple, new SlotId(nextSlot++));
-            slot.setType(expression.getType());
-            slot.setIsNullable(expression.isNullable());
-            slot.setIsMaterialized(true);
-            slot.setIsOutputColumn(true);
-            routedProjection.put(slot.getId(), expression);
-            routedSchemaExprs.add(new SlotRef(slot));
-        }
-        SlotDescriptor bucket = descriptors.addSlotDescriptor(routedTuple, new SlotId(nextSlot));
+        SlotDescriptor bucket = descriptors.addSlotDescriptor(tuple, new SlotId(nextSlot));
         bucket.setType(IntegerType.INT);
         bucket.setIsNullable(false);
         bucket.setIsMaterialized(true);
         bucket.setIsOutputColumn(true);
         bucket.setLabel("__paimon_native_bucket");
-        routedProjection.put(bucket.getId(), bucketFunction(sink, schemaExprs));
-        routedTuple.computeMemLayout();
-        schemaExprs = routedSchemaExprs;
+        // Target values are already materialized by physical planning. Read the input slots
+        // directly so the bucket expression does not depend on this Project's output slots.
+        projection.put(bucket.getId(), bucketFunction(sink, sourceExprs));
+        tuple.computeMemLayout();
 
         List<Expr> routeKeys = new ArrayList<>();
         for (String name : sink.getPartition_columns()) {
@@ -164,8 +148,9 @@ public final class PaimonSinkShuffleSpec implements ConnectorSinkShuffleSpec {
         }
         routeKeys.add(new SlotRef(bucket));
         DataPartition partition = DataPartition.hashPartitioned(routeKeys);
-        ProjectNode routing = new ProjectNode(plan.getNextNodeId(), routedTuple, materialize,
-                routedProjection, Collections.emptyMap());
+        PlanFragment input = plan.getTopFragment();
+        ProjectNode routing = new ProjectNode(plan.getNextNodeId(), tuple, input.getPlanRoot(),
+                projection, Collections.emptyMap());
         input.setPlanRoot(routing);
         input.disableRuntimeAdaptiveDop();
         ExchangeNode exchange = new ExchangeNode(plan.getNextNodeId(), routing, partition);
