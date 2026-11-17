@@ -16,6 +16,8 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Maps;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
+import com.starrocks.context.ai.AIProvider;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -48,6 +50,16 @@ final class AIFunctionAnalyzer {
                 validateHelperArray(node.getChild(i), node.getFn().getArgs()[i], node);
             }
         }
+    }
+
+    // check AI function & AI provider rbac usage
+    static void checkUsage(ConnectContext context, FunctionCallExpr node) {
+        if (!node.getFn().isAI()) {
+            return;
+        }
+        Authorizer.checkAIFunctionUsage(context, node);
+        AIProvider provider = AIFunctionProviderResolver.resolveProvider(context.getGlobalStateMgr().getAIProviderMgr(), node);
+        Authorizer.checkAIProviderUsage(context, provider);
     }
 
     // Arguments have been reordered and defaults appended by the named argument framework.

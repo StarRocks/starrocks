@@ -124,6 +124,26 @@ TEST_F(JsonFunctionsTest, get_json_string_casting) {
                         .ok());
 }
 
+TEST_F(JsonFunctionsTest, get_json_string_large_negative_double) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json = BinaryColumn::create();
+    json->append(R"({"value": -1.1126569627700335e23})");
+    auto path = BinaryColumn::create();
+    path->append("$.value");
+    Columns columns{json, path};
+
+    ctx->set_constant_columns(columns);
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    auto result = JsonFunctions::get_json_string(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto output = ColumnHelper::cast_to<TYPE_VARCHAR>(result.value());
+    EXPECT_EQ("-111265696277003350000000", output->get_slice(0).to_string());
+    ASSERT_TRUE(
+            JsonFunctions::native_json_path_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+}
+
 TEST_F(JsonFunctionsTest, get_json_string_scalar) {
     {
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());

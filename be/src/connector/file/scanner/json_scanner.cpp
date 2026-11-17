@@ -314,7 +314,8 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
 }
 
 Status JsonReader::open() {
-    Status st = _read_and_parse_json();
+    RETURN_IF_ERROR(_read_payload());
+    Status st = _parse_payload();
     if (!st.ok()) {
         // Timeout can happen when reading from a TimeBoundedStreamLoadPipe (e.g. merge-commit).
         // It's a retryable condition and should not be written into user-facing error logs.
@@ -384,7 +385,8 @@ Status JsonReader::_read_chunk_with_except(Chunk* chunk, int32_t rows_to_read) {
     int32_t rows_read = 0;
     while (rows_read < rows_to_read) {
         if (_empty_parser) {
-            auto st = _read_and_parse_json();
+            RETURN_IF_ERROR(_read_payload());
+            auto st = _parse_payload();
             if (!st.ok()) {
                 if (st.is_end_of_file()) {
                     // all data has been exhausted.
@@ -933,8 +935,7 @@ Status JsonReader::_check_ndjson() {
     return Status::OK();
 }
 
-// read one json string from file read and parse it to json doc.
-Status JsonReader::_read_and_parse_json() {
+Status JsonReader::_read_payload() {
     const auto& file_type = _scanner->_scan_range.ranges[0].file_type;
     if (file_type == TFileType::FILE_STREAM) {
         RETURN_IF_ERROR(_read_file_stream());
@@ -944,7 +945,11 @@ Status JsonReader::_read_and_parse_json() {
     } else {
         return Status::NotSupported(fmt::format("not support file type: {}", file_type));
     }
+    return Status::OK();
+}
 
+Status JsonReader::_parse_payload() {
+    const auto& file_type = _scanner->_scan_range.ranges[0].file_type;
     RETURN_IF_ERROR(_check_ndjson());
 
     if (_envelope_type == TEnvelopeType::DEBEZIUM) {

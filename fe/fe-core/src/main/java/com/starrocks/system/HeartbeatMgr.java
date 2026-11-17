@@ -374,6 +374,8 @@ public class HeartbeatMgr extends LeaderDaemon {
                     if (tBackendInfo.isSetReboot_time()) {
                         backendHbResponse.setRebootTime(tBackendInfo.getReboot_time());
                     }
+                    backendHbResponse.setSupportLakeIndexFastPath(tBackendInfo.isSetSupport_lake_index_fast_path()
+                            && tBackendInfo.isSupport_lake_index_fast_path());
                     return backendHbResponse;
                 } else {
                     return new BackendHbResponse(computeNodeId, result.getStatus().getStatus_code(),

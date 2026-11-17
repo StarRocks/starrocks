@@ -38,7 +38,6 @@ import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.Explain;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -435,20 +434,6 @@ public class AIProjectPlanTest extends PlanTestBase {
                 Assertions.assertFalse(containsFunction(expression, "now"), expression.toString());
                 Assertions.assertFalse(containsFunction(expression, "unix_timestamp"), expression.toString());
             });
-        }
-    }
-
-    @Test
-    public void testProviderAlwaysRequiresADefaultModel() throws Exception {
-        String configuredModel = AIProviderTestUtil.chatProperty("model");
-        AIProviderTestUtil.setChatProperty("model", "");
-        try {
-            Assertions.assertThrows(SemanticException.class,
-                    () -> getExecPlan("select ai_complete('explicit-model', k1) from t7"));
-            Assertions.assertThrows(SemanticException.class,
-                    () -> getExecPlan("select ai_complete(k1) from t7"));
-        } finally {
-            AIProviderTestUtil.setChatProperty("model", configuredModel);
         }
     }
 

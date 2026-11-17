@@ -860,6 +860,7 @@ public abstract class LakeOnlineRewriteJobBase
         // durable (the edit log runs the applier only after writing the entry). The finally uses that same
         // jobState as the single commit marker: PENDING means no durable WAITING_TXN entry, so drop the
         // shards this run built; WAITING_TXN means the journal already references them, so keep them.
+        long nextTxnId;
         try {
             // Stage 2 (lock-free): per partition, plan the shadow layout and build the shadow
             // MaterializedIndex via the StarOS createShards RPC. NO db lock is held here. The work reads
@@ -876,8 +877,8 @@ public abstract class LakeOnlineRewriteJobBase
             createShadowTabletMetadata(pendingPlans);
 
             // Stage 3 (WRITE-lock commit): re-fetch and re-validate the table (TOCTOU: it may have been
-            // dropped/altered while the lock was released), then install the built shadow indexes, journal
-            // the durable state, and transition to WAITING_TXN.
+            // dropped/altered while the lock was released), allocate the watershed, journal the durable state,
+            // and install the built shadow indexes as part of the transition to WAITING_TXN.
             try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
                 OlapTable committedTable = getTableOrThrow();
                 Preconditions.checkState(committedTable.getState() == OlapTable.OlapTableState.NORMAL
@@ -905,29 +906,41 @@ public abstract class LakeOnlineRewriteJobBase
                     partitionState.boundaries = plan.boundaries;
                 }
 
-                // Journal the durable job state (the shadow index id, K, boundaries, and shadow tablet ids
-                // recorded in partitionStates above) FIRST, then apply the catalog mutations in the
-                // applier. The edit log runs the applier only after the WAITING_TXN entry is durably
-                // written, so the catalog install is atomic with the journal: a journal/serialization
-                // failure leaves no shadow-index meta or inverted-index entry to orphan, and replay
-                // re-applies the install from the journaled partitionStates (reconstructShadowCatalogState).
-                // The shadow index meta/tablets are registered, but the per-partition shadow
-                // MaterializedIndex is intentionally NOT exposed to the catalog index map yet: incoming
-                // loads must not double-write the shadow until the watershed is allocated (WAITING_TXN).
+                // Loads after the watershed must write the shadow index. Getting the watershed and exposing the
+                // shadow are not atomic, and the id generator is shared by the whole cluster, so other ids are
+                // routinely drawn in between. That is safe without a check here: a writer that begins its
+                // transaction before resolving tablets does so under the table READ lock, which this WRITE lock
+                // excludes, so any such transaction with an id above the watershed sees the shadow and writes
+                // it. A writer that resolves tablets first (replication, a bypass-write client with cached
+                // metadata) is rejected at commit by LakeTableTxnStateListener#checkShadowIndexesLoaded if it
+                // misses the shadow and commits before this job makes the shadow NORMAL.
+                watershedTxnId = getNextTransactionId();
+                // Only for an older FE taking the job over after a downgrade; this FE redraws it when reserving versions.
+                commitGtid = getNextGtid();
+
+                // Journal the durable job state (the watershed, and the shadow index id, K, boundaries and shadow
+                // tablet ids recorded in partitionStates above) FIRST, then install the shadow in the applier,
+                // which the edit log runs only after the WAITING_TXN entry is durably written: a
+                // journal/serialization failure leaves nothing on the table, and replay re-applies the install
+                // (reconstructShadowCatalogState). The applier registers the shadow index meta and exposes the
+                // shadow index to every partition under this one WRITE lock: a load's sink lists the table's index
+                // metas in its schema param and each partition's indexes in its partition param, and the compute
+                // node rejects the load unless the two agree.
                 persistStateChange(this, JobState.WAITING_TXN, () -> {
                     // The journal is durable by the time this applier runs. Advance the live jobState to
                     // WAITING_TXN as the FIRST action -- before the catalog install -- so the live job can
-                    // never sit at PENDING against a durable WAITING_TXN entry: even an (effectively
-                    // impossible, write-lock + TOCTOU-guarded) throw from the install below cannot then make
-                    // the scheduler re-run runPendingJob and build a second shadow set, nor make the finally
-                    // delete shards the durable entry already references. persistStateChange assigns jobState
-                    // again after the applier returns (a harmless no-op). If the install does throw, restart
-                    // replays the entry and reconstructShadowCatalogState re-applies it idempotently.
+                    // never sit at PENDING against a durable WAITING_TXN entry, nor make the finally delete
+                    // shards the durable entry already references. persistStateChange assigns jobState again
+                    // after the applier returns (a harmless no-op). The install does not fail: its only input that
+                    // can throw, a synchronous materialized view's definition, was checked by beforeShadowBuild.
                     this.jobState = JobState.WAITING_TXN;
                     registerShadowIndexMeta(committedTable);
                     addShadowTabletsToInvertedIndex(committedTable);
+                    exposeShadowIndexToCatalog(committedTable);
                     committedTable.setState(jobTableState());
                 });
+                // The next id is kept only as a breadcrumb for the log line below.
+                nextTxnId = peekNextTransactionId();
             }
         } finally {
             if (jobState != JobState.WAITING_TXN) {
@@ -937,28 +950,31 @@ public abstract class LakeOnlineRewriteJobBase
                 // copied into partitionStates) on ANY failure -- AlterCancelException or an unchecked one (a
                 // Preconditions check, a createShards RPC failure, or a journal/serialization failure) -- and
                 // clear the partitionStates entries populated this run so a retry starts clean and cannot
-                // lose the cleanup handle. The catalog install (shadow meta + inverted-index entries) runs
-                // only in the post-journal applier above, so a failure before the journal commits leaves no
-                // catalog entry to undo.
+                // lose the cleanup handle. The catalog install (shadow meta, inverted-index entries and the
+                // per-partition shadow index) runs only in the post-journal applier above, so a failure before
+                // the journal commits leaves no catalog entry to undo; only the watershed drawn for it is reset.
                 dropOrphanedShadowShards(pendingPlans);
                 for (PendingPartitionPlan plan : pendingPlans) {
                     partitionStates.remove(plan.physicalPartitionId);
                 }
+                watershedTxnId = -1;
             }
         }
 
         if (span != null) {
+            span.setAttribute("watershedTxnId", this.watershedTxnId);
             span.addEvent("setWaitingTxn");
         }
-        LOG.info("transfer online rewrite job {} state to {}", jobId, this.jobState);
+        LOG.info("transfer online rewrite job {} state to {}, watershed txn id {}, next txn id after exposing the"
+                + " shadow index: {}", jobId, this.jobState, watershedTxnId, nextTxnId);
     }
 
     /**
      * Drop the StarOS shards built in {@link #runPendingJob} stage 2 on a pending-phase failure.
      * Called from the {@code runPendingJob} cleanup when the WAITING_TXN journal did not commit, so
-     * every built shadow shard is unreferenced -- the catalog install (shadow index meta + inverted-index
-     * entries) runs only in the post-journal applier, so there is no catalog or inverted-index entry to
-     * undo. Best-effort: lake GC reclaims the shards even if this delete fails.
+     * every built shadow shard is unreferenced -- the catalog install (shadow index meta, inverted-index
+     * entries and the per-partition shadow index) runs only in the post-journal applier, so there is no
+     * catalog or inverted-index entry to undo. Best-effort: lake GC reclaims the shards even if this delete fails.
      */
     private void dropOrphanedShadowShards(@NotNull List<PendingPartitionPlan> plans) {
         Set<Long> orphanShardIds = Sets.newHashSet();
@@ -1044,23 +1060,22 @@ public abstract class LakeOnlineRewriteJobBase
     /**
      * Drives the {@code WAITING_TXN} phase, mirroring the standard lake schema-change watershed.
      *
-     * <p>On the first run ({@code watershedTxnId == -1}) it allocates the watershed transaction id,
-     * exposes each partition's shadow {@link MaterializedIndex} to the catalog with
-     * {@code visibleTxnId = watershedTxnId} (so loads after the watershed double-write base+shadow
-     * while loads before it ignore the shadow) and re-journals {@code WAITING_TXN}.
-     *
-     * <p>On each subsequent run it waits until every transaction before the watershed has finished;
-     * only then does it capture each physical partition's visible version as the per-partition
-     * watershed version {@code W} (the rewrite must re-sort everything visible at the watershed) and
-     * transition to {@code RUNNING}.
+     * <p>{@link #runPendingJob} entered this phase with the watershed allocated and every partition's shadow
+     * {@link MaterializedIndex} exposed with {@code visibleTxnId = watershedTxnId}, so loads after the watershed
+     * double-write base+shadow while loads before it ignore the shadow. Each run waits until every transaction
+     * before the watershed has finished; only then does it capture each physical partition's visible version as
+     * the per-partition watershed version {@code W} (the rewrite must re-sort everything visible at the watershed)
+     * and transition to {@code RUNNING}.
      */
     @Override
     protected void runWaitingTxnJob() throws AlterCancelException {
         Preconditions.checkState(jobState == JobState.WAITING_TXN, jobState);
 
         if (watershedTxnId == -1) {
-            allocateWatershedAndExposeShadow();
-            return;
+            // Older code entered WAITING_TXN before allocating the watershed and exposed the shadow on a later run.
+            // Nothing exposes it any more, and running on would leave later loads not writing the shadow.
+            throw new AlterCancelException("online rewrite job " + jobId + " entered WAITING_TXN without a watershed"
+                    + " transaction id; re-run the ALTER");
         }
 
         try {
@@ -1100,45 +1115,6 @@ public abstract class LakeOnlineRewriteJobBase
             span.addEvent("setRunning");
         }
         LOG.info("transfer online rewrite job {} state to {}", jobId, this.jobState);
-    }
-
-    /**
-     * First {@code WAITING_TXN} run: allocate the watershed transaction id and expose every
-     * partition's shadow index to the catalog so post-watershed loads double-write it. Mirrors the
-     * standard lake schema-change watershed; a writer that resolved tablets before the exposure is
-     * rejected at commit by LakeTableTxnStateListener rather than detected here.
-     */
-    private void allocateWatershedAndExposeShadow() throws AlterCancelException {
-        long nextTxnId;
-        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
-            OlapTable table = getTableOrThrow();
-            Preconditions.checkState(table.getState() == jobTableState(), table.getState());
-            watershedTxnId = getNextTransactionId();
-            // Only for an older FE taking the job over after a downgrade; this FE redraws it when reserving versions.
-            commitGtid = getNextGtid();
-            exposeShadowIndexToCatalog(table);
-
-            // Getting the watershed and exposing the shadow are not atomic, and the id generator is shared
-            // by the whole cluster, so other ids are routinely drawn in between. That is safe without a
-            // check here: a writer that begins its transaction before resolving tablets does so under the
-            // table READ lock, which this WRITE lock excludes, so any such transaction with an id above the
-            // watershed sees the shadow and writes it. A writer that resolves tablets first (replication, a
-            // bypass-write client with cached metadata) is rejected at commit by
-            // LakeTableTxnStateListener#checkShadowIndexesLoaded if it misses the shadow and commits before
-            // this job makes the shadow NORMAL. The next id is kept only as a breadcrumb for the log line below.
-            nextTxnId = peekNextTransactionId();
-
-            // Re-journal WAITING_TXN so the allocated watershed and the exposure are durable; the
-            // exposure is idempotent, so a leader transfer re-runs it harmlessly.
-            persistStateChange(this, JobState.WAITING_TXN);
-        }
-
-        if (span != null) {
-            span.setAttribute("watershedTxnId", this.watershedTxnId);
-            span.addEvent("exposeShadow");
-        }
-        LOG.info("online rewrite job {} allocated watershed txn id {} and exposed shadow index, next txn id"
-                + " after exposing it: {}", jobId, watershedTxnId, nextTxnId);
     }
 
     /**
@@ -1449,6 +1425,11 @@ public abstract class LakeOnlineRewriteJobBase
             // SELECT reading the base deterministically (no-op for single-index rewrite jobs).
             sessionVariable.setEnableSyncMaterializedViewRewrite(false);
             sessionVariable.setInsertTimeoutS((int) (timeoutMs / 2000));
+            // The next scheduler tick checks a committed rewrite again, so wait for its publish at most one tick,
+            // whatever the global tx_visible_wait_timeout. StmtExecutor applies this wait to a shadow rewrite
+            // even with enable_sync_publish on.
+            sessionVariable.setTransactionVisibleWaitTimeout(
+                    Math.max(1L, Config.alter_scheduler_interval_millisecond / 1000L));
 
             // Journal the rewrite txn id BEFORE executing: peekNextTransactionId() is the id the
             // INSERT's beginTransaction will allocate, so record it as durable evidence of which txn
@@ -2353,9 +2334,9 @@ public abstract class LakeOnlineRewriteJobBase
 
             if (jobState == JobState.PENDING) {
                 // A PENDING job has installed no durable shadow catalog state yet. On the leader the shadow
-                // index meta + tablets are registered only inside the WAITING_TXN applier (runPendingJob),
-                // atomically with the WAITING_TXN journal entry, so the only PENDING journal entry (the
-                // initial ALTER log) carries empty partitionStates and nothing installed. Reconstructing
+                // index meta, tablets and per-partition shadow index are installed only inside the WAITING_TXN
+                // applier (runPendingJob), atomically with the WAITING_TXN journal entry, so the only PENDING
+                // journal entry (the initial ALTER log) carries empty partitionStates and nothing installed. Reconstructing
                 // here would call registerShadowIndexMeta with no per-partition shadow index, leaving the
                 // table with a shadow schema that OlapTableSink.createSchema() sees while createPartition()
                 // has no matching partition index -- loads to the table then fail until the job advances.
@@ -2366,9 +2347,8 @@ public abstract class LakeOnlineRewriteJobBase
             } else if (jobState == JobState.WAITING_TXN || jobState == JobState.RUNNING) {
                 // WAITING_TXN and RUNNING share the same durable catalog state: the shadow index meta is
                 // registered, the shadow tablets are in the inverted index, the table is in the job's
-                // working state (jobTableState()), and (watershed allocated from WAITING_TXN onwards) the
-                // shadow index is exposed to the catalog with visibleTxnId = watershedTxnId so
-                // post-watershed loads double-write it.
+                // working state (jobTableState()), and the shadow index is exposed to the catalog with
+                // visibleTxnId = watershedTxnId so post-watershed loads double-write it.
                 // RUNNING only adds in-flight rewrite txns on top of the WAITING_TXN catalog state; those
                 // are resumed by the live scheduler's three-state resume (rewriteTxnId is journaled) after
                 // the leader takes over, never by replay. So replay just reconstructs the shared shadow
@@ -2418,9 +2398,9 @@ public abstract class LakeOnlineRewriteJobBase
      * themselves serialized in {@link #partitionStates}, so GSON has already rebuilt them (with their
      * tablet ids and ranges) on deserialization; the StarOS shards they reference were created in the
      * live run and are not re-created here. We only re-attach the durable catalog state: the shadow
-     * index meta, the inverted-index entries, the table's working state ({@code jobTableState()}) and,
-     * once the watershed has been allocated, the catalog exposure of the shadow index. Every step is
-     * guarded so a second replay is a no-op (no double-add of meta, tablets or the exposed index).
+     * index meta, the inverted-index entries, the table's working state ({@code jobTableState()}) and
+     * the catalog exposure of the shadow index. Every step is guarded so a second replay is a no-op
+     * (no double-add of meta, tablets or the exposed index).
      *
      * <p>The catalog state in RUNNING is identical to WAITING_TXN. RUNNING also tracks rewrite txn ids
      * and durable partition completion, which the live scheduler resumes or skips after leader takeover.
@@ -2432,12 +2412,10 @@ public abstract class LakeOnlineRewriteJobBase
         // present, so a second replay does not double-add).
         addShadowTabletsToInvertedIndex(table);
         table.setState(jobTableState());
-        // Once the watershed has been allocated (WAITING_TXN onwards) the live path also exposed the
-        // shadow index to the catalog so post-watershed loads double-write it. Re-apply that exposure
-        // idempotently (a partition already carrying the shadow is skipped). When watershedTxnId is
-        // still -1 (journaled at PENDING -> WAITING_TXN but the first WAITING_TXN run has not happened
-        // yet) there is nothing to expose; the next live WAITING_TXN run allocates the watershed and
-        // exposes.
+        // The live path exposed the shadow index to the catalog together with the meta, so post-watershed
+        // loads double-write it. Re-apply that exposure idempotently (a partition already carrying the
+        // shadow is skipped). A WAITING_TXN entry without a watershed comes only from older code, which
+        // exposed the shadow on a later run; there is nothing to expose, and the leader cancels that job.
         if (watershedTxnId != -1) {
             exposeShadowIndexToCatalog(table);
         }

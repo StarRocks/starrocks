@@ -1452,14 +1452,16 @@ public class DefaultCoordinator extends Coordinator {
             LOG.warn("update profile failed {}", instanceId, e);
         }
 
-        // update load profile
-        try {
-            lock();
-            queryProfile.updateLoadChannelProfile(params);
-        } catch (Throwable e) {
-            LOG.warn("update load channel profile failed {}", instanceId, e);
-        } finally {
-            unlock();
+        // A status-only report must not wait for deployment while updating absent load data.
+        if (params.isSetLoad_channel_profile()) {
+            try {
+                lock();
+                queryProfile.updateLoadChannelProfile(params);
+            } catch (Throwable e) {
+                LOG.warn("update load channel profile failed {}", instanceId, e);
+            } finally {
+                unlock();
+            }
         }
 
         // update job progress
@@ -1502,12 +1504,19 @@ public class DefaultCoordinator extends Coordinator {
                     instanceId, DebugUtil.printId(params.getQuery_id())));
         }
         try {
-            lock();
-            queryProfile.updateLoadInformation(execState, params);
+            List<Runnable> loadUpdates = queryProfile.buildLoadInformationUpdates(execState, params);
+            if (!loadUpdates.isEmpty()) {
+                lock();
+                try {
+                    for (Runnable update : loadUpdates) {
+                        update.run();
+                    }
+                } finally {
+                    unlock();
+                }
+            }
         } catch (Throwable e) {
             LOG.warn("update load information failed {}", instanceId, e);
-        } finally {
-            unlock();
         }
 
         // NOTE: it's critical for query execution, and must be put after the profile update

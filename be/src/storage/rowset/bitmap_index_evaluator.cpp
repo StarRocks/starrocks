@@ -14,6 +14,8 @@
 
 #include "storage/rowset/bitmap_index_evaluator.h"
 
+#include <algorithm>
+
 #include "column/chunk_schema_helper.h"
 #include "common/config_rowset_fwd.h"
 #include "storage_primitive/predicate_tree/predicate_tree.hpp"
@@ -465,6 +467,13 @@ Status BitmapIndexEvaluator::init(BitmapIndexIteratorSupplier&& supplier) {
 }
 
 Status BitmapIndexEvaluator::evaluate(SparseRange<>& dst_scan_range, PredicateTree& dst_pred_tree) {
+    const auto optional_file_missing = [this]() {
+        return std::ranges::any_of(_bitmap_index_iterators,
+                                   [](const auto* iter) { return iter != nullptr && iter->is_file_missing(); });
+    };
+    if (optional_file_missing()) {
+        return Status::OK();
+    }
     // ---------------------------------------------------------
     // Seek bitmap index.
     //  - Seek to the position of predicate's operand within
@@ -472,7 +481,14 @@ Status BitmapIndexEvaluator::evaluate(SparseRange<>& dst_scan_range, PredicateTr
     // ---------------------------------------------------------
     // The root is an AND whose bitmap is intersected into the scan range, so predicates matched at the top
     // level are erasable. Erasability is only revoked while descending through a not-fully-covered OR.
-    ASSIGN_OR_RETURN(const auto seek_res, _pred_tree.visit(BitmapIndexSeeker{this}, /*erasable=*/true));
+    auto seek_result = _pred_tree.visit(BitmapIndexSeeker{this}, /*erasable=*/true);
+    // Both dictionary data and row bitmaps are lazy. A file can disappear after iterator construction;
+    // never commit partial pruning or erase predicates in that case. Only the actual optional-file I/O
+    // NotFound sets the marker; ordinary dictionary misses and other I/O errors retain their semantics.
+    if (optional_file_missing()) {
+        return Status::OK();
+    }
+    ASSIGN_OR_RETURN(const auto seek_res, std::move(seek_result));
     switch (seek_res) {
     case BitmapIndexSeeker::ResultType::ALWAYS_FALSE:
         dst_scan_range.clear();
@@ -494,7 +510,11 @@ Status BitmapIndexEvaluator::evaluate(SparseRange<>& dst_scan_range, PredicateTr
     const size_t input_rows = row_bitmap.cardinality();
     DCHECK_EQ(input_rows, dst_scan_range.span_size());
 
-    ASSIGN_OR_RETURN(auto roaring, _pred_tree.visit(BitmapIndexRetriver{this}));
+    auto retrieve_result = _pred_tree.visit(BitmapIndexRetriver{this});
+    if (optional_file_missing()) {
+        return Status::OK();
+    }
+    ASSIGN_OR_RETURN(auto roaring, std::move(retrieve_result));
     if (!roaring.has_value()) {
         return Status::OK();
     }

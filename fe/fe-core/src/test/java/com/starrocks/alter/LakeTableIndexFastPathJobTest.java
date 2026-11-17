@@ -28,6 +28,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -52,6 +53,8 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.system.BackendHbResponse;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -121,6 +124,20 @@ public class LakeTableIndexFastPathJobTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         UtFrameUtils.stopBackgroundSchemaChangeHandler(60000);
         UtFrameUtils.setUpForPersistTest();
+        GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
+        if (!gsm.isLeaderLeaseValid(gsm.captureLeaderLease())) {
+            Deencapsulation.invoke(gsm, "beginLeaderActivation");
+            Deencapsulation.invoke(gsm, "publishLeaderLease", 1L);
+        }
+        // Dispatch requires a live heartbeat of this leader session, rather than a persisted timestamp.
+        for (Long nodeId : gsm.getWarehouseMgr().getAllComputeNodeIds(WarehouseManager.DEFAULT_RESOURCE)) {
+            ComputeNode node = gsm.getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+            BackendHbResponse response = new BackendHbResponse(node.getId(), node.getBePort(), node.getHttpPort(),
+                    node.getBrpcPort(), node.getStarletPort(), System.currentTimeMillis(), node.getVersion(),
+                    node.getCpuCores(), node.getMemLimitBytes());
+            response.setSupportLakeIndexFastPath(true);
+            node.handleHbResponse(response, false);
+        }
         CreateDbStmt createDbStmt =
                 (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser("create database " + DB_NAME, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());

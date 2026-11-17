@@ -61,7 +61,7 @@ truncate plan advisor;
 -- result:
 [REGEX]Clear all plan advisor in FE*
 -- !result
-drop table iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew;
+drop table iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew force;
 -- result:
 -- !result
 drop database iceberg_catalog_${uuid0}.iceberg_db_${uuid0};
@@ -70,3 +70,9 @@ drop database iceberg_catalog_${uuid0}.iceberg_db_${uuid0};
 drop catalog iceberg_catalog_${uuid0};
 -- result:
 -- !result
+CLEANUP {
+drop table if exists iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew force;
+drop database if exists iceberg_catalog_${uuid0}.iceberg_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists iceberg_catalog_${uuid0};
+} END CLEANUP

@@ -553,10 +553,11 @@ public class MaterializedViewAnalyzer {
                 checkPartitionColumnExprs(statement, columnExprMap, changedPartitionByExprs, aliasTableMap, context);
                 // check whether partition expression functions are allowed if it exists
                 checkPartitionExpPatterns(statement);
+                // check window function can be used in partitioned mv; must run before the table names in
+                // partition exprs are replaced with the base table's, which may differ in case from the query's
+                checkWindowFunctions(statement);
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, changedPartitionByExprs, aliasTableMap);
-                // check window function can be used in partitioned mv
-                checkWindowFunctions(statement);
                 // determine mv partition 's type: list or range
                 checkMVPartitionInfoType(statement, aliasTableMap);
                 // deduce generate partition infos for list partition expressions

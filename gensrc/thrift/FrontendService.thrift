@@ -1346,6 +1346,8 @@ struct TRefreshTableRequest {
   2: optional string table_name
   3: optional list<string> partitions
   4: optional string catalog_name
+  // Only drop the cached table on the receiving FE, without loading it again
+  5: optional bool invalidate_only
 }
 
 struct TRefreshTableResponse {

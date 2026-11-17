@@ -62,7 +62,9 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Frontend;
+import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -86,6 +88,8 @@ import java.lang.reflect.Method;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -100,6 +104,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -915,6 +920,125 @@ public class GlobalStateMgrTest {
         }
     }
 
+    // Answers the invalidate RPC through a mocked FrontendService client, recording where it went and what it asked
+    private static class InvalidateRpcRecorder extends MockUp<ThriftRPCRequestExecutor> {
+        final List<TNetworkAddress> addresses = Collections.synchronizedList(new ArrayList<>());
+        final List<TRefreshTableRequest> requests = Collections.synchronizedList(new ArrayList<>());
+        final AtomicInteger tryTimes = new AtomicInteger();
+        final AtomicInteger timeoutMs = new AtomicInteger();
+        final CountDownLatch block;
+
+        InvalidateRpcRecorder(CountDownLatch block) {
+            this.block = block;
+        }
+
+        @Mock
+        @SuppressWarnings("unchecked")
+        public <RESULT, SERVER_CLIENT extends org.apache.thrift.TServiceClient> RESULT call(
+                com.starrocks.rpc.ThriftConnectionPool<SERVER_CLIENT> genericPool,
+                TNetworkAddress address,
+                int timeout, int tries,
+                ThriftRPCRequestExecutor.MethodCallable<SERVER_CLIENT, RESULT> callable) throws Exception {
+            addresses.add(address);
+            tryTimes.set(tries);
+            timeoutMs.set(timeout);
+            if (block != null) {
+                block.await();
+            }
+            FrontendService.Client client = Mockito.mock(FrontendService.Client.class);
+            Mockito.when(client.refreshTable(Mockito.any())).thenAnswer(invocation -> {
+                requests.add(invocation.getArgument(0));
+                return new TRefreshTableResponse(new TStatus(TStatusCode.OK));
+            });
+            return callable.apply((SERVER_CLIENT) client);
+        }
+    }
+
+    private GlobalStateMgr createInvalidateTestGlobalStateMgr() throws Exception {
+        NodeMgr nodeMgr = new NodeMgr();
+        Frontend self = createFrontend(FrontendNodeType.LEADER, "fe1", "127.0.0.1", 9010, 9020);
+        Frontend alivePeer = createFrontend(FrontendNodeType.FOLLOWER, "fe2", "127.0.0.2", 9011, 9021);
+        Frontend deadPeer = createFrontend(FrontendNodeType.FOLLOWER, "fe3", "127.0.0.3", 9012, 9022);
+        self.setAlive(true);
+        alivePeer.setAlive(true);
+        setFrontends(nodeMgr, List.of(self, alivePeer, deadPeer));
+        setSelfNode(nodeMgr, new Pair<>("127.0.0.1", 9010));
+        setRole(nodeMgr, FrontendNodeType.LEADER);
+        return new GlobalStateMgr(nodeMgr);
+    }
+
+    @Test
+    public void testInvalidateOthersFeTableSendsInvalidateOnlyToAlivePeers() throws Exception {
+        GlobalStateMgr globalStateMgr = createInvalidateTestGlobalStateMgr();
+        InvalidateRpcRecorder recorder = new InvalidateRpcRecorder(null);
+        try {
+            globalStateMgr.invalidateOthersFeTable(new TableName("c", "d", "t"), 1500);
+
+            Assertions.assertEquals(List.of(new TNetworkAddress("127.0.0.2", 9021)), recorder.addresses);
+            Assertions.assertEquals(1, recorder.requests.size());
+            TRefreshTableRequest request = recorder.requests.get(0);
+            Assertions.assertTrue(request.isInvalidate_only());
+            Assertions.assertEquals("c", request.getCatalog_name());
+            Assertions.assertEquals("d", request.getDb_name());
+            Assertions.assertEquals("t", request.getTable_name());
+            Assertions.assertEquals(1, recorder.tryTimes.get());
+            Assertions.assertEquals(1500, recorder.timeoutMs.get());
+        } finally {
+            shutdownRefreshOtherFeExecutors(globalStateMgr);
+        }
+    }
+
+    @Test
+    public void testInvalidateOthersFeTableStopsWaitingAtTimeout() throws Exception {
+        GlobalStateMgr globalStateMgr = createInvalidateTestGlobalStateMgr();
+        CountDownLatch block = new CountDownLatch(1);
+        InvalidateRpcRecorder recorder = new InvalidateRpcRecorder(block);
+        try {
+            long startNs = System.nanoTime();
+            globalStateMgr.invalidateOthersFeTable(new TableName("c", "d", "t"), 200);
+            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs);
+
+            // A peer that does not answer costs the commit the timeout, not a failure
+            Assertions.assertTrue(elapsedMs >= 150 && elapsedMs < 5000, "elapsed " + elapsedMs);
+            Assertions.assertEquals(1, recorder.addresses.size());
+        } finally {
+            block.countDown();
+            shutdownRefreshOtherFeExecutors(globalStateMgr);
+        }
+    }
+
+    @Test
+    public void testInvalidateOthersFeTableIgnoresFailures() throws Exception {
+        GlobalStateMgr globalStateMgr = createInvalidateTestGlobalStateMgr();
+        new MockUp<ThriftRPCRequestExecutor>() {
+            @Mock
+            public <RESULT, SERVER_CLIENT extends org.apache.thrift.TServiceClient> RESULT call(
+                    com.starrocks.rpc.ThriftConnectionPool<SERVER_CLIENT> genericPool,
+                    TNetworkAddress address,
+                    int timeout, int tries,
+                    ThriftRPCRequestExecutor.MethodCallable<SERVER_CLIENT, RESULT> callable) {
+                throw new RuntimeException("rpc failed");
+            }
+        };
+        try {
+            Assertions.assertDoesNotThrow(() -> globalStateMgr.invalidateOthersFeTable(new TableName("c", "d", "t"), 1000));
+        } finally {
+            shutdownRefreshOtherFeExecutors(globalStateMgr);
+        }
+    }
+
+    @Test
+    public void testInvalidateOthersFeTableDisabledByNonPositiveTimeout() throws Exception {
+        GlobalStateMgr globalStateMgr = createInvalidateTestGlobalStateMgr();
+        InvalidateRpcRecorder recorder = new InvalidateRpcRecorder(null);
+        try {
+            globalStateMgr.invalidateOthersFeTable(new TableName("c", "d", "t"), 0);
+            Assertions.assertTrue(recorder.addresses.isEmpty());
+        } finally {
+            shutdownRefreshOtherFeExecutors(globalStateMgr);
+        }
+    }
+
     private GlobalStateMgr createRefreshTestGlobalStateMgr(int refreshThreadNum) throws Exception {
         int originalThreadNum = Config.refresh_other_fe_rpc_executor_thread_num;
         int originalAsyncThreadNum = Config.refresh_other_fe_dispatch_executor_thread_num;
@@ -992,6 +1116,7 @@ public class GlobalStateMgrTest {
     private void shutdownRefreshOtherFeExecutors(GlobalStateMgr globalStateMgr) throws Exception {
         shutdownExecutor(globalStateMgr, "refreshOtherFeRpcExecutor");
         shutdownExecutor(globalStateMgr, "refreshOtherFeDispatchExecutor");
+        shutdownExecutor(globalStateMgr, "invalidateOtherFeRpcExecutor");
     }
 
     private void shutdownExecutor(GlobalStateMgr globalStateMgr, String fieldName) throws Exception {
