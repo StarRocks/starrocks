@@ -1371,8 +1371,7 @@ public class StmtExecutorTest {
             public InsertLoadJob registerInsertLoadJob(String label, String dbName, long tableId, long txnId,
                                                        String loadId, String user, EtlJobType jobType,
                                                        long createTimestamp, LoadMgr.EstimateStats estimateStats,
-                                                       long timeout, long warehouseId, boolean isStatisticsJob,
-                                                       Coordinator coordinator,
+                                                       long timeout, long warehouseId, Coordinator coordinator,
                                                        InsertLoadTxnCallback insertLoadTxnCallback) {
                 return loadJob;
             }
