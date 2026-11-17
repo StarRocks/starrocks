@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "tasks provides information about asynchronous tasks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # tasks

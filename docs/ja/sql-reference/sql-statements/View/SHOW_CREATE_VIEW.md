@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the CREATE statement that was used to create a given view."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW CREATE VIEW

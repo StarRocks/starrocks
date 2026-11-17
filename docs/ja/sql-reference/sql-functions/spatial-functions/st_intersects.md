@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "2 つのネイティブなポリゴンまたはマルチポリゴンが交差するかを判定します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Intersects

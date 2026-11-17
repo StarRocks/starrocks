@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Show the full configuration of a single AI provider."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DESC AI PROVIDER

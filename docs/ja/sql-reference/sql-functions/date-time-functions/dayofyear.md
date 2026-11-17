@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された日付の年の日数を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # dayofyear

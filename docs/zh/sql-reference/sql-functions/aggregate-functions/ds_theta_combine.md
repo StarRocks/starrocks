@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "跨行合并序列化的 Apache DataSketches Theta 草图，返回单个联合紧凑草图（VARBINARY）。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_combine

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "如何查看和解读 StarRocks 物化视图刷新 Task Run 的详细信息，以了解刷新行为、排查刷新失败并监控刷新性能。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 理解物化视图Task Run
@@ -118,11 +119,12 @@ description: "如何查看和解读 StarRocks 物化视图刷新 Task Run 的详
 - **默认值**: `Priority` = `LOWEST`, `isMergeRedundant` = `false`
 - **字段**:
   - `priority`: 任务执行优先级（值来自 `Constants.TaskRunPriority`）
-    - `HIGHEST`: 0
-    - `HIGH`: 32
-    - `NORMAL`: 64
-    - `LOW`: 96
-    - `LOWEST`: 127
+    - `LOWEST`: 0
+    - `LOW`: 20
+    - `NORMAL`: 50
+    - `HIGH`: 80
+    - `HIGHER`: 90
+    - `HIGHEST`: 100
   - `isMergeRedundant`: 是否合并冗余的刷新操作。
   - `properties`: 额外的执行属性，格式为 `Map<String, String>`。
 

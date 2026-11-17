@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW TABLES displays all tables in a StarRocks database or external data source."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW TABLES

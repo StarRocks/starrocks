@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "角度をラジアンで指定した余接を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # cot

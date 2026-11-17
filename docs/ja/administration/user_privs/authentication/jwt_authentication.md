@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "v3.5.0以降、JSON Web Token を使用してクライアントアクセスを認証します。"
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # JSON Web Token 認証

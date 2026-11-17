@@ -314,6 +314,34 @@ private:
 //   so pointers remain valid after moves. However, the _shredded_fields vector must NOT
 //   be resized after any reader is constructed. Fill the vector fully before calling
 //   any reader construction that captures these addresses.
+// Tells which rows hold an object `typed_value` group, even when every field below it is NULL (an empty object).
+// A group has no column of its own, so its presence is read from the definition levels of one scalar leaf below it:
+// a level at or above the group's own level means the group is present.
+struct ObjectPresenceSource {
+    // Reads the leaf, only for its levels.
+    ColumnReaderPtr reader;
+    // Heap-owned: the reader keeps a pointer to it.
+    std::unique_ptr<TypeDescriptor> read_type;
+    int16_t group_def_level = 0;
+    // batch-local, one flag per row, reset each read_range call. Empty when presence was not read.
+    std::vector<uint8_t> present;
+
+    bool is_present(size_t row) const { return row < present.size() && present[row] != 0; }
+};
+
+// A typed_value that is read as the raw file value, because the variant type it becomes depends on the Parquet logical
+// type and the usual column types lose it: a timestamp is shifted to a time zone and cut to microseconds, a UUID is a
+// plain binary. The node is bound as a VARIANT and encoded as the matching variant primitive.
+enum class ShreddedRawEncoding : uint8_t {
+    NONE = 0,
+    TIMESTAMP_TZ_MICROS,
+    TIMESTAMP_NTZ_MICROS,
+    TIMESTAMP_TZ_NANOS,
+    TIMESTAMP_NTZ_NANOS,
+    TIME_NTZ_MICROS,
+    UUID,
+};
+
 struct ShreddedFieldNode {
     enum class Kind : uint8_t { NONE = 0, SCALAR = 1, ARRAY = 2 };
 
@@ -330,6 +358,12 @@ struct ShreddedFieldNode {
     // In this mode, we read element.value as an additional per-element fallback source.
     bool scalar_array_layout = false;
     std::unique_ptr<ColumnReader> array_element_value_reader;
+    // Set for object nodes (typed_value is a group) outside arrays, when a leaf below it can give the levels.
+    std::unique_ptr<ObjectPresenceSource> presence;
+    // Non-empty when the typed_value type is not allowed in shredded variants. It fails the read of this node, not the
+    // creation of the reader: nodes exist for every field of the schema, whether the query uses it or not.
+    std::string unsupported_reason;
+    ShreddedRawEncoding raw_encoding = ShreddedRawEncoding::NONE;
 
     // batch-local columns filled during read_range, reset each call.
     ColumnPtr value_column;
@@ -386,6 +420,12 @@ private:
         ColumnReaderPtr root_typed_value_reader;
         std::unique_ptr<TypeDescriptor> root_typed_value_type;
         ColumnPtr root_typed_value_column;
+        // Presence of the root typed_value group when it is an object; set by the factory.
+        std::unique_ptr<ObjectPresenceSource> root_presence;
+        // Like ShreddedFieldNode::unsupported_reason, for a scalar root typed_value.
+        std::string root_unsupported_reason;
+        // Like ShreddedFieldNode::raw_encoding, for a scalar root typed_value.
+        ShreddedRawEncoding root_raw_encoding = ShreddedRawEncoding::NONE;
     };
 
 public:
@@ -430,6 +470,12 @@ public:
     }
 
     ~VariantColumnReader() override = default;
+
+    void set_root_presence(std::unique_ptr<ObjectPresenceSource> presence) {
+        _top_level.root_presence = std::move(presence);
+    }
+    void set_root_unsupported_reason(std::string reason) { _top_level.root_unsupported_reason = std::move(reason); }
+    void set_root_raw_encoding(ShreddedRawEncoding encoding) { _top_level.root_raw_encoding = encoding; }
 
     Status prepare() override;
 

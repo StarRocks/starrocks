@@ -24,6 +24,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.OptimizeTask;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.catalog.Database;
@@ -42,6 +43,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
@@ -55,6 +57,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -395,6 +398,25 @@ public class TaskRun implements Comparable<TaskRun> {
                 // Fallback to previous behavior if fetching roles fails
                 context.setCurrentRoleIds(context.getCurrentUserIdentity());
             }
+            Set<String> groups = resolveCreatorGroups(context);
+            context.setGroups(groups);
+            if (!groups.isEmpty()) {
+                AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+                Set<Long> roleIds = new HashSet<>(context.getCurrentRoleIds());
+                groups.forEach(group -> roleIds.addAll(authorizationMgr.getRoleIdListByGroup(group)));
+                context.setCurrentRoleIds(roleIds);
+            }
+        }
+    }
+
+    private Set<String> resolveCreatorGroups(ConnectContext context) {
+        try {
+            return ExecuteAsExecutor.resolveGroups(context, context.getCurrentUserIdentity());
+        } catch (Exception e) {
+            // Unlike a login, a failed lookup does not fail the task: it runs without groups, as EXECUTE AS does.
+            LOG.warn("TaskRun {} failed to resolve the groups of {}, running without them",
+                    taskRunId, context.getCurrentUserIdentity(), e);
+            return Set.of();
         }
     }
 
@@ -489,10 +511,9 @@ public class TaskRun implements Comparable<TaskRun> {
             if (Constants.TaskSource.MV.equals(task.getSource())
                     && MaterializedViewExceptions.isIncrementalBreakingFailure(e)) {
                 MaterializedView mv = TaskBuilder.getMvFromTask(task);
-                // Permanent incremental breakage: inactivate the MV and rethrow. Don't kill/suspend the running
-                // refresh here -- that would eat the actionable error; the consecutive-failure path suspends the task.
+                // Permanent breakage: inactivate for its own reason, not through the consecutive-failure path.
                 if (mv != null && mv.isActive()) {
-                    AlterMVJobExecutor.inactiveMvAndLog(mv,
+                    AlterMVJobExecutor.inactiveMvAndSuspendTask(mv,
                             MaterializedViewExceptions.inactiveReasonForBreakingFailure(e, mv.getName()));
                     throw e;
                 }

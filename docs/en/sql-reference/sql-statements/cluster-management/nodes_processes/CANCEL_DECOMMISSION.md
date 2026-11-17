@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CANCEL DECOMMISSION is used to undo a node decommission."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CANCEL DECOMMISSION

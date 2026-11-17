@@ -123,6 +123,38 @@ public class NestedGeoTypeRefusalTest {
 
     @ParameterizedTest
     @MethodSource("types")
+    public void testExpressionAndResolvedMapKeys(Type key) {
+        Type map = new MapType(IntegerType.INT, new MapType(key, IntegerType.INT));
+        Type nested = new ArrayType(new StructType(List.of(map)));
+        boolean geo = key.isGeoType() || key.hasNestedGeoType();
+        String error = "Map key doesn't support type: " + key;
+        if (geo) {
+            assertEquals(error, assertThrows(SemanticException.class,
+                    () -> visitor.visit(NullLiteral.create(nested), null)).getDetailMsg());
+        } else {
+            visitor.visit(NullLiteral.create(nested), null);
+        }
+
+        // Model a resolved variadic call whose result and SQL arguments do not expose the map type.
+        ExpressionAnalyzer.Visitor resolved = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext()) {
+            @Override
+            public Void visitFunctionCall(FunctionCallExpr call, Scope scope) {
+                return null;
+            }
+        };
+        FunctionCallExpr call = new FunctionCallExpr("test", List.of(new IntLiteral(1), new NullLiteral()));
+        call.setType(IntegerType.INT);
+        call.setFn(new ScalarFunction(new FunctionName("test"), List.of(IntegerType.INT, nested), IntegerType.INT, true));
+        if (geo) {
+            assertEquals(error, assertThrows(SemanticException.class,
+                    () -> resolved.visit(call, null)).getDetailMsg());
+        } else {
+            resolved.visit(call, null);
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("types")
     public void testComparisonAndCase(Type type) {
         boolean geo = type.isGeoType() || type.hasNestedGeoType();
         for (boolean range : new boolean[] {false, true}) {

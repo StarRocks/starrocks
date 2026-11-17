@@ -14,10 +14,22 @@
 
 package com.starrocks.connector.parser.trino;
 
+import com.starrocks.common.Config;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 public class TrinoDialectDowngradeTest extends TrinoTestBase {
     @BeforeAll
@@ -110,6 +122,59 @@ public class TrinoDialectDowngradeTest extends TrinoTestBase {
             connectContext.getSessionVariable().setSqlDialect("trino");
             connectContext.getSessionVariable().setEnableDialectDowngrade(true);
             connectContext.setRelationAliasCaseInSensitive(false);
+        }
+    }
+
+    // Falling back from the Trino parser logs the statement and the parsers' messages, which quote it; under
+    // enable_sql_desensitize_in_log neither may reach the log.
+    @Test
+    public void testFallbackLogsAreDesensitized() {
+        String downgraded = "select date_add('SECRET_DOWNGRADE', INTERVAL 3 DAY)";
+        String unparsable = "select 'SECRET_UNPARSABLE' from t0 where";
+        List<String> lines = new ArrayList<>();
+        AbstractAppender appender = new AbstractAppender("trino-desensitize-capture-" + UUID.randomUUID(), null, null) {
+            @Override
+            public void append(LogEvent event) {
+                StringBuilder text = new StringBuilder(event.getMessage().getFormattedMessage());
+                for (Throwable t = event.getThrown(); t != null; t = t.getCause()) {
+                    text.append(' ').append(t.getMessage());
+                }
+                lines.add(text.toString());
+            }
+        };
+        appender.start();
+        Logger logger = (Logger) LogManager.getLogger(SqlParser.class);
+        Level prevLevel = logger.getLevel();
+        logger.addAppender(appender);
+        logger.setLevel(Level.TRACE);
+        boolean prevDesensitize = Config.enable_sql_desensitize_in_log;
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        try {
+            sessionVariable.setEnableDialectDowngrade(true);
+            sessionVariable.setSqlDialect("trino");
+
+            // the fallback is logged, unchanged when desensitize is off
+            Config.enable_sql_desensitize_in_log = false;
+            SqlParser.parse(downgraded, sessionVariable);
+            Assertions.assertTrue(lines.stream().anyMatch(l -> l.contains("SECRET_DOWNGRADE")), lines.toString());
+
+            lines.clear();
+            Config.enable_sql_desensitize_in_log = true;
+            SqlParser.parse(downgraded, sessionVariable);
+            Assertions.assertThrows(Exception.class, () -> SqlParser.parse(unparsable, sessionVariable));
+            // the failure type stays
+            Assertions.assertTrue(lines.stream().anyMatch(l -> l.equals("Trino parse sql [<desensitized>] error, "
+                    + "cause by io.trino.sql.parser.ParsingException: <desensitized>")), lines.toString());
+            Assertions.assertTrue(lines.stream().anyMatch(l -> l.startsWith("StarRocks parse sql [<desensitized>]")),
+                    lines.toString());
+            for (String line : lines) {
+                Assertions.assertFalse(line.contains("SECRET"), line);
+            }
+        } finally {
+            Config.enable_sql_desensitize_in_log = prevDesensitize;
+            sessionVariable.setSqlDialect("trino");
+            logger.removeAppender(appender);
+            logger.setLevel(prevLevel);
         }
     }
 }

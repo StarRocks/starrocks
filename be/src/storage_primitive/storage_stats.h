@@ -194,6 +194,13 @@ struct OlapReaderStatistics {
     int64_t prefetch_wait_finish_ns = 0;
     int64_t prefetch_pending_ns = 0;
 
+    // Shared-data remote read scheduler, while it runs: time the reads of this scan waited for their remote reads to be
+    // admitted, time they waited for a cache block fill another read had started, and how many joined such a fill.
+    // The fill wait overlaps the remote read time of the read that started the fill; neither wait is remote IO.
+    int64_t remote_io_queue_wait_ns = 0;
+    int64_t remote_io_fill_wait_ns = 0;
+    int64_t remote_io_fill_joins = 0;
+
     // Segments whose footer was read on behalf of this reader, i.e. that were not already open. Only the
     // callers that pass their statistics to Segment::open count them.
     int64_t segments_opened = 0;
@@ -370,6 +377,9 @@ struct OlapReaderStatistics {
         prefetch_hit_count += other.prefetch_hit_count;
         prefetch_wait_finish_ns += other.prefetch_wait_finish_ns;
         prefetch_pending_ns += other.prefetch_pending_ns;
+        remote_io_queue_wait_ns += other.remote_io_queue_wait_ns;
+        remote_io_fill_wait_ns += other.remote_io_fill_wait_ns;
+        remote_io_fill_joins += other.remote_io_fill_joins;
         lake_prepared_rowsets += other.lake_prepared_rowsets;
         lake_prepared_segments += other.lake_prepared_segments;
         lake_prepared_scan_rows += other.lake_prepared_scan_rows;
@@ -451,5 +461,8 @@ const char* const kIONsWriteRemote = "io_ns_write_remote";
 const char* const kPrefetchHitCount = "prefetch_hit_count";
 const char* const kPrefetchWaitFinishNs = "prefetch_wait_finish_ns";
 const char* const kPrefetchPendingNs = "prefetch_pending_ns";
+const char* const kRemoteQueueWaitNs = "remote_queue_wait_ns";
+const char* const kRemoteFillWaitNs = "remote_fill_wait_ns";
+const char* const kRemoteFillJoins = "remote_fill_joins";
 
 } // namespace starrocks

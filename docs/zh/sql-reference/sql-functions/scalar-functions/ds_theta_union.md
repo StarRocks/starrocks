@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "对两个 Apache DataSketches Theta 草图执行并集运算，返回不同值估计为 |A∪B| 的序列化紧凑草图。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_union

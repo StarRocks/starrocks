@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回指定日期中的天数，取值范围 1 到 31。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # dayofmonth

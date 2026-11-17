@@ -3,6 +3,7 @@ sidebar_position: 50
 displayed_sidebar: docs
 description: "StarRocks Iceberg Catalog のデータベース、テーブル、ビュー作成を含む DDL 操作。"
 keywords: ['iceberg', 'ddl', 'create table', 'alter table', 'create database', 'drop table', 'create view', 'alter view']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Iceberg DDL 操作
@@ -153,7 +154,7 @@ PARTITION BY (partition_expr[, partition_expr...])
 - `transform_expr(column_name)`
 - `transform_expr(column_name, parameter)`
 
-StarRocks は、Apache Iceberg 仕様で定義されているパーティション変換式をサポートしています。
+StarRocks は、次のパーティション変換をサポートしています: identity（列名または `identity()`）、`year()`、`month()`、`day()`、`hour()`、`truncate()`、`bucket()`、および `void()`。その他の変換を使用するとエラーが返されます。
 
 :::note
 パーティション列は、FLOAT、DOUBLE、DECIMAL、DATETIME を除くすべてのデータ型をサポートしています。

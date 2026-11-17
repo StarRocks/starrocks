@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "使用 AI 函数完成文本生成、向量化、分类、提取、翻译、摘要与语义判断。"
 sidebar_position: 21
 toc_max_heading_level: 2
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # AI 文本类函数

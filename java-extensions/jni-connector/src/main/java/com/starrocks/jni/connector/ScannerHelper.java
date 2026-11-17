@@ -42,14 +42,35 @@ public class ScannerHelper {
     }
 
     public static ClassLoader createModuleClassLoader(String moduleName) {
-        String basePath = System.getenv("STARROCKS_HOME");
+        return createModuleClassLoader(moduleName, null);
+    }
+
+    public static ClassLoader createModuleClassLoader(String moduleName, String firstModuleJar) {
+        return createModuleClassLoader(new File(System.getenv("STARROCKS_HOME")), moduleName, firstModuleJar);
+    }
+
+    static ClassLoader createModuleClassLoader(File basePath, String moduleName, String firstModuleJar) {
         List<File> preloadFiles = new ArrayList<>();
-        preloadFiles.add(new File(basePath + "/lib/jni-packages/starrocks-hadoop-ext.jar"));
-        File dir = new File(basePath + "/lib/" + moduleName);
+        preloadFiles.add(new File(basePath, "lib/jni-packages/starrocks-hadoop-ext.jar"));
+        File dir = new File(basePath, "lib/" + moduleName);
+        File[] moduleFiles = Objects.requireNonNull(dir.listFiles());
+        if (firstModuleJar != null) {
+            File first = new File(dir, firstModuleJar);
+            if (!first.isFile()) {
+                throw new IllegalStateException("Missing module jar: " + first);
+            }
+            preloadFiles.add(first);
+            for (File file : moduleFiles) {
+                if (!file.equals(first)) {
+                    preloadFiles.add(file);
+                }
+            }
+        } else {
+            preloadFiles.addAll(Arrays.asList(moduleFiles));
+        }
+        dir = new File(basePath, "lib/common-runtime-lib");
         preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
-        dir = new File(basePath + "/lib/common-runtime-lib");
-        preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
-        dir = new File(basePath + "/lib/hadoop/common");
+        dir = new File(basePath, "lib/hadoop/common");
         preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
         ClassLoader classLoader = ScannerHelper.createChildFirstClassLoader(preloadFiles, moduleName);
         return classLoader;

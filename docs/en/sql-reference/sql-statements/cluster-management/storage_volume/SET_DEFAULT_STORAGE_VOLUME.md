@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SET DEFAULT STORAGE VOLUME sets a storage volume as the default storage volume."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SET DEFAULT STORAGE VOLUME

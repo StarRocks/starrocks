@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "DROP INDEX removes a specified bitmap index from a table."
 keywords: ['suoyin']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP INDEX

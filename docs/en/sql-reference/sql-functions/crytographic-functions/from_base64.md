@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Decodes a Base64-encoded string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # from_base64

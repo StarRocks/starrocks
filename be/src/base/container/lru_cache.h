@@ -7,10 +7,12 @@
 #include <rapidjson/document.h>
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "base/string/slice.h"
@@ -22,7 +24,14 @@ class CacheKey;
 
 // Create a new cache with a fixed size capacity.  This implementation
 // of Cache uses a least-recently-used eviction policy.
-extern Cache* new_lru_cache(size_t capacity);
+// Optional storage allocator for shared cache bookkeeping (handles and hash
+// buckets). It must outlive the cache and every handle. Client values/deleters
+// are deliberately NOT invoked under this allocator's context.
+struct CacheStorageAllocator {
+    void* (*allocate)(size_t);
+    void (*deallocate)(void*);
+};
+extern Cache* new_lru_cache(size_t capacity, const CacheStorageAllocator* allocator = nullptr);
 
 class CacheKey {
 public:
@@ -222,9 +231,13 @@ public:
 
     virtual void get_cache_status(rapidjson::Document* document) = 0;
 
-    virtual void set_capacity(size_t capacity) = 0;
+    // Sets the capacity and evicts entries until the cache fits it. Returns the total charge of the evicted entries.
+    virtual size_t set_capacity(size_t capacity) = 0;
     virtual size_t get_capacity() const = 0;
     virtual size_t get_memory_usage() const = 0;
+    // Memory usage of each shard that set_capacity() divides the capacity evenly among, so that each shard holds at
+    // most capacity / shards. A cache that is not sharded reports one shard.
+    virtual std::vector<size_t> get_shard_memory_usages() const { return {get_memory_usage()}; }
     virtual size_t get_lookup_count() const = 0;
     virtual size_t get_hit_count() const = 0;
     virtual size_t get_insert_count() const = 0;
@@ -262,9 +275,16 @@ typedef struct LRUHandle {
         }
     }
 
-    void free() {
+    void free_storage(const CacheStorageAllocator* allocator) {
+        if (allocator != nullptr)
+            allocator->deallocate(this);
+        else
+            ::free(this);
+    }
+
+    void free(const CacheStorageAllocator* allocator) {
         (*deleter)(key(), value);
-        ::free(this);
+        free_storage(allocator);
     }
 
 } LRUHandle;
@@ -277,9 +297,9 @@ typedef struct LRUHandle {
 
 class HandleTable {
 public:
-    HandleTable() { _resize(); }
+    explicit HandleTable(const CacheStorageAllocator* allocator = nullptr) : _allocator(allocator) { _resize(); }
 
-    ~HandleTable() { delete[] _list; }
+    ~HandleTable() { _free_buckets(_list); }
 
     LRUHandle* lookup(const CacheKey& key, uint32_t hash);
 
@@ -290,6 +310,13 @@ public:
 private:
     // The tablet consists of an array of buckets where each bucket is
     // a linked list of cache entries that hash into the bucket.
+    const CacheStorageAllocator* _allocator;
+    void _free_buckets(LRUHandle** buckets) {
+        if (_allocator != nullptr)
+            _allocator->deallocate(buckets);
+        else
+            delete[] buckets;
+    }
     uint32_t _length{0};
     uint32_t _elems{0};
     LRUHandle** _list{nullptr};
@@ -304,11 +331,12 @@ private:
 // A single shard of sharded cache.
 class LRUCache {
 public:
-    LRUCache();
+    explicit LRUCache(const CacheStorageAllocator* allocator = nullptr);
     ~LRUCache() noexcept;
 
-    // Separate from constructor so caller can easily make an array of LRUCache
-    void set_capacity(size_t capacity);
+    // Separate from constructor so caller can easily make an array of LRUCache. Returns the total charge of the
+    // entries evicted to fit the new capacity.
+    size_t set_capacity(size_t capacity);
 
     // Like Cache methods, but with an extra "hash" parameter.
     Cache::Handle* insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
@@ -350,8 +378,8 @@ private:
 
     // Build a detached handle for `key`. Done outside _mutex so that neither insert
     // path allocates while holding the shard lock.
-    static LRUHandle* _alloc_handle(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
-                                    void (*deleter)(const CacheKey& key, void* value), CachePriority priority);
+    LRUHandle* _alloc_handle(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                             void (*deleter)(const CacheKey& key, void* value), CachePriority priority);
 
     // Shared by insert() and insert_if_absent(). Entries displaced or evicted are
     // appended to `deleted` and must be freed by the caller after _mutex is released.
@@ -362,6 +390,7 @@ private:
     void _update_charge_no_lock(LRUHandle* e, size_t new_value_size, std::vector<LRUHandle*>* deleted);
 
     // Initialized before use.
+    const CacheStorageAllocator* _allocator;
     size_t _capacity{0};
 
     // _mutex protects the following state.
@@ -387,7 +416,7 @@ static const int kNumShards = 1 << kNumShardBits;
 
 class ShardedLRUCache : public Cache {
 public:
-    explicit ShardedLRUCache(size_t capacity);
+    explicit ShardedLRUCache(size_t capacity, const CacheStorageAllocator* allocator = nullptr);
     ~ShardedLRUCache() override = default;
     Handle* insert(const CacheKey& key, void* value, size_t value_size,
                    void (*deleter)(const CacheKey& key, void* value),
@@ -412,8 +441,9 @@ public:
     uint64_t new_id() override;
     void prune() override;
     void get_cache_status(rapidjson::Document* document) override;
-    void set_capacity(size_t capacity) override;
+    size_t set_capacity(size_t capacity) override;
     size_t get_memory_usage() const override;
+    std::vector<size_t> get_shard_memory_usages() const override;
     size_t get_capacity() const override;
     size_t get_lookup_count() const override;
     size_t get_hit_count() const override;
@@ -425,8 +455,14 @@ public:
 private:
     static uint32_t _hash_slice(const CacheKey& s);
     static uint32_t _shard(uint32_t hash);
-    void _set_capacity(size_t capacity);
+    size_t _set_capacity(size_t capacity);
     size_t _get_stat(uint64_t (LRUCache::*mem_fun)() const) const;
+
+    template <size_t... I>
+    ShardedLRUCache(size_t capacity, const CacheStorageAllocator* allocator, std::index_sequence<I...>)
+            : _shards{(static_cast<void>(I), LRUCache(allocator))...}, _capacity(capacity) {
+        _set_capacity(capacity);
+    }
 
     LRUCache _shards[kNumShards];
     mutable std::mutex _mutex;

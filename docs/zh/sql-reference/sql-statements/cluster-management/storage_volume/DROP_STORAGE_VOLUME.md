@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP STORAGE VOLUME removes a storage volume from the cluster."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP STORAGE VOLUME

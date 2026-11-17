@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Removes duplicate keys from a map, because keys in a map must be unique in terms of semantics."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # distinct_map_keys

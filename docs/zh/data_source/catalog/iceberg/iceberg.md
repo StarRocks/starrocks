@@ -3,17 +3,16 @@ displayed_sidebar: docs
 description: "Iceberg catalog 是外部 catalog，支持无导入查询 Iceberg 数据及数据转换导入。"
 toc_max_heading_level: 5
 keywords: ['iceberg']
+products: [oss, enterprise, cloud, anywhere]
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
-import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
-import EditionSpecificIcebergCatalogSyntax from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Syntax.mdx'
-import EditionSpecificIcebergCatalogParam from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Param.mdx'
 
 # Iceberg catalog
 
-<QSTip />
+:::tip
+此示例使用了在 [StarRocks Basics](../../../quick_start/shared-nothing.md) 快速入门中介绍的本地气候数据 (LCD) 数据集。您可以导入数据并亲自尝试该示例。
+:::
 
 Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使用 Iceberg catalog，您可以：
 
@@ -34,7 +33,17 @@ Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使�
 
 :::
 
-如果 Iceberg 列的列表、映射或结构体中嵌套了 geography，则整个列显示为 `UNKNOWN_TYPE`，无法查询，包括其中的非地理空间子字段。其他受支持的列和标量 geography 仍可读取。
+## Iceberg 类型映射
+
+| Iceberg 类型 | StarRocks 类型 | 读取条件 |
+| --- | --- | --- |
+| `geometry` | `GEOMETRY` | 支持 Iceberg 格式版本 3 及以上的 Parquet 表中的顶层列。CRS 必须为 `OGC:CRS84`（默认值）或 `EPSG:<n>`，其中 `n` 仅包含 ASCII 数字，且表示一个正的 32 位有符号整数。其他 CRS 标识符映射为 `UNKNOWN_TYPE`。 |
+
+StarRocks 原样保留 CRS 标识符。`OGC:CRS84` 和 `EPSG:4326` 是不同的标识符。使用 `ST_AsText(g)` 或 `ST_AsBinary(g)` 返回 GEOMETRY 值。直接输出 GEOMETRY 列（包括输出包含此列的 `SELECT *`）会在查询分析阶段报错。
+
+如果 Iceberg 列的列表、映射或结构体中嵌套了 geography 或 geometry，则整个列显示为 `UNKNOWN_TYPE`，包括其中的非地理空间子字段在内均无法查询。其他受支持的列和标量 geography 仍可读取。
+
+滚动升级时，请先升级所有 BE 和 CN 节点，再升级 FE 节点。
 
 ## 使用注意事项
 
@@ -115,7 +124,18 @@ Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使�
 
 ### 语法
 
-<EditionSpecificIcebergCatalogSyntax />
+```SQL
+CREATE EXTERNAL CATALOG <catalog_name>
+[COMMENT <comment>]
+PROPERTIES
+(
+    "type" = "iceberg",
+    [SecurityParams],
+    MetastoreParams,
+    StorageCredentialParams,
+    MetadataRelatedParams
+)
+```
 
 ---
 
@@ -140,7 +160,7 @@ Iceberg catalog 的描述。此参数是可选的。
 
 关于 StarRocks 如何管理 Catalog 数据访问的参数。
 
-<IcebergCatalogIcebergRestSecurityLink />
+有关管理 Iceberg REST Catalog 数据访问的详细说明，请参阅[Iceberg REST Catalog 的安全设置](./iceberg_rest_security.md)。
 
 ##### catalog.access.control
 
@@ -883,8 +903,6 @@ Google GCS 的 `StorageCredentialParams`：
 | **参数**                                       | **默认值**             | **描述**                       |
 | :-------------------------------------------- | :-------------------- | :----------------------------- |
 | enable_get_stats_from_external_metadata       | false                 | 是否允许系统从 Iceberg 元数据中获取统计信息。当此项设置为 `true` 时，您可以通过会话变量 [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata) 进一步控制要收集的统计信息类型。 |
-
-<EditionSpecificIcebergCatalogParam />
 
 ### 示例
 

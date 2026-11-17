@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "BE 設定パラメーター：共有データクラスタ、データレイク統合、その他の設定項目。"
 sidebar_label: "共有データ、データレイク、その他"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -322,11 +323,20 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_segment_metadata_cache_limit_percent
 
-- デフォルト: 20
+- デフォルト: 10
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタにおける Segment メタデータキャッシュの容量で、BE プロセスメモリ上限に対する割合（パーセント）で指定します。このキャッシュは、オープン済みの Segment（フッター、インデックス、カラムリーダー）、delete vector、および Tablet スキーマを保持します。Tablet メタデータキャッシュ（`lake_tablet_metadata_cache_limit_percent` を参照）とは独立しているため、大量の Segment をロードしても Tablet メタデータやトランザクションログが追い出されることはありません。0–100 の範囲外の値は 0 または 100 として扱われます。`0` に設定するとこのキャッシュを無効にします。この項目は `lake_tablet_metadata_cache_limit_percent` とともに `lake_metadata_cache_limit` を置き換えます。
+- 説明: 共有データクラスタにおける Segment メタデータキャッシュの容量で、BE プロセスメモリ上限に対する割合（パーセント）で指定します。このキャッシュは、オープン済みの Segment（フッター、インデックス、カラムリーダー）、delete vector、および Tablet スキーマを保持します。Tablet メタデータキャッシュ（`lake_tablet_metadata_cache_limit_percent` を参照）とは独立しているため、大量の Segment をロードしても Tablet メタデータやトランザクションログが追い出されることはありません。0–100 の範囲外の値は 0 または 100 として扱われます。`0` に設定するとこのキャッシュを無効にします。この項目は `lake_tablet_metadata_cache_limit_percent` とともに `lake_metadata_cache_limit` を置き換えます。この値はキャッシュ容量の上限であり、BE プロセスのメモリが逼迫するとキャッシュはこの値より小さく縮小されます（`lake_tablet_metadata_cache_min_limit` を参照）。
+- 導入バージョン: -
+
+### lake_segment_metadata_cache_min_limit
+
+- デフォルト: 1073741824
+- タイプ: Long
+- 単位: Bytes
+- 変更可能: はい
+- 説明: 共有データクラスタにおいて、メモリ逼迫時に Segment メタデータキャッシュがメモリを解放する際（`lake_tablet_metadata_cache_min_limit` を参照）の容量の下限。この値が `lake_segment_metadata_cache_limit_percent` で設定された容量より大きい場合、キャッシュはその容量のまま縮小しません。
 - 導入バージョン: -
 
 ### lake_shard_info_cache_ttl_sec
@@ -340,11 +350,20 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_tablet_metadata_cache_limit_percent
 
-- デフォルト: 10
+- デフォルト: 5
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタにおける Tablet メタデータキャッシュの容量で、BE プロセスメモリ上限に対する割合（パーセント）で指定します。このキャッシュは Tablet メタデータとトランザクションログを保持します。Segment メタデータキャッシュ（`lake_segment_metadata_cache_limit_percent` を参照）とは独立しているため、大量の Segment をロードしてもこれらが追い出されることはありません。0–100 の範囲外の値は 0 または 100 として扱われます。`0` に設定するとこのキャッシュを無効にします。この項目は `lake_segment_metadata_cache_limit_percent` とともに `lake_metadata_cache_limit` を置き換えます。
+- 説明: 共有データクラスタにおける Tablet メタデータキャッシュの容量で、BE プロセスメモリ上限に対する割合（パーセント）で指定します。このキャッシュは Tablet メタデータとトランザクションログを保持します。Segment メタデータキャッシュ（`lake_segment_metadata_cache_limit_percent` を参照）とは独立しているため、大量の Segment をロードしてもこれらが追い出されることはありません。0–100 の範囲外の値は 0 または 100 として扱われます。`0` に設定するとこのキャッシュを無効にします。この項目は `lake_segment_metadata_cache_limit_percent` とともに `lake_metadata_cache_limit` を置き換えます。この値はキャッシュ容量の上限であり、BE プロセスのメモリが逼迫するとキャッシュはこの値より小さく縮小されます（`lake_tablet_metadata_cache_min_limit` を参照）。
+- 導入バージョン: -
+
+### lake_tablet_metadata_cache_min_limit
+
+- デフォルト: 1073741824
+- タイプ: Long
+- 単位: Bytes
+- 変更可能: はい
+- 説明: 共有データクラスタにおける Tablet メタデータキャッシュの容量の下限。BE プロセスのメモリ使用量が `memory_high_level` を超えると、Tablet メタデータキャッシュと Segment メタデータキャッシュは容量を現在の使用量より小さくし、最も長く使われていないエントリを追い出します。解放するメモリ量は、各キャッシュの使用量が下限（この項目と `lake_segment_metadata_cache_min_limit`）を超えている分に比例して両キャッシュに配分されます。`memory_high_level` を超えた分は約 50 秒かけて段階的に解放されます。使用量が `memory_urgent_level` も超えた場合は、`memory_urgent_level` を超えた分が即座に解放されます。使用量が `memory_high_level` を下回ると、容量は約 200 秒かけて `lake_tablet_metadata_cache_limit_percent` と `lake_segment_metadata_cache_limit_percent` で設定された値まで段階的に戻ります。チェックは 10 秒ごとに行われます。この値が `lake_tablet_metadata_cache_limit_percent` で設定された容量より大きい場合、キャッシュはその容量のまま縮小しません。
 - 導入バージョン: -
 
 ### lake_vacuum_enable_task_timeout
@@ -574,11 +593,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### datacache_disk_size
 
-- デフォルト: 0
+- デフォルト: 100%
 - タイプ: String
 - 単位: -
 - 変更可能: はい
-- 説明: 単一ディスクにキャッシュできるデータの最大量。パーセンテージ (例: `80%`) または物理的な制限 (例: `2T`、`500G`) として設定できます。たとえば、2 つのディスクを使用し、`datacache_disk_size` パラメータの値を `21474836480` (20 GB) に設定した場合、これらの 2 つのディスクに最大 40 GB のデータをキャッシュできます。デフォルト値は `0` で、これはメモリのみがデータをキャッシュするために使用されることを示します。
+- 説明: 単一ディスクにキャッシュできるデータの最大量。パーセンテージ (例: `80%`) または物理的な制限 (例: `2T`、`500G`) として設定できます。たとえば、2 つのディスクを使用し、`datacache_disk_size` パラメータの値を `21474836480` (20 GB) に設定した場合、これらの 2 つのディスクに最大 40 GB のデータをキャッシュできます。パーセンテージは、各 `storage_root_path` が存在するディスクの容量に対する割合です。デフォルト値は `100%` です。`enable_datacache_disk_auto_adjust` が `true` (デフォルト) の場合、システムはディスク使用率に基づいて実際のディスクキャッシュ容量を自動調整し、この項目はその容量の上限のみを設定します。`0` はディスクキャッシュを無効にします。
 - 導入バージョン: -
 
 ### datacache_enable
@@ -876,8 +895,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
-- 変更可能: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクの最大同時実行数 (BE ノードごと)。デフォルト値 `0` は制限がないことを示します。
+- 変更可能: いいえ
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクの最大同時実行数 (BE ノードごと)。デフォルト値 `0` は制限がないことを示します。非推奨: v3.4 以降、FE が `default_mv_wg` を永続化して BE に送信するため、この項目は効果がありません。代わりに `ALTER RESOURCE GROUP default_mv_wg WITH (...)` を使用してください。
 - 導入バージョン: v3.1
 
 ### default_mv_resource_group_cpu_limit
@@ -885,8 +904,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 1
 - タイプ: Int
 - 単位: -
-- 変更可能: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大 CPU コア数 (BE ノードごと)。
+- 変更可能: いいえ
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大 CPU コア数 (BE ノードごと)。非推奨: v3.4 以降、FE が `default_mv_wg` を永続化して BE に送信するため、この項目は効果がありません。代わりに `ALTER RESOURCE GROUP default_mv_wg WITH (...)` を使用してください。
 - 導入バージョン: v3.1
 
 ### default_mv_resource_group_memory_limit
@@ -894,8 +913,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 0.8
 - タイプ: Double
 - 単位: 
-- 変更可能: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大メモリ比率 (BE ノードごと)。デフォルト値はメモリの 80% を示します。
+- 変更可能: いいえ
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大メモリ比率 (BE ノードごと)。デフォルト値はメモリの 80% を示します。非推奨: v3.4 以降、FE が `default_mv_wg` を永続化して BE に送信するため、この項目は効果がありません。代わりに `ALTER RESOURCE GROUP default_mv_wg WITH (...)` を使用してください。
 - 導入バージョン: v3.1
 
 ### default_mv_resource_group_spill_mem_limit_threshold
@@ -903,8 +922,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 0.8
 - タイプ: Double
 - 単位: -
-- 変更可能: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで中間結果のスピリングをトリガーする前のメモリ使用量のしきい値。デフォルト値はメモリの 80% を示します。
+- 変更可能: いいえ
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで中間結果のスピリングをトリガーする前のメモリ使用量のしきい値。デフォルト値はメモリの 80% を示します。非推奨: v3.4 以降、FE が `default_mv_wg` を永続化して BE に送信するため、この項目は効果がありません。代わりに `ALTER RESOURCE GROUP default_mv_wg WITH (...)` を使用してください。
 - 導入バージョン: v3.1
 
 ### enable_resolve_hostname_to_ip_in_load_error_url
@@ -978,7 +997,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Long
 - 単位: Percent
 - 変更可能: Yes
-- 説明: プロセスのメモリ上限に対する割合で表されるハイウォーターメモリ閾値。総メモリ使用量がこの割合を超えると、BE はメモリ圧力を緩和するために徐々にメモリを解放し始めます（現在はデータキャッシュと更新キャッシュの追い出しで実施）。モニタはこの値を用いて memory_high = mem_limit * memory_high_level / 100 を計算し、消費量が `>` memory_high の場合は GC アドバイザに導かれた制御されたエビクションを行います；消費量が別の設定である memory_urgent_level を超えると、より攻撃的な即時削減が行われます。この値は閾値超過時に一部のメモリ集約的な操作（例えば primary-key preload）を無効化するかどうかの判断にも使われます。memory_urgent_level と合わせた検証を満たす必要があります（memory_urgent_level `>` memory_high_level、memory_high_level `>=` 1、memory_urgent_level `<=` 100）。
+- 説明: プロセスのメモリ上限に対する割合で表されるハイウォーターメモリ閾値。総メモリ使用量がこの割合を超えると、BE はメモリ圧力を緩和するために徐々にメモリを解放し始めます（現在はデータキャッシュと更新キャッシュの追い出し、および共有データのメタデータキャッシュの縮小で実施）。モニタはこの値を用いて memory_high = mem_limit * memory_high_level / 100 を計算し、消費量が `>` memory_high の場合は GC アドバイザに導かれた制御されたエビクションを行います；消費量が別の設定である memory_urgent_level を超えると、より攻撃的な即時削減が行われます。この値は閾値超過時に一部のメモリ集約的な操作（例えば primary-key preload）を無効化するかどうかの判断にも使われます。memory_urgent_level と合わせた検証を満たす必要があります（memory_urgent_level `>` memory_high_level、memory_high_level `>=` 1、memory_urgent_level `<=` 100）。
 - 導入バージョン: v3.2.0
 
 ### report_exec_rpc_request_retry_num

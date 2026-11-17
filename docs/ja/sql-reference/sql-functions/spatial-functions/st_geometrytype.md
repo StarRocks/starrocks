@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "GEOGRAPHY または GEOMETRY 値の OGC ジオメトリファミリーを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_GEOMETRYTYPE

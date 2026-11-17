@@ -1,0 +1,31 @@
+-- name: test_iceberg_min_max_opt_no_stats_partition_source
+
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
+
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0} properties ("location" = "oss://${oss_bucket}/test_iceberg_min_max_opt_no_stats_partition_source/${uuid0}/iceberg_db_${uuid0}");
+set catalog iceberg_sql_test_${uuid0};
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+
+-- d is the source of the year(d) partition transform, so a query on d alone gets a placeholder column (v).
+-- The data files carry no min/max of d: d must be read from the files, not filled with a default value.
+create external table t1 (
+    v int,
+    d date
+) partition by (year(d))
+properties ("write.metadata.metrics.column.d" = "none");
+
+insert into t1 values (1, '2025-12-30'), (2, '2025-12-31'), (3, '2026-01-01'), (4, '2026-01-02');
+
+select v from t1 order by v;
+
+set enable_min_max_optimization = true;
+select min(d), max(d) from t1;
+
+set enable_min_max_optimization = false;
+select min(d), max(d) from t1;
+
+drop table t1 force;
+
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_sql_test_${uuid0};

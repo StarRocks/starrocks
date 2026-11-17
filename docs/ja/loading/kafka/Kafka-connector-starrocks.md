@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "StarRocks Kafka コネクタを使用して Apache Kafka トピックからデータを継続的にロードする方法（at-least-once セマンティクス保証付き）。"
+products: [oss, enterprise, anywhere]
 ---
 
 # Kafka コネクタを使用したデータのロード

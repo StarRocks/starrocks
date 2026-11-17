@@ -2104,7 +2104,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         } else {
             ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(segment_info.path));
         }
-        segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, tablet_schema, this);
+        segment = Segment::create(fs, segment_info, segment_id, tablet_schema, this);
         if (fill_meta_cache) {
             TEST_SYNC_POINT_CALLBACK("TabletManager::load_segment:before_cache_insert", &segment);
             // NOTE: the returned segment may be not the same as the parameter passed in
@@ -2127,13 +2127,13 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
             // only the entry we just checked so subsequent requests can reuse this schema. A racing
             // replacement or eviction must not be overwritten; serve this request privately instead.
             auto fs = segment_info.fs ? segment_info.fs : segment->shared_file_system();
-            auto replacement = std::make_shared<Segment>(fs, segment_info, segment_id, tablet_schema,
-                                                         fill_meta_cache ? this : nullptr);
+            auto replacement =
+                    Segment::create(fs, segment_info, segment_id, tablet_schema, fill_meta_cache ? this : nullptr);
             if (fill_meta_cache) {
                 TEST_SYNC_POINT_CALLBACK("TabletManager::load_segment:before_cache_replace", nullptr);
                 if (!_metacache->replace_segment_if_matches(cache_key, segment.get(), replacement)) {
-                    replacement = std::make_shared<Segment>(std::move(fs), segment_info, segment_id,
-                                                            std::move(tablet_schema), /*tablet_manager=*/nullptr);
+                    replacement = Segment::create(fs, segment_info, segment_id, tablet_schema,
+                                                  /*tablet_manager=*/nullptr);
                 }
             }
             segment = std::move(replacement);

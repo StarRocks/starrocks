@@ -94,6 +94,12 @@ public:
     int64_t sst_output_bytes() const { return _sst_output_bytes; }
 
 protected:
+    // Remote reads of this task are one background flow of the remote I/O scheduler.
+    RemoteReadContext remote_read_context() const {
+        return RemoteReadContext::for_background(RemoteReadContext::Workload::COMPACTION,
+                                                 static_cast<uint64_t>(_txn_id));
+    }
+
     // Read chunk size for this phase, deciding at the same time whether the held input set may stay.
     // The held set is resident for the whole task, so it comes out of the same per-worker budget the
     // read buffers are sized from -- but only up to a point: past it, holding starves the chunk

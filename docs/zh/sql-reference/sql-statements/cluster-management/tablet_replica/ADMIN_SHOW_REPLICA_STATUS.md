@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN SHOW REPLICA STATUS shows replica status information for a table or partition."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SHOW REPLICA STATUS
@@ -8,6 +9,8 @@ description: "ADMIN SHOW REPLICA STATUS shows replica status information for a t
 ## 功能
 
 该语句用于展示一个表或分区的副本状态信息。
+
+该语句不支持存算分离集群中的云原生表，也不支持物化视图。对云原生表执行该语句会返回以 `Unsupported operation on lake table` 开头的错误；对物化视图执行该语句会返回错误 `Table does not exist or is not OLAP table`。
 
 :::tip
 

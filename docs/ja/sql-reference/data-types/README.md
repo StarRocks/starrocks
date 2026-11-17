@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "数値型、文字列型、日付型、半構造化データ型など StarRocks がサポートするデータ型の概要。"
 sidebar_position: 1
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # データ型の概要

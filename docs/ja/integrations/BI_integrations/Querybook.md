@@ -2,6 +2,7 @@
 sidebar_position: 40
 displayed_sidebar: docs
 description: "Querybook で StarRocks の内部・外部データをクエリし可視化するための依存パッケージのインストール方法を説明します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Querybook

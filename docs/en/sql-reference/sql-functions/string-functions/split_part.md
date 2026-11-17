@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Splits a string by a delimiter and returns the Nth part."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # split_part

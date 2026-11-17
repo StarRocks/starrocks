@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "UNNEST 是表函数，用于将数组展开成多行。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # unnest

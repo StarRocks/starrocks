@@ -371,13 +371,16 @@ public class DatabaseTransactionMgr {
             throw new MetaNotFoundException("could not find db [" + dbId + "]");
         }
 
-        TransactionState transactionState = getTransactionState(transactionId);
-        if (transactionState == null) {
+        TransactionState lockedState = getTransactionState(transactionId);
+        if (lockedState == null) {
             throw new TransactionNotFoundException(transactionId);
         }
 
-        transactionState.writeLock();
+        lockedState.writeLock();
         try {
+            // An abort (a rollback, a cancel, the timeout checker) may have run after the lookup above, so prepare
+            // the current state: preparing the looked-up copy would write PREPARED over the abort.
+            TransactionState transactionState = getLatestTransactionStateInTxnLock(transactionId, lockedState);
             if (transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
                 throw new TransactionCommitFailedException(transactionState.getReason());
             }
@@ -473,7 +476,7 @@ public class DatabaseTransactionMgr {
 
             LOG.debug("transaction:[{}] successfully prepare", copiedState);
         } finally {
-            transactionState.writeUnlock();
+            lockedState.writeUnlock();
         }
     }
 
@@ -500,12 +503,16 @@ public class DatabaseTransactionMgr {
             throw new MetaNotFoundException("could not find db [" + dbId + "]");
         }
 
-        TransactionState transactionState = getTransactionState(transactionId);
-        if (transactionState == null) {
+        TransactionState lockedState = getTransactionState(transactionId);
+        if (lockedState == null) {
             throw new TransactionNotFoundException(transactionId);
         }
-        transactionState.writeLock();
+        lockedState.writeLock();
         try {
+            // A rollback sent together with this commit may have aborted the transaction after the lookup above.
+            // Commit the current state: committing the looked-up PREPARED copy would write COMMITTED over the abort,
+            // while the abort has told the backends to delete the load's txn logs and segments.
+            TransactionState transactionState = getLatestTransactionStateInTxnLock(transactionId, lockedState);
             if (transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
                 throw new TransactionCommitFailedException(transactionState.getReason());
             }
@@ -582,8 +589,31 @@ public class DatabaseTransactionMgr {
             LOG.info("transaction:[{}] successfully committed", copiedState);
             return waiter;
         } finally {
-            transactionState.writeUnlock();
+            lockedState.writeUnlock();
         }
+    }
+
+    /**
+     * Returns the current state object of a transaction. Call it while holding the transaction's write lock, which
+     * the caller took on {@code lockedState}, the object it looked up before.
+     * <p>
+     * Every state change stores a new copy in the transaction maps, so the looked-up object can be replaced before
+     * the caller gets the lock: a concurrent abort, which does not take the table locks, may already have stored an
+     * ABORTED copy. All copies share one lock, so the map entry no longer changes while the caller holds it, and a
+     * caller that checks and copies the returned object cannot write its change over a newer state.
+     */
+    private TransactionState getLatestTransactionStateInTxnLock(long transactionId, TransactionState lockedState)
+            throws TransactionNotFoundException {
+        TransactionState latest = getTransactionState(transactionId);
+        if (latest == null) {
+            // Only a finished transaction leaves the maps, when it expires.
+            throw new TransactionNotFoundException(transactionId);
+        }
+        if (latest != lockedState) {
+            LOG.info("transaction {} changed from {} to {} before its lock was taken, using the current state",
+                    transactionId, lockedState.getTransactionStatus(), latest.getTransactionStatus());
+        }
+        return latest;
     }
 
     private String buildTableListString(Database db, TransactionState transactionState) {

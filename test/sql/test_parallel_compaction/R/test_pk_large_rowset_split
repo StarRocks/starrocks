@@ -1,4 +1,4 @@
--- name: test_pk_large_rowset_split_basic @cloud @sequential
+-- name: test_pk_large_rowset_split_basic @cloud @sequential @slow
 create database test_pk_large_rowset_split_${uuid0};
 -- result:
 -- !result
@@ -6,21 +6,10 @@ use test_pk_large_rowset_split_${uuid0};
 -- result:
 -- !result
 [UC]orig_max_rowset_size=SELECT VALUE from information_schema.be_configs where name='lake_compaction_max_rowset_size' limit 1;
--- result:
-4294967296
--- !result
 [UC]orig_max_bytes_per_subtask=SELECT VALUE from information_schema.be_configs where name='lake_compaction_max_bytes_per_subtask' limit 1;
--- result:
-5368709120
--- !result
 [UC]orig_write_buffer_size=SELECT VALUE from information_schema.be_configs where name='write_buffer_size' limit 1;
--- result:
-104857600
--- !result
 [UC]orig_enable_load_spill=SELECT VALUE from information_schema.be_configs where name='enable_load_spill' limit 1;
--- result:
-true
--- !result
+[UC]function: orig_max_tasks=execute_sql("ADMIN SHOW FRONTEND CONFIG LIKE 'lake_compaction_max_tasks'", True)["result"][0][2]
 ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "0");
 -- result:
 -- !result
@@ -63,17 +52,8 @@ SELECT NUM_SEGMENT >= 4 as has_enough_segments FROM information_schema.be_tablet
 1
 -- !result
 [UC]seg_before=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
--- result:
-13
--- !result
 [UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
--- result:
-2
--- !result
 [UC]data_size=SELECT DATA_SIZE FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
--- result:
-16226630
--- !result
 SELECT COUNT(*) FROM pk_large_split;
 -- result:
 50000
@@ -92,36 +72,28 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
 -- result:
 -- !result
 [UC]ALTER TABLE pk_large_split COMPACT;
+function: wait_compaction_committed("pk_large_split", ${version_before})
 -- result:
+None
 -- !result
-SELECT sleep(30);
+function: wait_parallel_compaction_finished("pk_large_split")
 -- result:
-1
+None
 -- !result
-[UC]SHOW PROC '/compactions';
+ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "0");
 -- result:
-test_pk_large_rowset_split_ab7262b655c84f36a231faf57b4ce2fe.pk_large_split.22046	11020	2026-01-27 01:02:48	2026-01-27 01:02:49	2026-01-27 01:02:49	None	{"sub_task_count":3,"read_local_sec":0,"read_local_mb":15,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":13,"write_segment_count":3,"write_segment_mb":0,"write_remote_sec":0,"in_queue_sec":0}
 -- !result
 [UC]version_after=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
--- result:
-3
--- !result
 SELECT ${version_after} > ${version_before} as compaction_happened;
 -- result:
 1
 -- !result
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
--- result:
-3
--- !result
-SELECT ${rowset_after} > 1 as parallel_compaction_triggered;
+SELECT ${rowset_after} = 1 as split_outputs_merged;
 -- result:
 1
 -- !result
 [UC]seg_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
--- result:
-3
--- !result
 SELECT ${seg_after} < ${seg_before} as segments_reduced;
 -- result:
 1
@@ -139,18 +111,13 @@ SELECT k1, k2, LENGTH(v1), v2 FROM pk_large_split WHERE k1 IN (1, 10000, 20000, 
 40000	40000	320	400000
 50000	50000	320	500000
 -- !result
-UPDATE information_schema.be_configs SET VALUE = '${orig_max_rowset_size}' WHERE name = 'lake_compaction_max_rowset_size';
--- result:
--- !result
-UPDATE information_schema.be_configs SET VALUE = '${orig_max_bytes_per_subtask}' WHERE name = 'lake_compaction_max_bytes_per_subtask';
--- result:
--- !result
-UPDATE information_schema.be_configs SET VALUE = '${orig_write_buffer_size}' WHERE name = 'write_buffer_size';
--- result:
--- !result
-UPDATE information_schema.be_configs SET VALUE = '${orig_enable_load_spill}' WHERE name = 'enable_load_spill';
--- result:
--- !result
 DROP DATABASE test_pk_large_rowset_split_${uuid0} FORCE;
 -- result:
 -- !result
+CLEANUP {
+  UPDATE information_schema.be_configs SET VALUE = '${orig_max_rowset_size}' WHERE name = 'lake_compaction_max_rowset_size';
+  UPDATE information_schema.be_configs SET VALUE = '${orig_max_bytes_per_subtask}' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+  UPDATE information_schema.be_configs SET VALUE = '${orig_write_buffer_size}' WHERE name = 'write_buffer_size';
+  UPDATE information_schema.be_configs SET VALUE = '${orig_enable_load_spill}' WHERE name = 'enable_load_spill';
+  ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "${orig_max_tasks}");
+} END CLEANUP

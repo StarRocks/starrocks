@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回指定 FE 模块的估计内存使用量，以 JSON 格式呈现。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_memory

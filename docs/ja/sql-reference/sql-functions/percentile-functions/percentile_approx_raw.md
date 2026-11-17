@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定されたパーセンタイルに対応する値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_approx_raw

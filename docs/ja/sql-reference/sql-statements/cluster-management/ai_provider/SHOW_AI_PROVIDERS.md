@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "登録済みの AI プロバイダーを一覧表示します。名前のパターンまたはタイプでフィルタリングできます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW AI PROVIDERS

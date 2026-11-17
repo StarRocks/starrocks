@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "导入频率过快导致数据未及时合并导致版本数超限的解决方案。"
+products: [oss, enterprise]
 ---
 
 # 导入通用问题

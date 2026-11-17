@@ -291,6 +291,8 @@ public enum ErrorCode {
             "SELECT cannot read table '%s' modified earlier in the same transaction"),
     ERR_EXPLICIT_TXN_PARTIAL_UPDATE_ON_MODIFIED_TABLE(5308, new byte[] {'2', '5', 'P', '0', '1'},
             "Partial update cannot be applied to table '%s' modified earlier in the same transaction"),
+    ERR_EXPLICIT_TXN_DELETE_ON_NON_PRIMARY_KEY_TABLE(5309, new byte[] {'2', '5', 'P', '0', '1'},
+            "DELETE on non-Primary-Key table '%s' is not supported in an explicit transaction"),
 
     /**
      * 5400 - 5499: Internal error

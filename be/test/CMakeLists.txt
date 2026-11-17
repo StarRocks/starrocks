@@ -153,6 +153,7 @@ set(EXEC_FILES
         #./orchestration/routine_load_task_executor_test.cpp
         ./compute_env/load/time_bounded_stream_load_pipe_test.cpp
         ./runtime/merge_cascade_test.cpp
+        ./runtime/process_memory_test.cpp
         ./runtime/exec_env_test.cpp
         ./storage/flat_json_metrics_test.cpp
         ./util/json_flattener_test.cpp
@@ -166,6 +167,7 @@ set(EXEC_FILES
         ./service/daemon_test.cpp
         ./service/mem_hook_test.cpp
         ./service/service_metrics_test.cpp
+        ./service/service_be/arrow_flight_auth_server_middleware_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/backend_service_test.cpp
         ./base/auth/auth_info_test.cpp
@@ -302,6 +304,7 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_primary_key_recover_test.cpp
     ./exec/lake_connector_scan_node_test.cpp
     ./storage/lake/metacache_test.cpp
+    ./storage/lake/metacache_adjuster_test.cpp
     ./storage/lake/meta_file_test.cpp
     ./storage/lake/lake_proto_normalizer_test.cpp
     ./storage/lake/partial_update_test.cpp
@@ -418,6 +421,7 @@ SET(DW_TEST_FILES
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_manager_test.cpp
     ./storage/snapshot_meta_test.cpp
+    ./storage/sort_key_bounds_test.cpp
     ./storage/sort_key_sampler_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_cleanup_executor_test.cpp
