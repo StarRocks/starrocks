@@ -1827,45 +1827,6 @@ TEST_F(AggStateFunctionsTest, test_agg_state_combine_error_cases) {
     test_agg_state_combine_error_cases<int32_t>(ctx, "sum", arg_type_descs, return_type_desc);
 }
 
-<<<<<<< HEAD
-=======
-// The nested aggregate of a scalar combinator reports failures through a FunctionContext private to execute(), so
-// the combinator must return them as its status.
-TEST_F(AggStateFunctionsTest, test_state_combinators_return_nested_error) {
-    TypeDescriptor int_type(TYPE_INT);
-    TypeDescriptor intermediate_type(TYPE_VARBINARY);
-    std::vector<TypeDescriptor> arg_types = {int_type};
-    auto utils = std::make_unique<FunctionUtils>(nullptr, int_type, arg_types);
-    auto ctx = utils->get_fn_ctx();
-
-    auto func = get_aggregate_function("assert_single_value", TYPE_INT, TYPE_INT, false);
-    ASSERT_NE(func, nullptr);
-    auto state_of = [&](int32_t value) {
-        auto input = Int32Column::create();
-        input->append(value);
-        return create_agg_state_column<int32_t>(func, ctx, std::move(input), false, intermediate_type);
-    };
-    AggStateDesc agg_state_desc("assert_single_value", int_type, arg_types, false, 1);
-
-    StateUnionFunction union_func(agg_state_desc, intermediate_type, {false, false});
-    auto union_result = union_func.execute(ctx, {state_of(1), state_of(1)});
-    ASSERT_TRUE(union_result.ok()) << union_result.status();
-    union_result = union_func.execute(ctx, {state_of(1), state_of(2)});
-    ASSERT_FALSE(union_result.ok());
-    ASSERT_EQ(ASSERT_SINGLE_VALUE_ERROR, std::string(union_result.status().message()));
-
-    StateMergeFunction merge_func(agg_state_desc, int_type, {false});
-    auto merge_result = merge_func.execute(ctx, {state_of(1)});
-    ASSERT_TRUE(merge_result.ok()) << merge_result.status();
-    // A state of a TINYINT argument is three bytes short for INT.
-    auto short_state = BinaryColumn::create();
-    short_state->append(Slice("\x02\x0a", 2));
-    merge_result = merge_func.execute(ctx, {std::move(short_state)});
-    ASSERT_FALSE(merge_result.ok());
-    ASSERT_EQ(ASSERT_SINGLE_VALUE_INVALID_STATE_ERROR, std::string(merge_result.status().message()));
-    ASSERT_FALSE(ctx->has_error());
-}
-
 ColumnPtr combine_into_state(const AggregateFunction* func, FunctionContext* ctx, const Columns& args) {
     auto state = ManagedAggrState::create(ctx, func);
     std::vector<const Column*> raw_args;
@@ -2076,7 +2037,6 @@ TEST_F(AggStateFunctionsTest, test_state_combinators_keep_percentile_approx_comp
     }
 }
 
->>>>>>> f740e518425... [BugFix][RB-1620] Keep n and compression when agg_state combinators merge max_n/min_n/percentile_approx states (#69649)
 // A state that is not trivially destructible and counts how many of it are alive.
 struct LiveCountedState {
     static inline int64_t live = 0;
