@@ -270,7 +270,8 @@ public class FinalManagersRecoveryImageV3Test {
                 assertTrue(allIds.add(id.getValue()), "duplicate section ID " + id);
             }
         }
-        assertEquals(62, allIds.size());
+        assertEquals(63, allIds.size());
+        assertEquals(1, SectionId.GLOBAL_STATE.getValue());
         for (int reserved = 320; reserved < 330; reserved++) {
             assertTrue(!allIds.contains(reserved), "empty CE WarehouseManager must not allocate " + reserved);
         }

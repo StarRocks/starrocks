@@ -19,6 +19,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.bdbje.BDBEnvironment;
+import com.starrocks.persist.ImageFiles;
 import com.starrocks.persist.ImageLoader;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
@@ -201,17 +202,25 @@ public class RestoreClusterSnapshotMgr {
         try {
             String localImagePath = GlobalStateMgr.getImageDirPath();
 
-            // Try to read snapshot info from snapshot_meta.json first, then delete it regardless
             ClusterSnapshot snapshotMeta = ClusterSnapshotUtils.readLocalSnapshotMetaFile(localImagePath);
-            ClusterSnapshotUtils.deleteLocalSnapshotMetaFile(localImagePath);
+            ImageLoader loader = new ImageLoader(localImagePath);
+            long feImageJournalId = loader.getImageJournalId();
+            Storage starMgrStorage = new Storage(localImagePath + StarMgrServer.IMAGE_SUBDIR);
+            long starMgrImageJournalId = starMgrStorage.getImageJournalId();
+            ImageFiles.validate(loader.getImageFile().toPath(), loader.getImageFormatVersion(), feImageJournalId);
+            if (!starMgrStorage.getCurrentImageFile().isFile()) {
+                throw new java.io.IOException("snapshot has no StarMgr image");
+            }
             if (snapshotMeta != null) {
-                return new RestoredSnapshotInfo(snapshotMeta.getSnapshotName(),
-                        snapshotMeta.getFeJournalId(), snapshotMeta.getStarMgrJournalId());
+                if (snapshotMeta.getFeJournalId() != feImageJournalId
+                        || snapshotMeta.getStarMgrJournalId() != starMgrImageJournalId) {
+                    throw new java.io.IOException("snapshot metadata does not match the downloaded image journal IDs");
+                }
+                ClusterSnapshotUtils.deleteLocalSnapshotMetaFile(localImagePath);
+                return new RestoredSnapshotInfo(snapshotMeta.getSnapshotName(), feImageJournalId, starMgrImageJournalId);
             }
 
-            // Fallback: read image version from local image files (old format without meta file)
-            long feImageJournalId = new ImageLoader(localImagePath).getImageJournalId();
-            long starMgrImageJournalId = new Storage(localImagePath + StarMgrServer.IMAGE_SUBDIR).getImageJournalId();
+            // Older snapshots have no manifest; use the same image selection as normal startup.
             return new RestoredSnapshotInfo(snapshotName, feImageJournalId, starMgrImageJournalId);
         } catch (Exception e) {
             throw new StarRocksException("Failed to get local image version for restore", e);

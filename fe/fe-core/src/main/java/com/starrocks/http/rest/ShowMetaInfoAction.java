@@ -50,8 +50,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.leader.MetaHelper;
-import com.starrocks.persist.Storage;
+import com.starrocks.persist.ImageLoader;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -183,9 +182,10 @@ public class ShowMetaInfoAction extends RestBaseAction {
         feInfo.put("can_read", String.valueOf(GlobalStateMgr.getCurrentState().canRead()));
         feInfo.put("is_ready", String.valueOf(GlobalStateMgr.getCurrentState().isReady()));
         try {
-            Storage storage = new Storage(MetaHelper.getImageFileDir(true));
+            ImageLoader storage = new ImageLoader(GlobalStateMgr.getImageDirPath());
             feInfo.put("last_checkpoint_version", String.valueOf(storage.getImageJournalId()));
-            long lastCheckpointTime = storage.getCurrentImageFile().lastModified();
+            long lastCheckpointTime = storage.getImageFile().lastModified();
+            feInfo.put("image_format_version", storage.getImageFormatVersion().name());
             feInfo.put("last_checkpoint_time", String.valueOf(lastCheckpointTime));
         } catch (IOException e) {
             LOG.warn(e.getMessage(), e);

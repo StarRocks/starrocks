@@ -85,7 +85,6 @@ import org.mockito.Mockito;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -671,18 +670,10 @@ public class GlobalStateMgrTest {
 
         // move image file
         String imagePath = currentState.dumpImage();
-        Path targetPath = Path.of(Config.meta_dir, GlobalStateMgr.IMAGE_DIR, "/v2",
-                Path.of(imagePath).getFileName().toString());
+        Path targetPath = Path.of(Config.meta_dir, GlobalStateMgr.IMAGE_DIR, "v3",
+                Path.of(imagePath).getFileName().toString().replace("image.v3.", "image."));
+        Files.createDirectories(targetPath.getParent());
         Files.move(Path.of(imagePath), targetPath);
-        // Move all checksum files instead of a single file
-        Path checksumDir = Path.of(Config.meta_dir);
-        Path checksumTargetDir = Path.of(Config.meta_dir, GlobalStateMgr.IMAGE_DIR, "/v2");
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(checksumDir, "checksum.*")) {
-            for (Path file : stream) {
-                Path target = checksumTargetDir.resolve(file.getFileName());
-                Files.move(file, target);
-            }
-        }
 
         GlobalStateMgr newState = new MyGlobalStateMgr(false);
         newState.loadImage();

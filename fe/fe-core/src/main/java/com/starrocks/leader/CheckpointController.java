@@ -48,7 +48,9 @@ import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalType;
 import com.starrocks.lake.snapshot.ClusterSnapshotInfo;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.ImageFiles;
 import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageLoader;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.rpc.ThriftConnectionPool;
@@ -220,26 +222,41 @@ public class CheckpointController extends LeaderDaemon {
     public long getImageJournalId() {
         long imageJournalId = 0;
         try {
-            Storage storage = new Storage(MetaHelper.getImageFileDir(belongToGlobalStateMgr));
-            // get max image version
-            imageJournalId = storage.getImageJournalId();
+            imageJournalId = belongToGlobalStateMgr
+                    ? new ImageLoader(GlobalStateMgr.getImageDirPath()).getImageJournalId()
+                    : new Storage(MetaHelper.getImageFileDir(false)).getImageJournalId();
         } catch (IOException e) {
             LOG.error("Failed to get storage info", e);
         }
         return imageJournalId;
     }
 
+    public boolean isImageComplete(long imageJournalId) {
+        return belongToGlobalStateMgr
+                ? ImageFiles.isComplete(GlobalStateMgr.getImageDirPath(), imageJournalId, !Config.disable_image_v2_write)
+                : Storage.getImageFile(new File(MetaHelper.getImageFileDir(false)), imageJournalId).isFile();
+    }
+
     public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId,
                                                                 boolean needClusterSnapshotInfo) {
-        LOG.info("checkpoint imageJournalId {}, logJournalId {}", imageJournalId, maxJournalId);
+        LOG.info("checkpoint imageJournalId {}, logJournalId {}, writeV2 {}",
+                imageJournalId, maxJournalId, !Config.disable_image_v2_write);
 
         // Step 1: create image
         Pair<Boolean, String> createImageRet = Pair.create(false, "");
-        if (imageJournalId < maxJournalId) {
+        boolean hasNewJournals = imageJournalId < maxJournalId;
+        // Retry at the current journal ID in either case:
+        // 1. The caller needs snapshot information, which must be collected by the checkpoint worker.
+        // 2. A required image is missing or invalid. v2 and v3 are published separately, so a partial
+        //    download can advance the discovered image ID before all required files are ready.
+        boolean retryCurrentCheckpoint = imageJournalId == maxJournalId
+                && (needClusterSnapshotInfo || !isImageComplete(maxJournalId));
+        if (hasNewJournals || retryCurrentCheckpoint) {
             this.journalId = maxJournalId;
             createImageRet = createImage(needClusterSnapshotInfo);
         }
         if (createImageRet.first) {
+            nodesToPushImage.clear();
             // Push the image file to all other nodes
             // NOTE: Do not get other nodes from HaProtocol, because the node may not be in bdbje replication group yet.
             for (Frontend frontend : GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends()) {
@@ -260,7 +277,7 @@ public class CheckpointController extends LeaderDaemon {
         int needToPushCnt = nodesToPushImage.size();
         long newImageVersion = createImageRet.first ? maxJournalId : imageJournalId;
         if (needToPushCnt > 0) {
-            if (isStopRequested()) {
+            if (isStopRequested() || !isImageComplete(newImageVersion)) {
                 return createImageRet;
             }
             pushImage(newImageVersion);
@@ -340,17 +357,26 @@ public class CheckpointController extends LeaderDaemon {
     }
 
     private void downloadImage() throws IOException {
-        // if worker is self, do not download.
-        if (workerNodeName.equals(GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName())) {
-            return;
+        if (!workerNodeName.equals(GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName())) {
+            for (ImageFormatVersion format : checkpointFormats()) {
+                downloadImage(format, MetaHelper.getImageFileDir(subDir, format));
+            }
         }
-
         if (belongToGlobalStateMgr) {
-            downloadImage(ImageFormatVersion.v2, MetaHelper.getImageFileDir(true));
+            if (!isImageComplete(journalId)) {
+                throw new IOException("checkpoint " + journalId + " is missing a valid image, writeV2="
+                        + (!Config.disable_image_v2_write));
+            }
             GlobalStateMgr.getCurrentState().setImageJournalId(journalId);
-        } else {
-            downloadImage(ImageFormatVersion.v1, MetaHelper.getImageFileDir(false));
         }
+        for (ImageFormatVersion format : checkpointFormats()) {
+            new MetaCleaner(MetaHelper.getImageFileDir(subDir, format)).clean();
+        }
+    }
+
+    private List<ImageFormatVersion> checkpointFormats() {
+        return belongToGlobalStateMgr
+                ? ImageFiles.formats(!Config.disable_image_v2_write) : List.of(ImageFormatVersion.v1);
     }
 
     private void downloadImage(ImageFormatVersion imageFormatVersion, String imageDir) throws IOException {
@@ -366,7 +392,8 @@ public class CheckpointController extends LeaderDaemon {
                 + "&subdir=" + subDir
                 + "&image_format_version=" + imageFormatVersion;
         try {
-            MetaHelper.downloadImageFile(url, MetaService.DOWNLOAD_TIMEOUT_SECOND * 1000, String.valueOf(journalId), dir,
+            MetaHelper.downloadImageFile(url, MetaService.DOWNLOAD_TIMEOUT_SECOND * 1000, String.valueOf(journalId),
+                    dir, imageFormatVersion,
                     conn -> {
                         // Publish-point self-check: a stop landing between the worker's last
                         // isStopRequested() poll and this publication would find inFlightConnection
@@ -381,9 +408,6 @@ public class CheckpointController extends LeaderDaemon {
             inFlightConnection = null;
         }
 
-        // clean the old images
-        MetaCleaner cleaner = new MetaCleaner(imageDir);
-        cleaner.clean();
     }
 
     private String selectWorker(boolean needClusterSnapshotInfo) {
@@ -444,7 +468,7 @@ public class CheckpointController extends LeaderDaemon {
         if (selfName.equals(frontend.getNodeName())) {
             CheckpointWorker worker = getCheckpointWorker();
             try {
-                worker.setNextCheckpoint(epoch, journalId, needClusterSnapshotInfo);
+                worker.setNextCheckpoint(epoch, journalId, needClusterSnapshotInfo, !Config.disable_image_v2_write);
                 return true;
             } catch (CheckpointException e) {
                 LOG.warn("set next checkpoint failed", e);
@@ -457,6 +481,7 @@ public class CheckpointController extends LeaderDaemon {
                 request.setEpoch(epoch);
                 request.setJournal_id(journalId);
                 request.setIs_global_state_mgr(belongToGlobalStateMgr);
+                request.setWrite_v2(!Config.disable_image_v2_write);
                 TStartCheckpointResponse response = ThriftRPCRequestExecutor.call(
                         ThriftConnectionPool.frontendPool,
                         new TNetworkAddress(frontend.getHost(), frontend.getRpcPort()),
@@ -518,36 +543,38 @@ public class CheckpointController extends LeaderDaemon {
             }
 
             boolean pushSuccess = true;
-            ImageFormatVersion formatVersion = belongToGlobalStateMgr ? ImageFormatVersion.v2 : ImageFormatVersion.v1;
-            String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
-                    + "/put?version=" + imageVersion
-                    + "&port=" + Config.http_port
-                    + "&subdir=" + subDir
-                    + "&for_global_state=" + belongToGlobalStateMgr
-                    + "&image_format_version=" + formatVersion.toString();
-            try {
-                MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000, conn -> {
-                    // Publish-point self-check (see downloadImage): without it, a stop landing in the
-                    // check-then-publish gap leaves this worker blocked on a socket read for up to
-                    // PUT_TIMEOUT_SECOND (an hour) with no interrupt possible (interruptOnStop is
-                    // false), keeping isRunning true and tripping the re-activation gate into exit.
-                    inFlightConnection = conn;
-                    if (isStopRequested()) {
-                        conn.disconnect();
-                    }
-                });
-
-                LOG.info("push image successfully, url = {}", url);
+            for (ImageFormatVersion format : checkpointFormats()) {
+                String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
+                        + "/put?version=" + imageVersion
+                        + "&port=" + Config.http_port
+                        + "&subdir=" + subDir
+                        + "&for_global_state=" + belongToGlobalStateMgr
+                        + "&image_format_version=" + format;
+                try {
+                    MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000, conn -> {
+                        // Publish before checking stop so demotion can always disconnect our connection.
+                        inFlightConnection = conn;
+                        if (isStopRequested()) {
+                            conn.disconnect();
+                        }
+                    });
+                    LOG.info("push image successfully, url = {}", url);
+                } catch (IOException e) {
+                    pushSuccess = false;
+                    LOG.error("Exception when pushing image file. url = {}", url, e);
+                    break;
+                } finally {
+                    inFlightConnection = null;
+                }
+                if (isStopRequested()) {
+                    pushSuccess = false;
+                    break;
+                }
+            }
+            if (pushSuccess) {
                 if (MetricRepo.hasInit) {
                     MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
                 }
-            } catch (IOException e) {
-                pushSuccess = false;
-                LOG.error("Exception when pushing image file. url = {}", url, e);
-            } finally {
-                inFlightConnection = null;
-            }
-            if (pushSuccess) {
                 iterator.remove();
                 successPushedCnt++;
             }

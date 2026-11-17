@@ -39,8 +39,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.leader.MetaHelper;
-import com.starrocks.persist.Storage;
+import com.starrocks.persist.ImageLoader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import io.netty.handler.codec.http.HttpMethod;
@@ -139,11 +138,12 @@ public class HaAction extends WebBaseAction {
 
     private void appendImageInfo(StringBuilder buffer) {
         try {
-            Storage storage = new Storage(MetaHelper.getImageFileDir(true));
+            ImageLoader storage = new ImageLoader(GlobalStateMgr.getImageDirPath());
             buffer.append("<h2>Checkpoint Info</h2>");
             buffer.append("<pre>");
             buffer.append("<p>last checkpoint version:" + storage.getImageJournalId() + "</p>");
-            long lastCheckpointTime = storage.getCurrentImageFile().lastModified();
+            buffer.append("<p>image format: " + storage.getImageFormatVersion() + "</p>");
+            long lastCheckpointTime = storage.getImageFile().lastModified();
             Date date = new Date(lastCheckpointTime);
             buffer.append("<p>last checkpoint time: " + date + "</p>");
             buffer.append("</pre>");

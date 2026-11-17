@@ -47,7 +47,7 @@ public class GlobalStateCheckpointWorker extends CheckpointWorker {
 
             checkEpoch(epoch);
 
-            globalStateMgr.saveImage();
+            globalStateMgr.saveImage(writeV2);
             replayedJournalId = globalStateMgr.getReplayedJournalId();
             if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_IMAGE_WRITE.increase(1L);

@@ -34,13 +34,14 @@
 
 package com.starrocks.leader;
 
-import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.common.InvalidMetaDirException;
 import com.starrocks.common.io.IOUtils;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.persist.ImageFiles;
 import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageLoader;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.staros.StarMgrServer;
@@ -101,60 +102,59 @@ public class MetaHelper {
     public static void downloadImageFile(String urlStr, int timeout, String journalId, File destDir,
                                          Consumer<HttpURLConnection> onConnect)
             throws IOException {
+        ImageFormatVersion format = switch (destDir.getName()) {
+            case "v2" -> ImageFormatVersion.v2;
+            case "v3" -> ImageFormatVersion.v3;
+            default -> ImageFormatVersion.v1;
+        };
+        downloadImageFile(urlStr, timeout, journalId, destDir, format, onConnect);
+    }
+
+    public static void downloadImageFile(String urlStr, int timeout, String journalId, File destDir,
+                                         ImageFormatVersion format, Consumer<HttpURLConnection> onConnect)
+            throws IOException {
+        long id = Long.parseLong(journalId);
+        Files.createDirectories(destDir.toPath());
+        Path partFile = destDir.toPath().resolve(Storage.IMAGE + "." + journalId + PART_SUFFIX);
         HttpURLConnection conn = null;
-        String checksum = null;
-        String destFilename = Storage.IMAGE + "." + journalId;
-        File partFile = new File(destDir, destFilename + MetaHelper.PART_SUFFIX);
-        // 1. download to a tmp file image.xxx.part
-        try (FileOutputStream out = new FileOutputStream(partFile)) {
-            URL url = new URL(urlStr);
-            conn = (HttpURLConnection) url.openConnection();
-            if (onConnect != null) {
-                onConnect.accept(conn);
+        try {
+            String checksum;
+            try (FileOutputStream out = new FileOutputStream(partFile.toFile())) {
+                conn = (HttpURLConnection) new URL(urlStr).openConnection();
+                if (onConnect != null) {
+                    onConnect.accept(conn);
+                }
+                conn.setConnectTimeout(timeout);
+                conn.setReadTimeout(timeout);
+                String size = conn.getHeaderField(X_IMAGE_SIZE);
+                long imageSize = size == null ? -1 : Long.parseLong(size);
+                try (InputStream in = new BufferedInputStream(conn.getInputStream())) {
+                    long bytes = IOUtils.copyBytes(in, out, BUFFER_BYTES, CHECKPOINT_LIMIT_BYTES, false);
+                    if (imageSize >= 0 && bytes != imageSize) {
+                        throw new IOException("Unexpected image size, expected: " + imageSize + ", actual: " + bytes);
+                    }
+                }
+                out.getChannel().force(true);
+                checksum = conn.getHeaderField(X_IMAGE_CHECKSUM);
             }
-            conn.setConnectTimeout(timeout);
-            conn.setReadTimeout(timeout);
-
-            // Get image size
-            long imageSize = -1;
-            String imageSizeStr = conn.getHeaderField(X_IMAGE_SIZE);
-            if (imageSizeStr != null) {
-                imageSize = Long.parseLong(imageSizeStr);
+            if (format == ImageFormatVersion.v2) {
+                ImageFiles.validateChecksum(partFile, checksum);
+                Path checksumFile = destDir.toPath().resolve(Storage.CHECKSUM + "." + journalId);
+                try (FileOutputStream out = new FileOutputStream(checksumFile.toFile())) {
+                    out.write(checksum.getBytes(StandardCharsets.UTF_8));
+                    out.getChannel().force(true);
+                }
             }
-
-            BufferedInputStream bin = new BufferedInputStream(conn.getInputStream());
-
-            // Do not limit speed in client side.
-            long bytes = IOUtils.copyBytes(bin, out, BUFFER_BYTES, CHECKPOINT_LIMIT_BYTES, false);
-            if ((imageSize > 0) && (bytes != imageSize)) {
-                throw new IOException("Unexpected image size, expected: " + imageSize + ", actual: " + bytes);
-            }
-
-            out.getChannel().force(true);
-
-            checksum = conn.getHeaderField(X_IMAGE_CHECKSUM);
+            ImageFiles.publishImage(partFile, destDir.toPath(), format, id);
+            Files.deleteIfExists(partFile);
+            LOG.info("successfully downloaded image {} in format {}", ImageFiles.image(destDir.toPath(), id), format);
+        } catch (NumberFormatException e) {
+            throw new IOException("invalid image size from " + urlStr, e);
         } finally {
             if (conn != null) {
                 conn.disconnect();
             }
         }
-
-        // 2. write checksum if exists
-        if (!Strings.isNullOrEmpty(checksum)) {
-            File checksumFile = Path.of(destDir.getAbsolutePath(), Storage.CHECKSUM + "." + journalId).toFile();
-            try (FileOutputStream fos = new FileOutputStream(checksumFile)) {
-                fos.write(checksum.getBytes(StandardCharsets.UTF_8));
-                fos.getChannel().force(true);
-            }
-        }
-
-        // 3. rename to image.xxx
-        File imageFile = new File(destDir, destFilename);
-        if (!partFile.renameTo(imageFile)) {
-            throw new IOException("rename file:" + partFile.getName() + " to file:" + destFilename + " failed");
-        }
-
-        LOG.info("successfully download image file: {}", imageFile.getAbsolutePath());
     }
 
     public static OutputStream getOutputStream(String filename, File dir)
@@ -253,14 +253,8 @@ public class MetaHelper {
             throw new InvalidMetaDirException();
         }
 
-        Path imageDir = Paths.get(MetaHelper.getImageFileDir(true));
         Path bdbDir = Paths.get(BDBEnvironment.getBdbDir());
-        boolean haveImageData = false;
-        if (Files.exists(imageDir)) {
-            try (Stream<Path> stream = Files.walk(imageDir)) {
-                haveImageData = stream.anyMatch(path -> path.getFileName().toString().startsWith("image."));
-            }
-        }
+        boolean haveImageData = new ImageLoader(GlobalStateMgr.getImageDirPath()).getImageFile().isFile();
         boolean haveBDBData = false;
         if (Files.exists(bdbDir)) {
             try (Stream<Path> stream = Files.walk(bdbDir)) {

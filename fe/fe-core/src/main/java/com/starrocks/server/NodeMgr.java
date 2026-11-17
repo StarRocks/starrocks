@@ -52,6 +52,8 @@ import com.starrocks.ha.LeaderInfo;
 import com.starrocks.http.meta.MetaBaseAction;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.persist.DropFrontendInfo;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageLoader;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
@@ -716,26 +718,24 @@ public class NodeMgr {
      * Exception are free to raise on initialized phase
      */
     private void getNewImageOnStartup(Pair<String, Integer> helperNode, String subDir) throws IOException {
-        String imageFileDir = MetaHelper.getImageFileDir(Strings.isNullOrEmpty(subDir));
-        Storage storage = new Storage(imageFileDir);
-        long localImageJournalId = storage.getImageJournalId();
-
+        boolean global = Strings.isNullOrEmpty(subDir);
+        long localJournalId = global ? new ImageLoader(GlobalStateMgr.getImageDirPath()).getImageJournalId()
+                : new Storage(MetaHelper.getImageFileDir(false)).getImageJournalId();
         String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
         URL infoUrl = new URL("http://" + accessibleHostPort + "/info?subdir=" + subDir);
-        StorageInfo remoteStorageInfo = getStorageInfo(infoUrl);
-        long remoteImageJournalId = remoteStorageInfo.getImageJournalId();
-        if (remoteImageJournalId > localImageJournalId) {
-            String url = "http://" + accessibleHostPort + "/image?"
-                    + "version=" + remoteImageJournalId
-                    + "&subdir=" + subDir
-                    + "&image_format_version=" + remoteStorageInfo.getImageFormatVersion();
-            LOG.info("start to download image.{} version:{}, from {}", remoteImageJournalId,
-                    remoteStorageInfo.getImageFormatVersion(), url);
-            MetaHelper.downloadImageFile(url, HTTP_TIMEOUT_SECOND * 1000,
-                    Long.toString(remoteImageJournalId), new File(imageFileDir));
+        StorageInfo remote = getStorageInfo(infoUrl);
+        long remoteJournalId = remote.getImageJournalId();
+        if (remoteJournalId > localJournalId) {
+            ImageFormatVersion format = remote.getImageFormatVersion();
+            File directory = new File(MetaHelper.getImageFileDir(subDir, format));
+            String url = "http://" + accessibleHostPort + "/image?version=" + remoteJournalId
+                    + "&subdir=" + subDir + "&image_format_version=" + format;
+            LOG.info("download image {} in format {} from {}", remoteJournalId, format, url);
+            MetaHelper.downloadImageFile(url, HTTP_TIMEOUT_SECOND * 1000, Long.toString(remoteJournalId),
+                    directory);
         } else {
             LOG.info("skip download image for {}, current version {} >= version {} from {}",
-                    imageFileDir, localImageJournalId, remoteImageJournalId, helperNode);
+                    subDir, localJournalId, remoteJournalId, helperNode);
         }
     }
 

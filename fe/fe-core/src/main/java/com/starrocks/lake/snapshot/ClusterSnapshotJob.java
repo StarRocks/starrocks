@@ -236,7 +236,8 @@ public class ClusterSnapshotJob implements Writable {
         long starMgrCheckpointJournalId = getStarMgrJournalId();
 
         long feImageJournalId = feController.getImageJournalId();
-        if (feImageJournalId < feCheckpointJournalId) {
+        if (feImageJournalId <= feCheckpointJournalId && (feImageJournalId < feCheckpointJournalId
+                || !feController.isImageComplete(feCheckpointJournalId) || needClusterSnapshotInfo())) {
             Pair<Boolean, String> createFEImageRet = feController.runCheckpointControllerWithIds(feImageJournalId,
                     feCheckpointJournalId, needClusterSnapshotInfo());
             if (!createFEImageRet.first) {

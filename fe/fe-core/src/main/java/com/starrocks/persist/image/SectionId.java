@@ -27,6 +27,9 @@ import java.util.Objects;
  */
 public class SectionId {
     public static final SectionId INVALID = new SectionId(0, "INVALID");
+    // Global state: 1-9.
+    public static final SectionId GLOBAL_STATE = new SectionId(1, "GLOBAL_STATE");
+
     // Reserve ten IDs per manager, in v2 save order. Add list sections within that manager's range.
     // NodeMgr: 10-19.
     public static final SectionId NODE_MGR = new SectionId(10, "NODE_MGR");

@@ -43,9 +43,18 @@ public class ImageLoader {
     public ImageLoader(String imageDir) throws IOException {
         this.imageDir = imageDir;
         Storage storageV2 = new Storage(imageDir + "/v2");
-        imageFile = storageV2.getCurrentImageFile();
-        imageFormatVersion = ImageFormatVersion.v2;
-        imageJournalId = storageV2.getImageJournalId();
+        Storage storageV3 = new Storage(imageDir + "/v3");
+        if (storageV3.getCurrentImageFile().isFile()
+                && (!storageV2.getCurrentImageFile().isFile()
+                || storageV3.getImageJournalId() >= storageV2.getImageJournalId())) {
+            imageFile = storageV3.getCurrentImageFile();
+            imageFormatVersion = ImageFormatVersion.v3;
+            imageJournalId = storageV3.getImageJournalId();
+        } else {
+            imageFile = storageV2.getCurrentImageFile();
+            imageFormatVersion = ImageFormatVersion.v2;
+            imageJournalId = storageV2.getImageJournalId();
+        }
     }
 
     public File getImageFile() {
