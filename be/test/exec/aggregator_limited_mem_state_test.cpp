@@ -203,6 +203,10 @@ TEST_F(StreamingAggSinkHandoffTest, streaming_sink_reads_hash_map_it_owns) {
     EXPECT_EQ(aggregator->hash_map_variant().allocated_memory_usage(aggregator->mem_pool()),
               sink->revocable_mem_bytes());
 
+    sink->_handed_off_hash_table_memory_usage = 12345;
+    sink->_publish_hash_table_memory_usage();
+    EXPECT_EQ(aggregator->hash_map_memory_usage(), sink->_unique_metrics->get_counter("HashTableMemoryUsage")->value());
+
     // An empty table the sink owns is reported as drained.
     ASSERT_OK(sink->set_finishing(&_state));
     EXPECT_TRUE(aggregator->is_ht_eos());
@@ -223,6 +227,11 @@ TEST_F(StreamingAggSinkHandoffTest, streaming_sink_skips_hash_map_handed_to_sour
     sink->set_revocable_mem_bytes(42);
     sink->_update_revocable_mem_bytes();
     EXPECT_EQ(42u, sink->revocable_mem_bytes());
+
+    // The profile reports the size measured just before the hand-off, not zero.
+    sink->_handed_off_hash_table_memory_usage = 12345;
+    sink->_publish_hash_table_memory_usage();
+    EXPECT_EQ(12345, sink->_unique_metrics->get_counter("HashTableMemoryUsage")->value());
 
     op->set_execute_mode(1);
     EXPECT_EQ(static_cast<size_t>(config::streaming_agg_limited_memory_size),
@@ -245,6 +254,10 @@ TEST_F(StreamingAggSinkHandoffTest, distinct_sink_skips_hash_set_handed_to_sourc
     aggregator->_is_only_group_by_columns = true;
     aggregator->_hash_set_variant.hash_set_with_key = std::unique_ptr<Int32AggHashSetOfOneNumberKey<PhmapSeed1>>();
     aggregator->set_streaming_all_states(true);
+
+    sink->_handed_off_hash_table_memory_usage = 12345;
+    sink->_publish_hash_table_memory_usage();
+    EXPECT_EQ(12345, sink->_unique_metrics->get_counter("HashTableMemoryUsage")->value());
 
     op->set_execute_mode(1);
     EXPECT_EQ(static_cast<size_t>(config::streaming_agg_limited_memory_size),

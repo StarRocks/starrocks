@@ -76,6 +76,7 @@ private:
     Status _build_topn_runtime_filter(RuntimeState* state);
 
     void _update_revocable_mem_bytes();
+    void _publish_hash_table_memory_usage();
 
     // It is used to perform aggregation algorithms shared by
     // AggregateStreamingSourceOperator. It is
@@ -88,6 +89,8 @@ private:
     AggrAutoState _auto_state{};
     AggrAutoContext _auto_context;
     LimitedMemAggState _limited_mem_state;
+    // Hash table memory usage measured right before the table was last handed to the source.
+    int64_t _handed_off_hash_table_memory_usage = 0;
     // the size of hash table when the last time the topn runtime filter is built
     size_t _hash_table_size = 0;
 

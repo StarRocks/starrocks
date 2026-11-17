@@ -40,10 +40,7 @@ Status AggregateStreamingSinkOperator::prepare_local_state(RuntimeState* state) 
 }
 
 void AggregateStreamingSinkOperator::close(RuntimeState* state) {
-    auto* counter = ADD_COUNTER(_unique_metrics, "HashTableMemoryUsage", TUnit::BYTES);
-    if (!_aggregator->is_streaming_all_states()) {
-        COUNTER_SET(counter, _aggregator->hash_map_memory_usage());
-    }
+    _publish_hash_table_memory_usage();
     _aggregator->unref(state);
     Operator::close(state);
 }
@@ -374,6 +371,8 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_limited_memory(RuntimeStat
                                                                      const size_t chunk_size) {
     if (_limited_mem_state.has_limited(*_aggregator)) {
         RETURN_IF_ERROR(_push_chunk_by_force_streaming(chunk));
+        // Measure the table while the sink still owns it; close() reports this if the source has not rebuilt it.
+        _handed_off_hash_table_memory_usage = _aggregator->hash_map_memory_usage();
         auto notify = _aggregator->defer_notify_source();
         _aggregator->set_streaming_all_states(true);
     } else {
@@ -393,6 +392,13 @@ std::string AggregateStreamingSinkOperator::get_name() const {
     auto full = _aggregator->is_chunk_buffer_full();
     return fmt::format("{}_{}_{}({}) {{ full:{} has_output:{}}}", _name, _plan_node_id, (void*)this, finished, full,
                        has_output());
+}
+
+void AggregateStreamingSinkOperator::_publish_hash_table_memory_usage() {
+    auto* counter = ADD_COUNTER(_unique_metrics, "HashTableMemoryUsage", TUnit::BYTES);
+    // While the source owns the hash table, report its size as measured just before the hand-off.
+    COUNTER_SET(counter, _aggregator->is_streaming_all_states() ? _handed_off_hash_table_memory_usage
+                                                                : _aggregator->hash_map_memory_usage());
 }
 
 } // namespace starrocks::pipeline
