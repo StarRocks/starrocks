@@ -216,9 +216,10 @@ static ScalarArrayLayout detect_scalar_array_layout(const ParquetField* typed_fi
     VariantNodeFields elem_fields = find_variant_node_fields(element_field);
     const ParquetField* elem_value_field = elem_fields.value;
     const ParquetField* elem_typed_value_field = elem_fields.typed_value;
-    // Scalar-array layout: struct {value, typed_value(scalar), ...}
-    if (elem_value_field != nullptr && elem_typed_value_field != nullptr &&
-        elem_typed_value_field->type != ColumnType::STRUCT && elem_typed_value_field->type != ColumnType::ARRAY) {
+    // Scalar-array layout: struct {value, typed_value(scalar), ...}. `value` is optional: an element written without it
+    // has only a typed value.
+    if (elem_typed_value_field != nullptr && elem_typed_value_field->type != ColumnType::STRUCT &&
+        elem_typed_value_field->type != ColumnType::ARRAY) {
         layout.enabled = true;
         layout.value_field = elem_value_field;
         layout.typed_value_field = elem_typed_value_field;
@@ -246,7 +247,11 @@ static Status build_array_typed_value_reader(const ColumnReaderOptions& opts, co
         }
         node->typed_value_reader =
                 std::make_unique<ListColumnReader>(typed_field, std::move(element_reader_or).value());
-        DCHECK(array_layout.value_field != nullptr);
+        node->scalar_array_layout = true;
+        if (array_layout.value_field == nullptr) {
+            node->array_element_value_reader.reset();
+            return Status::OK();
+        }
         if (array_layout.value_field->physical_column_index < 0 ||
             static_cast<size_t>(array_layout.value_field->physical_column_index) >=
                     opts.row_group_meta->columns.size()) {
@@ -254,7 +259,6 @@ static Status build_array_typed_value_reader(const ColumnReaderOptions& opts, co
                     "variant array element.value has out-of-range physical_column_index $0 (num_chunks=$1)",
                     array_layout.value_field->physical_column_index, opts.row_group_meta->columns.size()));
         }
-        node->scalar_array_layout = true;
         auto element_value_reader = std::make_unique<ScalarColumnReader>(
                 array_layout.value_field,
                 &(opts.row_group_meta->columns[array_layout.value_field->physical_column_index]), &TYPE_VARBINARY_DESC,
@@ -800,8 +804,10 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
     DCHECK(variant_field->children.size() >= 2);
 
     VariantNodeFields top_fields = find_variant_node_fields(variant_field);
-    if (top_fields.metadata == nullptr || top_fields.value == nullptr) {
-        return Status::InvalidArgument("Variant type must have 'metadata' and 'value' fields");
+    // `value` is optional when `typed_value` holds the whole value (a fully shredded variant).
+    if (top_fields.metadata == nullptr || (top_fields.value == nullptr && top_fields.typed_value == nullptr)) {
+        return Status::InvalidArgument(
+                "Variant type must have a 'metadata' field and a 'value' or 'typed_value' field");
     }
 
     const tparquet::ColumnChunk* column_chunks = opts.row_group_meta->columns.data();
@@ -809,20 +815,31 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
     const ParquetField* value_field = top_fields.value;
     auto _metadata_reader = std::make_unique<ScalarColumnReader>(
             metadata_field, &(column_chunks[metadata_field->physical_column_index]), &TYPE_VARBINARY_DESC, opts);
-    auto _value_reader = std::make_unique<ScalarColumnReader>(
-            value_field, &(column_chunks[value_field->physical_column_index]), &TYPE_VARBINARY_DESC, opts);
+    std::unique_ptr<ScalarColumnReader> _value_reader;
+    if (value_field != nullptr) {
+        _value_reader = std::make_unique<ScalarColumnReader>(
+                value_field, &(column_chunks[value_field->physical_column_index]), &TYPE_VARBINARY_DESC, opts);
+    }
     std::vector<ShreddedFieldNode> shredded_fields;
     ColumnReaderPtr root_typed_value_reader = nullptr;
     std::unique_ptr<TypeDescriptor> root_typed_value_type = nullptr;
     std::unique_ptr<ObjectPresenceSource> root_presence;
     std::string root_unsupported_reason;
     ShreddedRawEncoding root_raw_encoding = ShreddedRawEncoding::NONE;
+    std::unique_ptr<ShreddedFieldNode> root_array_node;
     if (top_fields.typed_value != nullptr) {
         const ParquetField* typed_value_field = top_fields.typed_value;
         if (typed_value_field->type == ColumnType::STRUCT) {
             VariantPath root_path;
             RETURN_IF_ERROR(collect_variant_shredded_fields(opts, typed_value_field, &root_path, &shredded_fields));
             ASSIGN_OR_RETURN(root_presence, make_object_presence_source(opts, typed_value_field));
+        } else if (typed_value_field->type == ColumnType::ARRAY) {
+            // The elements are {value, typed_value} groups, which an array field resolves and a plain reader would not.
+            root_array_node = std::make_unique<ShreddedFieldNode>();
+            root_array_node->name = typed_value_field->name;
+            root_array_node->kind = ShreddedFieldNode::Kind::ARRAY;
+            RETURN_IF_ERROR(build_array_readers_for_variant_node(opts, column_chunks, typed_value_field,
+                                                                 root_array_node->full_path, root_array_node.get()));
         } else {
             TypeDescriptor file_type = variant_typed_desc_from_parquet_field(typed_value_field);
             root_raw_encoding = shredded_raw_encoding(*typed_value_field);
@@ -847,6 +864,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
     reader->set_root_presence(std::move(root_presence));
     reader->set_root_unsupported_reason(std::move(root_unsupported_reason));
     reader->set_root_raw_encoding(root_raw_encoding);
+    reader->set_root_array_node(std::move(root_array_node));
     return ColumnReaderPtr(std::move(reader));
 }
 
