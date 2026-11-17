@@ -103,6 +103,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -133,6 +134,10 @@ public class IcebergApiConverter {
     private static final Pattern ICEBERG_BUCKET_PATTERN = Pattern.compile("bucket\\[(\\d+)]");
     private static final Pattern ICEBERG_TRUNCATE_PATTERN = Pattern.compile("truncate\\[(\\d+)]");
     private static final int FAKE_FIELD_ID = -1;
+    private static final List<String> DATA_FILE_FORMATS = List.of("parquet", "orc", "avro");
+    // the names Iceberg's parquet writer parses; SR's own aliases zlib and none are not among them
+    private static final List<String> PARQUET_CODECS =
+            List.of("uncompressed", "snappy", "gzip", "lzo", "brotli", "lz4", "zstd", "lz4_raw");
 
     public static IcebergTable toIcebergTable(Table nativeTbl, String catalogName, String remoteDbName,
                                               String remoteTableName, String nativeCatalogType) {
@@ -892,10 +897,46 @@ public class IcebergApiConverter {
         }
     }
 
+    // These values are stored in the table metadata for every engine, so they must be ones Iceberg itself accepts.
+    public static void checkWriteProperty(String key, String value) {
+        switch (key) {
+            case TableProperties.DEFAULT_FILE_FORMAT:
+                checkOneOf(key, value, DATA_FILE_FORMATS);
+                break;
+            case TableProperties.PARQUET_COMPRESSION:
+            case TableProperties.DELETE_PARQUET_COMPRESSION:
+                checkOneOf(key, value, PARQUET_CODECS);
+                break;
+            case TableProperties.WRITE_TARGET_FILE_SIZE_BYTES:
+                // parsed as Iceberg's PropertyUtil.propertyAsLong does, without trimming
+                long size;
+                try {
+                    size = Long.parseLong(value);
+                } catch (NumberFormatException e) {
+                    size = 0;
+                }
+                if (size <= 0) {
+                    throw new StarRocksConnectorException("Invalid value '%s' for property '%s', expected a positive integer",
+                            value, key);
+                }
+                break;
+            default:
+        }
+    }
+
+    private static void checkOneOf(String key, String value, List<String> allowed) {
+        if (!allowed.contains(value.toLowerCase(Locale.ROOT))) {
+            throw new StarRocksConnectorException("Unsupported value '%s' for property '%s', supported: %s",
+                    value, key, String.join(", ", allowed));
+        }
+    }
+
     public static Map<String, String> rebuildCreateTableProperties(Map<String, String> createProperties) {
         ImmutableMap.Builder<String, String> tableProperties = ImmutableMap.builder();
         createProperties.entrySet().forEach(tableProperties::put);
-        String fileFormat = createProperties.getOrDefault(FILE_FORMAT, TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
+        // the alias codec follows the alias format, else the native default format
+        String fileFormat = createProperties.getOrDefault(FILE_FORMAT, createProperties.getOrDefault(
+                TableProperties.DEFAULT_FILE_FORMAT, TableProperties.DEFAULT_FILE_FORMAT_DEFAULT));
         String compressionCodec = createProperties.get(COMPRESSION_CODEC);
 
         if (!createProperties.containsKey(TableProperties.DEFAULT_FILE_FORMAT)) {
