@@ -16,6 +16,21 @@
 
 #include <future>
 
+<<<<<<< HEAD
+=======
+#include "base/debug/trace.h"
+#include "base/phmap/phmap.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "column/datum_convert.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "fs/fs_factory.h"
+#include "runtime/current_thread.h"
+#include "runtime/runtime_env.h"
+#include "runtime/runtime_state.h"
+>>>>>>> 53b21e7 ([BugFix][RB-1307] Keep the tablet schema map lock short on lake scans of wide tables (#83415))
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
@@ -39,6 +54,56 @@
 
 namespace starrocks::lake {
 
+<<<<<<< HEAD
+=======
+static bool cancel_requested(const std::atomic<bool>* flag) {
+    return flag != nullptr && flag->load(std::memory_order_acquire);
+}
+
+static SegmentReadStateCache make_segment_read_state_cache(const PreparedSegmentReadState& state) {
+    SegmentReadStateCache cache;
+    if (state.has_pruned_scan_range()) {
+        cache.scan_range = state.pruned_scan_range;
+    }
+    if (state.has_rowid_bounds_cache()) {
+        cache.seek_range_rowid_ranges = &state.seek_ranges_rowid_bounds;
+        cache.tablet_rowid_range = &state.tablet_range_rowid_bounds;
+    }
+    return cache;
+}
+
+// The schema that rowset |rowset_index| of |tablet_metadata| was written with: the historical schema that
+// rowset_to_schema maps it to, or else the tablet schema.
+static const TabletSchemaPB& rowset_schema_pb(const TabletMetadataPB& tablet_metadata, int rowset_index) {
+    const auto& rowset_to_schema = tablet_metadata.rowset_to_schema();
+    auto it = rowset_to_schema.find(tablet_metadata.rowsets(rowset_index).id());
+    if (it == rowset_to_schema.end()) {
+        return tablet_metadata.schema();
+    }
+    auto schema_it = tablet_metadata.historical_schemas().find(it->second);
+    CHECK(schema_it != tablet_metadata.historical_schemas().end());
+    return schema_it->second;
+}
+
+std::vector<RowsetPtr> Rowset::get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata) {
+    std::vector<RowsetPtr> rowsets;
+    rowsets.reserve(tablet_metadata->rowsets_size());
+    // Reuse the lookup result for each exact schema in this metadata snapshot. Key by address to keep different
+    // protobufs separate even when they share a schema id.
+    phmap::flat_hash_map<const TabletSchemaPB*, TabletSchemaPtr> schemas;
+    for (int i = 0, size = tablet_metadata->rowsets_size(); i < size; ++i) {
+        const TabletSchemaPB* schema_pb = &rowset_schema_pb(*tablet_metadata, i);
+        auto [it, inserted] = schemas.try_emplace(schema_pb);
+        if (inserted) {
+            it->second = GlobalTabletSchemaMap::Instance()->emplace(*schema_pb).first;
+        }
+        rowsets.emplace_back(
+                std::make_shared<Rowset>(tablet_mgr, tablet_metadata, i, 0 /* compaction_segment_limit */, it->second));
+    }
+    return rowsets;
+}
+
+>>>>>>> 53b21e7 ([BugFix][RB-1307] Keep the tablet schema map lock short on lake scans of wide tables (#83415))
 Rowset::Rowset(TabletManager* tablet_mgr, int64_t tablet_id, const RowsetMetadataPB* metadata, int index,
                TabletSchemaPtr tablet_schema)
         : _tablet_mgr(tablet_mgr),
@@ -50,23 +115,18 @@ Rowset::Rowset(TabletManager* tablet_mgr, int64_t tablet_id, const RowsetMetadat
           _compaction_segment_limit(0) {}
 
 Rowset::Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index,
-               size_t compaction_segment_limit)
+               size_t compaction_segment_limit, TabletSchemaPtr tablet_schema)
         : _tablet_mgr(tablet_mgr),
           _tablet_id(tablet_metadata->id()),
           _metadata(&tablet_metadata->rowsets(rowset_index)),
           _index(rowset_index),
+          _tablet_schema(std::move(tablet_schema)),
           _tablet_metadata(std::move(tablet_metadata)),
           _parallel_load(config::enable_load_segment_parallel),
           _compaction_segment_limit(0) {
-    auto rowset_id = _tablet_metadata->rowsets(rowset_index).id();
-    if (_tablet_metadata->rowset_to_schema().empty() ||
-        _tablet_metadata->rowset_to_schema().find(rowset_id) == _tablet_metadata->rowset_to_schema().end()) {
-        _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
-    } else {
-        auto schema_id = _tablet_metadata->rowset_to_schema().at(rowset_id);
-        CHECK(_tablet_metadata->historical_schemas().count(schema_id) > 0);
+    if (_tablet_schema == nullptr) {
         _tablet_schema =
-                GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->historical_schemas().at(schema_id)).first;
+                GlobalTabletSchemaMap::Instance()->emplace(rowset_schema_pb(*_tablet_metadata, rowset_index)).first;
     }
 
     // if segments are loaded in parallel, can not perform partial compaction, since
