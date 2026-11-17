@@ -38,6 +38,7 @@ import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
 import com.starrocks.thrift.TOlapTableSchemaParam;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
@@ -49,6 +50,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -124,6 +126,40 @@ public class ConcurrentLoad {
     public static void makeVisible(Database db, TransactionState load) throws Exception {
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .finishTransaction(db.getId(), load.getTransactionId(), null);
+    }
+
+    /**
+     * Makes a committed load visible the way the publish daemon does once its publish has finished: only when every
+     * partition it committed has reached the version right below the load's, which the daemon checks under the table
+     * READ lock. Waits at most lockTimeoutMs for that lock and leaves the load committed if it does not come free in
+     * time. Runs on a thread of its own, as the daemon does: the lock is reentrant, so the thread that holds it would
+     * always get in. Returns whether it made the load visible.
+     */
+    public static boolean tryMakeVisible(Database db, OlapTable table, TransactionState load, long lockTimeoutMs) {
+        return CompletableFuture.supplyAsync(() -> {
+            Locker locker = new Locker();
+            if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), List.of(table.getId()), LockType.READ,
+                    lockTimeoutMs, TimeUnit.MILLISECONDS)) {
+                return false;
+            }
+            try {
+                for (PartitionCommitInfo commitInfo : load.getTableCommitInfo(table.getId())
+                        .getIdToPartitionCommitInfo().values()) {
+                    PhysicalPartition partition = table.getPhysicalPartition(commitInfo.getPhysicalPartitionId());
+                    if (partition.getVisibleVersion() + 1 != commitInfo.getVersion()) {
+                        return false;
+                    }
+                }
+            } finally {
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), List.of(table.getId()), LockType.READ);
+            }
+            try {
+                makeVisible(db, load);
+            } catch (Exception e) {
+                throw new CompletionException(e);
+            }
+            return true;
+        }).join();
     }
 
     /**
