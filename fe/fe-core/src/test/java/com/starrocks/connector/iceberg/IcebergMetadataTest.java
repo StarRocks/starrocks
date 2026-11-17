@@ -1467,6 +1467,114 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(111L, dataFile.valueCounts().get(1).longValue());
     }
 
+    private static TSinkCommitInfo appendCommitInfo(org.apache.iceberg.Table nativeTable, String partition) {
+        TIcebergDataFile dataFile = new TIcebergDataFile();
+        dataFile.setPath(nativeTable.location() + "/data/" + partition + "/c.parquet");
+        dataFile.setFormat("parquet");
+        dataFile.setRecord_count(10);
+        dataFile.setSplit_offsets(Lists.newArrayList(4L));
+        dataFile.setPartition_path(nativeTable.location() + "/data/" + partition + "/");
+        dataFile.setFile_size_in_bytes(2000);
+        dataFile.setPartition_null_fingerprint("0");
+        TSinkCommitInfo commitInfo = new TSinkCommitInfo();
+        commitInfo.setIs_overwrite(false);
+        commitInfo.setIceberg_data_file(dataFile);
+        return commitInfo;
+    }
+
+    @Test
+    public void testFinishSinkInvalidatesOtherFesOnceCommitted() {
+        // A commit writes no edit log: the other FEs must drop the pre-commit table before the statement returns
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableJ, Maps.newHashMap());
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+        List<TableName> invalidated = new ArrayList<>();
+        List<Integer> timeouts = new ArrayList<>();
+        List<Boolean> committedWhenInvalidated = new ArrayList<>();
+        Snapshot before = mockedNativeTableJ.currentSnapshot();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+                invalidated.add(tableName);
+                timeouts.add(timeoutMs);
+                mockedNativeTableJ.refresh();
+                Snapshot now = mockedNativeTableJ.currentSnapshot();
+                committedWhenInvalidated.add(now != null && (before == null || now.snapshotId() != before.snapshotId()));
+            }
+        };
+
+        metadata.finishSink("iceberg_db", "iceberg_table",
+                Lists.newArrayList(appendCommitInfo(mockedNativeTableJ, "ts_month=2022-01")), null);
+
+        Assertions.assertEquals(List.of(new TableName(CATALOG_NAME, "iceberg_db", "iceberg_table")), invalidated);
+        Assertions.assertEquals(List.of(Config.iceberg_commit_invalidate_other_fe_timeout_ms), timeouts);
+        Assertions.assertEquals(List.of(true), committedWhenInvalidated);
+    }
+
+    @Test
+    public void testFinishSinkDoesNotInvalidateOtherFesWhenCommitIsRefused() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+        AtomicInteger invalidations = new AtomicInteger();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+                invalidations.incrementAndGet();
+            }
+        };
+        TSinkCommitInfo eqDelete = appendCommitInfo(mockedNativeTableA, "data_bucket=0");
+        eqDelete.getIceberg_data_file().setFile_content(TIcebergFileContent.EQUALITY_DELETES);
+
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(eqDelete), null));
+        Assertions.assertEquals(0, invalidations.get());
+    }
+
+    @Test
+    public void testInvalidateCachedTableDropsTheCachedTable() {
+        String dbName = "iceberg_db";
+        String tableName = "iceberg_table";
+        AtomicInteger catalogGetTableCalls = new AtomicInteger();
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        Mockito.when(icebergCatalog.getTable(Mockito.any(), Mockito.eq(dbName), Mockito.eq(tableName)))
+                .thenAnswer(invocation -> {
+                    catalogGetTableCalls.incrementAndGet();
+                    return mockedNativeTableB;
+                });
+        Mockito.when(icebergCatalog.getDB(Mockito.any(), Mockito.eq(dbName))).thenReturn(new Database(1, dbName));
+        Mockito.when(icebergCatalog.getIcebergCatalogType()).thenReturn(IcebergCatalogType.HIVE_CATALOG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        metadata.getTable(connectContext, dbName, tableName);
+        metadata.getTable(connectContext, dbName, tableName);
+        Assertions.assertEquals(1, catalogGetTableCalls.get());
+
+        metadata.invalidateCachedTable(dbName, tableName);
+        Mockito.verify(icebergCatalog).invalidateTableCache(dbName, tableName);
+        metadata.getTable(connectContext, dbName, tableName);
+        Assertions.assertEquals(2, catalogGetTableCalls.get());
+    }
+
     // End-to-end regression for the decimal manifest bound encoding bug: BE reports raw, fixed-width
     // Parquet statistics (little-endian INT32/INT64 for decimal32/64, sign-extended 16-byte
     // FIXED_LEN_BYTE_ARRAY for decimal128) exactly as it does in production; this drives them through the

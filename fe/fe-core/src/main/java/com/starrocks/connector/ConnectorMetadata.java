@@ -318,6 +318,13 @@ public interface ConnectorMetadata {
         refreshTable(srDbName, table, new ArrayList<>(), false);
     }
 
+    /**
+     * Drop what this FE cached about the table, by name and with no remote I/O, so the next read loads it as it
+     * is now. Sent by the FE that committed to the table, so this FE does not keep serving the pre-commit table.
+     */
+    default void invalidateCachedTable(String dbName, String tableName) {
+    }
+
     default boolean dbExists(ConnectContext context, String dbName) {
         return listDbNames(context).contains(dbName.toLowerCase(Locale.ROOT));
     }
