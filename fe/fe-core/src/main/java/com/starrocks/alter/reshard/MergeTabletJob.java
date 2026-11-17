@@ -205,9 +205,9 @@ public class MergeTabletJob extends TabletReshardJob {
     /*
      * 1. Publish the merge transaction, update new tablet ranges
      * 2. Re-arm the colocate checker if any new tablet crosses a ColocateRange boundary
-     * 3. Add the new versions of materialized index to catalog
-     * 4. Get end transaction id
-     * 5. Set job state to CLEANING
+     * 3. Get end transaction id
+     * 4. Set job state to CLEANING
+     * 5. Add the new versions of materialized index to catalog
      */
     @Override
     protected void runRunningJob() {
@@ -321,15 +321,35 @@ public class MergeTabletJob extends TabletReshardJob {
         //    pre-existing spanning tablet through as an identical replacement).
         applyColocateRangeMergeResult();
 
-        // 3. Add the new versions of materialized index to catalog
-        addNewMaterializedIndexes();
+        // 3-5. Under one table WRITE lock, journaling CLEANING before the new indexes make the commit version visible
+        // (see journalCleaningThenInstall for why the order matters).
+        MergeTabletJob cleaningRecord = (MergeTabletJob) newCleaningRecord();
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
+            OlapTable olapTable = lockedTable.get();
+            checkNewIndexesInstallable(olapTable, reshardingPhysicalPartitions);
+            // Taken under this lock, before the install: a writer gets its transaction id before it resolves the
+            // tablets to write under the table READ lock, so a writer whose id is at or above this one sees the new
+            // layout.
+            cleaningRecord.endTransactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().peekNextTransactionId();
+            journalCleaningThenInstall(cleaningRecord, () -> {
+                endTransactionId = cleaningRecord.endTransactionId;
+                addNewMaterializedIndexes(olapTable);
+            });
+        }
 
+<<<<<<< HEAD
         // 4. Get end transaction id
         endTransactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
                 .peekNextTransactionId();
 
         // 5. Set job state to CLEANING
         setJobState(JobState.CLEANING);
+=======
+        // Now that the merged tablets are visible, proactively enqueue them for async
+        // vector-index build (leader-only path; no-op for non-async-vector-index tables).
+        VectorIndexBuildScheduler.onReshardComplete(dbId, tableId, reshardingPhysicalPartitions.keySet());
+>>>>>>> ddf4d34 ([BugFix][RB-96] Journal a reshard job's CLEANING record before its version becomes visible (#83525))
     }
 
     /*
@@ -687,32 +707,26 @@ public class MergeTabletJob extends TabletReshardJob {
         }
     }
 
+    // Replays the install of a CLEANING record. Checks everything first, so a layout that cannot be installed is not
+    // installed halfway.
     private void addNewMaterializedIndexes() {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
             OlapTable olapTable = lockedTable.get();
-            for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
-                PhysicalPartition physicalPartition = olapTable
-                        .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
-                if (physicalPartition == null) {
-                    continue;
-                }
+            checkNewIndexesInstallable(olapTable, reshardingPhysicalPartitions);
+            addNewMaterializedIndexes(olapTable);
+        }
+    }
 
-                long commitVersion = reshardingPhysicalPartition.getCommitVersion();
-                Preconditions.checkState(commitVersion == physicalPartition.getVisibleVersion() + 1,
-                        "commit version: " + commitVersion + ", visible version: "
-                                + physicalPartition.getVisibleVersion());
-
-                physicalPartition.setVisibleVersion(commitVersion, stateStartedTimeMs);
-
-                for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
-                        .getReshardingIndexes().values()) {
-                    MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
-                    newIndex.setTakeoverVersion(commitVersion);
-                    physicalPartition.addMaterializedIndex(newIndex,
-                            newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
-                }
+    // The caller holds the table WRITE lock and has run checkNewIndexesInstallable under it.
+    private void addNewMaterializedIndexes(OlapTable olapTable) {
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            PhysicalPartition physicalPartition = olapTable
+                    .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                continue;
             }
 
+<<<<<<< HEAD
             // Installing the new materialized indexes changes the partition's tablet layout:
             // PhysicalPartition.getLatestIndex() now returns a different tablet set. A query that
             // captured the old layout during planning (OlapScanNode fills scanTabletIds from
@@ -724,7 +738,31 @@ public class MergeTabletJob extends TabletReshardJob {
             // same commit point. This runs on both the leader (runRunningJob) and the replay path
             // (replayCleaningJob), so followers re-plan too.
             olapTable.lastSchemaUpdateTime.set(System.nanoTime());
+=======
+            long commitVersion = reshardingPhysicalPartition.getCommitVersion();
+            physicalPartition.setVisibleVersion(commitVersion, stateStartedTimeMs);
+
+            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
+                    .getReshardingIndexes().values()) {
+                MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
+                newIndex.setTakeoverVersion(commitVersion);
+                physicalPartition.addMaterializedIndex(newIndex,
+                        newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
+            }
+>>>>>>> ddf4d34 ([BugFix][RB-96] Journal a reshard job's CLEANING record before its version becomes visible (#83525))
         }
+
+        // Installing the new materialized indexes changes both the writable and queryable tablet
+        // layouts. A query that captured the old layout during planning (OlapScanNode fills
+        // scanTabletIds from getQueryableIndex(), then mapTabletsToPartitions() re-reads it) would
+        // otherwise hard-fail
+        // at plan build ("Invalid tablet id ... may have been dropped") or hand a CN a stale
+        // tablet/version whose metadata object no longer exists. Bump the table's optimistic
+        // version so StatementPlanner's retry loop (OptimisticVersion.validateTableUpdate) detects
+        // the change and re-plans against the new layout. Mirrors SplitTabletJob's bump at the
+        // same commit point. This runs on both the leader (runRunningJob) and the replay path
+        // (replayCleaningJob), so followers re-plan too.
+        olapTable.lastSchemaUpdateTime.set(System.nanoTime());
     }
 
     private void removeOldMaterializedIndexes() {

@@ -32,6 +32,12 @@ import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.lake.LakeTable;
+>>>>>>> ddf4d34 ([BugFix][RB-96] Journal a reshard job's CLEANING record before its version becomes visible (#83525))
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
@@ -217,6 +223,149 @@ public class SplitTabletJobTest {
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * A load committed right above the split's version finishes as soon as the split makes its version visible, so the
+     * split's CLEANING record, which makes that version visible on replay, has to be journaled first. Otherwise every FE
+     * replaying the journal fails on the load's VISIBLE record.
+     */
+    @Test
+    public void testCleaningJournaledBeforeNextLoadIsVisible() throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+        starRocksAssert.withTable("create table cleaning_order_split_table (key1 int, key2 varchar(10)) "
+                + "order by(key1) properties('replication_num' = '1')");
+        OlapTable cleaningTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "cleaning_order_split_table");
+        TabletReshardJob job = createTabletReshardJob(cleaningTable,
+                cleaningTable.getAllPhysicalPartitions().iterator().next());
+
+        ReshardJournalReplay.checkCleaningJournaledBeforeNextLoadIsVisible(db, cleaningTable, job);
+    }
+
+    @Test
+    public void testFailedCleaningJournalLeavesLayoutUnchanged() throws Exception {
+        checkFailedCleaningJournalLeavesLayoutUnchanged("failed_cleaning_split_table", this::addDataDrivenRanges);
+    }
+
+    /** The same after the split fell back to an identical tablet, which drops new tablets in the RUNNING step. */
+    @Test
+    public void testFailedCleaningJournalLeavesLayoutUnchangedAfterIdenticalFallback() throws Exception {
+        checkFailedCleaningJournalLeavesLayoutUnchanged("failed_cleaning_fallback_table",
+                this::addFallbackToIdenticalRanges);
+    }
+
+    private void checkFailedCleaningJournalLeavesLayoutUnchanged(
+            String tableName, BiConsumer<ReshardingTabletInfoPB, Map<Long, TabletRangePB>> rangeBuilder)
+            throws Exception {
+        installLakeServiceMock(rangeBuilder);
+        starRocksAssert.withTable("create table " + tableName + " (key1 int, key2 varchar(10)) order by(key1) "
+                + "properties('replication_num' = '1')");
+        OlapTable target = (OlapTable) db.getTable(tableName);
+        PhysicalPartition physicalPartition = target.getAllPhysicalPartitions().iterator().next();
+        ReshardJournalReplay.checkFailedCleaningJournalLeavesLayoutUnchanged(
+                createTabletReshardJob(target, physicalPartition), physicalPartition);
+    }
+
+    /**
+     * Whether the new layout can be installed is checked for every partition before the CLEANING record is journaled.
+     * A partition that cannot take it stops the job before anything is journaled or installed in any partition, the
+     * partitions checked before it included.
+     */
+    @Test
+    public void testUninstallableLayoutJournalsNothing() throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+        starRocksAssert.withTable("create table uninstallable_split_table (p int, k int, v int) partition by range(p) "
+                + "(partition p1 values [('0'), ('10')), partition p2 values [('10'), ('20'))) "
+                + "order by(k) properties('replication_num' = '1')");
+        OlapTable target = (OlapTable) db.getTable("uninstallable_split_table");
+        List<Long> tabletIds = target.getAllPhysicalPartitions().stream()
+                .map(partition -> partition.getLatestBaseIndex().getTablets().get(0).getId())
+                .collect(Collectors.toList());
+        SplitTabletClause clause = new SplitTabletClause(null, new TabletList(tabletIds),
+                Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
+        clause.setTabletReshardTargetSize(-2);
+        SplitTabletJob job = (SplitTabletJob) new SplitTabletJobFactory(db, target, clause).createTabletReshardJob();
+        List<ReshardingPhysicalPartition> reshardingPartitions =
+                new ArrayList<>(job.getReshardingPhysicalPartitions().values());
+        Assertions.assertEquals(2, reshardingPartitions.size());
+        AtomicInteger cleaningRecords = ReshardJournalReplay.countCleaningRecords(false);
+        job.init();
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
+
+        PhysicalPartition first = target.getPhysicalPartition(reshardingPartitions.get(0).getPhysicalPartitionId());
+        MaterializedIndex firstOldIndex = first.getLatestBaseIndex();
+        long firstVisibleVersion = first.getVisibleVersion();
+        // The partition the install reaches last cannot take its new index, which is already there. An install
+        // that checked each partition only when it reached it would have changed the first one before failing.
+        ReshardingPhysicalPartition last = reshardingPartitions.get(1);
+        MaterializedIndex lastNewIndex = last.getReshardingIndexes().values().iterator().next().getMaterializedIndex();
+        try (LockedObject<OlapTable> lockedTable = job.getLockedTable(LockType.WRITE)) {
+            lockedTable.get().getPhysicalPartition(last.getPhysicalPartitionId())
+                    .addMaterializedIndex(lastNewIndex, true);
+        }
+
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
+        Assertions.assertEquals(0, cleaningRecords.get());
+        Assertions.assertEquals(firstVisibleVersion, first.getVisibleVersion());
+        Assertions.assertSame(firstOldIndex, first.getLatestBaseIndex());
+    }
+
+
+    /**
+     * Records the transactions and the version of each reshard publish, and answers it the way a BE splits the
+     * tablets by their data.
+     */
+    private PublishVersionResponse recordPublish(List<PublishVersionRequest> requests, List<TxnInfoPB> txns,
+                                                 List<Long> versions) {
+        PublishVersionResponse response = new PublishVersionResponse();
+        response.status = new StatusPB();
+        response.status.statusCode = TStatusCode.OK.getValue();
+        response.tabletRanges = new HashMap<>();
+        for (PublishVersionRequest request : requests) {
+            if (request.reshardingTabletInfos == null) {
+                continue;
+            }
+            txns.addAll(request.txnInfos);
+            versions.add(request.newVersion);
+            for (ReshardingTabletInfoPB info : request.reshardingTabletInfos) {
+                addDataDrivenRanges(info, response.tabletRanges);
+            }
+        }
+        return response;
+    }
+
+    @Test
+    public void testPkOrderByFactoryLeavesBoundarySelectionToBePkIndex() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE pk_order_by_split "
+                + "(pk1 int not null, pk2 int not null, sort_col int not null) "
+                + "PRIMARY KEY(pk1, pk2) ORDER BY(sort_col) "
+                + "PROPERTIES('replication_num' = '1', 'file_bundling' = 'true')");
+        OlapTable pkOrderByTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "pk_order_by_split");
+        PhysicalPartition physicalPartition = pkOrderByTable.getAllPhysicalPartitions().iterator().next();
+        long tabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
+
+        SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(tabletId)),
+                Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
+        clause.setTabletReshardTargetSize(-2);
+        SplitTabletJob job = (SplitTabletJob) new SplitTabletJobFactory(db, pkOrderByTable, clause)
+                .createTabletReshardJob();
+
+        SplittingTablet splittingTablet = job.getReshardingPhysicalPartitions().values().stream()
+                .flatMap(partition -> partition.getReshardingIndexes().values().stream())
+                .flatMap(index -> index.getReshardingTablets().stream())
+                .map(ReshardingTablet::getSplittingTablet)
+                .filter(java.util.Objects::nonNull)
+                .findFirst().orElseThrow();
+        Assertions.assertTrue(splittingTablet.getNewTabletRanges().isEmpty(),
+                "ordinary split must let BE derive PK boundaries from the cloud-native PK index");
+        Assertions.assertTrue(splittingTablet.getNewTabletIds().size() > 1);
+    }
+
+>>>>>>> ddf4d34 ([BugFix][RB-96] Journal a reshard job's CLEANING record before its version becomes visible (#83525))
     @Test
     public void testRunBumpsOptimisticVersion() throws Exception {
         installLakeServiceMock(this::addDataDrivenRanges);

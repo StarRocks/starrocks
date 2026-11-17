@@ -442,6 +442,16 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     // 1. mIndex.state is NORMAL.
     // 2. indexMetaIdToIndexIds currently contains mIndex.metaId.
     public void addMaterializedIndex(MaterializedIndex mIndex, boolean isBaseIndex) {
+        checkMaterializedIndexAddable(mIndex, isBaseIndex);
+
+        idToVisibleIndex = copyWith(idToVisibleIndex, mIndex.getId(), mIndex);
+        List<Long> indexIds = indexMetaIdToIndexIds.get(mIndex.getMetaId());
+        indexMetaIdToIndexIds = copyWith(indexMetaIdToIndexIds, mIndex.getMetaId(),
+                ImmutableList.<Long>builderWithExpectedSize(indexIds.size() + 1).addAll(indexIds).add(mIndex.getId()).build());
+    }
+
+    // Throws unless addMaterializedIndex(mIndex, isBaseIndex) would succeed, without changing anything.
+    public void checkMaterializedIndexAddable(MaterializedIndex mIndex, boolean isBaseIndex) {
         Preconditions.checkState(indexMetaIdToIndexIds.containsKey(mIndex.getMetaId()),
                 String.format("index meta id %d not exist", mIndex.getMetaId()));
         Preconditions.checkState(!idToVisibleIndex.containsKey(mIndex.getId()) && !idToShadowIndex.containsKey(mIndex.getId()),
@@ -450,11 +460,6 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
                 String.format("index meta id %d not match baseIndexMetaId %d", mIndex.getMetaId(), baseIndexMetaId));
         Preconditions.checkState(mIndex.getState() == IndexState.NORMAL,
                 String.format("index state %s is not NORMAL", mIndex.getState()));
-
-        idToVisibleIndex = copyWith(idToVisibleIndex, mIndex.getId(), mIndex);
-        List<Long> indexIds = indexMetaIdToIndexIds.get(mIndex.getMetaId());
-        indexMetaIdToIndexIds = copyWith(indexMetaIdToIndexIds, mIndex.getMetaId(),
-                ImmutableList.<Long>builderWithExpectedSize(indexIds.size() + 1).addAll(indexIds).add(mIndex.getId()).build());
     }
 
     public MaterializedIndex deleteMaterializedIndexByIndexId(long indexId) {
@@ -600,6 +605,43 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return getIndex(indexIds.get(indexIds.size() - 1));
     }
 
+<<<<<<< HEAD
+=======
+    /** Resolves an index meta id to the layout visible to queries. */
+    public MaterializedIndex getQueryableIndex(long indexMetaId) {
+        Long queryIndexId = queryIndexMetaIdToIndexId.get(indexMetaId);
+        return queryIndexId == null ? getLatestIndex(indexMetaId) : getIndex(queryIndexId);
+    }
+
+    public void pinQueryableIndex(long indexMetaId, long indexId) {
+        checkQueryableIndexPinnable(indexMetaId, indexId);
+        queryIndexMetaIdToIndexId.put(indexMetaId, indexId);
+    }
+
+    // Throws unless pinQueryableIndex(indexMetaId, indexId) would succeed, without changing anything.
+    public void checkQueryableIndexPinnable(long indexMetaId, long indexId) {
+        MaterializedIndex index = getIndex(indexId);
+        Preconditions.checkState(index != null && index.getMetaId() == indexMetaId,
+                String.format("query index id %d not exist for meta id %d", indexId, indexMetaId));
+    }
+
+    public boolean isQueryableIndexPinned(long indexMetaId) {
+        return queryIndexMetaIdToIndexId.containsKey(indexMetaId);
+    }
+
+    public boolean finishUnshare() {
+        if (queryIndexMetaIdToIndexId.isEmpty()) {
+            return false;
+        }
+        queryIndexMetaIdToIndexId.clear();
+        return true;
+    }
+
+    public boolean isUnsharing() {
+        return !queryIndexMetaIdToIndexId.isEmpty();
+    }
+
+>>>>>>> ddf4d34 ([BugFix][RB-96] Journal a reshard job's CLEANING record before its version becomes visible (#83525))
     public MaterializedIndex getIndex(long indexId) {
         MaterializedIndex index = idToVisibleIndex.get(indexId);
         if (index != null) {
