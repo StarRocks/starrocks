@@ -371,7 +371,7 @@ TEST_P(StreamLoadCancelTest, PartialBindingFailureCancelsPipeWithOriginalError) 
     _ranges.emplace_back(make_range(UniqueId::gen_uid().to_thrift()));
     const auto status = prepare_pipes();
     ASSERT_TRUE(status.is_internal_error()) << status;
-    EXPECT_EQ(status.to_string(), pipe->no_block_read().status().to_string());
+    EXPECT_EQ(status.to_string(false), pipe->no_block_read().status().to_string(false));
     EXPECT_TRUE(_pipeline->_fragment_ctx->_fragment_attachments.empty());
 }
 

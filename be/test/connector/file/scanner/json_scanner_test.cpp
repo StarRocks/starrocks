@@ -2257,7 +2257,7 @@ TEST_F(JsonScannerTruncatedDocTest, cancelled_pipe_does_not_report_bad_row) {
         const auto error = Status::Cancelled("Fragment cancelled");
         pipe->cancel(error);
         auto status = read_first_buffer ? reader.read_chunk(chunk.get(), 1) : reader.open();
-        EXPECT_EQ(error.to_string(), status.to_string());
+        EXPECT_EQ(error.to_string(false), status.to_string(false));
         EXPECT_EQ(0, _counter->num_rows_filtered);
         EXPECT_EQ("", error_log());
     }
