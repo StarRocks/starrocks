@@ -1196,8 +1196,8 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
     if (!_should_read_ahead()) {
         return;
     }
-    // Scalar columns read from the segment file itself; the others (complex types, default values, delta column
-    // groups) are read on demand as before.
+    // Scalar columns, read from the segment file or from a delta column group file; the others (complex types,
+    // default values) are read on demand as before.
     auto column_of = [&](ColumnId cid, SegmentPrefetchWindow::Column* out) {
         if (cid >= _column_iterators.size() || _column_iterators[cid] == nullptr) {
             return false;
@@ -1213,6 +1213,8 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
         }
         out->reader = reader;
         out->file = file->second.get();
+        // A delta column group overlay reads a file of its own, so each column takes its own stream's offset.
+        out->object_offset = out->file->bundle_offset();
         return true;
     };
     const size_t num_fields = _schema.num_fields();
@@ -1241,10 +1243,8 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
     if (columns.empty() && _prefetch_late_columns.empty()) {
         return;
     }
-    // Cache blocks are counted in the object, where a bundled segment does not start at 0.
-    const int64_t object_offset = _segment->file_info().bundle_file_offset.value_or(0);
     _prefetch_window = std::make_unique<SegmentPrefetchWindow>(
-            std::move(columns), &_scan_range, start_row, object_offset, config::remote_prefetch_window_blocks,
+            std::move(columns), &_scan_range, start_row, config::remote_prefetch_window_blocks,
             config::remote_prefetch_late_read_ahead_ratio, config::starlet_star_cache_block_size_bytes, _opts.stats);
 }
 

@@ -152,9 +152,9 @@ protected:
     std::unique_ptr<SegmentPrefetchWindow> make_window(const SparseRange<>* range, rowid_t start_row,
                                                        size_t ahead_blocks, double late_ratio = 2.0,
                                                        int64_t object_offset = 0, size_t block_size = kBlockSize) {
-        return std::make_unique<SegmentPrefetchWindow>(std::vector<SegmentPrefetchWindow::Column>{{_reader, &_stream}},
-                                                       range, start_row, object_offset, ahead_blocks, late_ratio,
-                                                       block_size, &_stats);
+        return std::make_unique<SegmentPrefetchWindow>(
+                std::vector<SegmentPrefetchWindow::Column>{{_reader, &_stream, object_offset}}, range, start_row,
+                ahead_blocks, late_ratio, block_size, &_stats);
     }
 
     std::shared_ptr<MemoryFileSystem> _fs;
@@ -289,6 +289,26 @@ TEST_F(SegmentPrefetchWindowTest, object_offset_keeps_segment_offsets) {
     for (const auto& w : _stream.warms) {
         EXPECT_GE(w.offset, 0);
     }
+}
+
+// Each column counts blocks at its own file's offset in its object: a delta column group overlay reads a file of
+// its own, not the bundled segment's.
+TEST_F(SegmentPrefetchWindowTest, columns_keep_their_own_object_offsets) {
+    constexpr int64_t kBigBlock = 1L << 30;
+    SparseRange<> range(0, kRows);
+    // Page 3 of the second column crosses into the next block; the first column's pages all fit in block 0.
+    const int64_t crossing = kBigBlock - static_cast<int64_t>(_pages[3].pointer.offset) - 1;
+    SegmentPrefetchWindow window({{_reader, &_stream, 0}, {_reader, &_stream, crossing}}, &range, 0, 1024, 2.0,
+                                 kBigBlock, &_stats);
+    window.advance(0);
+    ASSERT_EQ(3u, _stream.warms.size());
+    size_t from_next_block = 0;
+    for (const auto& w : _stream.warms) {
+        if (w.offset == static_cast<int64_t>(_pages[3].pointer.offset) + 1) {
+            from_next_block++;
+        }
+    }
+    EXPECT_EQ(1u, from_next_block);
 }
 
 // A stream that cannot warm (not a starlet file, or the scheduler is off) turns the window off for good.

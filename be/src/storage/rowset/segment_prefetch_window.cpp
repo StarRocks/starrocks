@@ -26,11 +26,9 @@ namespace starrocks {
 static constexpr int kLateReadAheadMinBatches = 4;
 
 SegmentPrefetchWindow::SegmentPrefetchWindow(std::vector<Column> columns, const SparseRange<>* scan_range,
-                                             rowid_t start_row, int64_t object_offset, size_t ahead_blocks,
-                                             double late_read_ahead_ratio, size_t block_size,
-                                             OlapReaderStatistics* stats)
+                                             rowid_t start_row, size_t ahead_blocks, double late_read_ahead_ratio,
+                                             size_t block_size, OlapReaderStatistics* stats)
         : _scan_range(scan_range),
-          _object_offset(object_offset),
           _ahead_limit(ahead_blocks),
           _late_read_ahead_ratio(late_read_ahead_ratio),
           _block_size(std::max<int64_t>(1, static_cast<int64_t>(block_size))),
@@ -110,7 +108,7 @@ void SegmentPrefetchWindow::submit(size_t cursor_idx, rowid_t row) {
     const PagePointer pp = c.page.page();
     const rowid_t begin_row = static_cast<rowid_t>(c.page.first_ordinal());
     const rowid_t end_row = static_cast<rowid_t>(c.page.last_ordinal() + 1);
-    const int64_t begin = _object_offset + static_cast<int64_t>(pp.offset);
+    const int64_t begin = c.column.object_offset + static_cast<int64_t>(pp.offset);
     const int64_t end = begin + pp.size;
     const int64_t first_block = begin / _block_size;
     const int64_t last_block = (end - 1) / _block_size;
@@ -135,7 +133,7 @@ void SegmentPrefetchWindow::submit(size_t cursor_idx, rowid_t row) {
     const int64_t from_block = std::max(first_block, c.last_block + 1);
     const int64_t warm_begin = std::max(begin, from_block * _block_size);
     std::shared_ptr<io::CacheWarmHandle> handle;
-    if (!warm(c.column.file, warm_begin - _object_offset, end - warm_begin, false /* urgent */, &handle)) {
+    if (!warm(c.column.file, warm_begin - c.column.object_offset, end - warm_begin, false /* urgent */, &handle)) {
         return;
     }
     const size_t blocks = static_cast<size_t>(last_block - from_block + 1);

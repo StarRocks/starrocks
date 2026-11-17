@@ -44,13 +44,14 @@ public:
     struct Column {
         ColumnReader* reader = nullptr;
         io::SeekableInputStream* file = nullptr;
+        // Where the column's file starts in its object (non-zero for a bundle file), so that blocks are
+        // counted where the cache stores them.
+        int64_t object_offset = 0;
     };
 
     // `scan_range` (ascending) must outlive the window; the pages before `start_row` are skipped.
-    // `object_offset` is where the segment starts in its object (non-zero for a bundle file), so that
-    // blocks are counted where the cache stores them.
     SegmentPrefetchWindow(std::vector<Column> columns, const SparseRange<>* scan_range, rowid_t start_row,
-                          int64_t object_offset, size_t ahead_blocks, double late_read_ahead_ratio, size_t block_size,
+                          size_t ahead_blocks, double late_read_ahead_ratio, size_t block_size,
                           OlapReaderStatistics* stats);
 
     // The reader is about to read the rows from `row` on: forget what it has consumed and top the
@@ -110,7 +111,6 @@ private:
 
     std::vector<Cursor> _cursors;
     const SparseRange<>* _scan_range;
-    const int64_t _object_offset;
     const size_t _ahead_limit;
     const double _late_read_ahead_ratio;
     const int64_t _block_size;
