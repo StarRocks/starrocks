@@ -483,9 +483,13 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
                     auto tablet_log_path =
                             tablet_mgr->txn_log_location(tablet_id_in_txn_log, txns[i].txn_id(), load_id);
                     if (tablet_info.can_delete_txn_log()) {
-                        if (!skip_write_tablet_metadata) {
-                            // CAN NOT delete txn log immediately, let vacuum do the work
-                            // because tablet meta may not be written successfully, and may need to reapply the txn log.
+                        // Delete the logs only when this transaction is published alone, as for a single txn log
+                        // below, and leave them to vacuum otherwise. A batch writes the metadata of its last
+                        // version only, and FE retries a batch it did not see succeed with the batch it builds
+                        // then -- other transactions, other versions, maybe on another node. That retry applies
+                        // this transaction again and cannot without its logs: the partition would never publish
+                        // again. With skip_write_tablet_metadata the new metadata may not be written yet.
+                        if (txns.size() == 1 && !skip_write_tablet_metadata) {
                             files_to_delete.emplace_back(tablet_log_path);
                         }
                         tablet_mgr->metacache()->erase(tablet_log_path);
@@ -529,21 +533,43 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
     // because the rowsets in txn log are older.
     if (alter_version != -1 && alter_version + 1 < new_version) {
         DCHECK(base_version == 1 && txns.size() == 1);
+        // Set once a missing version log made this publish look for new_version, which only it can write.
+        bool new_version_checked = false;
         for (int64_t v = alter_version + 1; v < new_version; ++v) {
             for (auto tablet_id_in_txn_log : tablet_info.get_tablet_ids_in_txn_logs()) {
                 auto vlog_path = tablet_mgr->txn_vlog_location(tablet_id_in_txn_log, v);
                 auto txn_vlog_or = tablet_mgr->get_txn_vlog(vlog_path, false);
-                if (txn_vlog_or.status().is_not_found()) {
-                    return new_version_metadata_or_error(txn_vlog_or.status());
+                if (txn_vlog_or.status().is_not_found() && !new_version_checked) {
+                    // As before statement groups: a publish that already finished returns its metadata.
+                    auto finished = new_version_metadata_or_error(txn_vlog_or.status());
+                    if (finished.ok()) {
+                        return finished;
+                    }
+                    new_version_checked = true;
+                }
+                // The legacy file, or the statement group a multi-statement transaction stored instead. Neither is
+                // rewritten in the other format, so the read may be served from the caches.
+                auto txn_vlogs_or =
+                        tablet_mgr->resolve_txn_vlog(tablet_id_in_txn_log, v, std::move(txn_vlog_or), &vlog_path);
+                if (txn_vlogs_or.status().is_not_found()) {
+                    return txn_vlogs_or.status();
                 }
 
-                if (!txn_vlog_or.ok()) {
-                    LOG(WARNING) << "Fail to get " << vlog_path << ": " << txn_vlog_or.status();
-                    return txn_vlog_or.status();
+                if (!txn_vlogs_or.ok()) {
+                    LOG(WARNING) << "Fail to get " << vlog_path << ": " << txn_vlogs_or.status();
+                    return txn_vlogs_or.status();
                 }
 
-                ASSIGN_OR_RETURN(auto txn_vlog, convert_txn_log(txn_vlog_or.value(), base_metadata, tablet_info));
-                auto st = log_applier->apply(*txn_vlog);
+                TxnLogVector txn_vlogs;
+                txn_vlogs.reserve(txn_vlogs_or->size());
+                for (const auto& log : txn_vlogs_or.value()) {
+                    ASSIGN_OR_RETURN(auto converted, convert_txn_log(log, base_metadata, tablet_info));
+                    txn_vlogs.emplace_back(std::move(converted));
+                }
+                // Preserve each statement's write schema and local segment/delete positions. The
+                // batch applier remaps them into one rowset only after applying them in SQL order.
+                auto st =
+                        txn_vlogs.size() == 1 ? log_applier->apply(*txn_vlogs.front()) : log_applier->apply(txn_vlogs);
                 if (!st.ok()) {
                     LOG(WARNING) << "Fail to apply " << vlog_path << ": " << st;
                     return st;
@@ -604,8 +630,8 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
         if (txn_infos[i].load_ids_size() > 0) {
             // Multi-statement transaction: each statement writes its own .log file at the
             // 4-segment path that encodes load_id. Read every per-load_id .log via
-            // load_txn_log (which already understands this layout) and merge them into a
-            // single TxnLog before persisting as the version-keyed .vlog.
+            // load_txn_log (which already understands this layout). The writer flag selects
+            // ordered statement groups after the reader-first rollout, or the legacy merge.
             //
             // Without this branch, publish_log_version would fall back to the 2-segment
             // path and fail with NotFound during schema change, leaving the txn stuck in
@@ -614,8 +640,58 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             auto txn_id = txn_infos[i].txn_id();
             auto log_version = log_versions[i];
             auto expected_count = txn_infos[i].load_ids_size();
+            // Stage every per-load_id source .log for async deletion, mirroring what
+            // publish_version does for the non-shadow path on the same txn shape.
+            auto stage_source_logs = [&]() {
+                for (const auto& load_id : txn_infos[i].load_ids()) {
+                    auto source_path = tablet_mgr->txn_log_location(tablet_id, txn_id, load_id);
+                    files_to_delete.emplace_back(source_path);
+                    tablet_mgr->metacache()->erase(MetacacheKey::txn_log(source_path));
+                }
+            };
+            // FE sends the load ids of every statement of the transaction, but a statement writes txn logs only
+            // for the tablets it loads (see load_txn_log): one that loaded another table or partition has no log
+            // here. A materialized log therefore holds the statements that logged this tablet in request order,
+            // possibly a strict subset of load_ids, and a statement it omits must not have a log here either.
+            auto validate_existing_group = [&](const TxnLogVector& existing) -> Status {
+                auto mismatch = [&](size_t k) {
+                    return Status::Corruption(fmt::format(
+                            "txn vlog group statement {} does not match publish request for tablet {} txn {}", k,
+                            tablet_id, txn_id));
+                };
+                std::vector<bool> named(expected_count, false);
+                int next = 0;
+                for (size_t k = 0; k < existing.size(); ++k) {
+                    const auto& log = existing[k];
+                    if (log->tablet_id() != tablet_id || log->txn_id() != txn_id || !log->has_load_id()) {
+                        return mismatch(k);
+                    }
+                    while (next < expected_count && (txn_infos[i].load_ids(next).hi() != log->load_id().hi() ||
+                                                     txn_infos[i].load_ids(next).lo() != log->load_id().lo())) {
+                        ++next;
+                    }
+                    if (next == expected_count) {
+                        return mismatch(k);
+                    }
+                    named[next++] = true;
+                }
+                for (int k = 0; k < expected_count; ++k) {
+                    if (named[k]) continue;
+                    auto source = tablet_mgr->txn_log_location(tablet_id, txn_id, txn_infos[i].load_ids(k));
+                    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(source));
+                    auto st = fs->path_exists(source);
+                    if (st.ok()) {
+                        // Reusing the log and deleting the sources would drop this statement.
+                        return Status::Corruption(
+                                fmt::format("txn vlog of tablet {} txn {} omits statement {}, which has a txn log",
+                                            tablet_id, txn_id, k));
+                    }
+                    if (!st.is_not_found()) return st;
+                }
+                return Status::OK();
+            };
             auto txn_logs_or = load_txn_log(tablet_mgr, {tablet_id}, txn_infos[i]);
-            // NotFound means no per-load_id file is left, the fully consumed case of the shortfall below.
+            // NotFound means this tablet has no per-load_id file left; the shortfall below handles it.
             if (!txn_logs_or.ok() && !txn_logs_or.status().is_not_found()) {
                 return txn_logs_or.status();
             }
@@ -625,6 +701,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             }
 
             if (static_cast<int>(txn_logs.size()) < expected_count) {
+<<<<<<< HEAD
                 // load_ids lists every statement of the transaction, while a statement writes txn logs only
                 // for the tablets it loads: when one statement loads another table or another partition, this
                 // tablet has no log under that statement's load id. publish_version applies whatever logs it
@@ -642,72 +719,104 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                         auto stale_path = tablet_mgr->txn_log_location(tablet_id, txn_id, load_id);
                         files_to_delete.emplace_back(stale_path);
                         tablet_mgr->metacache()->erase(stale_path);
+=======
+                // load_txn_log skips per-load_id files that are NotFound. A shortfall means either
+                // statements that did not load this tablet, or an idempotent retry whose sources were
+                // (partly) deleted after the target .vlog had been written. Look the target up as replay
+                // reads it, legacy file first, and strictly decode it before accepting a retry or deleting
+                // any remaining source. Complete-source retries skip this and rewrite the target below.
+                auto existing = tablet_mgr->get_txn_vlog_group(tablet_id, log_version);
+                if (existing.ok()) {
+                    if (existing->size() > 1 || existing->front()->has_load_id()) {
+                        // A merged legacy target clears load_id; a remaining statement cannot stand
+                        // in for a multi-statement request merely because its tablet and txn match.
+                        RETURN_IF_ERROR(validate_existing_group(*existing));
+                    } else if (existing->front()->tablet_id() != tablet_id || existing->front()->txn_id() != txn_id) {
+                        return Status::Corruption(fmt::format(
+                                "txn vlog does not match publish request for tablet {} txn {}", tablet_id, txn_id));
+>>>>>>> ab3169b ([BugFix][RB-925] Keep a lake explicit transaction's statement logs in shadow tablet replay and batch publish (#83413))
                     }
+                    stage_source_logs();
                     continue;
                 }
-                if (!check_st.is_not_found()) {
-                    LOG(WARNING) << "Fail to check the existance of " << txn_vlog_path << ": " << check_st;
-                    return check_st;
-                }
-                // FE publishes a partition only after all of its tablets finished loading, so every tablet has
-                // the log of at least one statement.
+                if (!existing.status().is_not_found()) return existing.status();
+                // Without a target no source has been consumed: sources are deleted only after the target is
+                // written, and vacuum keeps the txn logs of a transaction until it is visible. The logs found are
+                // all this tablet has, so materialize them below, as publish_version applies them on a normal
+                // tablet. Without any there is nothing to publish.
                 if (txn_logs.empty()) {
-                    return Status::NotFound(fmt::format("no txn log of tablet {} for any of the {} load ids of txn {}",
-                                                        tablet_id, expected_count, txn_id));
+                    return Status::NotFound(fmt::format(
+                            "incomplete per-load_id txn logs for tablet {} txn {}: loaded {} of {} expected", tablet_id,
+                            txn_id, txn_logs.size(), expected_count));
                 }
+                LOG(INFO) << "Materialize " << txn_logs.size() << " of " << expected_count << " statements of txn "
+                          << txn_id << " into the version " << log_version << " log of tablet " << tablet_id
+                          << ": the other statements have no txn log for this tablet";
             }
 
-            auto merged = std::make_shared<TxnLogPB>(*txn_logs[0]);
-            // The materialized .vlog spans every per-load_id source log, so the
-            // single load_id field carried over from the first source no longer applies.
-            merged->clear_load_id();
-            if (txn_logs.size() > 1) {
-                // MergeFrom appends repeated fields (segment_metas, dels_meta, ...)
-                // and recursively merges optional message fields, which is what we want
-                // for the per-segment lists. But it overwrites scalar accumulators with
-                // the last source's value, so sum num_rows / data_size / num_dels back
-                // up afterwards to reflect the full transaction.
-                for (size_t k = 1; k < txn_logs.size(); ++k) {
-                    merged->MergeFrom(*txn_logs[k]);
-                }
+            // Write the configured format without looking for a target of the other one. Both formats can
+            // exist only when a retry that still has every source straddles a writer-flag change. Replay then
+            // takes the legacy file: the log just written after a switch to legacy, the earlier one after a
+            // switch to groups. Either way the group goes unused and stays until the tablet is dropped.
+            if (config::lake_enable_txn_vlog_group) {
+                // A DELETE can carry a PK-only partial schema while a later INSERT carries full
+                // rows. Keep each statement's schema and local segment/delete positions intact.
+                RETURN_IF_ERROR(tablet_mgr->put_txn_vlog_group(txn_logs, log_version));
+            } else {
+                // Preserve the baseline writer until operators enable group emission after all
+                // readers are deployed. The original metadata/delete-order bug remains here.
+                auto merged = std::make_shared<TxnLogPB>(*txn_logs[0]);
+                // The materialized .vlog spans every per-load_id source log, so the
+                // single load_id field carried over from the first source no longer applies.
                 merged->clear_load_id();
-                // MergeFrom concatenated each source log's del_op_offsets, but those offsets are in
-                // per-statement-local segment space and this path (unlike batch_apply_opwrite) does not
-                // re-index the merged segment_metas into a global order -- so a later statement's delete
-                // would map onto an earlier statement's segment. Drop them so the merged log uniformly
-                // falls back to the legacy "delete after all segments" ordering (safe; the read path
-                // treats an absent array as "not recorded", see del_op_offset_or_unset()).
-                // TODO: to also preserve intra-transaction upsert/delete order for multi-statement /
-                // merge-commit txns snapshotted through publish_log_version, re-index the merged
-                // segment_metas to a global order here and rebase del_op_offsets to match (as
-                // MetaFileBuilder::add_rowset does via assigned_segment_idx) instead of dropping them.
-                if (merged->has_op_write()) {
-                    merged->mutable_op_write()->clear_del_op_offsets();
-                }
-                if (merged->has_op_write() && merged->op_write().has_rowset()) {
-                    auto* rowset = merged->mutable_op_write()->mutable_rowset();
-                    int64_t num_rows = 0;
-                    int64_t data_size = 0;
-                    int64_t num_dels = 0;
-                    for (const auto& log : txn_logs) {
-                        if (log->has_op_write() && log->op_write().has_rowset()) {
-                            const auto& src = log->op_write().rowset();
-                            num_rows += src.num_rows();
-                            data_size += src.data_size();
-                            num_dels += src.num_dels();
-                        }
+                if (txn_logs.size() > 1) {
+                    // MergeFrom appends repeated fields (segment_metas, dels_meta, ...)
+                    // and recursively merges optional message fields, which is what we want
+                    // for the per-segment lists. But it overwrites scalar accumulators with
+                    // the last source's value, so sum num_rows / data_size / num_dels back
+                    // up afterwards to reflect the full transaction.
+                    for (size_t k = 1; k < txn_logs.size(); ++k) {
+                        merged->MergeFrom(*txn_logs[k]);
                     }
-                    rowset->set_num_rows(num_rows);
-                    rowset->set_data_size(data_size);
-                    rowset->set_num_dels(num_dels);
-                    rowset->set_overlapped(rowset->segment_metas_size() > 1);
-                    // MergeFrom above overwrote the combined rowset's uid with the last source's;
-                    // restore the first log's identity by re-reading txn_logs.front() (MergeFrom
-                    // never mutates the sources) so it stays stable across cross-published children.
-                    tablet_reshard_helper::inherit_or_set_uid(rowset, txn_logs.front()->op_write().rowset());
+                    merged->clear_load_id();
+                    // MergeFrom concatenated each source log's del_op_offsets, but those offsets are in
+                    // per-statement-local segment space and this path (unlike batch_apply_opwrite) does not
+                    // re-index the merged segment_metas into a global order -- so a later statement's delete
+                    // would map onto an earlier statement's segment. Drop them so the merged log uniformly
+                    // falls back to the legacy "delete after all segments" ordering. This retains
+                    // the old write semantics while group-format emission is disabled for rollout.
+                    // TODO: to also preserve intra-transaction upsert/delete order for multi-statement /
+                    // merge-commit txns snapshotted through publish_log_version, re-index the merged
+                    // segment_metas to a global order here and rebase del_op_offsets to match (as
+                    // MetaFileBuilder::add_rowset does via assigned_segment_idx) instead of dropping them.
+                    if (merged->has_op_write()) {
+                        merged->mutable_op_write()->clear_del_op_offsets();
+                    }
+                    if (merged->has_op_write() && merged->op_write().has_rowset()) {
+                        auto* rowset = merged->mutable_op_write()->mutable_rowset();
+                        int64_t num_rows = 0;
+                        int64_t data_size = 0;
+                        int64_t num_dels = 0;
+                        for (const auto& log : txn_logs) {
+                            if (log->has_op_write() && log->op_write().has_rowset()) {
+                                const auto& src = log->op_write().rowset();
+                                num_rows += src.num_rows();
+                                data_size += src.data_size();
+                                num_dels += src.num_dels();
+                            }
+                        }
+                        rowset->set_num_rows(num_rows);
+                        rowset->set_data_size(data_size);
+                        rowset->set_num_dels(num_dels);
+                        rowset->set_overlapped(rowset->segment_metas_size() > 1);
+                        // MergeFrom above overwrote the combined rowset's uid with the last source's;
+                        // restore the first log's identity by re-reading txn_logs.front() (MergeFrom
+                        // never mutates the sources) so it stays stable across cross-published children.
+                        tablet_reshard_helper::inherit_or_set_uid(rowset, txn_logs.front()->op_write().rowset());
+                    }
                 }
-            }
 
+<<<<<<< HEAD
             RETURN_IF_ERROR(tablet_mgr->put_txn_vlog(merged, log_version));
 
             // Stage every per-load_id source .log for async deletion, mirroring what
@@ -716,7 +825,11 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                 auto txn_log_path = tablet_mgr->txn_log_location(tablet_id, txn_id, load_id);
                 files_to_delete.emplace_back(txn_log_path);
                 tablet_mgr->metacache()->erase(txn_log_path);
+=======
+                RETURN_IF_ERROR(tablet_mgr->put_txn_vlog(merged, log_version));
+>>>>>>> ab3169b ([BugFix][RB-925] Keep a lake explicit transaction's statement logs in shadow tablet replay and batch publish (#83413))
             }
+            stage_source_logs();
         } else if (!txn_infos[i].combined_txn_log()) {
             auto txn_id = txn_infos[i].txn_id();
             auto log_version = log_versions[i];
