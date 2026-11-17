@@ -20,15 +20,19 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.DecimalType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.Optional;
 
 public class ConstantOperatorTest {
@@ -327,6 +331,23 @@ public class ConstantOperatorTest {
             ConstantOperator var2 = ConstantOperator.createDatetime(LocalDateTime.of(2023, 10, 5, 0, 0, 10));
             Assertions.assertEquals(10, var1.distance(var2));
             Assertions.assertEquals(-10, var2.distance(var1));
+        }
+    }
+
+    @Test
+    public void testDecimalV3IsLocaleIndependent() {
+        // A JVM locale with a decimal comma (e.g. en_DK, de_DE) must not leak into the constant's text,
+        // otherwise folding CAST(decimal AS DOUBLE) fails and leaves an unfolded cast in the plan
+        Locale defaultFormatLocale = Locale.getDefault(Locale.Category.FORMAT);
+        try {
+            Locale.setDefault(Locale.Category.FORMAT, Locale.GERMANY);
+            ScalarType decimal32p9s2 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2);
+            ConstantOperator decimal = ConstantOperator.createDecimal(new BigDecimal("-1234.5"), decimal32p9s2);
+
+            Assertions.assertEquals("-1234.50", decimal.toString());
+            Assertions.assertEquals(ConstantOperator.createDouble(-1234.5), decimal.castTo(FloatType.DOUBLE).get());
+        } finally {
+            Locale.setDefault(Locale.Category.FORMAT, defaultFormatLocale);
         }
     }
 }
