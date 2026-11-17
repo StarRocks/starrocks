@@ -56,6 +56,8 @@ During a rolling upgrade, upgrade all BE and CN nodes to a version with the nest
 
 Take note of the following points when you use StarRocks to query data from Iceberg:
 
+The Parquet reader in BE and CN supports nested Iceberg `GEOMETRY` in array elements, map values, and struct fields. FE maps these columns to `UNKNOWN_TYPE` until a separate FE release enables queries. Before upgrading to that FE version, upgrade all BE and CN nodes to a version with the nested `GEOMETRY` reader.
+
 | **File format** | **Compression format**                                   | **Iceberg table version**                                           |
 | --------------- | ---------------------------------------------- | ------------------------------------------------------------ |
 | Parquet         | SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION      | <ul><li>v1 tables: supported. </li><li>v2 tables: supported from StarRocks v3.1 onwards in which queries on these v2 tables support position deletes. In v3.1.10, v3.2.5, v3.3 and their later versions, queries on v2 tables also support equality deletes. </li></ul> |
