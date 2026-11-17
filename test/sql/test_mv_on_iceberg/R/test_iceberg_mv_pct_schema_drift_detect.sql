@@ -301,7 +301,7 @@ set catalog mv_iceberg_${uuid0};
 use c5_db_${uuid0};
 -- result:
 -- !result
-DROP TABLE c5_base;
+DROP TABLE c5_base FORCE;
 -- result:
 -- !result
 set catalog default_catalog;
@@ -358,3 +358,18 @@ drop database c5_db_${uuid0} force;
 drop catalog mv_iceberg_${uuid0};
 -- result:
 -- !result
+CLEANUP {
+drop database if exists default_catalog.db_${uuid0} force;
+drop table if exists mv_iceberg_${uuid0}.c1_db_${uuid0}.c1_base force;
+drop table if exists mv_iceberg_${uuid0}.c2_db_${uuid0}.c2_base force;
+drop table if exists mv_iceberg_${uuid0}.c3_db_${uuid0}.c3_base force;
+drop table if exists mv_iceberg_${uuid0}.c4_db_${uuid0}.c4_base force;
+drop table if exists mv_iceberg_${uuid0}.c5_db_${uuid0}.c5_base force;
+drop database if exists mv_iceberg_${uuid0}.c1_db_${uuid0};
+drop database if exists mv_iceberg_${uuid0}.c2_db_${uuid0};
+drop database if exists mv_iceberg_${uuid0}.c3_db_${uuid0};
+drop database if exists mv_iceberg_${uuid0}.c4_db_${uuid0};
+drop database if exists mv_iceberg_${uuid0}.c5_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists mv_iceberg_${uuid0};
+} END CLEANUP
