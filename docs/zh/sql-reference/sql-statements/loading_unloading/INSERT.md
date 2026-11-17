@@ -106,7 +106,7 @@ SELECT * FROM source_wiki_edit;
 
 - 当前版本中，StarRocks 在执行 INSERT 语句时，如果有数据不符合目标表格式的数据（例如字符串超长等情况），INSERT 操作默认执行失败。您可以通过设置会话变量 `enable_insert_strict` 为 `false` 以确保 INSERT 操作过滤不符合目标表格式的数据，并继续执行。
 
-- 执行 INSERT OVERWRITE 语句后，系统将为目标分区创建相应的临时分区，并将数据写入临时分区，最后使用临时分区原子替换目标分区来实现覆盖写入。其所有过程均在在 Leader FE 节点执行。因此，如果 Leader FE 节点在覆盖写入过程中发生宕机，将会导致该次 INSERT OVERWRITE 导入失败，其过程中所创建的临时分区也会被删除。
+- INSERT OVERWRITE 先写入临时分区。只有导入事务达到 `VISIBLE` 后，Leader FE 才替换正式分区。如果事务提交后的 publish 等待超时，语句可能返回 `COMMITTED`，并包含 `overwriteJobId` 和 `overwriteStatus: WAITING_VISIBLE`；替换完成前，旧正式分区仍可读取。Leader FE 重启后会恢复已提交、待可见的覆盖作业；尚未提交的作业会被取消并清理临时分区。如果源分区在替换前被删除，覆盖作业会失败并清理临时分区，其他旧正式分区保持不变。
 
 - StarRocks 支持通过 INSERT OVERWRITE 语句写入非表达式分区。但对于先前不存在的分区，写入新数据时，系统不会创建不存在的分区。
 

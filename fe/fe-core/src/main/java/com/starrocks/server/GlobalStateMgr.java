@@ -2263,6 +2263,11 @@ public class GlobalStateMgr {
 
         imageLoader.checkCheckSum();
 
+        // Transaction states are loaded before INSERT_OVERWRITE_JOB_MGR in the image. Defer
+        // expiration until the overwrite jobs are available so a pending replacement does not
+        // lose the VISIBLE transaction it still needs to finish.
+        globalTransactionMgr.removeExpiredTxns();
+
         postLoadImageWithRecoveryPolicy();
 
         long loadImageEndTime = System.currentTimeMillis();

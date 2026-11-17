@@ -63,6 +63,7 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTableHelper;
+import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -2341,22 +2342,31 @@ public class DatabaseTransactionMgr {
             StringBuilder expiredTxnMsgs = new StringBuilder(1024);
             String prefix = "";
             int numJobsToRemove = getTransactionNum() - Config.label_keep_max_num;
-            while (!finalStatusTransactionStateDeque.isEmpty()) {
-                TransactionState transactionState = finalStatusTransactionStateDeque.getFirst();
-                if (transactionState.isExpired(currentMillis) || numJobsToRemove > 0) {
-                    finalStatusTransactionStateDeque.pop();
-                    clearTransactionState(transactionState);
-                    --numJobsToRemove;
-                    expiredTxnMsgs.append(prefix);
-                    prefix = ", ";
-                    expiredTxnMsgs.append(transactionState.getTransactionId());
-                    if (expiredTxnMsgs.length() > 4096) {
-                        LOG.info("transaction list [{}] are expired, remove them from transaction manager",
-                                expiredTxnMsgs);
-                        expiredTxnMsgs = new StringBuilder(1024);
-                    }
-                } else {
+            InsertOverwriteJobMgr overwriteMgr = globalStateMgr.getInsertOverwriteJobMgr();
+            Set<Long> protectedTxnIds = overwriteMgr == null ? Collections.emptySet()
+                    : overwriteMgr.getUnfinishedTransactionIds(dbId);
+            Iterator<TransactionState> iterator = finalStatusTransactionStateDeque.iterator();
+            while (iterator.hasNext()) {
+                TransactionState transactionState = iterator.next();
+                if (!transactionState.isExpired(currentMillis) && numJobsToRemove <= 0) {
                     break;
+                }
+                // A VISIBLE INSERT OVERWRITE transaction is still needed until its temporary
+                // partitions have replaced the formal ones. Skipping it may temporarily exceed
+                // label_keep_max_num, but avoids leaving the overwrite permanently pending.
+                if (protectedTxnIds.contains(transactionState.getTransactionId())) {
+                    continue;
+                }
+                iterator.remove();
+                clearTransactionState(transactionState);
+                --numJobsToRemove;
+                expiredTxnMsgs.append(prefix);
+                prefix = ", ";
+                expiredTxnMsgs.append(transactionState.getTransactionId());
+                if (expiredTxnMsgs.length() > 4096) {
+                    LOG.info("transaction list [{}] are expired, remove them from transaction manager",
+                            expiredTxnMsgs);
+                    expiredTxnMsgs = new StringBuilder(1024);
                 }
             }
             if (expiredTxnMsgs.length() > 0) {
@@ -2614,7 +2624,11 @@ public class DatabaseTransactionMgr {
                 }
             }
             unprotectUpsertTransactionState(transactionState);
-            if (transactionState.isExpired(System.currentTimeMillis())) {
+            // The job's RUNNING/WAITING_VISIBLE log is replayed before its committed transaction.
+            // Keep the transaction until the replacement is journaled as complete.
+            boolean referencedByOverwrite = globalStateMgr.getInsertOverwriteJobMgr()
+                    .getUnfinishedTransactionIds(dbId).contains(transactionState.getTransactionId());
+            if (transactionState.isExpired(System.currentTimeMillis()) && !referencedByOverwrite) {
                 if (!isCheckpoint) {
                     LOG.info("remove expired transaction: {}", transactionState.getBrief());
                 }

@@ -33,6 +33,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 public class InsertOverwriteJobManagerTest {
 
@@ -106,6 +107,9 @@ public class InsertOverwriteJobManagerTest {
 
                 globalStateMgr.isReady();
                 result = true;
+
+                runner.cancel();
+                result = true;
             }
         };
 
@@ -136,4 +140,22 @@ public class InsertOverwriteJobManagerTest {
                 sourcePartitionNames, null, newPartitionNames);
         insertOverwriteJobManager.replayInsertOverwriteStateChange(stateChangeInfo2);
     }
+
+
+    @Test
+    public void testOnlyEarlierOverlappingPartitionsBlockReplacement() {
+        Set<String> first = Set.of("p1", "p2");
+        Set<String> overlap = Set.of("p2", "p3");
+        Set<String> disjoint = Set.of("p3");
+
+        Assertions.assertTrue(InsertOverwriteJobMgr.isEarlierOverlapping(100L, 1L, first,
+                101L, 2L, overlap));
+        Assertions.assertFalse(InsertOverwriteJobMgr.isEarlierOverlapping(100L, 1L, first,
+                101L, 2L, disjoint));
+        Assertions.assertFalse(InsertOverwriteJobMgr.isEarlierOverlapping(101L, 2L, overlap,
+                100L, 1L, first));
+        Assertions.assertTrue(InsertOverwriteJobMgr.isEarlierOverlapping(100L, 1L, first,
+                100L, 2L, overlap));
+    }
+
 }
