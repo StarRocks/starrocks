@@ -194,8 +194,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタで、主キーテーブルの tablet の削除量が `lake_pk_compaction_base_delete_ratio_threshold` または `lake_pk_compaction_base_delete_rows_threshold` に達したときに、累積コンパクションからベースコンパクションへ自動的に切り替えるかどうか。`lake_pk_compaction_base_delete_rows_threshold` は絶対行数であるため、デフォルトでは無効です。既存の行が継続的に更新または削除される大きなテーブルでは、tablet はベースコンパクションのたびにすぐ再びこの値に達し、各ベースコンパクションは tablet のデータのうち最大 `update_compaction_ratio_threshold` (デフォルト 0.5) の割合を書き換えます。手動の `ALTER TABLE ... COMPACT` は、この項目の設定に関係なくベースコンパクションを実行します。
-- 導入バージョン: v4.1.6, v26.2.1
+- 説明: 共有データの主キータブレットに対する自動 Compaction で、削除率または削除行数がしきい値に達したときに Base Compaction を選択できるかどうか。このスイッチは削除量による自動 Base Compaction だけを制御し、通常の Cumulative Compaction には影響しません。継続的な更新や削除がある大きなタブレットでは、絶対削除行数のしきい値に頻繁に達し、データが繰り返し書き換えられる可能性があるため、デフォルトでは無効です。手動の `ALTER TABLE ... COMPACT` はこのスイッチと 2 つの削除しきい値を回避します。削除行がなければ通常の Compaction 選択にフォールバックします。自動と手動のいずれも、1 回でタブレット全体がマージされるとは限りません。[主キーテーブルの Base Compaction](../../management/compaction.md#primary-key-base-compaction)を参照してください。
+- 導入バージョン: v4.1.7, v26.2.1
 
 ### lake_pk_compaction_base_delete_ratio_threshold
 
@@ -203,8 +203,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Double
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタで、主キーテーブルの tablet を累積コンパクション (サイズ階層型の小ファイルマージ) からベースコンパクションに切り替える 2 つのトリガーの 1 つ。ベースコンパクションは削除を含む rowset を (削除行数の多いものから優先して) 書き換え、削除された行を物理的に除去して delete vector を縮小します。`lake_pk_compaction_base_enable_delete_trigger` が `true` の場合、tablet の集約削除率 (各 rowset の `sum(num_dels) / sum(num_rows)`) がこの値に達したとき、または絶対削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達したときに実行されます。手動の `ALTER TABLE ... COMPACT` は、これらの設定に関係なくベースコンパクションを強制します。
-- 導入バージョン: v4.2
+- 説明: 共有データの主キータブレットで、削除量による自動 Base Compaction の選択を判定する 2 つのしきい値の一方です。現在のすべての Rowset の合計削除率 `sum(num_dels) / sum(num_rows)` がこの値に達するか、合計削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達すると選択対象になります。v4.1.4～v4.1.6 は両方のしきい値を直接確認します。v4.1.7 以降は `lake_pk_compaction_base_enable_delete_trigger = true` も必要です。手動の `ALTER TABLE ... COMPACT` は両方のしきい値を回避します。しきい値に達しても FE による即時スケジュールは保証されません。[自動トリガー](../../management/compaction.md#automatic-base-compaction)を参照してください。
+- 導入バージョン: v4.1.4
 
 ### lake_pk_compaction_base_delete_rows_threshold
 
@@ -212,8 +212,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタでの主キーテーブルのベースコンパクションの 2 つのトリガーの 1 つ (`lake_pk_compaction_base_delete_ratio_threshold` を参照)。`lake_pk_compaction_base_enable_delete_trigger` が `true` の場合、tablet の絶対削除行数 (各 rowset の `sum(num_dels)`) がこの値に達したときにベースコンパクションが実行されます。この絶対数トリガーは比率トリガーを補完します。高頻度の更新/削除テーブルでは、delete vector が肥大化して領域が無駄になる一方、集約削除率は多数のほぼ生存している rowset によって希釈されて低いままになるため、比率トリガーだけでは発火しません。この値を大きくするとベースコンパクションの頻度が下がり、小さくすると delete vector をより早く回収できます。
-- 導入バージョン: v4.2
+- 説明: 共有データの主キータブレットで、削除量による自動 Base Compaction を選択する絶対行数のしきい値です。`lake_pk_compaction_base_delete_ratio_threshold` と OR 条件で組み合わせます。削除行数はタブレット内の現在のすべての Rowset の `sum(num_dels)` です。v4.1.4～v4.1.6 はこのしきい値を直接確認します。v4.1.7 以降は `lake_pk_compaction_base_enable_delete_trigger = true` も必要です。手動要求はこのしきい値を回避します。全体の削除率が低くても Delete Vector の削除マークが多い場合を補います。値を大きくすると自動 Base Compaction の頻度が下がり、小さくすると削除データ回収の選択対象に早くなります。[自動トリガー](../../management/compaction.md#automatic-base-compaction)を参照してください。
+- 導入バージョン: v4.1.4
 
 ### enable_lake_pk_compaction_score_gate
 
