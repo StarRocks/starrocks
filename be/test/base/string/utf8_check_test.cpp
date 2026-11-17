@@ -231,7 +231,7 @@ TEST_F(Utf8CheckTest, SimdutfBase64ExactBufferOverflowRegression) {
             }
         };
 
-        // Case A (simdutf #1044 & 9f87f25c):
+        // Case A (simdutf 9f87f25c6350 in v9.1.2 & #1044 in v9.2.1):
         //   - 64 Base64 chars + 64 spaces (no trailing payload -> 48 decoded bytes)
         //   - 64 Base64 chars + 64 spaces + 64 Base64 chars (-> 96 decoded bytes)
         //   - 64 Base64 chars + 1000 spaces + "AAAA" (-> 51 decoded bytes)
@@ -239,9 +239,9 @@ TEST_F(Utf8CheckTest, SimdutfBase64ExactBufferOverflowRegression) {
         check_exact(std::string(64, 'A') + std::string(64, ' ') + std::string(64, 'A'), simdutf::base64_default, 96u);
         check_exact(std::string(64, 'A') + std::string(1000, ' ') + "AAAA", simdutf::base64_default, 51u);
 
-        // Case B (simdutf #1044): Five 56-'A' runs and one 52-'A'+4-newline run separated by spaces + "AAAAAA=="
-        // (338 Base64 chars -> 253 decoded bytes). Triggers the multi-block buffer flush in compress_decode_base64
-        // where end_of_safe_64byte_zone was inflated by whitespace.
+        // Case B (simdutf #1044 in v9.2.1): Five 56-'A' runs and one 52-'A'+4-newline run separated by spaces +
+        // "AAAAAA==" (338 Base64 chars -> 253 decoded bytes). Triggers the multi-block buffer flush in
+        // compress_decode_base64 where end_of_safe_64byte_zone was inflated by whitespace.
         std::string runs;
         for (int g = 0; g < 6; ++g) {
             if (g == 2) {
@@ -254,11 +254,13 @@ TEST_F(Utf8CheckTest, SimdutfBase64ExactBufferOverflowRegression) {
         runs += "AAAAAA==";
         check_exact(runs, simdutf::base64_default, 253u);
 
-        // Case C (simdutf #1044): 60 'A's + "#" + 32 spaces + 7 'A's under base64_default_accept_garbage (50 decoded bytes).
+        // Case C (simdutf #1044 in v9.2.1): 60 'A's + "#" + 32 spaces + 7 'A's under base64_default_accept_garbage
+        // (50 decoded bytes).
         std::string with_garbage = std::string(60, 'A') + "#" + std::string(32, ' ') + std::string(7, 'A');
         check_exact(with_garbage, simdutf::base64_default_accept_garbage, 50u);
 
-        // Case D (simdutf #1074): 59 spaces + "AAAAA" (5 Base64 chars) with loose handling -> 3 valid bytes before remainder error.
+        // Case D (simdutf #1074 in v9.4.0, arm64/lsx/lasx tail): 59 spaces + "AAAAA" (5 Base64 chars) with loose
+        // handling -> 3 valid bytes before remainder error.
         {
             std::string input = std::string(59, ' ') + "AAAAA";
             size_t exact_len = 3;
@@ -272,7 +274,9 @@ TEST_F(Utf8CheckTest, SimdutfBase64ExactBufferOverflowRegression) {
             }
         }
 
-        // Case E (simdutf 877be5d5): '[' (0x5B) in base64_default_or_url mode must be rejected as INVALID_BASE64_CHARACTER.
+        // Case E (simdutf #1062 in v9.3.3, arm64-only): '[' (0x5B) in base64_default_or_url mode must be rejected as
+        // INVALID_BASE64_CHARACTER. Because the lookup-table bug was arm64-only, this case only fails on arm64 with
+        // 9.1.0 and passes on x86.
         {
             std::string input(128, 'A');
             input[31] = '[';
@@ -282,7 +286,9 @@ TEST_F(Utf8CheckTest, SimdutfBase64ExactBufferOverflowRegression) {
             EXPECT_EQ(simdutf::error_code::INVALID_BASE64_CHARACTER, r.error) << "impl=" << impl->name();
         }
 
-        // Case F (simdutf #1087 & trailing whitespace): base64_to_binary_details must report full input_count including trailing whitespace.
+        // Case F (simdutf #1090 in v9.4.0): base64_to_binary_details must report full input_count including trailing
+        // whitespace when the 64-character SIMD loop consumes all Base64 characters (affected icelake, haswell,
+        // westmere, ppc64, arm64, lsx, and lasx).
         {
             std::string input = std::string(64, 'A') + "   ";
             std::vector<char> out(48, 0);
@@ -296,8 +302,9 @@ TEST_F(Utf8CheckTest, SimdutfBase64ExactBufferOverflowRegression) {
 
 #if defined(__aarch64__)
 TEST_F(Utf8CheckTest, Arm64FlushToZeroSurrogateMaskRegression) {
-    // Regression test for simdutf f40cd326: ARM64 any_lane_set used fcmp != 0.0 on a narrowed mask,
-    // which flushes subnormal non-zero masks to 0.0 when FPCR.FZ (bit 24) is set.
+    // Regression test for simdutf f40cd326c83a (v9.2.0): ARM64 any_lane_set previously used shrn+fcmp != 0.0 on a
+    // narrowed mask, which flushes subnormal non-zero masks to 0.0 when FPCR.FZ (bit 24) is set, and was replaced
+    // with vmaxvq_u32.
     uint64_t old_fpcr = 0;
     asm volatile("mrs %0, fpcr" : "=r"(old_fpcr));
     uint64_t fz_fpcr = old_fpcr | (1ULL << 24);
