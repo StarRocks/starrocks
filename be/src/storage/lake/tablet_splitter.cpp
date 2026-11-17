@@ -1774,10 +1774,19 @@ Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<Ta
                     (effective.is_maximum() || effective.upper_bound_included() == source_range.upper_bound_included());
             const bool all_shared = std::all_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
                                                 [](const auto& segment) { return segment.shared(); });
-            if (rowset.has_range() && rowset.segment_metas_size() > 0 && same_source_range && all_shared) {
-                return Status::NotSupported("tablet split cross-published rowset has no active physical weight");
+            if (!rowset.has_range() || rowset.segment_metas_size() == 0 || !same_source_range || !all_shared) {
+                return Status::Corruption("tablet split positive rowset anchor has zero emitted weight");
             }
-            return Status::Corruption("tablet split positive rowset anchor has zero emitted weight");
+            // A split cross-publish hands every child the parent load's whole rowset: every segment shared,
+            // the child's range, and stats divided by the split count whatever the keys. A child whose range
+            // holds none of the load's rows ends up here with positive stats and no physical weight. The
+            // rowset reads empty and goes to the children it is emitted to as it is, so share the stats that have
+            // no weight out evenly among them, as the cross-publish did; the split does not wait for a compaction
+            // to rewrite the rowset.
+            for (size_t c = 0; c < child_count; ++c) {
+                if (zero_row_weight) row_weights[c] = emit[c] ? 1 : 0;
+                if (zero_byte_weight) byte_weights[c] = emit[c] ? 1 : 0;
+            }
         }
         tablet_reshard_helper::allocate_proportionally(anchor.num_rows, row_weights, &rows);
         tablet_reshard_helper::allocate_proportionally(anchor.data_size, byte_weights, &bytes);
