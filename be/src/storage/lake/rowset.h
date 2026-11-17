@@ -129,6 +129,8 @@ public:
 
     int64_t tablet_id() const { return _tablet_id; }
 
+    TabletSchemaPtr tablet_schema() const { return _tablet_schema; }
+
     [[nodiscard]] int64_t version() const { return metadata().version(); }
 
     bool has_data_files() const override { return num_segments() > 0 || num_dels() > 0; }

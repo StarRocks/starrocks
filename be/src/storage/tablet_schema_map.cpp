@@ -16,12 +16,9 @@
 
 #include <bvar/bvar.h>
 
-<<<<<<< HEAD
 #include "runtime/exec_env.h"
-=======
-#include "base/testutil/sync_point.h"
->>>>>>> 53b21e7 ([BugFix][RB-1307] Keep the tablet schema map lock short on lake scans of wide tables (#83415))
 #include "runtime/mem_tracker.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks {
 
