@@ -247,6 +247,13 @@ public:
         if (state->error_for_division_by_zero()) {
             return false;
         }
+        // The generated code computes in Type and reads both operands as Type. INT_DIVIDE over DECIMAL operands
+        // (int_col DIV decimal_col) has a BIGINT Type but DECIMAL children, which evaluate_checked divides as
+        // decimals and casts to BIGINT; compiled, the decimal values were divided as BIGINT (wrong results) and for
+        // DECIMAL128 operands the code wrote past the BIGINT result column and corrupted the heap.
+        if (_children[0]->type().type != Type || _children[1]->type().type != Type) {
+            return false;
+        }
         return state->can_jit_expr(CompilableExprType::DIV) && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
     }
 
