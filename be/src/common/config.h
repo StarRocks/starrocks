@@ -1882,8 +1882,9 @@ CONF_mInt32(agg_hash_map_prefetch_dist, "16");
 // contended many-driver-per-core deployments where the effective L2 share per
 // table is smaller than the nominal per-core size.
 CONF_mDouble(agg_prefetch_l2_ratio, "1.0");
-// sink buffer memory limit per driver
-CONF_mInt64(sink_buffer_mem_limit_per_driver, "134217728");
+// sink buffer memory limit per driver. A value <= 0 disables the limit (the default on this branch);
+// set it to a positive value, e.g. 134217728 (128MB), to enable it.
+CONF_mInt64(sink_buffer_mem_limit_per_driver, "-1");
 // Memory limit of the rows an exchange sink driver buffers per (destination, driver_sequence) while shuffling.
 // A shuffle keeps one partial chunk per destination pipeline driver and only sends it once it holds
 // vector_chunk_size rows; with many destinations x dop and wide rows those partial chunks can retain the whole
