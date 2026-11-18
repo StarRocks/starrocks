@@ -1,12 +1,13 @@
 ---
 displayed_sidebar: docs
-description: "MapまたはStruct値をJSON文字列に変換します。"
+description: "Array、Map、またはStruct値をJSON値に変換します。"
 products: [oss, enterprise, cloud, anywhere]
+
 ---
 
 # to_json
 
-Map または Struct の値を JSON 文字列に変換します。入力値が NULL の場合、NULL が返されます。
+Array、Map、または Struct の値を JSON 値に変換します。入力値が NULL の場合、NULL が返されます。
 
 :::tip
 すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
@@ -26,7 +27,7 @@ to_json(any_value)
 
 ## パラメータ
 
-`any_value`: 変換したい Map または Struct 式。入力値が無効な場合、エラーが返されます。Map または Struct 値の各キーと値のペアの値は nullable です。最後の例を参照してください。
+`any_value`: 変換する Array、Map、または Struct 式。入力値が無効な場合、エラーが返されます。Array の要素、および Map または Struct 値の各キーと値のペアの値には NULL を指定できます。
 
 入力内のどの階層でも `GEOGRAPHY` と `GEOMETRY` はサポートされません。これらの型の NULL 値も含みます。JSON に地理空間値の WKT を含めるには、Map または Struct を作成する前に値を `ST_AsText` で変換します。
 
@@ -37,6 +38,13 @@ JSON 値を返します。
 ## 例
 
 ```Haskell
+select to_json([1, NULL, 3]);
++-----------------------+
+| to_json([1,NULL,3])   |
++-----------------------+
+| [1, null, 3]          |
++-----------------------+
+
 select to_json(map{1:'a',2:'b'});
 +---------------------------+
 | to_json(map{1:'a',2:'b'}) |
@@ -68,6 +76,7 @@ select to_json(named_struct("k1", cast(null as string), "k2", "v2"));
 
 ## 関連項目
 
+- [Array data type](../../../data-types/semi_structured/Array.md)
 - [Map data type](../../../data-types/semi_structured/Map.md)
 - [Struct data type](../../../data-types/semi_structured/STRUCT.md)
 - [Map functions](../../README.md#map-functions)
