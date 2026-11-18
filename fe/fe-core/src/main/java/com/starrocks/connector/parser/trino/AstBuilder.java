@@ -221,6 +221,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -1486,7 +1487,10 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             for (int i = 0; i < rowDataType.getFields().size(); i++) {
                 final int finalIdx = i;
                 RowDataType.Field trinoField = rowDataType.getFields().get(i);
-                String name = trinoField.getName().map(Identifier::getCanonicalValue).orElseGet(() -> "col_" + finalIdx);
+                // Like Trino, keep a delimited field name as written and lowercase an undelimited one.
+                String name = trinoField.getName()
+                        .map(id -> id.isDelimited() ? id.getValue() : id.getValue().toLowerCase(Locale.ENGLISH))
+                        .orElseGet(() -> "col_" + finalIdx);
                 StructField field = new StructField(name, getType(trinoField.getType()));
                 fields.add(field);
             }
