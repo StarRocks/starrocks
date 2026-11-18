@@ -524,12 +524,14 @@ std::pair<bool, size_t> ColumnHelper::num_packed_rows(const Columns& columns) {
         return {false, 0};
     }
 
-    bool all_const = is_all_const(columns);
-    if (!all_const) {
-        return {all_const, columns[0]->size()};
+    // A const column may report size 1 for a chunk of N rows (it is resized only where ExprContext::evaluate
+    // returns it), so take the row count from a non-const column: those always have all N rows.
+    for (const auto& column : columns) {
+        if (!column->is_constant()) {
+            return {false, column->size()};
+        }
     }
-
-    return {all_const, 1};
+    return {true, 1};
 }
 
 std::pair<bool, size_t> ColumnHelper::num_packed_rows(const Column* column) {
