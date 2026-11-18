@@ -324,10 +324,10 @@ let
       md5 = "293552c7646193b8b4a01556808fe155";
       sha256 = "0qlhv3qkgh63yls1f6qylnsg69lfavm61ymz564rx4k87xjrph2l";
     };
-    "simdjson-v5.1.1.tar.gz" = {
-      url = "https://github.com/simdjson/simdjson/archive/refs/tags/v5.1.1.tar.gz";
-      md5 = "0e2c1592f5712896334fb24f7a96bc60";
-      sha256 = "1rpkjyzks1pgcq3d5s6m7hi1ncw456kmgw05fyzhphhkjqwzlsfn";
+    "simdjson-v5.2.0.tar.gz" = {
+      url = "https://github.com/simdjson/simdjson/archive/refs/tags/v5.2.0.tar.gz";
+      md5 = "1c37622a26e3fedd98a5d4cf1db49867";
+      sha256 = "0r6zijjmvd7h5pi1j71f0y074h40p1rza7jmcmpvwbxksjppd4a9";
     };
     "simdutf-9.4.0.tar.gz" = {
       url = "https://github.com/simdutf/simdutf/archive/refs/tags/v9.4.0.tar.gz";
@@ -484,7 +484,7 @@ let
       "glog-0.7.1.tar.gz"
       "googletest-release-1.10.0.tar.gz"
       "rapidjson-1.1.0.tar.gz"
-      "simdjson-v5.1.1.tar.gz"
+      "simdjson-v5.2.0.tar.gz"
       "snappy-1.2.1.tar.gz"
       "gperftools-2.7.tar.gz"
       "zlib-ng-2.3.3.tar.gz"
@@ -559,7 +559,7 @@ let
       "glog-0.7.1.tar.gz"
       "googletest-release-1.10.0.tar.gz"
       "rapidjson-1.1.0.tar.gz"
-      "simdjson-v5.1.1.tar.gz"
+      "simdjson-v5.2.0.tar.gz"
       "snappy-1.2.1.tar.gz"
       "gperftools-2.7.tar.gz"
       "zlib-ng-2.3.3.tar.gz"
@@ -633,7 +633,7 @@ let
       "glog-0.7.1.tar.gz"
       "googletest-release-1.10.0.tar.gz"
       "rapidjson-1.1.0.tar.gz"
-      "simdjson-v5.1.1.tar.gz"
+      "simdjson-v5.2.0.tar.gz"
       "snappy-1.2.1.tar.gz"
       "gperftools-2.7.tar.gz"
       "zlib-ng-2.3.3.tar.gz"
