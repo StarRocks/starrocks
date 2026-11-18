@@ -1744,6 +1744,13 @@ vectorized_functions = [
     [150351, 'array_generate', True, False, 'ARRAY_DATE', ['DATE', 'DATE', 'INT', 'VARCHAR'],
      "ArrayFunctions::array_generate<TYPE_DATE>", "ArrayFunctions::array_generate_prepare<TYPE_DATE>", "ArrayFunctions::array_generate_close<TYPE_DATE>"],
 
+    # Trino's sequence(), mapped from the Trino dialect. Kept apart from array_generate, whose defaults, NULL
+    # handling and step checks differ.
+    [150360, 'trino_sequence', False, False, 'ARRAY_BIGINT', ['BIGINT', 'BIGINT'],
+     "ArrayFunctions::trino_sequence_bigint"],
+    [150361, 'trino_sequence', False, False, 'ARRAY_BIGINT', ['BIGINT', 'BIGINT', 'BIGINT'],
+     "ArrayFunctions::trino_sequence_bigint"],
+
     # high-order functions related to lambda functions.
     [160100, 'array_map', True, False, 'ANY_ARRAY', ['FUNCTION', 'ANY_ARRAY', "..."], 'ArrayFunctions::array_map'],
 
