@@ -3645,4 +3645,21 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "output: sum(2: v2), max(3: v3)");
         assertContains(plan, "named_struct('a', 4: sum, 'b', 5: max).a");
     }
+
+    @Test
+    public void testHistogramForcedSingleStage() throws Exception {
+        String sql = "select histogram(v1, 10, 1.0) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "AGGREGATE (update finalize)");
+        assertNotContains(plan, "update serialize");
+        assertNotContains(plan, "merge finalize");
+    }
+
+    @Test
+    public void testHistogramWithGroupByThrowsError() throws Exception {
+        String sql = "select v2, histogram(v1, 10, 1.0) from t0 group by v2";
+        StarRocksPlannerException exception = assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("histogram() does not support GROUP BY"));
+    }
 }
