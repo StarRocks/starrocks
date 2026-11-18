@@ -36,7 +36,6 @@ protected:
         bool geography = GetParam() == TYPE_GEOGRAPHY;
         return TypeDescriptor::create_geo_type(
                 GetParam(), {geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
-                             geography ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN,
                              geography ? GEO_EDGE_ALGORITHM_KARNEY : GEO_EDGE_ALGORITHM_PLANAR,
                              geography ? "OGC:CRS84" : "EPSG:3857", geography ? 4326 : 3857});
     }

@@ -39,7 +39,6 @@ protected:
         return TypeDescriptor::create_geo_type(
                 primitive,
                 GeoTypeDescriptor{geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
-                                  geography ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN,
                                   geography ? GEO_EDGE_ALGORITHM_KARNEY : GEO_EDGE_ALGORITHM_PLANAR, "custom:geo-crs",
                                   4326});
     }

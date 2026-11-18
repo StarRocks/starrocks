@@ -33,9 +33,8 @@ namespace starrocks {
 namespace {
 constexpr const char* kSquare = "POLYGON ((0 0,1 0,2 0,2 1,2 2,1 2,0 2,0 1,0 0))";
 TypeDescriptor geo_type(std::string crs = "EPSG:3857") {
-    return TypeDescriptor::create_geo_type(
-            TYPE_GEOMETRY, {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, crs,
-                            crs == "EPSG:4326" ? 4326 : 3857});
+    return TypeDescriptor::create_geo_type(TYPE_GEOMETRY, {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, crs,
+                                                           crs == "EPSG:4326" ? 4326 : 3857});
 }
 std::unique_ptr<FunctionContext> context(const TypeDescriptor& type = geo_type()) {
     return std::unique_ptr<FunctionContext>(FunctionContext::create_test_context({type, TYPE_DOUBLE_DESC}, type));

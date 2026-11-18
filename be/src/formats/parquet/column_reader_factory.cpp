@@ -59,8 +59,7 @@ Status validate_native_iceberg_geo(const ParquetField& field, const TypeDescript
     }
     if (!geography) {
         const auto srid = derive_geo_srid(planned.crs);
-        if (planned.coordinate_system != GEO_COORDINATE_SYSTEM_CARTESIAN ||
-            planned.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR || !srid || *srid <= 0 || planned.srid != srid) {
+        if (planned.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR || !srid || *srid <= 0 || planned.srid != srid) {
             return Status::InvalidArgument("Unsupported Iceberg GEOMETRY descriptor: " + field.name);
         }
     }

@@ -25,7 +25,6 @@ GeoColumnDescriptor descriptor(LogicalType primitive) {
     GeoColumnDescriptor result;
     bool geography = primitive == TYPE_GEOGRAPHY;
     result.type.logical_type = geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY;
-    result.type.coordinate_system = geography ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN;
     result.type.edge_algorithm = geography ? GEO_EDGE_ALGORITHM_SPHERICAL : GEO_EDGE_ALGORITHM_PLANAR;
     result.type.crs = "OGC:CRS84";
     result.type.srid = 4326;
