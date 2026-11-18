@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -103,13 +104,16 @@ public class ScalarApplyNormalizeCountRule extends TransformationRule {
         return ZERO_ON_EMPTY_FUNCTIONS.contains(aggregation.getFnName()) && aggregation.getType().isBigint();
     }
 
-    // Whether the aggregation returns a non-NULL value on an empty input, e.g. 0 for count or an empty bitmap for
-    // bitmap_union.
+    // Whether the aggregation may return a non-NULL value on an empty input, e.g. 0 for count, an empty bitmap for
+    // bitmap_union, or the result of an agg-state combinator such as count_merge.
     public static boolean isNonNullOnEmpty(CallOperator aggregation) {
         Function fn = aggregation.getFunction();
         return isZeroOnEmpty(aggregation)
                 || FunctionSet.alwaysReturnNonNullableFunctions.contains(aggregation.getFnName())
-                || (fn instanceof AggregateFunction && ((AggregateFunction) fn).returnsNonNullOnEmpty());
+                || (fn instanceof AggregateFunction && ((AggregateFunction) fn).returnsNonNullOnEmpty())
+                || (fn != null && !fn.isNullable())
+                || AggStateUtils.isAggStateCombinator(fn)
+                || AggStateUtils.isAggStateCombinator(aggregation.getFnName());
     }
 
     // Replaces every count-like aggregation used by the subquery operator with ifnull(count, 0), see

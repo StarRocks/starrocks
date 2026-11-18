@@ -703,6 +703,13 @@ public class SubqueryTest extends PlanTestBase {
             Throwable exception = assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
             assertThat(exception.getMessage(), containsString("Not support Non-EQ correlated predicate"));
         }
+        {
+            // the empty result of an agg-state combinator depends on the aggregate function, e.g. 0 for count_merge
+            String sql = "select v1, (select count_merge(count_state(v6)) from t1 " +
+                    "where t1.v4 = t0.v1 and t1.v5 < t0.v2) c from t0";
+            Throwable exception = assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+            assertThat(exception.getMessage(), containsString("Not support Non-EQ correlated predicate"));
+        }
     }
 
     @Test
