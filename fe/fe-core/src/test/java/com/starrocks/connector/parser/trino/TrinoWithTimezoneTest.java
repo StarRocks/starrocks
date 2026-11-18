@@ -132,6 +132,10 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
         Assertions.assertEquals(2, StringUtils.countMatches(plan, "time_slice("), plan);
         assertPlanContains("select second(with_timezone(x, 'UTC')) from (select CAST(ts AS TIMESTAMP(0)) x" + values +
                 ") s", "date_trunc('second', microseconds_add(");
+        // A literal that already fits isn't rounded, so it stays a constant
+        plan = getFragmentPlan("select 1" + values + " where CAST(with_timezone(ts, 'UTC') AS TIMESTAMP) >= " +
+                "CAST('2024-08-01' AS TIMESTAMP)");
+        Assertions.assertEquals(1, StringUtils.countMatches(plan, "time_slice("), plan);
     }
 
     // Below a day, truncation is exact only in a fixed-offset zone; Trino promotes a DATE argument to TIMESTAMP
@@ -240,9 +244,11 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                 "select CAST(with_timezone(from_unixtime(0), 'UTC') AS DATE)",
                 "select CAST(with_timezone(ts AT TIME ZONE 'UTC', 'UTC') AS DATE)" + values,
                 "select CAST(with_timezone(TIMESTAMP '2024-01-01 00:00:00', '+14:30') AT TIME ZONE 'UTC' AS TIMESTAMP)",
-                // date_parse returns TIMESTAMP(3) in Trino and drops digits that StarRocks keeps (Trino: 14:36:41)
+                // These parses return TIMESTAMP(3) in Trino and drop digits that StarRocks keeps (Trino: 14:36:41)
                 "select date_format(with_timezone(date_parse('2024-08-19 14:36:41.999999', " +
                         "'%Y-%m-%d %H:%i:%s.%f'), 'UTC'), '%H:%i:%s')",
+                "select date_format(with_timezone(CAST(parse_datetime('2024-08-19 14:36:41.999999', " +
+                        "'yyyy-MM-dd HH:mm:ss.SSSSSS') AS TIMESTAMP(6)), 'UTC'), '%H:%i:%s')",
                 // Zones the BE would resolve differently, or not at all
                 "select cast(with_timezone(ts, 'utc') AT TIME ZONE 'UTC' AS TIMESTAMP)" + values,
                 "select cast(with_timezone(ts, 'GMT+8') AT TIME ZONE 'UTC' AS TIMESTAMP)" + values,
