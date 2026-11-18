@@ -19,7 +19,7 @@ products: [oss]
 
 **JAR ファイルの取得方法:**
 
-- [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks) から直接 Spark connector JAR ファイルをダウンロードします。
+- [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks/) から直接 Spark connector JAR ファイルをダウンロードします。
 - Maven プロジェクトの `pom.xml` ファイルに Spark connector を依存関係として追加し、ダウンロードします。具体的な手順については、[ユーザーガイド](../../loading/spark/Spark-connector-starrocks.md#obtain-spark-connector) を参照してください。
 - ソースコードをコンパイルして Spark connector JAR ファイルを作成します。具体的な手順については、[ユーザーガイド](../../loading/spark/Spark-connector-starrocks.md#obtain-spark-connector) を参照してください。
 
