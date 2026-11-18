@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
@@ -90,6 +91,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropPartitionColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -200,6 +202,7 @@ import org.apache.iceberg.util.TableScanUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -6326,8 +6329,6 @@ public class IcebergMetadataTest extends TableTestBase {
         }
     }
 
-<<<<<<< HEAD
-=======
     private CreateTableStmt buildIcebergCreateTableStmt(String dbName, String tableName,
                                                         Map<String, String> properties) {
         CreateTableStmt stmt = new CreateTableStmt(
@@ -6352,113 +6353,44 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
-    public void testCreateTableInjectsCatalogMaintenanceDefaultsWhenAutoMaintenanceEnabled() throws DdlException {
-        Map<String, String> config = new HashMap<>(DEFAULT_CONFIG);
-        config.put(ENABLE_ICEBERG_AUTO_MAINTENANCE, "true");
-        IcebergCatalogProperties catalogProps = new IcebergCatalogProperties(config);
+    public void testListTableDeltaTraitsSkipsReplaceSnapshots() {
+        // Step 1: APPEND FILE_A
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        Snapshot snap1 = mockedNativeTableA.currentSnapshot();
+        Assertions.assertEquals("append", snap1.operation());
 
-        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Map<String, String>> propsCaptor = ArgumentCaptor.forClass(Map.class);
-        Mockito.when(icebergCatalog.createTable(
-                Mockito.eq(connectContext),
-                Mockito.eq("db"),
-                Mockito.eq("tbl"),
-                Mockito.any(Schema.class),
-                Mockito.any(PartitionSpec.class),
-                Mockito.isNull(),
-                Mockito.isNull(),
-                propsCaptor.capture())).thenReturn(true);
+        // Step 2: REPLACE (rewrite FILE_A -> FILE_A_1, simulating compaction)
+        mockedNativeTableA.newRewrite().deleteFile(FILE_A).addFile(FILE_A_1).commit();
+        Snapshot snap2 = mockedNativeTableA.currentSnapshot();
+        Assertions.assertEquals("replace", snap2.operation());
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
-                Executors.newSingleThreadExecutor(), catalogProps);
+        // Step 3: APPEND FILE_A_2
+        mockedNativeTableA.newAppend().appendFile(FILE_A_2).commit();
+        Snapshot snap3 = mockedNativeTableA.currentSnapshot();
+        Assertions.assertEquals("append", snap3.operation());
 
-        CreateTableStmt stmt = buildIcebergCreateTableStmt("db", "tbl", new HashMap<>());
-        Assertions.assertTrue(metadata.createTable(connectContext, stmt));
+        // Build IcebergTable wrapping the native table
+        IcebergTable icebergTable = new IcebergTable(1, "testTbl", CATALOG_NAME, CATALOG_NAME,
+                "db", "testTbl", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
 
-        Map<String, String> passed = propsCaptor.getValue();
-        Assertions.assertEquals(String.valueOf(AUTO_MAINTENANCE_DEFAULT_MAX_SNAPSHOT_AGE_MS),
-                passed.get(ICEBERG_MAX_SNAPSHOT_AGE_MS));
-        Assertions.assertEquals(String.valueOf(AUTO_MAINTENANCE_DEFAULT_MIN_SNAPSHOTS_TO_KEEP),
-                passed.get(ICEBERG_MIN_SNAPSHOTS_TO_KEEP));
-        Assertions.assertEquals(String.valueOf(AUTO_MAINTENANCE_DEFAULT_MANIFEST_TARGET_SIZE_BYTES),
-                passed.get(ICEBERG_MANIFEST_TARGET_SIZE_BYTES));
-    }
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), null);
 
-    @Test
-    public void testCreateTableKeepsTableLevelMaintenancePropertyOverrides() throws DdlException {
-        Map<String, String> config = new HashMap<>(DEFAULT_CONFIG);
-        config.put(ENABLE_ICEBERG_AUTO_MAINTENANCE, "true");
-        IcebergCatalogProperties catalogProps = new IcebergCatalogProperties(config);
+        // Query delta traits from snap1 (exclusive) to snap3 (inclusive)
+        // This range includes snap2 (REPLACE) and snap3 (APPEND)
+        TvrTableSnapshot from = TvrTableSnapshot.of(Optional.of(snap1.snapshotId()));
+        TvrTableSnapshot to = TvrTableSnapshot.of(Optional.of(snap3.snapshotId()));
 
-        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Map<String, String>> propsCaptor = ArgumentCaptor.forClass(Map.class);
-        Mockito.when(icebergCatalog.createTable(
-                Mockito.eq(connectContext),
-                Mockito.eq("db"),
-                Mockito.eq("tbl"),
-                Mockito.any(Schema.class),
-                Mockito.any(PartitionSpec.class),
-                Mockito.isNull(),
-                Mockito.isNull(),
-                propsCaptor.capture())).thenReturn(true);
+        List<TvrTableDeltaTrait> traits = metadata.listTableDeltaTraits("db", icebergTable, from, to);
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
-                Executors.newSingleThreadExecutor(), catalogProps);
+        // REPLACE snapshot should be skipped, only APPEND (snap3) should remain
+        Assertions.assertEquals(1, traits.size());
+        Assertions.assertTrue(traits.get(0).isAppendOnly());
 
-        Map<String, String> tableProps = new HashMap<>();
-        tableProps.put(ICEBERG_MAX_SNAPSHOT_AGE_MS, "999999");
-        CreateTableStmt stmt = buildIcebergCreateTableStmt("db", "tbl", tableProps);
-        Assertions.assertTrue(metadata.createTable(connectContext, stmt));
-
-        Map<String, String> passed = propsCaptor.getValue();
-        Assertions.assertEquals("999999", passed.get(ICEBERG_MAX_SNAPSHOT_AGE_MS));
-        Assertions.assertEquals(String.valueOf(AUTO_MAINTENANCE_DEFAULT_MIN_SNAPSHOTS_TO_KEEP),
-                passed.get(ICEBERG_MIN_SNAPSHOTS_TO_KEEP));
-        Assertions.assertEquals(String.valueOf(AUTO_MAINTENANCE_DEFAULT_MANIFEST_TARGET_SIZE_BYTES),
-                passed.get(ICEBERG_MANIFEST_TARGET_SIZE_BYTES));
-    }
-
-    private Schema createTableWithIdentifierFields(String identifierFields) throws DdlException {
-        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
-        ArgumentCaptor<Schema> schemaCaptor = ArgumentCaptor.forClass(Schema.class);
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Map<String, String>> propsCaptor = ArgumentCaptor.forClass(Map.class);
-        Mockito.when(icebergCatalog.createTable(Mockito.eq(connectContext), Mockito.eq("db"), Mockito.eq("tbl"),
-                schemaCaptor.capture(), Mockito.any(PartitionSpec.class), Mockito.isNull(), Mockito.isNull(),
-                propsCaptor.capture())).thenReturn(true);
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
-                Executors.newSingleThreadExecutor(), new IcebergCatalogProperties(DEFAULT_CONFIG));
-
-        Map<String, String> props = new HashMap<>();
-        props.put("identifier-fields", identifierFields);
-        CreateTableStmt stmt = buildIcebergCreateTableStmt("db", "tbl", props);
-        stmt.setColumns(Lists.newArrayList(
-                new Column("id", IntegerType.BIGINT, false),
-                new Column("region", VARCHAR, false),
-                new Column("v", INT, true)));
-        Assertions.assertTrue(metadata.createTable(connectContext, stmt));
-        Assertions.assertFalse(propsCaptor.getValue().containsKey("identifier-fields"));
-        return schemaCaptor.getValue();
-    }
-
-    @Test
-    public void testCreateTableSetsIdentifierFields() throws DdlException {
-        Assertions.assertEquals(Set.of("id"), createTableWithIdentifierFields("id").identifierFieldNames());
-        Assertions.assertEquals(Set.of("id", "region"),
-                createTableWithIdentifierFields(" ID , region ").identifierFieldNames());
-    }
-
-    @Test
-    public void testCreateTableRejectsInvalidIdentifierFields() {
-        DdlException e = Assertions.assertThrows(DdlException.class, () -> createTableWithIdentifierFields("v"));
-        Assertions.assertTrue(e.getMessage().contains("not a required field"), e.getMessage());
-        e = Assertions.assertThrows(DdlException.class, () -> createTableWithIdentifierFields("id,nope"));
-        Assertions.assertTrue(e.getMessage().contains("nope"), e.getMessage());
-        Assertions.assertThrows(DdlException.class, () -> createTableWithIdentifierFields(" , "));
-        e = Assertions.assertThrows(DdlException.class, () -> createTableWithIdentifierFields("id,ID"));
-        Assertions.assertTrue(e.getMessage().contains("Duplicate"), e.getMessage());
+        // Verify the returned trait corresponds to snap3, not snap2
+        TvrTableDelta delta = traits.get(0).getTvrDelta();
+        Assertions.assertEquals(snap3.snapshotId(), delta.end().get());
     }
 
     private Map<String, String> createTableWithProperties(IcebergCatalog icebergCatalog, Map<String, String> props)
@@ -6534,96 +6466,6 @@ public class IcebergMetadataTest extends TableTestBase {
                 Map.of("write.format.default", "orc", "compression_codec", "zlib"));
         Assertions.assertEquals("zlib", passed.get("write.orc.compression-codec"));
         Assertions.assertFalse(passed.containsKey("write.parquet.compression-codec"));
-    }
-
-    @Test
-    public void testShowCreateTableWithIdentifierFields() {
-        Schema schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
-                required(2, "region", Types.StringType.get())), Set.of(2, 1));
-        IcebergTable table = IcebergTable.builder()
-                .setSrTableName("t_ident")
-                .setCatalogName(CATALOG_NAME)
-                .setCatalogDBName("db")
-                .setCatalogTableName("t_ident")
-                .setFullSchema(IcebergApiConverter.toFullSchemas(schema))
-                .setNativeTable(create(schema, PartitionSpec.unpartitioned(), "t_ident", 2))
-                .build();
-        table.getNativeTable().updateProperties().set("identifier-fields", "stale").commit();
-
-        String createSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(table);
-        Assertions.assertTrue(createSql.contains("\"identifier-fields\" = \"id,region\""), createSql);
-        Assertions.assertFalse(createSql.contains("stale"), createSql);
-    }
-
-    @Test
-    public void testShowCreateTableOmitsNestedIdentifierFields() {
-        Schema schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
-                required(2, "key", Types.StructType.of(required(3, "kid", Types.LongType.get())))), Set.of(1, 3));
-        Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
-    }
-
-    @Test
-    public void testShowCreateTableOmitsIdentifierFieldsWithComma() {
-        Schema schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
-                required(2, "a,b", Types.LongType.get())), Set.of(1, 2));
-        Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
-        // also when a,b resolve to other columns
-        schema = new Schema(List.of(required(1, "a", Types.LongType.get()), required(2, "b", Types.LongType.get()),
-                required(3, "a,b", Types.LongType.get())), Set.of(3));
-        Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
-    }
-
-    @Test
-    public void testShowCreateTableOmitsIdentifierFieldsThatResolveElsewhere() {
-        // CREATE trims names and matches case-insensitively, so these would resolve to the other column
-        Schema schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
-                required(2, " id", Types.LongType.get())), Set.of(2));
-        Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
-        schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
-                required(2, "ID", Types.LongType.get())), Set.of(2));
-        Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
-    }
-
->>>>>>> 42eff907210... [BugFix][RB-1622] Validate Iceberg write property values on CREATE and ALTER TABLE (#69659)
-    @Test
-    public void testListTableDeltaTraitsSkipsReplaceSnapshots() {
-        // Step 1: APPEND FILE_A
-        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
-        Snapshot snap1 = mockedNativeTableA.currentSnapshot();
-        Assertions.assertEquals("append", snap1.operation());
-
-        // Step 2: REPLACE (rewrite FILE_A -> FILE_A_1, simulating compaction)
-        mockedNativeTableA.newRewrite().deleteFile(FILE_A).addFile(FILE_A_1).commit();
-        Snapshot snap2 = mockedNativeTableA.currentSnapshot();
-        Assertions.assertEquals("replace", snap2.operation());
-
-        // Step 3: APPEND FILE_A_2
-        mockedNativeTableA.newAppend().appendFile(FILE_A_2).commit();
-        Snapshot snap3 = mockedNativeTableA.currentSnapshot();
-        Assertions.assertEquals("append", snap3.operation());
-
-        // Build IcebergTable wrapping the native table
-        IcebergTable icebergTable = new IcebergTable(1, "testTbl", CATALOG_NAME, CATALOG_NAME,
-                "db", "testTbl", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
-
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
-                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
-                Executors.newSingleThreadExecutor(), null);
-
-        // Query delta traits from snap1 (exclusive) to snap3 (inclusive)
-        // This range includes snap2 (REPLACE) and snap3 (APPEND)
-        TvrTableSnapshot from = TvrTableSnapshot.of(Optional.of(snap1.snapshotId()));
-        TvrTableSnapshot to = TvrTableSnapshot.of(Optional.of(snap3.snapshotId()));
-
-        List<TvrTableDeltaTrait> traits = metadata.listTableDeltaTraits("db", icebergTable, from, to);
-
-        // REPLACE snapshot should be skipped, only APPEND (snap3) should remain
-        Assertions.assertEquals(1, traits.size());
-        Assertions.assertTrue(traits.get(0).isAppendOnly());
-
-        // Verify the returned trait corresponds to snap3, not snap2
-        TvrTableDelta delta = traits.get(0).getTvrDelta();
-        Assertions.assertEquals(snap3.snapshotId(), delta.end().get());
     }
 
     @Test
