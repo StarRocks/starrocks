@@ -303,13 +303,15 @@ public class AlterJobV2CopyForPersistTest {
     private static LakeTableAddIndexJob newLakeTableAddIndexJob() {
         Index index = new Index(-1L, "ix_bm", List.of(ColumnId.create("c1")), IndexDef.IndexType.BITMAP, "",
                 Maps.newHashMap());
-        LakeTableAddIndexJob job = new LakeTableAddIndexJob(1L, 2L, 3L, "tbl", 1000L, List.of(index), List.of("c2"));
+        LakeTableAddIndexJob job = new LakeTableAddIndexJob(1L, 2L, 3L, "tbl", 1000L, List.of(index), List.of(),
+                List.of("c2"));
         job.putNewSchema(10L, 100L, 2L);
         return job;
     }
 
     private static LakeTableDropIndexJob newLakeTableDropIndexJob() {
-        return new LakeTableDropIndexJob(1L, 2L, 3L, "tbl", 1000L, List.of(-1L), List.of("ix_bm"), List.of("c2"));
+        return new LakeTableDropIndexJob(1L, 2L, 3L, "tbl", 1000L, List.of(-1L), List.of("ix_bm"), List.of(),
+                List.of("c2"));
     }
 
     @Test
