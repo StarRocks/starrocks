@@ -2842,7 +2842,9 @@ TEST_F(LakeTabletReaderSpit, test_parallel_segment_open_prepared_split_switches)
     EXPECT_EQ(3, open_stats.lake_prepared_tablet_segments);
     EXPECT_EQ(3, open_stats.lake_prepared_tablet_segments_opened);
     EXPECT_EQ(0, open_stats.lake_prepared_tablet_cached_segments);
-    EXPECT_GT(open_stats.lake_prepared_tablet_io_count, 0);
+    // The footer reads of the tasks are added up. The local file system reports their time but no remote reads.
+    EXPECT_GT(open_stats.lake_prepared_tablet_io_ns, 0);
+    EXPECT_EQ(0, open_stats.lake_prepared_tablet_io_count);
 }
 
 // A CLASSIC physical split plans on the segments the parallel open put in metadata order, and its splits read those
