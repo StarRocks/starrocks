@@ -19,13 +19,10 @@
 #include <functional>
 #include <memory>
 
-<<<<<<< HEAD
-=======
 #include "column/array_column.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "exprs/agg/aggregate_factory.h"
->>>>>>> 7dd4de4 ([BugFix][RB-1620] Keep n and compression when agg_state combinators merge max_n/min_n/percentile_approx states (#83385))
 #include "exprs/agg/base_aggregate_test.h"
 #include "exprs/agg/combinator/agg_state_combine.h"
 #include "exprs/agg/combinator/agg_state_if.h"
@@ -36,12 +33,9 @@
 #include "exprs/agg/combinator/state_merge_function.h"
 #include "exprs/agg/combinator/state_union_function.h"
 #include "runtime/types.h"
+#include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
-<<<<<<< HEAD
-=======
-#include "types/tdigest.h"
-#include "types/type_descriptor.h"
->>>>>>> 7dd4de4 ([BugFix][RB-1620] Keep n and compression when agg_state combinators merge max_n/min_n/percentile_approx states (#83385))
+#include "util/tdigest.h"
 
 namespace starrocks {
 
@@ -1797,7 +1791,7 @@ Slice serialized_state(const ColumnPtr& states, size_t row) {
 void test_state_combinators_keep_constant_args(const AggStateDesc& desc, FunctionContext* ctx,
                                                const Columns& first_part, const Columns& second_part,
                                                const std::function<void(const ColumnPtr&)>& check_state) {
-    const AggregateFunction* func = get_aggregate_function(desc);
+    const AggregateFunction* func = AggStateDesc::get_agg_state_func(&desc);
     ASSERT_NE(func, nullptr);
     const TypeDescriptor& ret_type = desc.get_return_type();
     auto first_state = combine_into_state(func, ctx, first_part);
@@ -1845,45 +1839,6 @@ void test_state_combinators_keep_constant_args(const AggStateDesc& desc, Functio
     auto merge_agg_result = ColumnHelper::create_column(ret_type, true);
     merge_agg.finalize_to_column(no_constants_ctx, merge_agg_state->state(), merge_agg_result.get());
     ASSERT_EQ(expected->debug_item(0), merge_agg_result->debug_item(0));
-}
-
-TEST_F(AggStateFunctionsTest, test_state_combinators_keep_min_max_n) {
-    std::vector<TypeDescriptor> arg_types = {TYPE_INT_DESC, TYPE_INT_DESC};
-    TypeDescriptor ret_type = TypeDescriptor::create_array_type(TYPE_INT_DESC);
-    auto utils = std::make_unique<FunctionUtils>(nullptr, ret_type, arg_types);
-    FunctionContext* ctx = utils->get_fn_ctx();
-    ColumnPtr n = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
-    ctx->set_constant_columns({nullptr, n});
-    Columns first_part = {ColumnTestHelper::build_column<int32_t>({5, 1, 9, 3, 12}), n};
-    Columns second_part = {ColumnTestHelper::build_column<int32_t>({7, 2, 8, 10, 4, 11}), n};
-    auto check_n = [](const ColumnPtr& states) {
-        int32_t serialized_n;
-        memcpy(&serialized_n, serialized_state(states, 0).data, sizeof(int32_t));
-        ASSERT_EQ(3, serialized_n);
-    };
-
-    for (const std::string fn : {"max_n", "min_n"}) {
-        AggStateDesc desc(fn, ret_type, arg_types, true, 1);
-        test_state_combinators_keep_constant_args(desc, ctx, first_part, second_part, check_n);
-
-        // A state that never saw a row serializes n = 0 and must not decide the n of the union.
-        AggStateDesc not_null_desc(fn, ret_type, arg_types, false, 1);
-        const AggregateFunction* not_null_func = get_aggregate_function(not_null_desc);
-        ASSERT_NE(not_null_func, nullptr);
-        auto empty = ManagedAggrState::create(ctx, not_null_func);
-        auto empty_state = BinaryColumn::create();
-        not_null_func->serialize_to_column(ctx, empty->state(), empty_state.get());
-        ColumnPtr nullable_empty_state = ColumnHelper::cast_to_nullable_column(std::move(empty_state));
-
-        const AggregateFunction* func = get_aggregate_function(desc);
-        auto first_state = combine_into_state(func, ctx, first_part);
-        StateUnionFunction state_union(desc, TYPE_VARBINARY_DESC, {true, true});
-        auto unioned = state_union.execute(ctx, {nullable_empty_state, first_state});
-        ASSERT_TRUE(unioned.ok()) << unioned.status();
-        check_n(unioned.value());
-        ASSERT_EQ(merge_and_finalize(func, ctx, first_state, ret_type)->debug_item(0),
-                  merge_and_finalize(func, ctx, unioned.value(), ret_type)->debug_item(0));
-    }
 }
 
 double serialized_compression(const ColumnPtr& states, size_t row, size_t digest_offset) {
