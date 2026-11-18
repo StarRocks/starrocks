@@ -23,6 +23,7 @@
 #include <future>
 #include <iomanip>
 #include <map>
+#include <mutex>
 #include <numeric>
 #include <set>
 #include <thread>
@@ -47,6 +48,8 @@
 #include "fs/fs_factory.h"
 #include "fs/remote_read_context.h"
 #include "gen_cpp/InternalService_types.h"
+#include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -3101,6 +3104,60 @@ TEST_F(LakeTabletReaderSpit, test_parallel_segment_open_submit_failure_runs_inli
 }
 
 // A failed task fails the open with its own cause, but only once every submitted task has finished.
+// The pool tasks run with the scan's memory tracker: segment opens on the load segment pool and rowset iterator
+// construction on the load rowset pool, neither of which inherits the caller's thread-local tracker by itself.
+TEST_F(LakeTabletReaderSpit, test_parallel_tasks_charge_the_caller_tracker) {
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
+    TInternalScanRange internal;
+    internal.__set_tablet_id(_tablet_metadata->id());
+    internal.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan;
+    scan.__set_internal_scan_range(internal);
+    ConfigResetGuard<bool> parallel_guard(&config::enable_load_segment_parallel, false);
+    ParallelSegmentOpenScope scope(true, true);
+    auto* sync = SyncPoint::GetInstance();
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    std::mutex mu;
+    std::vector<MemTracker*> segment_task_trackers;
+    std::vector<MemTracker*> rowset_task_trackers;
+    sync->SetCallBack("TabletReader::open_segment_task", [&](void*) {
+        std::lock_guard<std::mutex> l(mu);
+        segment_task_trackers.push_back(CurrentThread::mem_tracker());
+    });
+    sync->SetCallBack("TabletReader::get_segment_iterators::parallel_read", [&](void*) {
+        std::lock_guard<std::mutex> l(mu);
+        rowset_task_trackers.push_back(CurrentThread::mem_tracker());
+    });
+    auto tracker = std::make_unique<MemTracker>(-1, "c3_scan_tracker");
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(tracker.get());
+    _tablet_mgr->metacache()->prune();
+
+    // Prepared physical split: the segments open on the load segment pool.
+    auto params = generate_tablet_reader_params(&scan);
+    params.enable_prepared_physical_split_scan = true;
+    auto planner = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                  /*need_split=*/true, /*could_split_physically=*/true);
+    ASSERT_OK(planner->prepare());
+    ASSERT_OK(planner->open(params));
+    planner->close();
+
+    // Unsplit query read: the rowsets build their iterators on the load rowset pool.
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+    ASSERT_OK(reader->prepare());
+    TabletReaderParams read_params;
+    ASSERT_OK(reader->open(read_params));
+    reader->close();
+
+    ASSERT_EQ(3, segment_task_trackers.size());
+    ASSERT_EQ(2, rowset_task_trackers.size());
+    for (auto* t : segment_task_trackers) EXPECT_EQ(tracker.get(), t);
+    for (auto* t : rowset_task_trackers) EXPECT_EQ(tracker.get(), t);
+}
+
 TEST_F(LakeTabletReaderSpit, test_parallel_segment_open_error_waits_all_tasks) {
     ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
     TInternalScanRange internal;
