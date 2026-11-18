@@ -147,6 +147,8 @@ private:
     using PredicateList = std::vector<const ColumnPredicate*>;
     using PredicateMap = std::unordered_map<ColumnId, PredicateList>;
 
+    // Adds the reads the tablet preparation made, collected in |prepare_stats|, to the TabletPrepare statistics.
+    void record_tablet_prepare_stats(const OlapReaderStatistics& prepare_stats);
     // Both add the reads they make to |prepare_stats|.
     Status build_prepared_tablet_read_state(const TabletReaderParams& params, PreparedTabletReadState* state,
                                             OlapReaderStatistics* prepare_stats);

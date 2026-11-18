@@ -62,7 +62,9 @@ public:
 
     std::shared_ptr<const TabletSchema> lookup_tablet_schema(const MetacacheKey& key);
 
-    std::shared_ptr<Segment> lookup_segment(const MetacacheKey& key);
+    // |count_miss| false leaves a miss out of the segment cache miss counter, for a probe whose miss is followed by
+    // a load that looks the same key up again.
+    std::shared_ptr<Segment> lookup_segment(const MetacacheKey& key, bool count_miss = true);
 
     std::shared_ptr<const DelVector> lookup_delvec(const MetacacheKey& key);
 
