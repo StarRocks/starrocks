@@ -414,9 +414,10 @@ build_openssl() {
     unset CPPFLAGS
     export CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC" "${TP_TARGET_ARCH_FLAGS}")"
 
+    # no-tests: install_sw installs none of the test and fuzz programs, so do not build them.
     LDFLAGS="-L${TP_LIB_DIR}" \
     LIBDIR="lib" \
-    ./Configure --prefix=$TP_INSTALL_DIR -lz -no-shared ${OPENSSL_PLATFORM} --libdir=lib
+    ./Configure --prefix=$TP_INSTALL_DIR -lz -no-shared no-tests ${OPENSSL_PLATFORM} --libdir=lib
     make -j$PARALLEL
     make install_sw
 
@@ -603,7 +604,8 @@ build_glog() {
         -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
         -DBUILD_SHARED_LIBS=OFF \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-        -DCMAKE_INSTALL_LIBDIR=lib
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DBUILD_TESTING=OFF
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -683,7 +685,9 @@ build_poco() {
   mkdir -p $BUILD_DIR
   cd $BUILD_DIR
   rm -rf CMakeCache.txt CMakeFiles/
+  # poco defaults to RelWithDebInfo.
   $CMAKE_CMD .. -DBUILD_SHARED_LIBS=NO -DOPENSSL_ROOT_DIR=$TP_INSTALL_DIR -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+   "${CMAKE_RELWITHDEBINFO_NO_G[@]}" \
    -DENABLE_XML=OFF -DENABLE_JSON=OFF -DENABLE_NET=ON -DENABLE_NETSSL=ON -DENABLE_CRYPTO=OFF -DENABLE_JWT=OFF -DENABLE_DATA=OFF -DENABLE_DATA_SQLITE=OFF -DENABLE_DATA_MYSQL=OFF -DENABLE_DATA_POSTGRESQL=OFF -DENABLE_DATA_ODBC=OFF \
    -DENABLE_MONGODB=OFF -DENABLE_REDIS=OFF -DENABLE_UTIL=OFF -DENABLE_ZIP=OFF -DENABLE_APACHECONNECTOR=OFF -DENABLE_ENCODINGS=OFF \
    -DENABLE_PAGECOMPILER=OFF -DENABLE_PAGECOMPILER_FILE2PAGE=OFF -DENABLE_ACTIVERECORD=OFF -DENABLE_ACTIVERECORD_COMPILER=OFF -DENABLE_PROMETHEUS=OFF
@@ -731,7 +735,7 @@ build_gperftools() {
     fi
 
     LDFLAGS="-L${TP_LIB_DIR}" \
-    CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC -g" "${TP_TARGET_ARCH_FLAGS}")" \
+    CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC ${TP_DEBUG_FLAGS}" "${TP_TARGET_ARCH_FLAGS}")" \
     ./configure --prefix=$TP_INSTALL_DIR/gperftools --disable-shared --enable-static --disable-libunwind --with-pic --enable-frame-pointers
     make -j$PARALLEL
     make install
@@ -786,7 +790,9 @@ build_lzo2() {
 build_bzip() {
     check_if_source_exist $BZIP_SOURCE
     cd $TP_SOURCE_DIR/$BZIP_SOURCE
-    make -j$PARALLEL install PREFIX=$TP_INSTALL_DIR
+    # Same as the CFLAGS of the (patched) Makefile, with TP_DEBUG_FLAGS instead of -g.
+    make -j$PARALLEL install PREFIX=$TP_INSTALL_DIR \
+        CFLAGS="-Wall -Winline -O2 ${TP_DEBUG_FLAGS} -D_FILE_OFFSET_BITS=64 -fPIC"
 }
 
 # curl
@@ -812,7 +818,8 @@ build_re2() {
     cd $TP_SOURCE_DIR/$RE2_SOURCE
 
     $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_BUILD_TYPE=Release \
-	    -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib
+	    -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib \
+	    -DRE2_BUILD_TESTING=OFF
     ${BUILD_SYSTEM} -j$PARALLEL install
 }
 
@@ -823,9 +830,21 @@ build_boost() {
 
     # It is difficult to generate static linked b2, so we use LD_LIBRARY_PATH instead
     ./bootstrap.sh --prefix=$TP_INSTALL_DIR
-    local boost_cxxflags="$(append_flags "-std=c++11 -g -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")"
+    local boost_cxxflags="$(append_flags "-std=c++11 ${TP_DEBUG_FLAGS} -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")"
+    # Build only the compiled libraries something links; the headers are installed in full.
+    #   BE (be/cmake_modules/ThirdParty.cmake): thread regex program_options filesystem
+    #     context iostreams, plus chrono and atomic that FindBoost adds for thread/filesystem.
+    #   avro-cpp: filesystem iostreams program_options regex system.
+    #   date_time: BE uses it header-only today; kept so FindBoost callers can still ask for it.
+    # Everything else (pulsar, thrift, clucene, hyperscan, opentelemetry) uses headers only.
+    local boost_libraries=(atomic chrono context date_time filesystem iostreams program_options regex system thread)
+    local boost_with_args=()
+    local boost_library
+    for boost_library in "${boost_libraries[@]}"; do
+        boost_with_args+=("--with-${boost_library}")
+    done
     LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib:${STARROCKS_GCC_HOME}/lib64:${LD_LIBRARY_PATH} \
-    ./b2 link=static runtime-link=static -j $PARALLEL --without-test --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="${boost_cxxflags}" install
+    ./b2 link=static runtime-link=static -j $PARALLEL "${boost_with_args[@]}" cxxflags="${boost_cxxflags}" install
 }
 
 #leveldb
@@ -845,8 +864,11 @@ build_brpc() {
     cd $TP_SOURCE_DIR/$BRPC_SOURCE
     # Match Starlet's CMake build and keep C++17 for glog 0.7.1 compatibility.
     rm -rf build
+    # WITH_DEBUG_SYMBOLS=OFF drops brpc's own -g, so that the debug level comes from TP_DEBUG_FLAGS.
     PATH="$TP_INSTALL_DIR/bin:$PATH" $CMAKE_CMD -S . -B build -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        "${CMAKE_RELWITHDEBINFO_NO_G[@]}" \
+        -DWITH_DEBUG_SYMBOLS=OFF \
         -DCMAKE_INSTALL_PREFIX="$TP_INSTALL_DIR" \
         -DCMAKE_INSTALL_LIBDIR=lib \
         -DCMAKE_PREFIX_PATH="$TP_INSTALL_DIR" \
@@ -880,6 +902,9 @@ build_rocksdb() {
     cd $TP_SOURCE_DIR/$ROCKSDB_SOURCE
     make clean
 
+    # The Makefile adds its own -g to CFLAGS/CXXFLAGS. OPT is appended after it, so the
+    # debug level is passed there.
+    OPT="${TP_DEBUG_FLAGS}" \
     CFLAGS= \
     EXTRA_CFLAGS="$(append_flags "-I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy -I ${TP_INCLUDE_DIR}/lz4 -L${TP_LIB_DIR} ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")" \
     EXTRA_CXXFLAGS="$(append_flags "-fPIC -Wno-redundant-move -Wno-deprecated-copy -Wno-stringop-truncation -Wno-pessimizing-move -I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")" \
@@ -931,7 +956,9 @@ build_pulsar() {
 
     cd $TP_SOURCE_DIR/$PULSAR_SOURCE
 
+    # pulsar defaults to RelWithDebInfo.
     $CMAKE_CMD -DCMAKE_LIBRARY_PATH=$TP_INSTALL_DIR/lib -DCMAKE_INCLUDE_PATH=$TP_INSTALL_DIR/include \
+        "${CMAKE_RELWITHDEBINFO_NO_G[@]}" \
         -DPROTOC_PATH=$TP_INSTALL_DIR/bin/protoc -DOPENSSL_ROOT_DIR=$TP_INSTALL_DIR -DBUILD_TESTS=OFF -DBUILD_PYTHON_WRAPPER=OFF -DBUILD_DYNAMIC_LIB=OFF .
     ${BUILD_SYSTEM} -j$PARALLEL
 
@@ -972,8 +999,8 @@ build_brotli() {
 
 # arrow
 build_arrow() {
-    export CXXFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC -g -fno-sized-deallocation ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")"
-    export CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC -g ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")"
+    export CXXFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC ${TP_DEBUG_FLAGS} -fno-sized-deallocation ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")"
+    export CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC ${TP_DEBUG_FLAGS} ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")"
     export CPPFLAGS=$CXXFLAGS
 
     check_if_source_exist $ARROW_SOURCE
@@ -1239,7 +1266,9 @@ build_cctz() {
     check_if_source_exist $CCTZ_SOURCE
     cd $TP_SOURCE_DIR/$CCTZ_SOURCE
 
-    make -j$PARALLEL
+    # The Makefile adds its own -g to CXXFLAGS. TEST_FLAGS is appended after it, so the
+    # debug level is passed there.
+    make -j$PARALLEL TEST_FLAGS="${TP_DEBUG_FLAGS}"
     PREFIX=${TP_INSTALL_DIR} make install
 }
 
@@ -1404,6 +1433,7 @@ build_aws_cpp_sdk() {
     cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
     # only build s3, s3-crt, transfer manager, identity-management and sts, you can add more components if you want.
     $CMAKE_CMD -Bbuild -DBUILD_ONLY="core;s3;s3-crt;transfer;identity-management;sts;kms" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+               "${CMAKE_RELWITHDEBINFO_NO_G[@]}" \
                -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DENABLE_TESTING=OFF \
                -DENABLE_CURL_LOGGING=OFF \
                -G "${CMAKE_GENERATOR}" \
@@ -1473,7 +1503,7 @@ build_jemalloc() {
     else
         addition_opts=" --with-lg-page=12"
     fi
-    local jemalloc_cflags="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC -g" "${TP_TARGET_ARCH_FLAGS}")"
+    local jemalloc_cflags="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC ${TP_DEBUG_FLAGS}" "${TP_TARGET_ARCH_FLAGS}")"
 
     # build jemalloc with release
     CFLAGS="${jemalloc_cflags}" \
@@ -1530,6 +1560,7 @@ build_benchmark() {
     # Force the POSIX regex backend to avoid CentOS7 try_run failures when the
     # probe binaries pick up the system libstdc++ instead of the toolchain one.
     cmake -DBENCHMARK_DOWNLOAD_DEPENDENCIES=OFF \
+          -DBENCHMARK_ENABLE_TESTING=OFF \
           -DBENCHMARK_ENABLE_GTEST_TESTS=OFF \
           -DBENCHMARK_INSTALL_DOCS=OFF \
           -DBENCHMARK_INSTALL_TOOLS=OFF \
@@ -1608,7 +1639,9 @@ build_avro_cpp() {
 
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=${TP_INSTALL_DIR} -DBoost_USE_STATIC_RUNTIME=ON  -DCMAKE_PREFIX_PATH="${cmake_prefix_path}" -DSNAPPY_INCLUDE_DIR=${TP_INSTALL_DIR}/include -DSNAPPY_LIBRARIES=${TP_INSTALL_DIR}/lib
-    LIBRARY_PATH=${TP_INSTALL_DIR}/lib64:$LIBRARY_PATH LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib64:$LD_LIBRARY_PATH ${BUILD_SYSTEM} -j$PARALLEL
+    # Only the static library is installed; skip the shared library, the code
+    # generators and the unit tests, which would otherwise compile everything twice.
+    LIBRARY_PATH=${TP_INSTALL_DIR}/lib64:$LIBRARY_PATH LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib64:$LD_LIBRARY_PATH ${BUILD_SYSTEM} -j$PARALLEL avrocpp_s
 
     # cp include and lib
     cp libavrocpp_s.a ${TP_INSTALL_DIR}/lib64/
@@ -1617,7 +1650,7 @@ build_avro_cpp() {
 
 # serders
 build_serdes() {
-    export CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC -g" "${TP_TARGET_ARCH_FLAGS}")"
+    export CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC ${TP_DEBUG_FLAGS}" "${TP_TARGET_ARCH_FLAGS}")"
     check_if_source_exist $SERDES_SOURCE
     cd $TP_SOURCE_DIR/$SERDES_SOURCE
     export LIBS="-lrt -lpthread -lcurl -ljansson -lrdkafka -lrdkafka++ -lavro -lssl -lcrypto -ldl"
@@ -1695,7 +1728,7 @@ build_clucene() {
         -DBUILD_SHARED_LIBRARIES=OFF \
         -DBOOST_ROOT="$TP_INSTALL_DIR" \
         -DZLIB_ROOT="$TP_INSTALL_DIR" \
-        -DCMAKE_CXX_FLAGS="$(append_flags "-g -fno-omit-frame-pointer -Wno-narrowing ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")" \
+        -DCMAKE_CXX_FLAGS="$(append_flags "${TP_DEBUG_FLAGS} -fno-omit-frame-pointer -Wno-narrowing ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")" \
         -DUSE_STAT64=0 \
         -DCMAKE_BUILD_TYPE=Release \
         -DUSE_AVX2=$THIRD_PARTY_BUILD_WITH_AVX2 \
@@ -1858,8 +1891,20 @@ build_azure() {
         -DLibXml2_ROOT=$TP_INSTALL_DIR \
         -DCMAKE_INSTALL_LIBDIR=lib
 
-    ${BUILD_SYSTEM} -j "${PARALLEL}"
-    ${BUILD_SYSTEM} install
+    # The repository configures every SDK (keyvault, attestation, tables, queues, ...),
+    # but BE and starlet link only these five. Build and install just them; each SDK
+    # directory has its own cmake_install.cmake.
+    local azure_sdks=(core/azure-core identity/azure-identity storage/azure-storage-common
+                      storage/azure-storage-blobs storage/azure-storage-files-datalake)
+    local azure_targets=()
+    local azure_sdk
+    for azure_sdk in "${azure_sdks[@]}"; do
+        azure_targets+=("${azure_sdk#*/}")
+    done
+    ${BUILD_SYSTEM} -j "${PARALLEL}" "${azure_targets[@]}"
+    for azure_sdk in "${azure_sdks[@]}"; do
+        ${CMAKE_CMD} --install "sdk/${azure_sdk}"
+    done
 
     unset AZURE_SDK_DISABLE_AUTO_VCPKG
     unset PKG_CONFIG_LIBDIR
@@ -2021,6 +2066,23 @@ restore_compile_flags() {
     unset LDFLAGS
 }
 
+# Set the debug info flags of package $1: TP_DEBUG_FLAGS for the build functions that set
+# their own compile flags, and GLOBAL_CFLAGS/GLOBAL_CXXFLAGS/CFLAGS/CXXFLAGS for the others.
+set_debug_flags() {
+    local level="-g2"
+    local pkg
+    for pkg in "${MINIMAL_DEBUG_INFO_PACKAGES[@]}"; do
+        if [[ "$1" == "${pkg}" ]]; then
+            level="-g1"
+        fi
+    done
+    export TP_DEBUG_FLAGS="${level} -gz=zlib"
+    export GLOBAL_CFLAGS="${GLOBAL_CFLAGS_NO_DEBUG} ${TP_DEBUG_FLAGS}"
+    export GLOBAL_CXXFLAGS="${GLOBAL_CXXFLAGS_NO_DEBUG} ${TP_DEBUG_FLAGS}"
+    export CFLAGS=$GLOBAL_CFLAGS
+    export CXXFLAGS=$GLOBAL_CXXFLAGS
+}
+
 strip_binary() {
     # strip binary tools and ignore any errors
     echo "Strip binaries in $TP_INSTALL_DIR/bin/ ..."
@@ -2030,20 +2092,51 @@ strip_binary() {
 
 # strip `$TP_SOURCE_DIR` and `$TP_INSTALL_DIR` from source code file path
 export FILE_PREFIX_MAP_OPTION="-ffile-prefix-map=${TP_SOURCE_DIR}=. -ffile-prefix-map=${TP_INSTALL_DIR}=."
-# set GLOBAL_C*FLAGS for easy restore in each sub build process
+# Debug info level of the thirdparty libraries.
+# Packages are built with full debug info (-g2), except the packages listed below, which are
+# built with -g1: line tables plus function and inlined-function records. That is enough to
+# symbolize a stack trace, inlined frames included, with addr2line or gdb, at a fraction of
+# the size of full debug info; local variables and types are not kept.
+# The list is hardcoded on purpose: building one more package with -g1 needs a change to this
+# list. Entries are package names as in package-manifest.sh.
+MINIMAL_DEBUG_INFO_PACKAGES=(
+    arrow
+    aws_cpp_sdk
+    azure
+    benchgen
+    grpc
+    paimon_cpp
+    poco
+    protobuf
+    thrift
+)
+for pkg in "${MINIMAL_DEBUG_INFO_PACKAGES[@]}"; do
+    if ! declare -F "build_${pkg}" > /dev/null; then
+        echo "Unknown package ${pkg} in MINIMAL_DEBUG_INFO_PACKAGES"
+        exit 1
+    fi
+done
+
+# CMake adds "-O2 -g -DNDEBUG" for RelWithDebInfo, and that -g would override the level in
+# CFLAGS/CXXFLAGS. Packages built as RelWithDebInfo pass these to keep -O2 and NDEBUG only.
+CMAKE_RELWITHDEBINFO_NO_G=(
+    "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O2 -DNDEBUG"
+    "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O2 -DNDEBUG"
+)
+
+# set GLOBAL_C*FLAGS for easy restore in each sub build process.
+# The debug info flags are added per package by set_debug_flags.
 export GLOBAL_CPPFLAGS="-I${TP_INCLUDE_DIR} "
-export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=gnu17 -fPIC -g -gz=zlib ${FILE_PREFIX_MAP_OPTION}"
-export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -gz=zlib ${FILE_PREFIX_MAP_OPTION}"
+export GLOBAL_CFLAGS_NO_DEBUG="-O3 -fno-omit-frame-pointer -std=gnu17 -fPIC ${FILE_PREFIX_MAP_OPTION}"
+export GLOBAL_CXXFLAGS_NO_DEBUG="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC ${FILE_PREFIX_MAP_OPTION}"
 
 if [[ -n "${TP_TARGET_ARCH_FLAGS}" ]]; then
-    export GLOBAL_CFLAGS="$(append_flags "${GLOBAL_CFLAGS}" "${TP_TARGET_ARCH_FLAGS}")"
-    export GLOBAL_CXXFLAGS="$(append_flags "${GLOBAL_CXXFLAGS}" "${TP_TARGET_ARCH_FLAGS}")"
+    export GLOBAL_CFLAGS_NO_DEBUG="$(append_flags "${GLOBAL_CFLAGS_NO_DEBUG}" "${TP_TARGET_ARCH_FLAGS}")"
+    export GLOBAL_CXXFLAGS_NO_DEBUG="$(append_flags "${GLOBAL_CXXFLAGS_NO_DEBUG}" "${TP_TARGET_ARCH_FLAGS}")"
 fi
 
-# set those GLOBAL_*FLAGS to the CFLAGS/CXXFLAGS/CPPFLAGS
+# set GLOBAL_CPPFLAGS to CPPFLAGS; CFLAGS/CXXFLAGS are set per package by set_debug_flags
 export CPPFLAGS=$GLOBAL_CPPFLAGS
-export CXXFLAGS=$GLOBAL_CXXFLAGS
-export CFLAGS=$GLOBAL_CFLAGS
 
 # Initialize packages array - if none specified, build all
 if [[ "${#packages[@]}" -eq 0 ]]; then
@@ -2059,6 +2152,7 @@ for package in "${packages[@]}"; do
     if [[ "${CONTINUE}" -eq 0 ]] || [[ "${PACKAGE_FOUND}" -eq 1 ]]; then
         command="build_${package}"
         package_start=${SECONDS}
+        set_debug_flags "${package}"
         ${command}
         echo "===== finish build ${package} in $((SECONDS - package_start))s"
     fi
