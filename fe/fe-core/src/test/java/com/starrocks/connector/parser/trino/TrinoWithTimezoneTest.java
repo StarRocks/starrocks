@@ -246,6 +246,9 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                 // (from_unixtime(-1) is NULL in StarRocks; Trino: 1969)
                 "select year(with_timezone(CAST(from_unixtime(-1) AS TIMESTAMP(6)), 'UTC'))",
                 "select hour(with_timezone(date_add('hour', 1, ts), 'UTC'))" + values,
+                // A zoned literal under a cast keeps its wall-clock time in Trino (Trino: 14)
+                "select hour(with_timezone(CAST(TIMESTAMP '2024-08-19 14:36:41 America/Los_Angeles' AS TIMESTAMP(6)), " +
+                        "'UTC'))",
                 // Trino rounds digits past microseconds, which StarRocks drops (Trino: 42)
                 "select second(CAST(with_timezone(CAST('2024-08-19 14:36:41.4999995' AS TIMESTAMP(6)), 'UTC') " +
                         "AS TIMESTAMP(0)))",
