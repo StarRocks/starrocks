@@ -45,6 +45,7 @@
 namespace starrocks {
 
 class StreamLoadContext;
+class StreamLoadPipe;
 
 namespace pipeline {
 
@@ -131,6 +132,9 @@ public:
 
     bool enable_cache() const { return _enable_cache; }
 
+    void set_stream_load_pipes(std::vector<std::shared_ptr<StreamLoadPipe>> pipes) {
+        _stream_load_pipes = std::move(pipes);
+    }
     void set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts);
 
     void set_enable_adaptive_dop(bool val) { _enable_adaptive_dop = val; }
@@ -234,6 +238,8 @@ private:
 
     query_cache::CacheParam _cache_param;
     bool _enable_cache = false;
+    // Existing pipes belong to HTTP/routine load. Only channel contexts need unregistering.
+    std::vector<std::shared_ptr<StreamLoadPipe>> _stream_load_pipes;
     std::vector<StreamLoadContext*> _stream_load_contexts;
 
     // STREAM MV
