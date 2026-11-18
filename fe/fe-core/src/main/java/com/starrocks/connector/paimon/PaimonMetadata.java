@@ -150,7 +150,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                                  List<String> fieldNames, long limit) {
     }
 
-    private record ScanCacheKey(UUID queryId, SplitCacheKey scan) {
+    private record ScanCacheKey(UUID queryId, SplitCacheKey scan, Map<Integer, String> columnNames) {
     }
 
     private final ConnectorProperties properties;
@@ -926,7 +926,8 @@ public class PaimonMetadata implements ConnectorMetadata {
                     && fileStore != null) {
                 // Keep final scan results separate from optimizer/statistics probes. Cache splits,
                 // including a completed fallback, rather than retaining the intermediate bitmap.
-                ScanCacheKey key = new ScanCacheKey(caller.getQueryId(), splitKey);
+                ScanCacheKey key = new ScanCacheKey(caller.getQueryId(), splitKey,
+                        ((PaimonScanRangeParams) params).getColumnNames());
                 boolean reused = paimonScanSplits.containsKey(key);
                 splitsInfo = paimonScanSplits.computeIfAbsent(key, unused ->
                         planSplits(paimonTable, paimonNativeTable, params, evaluateIndex, snapshotId, caller));
@@ -967,7 +968,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         if (evaluateIndex && paimonNativeTable instanceof FileStoreTable fileStore) {
             try (Timer ignored = Tracers.watchScope(EXTERNAL, "PaimonGlobalIndex.Evaluate")) {
                 PaimonGlobalIndexRequest request = PaimonGlobalIndexPlanner.request(fileStore, snapshotId,
-                        params.getPredicate());
+                        params.getPredicate(), ((PaimonScanRangeParams) params).getColumnNames());
                 if (request != null) {
                     var result = new PaimonGlobalIndexCollectJob(paimonTable, request,
                             PaimonGlobalIndexRequest.resultBudget()).collect(caller);

@@ -16,9 +16,23 @@ package com.starrocks.connector.paimon;
 
 import com.starrocks.connector.GetRemoteFilesParams;
 
+import java.util.Map;
+
 /** Identifies final data scan-range planning, excluding optimizer and statistics probes. */
 public final class PaimonScanRangeParams extends GetRemoteFilesParams {
+    private final Map<Integer, String> columnNames;
+
     public PaimonScanRangeParams(GetRemoteFilesParams.Builder builder) {
+        this(builder, Map.of());
+    }
+
+    public PaimonScanRangeParams(GetRemoteFilesParams.Builder builder, Map<Integer, String> columnNames) {
         super(builder);
+        this.columnNames = Map.copyOf(columnNames);
+    }
+
+    /** Optimizer column-reference ids mapped to the scan's actual table column names. */
+    public Map<Integer, String> getColumnNames() {
+        return columnNames;
     }
 }

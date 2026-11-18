@@ -32,6 +32,7 @@ import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ScanMode;
 import org.apache.paimon.table.source.Split;
+import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DataTypeRoot;
 import org.apache.paimon.types.DataTypes;
@@ -58,46 +59,78 @@ public final class PaimonGlobalIndexPlanner {
     private PaimonGlobalIndexPlanner() {
     }
 
-    public static PaimonGlobalIndexRequest request(FileStoreTable table, long snapshotId, ScalarOperator predicate) {
+    private record Candidate(ScalarOperator predicate, Map<Integer, Integer> fieldIds) {
+    }
+
+    public static PaimonGlobalIndexRequest request(FileStoreTable table, long snapshotId, ScalarOperator predicate,
+                                                  Map<Integer, String> columnNames) {
         if (snapshotId < 0 || predicate == null || predicate.getColumnRefs().isEmpty() || !eligible(table.schema())
                 || !"main".equals(org.apache.paimon.CoreOptions.branch(table.options()))) {
             return null;
         }
-        Set<Integer> indexedFields = btreeFields(table, snapshotId);
-        if (indexedFields.isEmpty()) {
-            return null;
-        }
-        List<ScalarOperator> supported = new ArrayList<>();
-        Map<Integer, Integer> bindings = new HashMap<>();
+        TableSchema schema = table.schema();
+        Map<String, DataField> schemaFields = schema.fields().stream()
+                .collect(Collectors.toMap(DataField::name, field -> field));
+        List<Candidate> candidates = new ArrayList<>();
         for (ScalarOperator conjunct : Utils.extractConjuncts(predicate)) {
-            Map<Integer, Integer> fields = new HashMap<>();
+            Map<Integer, DataField> fields = new HashMap<>();
             boolean compatible = !conjunct.getColumnRefs().isEmpty();
             for (ColumnRefOperator column : conjunct.getColumnRefs()) {
-                var field = table.rowType().getFields().stream().filter(f -> f.name().equals(column.getName()))
-                        .findFirst().orElse(null);
-                if (field == null || !indexedFields.contains(field.id()) || table.partitionKeys().contains(field.name())
-                        || !supportedKey(field.type())) {
+                // Resolve the scan's actual column, not an alias or a same-named column from another scan.
+                DataField field = schemaFields.get(columnNames.get(column.getId()));
+                if (field == null || schema.partitionKeys().contains(field.name()) || !supportedKey(field.type())) {
                     compatible = false;
                     break;
                 }
-                fields.put(column.getId(), field.id());
+                fields.put(column.getId(), field);
             }
             if (!compatible) {
                 // A top-level AND conjunct may be omitted, but never prune only part of an OR.
                 continue;
             }
             try {
+                ScalarOperator bound = bindColumnNames(conjunct.clone(), fields);
+                Map<Integer, Integer> fieldIds = fields.entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().id()));
                 var candidate = PaimonGlobalIndexRequest.create(table.location().toString(), "main", snapshotId,
-                        table.schema().id(), table.schema().timeMillis(), conjunct, fields);
-                candidate.validatePredicate(table.schema());
-                supported.add(conjunct);
-                bindings.putAll(fields);
+                        schema.id(), schema.timeMillis(), bound, fieldIds);
+                // Reuse the request validator so the local filter accepts exactly the supported predicate shapes.
+                candidate.validatePredicate(schema);
+                candidates.add(new Candidate(bound, fieldIds));
             } catch (IllegalArgumentException ignored) {
                 // Unsupported expressions remain normal data-scan predicates.
             }
         }
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        // Only access the snapshot and index manifest after finding a locally usable predicate.
+        Set<Integer> indexedFields = btreeFields(table, snapshotId);
+        List<ScalarOperator> supported = new ArrayList<>();
+        Map<Integer, Integer> bindings = new HashMap<>();
+        for (Candidate candidate : candidates) {
+            if (indexedFields.containsAll(candidate.fieldIds().values())) {
+                supported.add(candidate.predicate());
+                bindings.putAll(candidate.fieldIds());
+            }
+        }
         return supported.isEmpty() ? null : PaimonGlobalIndexRequest.create(table.location().toString(), "main", snapshotId,
-                table.schema().id(), table.schema().timeMillis(), Utils.compoundAnd(supported), bindings);
+                schema.id(), schema.timeMillis(), Utils.compoundAnd(supported), bindings);
+    }
+
+    // Only the request's cloned predicate is renamed. The original predicate remains on the data scan.
+    private static ScalarOperator bindColumnNames(ScalarOperator predicate, Map<Integer, DataField> fields) {
+        if (predicate instanceof ColumnRefOperator column) {
+            DataField field = fields.get(column.getId());
+            if (field == null) {
+                throw new IllegalArgumentException("Unbound Paimon index column");
+            }
+            return new ColumnRefOperator(column.getId(), column.getType(), field.name(), column.isNullable());
+        }
+        for (int i = 0; i < predicate.getChildren().size(); i++) {
+            predicate.setChild(i, bindColumnNames(predicate.getChild(i), fields));
+        }
+        return predicate;
     }
 
     private static Set<Integer> btreeFields(FileStoreTable table, long snapshotId) {

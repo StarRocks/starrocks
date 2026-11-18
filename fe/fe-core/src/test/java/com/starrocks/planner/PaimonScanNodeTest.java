@@ -24,6 +24,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.paimon.PaimonReaderSelector.Reader;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
+import com.starrocks.connector.paimon.PaimonScanRangeParams;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -39,6 +40,7 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import mockit.Expectations;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.BinaryRowWriter;
 import org.apache.paimon.globalindex.IndexedSplit;
@@ -300,6 +302,15 @@ public class PaimonScanNodeTest {
             desc.addSlot(slot);
             PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
             scanNode.setupScanRangeLocations(desc, null, -1);
+
+            new Verifications() {
+                {
+                    GetRemoteFilesParams captured;
+                    metadataMgr.getRemoteFiles((Table) any, captured = withCapture());
+                    Assertions.assertInstanceOf(PaimonScanRangeParams.class, captured);
+                    Assertions.assertEquals(Map.of(1, "id"), ((PaimonScanRangeParams) captured).getColumnNames());
+                }
+            };
 
             Assertions.assertEquals(3, scanNode.getScanRangeLocations(10).size());
             THdfsScanRange parquetRange = scanNode.getScanRangeLocations(10).get(0)
