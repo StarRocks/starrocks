@@ -493,9 +493,11 @@ build_llvm() {
     -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../llvm-build
 
     REQUIRES_RTTI=1 ${BUILD_SYSTEM} -j$PARALLEL ${LLVM_TARGETS_TO_BUILD[@]}
-    ${BUILD_SYSTEM} install-llvm-headers
-    ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
-    ${BUILD_SYSTEM} install-LLVM
+    ${BUILD_SYSTEM} -j$PARALLEL install-llvm-headers
+    ${BUILD_SYSTEM} -j$PARALLEL ${LLVM_TARGETS_TO_INSTALL[@]}
+    # install-LLVM still compiles every component library that libLLVM.so
+    # needs beyond the targets above, so it must run in parallel too.
+    ${BUILD_SYSTEM} -j$PARALLEL install-LLVM
 
     export LD_LIBRARY_PATH="${BASE_DY_LIB_BASE}"
     restore_compile_flags
@@ -604,7 +606,7 @@ build_poco() {
    -DENABLE_XML=OFF -DENABLE_JSON=OFF -DENABLE_NET=ON -DENABLE_NETSSL=ON -DENABLE_CRYPTO=OFF -DENABLE_JWT=OFF -DENABLE_DATA=OFF -DENABLE_DATA_SQLITE=OFF -DENABLE_DATA_MYSQL=OFF -DENABLE_DATA_POSTGRESQL=OFF -DENABLE_DATA_ODBC=OFF \
    -DENABLE_MONGODB=OFF -DENABLE_REDIS=OFF -DENABLE_UTIL=OFF -DENABLE_ZIP=OFF -DENABLE_APACHECONNECTOR=OFF -DENABLE_ENCODINGS=OFF \
    -DENABLE_PAGECOMPILER=OFF -DENABLE_PAGECOMPILER_FILE2PAGE=OFF -DENABLE_ACTIVERECORD=OFF -DENABLE_ACTIVERECORD_COMPILER=OFF -DENABLE_PROMETHEUS=OFF
-  $CMAKE_CMD --build . --config Release --target install
+  $CMAKE_CMD --build . --config Release --target install -j "${PARALLEL}"
 }
 
 # snappy
@@ -1388,9 +1390,9 @@ build_streamvbyte() {
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
 
-    CMAKE_GENERATOR="Unix Makefiles"
-    BUILD_SYSTEM='make'
-    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX:PATH=$TP_INSTALL_DIR/
+    # Pick the generator on the command line: assigning CMAKE_GENERATOR and
+    # BUILD_SYSTEM here would leak make to every package built after this one.
+    $CMAKE_CMD .. -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX:PATH=$TP_INSTALL_DIR/
 
     make -j$PARALLEL
     make install
@@ -1838,7 +1840,9 @@ for package in "${packages[@]}"; do
     fi
     if [[ "${CONTINUE}" -eq 0 ]] || [[ "${PACKAGE_FOUND}" -eq 1 ]]; then
         command="build_${package}"
+        package_start=${SECONDS}
         ${command}
+        echo "===== finish build ${package} in $((SECONDS - package_start))s"
     fi
 done
 
