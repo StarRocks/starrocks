@@ -383,6 +383,7 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains("select format('%s %d %.2f %.0f|%5d|%-5d|', NULL, NULL, NULL, NULL, NULL, NULL)",
                 "'null null nu | null|null |'");
         assertPlanContains("select format('100%% done%n%s', 'x')", "'100% done\nx'");
+        assertPlanContains("select format('%s|%s', CAST(NULL AS BOOLEAN), false)", "'null|false'");
 
         // %d pads to the width without truncating, with zeros after the sign for the '0' flag.
         assertPlanContains("select format('%03d|%-5d|%2d', tc, tc, tc) from tall",
@@ -394,13 +395,15 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains("select format('%.2f', tj) from tall",
                 "concat(if(13: expr, '-', ''), CAST(CAST(if(13: expr, 0 - CAST(10: tj AS DECIMAL64(13,3)), 10: tj) " +
                         "AS DECIMAL128(13,2)) AS VARCHAR))", "<slot 13> : 10: tj < 0");
+        // money_format gets a DECIMAL that is already rounded half up, with a scale of 2.
         assertPlanContains("select format('%,.2f', tj) from tall",
-                "concat(if(13: expr, '-', ''), money_format(if(13: expr, 0 - CAST(10: tj AS DECIMAL64(13,3)), 10: tj)))");
+                "concat(if(13: expr, '-', ''), money_format(CAST(if(13: expr, 0 - CAST(10: tj AS DECIMAL64(13,3)), " +
+                        "10: tj) AS DECIMAL128(13,2))))");
         // %,d and %,.0f use money_format without its ".00".
         assertPlanContains("select format('%,d|%,.0f', td, tj) from tall",
                 "substr(13: money_format, 1, CAST(CAST(char_length(13: money_format) AS BIGINT) - 3 AS INT))",
-                "<slot 13> : money_format(4: td)", "<slot 18> : CAST(17: if AS DECIMAL128(11,0))",
-                "<slot 19> : money_format(18: cast)");
+                "<slot 13> : money_format(4: td)", "<slot 20> : money_format(19: cast)", "AS DECIMAL128(11,0)",
+                "AS DECIMAL128(13,2)");
         assertPlanContains("select format('%s %s %s', ta, td, ti) from tall",
                 "ifnull(1: ta, 'null')", "CAST(4: td AS VARCHAR)", "CAST(9: ti AS VARCHAR)");
 
@@ -418,6 +421,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         analyzeFail("select format('%,.3f|%5s|%+d', 1.5, 'a', 1)", "No matching function with signature: format");
         analyzeFail("select format(ta, 1) from tall", "No matching function with signature: format");
         analyzeFail("select format('%s %s', 'a')", "No matching function with signature: format");
+        analyzeFail("select format('%1001d', 1)", "No matching function with signature: format");
+        analyzeFail("select format('%1$d|%1$d', CAST(random() * 100 AS BIGINT))",
+                "format() does not support nondeterministic arguments [%1$d]");
     }
 
     @Test

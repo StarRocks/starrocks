@@ -24,6 +24,8 @@ import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.type.PrimitiveType;
@@ -59,6 +61,8 @@ public final class TrinoFormatFunction {
             Pattern.compile("%(\\d+\\$)?([-#+ 0,(<]*)?(\\d+)?(\\.\\d+)?([tT])?([a-zA-Z%])");
 
     private static final int MAX_DECIMAL128_PRECISION = 38;
+    // Java pads to any width, but a large width would only allocate a huge string.
+    private static final int MAX_WIDTH = 1000;
     private static final int DEFAULT_PRECISION = 6;
 
     private TrinoFormatFunction() {
@@ -108,6 +112,9 @@ public final class TrinoFormatFunction {
             String index = matcher.group(1);
             String flags = matcher.group(2) == null ? "" : matcher.group(2);
             int width = matcher.group(3) == null ? -1 : parseNumber(matcher.group(3), text);
+            if (width > MAX_WIDTH) {
+                throw unsupported(text);
+            }
             int precision = matcher.group(4) == null ? -1 : parseNumber(matcher.group(4).substring(1), text);
             char conversion = matcher.group(6).charAt(0);
             if (matcher.group(5) != null) {
@@ -222,6 +229,11 @@ public final class TrinoFormatFunction {
     private static Expr format(Specifier specifier, Expr argument, UnaryOperator<Expr> analyzer,
                                FunctionCallExpr node) {
         Type type = argument.getType();
+        if (isNondeterministic(argument)) {
+            // The pieces can evaluate an argument more than once, and each evaluation could return a different value.
+            throw new SemanticException(String.format("format() does not support nondeterministic arguments [%s]",
+                    specifier.text), node.getPos());
+        }
         // Java formats a null argument as "null", cut to the precision and padded to the width.
         String nullText = "null";
         if (specifier.precision != -1 && specifier.precision < nullText.length()) {
@@ -258,7 +270,10 @@ public final class TrinoFormatFunction {
         } else if (isInteger(type) || type.isDate()) {
             return toVarchar(argument, analyzer);
         } else if (type.isBoolean()) {
-            return call(analyzer, FunctionSet.IF, argument, new StringLiteral("true"), new StringLiteral("false"));
+            // if(NULL, ...) takes the else branch, so a NULL is kept explicitly.
+            Expr isNull = analyzer.apply(new IsNullPredicate(argument, false));
+            return call(analyzer, FunctionSet.IF, isNull, new NullLiteral(),
+                    call(analyzer, FunctionSet.IF, argument, new StringLiteral("true"), new StringLiteral("false")));
         }
         return null;
     }
@@ -305,16 +320,26 @@ public final class TrinoFormatFunction {
         Expr negated = analyzer.apply(new ArithmeticExpr(ArithmeticExpr.Operator.SUBTRACT, new IntLiteral(0), argument));
         Expr magnitude = call(analyzer, FunctionSet.IF, negative, negated, argument);
         Expr digits;
-        if (specifier.flags.equals(",") && specifier.precision == 2) {
-            // money_format rounds half up to 2 digits and groups the integer digits with commas.
-            digits = call(analyzer, FunctionSet.MONEY_FORMAT, magnitude);
-        } else if (specifier.flags.equals(",")) {
-            // %,.0f: money_format of the value rounded to an integer ends with ".00".
-            Expr rounded = roundToDecimal(0, magnitude, analyzer);
+        if (specifier.flags.equals(",")) {
+            // money_format groups the integer digits with commas. It gets a DECIMAL that is already rounded and has
+            // a scale of 2, so it neither rounds nor scales up, which could overflow. %,.0f rounds to an integer
+            // first, and drops the ".00".
+            Expr rounded = roundToDecimal(specifier.precision, magnitude, analyzer);
             if (rounded == null) {
                 return null;
             }
-            digits = withoutCents(call(analyzer, FunctionSet.MONEY_FORMAT, rounded), analyzer);
+            if (specifier.precision == 0) {
+                int precision = ((ScalarType) rounded.getType()).getScalarPrecision() + 2;
+                if (precision > MAX_DECIMAL128_PRECISION) {
+                    return null;
+                }
+                rounded = analyzer.apply(new CastExpr(new TypeDef(
+                        TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, 2)), rounded));
+            }
+            digits = call(analyzer, FunctionSet.MONEY_FORMAT, rounded);
+            if (specifier.precision == 0) {
+                digits = withoutCents(digits, analyzer);
+            }
         } else {
             digits = roundToVarchar(specifier, magnitude, analyzer);
             if (digits == null) {
@@ -352,6 +377,18 @@ public final class TrinoFormatFunction {
         Expr withoutCentsLength = analyzer.apply(
                 new ArithmeticExpr(ArithmeticExpr.Operator.SUBTRACT, length, new IntLiteral(3)));
         return call(analyzer, FunctionSet.SUBSTR, moneyFormatted, new IntLiteral(1), withoutCentsLength);
+    }
+
+    private static boolean isNondeterministic(Expr expr) {
+        if (expr instanceof FunctionCallExpr && ((FunctionCallExpr) expr).isNondeterministicBuiltinFnName()) {
+            return true;
+        }
+        for (Expr child : expr.getChildren()) {
+            if (isNondeterministic(child)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isInteger(Type type) {

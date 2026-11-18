@@ -16,7 +16,8 @@ insert into format_tbl values
 (1, 'a', 8, -1234567, 2.675, true, '2026-01-02'),
 (2, 'bc', -8, 0, -0.005, false, '0999-12-31'),
 (3, null, null, null, null, null, null),
-(4, '', 12345, 9223372036854775807, 1234567.891, true, '2026-11-18');
+(4, '', 12345, 9223372036854775807, 1234567.891, true, '2026-11-18'),
+(5, 'd', 0, 1, 2.665, true, '2026-01-01');
 
 set sql_dialect='trino';
 select c1, format('%s|%s|%s|%s|%s', c_str, c_int, c_big, c_bool, c_date) from format_tbl order by c1;
