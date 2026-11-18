@@ -180,7 +180,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 >   default_replication_num = 1
 >   ```
 
-## 步骤 3：搭建集群 {/* #step-3-set-up-the-cluster */}
+## 步骤三：搭建集群 {/* #step-3-set-up-the-cluster */}
 
 在 all FE 和 BE 节点都正常启动后，您就可以搭建 StarRocks 集群了。
 
@@ -283,7 +283,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
    如果字段 `Alive` 为 `true`，表示该 BE 节点已正常启动并添加到集群中。
 
-## 步骤 4：（可选）部署高可用 FE 集群 {/* #step-4-optional-deploy-a-high-availability-fe-cluster */}
+## 步骤四：（可选）部署高可用 FE 集群 {/* #step-4-optional-deploy-a-high-availability-fe-cluster */}
 
 高可用 FE 集群要求 StarRocks 集群中至少有三个 Follower FE 节点。在 Leader FE 节点启动成功后，您可以启动两个新的 FE 节点来部署高可用 FE 集群。
 
