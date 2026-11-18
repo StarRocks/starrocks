@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include <type_traits>
 #include <vector>
 
+#include "base/container/raw_container.h"
 #include "base/simd/simd.h"
 #include "base/string/array_view.hpp"
 #include "column/vectorized_fwd.h"
@@ -57,10 +59,20 @@ using SmallPermutation = std::vector<SmallPermuteItem>;
 using SmallPermutationView = array_view<SmallPermuteItem>;
 
 template <class T, bool CheckBound = false>
+constexpr bool can_resize_inline_permutation_uninitialized =
+        !CheckBound && std::is_trivially_default_constructible_v<InlinePermuteItem<T>> &&
+        std::is_trivially_destructible_v<InlinePermuteItem<T>>;
+
+template <class T, bool CheckBound = false>
 static inline InlinePermutation<T> create_inline_permutation(const SmallPermutation& other, const auto& container) {
-    InlinePermutation<T> inlined(other.size());
-    for (int i = 0; i < other.size(); i++) {
-        int index = other[i].index_in_chunk;
+    InlinePermutation<T> inlined;
+    if constexpr (can_resize_inline_permutation_uninitialized<T, CheckBound>) {
+        raw::stl_vector_resize_uninitialized(&inlined, other.size());
+    } else {
+        inlined.resize(other.size());
+    }
+    for (size_t i = 0; i < other.size(); i++) {
+        uint32_t index = other[i].index_in_chunk;
         inlined[i].index_in_chunk = index;
         if constexpr (CheckBound) {
             if (index >= container.size()) {
@@ -80,7 +92,8 @@ static inline void restore_inline_permutation(const InlinePermutation<T>& inline
 }
 
 inline SmallPermutation create_small_permutation(uint32_t rows) {
-    SmallPermutation perm(rows);
+    SmallPermutation perm;
+    raw::stl_vector_resize_uninitialized(&perm, rows);
     for (uint32_t i = 0; i < rows; i++) {
         perm[i].index_in_chunk = i;
     }
