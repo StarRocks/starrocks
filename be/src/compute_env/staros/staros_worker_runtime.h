@@ -73,6 +73,11 @@ staros::starlet::fslib::RemoteReadSchedulerOptions remote_read_scheduler_options
 // are fixed once the scheduler runs, and it cannot be turned off again.
 Status enable_remote_io_scheduler();
 
+// Applies starlet_grpc_client_enable_http_proxy to the starlet gflag grpc_client_enable_http_proxy,
+// which starlet reads whenever it creates a channel to StarMgr or to a peer. Called during worker
+// init, before starlet creates any channel; exposed for tests.
+void apply_starlet_grpc_client_proxy_config();
+
 #ifdef BE_TEST
 void set_staros_worker_for_test(std::shared_ptr<StarOSWorker> worker);
 std::shared_ptr<staros::starlet::Starlet> swap_starlet_for_test(std::shared_ptr<staros::starlet::Starlet> starlet);

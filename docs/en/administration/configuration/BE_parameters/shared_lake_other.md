@@ -616,6 +616,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: In a shared-data cluster, the part size used for multipart uploads to S3 or an S3-compatible object store. BE buffers up to this many bytes in memory per output stream between part uploads, so raising it raises memory usage, multiplied by the number of concurrent output streams. Setting it very low increases request count and can exceed the 10,000-part limit or fall below the 5 MB minimum part size that AWS S3 enforces; the limits of other S3-compatible stores differ. Changing it takes effect on uploads already in progress. The value must be greater than 0; a non-positive value is rejected. A valid value here overrides an equivalent `--fslib_*` gflag passed on the BE command line. A value rejected at BE startup is not applied at all: BE keeps the previously effective value and logs a warning, so this item can report a value that is not the one in effect. This item controls starlet uploads in a shared-data cluster and is unrelated to the `experimental_s3_*` items.
 - Introduced in: v4.1.5, v4.2
 
+### starlet_grpc_client_enable_http_proxy
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: In a shared-data cluster, whether the gRPC connections that this CN opens to StarMgr and to other CNs go through the HTTP proxy set in the environment of the CN process. These connections carry tablet information lookups (GetShard), the worker heartbeat, tablet replica information updates, and Data Cache replication between CNs. The CN takes the proxy only from the lowercase `grpc_proxy`, `https_proxy`, and `http_proxy` environment variables, and bypasses it only for the hosts listed in the lowercase `no_grpc_proxy` or `no_proxy` environment variables. The default value `false` ignores these variables and connects directly, so a proxy that the CN process inherits for other outbound traffic cannot capture the traffic between cluster nodes, even when its bypass list does not include the cluster addresses. Set this item to `true` only if these connections must go through the proxy, as they did in earlier versions. This item does not affect other outbound traffic of the CN, such as access to object storage. The CN reads this item once at startup, so a change takes effect only after the CN restarts. For the connections that the FE opens, see the FE parameter `starmgr_grpc_client_enable_http_proxy`.
+- Introduced in: v26.3
+
 ### starlet_port
 
 - Default: 9070
