@@ -58,8 +58,10 @@ private:
     // Out-of-line definition of the actual spin loop to keep the inlined fast path compact.
     void slow_acquire();
 
-    // Number of single-pause TTAS probes before yielding the OS thread slice.
-    static constexpr int NUM_SPIN_CYCLES = 70;
+    // Number of exponential-backoff TTAS probes per spin round before yielding the OS thread slice,
+    // and maximum cpu_relax() count per probe (1 -> 2 -> 4 -> 8 -> 16 -> 32 -> 64).
+    static constexpr int NUM_SPIN_PROBES = 4;
+    static constexpr int MAX_SPIN_STEP = 64;
 
     bool _locked{false};
 };

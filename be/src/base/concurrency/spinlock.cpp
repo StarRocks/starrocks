@@ -40,11 +40,17 @@ inline void cpu_relax() {
 } // namespace
 
 void SpinLock::slow_acquire() {
+    int step = 1;
     while (true) {
-        for (int i = 0; i < NUM_SPIN_CYCLES; ++i) {
-            cpu_relax();
+        for (int probe = 0; probe < NUM_SPIN_PROBES; ++probe) {
+            for (int i = 0; i < step; ++i) {
+                cpu_relax();
+            }
             if (try_lock()) {
                 return;
+            }
+            if (step < MAX_SPIN_STEP) {
+                step <<= 1;
             }
         }
         sched_yield();

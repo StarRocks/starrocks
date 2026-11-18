@@ -33,6 +33,8 @@ TEST(SpinLockTest, LayoutAndConstContract) {
     static_assert(std::is_trivially_copyable_v<SpinLock>);
     static_assert(std::is_trivially_move_constructible_v<SpinLock>);
     static_assert(std::is_trivially_move_assignable_v<SpinLock>);
+    static_assert(SpinLock::NUM_SPIN_PROBES == 4, "SpinLock must perform 4 exponential-backoff probes per spin round");
+    static_assert(SpinLock::MAX_SPIN_STEP == 64, "SpinLock exponential-backoff step must cap at 64");
 
     // Fails on legacy SpinLock where dcheck_locked() is non-const.
     EXPECT_TRUE((std::is_invocable_v<decltype(&SpinLock::dcheck_locked), const SpinLock&>));

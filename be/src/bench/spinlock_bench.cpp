@@ -89,6 +89,10 @@ void ApplyThreadCounts(benchmark::Benchmark* b) {
             ->Threads(32)
             ->Threads(64)
             ->Threads(128)
+            ->Threads(256)
+            ->Threads(512)
+            ->Threads(1024)
+            ->Threads(2048)
             ->UseRealTime();
 }
 
@@ -142,7 +146,7 @@ void BM_ContendedCriticalSection(benchmark::State& state) {
             shared.value = s;
             benchmark::DoNotOptimize(shared.value);
         }
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < 64; ++i) {
             unlocked_state = splitmix64_step(unlocked_state);
         }
         benchmark::DoNotOptimize(unlocked_state);
