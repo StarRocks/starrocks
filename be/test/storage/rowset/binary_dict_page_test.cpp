@@ -592,4 +592,39 @@ TEST_F(BinaryDictPageTest, TestNextBatchWithFilterAllDictRejectedAdvancesCursor)
     ASSERT_EQ(8, page_decoder.current_index());
 }
 
+TEST_F(BinaryDictPageTest, TestIsValidGlobalDictWithPaddedKeys) {
+    std::vector<std::string> words = {"a", "short_key", "sixteen_byte_key", "longer_dictionary_entry_value"};
+    std::vector<Slice> slices;
+    slices.reserve(words.size());
+    for (const auto& w : words) {
+        slices.emplace_back(w);
+    }
+
+    PageBuilderOptions options;
+    options.data_page_size = 256 * 1024;
+    options.dict_page_size = 256 * 1024;
+    BinaryDictPageBuilder page_builder(options);
+    size_t count = slices.size();
+    count = page_builder.add(reinterpret_cast<const uint8_t*>(slices.data()), count);
+    ASSERT_EQ(words.size(), count);
+
+    MemPool pool;
+    GlobalDictMap valid_dict;
+    GlobalDictMap incomplete_dict;
+    for (size_t i = 0; i < words.size(); ++i) {
+        const auto& w = words[i];
+        uint8_t* buf = pool.allocate_with_reserve(w.size(), SLICE_MEMEQUAL_OVERFLOW_PADDING);
+        memcpy(buf, w.data(), w.size());
+        // Poison trailing overflow bytes to verify masked memequal_padded ignores bytes past w.size().
+        memset(buf + w.size(), 0xA5, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+        valid_dict.emplace(Slice(buf, w.size()), static_cast<DictId>(i + 1));
+        if (i + 1 < words.size()) {
+            incomplete_dict.emplace(Slice(buf, w.size()), static_cast<DictId>(i + 1));
+        }
+    }
+
+    EXPECT_TRUE(page_builder.is_valid_global_dict(&valid_dict));
+    EXPECT_FALSE(page_builder.is_valid_global_dict(&incomplete_dict));
+}
+
 } // namespace starrocks

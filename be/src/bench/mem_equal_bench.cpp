@@ -30,14 +30,13 @@ static std::string kAlphaNumber =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
         "abcdefghijklmnopqrstuvwxyz";
 
-static size_t ROUND_NUM = 1000;
+static constexpr size_t ROUND_NUM = 1000;
 
-static size_t PADDED_BYTES = 15;
+static constexpr size_t PADDED_BYTES = SLICE_MEMEQUAL_OVERFLOW_PADDING;
 
-template <bool padded, bool equal>
+template <bool padded, bool equal, bool diff_pad = false>
 static void do_MemEqual(benchmark::State& state) {
-    std::random_device rd;
-    std::mt19937 rng(rd());
+    std::mt19937 rng(42);
     std::uniform_int_distribution<int> beginning_gen(0, 40);
     std::uniform_int_distribution<int> length_gen(1, 16);
 
@@ -50,8 +49,9 @@ static void do_MemEqual(benchmark::State& state) {
     }
 
     auto sum = std::accumulate(lengths.begin(), lengths.end(), 0);
-    std::vector<char> buffer_0(sum + PADDED_BYTES);
-    std::vector<char> buffer_1(sum + PADDED_BYTES);
+    const size_t total_bytes = diff_pad ? (sum + ROUND_NUM * PADDED_BYTES) : (sum + PADDED_BYTES);
+    std::vector<char> buffer_0(total_bytes, diff_pad ? static_cast<char>(0x11) : 0);
+    std::vector<char> buffer_1(total_bytes, diff_pad ? static_cast<char>(0xEE) : 0);
 
     auto acc_begin = 0;
     for (size_t i = 0; i < ROUND_NUM; i++) {
@@ -60,16 +60,19 @@ static void do_MemEqual(benchmark::State& state) {
         if constexpr (!equal) {
             std::uniform_int_distribution<int> index_gen(0, lengths[i] - 1);
             auto index = index_gen(rng);
-            buffer_1[acc_begin + index] = 'z';
+            buffer_1[acc_begin + index] ^= 0x01;
         }
         beginnings[i] = acc_begin;
-        acc_begin += lengths[i];
+        if constexpr (diff_pad) {
+            acc_begin += lengths[i] + PADDED_BYTES;
+        } else {
+            acc_begin += lengths[i];
+        }
     }
 
+    bool and_res = true;
+    bool or_res = false;
     for (auto _ : state) {
-        state.ResumeTiming();
-        bool and_res = true;
-        bool or_res = false;
         bool res = false;
         for (size_t i = 0; i < ROUND_NUM; i++) {
             if constexpr (padded) {
@@ -82,12 +85,13 @@ static void do_MemEqual(benchmark::State& state) {
             and_res &= res;
             or_res |= res;
         }
-        state.PauseTiming();
-        if constexpr (equal) {
-            ASSERT_TRUE(and_res);
-        } else {
-            ASSERT_FALSE(or_res);
-        }
+        benchmark::DoNotOptimize(and_res);
+        benchmark::DoNotOptimize(or_res);
+    }
+    if constexpr (equal) {
+        CHECK(and_res);
+    } else {
+        CHECK(!or_res);
     }
 }
 
@@ -99,6 +103,10 @@ static void BM_memequal_padded_equal(benchmark::State& state) {
     do_MemEqual<true, true>(state);
 }
 
+static void BM_memequal_padded_equal_diff_pad(benchmark::State& state) {
+    do_MemEqual<true, true, true>(state);
+}
+
 static void BM_memequal_padded_notequal(benchmark::State& state) {
     do_MemEqual<true, false>(state);
 }
@@ -108,10 +116,11 @@ static void BM_memequal_no_padded_equal(benchmark::State& state) {
 }
 
 static void BM_memequal_no_padded_notequal(benchmark::State& state) {
-    do_MemEqual<false, true>(state);
+    do_MemEqual<false, false>(state);
 }
 
 BENCHMARK(BM_memequal_padded_equal)->Apply(process_args);
+BENCHMARK(BM_memequal_padded_equal_diff_pad)->Apply(process_args);
 BENCHMARK(BM_memequal_padded_notequal)->Apply(process_args);
 BENCHMARK(BM_memequal_no_padded_equal)->Apply(process_args);
 BENCHMARK(BM_memequal_no_padded_notequal)->Apply(process_args);
