@@ -22,7 +22,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.defaults.engine.DefaultParquetHandler;
-import io.delta.kernel.defaults.engine.hadoopio.HadoopFileIO;
+import io.delta.kernel.defaults.engine.fileio.FileIO;
 import io.delta.kernel.engine.FileReadResult;
 import io.delta.kernel.exceptions.KernelEngineException;
 import io.delta.kernel.expressions.Predicate;
@@ -31,7 +31,6 @@ import io.delta.kernel.internal.util.Utils;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
 import io.delta.kernel.utils.FileStatus;
-import org.apache.hadoop.conf.Configuration;
 
 import java.util.List;
 import java.util.Optional;
@@ -41,25 +40,25 @@ import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static java.lang.String.format;
 
 public class DeltaLakeParquetHandler extends DefaultParquetHandler {
-    private final Configuration hadoopConf;
+    private final FileIO fileIO;
     private final Cache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache;
 
-    public DeltaLakeParquetHandler(Configuration hadoopConf, Cache<Pair<DeltaLakeFileStatus, StructType>,
+    public DeltaLakeParquetHandler(FileIO fileIO, Cache<Pair<DeltaLakeFileStatus, StructType>,
             List<ColumnarBatch>> checkpointCache) {
-        super(new HadoopFileIO(hadoopConf));
-        this.hadoopConf = hadoopConf;
+        super(fileIO);
+        this.fileIO = fileIO;
         this.checkpointCache = checkpointCache;
     }
 
     public static List<ColumnarBatch> readParquetFile(String filePath, long fileSize, long modificationTime,
-                                                      StructType physicalSchema, Configuration hadoopConf) {
+                                                      StructType physicalSchema, FileIO fileIO) {
         // The checkpointCache loader on a miss. Same story as the json handler: the kernel's parquet
         // reader goes to storage by itself, so the FE-owned wrapper is where the wait is visible.
         BlockingCallValidator.validateNotUnderLock("remote-storage");
         try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL,
                 "DeltaLakeParquetHandler.readParquetFileAndGetColumnarBatch")) {
             io.delta.kernel.defaults.internal.parquet.ParquetFileReader batchReader =
-                    new io.delta.kernel.defaults.internal.parquet.ParquetFileReader(new HadoopFileIO(hadoopConf));
+                    new io.delta.kernel.defaults.internal.parquet.ParquetFileReader(fileIO);
             CloseableIterator<ColumnarBatch> currentFileReader =
                     batchReader.read(FileStatus.of(filePath, fileSize, modificationTime), physicalSchema, Optional.empty());
 
@@ -135,10 +134,10 @@ public class DeltaLakeParquetHandler extends DefaultParquetHandler {
                         Pair<DeltaLakeFileStatus, StructType> key = Pair.create(deltaLakeFileStatus, physicalSchema);
                         currentColumnarBatchList = checkpointCache.get(key,
                                 () -> readParquetFile(deltaLakeFileStatus.getPath(), deltaLakeFileStatus.getSize(),
-                                        deltaLakeFileStatus.getModificationTime(), physicalSchema, hadoopConf));
+                                        deltaLakeFileStatus.getModificationTime(), physicalSchema, fileIO));
                     } else {
                         currentColumnarBatchList = readParquetFile(currentFile, deltaLakeFileStatus.getSize(),
-                                deltaLakeFileStatus.getModificationTime(), physicalSchema, hadoopConf);
+                                deltaLakeFileStatus.getModificationTime(), physicalSchema, fileIO);
                     }
                     currentReadColumnarBatchIndex = 0;
                 }
