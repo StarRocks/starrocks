@@ -1,5 +1,26 @@
 {
     "docs": [
+        {
+            "type": "category",
+            "label": "Release notes",
+            "link": {
+                "type": "doc",
+                "id": "release_notes/release_notes"
+            },
+            "items": [
+                "release_notes/release-3.1",
+                {
+                    "type": "category",
+                    "label": "Ecosystem",
+                    "items": [
+                        "release_notes/ecosystem/kafka_connector",
+                        "release_notes/ecosystem/spark_connector",
+                        "release_notes/ecosystem/flink_connector",
+                        "release_notes/ecosystem/starrocks-kubernetes-operator"
+                    ]
+                }
+            ]
+        },
         "introduction/StarRocks_intro",
         {
             "type": "category",
