@@ -20,6 +20,98 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
   v4.1 で導入された内部的なデータレイアウトの変更（tablet の分割および分散メカニズムに関連）により、v4.1 にアップグレードされたクラスタでは、以前のバージョンと完全には互換性のないメタデータおよびストレージ構造が生成される場合があります。そのため、v4.1 からのダウングレードは v4.0.6 以降にのみサポートされます。v4.0.6 より前のバージョンへのダウングレードはサポートされていません。これは、以前のバージョンが tablet のレイアウトおよび分散メタデータをどのように解釈するかに関する後方互換性の制約によるものです。
 :::
 
+## 4.1.8 {#418}
+
+リリース日：2026 年 11 月 16 日
+
+### 動作の変更 {#behavior-changes}
+
+- 共有データの主キーインデックスのキャッシュ退避ポリシーが変更されました。キャッシュには、すべての publish の後にチェックされる緊急レベルが追加されました。[#81143](https://github.com/StarRocks/starrocks/pull/81143) [#81168](https://github.com/StarRocks/starrocks/pull/81168)
+- ローカル（共有なし）の主キー挿入では、デフォルトで、重複キーについて不変の L1 および L2 永続性インデックスファイルをチェックしなくなりました。新しい BE 設定項目 `skip_pindex_l1_l2_check_in_insert` のデフォルトは `true` です。以前の動作に戻すには `false` に設定してください。[#81304](https://github.com/StarRocks/starrocks/pull/81304)
+- `lake_pk_preload_memory_limit_percent`、`lake_pk_index_block_cache_limit_percent`、および `put_combined_txn_log_thread_pool_num_max` は、BE または CN を再起動せずに実行時に有効になるようになりました。`lake_pk_index_block_cache_limit_percent` は可変になりました。[#81164](https://github.com/StarRocks/starrocks/pull/81164) [#81244](https://github.com/StarRocks/starrocks/pull/81244) [#81677](https://github.com/StarRocks/starrocks/pull/81677)
+- マテリアライズドビューのリフレッシュ処理が変更されました。削除されたベースパーティションは、そのマテリアライズドビューパーティションがリフレッシュされるまで追跡され続け、どのベースパーティションにも対応しないマテリアライズドビューパーティションはリフレッシュされ、インクリメンタルなマテリアライズドビュー再構築のうち上書きされたバッチは失敗ではなくスキップされるようになりました。[#81187](https://github.com/StarRocks/starrocks/pull/81187) [#81192](https://github.com/StarRocks/starrocks/pull/81192) [#81262](https://github.com/StarRocks/starrocks/pull/81262)
+- インクリメンタルなマテリアライズドビューは、`__ROW_ID__` に対してプレフィックスフリーの行 ID フィンガープリントを使用します。[#81259](https://github.com/StarRocks/starrocks/pull/81259)
+- マテリアライズドビューは FE 起動時にレイヤーごとに有効化されるようになったため、`mv-plan-cache` プールを枯渇させることがなくなりました。[#81497](https://github.com/StarRocks/starrocks/pull/81497)
+- external catalog テーブルおよび外部データベース・テーブルの一覧表示における `DESCRIBE` は、メタデータ呼び出しに呼び出し元のセッションコンテキストを使用するようになりました。[#80628](https://github.com/StarRocks/starrocks/pull/80628)
+- `bool_or` は、NULL を保持する中間列をマージできるようになりました。[#81237](https://github.com/StarRocks/starrocks/pull/81237)
+- サポートされていない間隔演算は、`Unknown error` の代わりに説明的なエラーを報告するようになりました。[#81024](https://github.com/StarRocks/starrocks/pull/81024)
+- `CREATE BASELINE` が follower FE 上で動作するようになりました。[#81157](https://github.com/StarRocks/starrocks/pull/81157)
+- FE が複数の FE 間でグローバル辞書を誤って更新する問題が解消されました。[#79511](https://github.com/StarRocks/starrocks/pull/79511)
+- 削除された共有データ tablet のバージョン 1 を読み取ると、`NotFound` が返されるようになりました。[#81196](https://github.com/StarRocks/starrocks/pull/81196)
+- 共有データの主キー tablet のリカバリが改修されました。publish の Delete Vector はリカバリと整合性が保たれ、マルチステートメントトランザクションのバッチ適用は主キーの不整合時にリカバリされ、物理行 ID が使用され、Compaction によって継承された削除ファイルは破棄されるようになりました。[#81204](https://github.com/StarRocks/starrocks/pull/81204) [#81206](https://github.com/StarRocks/starrocks/pull/81206) [#81211](https://github.com/StarRocks/starrocks/pull/81211) [#81250](https://github.com/StarRocks/starrocks/pull/81250)
+- Kafka の Routine Load は、パーティションごとに EOF を追跡し、空のロード（宛先行を生成しないバッチ）を異なる方法で処理するようになりました。[#81412](https://github.com/StarRocks/starrocks/pull/81412)
+- 明示的なトランザクションのロード ID が永続化されるようになったため、FE の再起動やリーダー変更後でも、publish がトランザクションログを見つけられるようになりました。[#81413](https://github.com/StarRocks/starrocks/pull/81413)
+- レガシーなユーザー DN ごとの LDAP ユーザーに対して、グループプロバイダが保持されるようになりました。[#81399](https://github.com/StarRocks/starrocks/pull/81399)
+- FE がイメージをロードする際、拒否されたセッション変数の値は FE の起動を失敗させる代わりにスキップされるようになりました。[#81655](https://github.com/StarRocks/starrocks/pull/81655)
+- Arrow が事前バッファリングする Parquet の範囲は、`FILES()` および Broker Load においてスキャンスレッド上で読み取られるようになりました。[#81771](https://github.com/StarRocks/starrocks/pull/81771)
+- Iceberg のパーティション値は、各データファイル固有のパーティション仕様でデコードされるようになりました。[#81789](https://github.com/StarRocks/starrocks/pull/81789)
+- 単一トランザクションの lake publish バッチが、再試行のバックオフを尊重するようになりました。[#81803](https://github.com/StarRocks/starrocks/pull/81803)
+- トライ境界によって以前は除外されていた、フラットな JSON パスが、JSON 型として扱われるようになりました。[#81816](https://github.com/StarRocks/starrocks/pull/81816)
+- Lake メタデータキャッシュのキーおよびメタデータ削除時のキャッシュ退避に関する問題が修正されました。[#81978](https://github.com/StarRocks/starrocks/pull/81978)
+
+### 改善項目 {#improvements}
+
+- スキャンエグゼキュータのワーカースレッドに関するメトリクスが追加されました。[#77435](https://github.com/StarRocks/starrocks/pull/77435)
+- 共有データの publish バージョンのタイムアウトが設定可能になりました。[#79332](https://github.com/StarRocks/starrocks/pull/79332)
+- 大きなフラット JSON の Compaction 出力が、セグメント全体をバッファリングする代わりにストリーミングされるようになりました。[#80470](https://github.com/StarRocks/starrocks/pull/80470)
+- `update_memory_limit_percent` が可変になりました。[#81118](https://github.com/StarRocks/starrocks/pull/81118)
+- JVM のコミット済みメモリが、BE プロセスのメモリトラッカーでカウントされるようになりました。[#81127](https://github.com/StarRocks/starrocks/pull/81127)
+- 不変インデックスの存在チェックが `get` を再利用するようになりました。[#81307](https://github.com/StarRocks/starrocks/pull/81307)
+- データファイルが ORC である Iceberg テーブルに対する `DELETE` をサポートしました。[#81435](https://github.com/StarRocks/starrocks/pull/81435)
+- ORC データファイルからの Iceberg v3 行系列（row lineage）の読み取りをサポートしました。[#81440](https://github.com/StarRocks/starrocks/pull/81440)
+- ランタイムフィルターによって拒否されたパーティションの Iceberg equality delete ファイルはスキップされ、Iceberg スキャンレンジのプランニング時にファイルごとのパーティション処理もスキップされます。[#81437](https://github.com/StarRocks/starrocks/pull/81437) [#81438](https://github.com/StarRocks/starrocks/pull/81438)
+- 共有データバックアップノードは tablet ハッシュによって分散されます。[#81436](https://github.com/StarRocks/starrocks/pull/81436)
+
+### セキュリティ {#security}
+
+- FE の ZooKeeper を 3.9.6 にバンプしました。[#81292](https://github.com/StarRocks/starrocks/pull/81292)
+- pprof を release/20261022 にバンプしました。[#81300](https://github.com/StarRocks/starrocks/pull/81300)
+- guava を 33.7.2 に、snappy-java を 1.1.10.9 にバンプしました。[#81859](https://github.com/StarRocks/starrocks/pull/81859)
+
+### バグ修正 {#bug-fixes}
+
+以下の問題が修正されました：
+
+- Iceberg の読み込みおよび挿入において、不明なパーティショントランスフォーム、ORC フィールド ID、昇格された境界値、不明なタイプ、デフォルト値に関する問題を修正しました。[#81257](https://github.com/StarRocks/starrocks/pull/81257) [#81311](https://github.com/StarRocks/starrocks/pull/81311) [#81432](https://github.com/StarRocks/starrocks/pull/81432)
+- パーティション進化が行われたテーブルに対する Iceberg の読み書きを修正しました。これには、位置削除がデータファイルのスペックの下に保持されることを含みます。[#81401](https://github.com/StarRocks/starrocks/pull/81401) [#81361](https://github.com/StarRocks/starrocks/pull/81361)
+- Iceberg DML のターゲット検索、row id でペアリングされた v3 検索行、および write-default を持たない列に対する NULL 書き込みの問題を修正しました。[#81165](https://github.com/StarRocks/starrocks/pull/81165) [#81188](https://github.com/StarRocks/starrocks/pull/81188) [#81362](https://github.com/StarRocks/starrocks/pull/81362)
+- 2 つの Iceberg FE ハング（explain パーティションリスト表示と OSS の read-ahead 待機）、およびアイドル状態の Iceberg コミットエグゼキュータースレッドの問題を修正しました。[#81711](https://github.com/StarRocks/starrocks/pull/81711) [#81805](https://github.com/StarRocks/starrocks/pull/81805)
+- Iceberg、Delta、Hudi の `INSERT` ソースは、テーブルロック中にリフレッシュされるのではなく無効化されるようになりました。[#81923](https://github.com/StarRocks/starrocks/pull/81923)
+- Iceberg REST catalog のユーザーエージェントが `NodeMgr` を使わずに構築されるようになりました。[#80660](https://github.com/StarRocks/starrocks/pull/80660)
+- `OR` 転置インデックスフォールバック内で否定された `MATCH` が NULL 行を返していた問題を修正しました。[#76350](https://github.com/StarRocks/starrocks/pull/76350)
+- 主キーテーブルの Compaction におけるレベル -1 の rowset 選択が無制限になっていた問題を修正しました。[#80471](https://github.com/StarRocks/starrocks/pull/80471)
+- バッファリングされたパススルーチャンクがクエリおよびプロセスのメモリに計上されていなかった問題を修正しました。[#80910](https://github.com/StarRocks/starrocks/pull/80910)
+- 集計状態コンビネーターが、バッチ破棄時にラップされた状態をリークしていた問題を修正しました。[#81054](https://github.com/StarRocks/starrocks/pull/81054)
+- Compaction 処理がマージされた JSON 列を書き込んでいる最中に、その列が解放される可能性があった問題を修正しました。[#81117](https://github.com/StarRocks/starrocks/pull/81117)
+- フラッシュが並行して完了した場合、スピラーの flush-all コールバックが 2 回実行される可能性があった問題を修正しました。[#81134](https://github.com/StarRocks/starrocks/pull/81134)
+- min/max ランタイムフィルターの境界値が、スライスロックを保持せずに読み取られていた問題を修正しました。[#81138](https://github.com/StarRocks/starrocks/pull/81138)
+- スピル可能な集計ソースが、解放済みのスピラーにアクセスする可能性があった問題を修正しました。[#81199](https://github.com/StarRocks/starrocks/pull/81199)
+- `getShardInfo` 呼び出しが、バッチあたりのシャード数で制限されていなかった問題を修正しました。[#81197](https://github.com/StarRocks/starrocks/pull/81197)
+- ロードシンクのクローズ送信時の例外により、BE または CN プロセスが終了する可能性があった問題を修正しました。[#81251](https://github.com/StarRocks/starrocks/pull/81251)
+- Trino の `TIMESTAMP WITH TIME ZONE` リテラルが誤ったタイムゾーンの方向を使用していた問題を修正しました。[#81256](https://github.com/StarRocks/starrocks/pull/81256)
+- アクティベーションが失敗した際、`ALTER MATERIALIZED VIEW ... ACTIVE` が `Can not active materialized view` メッセージを失っていた問題を修正しました。[#81258](https://github.com/StarRocks/starrocks/pull/81258)
+- イメージのロード時に、`mv_rewrite_staleness_second` がマテリアライズドビューのプロパティから復元されていなかった問題を修正しました。[#81263](https://github.com/StarRocks/starrocks/pull/81263)
+- `DOUBLE` または `FLOAT` を `DECIMAL` にキャストした際、aarch64 と x86 で結果が異なっていた問題を修正しました。[#81261](https://github.com/StarRocks/starrocks/pull/81261)
+- 結果が `DATETIME` の範囲を超える場合、`convert_tz` が NULL を返すようになりました。[#81264](https://github.com/StarRocks/starrocks/pull/81264)
+- `VARBINARY` 列に対する等価フィルターでプランニングが失敗していた問題を修正しました。[#81310](https://github.com/StarRocks/starrocks/pull/81310)
+- マテリアライズドビューの命名と検索について：参照先ベーステーブルのパーティション列が解析されていない場合に MV が命名されるようにし、`inspect_mv_refresh_info` が同名のベーステーブルを完全名でキー管理するようにしました。[#81357](https://github.com/StarRocks/starrocks/pull/81357) [#81358](https://github.com/StarRocks/starrocks/pull/81358)
+- 共有なしモードにおいて、グローバル後期実体化の検索がコンピュートノードに到達できなかった問題を修正しました。[#81359](https://github.com/StarRocks/starrocks/pull/81359)
+- `lastSchemaUpdateTime` のバンプが遅すぎたため、共有データ schema change 中に並行クエリが再プランニングされない問題を修正しました。[#81363](https://github.com/StarRocks/starrocks/pull/81363)
+- Ranger のサービス定義で、ビューおよびマテリアライズドビューに対する `SELECT` の付与が許可されていなかった問題を修正しました。[#81400](https://github.com/StarRocks/starrocks/pull/81400)
+- `UNION` のマージで値の順序が誤る可能性があった問題を修正しました。[#81420](https://github.com/StarRocks/starrocks/pull/81420)
+- タスク実行プロセスの開始時刻が、Follower で再生されていなかった問題を修正しました。[#81433](https://github.com/StarRocks/starrocks/pull/81433)
+- `IF EXISTS` の下で、ロード不可な外部テーブルに対して `DROP` 権限がチェックされるようになりました。[#81434](https://github.com/StarRocks/starrocks/pull/81434)
+- クエリがキャンセルされた後、Lake セグメントが開かれなくなりました。[#81598](https://github.com/StarRocks/starrocks/pull/81598)
+- リフレッシュによって行われたマテリアライズドビューの非アクティブ化がジャーナルに記録され、そのタスクがスケジュール済みのままになるようになりました。[#81660](https://github.com/StarRocks/starrocks/pull/81660)
+- キープレフィックスのみが制約されている場合に、末尾の NULL を保持するパーティションが削除されていた問題を修正しました。[#81675](https://github.com/StarRocks/starrocks/pull/81675)
+- 文字列 `IN` 述語が、ランタイムフィルターパスで辞書コードとして読み取られていました。[#81676](https://github.com/StarRocks/starrocks/pull/81676)
+- 後期マテリアライズドビュープルーニングが、その述語に必要な列を保持していませんでした。[#81687](https://github.com/StarRocks/starrocks/pull/81687)
+- 定数 `IN` 述語の値リストに列参照が含まれる可能性がありました。[#81825](https://github.com/StarRocks/starrocks/pull/81825)
+- 定数の GROUP BY キーが畳み込まれた後、`HAVING` が正規化されていませんでした。[#81919](https://github.com/StarRocks/starrocks/pull/81919)
+- 月単位の日付演算が、あたかも可逆であるかのように書き換えられていました。[#81979](https://github.com/StarRocks/starrocks/pull/81979)
+- 保持期間が 0 の場合、マテリアライズドビューの強制削除が再帰していました。[#81953](https://github.com/StarRocks/starrocks/pull/81953)
+- StarOS と StarCache を v4.1.6 にアップグレードしました。[#81508](https://github.com/StarRocks/starrocks/pull/81508)
+
 ## 4.1.7 {#417}
 
 リリース日：2026年10月26日
