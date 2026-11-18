@@ -1065,13 +1065,13 @@ public class ExpressionAnalyzer {
         }
 
         // An explicit CAST(<ARRAY | MAP | STRUCT> AS JSON) is evaluated as CAST(to_json(<value>) AS JSON).
-        // Decimals are cast to DOUBLE first, so that they become JSON numbers as in CAST(<decimal> AS JSON)
-        // instead of the JSON strings that to_json() writes for them.
+        // BOOLEAN and DECIMAL values inside it are cast to JSON first, so that they become a JSON boolean and a
+        // JSON number as in CAST(<value> AS JSON), instead of the 0/1 and the JSON string that to_json() writes.
         private void analyzeComplexTypeToJsonCast(CastExpr cast, Type sourceType, Scope scope) {
             Expr value = cast.getChild(0);
             if (!sourceType.equals(value.getType())) {
                 // An explicit cast, which is kept when the analyzed statement is printed, for example as a view
-                // definition. An implicit cast would be dropped there, and the decimals would become JSON strings.
+                // definition. An implicit cast would be dropped there.
                 CastExpr toSourceType = new CastExpr(new TypeDef(sourceType), value, cast.getPos());
                 visitCastExpr(toSourceType, scope);
                 value = toSourceType;
@@ -1108,10 +1108,10 @@ public class ExpressionAnalyzer {
                     fields.add(new StructField(field.getName(), fieldType, field.getComment()));
                 }
                 return new StructType(fields, true);
-            } else if (type.isDecimalOfAnyVersion()) {
-                return FloatType.DOUBLE;
-            } else if (type.isNull() || type.isBoolean() || type.isIntegerType() || type.isFloatingPointType()
-                    || type.isStringType() || type.isJsonType() || type.isDateType()) {
+            } else if (type.isDecimalOfAnyVersion() || type.isBoolean()) {
+                return JsonType.JSON;
+            } else if (type.isNull() || type.isIntegerType() || type.isFloatingPointType() || type.isStringType()
+                    || type.isJsonType() || type.isDateType()) {
                 return type;
             }
             return null;

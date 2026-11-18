@@ -50,7 +50,7 @@ cast(sql_expr AS JSON)
 
   - If the SQL value is `NULL`, the cast function does not convert the SQL value `NULL` to a JSON value of `NULL`. The return value is still an SQL value of `NULL`.
 
-  - An ARRAY, MAP, or STRUCT value is converted in the same way as [to_json](./to_json.md): an ARRAY becomes a JSON array, and a MAP or STRUCT becomes a JSON object. `NULL` elements, values, and fields become JSON `null`. DECIMAL values inside them are converted to DOUBLE first, so they become JSON numbers, as in a cast of a single DECIMAL value. For example, `cast([1, 2] AS JSON)` returns `[1, 2]`, and `cast(map{'a': 1.5} AS JSON)` returns `{"a": 1.5}`.
+  - An ARRAY, MAP, or STRUCT value is converted in the same way as [to_json](./to_json.md): an ARRAY becomes a JSON array, and a MAP or STRUCT becomes a JSON object. `NULL` elements, values, and fields become JSON `null`. BOOLEAN and DECIMAL values inside them become JSON booleans and JSON numbers, as in a cast of a single value. For example, `cast([1, 2] AS JSON)` returns `[1, 2]`, and `cast(map{'a': 1.5} AS JSON)` returns `{"a": 1.5}`.
 
 - Conversion from JSON to SQL
 

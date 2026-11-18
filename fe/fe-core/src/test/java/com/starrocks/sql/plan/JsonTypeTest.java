@@ -231,6 +231,7 @@ public class JsonTypeTest extends PlanTestBase {
                 " v_map_decimal MAP<DECIMAL(10, 2), INT>," +
                 " v_map_boolean MAP<BOOLEAN, INT>," +
                 " v_array_decimal ARRAY<DECIMAL(10, 2)>," +
+                " v_array_boolean ARRAY<BOOLEAN>," +
                 " v_struct STRUCT<a INT, b DECIMAL(10, 2), c ARRAY<DATETIME>>" +
                 ") DUPLICATE KEY (v_id) " +
                 "DISTRIBUTED BY HASH (v_id) " +
@@ -238,22 +239,23 @@ public class JsonTypeTest extends PlanTestBase {
 
         String plan = getFragmentPlan("select cast(v_array as json), cast(v_nested as json), " +
                 "cast(v_array_json as json), cast(v_map as json), cast(v_map_int as json), " +
-                "cast(v_array_decimal as json), cast(v_struct as json) from tjson_complex");
+                "cast(v_array_decimal as json), cast(v_array_boolean as json), cast(v_struct as json) " +
+                "from tjson_complex");
         assertContains(plan, "to_json(2: v_array)", "to_json(3: v_nested)", "to_json(4: v_array_json)",
                 "to_json(5: v_map)", "to_json(6: v_map_int)",
-                "to_json(CAST(9: v_array_decimal AS ARRAY<DOUBLE>))",
-                "to_json(CAST(10: v_struct AS struct<`a` int(11), `b` double, `c` array<datetime>>))");
+                "to_json(CAST(9: v_array_decimal AS ARRAY<JSON>))", "to_json(CAST(10: v_array_boolean AS ARRAY<JSON>))",
+                "to_json(CAST(11: v_struct AS struct<`a` int(11), `b` json, `c` array<datetime>>))");
         assertPlanContains("select cast(map{'a': [1, 2]} as json), cast(named_struct('a', 1, 'b', 'x') as json)",
                 "to_json(map{'a':[1,2]})", "to_json(named_struct('a', 1, 'b', 'x'))");
 
         // Aggregated values, as in CAST(map_agg(k, v) AS JSON).
         assertPlanContains("select v_id, cast(array_agg(v_array) as json), cast(map_agg(v_id, v_array_decimal) as json) " +
                         "from tjson_complex group by v_id",
-                "to_json(11: array_agg)", "to_json(CAST(12: map_agg AS MAP<INT,ARRAY<DOUBLE>>))");
-        // A view keeps the conversion of decimals to DOUBLE.
+                "to_json(12: array_agg)", "to_json(CAST(13: map_agg AS MAP<INT,ARRAY<JSON>>))");
+        // A view keeps the conversion of decimals to JSON.
         starRocksAssert.withView("CREATE VIEW tjson_complex_view AS " +
                 "SELECT cast(v_array_decimal as json) AS j FROM tjson_complex");
-        assertPlanContains("select j from tjson_complex_view", "to_json(CAST(9: v_array_decimal AS ARRAY<DOUBLE>))");
+        assertPlanContains("select j from tjson_complex_view", "to_json(CAST(9: v_array_decimal AS ARRAY<JSON>))");
 
         assertExceptionMsgContains("select cast(v_map_decimal as json) from tjson_complex",
                 "Invalid type cast from map<decimal(10, 2),int(11)> to json");
