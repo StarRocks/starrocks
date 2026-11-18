@@ -53,14 +53,9 @@ class ExecNode;
 class RowDescriptor;
 class DataSink;
 class DataStreamMgr;
+class MessageBodySink;
 class RuntimeProfile;
 class RuntimeState;
-<<<<<<< HEAD:be/src/runtime/plan_fragment_executor.h
-=======
-class StreamLoadContext;
-class MessageBodySink;
-class TExecPlanFragmentParams;
->>>>>>> 6506f99 ([BugFix] Propagate fragment cancellation to stream load pipes (#82741)):be/src/orchestration/plan_fragment_executor.h
 class TPlanFragment;
 class TPlanFragmentExecParams;
 class TPlanExecParams;
@@ -220,17 +215,12 @@ private:
     // If this is a runtime filter merge node for some query.
     bool _is_runtime_filter_merge_node;
 
+    // Bound in prepare and retained until destruction so cancel and close can both notify readers.
+    std::vector<std::shared_ptr<MessageBodySink>> _stream_load_sinks;
     std::vector<StreamLoadContext*> _stream_load_contexts;
     bool _channel_stream_load = false;
 
-<<<<<<< HEAD:be/src/runtime/plan_fragment_executor.h
     ObjectPool* obj_pool() { return _runtime_state->obj_pool(); }
-=======
-    // Populated in prepare; immutable afterwards so cancel and close can both notify readers.
-    std::vector<std::shared_ptr<MessageBodySink>> _stream_load_sinks;
-
-    ObjectPool* obj_pool();
->>>>>>> 6506f99 ([BugFix] Propagate fragment cancellation to stream load pipes (#82741)):be/src/orchestration/plan_fragment_executor.h
 
     // Invoked the report callback if there is a report callback and the current
     // status isn't CANCELLED. Sets 'done' to true in the callback invocation if
