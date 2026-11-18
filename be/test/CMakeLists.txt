@@ -613,6 +613,10 @@ TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 
 # =================================================
 # test cases must be compiled as a standalone binary
+# fragment_mgr_test supplies stub PlanFragmentExecutor methods; link the real executor separately.
+ADD_BE_TEST(runtime/stream_load_cancel_test)
+target_sources(stream_load_cancel_test PRIVATE test_main.cpp)
+
 ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
 ADD_BE_TEST(storage/lake/compaction_task_test)
 
