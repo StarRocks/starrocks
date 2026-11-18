@@ -64,6 +64,7 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
         request.SetBucket(_bucket);
         request.SetKey(_object);
         request.SetRange(std::move(range));
+        apply_sse_customer_key(request);
         request.SetResponseStreamFactory([out, real_length]() {
             return Aws::New<S3ZeroCopyIOStream>(AWS_ALLOCATE_TAG, reinterpret_cast<char*>(out), real_length);
         });
@@ -104,6 +105,7 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
             request.SetBucket(_bucket);
             request.SetKey(_object);
             request.SetRange(std::move(range));
+            apply_sse_customer_key(request);
 
             Aws::S3::Model::GetObjectOutcome outcome = _s3client->GetObject(request);
             if (outcome.IsSuccess()) {
@@ -139,6 +141,7 @@ StatusOr<int64_t> S3InputStream::get_size() {
         Aws::S3::Model::HeadObjectRequest request;
         request.SetBucket(_bucket);
         request.SetKey(_object);
+        apply_sse_customer_key(request);
         Aws::S3::Model::HeadObjectOutcome outcome = _s3client->HeadObject(request);
         if (outcome.IsSuccess()) {
             _size = outcome.GetResult().GetContentLength();
@@ -159,6 +162,7 @@ StatusOr<std::string> S3InputStream::read_all() {
     Aws::S3::Model::GetObjectRequest request;
     request.SetBucket(_bucket);
     request.SetKey(_object);
+    apply_sse_customer_key(request);
     Aws::S3::Model::GetObjectOutcome outcome = _s3client->GetObject(request);
     if (outcome.IsSuccess()) {
         Aws::IOStream& body = outcome.GetResult().GetBody();

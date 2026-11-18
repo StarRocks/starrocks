@@ -63,6 +63,21 @@ public class CloudConfigurationConstants {
      */
     public static final String AWS_S3_ENABLE_SSL = "aws.s3.enable_ssl";
 
+    /**
+     * Server-Side Encryption with Customer-provided keys (SSE-C).
+     * When {@link #AWS_S3_SSE_TYPE} is set to {@link #AWS_S3_SSE_TYPE_SSE_C}, every S3 GetObject/HeadObject
+     * request must carry the customer key headers, so the key is threaded down to both the FE metadata
+     * reader (Iceberg S3FileIO) and the BE data reader.
+     * Default value of the type: [none]
+     */
+    public static final String AWS_S3_SSE_TYPE = "aws.s3.sse.type";
+    // base64-encoded 256-bit AES key.
+    public static final String AWS_S3_SSE_KEY = "aws.s3.sse.customer_key";
+    // base64-encoded MD5 digest of the raw (non-base64) key. Optional; the FE computes it when omitted.
+    public static final String AWS_S3_SSE_KEY_MD5 = "aws.s3.sse.customer_key_md5";
+    public static final String AWS_S3_SSE_TYPE_NONE = "none";
+    public static final String AWS_S3_SSE_TYPE_SSE_C = "sse-c";
+
     public static final String AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR = "aws.glue.use_aws_sdk_default_behavior";
     public static final String AWS_GLUE_USE_INSTANCE_PROFILE = "aws.glue.use_instance_profile";
     public static final String AWS_GLUE_USE_WEB_IDENTITY_TOKEN_FILE = "aws.glue.use_web_identity_token_file";

@@ -51,6 +51,7 @@ public class CredentialUtil {
             CloudConfigurationConstants.AWS_S3_ACCESS_KEY,
             CloudConfigurationConstants.AWS_S3_SECRET_KEY,
             CloudConfigurationConstants.AWS_S3_SESSION_TOKEN,
+            CloudConfigurationConstants.AWS_S3_SSE_KEY,
             CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY,
             CloudConfigurationConstants.AWS_GLUE_SECRET_KEY,
             CloudConfigurationConstants.AWS_GLUE_SESSION_TOKEN,
