@@ -14,8 +14,8 @@ StarRocks 提供的 Operator 用于在 Kubernetes 环境中部署 StarRocks 集�
 
 在 Kubernetes 上的部署 StarRocks 集群支持以下两种方式：
 
-- [直接使用 StarRocks CRD 部署 StarRocks 集群](https://docs.starrocks.io/zh/docs/deployment/sr_operator/)
-- [通过 Helm Chart 部署 Operator 和 StarRocks 集群](https://docs.starrocks.io/zh/docs/deployment/helm/)
+- [直接使用 StarRocks CRD 部署 StarRocks 集群](../../deployment/sr_operator.md)
+- [通过 Helm Chart 部署 Operator 和 StarRocks 集群](../../deployment/helm.md)
 
 **源码下载地址：**
 

@@ -12,8 +12,8 @@ StarRocks が提供する Operator は、Kubernetes 環境で StarRocks クラ�
 
 **ユーザーガイド:** 以下の方法で Kubernetes 上に StarRocks クラスターをデプロイできます:
 
-- [StarRocks CRD を直接使用して StarRocks クラスターをデプロイする](https://docs.starrocks.io/docs/deployment/sr_operator/)
-- [Helm Chart を使用して Operator と StarRocks クラスターの両方をデプロイする](https://docs.starrocks.io/zh/docs/deployment/helm/)
+- [StarRocks CRD を直接使用して StarRocks クラスターをデプロイする](../../deployment/sr_operator.md)
+- [Helm Chart を使用して Operator と StarRocks クラスターの両方をデプロイする](../../deployment/helm.md)
 
 **ソースコード:**
 

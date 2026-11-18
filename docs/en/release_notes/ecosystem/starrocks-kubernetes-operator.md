@@ -12,8 +12,8 @@ The Operator provided by StarRocks is used to deploy StarRocks clusters in the K
 
 **User guide:** You can use the following methods to deploy StarRocks clusters on Kubernetes:
 
-- [Directly use StarRocks CRD to deploy StarRocks clusters](https://docs.starrocks.io/docs/deployment/sr_operator/)
-- [Deploying both the Operator and StarRocks clusters by using the Helm Chart](https://docs.starrocks.io/zh/docs/deployment/helm/)
+- [Directly use StarRocks CRD to deploy StarRocks clusters](../../deployment/sr_operator.md)
+- [Deploying both the Operator and StarRocks clusters by using the Helm Chart](../../deployment/helm.md)
 
 **Source codes:**
 
