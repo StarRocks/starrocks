@@ -147,6 +147,8 @@ private:
     using PredicateList = std::vector<const ColumnPredicate*>;
     using PredicateMap = std::unordered_map<ColumnId, PredicateList>;
 
+    // Adds the reads the tablet preparation made, collected in |prepare_stats|, to the TabletPrepare statistics.
+    void record_tablet_prepare_stats(const OlapReaderStatistics& prepare_stats);
     // Both add the reads they make to |prepare_stats|.
     Status build_prepared_tablet_read_state(const TabletReaderParams& params, PreparedTabletReadState* state,
                                             OlapReaderStatistics* prepare_stats);
@@ -156,6 +158,9 @@ private:
     Status refine_initial_coarse_split_and_append_refined_tasks(const TabletReaderParams& params,
                                                                 RowidRangeOptionPtr* local_rowid_range);
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
+    // lake_scan_warm_index: starts warming the index pages the query scan of |state| reads next, without waiting.
+    void warm_index_pages(PreparedTabletReadState* state, ReaderType reader_type, const RowsetReadOptions& options,
+                          const LakeIOOptions& lake_io_opts);
     Status init_rowset_read_options(const TabletReaderParams& params, RowsetReadOptions* options);
     Status init_rowset_read_options_for_split(const TabletReaderParams& params, RowsetReadOptions* options,
                                               LakeIOOptions* lake_io_opts);
@@ -164,6 +169,8 @@ private:
     Status init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
 
     Status init_collector(const TabletReaderParams& read_params);
+    // Whether init_collector() unions the segment iterators with lake_scan_read_ahead_segments.
+    bool union_reads_ahead(const TabletReaderParams& params) const;
     Status init_compaction_column_paths(const TabletReaderParams& read_params);
 
     static Status to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
@@ -181,6 +188,9 @@ private:
     // (rowset, segment) of the reusable slots used since the last flush_reusable_iterator_io_stats().
     std::vector<std::pair<size_t, size_t>> _used_reusable_slots;
     std::shared_ptr<ChunkIterator> _collect_iter;
+    // lake_scan_warm_index for a non-split query scan: the segments it opened once and warmed, which its rowset
+    // iterators reuse, and the warm handles. Released by close() or the next open().
+    PreparedTabletReadStatePtr _nosplit_warm_state;
 
     DeletePredicates _delete_predicates;
     PredicateList _predicate_free_list;
@@ -201,6 +211,9 @@ private:
     std::optional<std::vector<SeekRange>> _cached_seek_ranges;
 
     bool _is_asc_hint = true;
+    // Set by init_collector() from union_reads_ahead(): the union reads ahead across the segments, so every rowset
+    // returns one iterator per segment.
+    bool _union_reads_ahead = false;
 
     // used for vertical compaction
     bool _is_vertical_merge = false;

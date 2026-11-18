@@ -1352,6 +1352,47 @@ TEST_F(StarOSWorkerTest, remote_read_retain_prefetched_bytes_dynamic_update_roll
     EXPECT_EQ(0, fslib::FLAGS_remote_read_retain_prefetched_bytes);
 }
 
+// Skipping contended cache writes with a zero retain budget: starlet then retains no block, so nothing is skipped,
+// but both flags still mirror their own config whichever is applied first, and applying the budget (accepted or
+// refused) never touches the skip flag.
+TEST_F(StarOSWorkerTest, skip_contended_cache_writes_with_zero_retain_budget) {
+    gflags::FlagSaver flag_saver;
+    namespace fslib = staros::starlet::fslib;
+    SCOPED_UPDATE(bool, config::remote_read_skip_contended_cache_writes, true);
+    SCOPED_UPDATE(int64_t, config::remote_read_retain_prefetched_bytes, 0);
+
+    for (bool skip_first : {true, false}) {
+        fslib::FLAGS_remote_read_skip_contended_cache_writes = false;
+        fslib::FLAGS_remote_read_retain_prefetched_bytes = 7;
+        if (skip_first) {
+            apply_remote_read_skip_contended_cache_writes();
+            ASSERT_OK(update_remote_read_retain_prefetched_bytes());
+        } else {
+            ASSERT_OK(update_remote_read_retain_prefetched_bytes());
+            apply_remote_read_skip_contended_cache_writes();
+        }
+        EXPECT_TRUE(config::remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(0, config::remote_read_retain_prefetched_bytes);
+        EXPECT_TRUE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(0, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+    }
+
+    // Re-applying the zero budget, or refusing a negative one, leaves the skip flag alone, even if it no longer
+    // matches the config, so the budget update cannot be what restores or clears it.
+    for (bool skip_flag : {true, false}) {
+        fslib::FLAGS_remote_read_skip_contended_cache_writes = skip_flag;
+        ASSERT_OK(update_remote_read_retain_prefetched_bytes());
+        EXPECT_EQ(skip_flag, fslib::FLAGS_remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(0, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+        {
+            SCOPED_UPDATE(int64_t, config::remote_read_retain_prefetched_bytes, -1);
+            EXPECT_TRUE(update_remote_read_retain_prefetched_bytes().is_invalid_argument());
+        }
+        EXPECT_EQ(skip_flag, fslib::FLAGS_remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(0, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+    }
+}
+
 // `shutdown_staros_worker()` releases the starlet runtime while an in-flight load may still be
 // walking a StarOS-backed path. Every call that reaches starlet after that must report a status
 // instead of dereferencing the released runtime. See issue #78883.
