@@ -18,9 +18,9 @@
 #include <cstdint>
 #include <limits>
 
-#include "common/config.h"
 #include "common/logging.h"
 #include "testutil/sync_point.h"
+#include "util/updater.h"
 
 namespace starrocks::pipeline {
 // Manage the memory usage for local exchange
@@ -62,6 +62,8 @@ public:
         int64_t prev_memusage = _memory_usage.fetch_add(memory_usage);
         TEST_SYNC_POINT_CALLBACK("ChunkBufferMemoryManager::update_memory_usage::between_counters", &memory_usage);
         int64_t prev_num_rows = _buffered_num_rows.fetch_add(num_rows);
+        _update_peak_memusage();
+        _update_peak_num_rows();
         // Load the limit after fetch_add(): update_max_memory_usage() may lower it concurrently, and a sink that
         // parked on the lower limit must still see the fall below it.
         const auto max_memory_usage = static_cast<int64_t>(_max_memory_usage.load());
@@ -76,6 +78,9 @@ public:
     size_t get_memory_limit_per_driver() const { return _max_memory_usage_per_driver; }
 
     int64_t get_memory_usage() const { return _memory_usage; }
+
+    int64_t get_peak_memory_usage() const { return _peak_memory_usage.load(); }
+    int64_t get_peak_num_rows() const { return _peak_num_rows.load(); }
 
     bool is_full() const { return _memory_usage >= _max_memory_usage || _buffered_num_rows > _max_buffered_rows; }
 
@@ -106,11 +111,17 @@ public:
     }
 
 private:
+    void _update_peak_memusage() { atomic_max(_peak_memory_usage, _memory_usage); }
+
+    void _update_peak_num_rows() { atomic_max(_peak_num_rows, _buffered_num_rows); }
+
     std::atomic<size_t> _max_memory_usage{128UL * 1024 * 1024 * 1024}; // 128GB
     size_t _max_memory_usage_per_driver = 128 * 1024 * 1024UL;         // 128MB
     size_t _max_buffered_rows{};
     std::atomic<int64_t> _memory_usage{};
     std::atomic<int64_t> _buffered_num_rows{};
+    std::atomic<int64_t> _peak_memory_usage{};
+    std::atomic<int64_t> _peak_num_rows{};
     size_t _max_input_dop;
     std::atomic<bool> _full_events_changed{};
 };
