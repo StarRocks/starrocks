@@ -30,6 +30,7 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -48,6 +49,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ColocateTableIndexTest {
     private static final Logger LOG = LogManager.getLogger(ColocateTableIndexTest.class);
@@ -319,6 +321,98 @@ public class ColocateTableIndexTest {
 
         colocateTableIndex.removeTable(tableId, null, false /* isReplay */);
         Assertions.assertFalse(colocateTableIndex.isMetaGroupColocateTable(tableId));
+    }
+
+    @Test
+    public void testLakeGroupStabilityAskedOncePerStatement(@Mocked LakeTable olapTable,
+                                                            @Mocked StarOSAgent starOSAgent) throws Exception {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+        long tableId = 200;
+        new MockUp<OlapTable>() {
+            @Mock
+            public long getId() {
+                return tableId;
+            }
+
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+
+            @Mock
+            public DistributionInfo getDefaultDistributionInfo() {
+                return new HashDistributionInfo();
+            }
+        };
+        new MockUp<LakeTable>() {
+            @Mock
+            public List<Long> getShardGroupIds() {
+                return new ArrayList<>();
+            }
+        };
+        AtomicInteger starMgrCalls = new AtomicInteger();
+        AtomicBoolean starMgrSaysStable = new AtomicBoolean(true);
+        new Expectations() {
+            {
+                starOSAgent.queryMetaGroupStable(anyLong);
+                minTimes = 0;
+                result = new Delegate<Boolean>() {
+                    boolean queryMetaGroupStable(long metaGroupId) {
+                        starMgrCalls.incrementAndGet();
+                        return starMgrSaysStable.get();
+                    }
+                };
+            }
+        };
+        ColocateTableIndex.GroupId groupA = new ColocateTableIndex.GroupId(100, 10000);
+        ColocateTableIndex.GroupId groupB = new ColocateTableIndex.GroupId(101, 10000);
+        ColocateTableIndex.GroupId sharedNothingGroup = new ColocateTableIndex.GroupId(100, 10001);
+        colocateTableIndex.addTableToGroup(100, (OlapTable) olapTable, "lakeGroup", groupA, false /* isReplay */);
+        colocateTableIndex.addTableToGroup(101, (OlapTable) olapTable, "lakeGroup", groupB, false /* isReplay */);
+        starMgrCalls.set(0);
+
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        try {
+            // Outside a stability scope every question goes to StarMgr.
+            Assertions.assertFalse(colocateTableIndex.isGroupUnstable(groupA));
+            Assertions.assertFalse(colocateTableIndex.isGroupUnstable(groupA));
+            Assertions.assertEquals(2, starMgrCalls.get());
+
+            try (var scope = ColocateTableIndex.openStabilityScope(context)) {
+                for (int i = 0; i < 5; i++) {
+                    Assertions.assertFalse(colocateTableIndex.isGroupUnstable(groupA));
+                    Assertions.assertFalse(colocateTableIndex.isGroupUnstable(groupB));
+                }
+                Assertions.assertEquals(4, starMgrCalls.get(), "one StarMgr call per group in a scope");
+
+                // The answer stays the same for the rest of the statement, even when StarMgr's changes.
+                starMgrSaysStable.set(false);
+                Assertions.assertFalse(colocateTableIndex.isGroupUnstable(groupA));
+                try (var nested = ColocateTableIndex.openStabilityScope(context)) {
+                    Assertions.assertFalse(colocateTableIndex.isGroupUnstable(groupA));
+                }
+                Assertions.assertFalse(colocateTableIndex.isGroupUnstable(groupB));
+                Assertions.assertEquals(4, starMgrCalls.get(), "a nested scope reuses the outer one");
+
+                // A group that is not a shared-data group never asks StarMgr.
+                Assertions.assertFalse(colocateTableIndex.isGroupUnstable(sharedNothingGroup));
+                Assertions.assertEquals(4, starMgrCalls.get());
+            }
+            Assertions.assertNull(context.getColocateGroupStability());
+
+            // Once the scope is closed, StarMgr is asked again and its new answer is seen.
+            Assertions.assertTrue(colocateTableIndex.isGroupUnstable(groupA));
+            Assertions.assertEquals(5, starMgrCalls.get());
+        } finally {
+            ConnectContext.remove();
+        }
     }
 
     // Regression test: when addTableToGroup is called with a non-null assignedGroupId
