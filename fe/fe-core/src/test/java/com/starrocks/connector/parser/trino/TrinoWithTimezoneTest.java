@@ -16,6 +16,7 @@ package com.starrocks.connector.parser.trino;
 
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.parser.SqlParser;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -123,6 +124,14 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                 " where CAST(with_timezone(ts, 'UTC') AS TIMESTAMP) > TIMESTAMP '2024-08-19 00:00:00'", "time_slice(");
         assertPlanContains("select x from (select CAST(with_timezone(ts, 'UTC') AS TIMESTAMP(0)) x" + values + ") s",
                 "date_trunc('second', microseconds_add(");
+        // In a statement with with_timezone, every TIMESTAMP(p) cast rounds as in Trino: one compared with a
+        // with_timezone value, and one that reaches with_timezone through a derived table (Trino: 42)
+        String plan = getFragmentPlan("select 1 from (values (TIMESTAMP '2024-08-19 14:36:41.9996', " +
+                "TIMESTAMP '2024-08-19 14:36:41.9996')) t(a, b) where CAST(with_timezone(a, 'UTC') AS TIMESTAMP) = " +
+                "CAST(b AS TIMESTAMP)");
+        Assertions.assertEquals(2, StringUtils.countMatches(plan, "time_slice("), plan);
+        assertPlanContains("select second(with_timezone(x, 'UTC')) from (select CAST(ts AS TIMESTAMP(0)) x" + values +
+                ") s", "date_trunc('second', microseconds_add(");
     }
 
     // Below a day, truncation is exact only in a fixed-offset zone; Trino promotes a DATE argument to TIMESTAMP
@@ -226,6 +235,14 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                         "'UTC' AS TIMESTAMP)",
                 "select cast(with_timezone(TIMESTAMP '2024-10-27 02:30:00', 'Europe/Berlin') AT TIME ZONE " +
                         "'UTC' AS TIMESTAMP)",
+                // Trino rejects a zoned argument and an offset past +14:00
+                "select CAST(with_timezone(now(), 'UTC') AS DATE)",
+                "select CAST(with_timezone(from_unixtime(0), 'UTC') AS DATE)",
+                "select CAST(with_timezone(ts AT TIME ZONE 'UTC', 'UTC') AS DATE)" + values,
+                "select CAST(with_timezone(TIMESTAMP '2024-01-01 00:00:00', '+14:30') AT TIME ZONE 'UTC' AS TIMESTAMP)",
+                // date_parse returns TIMESTAMP(3) in Trino and drops digits that StarRocks keeps (Trino: 14:36:41)
+                "select date_format(with_timezone(date_parse('2024-08-19 14:36:41.999999', " +
+                        "'%Y-%m-%d %H:%i:%s.%f'), 'UTC'), '%H:%i:%s')",
                 // Zones the BE would resolve differently, or not at all
                 "select cast(with_timezone(ts, 'utc') AT TIME ZONE 'UTC' AS TIMESTAMP)" + values,
                 "select cast(with_timezone(ts, 'GMT+8') AT TIME ZONE 'UTC' AS TIMESTAMP)" + values,

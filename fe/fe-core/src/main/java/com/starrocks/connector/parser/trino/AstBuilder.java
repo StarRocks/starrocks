@@ -252,6 +252,9 @@ import static java.util.stream.Collectors.toList;
 public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     private static final String WITH_TIMEZONE = "with_timezone";
     private static final String AT_TIMEZONE = "at_timezone";
+    private static final Set<String> ZONED_FUNCTIONS = Set.of("now", "current_timestamp", "from_unixtime",
+            "from_unixtime_nanos", "from_iso8601_timestamp", "from_iso8601_timestamp_nanos", "parse_datetime",
+            WITH_TIMEZONE, AT_TIMEZONE);
     // Trino functions that read only the wall-clock fields of their first argument and return a value without a zone
     private static final Set<String> WALL_CLOCK_FUNCTIONS = Set.of("date", "year", "quarter", "month", "week",
             "week_of_year", "day", "day_of_month", "day_of_week", "dow", "day_of_year", "doy", "year_of_week", "yow",
@@ -269,12 +272,19 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     // Expressions that their consumer reads by value or that the statement returns: comparison, BETWEEN, IN and
     // IS NULL operands, sort and grouping keys, and the outermost query's columns; by identity
     private final Set<Expression> valueArguments = Collections.newSetFromMap(new IdentityHashMap<>());
-    // Nesting depth of with_timezone timestamp arguments, in which a TIMESTAMP(p) cast is rounded as in Trino
-    private int withTimezoneSourceDepth = 0;
+    // Whether the statement calls with_timezone. Then every TIMESTAMP(p) cast in it rounds as in Trino, because a
+    // derived table or a CTE can hand the cast's value to with_timezone or compare it with a with_timezone value
+    private final boolean hasWithTimezone;
+    // Whether the statement calls date_parse, which returns TIMESTAMP(3) in Trino and drops the digits that StarRocks
+    // keeps. Rounding a with_timezone value of it would round those digits, and that isn't tracked through
+    // projections, so every with_timezone in such a statement is rejected
+    private final boolean hasDateParse;
 
     public AstBuilder(long sqlMode, Node statement) {
         this.sqlMode = sqlMode;
         this.hasFormatUnlikeTrino = containsFormatCallUnlikeTrino(statement);
+        this.hasWithTimezone = containsCall(statement, WITH_TIMEZONE);
+        this.hasDateParse = containsCall(statement, "date_parse");
         addValueArguments(statement);
         addOutputColumns(statement);
     }
@@ -1244,13 +1254,14 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         Optional<ZoneId> fromZone = backendZone(withTimezone.getArguments().get(1));
         Optional<ZoneId> to = toZone == null ? fromZone : backendZone(toZone);
         Optional<String> from = fromZone.flatMap(zone -> attachedOffset(timestamp, zone));
-        if (hasFormatUnlikeTrino || !wallClockArguments.contains(node) || from.isEmpty() || to.isEmpty()) {
+        if (hasFormatUnlikeTrino || hasDateParse || isZonedValue(timestamp) || !wallClockArguments.contains(node)
+                || from.isEmpty() || to.isEmpty()) {
             throw unsupportedWithTimezone(node);
         }
         // Trino promotes a DATE argument to TIMESTAMP. A format rounds the instant to milliseconds, which is rounding ts
         // in the fixed offset attached to it, before the value is read in its zone
         boolean formatted = formattedArguments.contains(node);
-        Expr value = roundHalfUp(new CastExpr(new TypeDef(DATETIME), visitWithTimezoneSource(timestamp, context)),
+        Expr value = roundHalfUp(new CastExpr(new TypeDef(DATETIME), (Expr) visit(timestamp, context)),
                 formatted ? 3 : 6);
         if (toZone == null && (fromZone.get().getRules().isFixedOffset() || !formatted)) {
             return value;
@@ -1261,13 +1272,14 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 new com.starrocks.sql.ast.expression.StringLiteral(to.get().getId())));
     }
 
-    private Expr visitWithTimezoneSource(Expression timestamp, ParseTreeContext context) {
-        withTimezoneSourceDepth++;
-        try {
-            return (Expr) visit(timestamp, context);
-        } finally {
-            withTimezoneSourceDepth--;
+    // Trino's with_timezone takes only a TIMESTAMP without a zone. StarRocks has no zoned type to tell a zoned
+    // value apart, so the functions and expressions that return one in Trino are rejected
+    private static boolean isZonedValue(Expression expression) {
+        if (expression instanceof AtTimeZone || expression instanceof CurrentTime) {
+            return true;
         }
+        return expression instanceof FunctionCall && ZONED_FUNCTIONS.contains(
+                ((FunctionCall) expression).getName().toString().toLowerCase());
     }
 
     private static RuntimeException unsupportedWithTimezone(Expression node) {
@@ -1329,10 +1341,10 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return Optional.empty();
     }
 
-    // convert_tz in the BE takes offsets in whole minutes from -12:59 to +14:59
+    // convert_tz in the BE takes offsets in whole minutes from -12:59 to +14:59, and Trino up to +14:00
     private static boolean isBackendOffset(ZoneOffset offset) {
         int seconds = offset.getTotalSeconds();
-        return seconds % 60 == 0 && seconds >= -(12 * 3600 + 59 * 60) && seconds <= 14 * 3600 + 59 * 60;
+        return seconds % 60 == 0 && seconds >= -(12 * 3600 + 59 * 60) && seconds <= 14 * 3600;
     }
 
     // with_timezone(ts, zone) as a plain call; Trino rejects a window, FILTER, DISTINCT or ORDER BY on it
@@ -1365,6 +1377,13 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 && isTruncationExact(arguments.get(0), arguments.get(1))) {
             wallClockArguments.add(arguments.get(1));
         }
+    }
+
+    private static boolean containsCall(Node node, String name) {
+        if (node instanceof FunctionCall && ((FunctionCall) node).getName().toString().equalsIgnoreCase(name)) {
+            return true;
+        }
+        return node.getChildren().stream().anyMatch(child -> containsCall(child, name));
     }
 
     private static boolean containsFormatCallUnlikeTrino(Node node) {
@@ -1806,8 +1825,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             }
             return roundHalfUp(cast, precision);
         }
-        // Trino rounds a cast to TIMESTAMP(p) in a with_timezone argument too, where a DATETIME cast keeps the digits
-        if (withTimezoneSourceDepth > 0 && node.getType() instanceof DateTimeDataType
+        // Trino rounds every cast to TIMESTAMP(p), where a DATETIME cast keeps the digits
+        if (hasWithTimezone && node.getType() instanceof DateTimeDataType
                 && isWallClockType(node.getType())) {
             return roundHalfUp(cast, castPrecision((DateTimeDataType) node.getType(), node));
         }
