@@ -168,6 +168,12 @@ public class LakeTable extends OlapTable {
             properties.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, getPersistentIndexTypeString());
         }
 
+        // flat_json: render it like OlapTable.getUniqueProperties() so SHOW CREATE TABLE reflects
+        // the table-level flat_json config for cloud-native tables too.
+        if (tableProperty != null) {
+            appendFlatJsonProperties(properties, tableProperty.getProperties());
+        }
+
         return properties;
     }
 

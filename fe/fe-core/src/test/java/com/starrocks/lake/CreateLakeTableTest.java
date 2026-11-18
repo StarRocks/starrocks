@@ -29,10 +29,12 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
@@ -276,6 +278,55 @@ public class CreateLakeTableTest {
 
             Assertions.assertNotEquals(0, resultSet.getResultRows().size());
         }
+    }
+
+    private static String showCreateTable(String dbAndTable) throws Exception {
+        ShowCreateTableStmt stmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "show create table " + dbAndTable, connectContext);
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, connectContext);
+        return resultSet.getResultRows().get(0).get(1);
+    }
+
+    @Test
+    public void testShowCreateLakeTableWithFlatJson() throws Exception {
+        // enabled: flat_json.enable and the factors are rendered
+        createTable("create table lake_test.lake_flat_json_on (k int, j json)\n" +
+                "duplicate key(k) distributed by hash(k) buckets 1\n" +
+                "properties('flat_json.enable' = 'true', 'flat_json.null.factor' = '0.15',\n" +
+                "'flat_json.sparsity.factor' = '0.6', 'flat_json.column.max' = '30');");
+        String ddl = showCreateTable("lake_test.lake_flat_json_on");
+        Assertions.assertTrue(ddl.contains("\"flat_json.enable\" = \"true\""), ddl);
+        Assertions.assertTrue(ddl.contains("\"flat_json.null.factor\" = \"0.15\""), ddl);
+        Assertions.assertTrue(ddl.contains("\"flat_json.sparsity.factor\" = \"0.6\""), ddl);
+        Assertions.assertTrue(ddl.contains("\"flat_json.column.max\" = \"30\""), ddl);
+
+        // the rendered DDL must be replayable
+        createTable(ddl.replace("`lake_flat_json_on`", "`lake_test`.`lake_flat_json_on_replay`"));
+        Assertions.assertEquals(ddl.replace("lake_flat_json_on", "lake_flat_json_on_replay"),
+                showCreateTable("lake_test.lake_flat_json_on_replay"));
+
+        // ALTER is reflected
+        AlterTableStmt alter = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "alter table lake_test.lake_flat_json_on set ('flat_json.column.max' = '50')", connectContext);
+        DDLStmtExecutor.execute(alter, connectContext);
+        ddl = showCreateTable("lake_test.lake_flat_json_on");
+        Assertions.assertTrue(ddl.contains("\"flat_json.column.max\" = \"50\""), ddl);
+
+        // disabled: only flat_json.enable is rendered, so the DDL stays replayable
+        createTable("create table lake_test.lake_flat_json_off (k int, j json)\n" +
+                "duplicate key(k) distributed by hash(k) buckets 1\n" +
+                "properties('flat_json.enable' = 'false');");
+        ddl = showCreateTable("lake_test.lake_flat_json_off");
+        Assertions.assertTrue(ddl.contains("\"flat_json.enable\" = \"false\""), ddl);
+        Assertions.assertFalse(ddl.contains("flat_json.null.factor"), ddl);
+        Assertions.assertFalse(ddl.contains("flat_json.sparsity.factor"), ddl);
+        Assertions.assertFalse(ddl.contains("flat_json.column.max"), ddl);
+        createTable(ddl.replace("`lake_flat_json_off`", "`lake_test`.`lake_flat_json_off_replay`"));
+
+        // not set at all: nothing rendered
+        createTable("create table lake_test.lake_flat_json_unset (k int, j json)\n" +
+                "duplicate key(k) distributed by hash(k) buckets 1;");
+        Assertions.assertFalse(showCreateTable("lake_test.lake_flat_json_unset").contains("\"flat_json."));
     }
 
     @Test
