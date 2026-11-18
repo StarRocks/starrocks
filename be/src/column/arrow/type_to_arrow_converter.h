@@ -34,7 +34,9 @@ Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::
 Status convert_to_arrow_field(const TypeDescriptor& desc, const std::string& col_name, bool is_nullable,
                               std::shared_ptr<arrow::Field>* field);
 
-Status convert_to_arrow_type_for_flight_sql(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result);
+// `version` is a TArrowFlightSQLVersion value.
+Status convert_to_arrow_type_for_flight_sql(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result,
+                                            int32_t version);
 Status convert_to_arrow_field_for_flight_sql(const TypeDescriptor& desc, const std::string& col_name, bool is_nullable,
                                              std::shared_ptr<arrow::Field>* field, int32_t version);
 
