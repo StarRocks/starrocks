@@ -1065,8 +1065,8 @@ public class ExpressionAnalyzer {
         }
 
         // An explicit CAST(<ARRAY | MAP | STRUCT> AS JSON) is evaluated as CAST(to_json(<value>) AS JSON).
-        // BOOLEAN and DECIMAL values inside it are cast to JSON first, so that they become a JSON boolean and a
-        // JSON number as in CAST(<value> AS JSON), instead of the 0/1 and the JSON string that to_json() writes.
+        // BOOLEAN, LARGEINT and DECIMAL values inside it are cast to JSON first, so that they become a JSON boolean and
+        // JSON numbers as in CAST(<value> AS JSON), instead of the 0/1 and the JSON strings that to_json() writes.
         private void analyzeComplexTypeToJsonCast(CastExpr cast, Type sourceType, Scope scope) {
             Expr value = cast.getChild(0);
             if (!sourceType.equals(value.getType())) {
@@ -1108,7 +1108,7 @@ public class ExpressionAnalyzer {
                     fields.add(new StructField(field.getName(), fieldType, field.getComment()));
                 }
                 return new StructType(fields, true);
-            } else if (type.isDecimalOfAnyVersion() || type.isBoolean()) {
+            } else if (type.isDecimalOfAnyVersion() || type.isBoolean() || type.isLargeint()) {
                 return JsonType.JSON;
             } else if (type.isNull() || type.isIntegerType() || type.isFloatingPointType() || type.isStringType()
                     || type.isJsonType() || type.isDateType()) {

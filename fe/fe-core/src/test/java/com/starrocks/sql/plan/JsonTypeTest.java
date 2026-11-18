@@ -245,6 +245,7 @@ public class JsonTypeTest extends PlanTestBase {
                 "to_json(5: v_map)", "to_json(6: v_map_int)",
                 "to_json(CAST(9: v_array_decimal AS ARRAY<JSON>))", "to_json(CAST(10: v_array_boolean AS ARRAY<JSON>))",
                 "to_json(CAST(11: v_struct AS struct<`a` int(11), `b` json, `c` array<datetime>>))");
+        assertPlanContains("select cast([cast(1 as largeint)] as json)", "to_json(CAST([1] AS ARRAY<JSON>))");
         assertPlanContains("select cast(map{'a': [1, 2]} as json), cast(named_struct('a', 1, 'b', 'x') as json)",
                 "to_json(map{'a':[1,2]})", "to_json(named_struct('a', 1, 'b', 'x'))");
 
