@@ -194,8 +194,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタで、主キーテーブルの tablet の削除量が `lake_pk_compaction_base_delete_ratio_threshold` または `lake_pk_compaction_base_delete_rows_threshold` に達したときに、累積コンパクションからベースコンパクションへ自動的に切り替えるかどうか。`lake_pk_compaction_base_delete_rows_threshold` は絶対行数であるため、デフォルトでは無効です。既存の行が継続的に更新または削除される大きなテーブルでは、tablet はベースコンパクションのたびにすぐ再びこの値に達し、各ベースコンパクションは tablet のデータのうち最大 `update_compaction_ratio_threshold` (デフォルト 0.5) の割合を書き換えます。手動の `ALTER TABLE ... COMPACT` は、この項目の設定に関係なくベースコンパクションを実行します。
-- 導入バージョン: v4.1.6, v26.2.1
+- 説明: 共有データの主キータブレットに対する自動 Compaction で、削除率または削除行数がしきい値に達したときに Base Compaction を選択できるかどうか。このスイッチは削除量による自動 Base Compaction だけを制御し、通常の Cumulative Compaction には影響しません。継続的な更新や削除がある大きなタブレットでは、絶対削除行数のしきい値に頻繁に達し、データが繰り返し書き換えられる可能性があるため、デフォルトでは無効です。手動の `ALTER TABLE ... COMPACT` はこのスイッチと 2 つの削除しきい値を回避します。削除行がなければ通常の Compaction 選択にフォールバックします。自動と手動のいずれも、1 回でタブレット全体がマージされるとは限りません。[主キーテーブルの Base Compaction](../../management/compaction.md#primary-key-base-compaction)を参照してください。
+- 導入バージョン: v4.1.7, v26.2.1
 
 ### lake_pk_compaction_base_delete_ratio_threshold
 
@@ -203,8 +203,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Double
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタで、主キーテーブルの tablet を累積コンパクション (サイズ階層型の小ファイルマージ) からベースコンパクションに切り替える 2 つのトリガーの 1 つ。ベースコンパクションは削除を含む rowset を (削除行数の多いものから優先して) 書き換え、削除された行を物理的に除去して delete vector を縮小します。`lake_pk_compaction_base_enable_delete_trigger` が `true` の場合、tablet の集約削除率 (各 rowset の `sum(num_dels) / sum(num_rows)`) がこの値に達したとき、または絶対削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達したときに実行されます。手動の `ALTER TABLE ... COMPACT` は、これらの設定に関係なくベースコンパクションを強制します。
-- 導入バージョン: v4.2
+- 説明: 共有データの主キータブレットで、削除量による自動 Base Compaction の選択を判定する 2 つのしきい値の一方です。現在のすべての Rowset の合計削除率 `sum(num_dels) / sum(num_rows)` がこの値に達するか、合計削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達すると選択対象になります。v4.1.4～v4.1.6 は両方のしきい値を直接確認します。v4.1.7 以降は `lake_pk_compaction_base_enable_delete_trigger = true` も必要です。手動の `ALTER TABLE ... COMPACT` は両方のしきい値を回避します。しきい値に達しても FE による即時スケジュールは保証されません。[自動トリガー](../../management/compaction.md#automatic-base-compaction)を参照してください。
+- 導入バージョン: v4.1.4
 
 ### lake_pk_compaction_base_delete_rows_threshold
 
@@ -212,8 +212,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタでの主キーテーブルのベースコンパクションの 2 つのトリガーの 1 つ (`lake_pk_compaction_base_delete_ratio_threshold` を参照)。`lake_pk_compaction_base_enable_delete_trigger` が `true` の場合、tablet の絶対削除行数 (各 rowset の `sum(num_dels)`) がこの値に達したときにベースコンパクションが実行されます。この絶対数トリガーは比率トリガーを補完します。高頻度の更新/削除テーブルでは、delete vector が肥大化して領域が無駄になる一方、集約削除率は多数のほぼ生存している rowset によって希釈されて低いままになるため、比率トリガーだけでは発火しません。この値を大きくするとベースコンパクションの頻度が下がり、小さくすると delete vector をより早く回収できます。
-- 導入バージョン: v4.2
+- 説明: 共有データの主キータブレットで、削除量による自動 Base Compaction を選択する絶対行数のしきい値です。`lake_pk_compaction_base_delete_ratio_threshold` と OR 条件で組み合わせます。削除行数はタブレット内の現在のすべての Rowset の `sum(num_dels)` です。v4.1.4～v4.1.6 はこのしきい値を直接確認します。v4.1.7 以降は `lake_pk_compaction_base_enable_delete_trigger = true` も必要です。手動要求はこのしきい値を回避します。全体の削除率が低くても Delete Vector の削除マークが多い場合を補います。値を大きくすると自動 Base Compaction の頻度が下がり、小さくすると削除データ回収の選択対象に早くなります。[自動トリガー](../../management/compaction.md#automatic-base-compaction)を参照してください。
+- 導入バージョン: v4.1.4
 
 ### enable_lake_pk_compaction_score_gate
 
@@ -517,6 +517,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: すべてが待機している場合の、クエリによるオブジェクトストレージ読み取りの割り当て。`remote_read_load_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` に対する相対値です。正の値である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
 - 導入バージョン: -
 
+### remote_read_retain_prefetched_bytes
+
+- デフォルト: 2147483648
+- タイプ: Int
+- 単位: Bytes
+- 変更可能: はい
+- 説明: 共有データクラスタで、ノードがメモリ上に保持する Segment ファイルの先読み済み Block の合計サイズの上限。リモート I/O スケジューラ（`remote_io_scheduler_enable`）がクエリのスキャンのために先読みした Block は、読み取り完了後もスキャンがその Block を対象としている間はメモリ上に保持され、スキャンは Data Cache から読み直す代わりにメモリから Page をコピーします。Block は引き続き Data Cache にも書き込まれます。メモリ上に保持した Block の合計がこの値に達すると、それ以降に完了した Block は保持されません。`0` に設定するとこの機能は無効になります。リモート I/O スケジューラが無効な場合、この項目は効果がありません。保持の対象は上書きされることのない Segment ファイルのみで、メタデータなどその他のファイルは保持されません。このメモリはプロセスに計上され、どのクエリにも計上されません。値を大きくすると、その後に完了した Block から適用されます。値を小さくすると、合計が新しい値を下回るまで新しい Block は保持されず、保持済みの Block は、次に読み取られた時点で合計がまだ新しい値を超えていれば読み取り後に解放され、スキャンの対象外になったときにも解放されます。バックグラウンドでの追い出しは行われません。負の値は指定できません。リモート I/O スケジューラが有効な場合、負の値が設定されていると CN は起動を拒否し、負の値への動的な変更は拒否されます。
+- 導入バージョン: v4.2
+
+### remote_read_skip_contended_cache_writes
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで、キャッシュディスクが混雑しているときに、リモート IO スケジューラーが取得したブロックの Data Cache への書き込みを省略できるかどうか。混雑とは、250 ms ごとのサンプリングで 2 回連続して、ディスク使用率が 90% 以上かつ読み取りがサービス時間の 20% 以上を占める状態を指します。対象は大規模なクエリスキャンの後半で取得されたブロックのみで、さらにそのブロックが `remote_read_retain_prefetched_bytes` の範囲でメモリに保持され、読み取り側にメモリから提供される場合に限ります。書き込みを省略したブロックを後で読み取る場合は、オブジェクトストレージから再取得します。キャッシュディスクがネットワークより遅く、後続のスキャンが直前のスキャンでキャッシュしたブロックを読み戻す場合に効果があります。`remote_io_scheduler_enable` が `false` の場合、または `remote_read_retain_prefetched_bytes` が `0` の場合は効果がありません。変更はその後に取得されるブロックに反映されます。
+- 導入バージョン: -
+
 ### remote_read_weight_decay_ios
 
 - デフォルト: 1024
@@ -606,6 +624,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタにおいて、S3 または S3 互換オブジェクトストレージへのマルチパートアップロードで使用するパートサイズです。パートのアップロードまで、出力ストリームごとに最大このサイズまでメモリにバッファリングされるため、値を大きくするとメモリ使用量が増加し、同時実行される出力ストリーム数に比例して増加します。値を小さくしすぎるとリクエスト数が増加し、AWS S3 の 10,000 パート上限を超えたり、最小パートサイズ 5 MB を下回ったりする可能性があります。他の S3 互換ストレージでは制限が異なります。変更は進行中のアップロードにも反映されます。値は 0 より大きい必要があり、0 以下の値は拒否されます。有効な値は、BE のコマンドラインで渡された対応する `--fslib_*` gflag を上書きします。BE 起動時に拒否された値は適用されず、BE は以前に有効だった値を保持して警告ログを出力するため、この項目が表示する値が実際に有効な値と異なる場合があります。この項目は共有データクラスタの starlet アップロードを制御するもので、`experimental_s3_*` 項目とは無関係です。
 - 導入バージョン: v4.1.5, v4.2
+
+### starlet_grpc_client_enable_http_proxy
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: 共有データクラスタで、この CN が StarMgr および他の CN に対して開始する gRPC 接続が、CN プロセスの環境変数で設定された HTTP プロキシを経由するかどうか。これらの接続は、tablet 情報の照会（GetShard）、worker ハートビート、tablet レプリカ情報の更新、および CN 間の Data Cache のレプリケーションに使用されます。CN は小文字の `grpc_proxy`、`https_proxy`、`http_proxy` 環境変数からのみプロキシを取得し、小文字の `no_grpc_proxy` または `no_proxy` に記載されたホストに対してのみプロキシをバイパスします。デフォルト値の `false` では、これらの環境変数を無視して直接接続します。そのため、CN プロセスが他の外部通信用のプロキシ設定を継承しており、そのバイパスリストにクラスタノードのアドレスが含まれていない場合でも、クラスタノード間の通信がプロキシに送られることはありません。これらの接続がプロキシを経由する必要がある場合にのみ `true` に設定してください。これは以前のバージョンの動作です。この項目は、オブジェクトストレージへのアクセスなど、CN の他の外部通信には影響しません。CN はこの項目を起動時に一度だけ読み取るため、変更は CN の再起動後にのみ有効になります。FE 側の接続については、FE パラメータ `starmgr_grpc_client_enable_http_proxy` を参照してください。
+- 導入バージョン: v26.3
 
 ### starlet_port
 

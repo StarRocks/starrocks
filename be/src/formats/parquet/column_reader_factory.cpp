@@ -626,6 +626,7 @@ Status VariantShreddedReadHints::add_path(std::string path) {
 void VariantShreddedReadHints::clear() {
     shredded_paths.clear();
     parsed_shredded_paths.clear();
+    null_only = false;
 }
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
@@ -642,13 +643,6 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
                 strings::Substitute("ParquetField '$0' file's type $1 is different from table's type $2", field->name,
                                     column_type_to_string(field->type), logical_type_to_string(col_type.type)));
     }
-    if (lake_schema_field != nullptr && col_type.is_complex_type()) {
-        for (const auto& child : col_type.children) {
-            if (child.type == TYPE_GEOMETRY) {
-                return Status::NotSupported("Nested GEOMETRY is not supported");
-            }
-        }
-    }
     // The Iceberg schema child at a fixed position (list element, map key / value); nullptr off the Iceberg path.
     auto lake_child = [lake_schema_field](size_t idx) -> const TIcebergSchemaField* {
         return lake_schema_field != nullptr && idx < lake_schema_field->children.size()
@@ -657,9 +651,10 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
     };
     auto create_child = [&opts](const ParquetField* child, const TypeDescriptor& type,
                                 const TIcebergSchemaField* lake) -> StatusOr<ColumnReaderPtr> {
-        if (type.type == TYPE_GEOGRAPHY && lake != nullptr &&
+        if (type.is_geo_type() && lake != nullptr &&
             (!lake->__isset.field_id || !child->schema_element.__isset.field_id || child->field_id != lake->field_id)) {
-            return Status::InvalidArgument("Iceberg/Parquet GEOGRAPHY field ID mismatch: " + child->name);
+            return Status::InvalidArgument(strings::Substitute("Iceberg/Parquet $0 field ID mismatch: $1",
+                                                               logical_type_to_string(type.type), child->name));
         }
         return ColumnReaderFactory::create(opts, child, type, lake);
     };
@@ -865,6 +860,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
     reader->set_root_unsupported_reason(std::move(root_unsupported_reason));
     reader->set_root_raw_encoding(root_raw_encoding);
     reader->set_root_array_node(std::move(root_array_node));
+    reader->set_null_only(hints.null_only && hints.parsed_shredded_paths.empty());
     return ColumnReaderPtr(std::move(reader));
 }
 

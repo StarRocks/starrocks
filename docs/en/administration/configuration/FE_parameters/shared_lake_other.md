@@ -691,6 +691,15 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Description:
 - Introduced in: -
 
+### `starmgr_grpc_client_enable_http_proxy`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: In a shared-data cluster, whether the gRPC connections that StarMgr in the FE opens to the CNs, and that the FE opens to StarMgr, go through an HTTP proxy. The FE takes the proxy from the JVM proxy settings, such as `-Dhttps.proxyHost`, not directly from the `http_proxy` or `https_proxy` environment variables. The default value `false` makes these connections ignore the JVM proxy settings and connect directly, so a proxy configured for other outbound traffic of the FE cannot capture the traffic between cluster nodes. Set this item to `true` only if these connections must go through the proxy, as they did in earlier versions. This item does not affect other outbound traffic of the FE. The FE reads this item once at startup, so a change takes effect only after the FE restarts. For the connections that CNs open, see the BE parameter `starlet_grpc_client_enable_http_proxy`.
+- Introduced in: v26.3
+
 ### `star_client_get_shard_info_batch_size`
 
 - Default: 1024

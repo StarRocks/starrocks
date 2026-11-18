@@ -687,6 +687,7 @@
         "lake_shard_info_cache_ttl_sec",
         "object_storage_max_connection",
         "object_storage_request_timeout_ms",
+        "remote_read_retain_prefetched_bytes",
         "s3_multipart_equal_part_size",
         "s3_use_list_objects_v1",
         "starlet_cache_dir",
@@ -705,6 +706,7 @@
         "starlet_fslib_s3client_connect_timeout_ms",
         "starlet_fslib_s3client_nonread_max_retries",
         "starlet_fslib_s3client_nonread_retry_scale_factor",
+        "starlet_grpc_client_enable_http_proxy",
         "starlet_port",
         "starlet_s3_client_max_cache_capacity",
         "starlet_s3_client_num_instances_per_cache",
@@ -731,7 +733,8 @@
         "remote_read_load_weight",
         "remote_read_compaction_weight",
         "remote_read_background_weight",
-        "remote_prefetch_window_blocks"
+        "remote_prefetch_window_blocks",
+        "remote_read_skip_contended_cache_writes"
       ]
     },
     {

@@ -1687,6 +1687,21 @@ CONF_mInt32(remote_prefetch_window_blocks, "128");
 // share of the pages they span, these columns are read ahead like the predicate columns. Above 1, never. Applies to
 // the segment readers opened afterwards; only used while the remote I/O scheduler is enabled.
 CONF_mDouble(remote_prefetch_late_read_ahead_ratio, "0.5");
+// Whether starlet's remote I/O scheduler may skip the local-cache write of a block fill while the cache disk is
+// contended: 90% busy or more with reads taking at least 20% of its service time, for two 250 ms samples in a row. Only
+// a fill of the body of a big query scan qualifies, and only once its block is retained in memory (see
+// remote_read_retain_prefetched_bytes), which then serves its readers; a later reader fetches the block again. Helps when
+// the cache disk is slower than the network and a later scan reads back what an earlier one just cached. Has no effect
+// while the remote I/O scheduler is disabled or retains nothing. Forwarded to the starlet gflag of the same name.
+CONF_mBool(remote_read_skip_contended_cache_writes, "false");
+// Bytes of finished read-ahead blocks of segment data files kept in memory while the reader that warmed them still
+// covers them, when the remote I/O scheduler is enabled: a reader of such a block copies it from memory instead of
+// reading it back from the local cache, which is still written. Once this many bytes are held, later blocks are not
+// kept. 0 turns it off. Has no effect while the remote I/O scheduler is disabled. A raise applies to the blocks
+// finished afterwards; a lowered value keeps new blocks out at once, and a block already held is released when it is
+// next read while the total is still over the budget, or when no reader covers it any more. The buffers are charged
+// to the process, not to a query. Must not be negative.
+CONF_mInt64(remote_read_retain_prefetched_bytes, "2147483648");
 CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");
 CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");
 CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
@@ -1729,6 +1744,20 @@ CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
 // the compute nodes. An unrecognized value is reported and falls back to "none" rather than
 // keeping the node from starting.
 CONF_mString_enum_or_default(starlet_starmgr_client_compression_type, "none", "none,zstd");
+// Whether the gRPC channels that starlet opens from this node to StarMgr (GetShard, the worker
+// heartbeat, the shard replica info update) and to peer nodes (cache replication) go through the
+// HTTP proxy that the process environment names. starlet's gRPC library reads only the lowercase
+// grpc_proxy, https_proxy and http_proxy variables, and exempts only the hosts listed in the
+// lowercase no_grpc_proxy or no_proxy. false, the default, ignores them and connects directly:
+// these channels only connect cluster nodes, and a proxy inherited for other outbound traffic that
+// does not exempt the cluster addresses breaks shard lookups and heartbeats. Other outbound traffic
+// of the process, such as object storage access, is not affected either way.
+//
+// Immutable: starlet reads it whenever it creates a channel, and it creates channels at unrelated
+// times (a channel to StarMgr is rebuilt after repeated transport failures or an address change, a
+// channel to a peer is kept for the life of the process), so a runtime change would reach some
+// channels and never others.
+CONF_Bool(starlet_grpc_client_enable_http_proxy, "false");
 CONF_mBool(starlet_write_file_with_tag, "false");
 #endif
 

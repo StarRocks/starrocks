@@ -320,17 +320,25 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     }
 
     @Override
+    protected void onComputeResourceUnavailable() {
+        LakeAlterWaitGuard.checkWithoutComputeResource(this);
+    }
+
+    @Override
     protected void runWaitingTxnJob() throws AlterCancelException {
         // Poll the txn manager: all txn ids <= watershed must be closed
         // before we flip tablet state. Same guarantee as
         // LakeTableSchemaChangeJob uses before dispatching tasks.
+        boolean previousTxnsFinished;
         try {
-            if (!GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().isPreviousTransactionsFinished(
-                    watershedTxnId, dbId, Lists.newArrayList(tableId))) {
-                return;
-            }
+            previousTxnsFinished = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(tableId));
         } catch (Exception e) {
             throw new AlterCancelException(e.getMessage());
+        }
+        if (!previousTxnsFinished) {
+            LakeAlterWaitGuard.cancelIfCommitsRejected(this, watershedTxnId);
+            return;
         }
         this.jobState = JobState.RUNNING;
         LOG.info("index fast-path job {} moved to RUNNING", jobId);
@@ -617,6 +625,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                         }
                         if (table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
                             table.setState(OlapTable.OlapTableState.NORMAL);
+                            GlobalStateMgr.getCurrentState().getCompactionMgr().resumeCompactionAfterAlter(dbId, table);
                         }
                     }
                 });
@@ -862,6 +871,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                     advanceVisibleVersionForForceSkip(table, commitVersionMap);
                 }
                 table.setState(OlapTable.OlapTableState.NORMAL);
+                GlobalStateMgr.getCurrentState().getCompactionMgr().resumeCompactionAfterAlter(dbId, table);
             }
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);

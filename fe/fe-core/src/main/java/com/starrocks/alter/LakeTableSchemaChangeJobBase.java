@@ -19,6 +19,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -30,7 +31,9 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -43,6 +46,10 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
     protected long watershedTxnId = -1;
     @SerializedName(value = "watershedGtid")
     protected long watershedGtid = -1;
+
+    // Heavy schema change and hash rollup dispatch their rewrite tasks without journaling RUNNING.
+    // Track each live pin as it is acquired, including if dispatch fails partway through the partitions.
+    private transient Map<Long, Long> rewriteVersionPins = new HashMap<>();
 
     public LakeTableSchemaChangeJobBase(long jobId, JobType jobType, long dbId, long tableId,
                                         String tableName, long timeoutMs) {
@@ -57,6 +64,23 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
         super(job);
         this.watershedTxnId = job.watershedTxnId;
         this.watershedGtid = job.watershedGtid;
+    }
+
+    protected void pinVersionForRewrite(PhysicalPartition partition, long version) {
+        partition.setMinRetainVersion(version);
+        rewriteVersionPins.put(partition.getId(), version);
+    }
+
+    protected void releaseRewriteVersionPin(PhysicalPartition partition) {
+        Long version = rewriteVersionPins.remove(partition.getId());
+        if (version != null) {
+            partition.releaseMinRetainVersion(version);
+        }
+    }
+
+    @Override
+    public void pruneMeta() {
+        rewriteVersionPins = new HashMap<>();
     }
 
     // NOTE: Metadata access in these jobs locks only the job's own table
@@ -88,6 +112,11 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
     public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
         GlobalTransactionMgr globalTxnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         return globalTxnMgr.isPreviousTransactionsFinished(txnId, dbId, Lists.newArrayList(tableId));
+    }
+
+    @Override
+    protected void onComputeResourceUnavailable() {
+        LakeAlterWaitGuard.checkWithoutComputeResource(this);
     }
 
     protected boolean tableExists() {

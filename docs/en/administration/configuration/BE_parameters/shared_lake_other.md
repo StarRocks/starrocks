@@ -194,8 +194,8 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether a Primary Key tablet in a shared-data cluster switches from cumulative compaction to base compaction on its own when its deletes reach `lake_pk_compaction_base_delete_ratio_threshold` or `lake_pk_compaction_base_delete_rows_threshold`. It is disabled by default because `lake_pk_compaction_base_delete_rows_threshold` is an absolute count: on a large table whose existing rows keep being updated or deleted, a tablet reaches it again soon after each base compaction, and each base compaction rewrites up to `update_compaction_ratio_threshold` (0.5 by default) of the tablet's data. A manual `ALTER TABLE ... COMPACT` runs base compaction regardless of this item.
-- Introduced in: v4.1.6, v26.2.1
+- Description: Whether automatic compaction of a shared-data Primary Key tablet can select Base Compaction when its delete ratio or delete-row count reaches a threshold. This switch only controls automatic Base Compaction triggered by deletes and does not affect ordinary Cumulative Compaction. It is disabled by default because large tablets under continuous updates or deletes can frequently reach the absolute delete-row threshold and repeatedly rewrite data. Manual `ALTER TABLE ... COMPACT` requests bypass this switch and both delete thresholds; tablets without deleted rows fall back to ordinary compaction selection. Neither automatic nor manual requests guarantee a full-tablet merge in one execution. See [Base Compaction for Primary Key tables](../../management/compaction.md#primary-key-base-compaction).
+- Introduced in: v4.1.7, v26.2.1
 
 ### lake_pk_compaction_base_delete_ratio_threshold
 
@@ -203,8 +203,8 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: One of two triggers that switch a Primary Key tablet in a shared-data cluster from cumulative compaction (size-tiered small-file merges) to base compaction, which rewrites the delete-bearing rowsets (the ones with the most deleted rows first) to drop deleted rows and shrink their delete vectors. When `lake_pk_compaction_base_enable_delete_trigger` is `true`, base compaction runs when the tablet's aggregate delete ratio (`sum(num_dels) / sum(num_rows)` across rowsets) reaches this value or when its absolute delete-row count reaches `lake_pk_compaction_base_delete_rows_threshold`. A manual `ALTER TABLE ... COMPACT` forces a base compaction regardless of these items.
-- Introduced in: v4.2
+- Description: One of the two thresholds for automatically selecting Base Compaction by deletes for a shared-data Primary Key tablet. Base Compaction can be selected when the aggregate delete ratio across all current Rowsets, `sum(num_dels) / sum(num_rows)`, reaches this value, or when the total delete-row count reaches `lake_pk_compaction_base_delete_rows_threshold`. In v4.1.4–v4.1.6, both thresholds are checked directly. From v4.1.7, `lake_pk_compaction_base_enable_delete_trigger = true` is also required. Manual `ALTER TABLE ... COMPACT` requests bypass both thresholds. Reaching a threshold does not guarantee immediate FE scheduling. See [Automatic triggering](../../management/compaction.md#automatic-base-compaction).
+- Introduced in: v4.1.4
 
 ### lake_pk_compaction_base_delete_rows_threshold
 
@@ -212,8 +212,8 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: One of two triggers for Primary Key base compaction in a shared-data cluster (see `lake_pk_compaction_base_delete_ratio_threshold`). When `lake_pk_compaction_base_enable_delete_trigger` is `true`, base compaction runs when a tablet's absolute delete-row count (`sum(num_dels)` across rowsets) reaches this value. This absolute-count trigger complements the ratio trigger: on hot update/delete tables the delete vectors bloat and space is wasted while the aggregate delete ratio stays low (diluted by many mostly-live rowsets), so the ratio trigger alone would not fire. Raise it to make base compaction less frequent, or lower it to reclaim delete vectors sooner.
-- Introduced in: v4.2
+- Description: The absolute delete-row threshold for automatically selecting Base Compaction by deletes for a shared-data Primary Key tablet. It is combined with `lake_pk_compaction_base_delete_ratio_threshold` using OR. The delete-row count is `sum(num_dels)` across all current Rowsets in the tablet. In v4.1.4–v4.1.6, this threshold is checked directly. From v4.1.7, `lake_pk_compaction_base_enable_delete_trigger = true` is also required. Manual requests bypass this threshold. This condition covers tablets with a low aggregate delete ratio but many delete marks in delete vectors. Raise it to make automatic Base Compaction less frequent, or lower it to select delete reclamation sooner. See [Automatic triggering](../../management/compaction.md#automatic-base-compaction).
+- Introduced in: v4.1.4
 
 ### enable_lake_pk_compaction_score_gate
 
@@ -526,6 +526,24 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: The share of the object store reads of queries relative to `remote_read_load_weight`, `remote_read_compaction_weight`, and `remote_read_background_weight` while all of them wait. It must be positive. Takes effect only when `remote_io_scheduler_enable` is `true`.
 - Introduced in: -
 
+### remote_read_retain_prefetched_bytes
+
+- Default: 2147483648
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum total size of finished read-ahead blocks of segment files that a node keeps in memory in a shared-data cluster. When the remote I/O scheduler (`remote_io_scheduler_enable`) reads blocks ahead for a query scan, a finished block stays in memory while the scan still covers it, and the scan copies its pages from memory instead of reading them back from the Data Cache. The block is still written to the Data Cache. Once the blocks kept in memory reach this size, later blocks are not kept. `0` disables this feature. This item has no effect while the remote I/O scheduler is disabled. Only segment files, which are never overwritten, are kept; other files such as metadata are not. The memory is counted toward the process, not toward any query. A raised value applies to the blocks finished afterwards. After the value is lowered, no new blocks are kept until the total falls below it, and a block already kept is released when it is next read while the total is still above the new value, or when the scan no longer covers it. Nothing is evicted in the background. The value must not be negative: with the remote I/O scheduler enabled, the CN refuses to start with a negative value, and a dynamic update to a negative value is rejected.
+- Introduced in: v4.2
+
+### remote_read_skip_contended_cache_writes
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the remote I/O scheduler in a shared-data cluster may skip writing a fetched block to Data Cache while the cache disk is contended, that is, at least 90% busy with reads taking at least 20% of its service time for two consecutive 250 ms samples. Only blocks fetched for the later part of a large query scan qualify, and only after the block is retained in memory under `remote_read_retain_prefetched_bytes`, from which its readers are served. A later read of a skipped block fetches it from object storage again. Enabling this item can help when the cache disk is slower than the network and scans read back blocks that earlier scans have just cached. It has no effect when `remote_io_scheduler_enable` is `false` or `remote_read_retain_prefetched_bytes` is `0`. A change takes effect on blocks fetched afterwards.
+- Introduced in: -
+
 ### remote_read_weight_decay_ios
 
 - Default: 1024
@@ -615,6 +633,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Is mutable: Yes
 - Description: In a shared-data cluster, the part size used for multipart uploads to S3 or an S3-compatible object store. BE buffers up to this many bytes in memory per output stream between part uploads, so raising it raises memory usage, multiplied by the number of concurrent output streams. Setting it very low increases request count and can exceed the 10,000-part limit or fall below the 5 MB minimum part size that AWS S3 enforces; the limits of other S3-compatible stores differ. Changing it takes effect on uploads already in progress. The value must be greater than 0; a non-positive value is rejected. A valid value here overrides an equivalent `--fslib_*` gflag passed on the BE command line. A value rejected at BE startup is not applied at all: BE keeps the previously effective value and logs a warning, so this item can report a value that is not the one in effect. This item controls starlet uploads in a shared-data cluster and is unrelated to the `experimental_s3_*` items.
 - Introduced in: v4.1.5, v4.2
+
+### starlet_grpc_client_enable_http_proxy
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: In a shared-data cluster, whether the gRPC connections that this CN opens to StarMgr and to other CNs go through the HTTP proxy set in the environment of the CN process. These connections carry tablet information lookups (GetShard), the worker heartbeat, tablet replica information updates, and Data Cache replication between CNs. The CN takes the proxy only from the lowercase `grpc_proxy`, `https_proxy`, and `http_proxy` environment variables, and bypasses it only for the hosts listed in the lowercase `no_grpc_proxy` or `no_proxy` environment variables. The default value `false` ignores these variables and connects directly, so a proxy that the CN process inherits for other outbound traffic cannot capture the traffic between cluster nodes, even when its bypass list does not include the cluster addresses. Set this item to `true` only if these connections must go through the proxy, as they did in earlier versions. This item does not affect other outbound traffic of the CN, such as access to object storage. The CN reads this item once at startup, so a change takes effect only after the CN restarts. For the connections that the FE opens, see the FE parameter `starmgr_grpc_client_enable_http_proxy`.
+- Introduced in: v26.3
 
 ### starlet_port
 

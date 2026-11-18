@@ -109,7 +109,14 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `desired_concurrent_number`
 
 **必須**: いいえ\
-**説明**: 単一の Routine Load ジョブの期待されるタスク並行性。デフォルト値: `3`。実際のタスク並行性は、複数のパラメーターの最小値によって決定されます: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。 <ul><li>`alive_be_number`: 生存している BE ノードの数。</li><li>`partition_number`: 消費されるパーティションの数。</li><li>`desired_concurrent_number`: 単一の Routine Load ジョブの期待されるタスク並行性。デフォルト値: `3`。</li><li>`max_routine_load_task_concurrent_num`: Routine Load ジョブのデフォルトの最大タスク並行性で、`5` です。 [FE dynamic parameter](../../../../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) を参照してください。</li></ul>最大の実際のタスク並行性は、生存している BE ノードの数または消費されるパーティションの数によって決定されます。<br/>
+**説明**: 単一の Routine Load ジョブの期待されるタスク並行性。デフォルト値: `3`。実際のタスク並行性は、複数のパラメーターの最小値によって決定されます: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。
+
+- `alive_be_number`: 生存している BE ノードの数。
+- `partition_number`: 消費されるパーティションの数。
+- `desired_concurrent_number`: 単一の Routine Load ジョブの期待されるタスク並行性。デフォルト値: `3`。
+- `max_routine_load_task_concurrent_num`: Routine Load ジョブのデフォルトの最大タスク並行性で、`5` です。 [FE dynamic parameter](../../../../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) を参照してください。
+
+最大の実際のタスク並行性は、生存している BE ノードの数または消費されるパーティションの数によって決定されます。
 
 #### `max_batch_interval`
 
@@ -124,12 +131,20 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `max_error_number`
 
 **必須**: いいえ\
-**説明**: エラーデータ検出ウィンドウ内で許可されるエラーデータ行の最大数。この値を超えると、ロードジョブは一時停止します。 [SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md) を実行し、`ErrorLogUrls` を使用してエラーログを表示できます。その後、エラーログに従って Kafka のエラーを修正できます。デフォルト値は `0` で、エラーデータ行は許可されません。 <br />**注意** <br /> <ul><li>エラーデータ行が多すぎる場合、ロードジョブが一時停止する前に最後のバッチタスクは **成功** します。つまり、適格なデータはロードされ、不適格なデータはフィルタリングされます。あまりにも多くの不適格なデータ行をフィルタリングしたくない場合は、パラメーター `max_filter_ratio` を設定してください。 </li><li>エラーデータ行には、WHERE 句によってフィルタリングされたデータ行は含まれません。</li><li>このパラメーターは、次のパラメーター `max_filter_ratio` と共に、エラーデータレコードの最大数を制御します。`max_filter_ratio` が設定されていない場合、このパラメーターの値が有効になります。`max_filter_ratio` が設定されている場合、エラーデータレコードの数がこのパラメーターまたは `max_filter_ratio` パラメーターで設定されたしきい値に達すると、ロードジョブは一時停止します。</li></ul>
+**説明**: エラーデータ検出ウィンドウ内で許可されるエラーデータ行の最大数。この値を超えると、ロードジョブは一時停止します。 [SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md) を実行し、`ErrorLogUrls` を使用してエラーログを表示できます。その後、エラーログに従って Kafka のエラーを修正できます。デフォルト値は `0` で、エラーデータ行は許可されません。 <br />**注意**
+
+- エラーデータ行が多すぎる場合、ロードジョブが一時停止する前に最後のバッチタスクは **成功** します。つまり、適格なデータはロードされ、不適格なデータはフィルタリングされます。あまりにも多くの不適格なデータ行をフィルタリングしたくない場合は、パラメーター `max_filter_ratio` を設定してください。
+- エラーデータ行には、WHERE 句によってフィルタリングされたデータ行は含まれません。
+- このパラメーターは、次のパラメーター `max_filter_ratio` と共に、エラーデータレコードの最大数を制御します。`max_filter_ratio` が設定されていない場合、このパラメーターの値が有効になります。`max_filter_ratio` が設定されている場合、エラーデータレコードの数がこのパラメーターまたは `max_filter_ratio` パラメーターで設定されたしきい値に達すると、ロードジョブは一時停止します。
 
 #### `max_filter_ratio`
 
 **必須**: いいえ\
-**説明**: ロードジョブの最大エラー許容度。エラー許容度は、ロードジョブによって要求されたすべてのデータレコードの中で、不適格なデータ品質のためにフィルタリングされる可能性のあるデータレコードの最大割合です。有効な値: `0` から `1`。デフォルト値: `1`（実際には効果を発揮しません）。<br/>`0` に設定することをお勧めします。これにより、不適格なデータレコードが検出された場合、ロードジョブが一時停止し、データの正確性が確保されます。<br/>不適格なデータレコードを無視したい場合は、このパラメーターを `0` より大きい値に設定できます。このようにすると、データファイルに不適格なデータレコードが含まれていても、ロードジョブは成功します。  <br/>**注意**<br/><ul><li>エラーデータ行が `max_filter_ratio` を超える場合、最後のバッチタスクは **失敗** します。これは `max_error_number` の効果とは **異なります**。</li><li>不適格なデータレコードには、WHERE 句によってフィルタリングされたデータレコードは含まれません。</li><li>このパラメーターは、前のパラメーター `max_error_number` と共に、エラーデータレコードの最大数を制御します。このパラメーターが設定されていない場合（`max_filter_ratio = 1` と同じように動作します）、`max_error_number` パラメーターの値が有効になります。このパラメーターが設定されている場合、エラーデータレコードの数がこのパラメーターまたは `max_error_number` パラメーターで設定されたしきい値に達すると、ロードジョブは一時停止します。</li></ul>
+**説明**: ロードジョブの最大エラー許容度。エラー許容度は、ロードジョブによって要求されたすべてのデータレコードの中で、不適格なデータ品質のためにフィルタリングされる可能性のあるデータレコードの最大割合です。有効な値: `0` から `1`。デフォルト値: `1`（実際には効果を発揮しません）。<br/>`0` に設定することをお勧めします。これにより、不適格なデータレコードが検出された場合、ロードジョブが一時停止し、データの正確性が確保されます。<br/>不適格なデータレコードを無視したい場合は、このパラメーターを `0` より大きい値に設定できます。このようにすると、データファイルに不適格なデータレコードが含まれていても、ロードジョブは成功します。  <br/>**注意**
+
+- エラーデータ行が `max_filter_ratio` を超える場合、最後のバッチタスクは **失敗** します。これは `max_error_number` の効果とは **異なります**。
+- 不適格なデータレコードには、WHERE 句によってフィルタリングされたデータレコードは含まれません。
+- このパラメーターは、前のパラメーター `max_error_number` と共に、エラーデータレコードの最大数を制御します。このパラメーターが設定されていない場合（`max_filter_ratio = 1` と同じように動作します）、`max_error_number` パラメーターの値が有効になります。このパラメーターが設定されている場合、エラーデータレコードの数がこのパラメーターまたは `max_error_number` パラメーターで設定されたしきい値に達すると、ロードジョブは一時停止します。
 
 #### `strict_mode`      
 
@@ -139,7 +154,13 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `log_rejected_record_num`
 
 **必須**: いいえ\
-**説明**: ログに記録できる不適格なデータ行の最大数を指定します。このパラメーターは v3.1 以降でサポートされています。有効な値: `0`、`-1`、および任意の非ゼロの正の整数。デフォルト値: `0`。<ul><li>値 `0` は、フィルタリングされたデータ行がログに記録されないことを指定します。</li><li>値 `-1` は、フィルタリングされたすべてのデータ行がログに記録されることを指定します。</li><li>非ゼロの正の整数 `n` は、各 BE でフィルタリングされた最大 `n` 行のデータ行がログに記録されることを指定します。</li></ul>ロードジョブからフィルタリングされたすべての不適格なデータ行にアクセスするには、`information_schema.loads` ビューに対するクエリから返された `REJECTED_RECORD_PATH` フィールドのパスに移動します。
+**説明**: ログに記録できる不適格なデータ行の最大数を指定します。このパラメーターは v3.1 以降でサポートされています。有効な値: `0`、`-1`、および任意の非ゼロの正の整数。デフォルト値: `0`。
+
+- 値 `0` は、フィルタリングされたデータ行がログに記録されないことを指定します。
+- 値 `-1` は、フィルタリングされたすべてのデータ行がログに記録されることを指定します。
+- 非ゼロの正の整数 `n` は、各 BE でフィルタリングされた最大 `n` 行のデータ行がログに記録されることを指定します。
+
+ロードジョブからフィルタリングされたすべての不適格なデータ行にアクセスするには、`information_schema.loads` ビューに対するクエリから返された `REJECTED_RECORD_PATH` フィールドのパスに移動します。
 
 #### `timezone`    
 
@@ -174,7 +195,10 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `escape`
 
 **必須**: いいえ\
-**説明**: 行セパレーター、カラムセパレーター、エスケープ文字、`enclose` で指定された文字などのさまざまな特殊文字をエスケープするために使用される文字を指定します。これらは StarRocks によって通常の文字と見なされ、それらが存在するフィールド値の一部として解析されます。タイプ: 単一バイト文字。デフォルト値: `NONE`。最も一般的な文字はスラッシュ (`\`) で、SQL ステートメントではダブルスラッシュ (`\\`) として書く必要があります。<br />**注意**<br />`escape` で指定された文字は、各ペアの `enclose` で指定された文字の内側と外側の両方に適用されます。<br />次の 2 つの例を示します:<br /><ul><li>`enclose` を `"` に設定し、`escape` を `\` に設定すると、StarRocks は `"say \"Hello world\""` を `say "Hello world"` に解析します。</li><li>カラムセパレーターがカンマ（`,`）であると仮定します。`escape` を `\` に設定すると、StarRocks は `a, b\, c` を 2 つの別々のフィールド値に解析します: `a` と `b, c`。</li></ul>
+**説明**: 行セパレーター、カラムセパレーター、エスケープ文字、`enclose` で指定された文字などのさまざまな特殊文字をエスケープするために使用される文字を指定します。これらは StarRocks によって通常の文字と見なされ、それらが存在するフィールド値の一部として解析されます。タイプ: 単一バイト文字。デフォルト値: `NONE`。最も一般的な文字はスラッシュ (`\`) で、SQL ステートメントではダブルスラッシュ (`\\`) として書く必要があります。<br />**注意**<br />`escape` で指定された文字は、各ペアの `enclose` で指定された文字の内側と外側の両方に適用されます。<br />次の 2 つの例を示します:
+
+- `enclose` を `"` に設定し、`escape` を `\` に設定すると、StarRocks は `"say \"Hello world\""` を `say "Hello world"` に解析します。
+- カラムセパレーターがカンマ（`,`）であると仮定します。`escape` を `\` に設定すると、StarRocks は `a, b\, c` を 2 つの別々のフィールド値に解析します: `a` と `b, c`。
 
 #### `strip_outer_array`
 
@@ -199,17 +223,28 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `task_consume_second`
 
 **必須**: いいえ\
-**説明**: 指定された Routine Load ジョブ内の各 Routine Load タスクがデータを消費する最大時間。単位: 秒。 [FE dynamic parameters](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_consume_second`（クラスター内のすべての Routine Load ジョブに適用される）とは異なり、このパラメーターは個々の Routine Load ジョブに特有であり、より柔軟です。このパラメーターは v3.1.0 以降でサポートされています。<ul> <li>`task_consume_second` と `task_timeout_second` が設定されていない場合、StarRocks は FE 動的パラメーター `routine_load_task_consume_second` と `routine_load_task_timeout_second` を使用してロード動作を制御します。</li> <li>`task_consume_second` のみが設定されている場合、`task_timeout_second` のデフォルト値は `task_consume_second` * 4 として計算されます。</li> <li>`task_timeout_second` のみが設定されている場合、`task_consume_second` のデフォルト値は `task_timeout_second`/4 として計算されます。</li> </ul>
+**説明**: 指定された Routine Load ジョブ内の各 Routine Load タスクがデータを消費する最大時間。単位: 秒。 [FE dynamic parameters](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_consume_second`（クラスター内のすべての Routine Load ジョブに適用される）とは異なり、このパラメーターは個々の Routine Load ジョブに特有であり、より柔軟です。このパラメーターは v3.1.0 以降でサポートされています。
+
+- `task_consume_second` と `task_timeout_second` が設定されていない場合、StarRocks は FE 動的パラメーター `routine_load_task_consume_second` と `routine_load_task_timeout_second` を使用してロード動作を制御します。
+- `task_consume_second` のみが設定されている場合、`task_timeout_second` のデフォルト値は `task_consume_second` * 4 として計算されます。
+- `task_timeout_second` のみが設定されている場合、`task_consume_second` のデフォルト値は `task_timeout_second`/4 として計算されます。
 
 #### `task_timeout_second`
 
 **必須**: いいえ\
-**説明**: 指定された Routine Load ジョブ内の各 Routine Load タスクのタイムアウト期間。単位: 秒。 [FE dynamic parameter](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_timeout_second`（クラスター内のすべての Routine Load ジョブに適用される）とは異なり、このパラメーターは個々の Routine Load ジョブに特有であり、より柔軟です。このパラメーターは v3.1.0 以降でサポートされています。 <ul> <li>`task_consume_second` と `task_timeout_second` が設定されていない場合、StarRocks は FE 動的パラメーター `routine_load_task_consume_second` と `routine_load_task_timeout_second` を使用してロード動作を制御します。</li> <li>`task_timeout_second` のみが設定されている場合、`task_consume_second` のデフォルト値は `task_timeout_second`/4 として計算されます。</li> <li>`task_consume_second` のみが設定されている場合、`task_timeout_second` のデフォルト値は `task_consume_second` * 4 として計算されます。</li> </ul>
+**説明**: 指定された Routine Load ジョブ内の各 Routine Load タスクのタイムアウト期間。単位: 秒。 [FE dynamic parameter](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_timeout_second`（クラスター内のすべての Routine Load ジョブに適用される）とは異なり、このパラメーターは個々の Routine Load ジョブに特有であり、より柔軟です。このパラメーターは v3.1.0 以降でサポートされています。
+
+- `task_consume_second` と `task_timeout_second` が設定されていない場合、StarRocks は FE 動的パラメーター `routine_load_task_consume_second` と `routine_load_task_timeout_second` を使用してロード動作を制御します。
+- `task_timeout_second` のみが設定されている場合、`task_consume_second` のデフォルト値は `task_timeout_second`/4 として計算されます。
+- `task_consume_second` のみが設定されている場合、`task_timeout_second` のデフォルト値は `task_consume_second` * 4 として計算されます。
 
 #### `pause_on_fatal_parse_error`
 
 **必須**: いいえ\
-**説明**: 回復不能なデータ解析エラーに遭遇した際にジョブを自動的に一時停止するかどうかを指定します。有効な値: `true` と `false`。デフォルト値: `false`。このパラメーターは v3.3.12/v3.4.2 以降でサポートされています。 <br />このような解析エラーは通常、不正なデータ形式によって引き起こされます。例:<ul><li>`strip_outer_array` を設定せずに JSON 配列をインポートする。</li><li>JSON データをインポートするが、Kafka メッセージに不正な JSON が含まれている（例: `abcd`）。</li></ul>
+**説明**: 回復不能なデータ解析エラーに遭遇した際にジョブを自動的に一時停止するかどうかを指定します。有効な値: `true` と `false`。デフォルト値: `false`。このパラメーターは v3.3.12/v3.4.2 以降でサポートされています。 <br />このような解析エラーは通常、不正なデータ形式によって引き起こされます。例:
+
+- `strip_outer_array` を設定せずに JSON 配列をインポートする。
+- JSON データをインポートするが、Kafka メッセージに不正な JSON が含まれている（例: `abcd`）。
 
 #### `data_source`, `data_source_properties`
 
@@ -246,7 +281,13 @@ FROM <data_source>
 #### `kafka_offsets`
 
 **必須**: いいえ\
-**説明**: `kafka_partitions` で指定された Kafka パーティションでデータを消費し始めるオフセット。指定されていない場合、Routine Load ジョブは `kafka_partitions` の最新のオフセットからデータを消費します。有効な値:<ul><li>特定のオフセット: 特定のオフセットからデータを消費します。</li><li>`OFFSET_BEGINNING`: 最も早いオフセットからデータを消費します。</li><li>`OFFSET_END`: 最新のオフセットからデータを消費します。</li></ul>複数の開始オフセットはカンマ（,）で区切られます。例: `"kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"`。
+**説明**: `kafka_partitions` で指定された Kafka パーティションでデータを消費し始めるオフセット。指定されていない場合、Routine Load ジョブは `kafka_partitions` の最新のオフセットからデータを消費します。有効な値:
+
+- 特定のオフセット: 特定のオフセットからデータを消費します。
+- `OFFSET_BEGINNING`: 最も早いオフセットからデータを消費します。
+- `OFFSET_END`: 最新のオフセットからデータを消費します。
+
+複数の開始オフセットはカンマ（,）で区切られます。例: `"kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"`。
 
 #### `property.kafka_default_offsets`
 

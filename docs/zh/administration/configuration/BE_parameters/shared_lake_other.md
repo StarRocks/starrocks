@@ -191,8 +191,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，主键表 Tablet 的删除量达到 `lake_pk_compaction_base_delete_ratio_threshold` 或 `lake_pk_compaction_base_delete_rows_threshold` 时，是否自动从 Cumulative Compaction 切换到 Base Compaction。默认关闭，因为 `lake_pk_compaction_base_delete_rows_threshold` 是绝对行数：在已有数据持续被更新或删除的大表上，Tablet 每次 Base Compaction 之后很快又会达到该值，而每次 Base Compaction 最多重写 Tablet 中 `update_compaction_ratio_threshold`（默认 0.5）比例的数据。手动执行 `ALTER TABLE ... COMPACT` 时，无论该参数如何设置都会执行 Base Compaction。
-- 引入版本：v4.1.6, v26.2.1
+- 描述：是否允许存算分离主键表的自动 Compaction 在删除比例或删除行数达到阈值时选择 Base Compaction。此项只控制按删除量自动触发 Base Compaction，不影响普通 Cumulative Compaction。默认关闭，因为持续更新或删除的大 Tablet 可能频繁达到绝对删除行数阈值，导致反复重写数据。手动 `ALTER TABLE ... COMPACT` 不受此开关和两个删除阈值限制；没有删除行时回退到普通 Compaction 选取。自动和手动请求都不保证一次合完整个 Tablet。详见[主键表 Base Compaction](../../management/compaction.md#primary-key-base-compaction)。
+- 引入版本：v4.1.7, v26.2.1
 
 ### lake_pk_compaction_base_delete_ratio_threshold
 
@@ -200,8 +200,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Double
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，将主键表 Tablet 从 Cumulative Compaction（Size-tiered 小文件合并）切换到 Base Compaction 的两个触发条件之一。Base Compaction 会重写带删除的 Rowset（删除行数多的优先），物理清除被删除的行并缩小其 Delete Vector。`lake_pk_compaction_base_enable_delete_trigger` 为 `true` 时，当 Tablet 的整体删除比例（各 Rowset 的 `sum(num_dels) / sum(num_rows)`）达到该值、或其累计删除行数达到 `lake_pk_compaction_base_delete_rows_threshold` 时触发。手动执行 `ALTER TABLE ... COMPACT` 时，无论这些参数如何设置都会强制执行 Base Compaction。
-- 引入版本：v4.2
+- 描述：存算分离主键表按删除量自动选择 Base Compaction 的两个阈值之一。Tablet 当前所有 Rowset 的整体删除比例 `sum(num_dels) / sum(num_rows)` 达到此值，或累计删除行数达到 `lake_pk_compaction_base_delete_rows_threshold`，即可进入 Base Compaction 选取。v4.1.4～v4.1.6 直接检查这两个阈值；从 v4.1.7 开始，还需要 `lake_pk_compaction_base_enable_delete_trigger = true`。手动 `ALTER TABLE ... COMPACT` 不受这两个阈值限制。达到阈值不保证立即获得 FE 调度。详见[自动触发](../../management/compaction.md#automatic-base-compaction)。
+- 引入版本：v4.1.4
 
 ### lake_pk_compaction_base_delete_rows_threshold
 
@@ -209,8 +209,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下主键表 Base Compaction 的两个触发条件之一（参见 `lake_pk_compaction_base_delete_ratio_threshold`）。`lake_pk_compaction_base_enable_delete_trigger` 为 `true` 时，当 Tablet 的累计删除行数（各 Rowset 的 `sum(num_dels)`）达到该值时触发 Base Compaction。该绝对数量触发条件是对比例触发条件的补充：在高频更新/删除的表上，Delete Vector 会膨胀、空间被浪费，但整体删除比例可能因大量存活行的稀释而偏低，仅靠比例触发条件不会触发。调大该值可降低 Base Compaction 频率，调小则可更早回收 Delete Vector。
-- 引入版本：v4.2
+- 描述：存算分离主键表按删除量自动选择 Base Compaction 的绝对行数阈值，与 `lake_pk_compaction_base_delete_ratio_threshold` 为 OR 关系。累计删除行数为 Tablet 当前所有 Rowset 的 `sum(num_dels)`。v4.1.4～v4.1.6 直接检查此阈值；从 v4.1.7 开始，还需要 `lake_pk_compaction_base_enable_delete_trigger = true`。手动请求不受此阈值限制。该条件补充了整体删除比例较低、但 Delete Vector 中删除标记较多的场景。调大该值可降低自动 Base Compaction 的频率，调小可更早进入删除回收选取。详见[自动触发](../../management/compaction.md#automatic-base-compaction)。
+- 引入版本：v4.1.4
 
 ### enable_lake_pk_compaction_score_gate
 
@@ -523,6 +523,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：多方同时等待时，查询读取对象存储的份额，与 `remote_read_load_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` 相对。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
 - 引入版本：-
 
+### remote_read_retain_prefetched_bytes
+
+- 默认值：2147483648
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离集群中，节点在内存中保留的 Segment 文件预读完成 Block 的总大小上限。开启远程 I/O 调度器（`remote_io_scheduler_enable`）后，调度器为查询扫描预读的 Block 读取完成后，只要扫描仍覆盖该 Block，就保留在内存中，扫描直接从内存复制所需的 Page，不再从 Data Cache 读回。该 Block 仍会写入 Data Cache。内存中保留的 Block 总大小达到该值后，之后完成的 Block 不再保留。设置为 `0` 表示关闭该功能。远程 I/O 调度器未开启时，该项不生效。只保留不会被覆盖写的 Segment 文件，元数据等其他文件不保留。这部分内存计入进程，不计入任何查询。调大该值后，对之后完成的 Block 生效。调小后，在保留总量降到新值以下之前不再保留新的 Block，已保留的 Block 若在下次被读取时总量仍超过新值，读取后即释放；扫描不再覆盖时也会释放。不会在后台主动淘汰。该值不能为负数：开启远程 I/O 调度器时，配置为负数 CN 将无法启动；动态修改为负数会被拒绝。
+- 引入版本：v4.2
+
+### remote_read_skip_contended_cache_writes
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，缓存盘繁忙时远端 IO 调度器是否可以不把拉取到的数据块写入 Data Cache。缓存盘繁忙指连续两次 250 ms 采样中，磁盘利用率都不低于 90%，且读请求占服务时间的比例不低于 20%。只有大查询扫描后段拉取的数据块才可能跳过写入，且该数据块必须已按 `remote_read_retain_prefetched_bytes` 保留在内存中，由内存中的副本供读取方使用。跳过写入的数据块再次被读取时，会重新从对象存储拉取。如果缓存盘比网络慢，且后续扫描经常回读前面扫描刚写入缓存的数据，开启该参数可能有帮助。`remote_io_scheduler_enable` 为 `false` 或 `remote_read_retain_prefetched_bytes` 为 `0` 时不生效。修改后对之后拉取的数据块生效。
+- 引入版本：-
+
 ### remote_read_weight_decay_ios
 
 - 默认值：1024
@@ -612,6 +630,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群中，向 S3 或兼容 S3 的对象存储进行分片上传时使用的分片大小。每次上传分片之前，每个输出流最多在内存中缓存该大小的数据，因此调大该值会增加内存占用，且随并发输出流数量成倍增加。取值过小会增加请求数量，并可能超出 AWS S3 的 10000 个分片上限，或低于其 5 MB 的最小分片大小；其他兼容 S3 的对象存储限制不同。修改该参数对正在进行的上传立即生效。取值必须大于 0，非正数将被拒绝。合法取值会覆盖通过 BE 命令行传入的对应的 `--fslib_*` gflag；而在 BE 启动时被拒绝的取值不会生效，BE 保留此前生效的值并记录 WARNING 日志，此时该参数显示的值可能并非实际生效的值。该参数用于存算分离集群中的 starlet 上传，与 `experimental_s3_*` 系列参数无关。
 - 引入版本：v4.1.5, v4.2
+
+### starlet_grpc_client_enable_http_proxy
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：存算分离集群中，当前 CN 向 StarMgr 及其他 CN 发起的 gRPC 连接是否经过 CN 进程环境变量中设置的 HTTP 代理。这些连接用于查询 Tablet 信息（GetShard）、发送 Worker 心跳、更新 Tablet 副本信息，以及在 CN 之间复制 Data Cache 数据。CN 只从小写的 `grpc_proxy`、`https_proxy` 和 `http_proxy` 环境变量获取代理，并且只对小写的 `no_grpc_proxy` 或 `no_proxy` 中列出的主机绕过代理。默认值 `false` 表示忽略这些环境变量，直接建立连接。这样，即使 CN 进程为其他对外访问继承了代理配置，而且豁免列表中没有集群节点地址，集群节点之间的流量也不会被转发到代理。仅当这些连接必须经过代理时才需要设为 `true`，即沿用早期版本的行为。该项不影响 CN 的其他对外访问，例如访问对象存储。CN 仅在启动时读取该项，修改后需重启 CN 才能生效。FE 侧的对应配置参见 FE 参数 `starmgr_grpc_client_enable_http_proxy`。
+- 引入版本：v26.3
 
 ### starlet_port
 
