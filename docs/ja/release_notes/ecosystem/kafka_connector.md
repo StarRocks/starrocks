@@ -8,7 +8,7 @@ products: [oss]
 
 ## Notifications
 
-**User guide:** [Load data using Kafka connector](https://docs.starrocks.io/docs/loading/kafka/Kafka-connector-starrocks/)
+**User guide:** [Load data using Kafka connector](../../loading/kafka/Kafka-connector-starrocks.md)
 
 **Source codes:** [starrocks-connector-for-kafka](https://github.com/StarRocks/starrocks-connector-for-kafka)
 
