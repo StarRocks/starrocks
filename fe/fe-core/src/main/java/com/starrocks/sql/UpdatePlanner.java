@@ -16,6 +16,7 @@ package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
@@ -38,11 +39,18 @@ import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -61,26 +69,31 @@ import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TIcebergWriteMode;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 public class UpdatePlanner {
 
     public ExecPlan plan(UpdateStmt updateStmt, ConnectContext session) {
         QueryRelation query = updateStmt.getQueryStatement().getQueryRelation();
-        List<String> colNames = query.getColumnOutputNames();
+        List<String> colNames = new ArrayList<>(query.getColumnOutputNames());
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transform(query);
 
@@ -97,6 +110,10 @@ public class UpdatePlanner {
             // OLAP/System: cast output column types to target schema types
             optExprBuilder = castOutputColumnsTypeToTargetColumns(columnRefFactory, targetTable,
                     colNames, outputColumns, optExprBuilder);
+            if (targetTable instanceof OlapTable olapTable) {
+                optExprBuilder = alignOutputToOlapSink(updateStmt, session, columnRefFactory, olapTable,
+                        colNames, outputColumns, optExprBuilder);
+            }
             requiredProperty = new PhysicalPropertySet();
         }
 
@@ -166,18 +183,12 @@ public class UpdatePlanner {
         OlapTable olapTable = (OlapTable) targetTable;
 
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-        // UpdateAnalyzer builds the output expressions from baseSchema. Only a real schema change
-        // needs fullSchema so concurrent writes can target its shadow indexes. Online OPTIMIZE can
-        // leave duplicate generated-column entries in fullSchema, including entries without the
-        // shadow-name prefix, so filtering by Column.isShadowColumn() is not sufficient here.
-        List<Column> outputSchema = olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
-                ? targetTable.getFullSchema()
-                : targetTable.getBaseSchema();
-        for (Column column : outputSchema) {
-            if (updateStmt.usePartialUpdate() && !column.isGeneratedColumn() &&
-                    !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
-                continue;
-            }
+        List<Column> sinkColumns = olapSinkColumns(updateStmt, olapTable);
+        // alignOutputToOlapSink built the output from this same list, one expression per column in this order.
+        Preconditions.checkState(sinkColumns.size() == execPlan.getOutputExprs().size(),
+                "update of %s writes %s columns but produces %s values", olapTable.getName(), sinkColumns.size(),
+                execPlan.getOutputExprs().size());
+        for (Column column : sinkColumns) {
             SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
             slotDescriptor.setIsMaterialized(true);
             slotDescriptor.setType(column.getType());
@@ -297,6 +308,118 @@ public class UpdatePlanner {
         sinkFragment.setForceSetTableSinkDop();
         sinkFragment.setForceAssignScanRangesPerDriverSeq();
         sinkFragment.disableRuntimeAdaptiveDop();
+    }
+
+    /**
+     * The columns an UPDATE of an OLAP table writes, in sink tuple order. UpdateAnalyzer builds the output
+     * expressions from baseSchema. Only a real schema change needs fullSchema so concurrent writes can target its
+     * shadow indexes. Online OPTIMIZE can leave duplicate generated-column entries in fullSchema, including entries
+     * without the shadow-name prefix, so filtering by Column.isShadowColumn() is not sufficient here.
+     */
+    private static List<Column> olapSinkColumns(UpdateStmt updateStmt, OlapTable olapTable) {
+        List<Column> schema = olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
+                ? olapTable.getFullSchema()
+                : olapTable.getBaseSchema();
+        List<Column> columns = new ArrayList<>();
+        for (Column column : schema) {
+            if (updateStmt.usePartialUpdate() && !column.isGeneratedColumn() &&
+                    !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
+                continue;
+            }
+            columns.add(column);
+        }
+        return columns;
+    }
+
+    /**
+     * Give the output one value per sink column, in sink order. During a schema change the sink writes the
+     * shadow index too, so its tuple carries columns the base schema does not have and UpdateAnalyzer therefore
+     * produced nothing for: a column being added (generated or not) and the shadow of a column whose type is
+     * changing. Left out, the BE rejected the fragment ("number of exprs is not same with slots") and every
+     * row-mode UPDATE failed until the schema change finished. They are filled the way InsertPlanner fills them:
+     * a generated column from its expression over the updated row, a shadow column from its origin, a new column
+     * from its default.
+     */
+    private static OptExprBuilder alignOutputToOlapSink(UpdateStmt updateStmt, ConnectContext session,
+                                                        ColumnRefFactory columnRefFactory, OlapTable olapTable,
+                                                        List<String> colNames, List<ColumnRefOperator> outputColumns,
+                                                        OptExprBuilder root) {
+        List<Column> sinkColumns = olapSinkColumns(updateStmt, olapTable);
+        if (sinkColumns.size() == outputColumns.size()) {
+            return root;
+        }
+        Map<String, ColumnRefOperator> outputByName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (int i = 0; i < colNames.size(); i++) {
+            outputByName.put(colNames.get(i), outputColumns.get(i));
+        }
+
+        Map<ColumnRefOperator, ScalarOperator> projection = new HashMap<>();
+        List<ColumnRefOperator> alignedColumns = new ArrayList<>();
+        List<String> alignedNames = new ArrayList<>();
+        for (Column column : sinkColumns) {
+            ColumnRefOperator output = outputByName.get(column.getName());
+            if (output == null) {
+                ScalarOperator value;
+                String originName = Column.removeNamePrefix(column.getName());
+                if (column.isGeneratedColumn()) {
+                    value = generatedColumnValue(updateStmt, session, columnRefFactory, olapTable, column,
+                            outputByName);
+                } else if (column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)
+                        && outputByName.containsKey(originName)) {
+                    value = outputByName.get(originName);
+                } else {
+                    // What is left must be a column the schema change adds, which no row holds a value for yet.
+                    // Anything else -- a column the base schema has under this name, or one defined by an
+                    // expression -- would get a default where the row has a value, so refuse rather than guess.
+                    if (column.getDefineExpr() != null || olapTable.getBaseSchema().stream()
+                            .anyMatch(c -> c.nameEquals(originName, false))) {
+                        throw new SemanticException("UPDATE of %s cannot write column %s during a schema change",
+                                olapTable.getName(), column.getName());
+                    }
+                    value = InsertPlanner.schemaChangeColumnDefault(column);
+                }
+                if (!value.getType().matchesType(column.getType())) {
+                    value = new CastOperator(column.getType(), value, true);
+                }
+                output = columnRefFactory.create(column.getName(), column.getType(), column.isAllowNull());
+                projection.put(output, value);
+            } else {
+                projection.put(output, output);
+            }
+            alignedColumns.add(output);
+            alignedNames.add(column.getName());
+        }
+        outputColumns.clear();
+        outputColumns.addAll(alignedColumns);
+        colNames.clear();
+        colNames.addAll(alignedNames);
+        return root.withNewRoot(new LogicalProjectOperator(projection));
+    }
+
+    /** A generated column's expression over the row as updated: its column references read the output. */
+    private static ScalarOperator generatedColumnValue(UpdateStmt updateStmt, ConnectContext session,
+                                                       ColumnRefFactory columnRefFactory, OlapTable olapTable,
+                                                       Column column, Map<String, ColumnRefOperator> outputByName) {
+        TableName tableName = TableName.fromTableRef(updateStmt.getTableRef());
+        Expr expr = column.getGeneratedColumnExpr(olapTable.getIdToColumn());
+        ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(),
+                new Scope(RelationId.anonymous(), new RelationFields(olapTable.getBaseSchema().stream()
+                        .map(c -> new Field(c.getName(), c.getType(), tableName, null))
+                        .collect(Collectors.toList()))), session);
+        List<SlotRef> slots = new ArrayList<>();
+        expr.collect(SlotRef.class, slots);
+        ExpressionMapping mapping =
+                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()), Lists.newArrayList());
+        for (SlotRef slot : slots) {
+            ColumnRefOperator ref = outputByName.get(slot.getColumnName());
+            if (ref == null) {
+                // A column-mode partial update writes only the columns it assigns; UpdateAnalyzer rejects the
+                // same for a generated column the base schema already has.
+                throw new SemanticException("All ref Column must be sepecfied in partial update mode");
+            }
+            mapping.put(slot, ref);
+        }
+        return SqlToScalarOperatorTranslator.translate(expr, mapping, columnRefFactory);
     }
 
     private static OptExprBuilder castOutputColumnsTypeToTargetColumns(ColumnRefFactory columnRefFactory,

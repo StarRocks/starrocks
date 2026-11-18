@@ -169,9 +169,62 @@ public class UpdatePlanTest extends PlanTestBase {
                     "update update_shadow_generated_column set v = 2 where pk = 1");
             OlapTableSink sink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
             assertEquals(schemaWithShadowGeneratedColumns.size(), sink.getTupleDescriptor().getSlots().size());
+            // The BE pairs output expressions with tuple slots by position and rejects the fragment when the
+            // counts differ.
+            assertEquals(sink.getTupleDescriptor().getSlots().size(), execPlan.getOutputExprs().size());
             Assertions.assertTrue(sink.getTupleDescriptor().getSlots().stream()
                     .anyMatch(slot -> slot.getColumn().isShadowColumn()));
         } finally {
+            table.setState(originalState);
+            table.setNewFullSchema(originalFullSchema);
+        }
+    }
+
+    // During a schema change the sink writes the shadow index too, so its tuple carries columns the base schema
+    // does not have: a generated column being added (under its own name) and the shadow of a column whose type
+    // is changing. The UPDATE produced no value for them and the BE rejected every such fragment with "number of
+    // exprs is not same with slots".
+    @Test
+    public void testUpdateFillsColumnsOnlyInShadowIndex() throws Exception {
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(connectContext.getDatabase()).getTable("update_shadow_generated_column");
+        List<Column> originalFullSchema = table.getFullSchema();
+        OlapTable.OlapTableState originalState = table.getState();
+        String originalMode = connectContext.getSessionVariable().getPartialUpdateMode();
+        List<Column> fullSchema = new ArrayList<>(originalFullSchema);
+        Column addedGenerated = table.getColumn("g").deepCopy();
+        addedGenerated.setName("g2");
+        fullSchema.add(addedGenerated);
+        Column modifiedShadow = table.getColumn("v").deepCopy();
+        modifiedShadow.setName(SchemaChangeHandler.SHADOW_NAME_PREFIX + "v");
+        fullSchema.add(modifiedShadow);
+        table.setNewFullSchema(fullSchema);
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+
+        try {
+            for (String mode : List.of("row", "column", "auto")) {
+                for (String sql : List.of("update update_shadow_generated_column set v = 2 where pk = 1",
+                        "update update_shadow_generated_column set v = 2")) {
+                    if (!mode.equals("column") && !sql.contains("where")) {
+                        // Without a WHERE only a partial update may run, and only column mode forces one: auto
+                        // goes partial only for a small share of the columns, and this table has three.
+                        continue;
+                    }
+                    connectContext.getSessionVariable().setPartialUpdateMode(mode);
+                    String what = mode + ": " + sql;
+                    ExecPlan execPlan = getUpdateExecPlanObject(sql);
+                    OlapTableSink sink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
+                    List<SlotDescriptor> slots = sink.getTupleDescriptor().getSlots();
+                    assertEquals(slots.size(), execPlan.getOutputExprs().size(), what);
+                    Assertions.assertTrue(slots.stream().anyMatch(slot -> slot.getColumn().getName().equals("g2")),
+                            what);
+                    for (int i = 0; i < slots.size(); i++) {
+                        assertEquals(slots.get(i).getColumn().getName(), execPlan.getColNames().get(i), what);
+                    }
+                }
+            }
+        } finally {
+            connectContext.getSessionVariable().setPartialUpdateMode(originalMode);
             table.setState(originalState);
             table.setNewFullSchema(originalFullSchema);
         }
