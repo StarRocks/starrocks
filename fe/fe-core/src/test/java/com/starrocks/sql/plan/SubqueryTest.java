@@ -713,6 +713,26 @@ public class SubqueryTest extends PlanTestBase {
     }
 
     @Test
+    public void testCorrelatedCountSubqueryWithHaving() throws Exception {
+        // HAVING is evaluated on the normalized count, so a row it rejects returns NULL, not 0, and an empty input
+        // returns 0 only when HAVING accepts it
+        {
+            String sql = "select v1, (select count(*) from t1 where t1.v4 = t0.v1 having count(*) > 1) c from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "<slot 8> : CASE WHEN 9: ifnull > 1 THEN 9: ifnull ELSE NULL END");
+            assertContains(plan, "<slot 9> : ifnull(7: count, 0)");
+            assertNotContains(plan, "having: 7: count > 1");
+        }
+        {
+            String sql = "select v1, (select count_if(v6 > 0) from t1 where t1.v4 = t0.v1 " +
+                    "having count_if(v6 > 0) = 0) c from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "<slot 9> : CASE WHEN 10: ifnull = 0 THEN 10: ifnull ELSE NULL END");
+            assertContains(plan, "<slot 10> : ifnull(8: count_if, 0)");
+        }
+    }
+
+    @Test
     public void testNonEQCorrelatedExistsSubqueryOutsideWhereConjuncts() throws Exception {
         {
             String sql = "select v1, exists (select 1 from t1 where t1.v4 = t0.v1 and t1.v5 > t0.v2) e from t0";

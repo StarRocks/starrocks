@@ -65,6 +65,26 @@ SELECT id, (SELECT count_if(i.v > 150) FROM ne_inner i WHERE i.k = o.k AND i.ts 
 6	1
 7	0
 -- !result
+SELECT id, (SELECT count(*) FROM ne_inner i WHERE i.k = o.k HAVING count(*) > 1) a, (SELECT count(*) FROM ne_inner i WHERE i.k = o.k HAVING count(*) = 0) b FROM ne_outer o ORDER BY id;
+-- result:
+1	3	None
+2	3	None
+3	None	None
+4	None	0
+5	3	None
+6	3	None
+7	None	None
+-- !result
+SELECT id, (SELECT count_if(i.v > 150) FROM ne_inner i WHERE i.k = o.k HAVING count_if(i.v > 150) < 2) c FROM ne_outer o ORDER BY id;
+-- result:
+1	None
+2	None
+3	1
+4	0
+5	None
+6	None
+7	1
+-- !result
 SELECT id, (SELECT count(*) FROM ne_inner i WHERE i.k = 1 AND (o.k IS NULL OR i.ts < o.ts)) c FROM ne_outer o ORDER BY id;
 -- result:
 1	1

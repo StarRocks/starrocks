@@ -25,11 +25,13 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.SubqueryUtils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -58,6 +60,8 @@ import java.util.Set;
  *          Apply(subquery operator = ifnull(count))
  *         /      \
  *      Leaf       AGG(count)
+ *
+ * A HAVING clause on the apply is moved into the subquery operator, see transform.
  */
 public class ScalarApplyNormalizeCountRule extends TransformationRule {
     public ScalarApplyNormalizeCountRule() {
@@ -81,8 +85,22 @@ public class ScalarApplyNormalizeCountRule extends TransformationRule {
             return Collections.emptyList();
         }
 
+        ScalarOperator predicate = apply.getPredicate();
+        if (predicate != null && !apply.isNeedCheckMaxRows()
+                && new ColumnRefSet(agg.getAggregations().keySet()).containsAll(predicate.getUsedColumns())) {
+            // The predicate is the HAVING clause of the scalar aggregation. Evaluated in the outer join it would drop
+            // the row and the subquery would return the normalized count instead of NULL, so evaluate it on the
+            // normalized aggregations instead:
+            //   CASE WHEN having(ifnull(count, 0)) THEN ifnull(count, 0) ELSE NULL END
+            subqueryOperator = new CaseWhenOperator(subqueryOperator.getType(), null,
+                    ConstantOperator.createNull(subqueryOperator.getType()),
+                    Lists.newArrayList(normalizeCount(predicate, agg.getAggregations()), subqueryOperator));
+            predicate = null;
+        }
+
         LogicalApplyOperator newApply = LogicalApplyOperator.builder().withOperator(apply)
                 .setSubqueryOperator(subqueryOperator)
+                .setPredicate(predicate)
                 .build();
         return Lists.newArrayList(OptExpression.create(newApply, input.getInputs()));
     }
