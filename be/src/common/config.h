@@ -976,6 +976,12 @@ CONF_Int64(pipeline_sink_io_thread_pool_queue_size, "102400");
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.
 CONF_Int64(pipeline_sink_brpc_dop, "64");
+// Memory threshold of the rows an exchange sink driver buffers per (destination, driver_sequence) while shuffling.
+// A shuffle keeps one partial chunk per destination pipeline driver and only sends it once it holds
+// vector_chunk_size rows; with many destinations x dop and wide rows those partial chunks can retain the whole
+// input. When their total size exceeds this threshold they are all sent and cleared; if the capacity they keep is
+// still above half of the threshold, partial chunks are released until it is not. A value <= 0 disables it.
+CONF_mInt64(exchange_sink_buffer_flush_threshold_bytes, "67108864");
 // Used to reject coming fragment instances, when the number of running drivers
 // exceeds it*pipeline_exec_thread_pool_thread_num.
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
