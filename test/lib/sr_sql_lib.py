@@ -777,7 +777,7 @@ class StarrocksSQLApiLib(object):
         catalog, since Iceberg HadoopCatalog's FE-side validation expects the
         warehouse path to exist.
         """
-        warehouse = "%s/sql_test/%s" % (self.iceberg_local_warehouse_root, self.uuid0)
+        warehouse = "%s/sql_test/%s" % (self.iceberg_local_warehouse_root, catalog_name)
         os.makedirs(warehouse, exist_ok=True)
         sql = (
             'create external catalog %s properties ('
