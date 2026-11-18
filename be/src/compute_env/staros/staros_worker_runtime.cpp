@@ -115,6 +115,10 @@ void apply_starlet_upload_threshold_configs() {
     FLAGS_fslib_s3_multipart_equal_part_size = config::s3_multipart_equal_part_size;
 }
 
+void apply_starlet_grpc_client_proxy_config() {
+    FLAGS_grpc_client_enable_http_proxy = config::starlet_grpc_client_enable_http_proxy;
+}
+
 namespace fslib = staros::starlet::fslib;
 
 std::optional<int32_t> starlet_request_timeout_ms(int64_t configured_timeout_ms, bool use_poco_client) {
@@ -328,6 +332,7 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
     }
     fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
     apply_starlet_upload_threshold_configs();
+    apply_starlet_grpc_client_proxy_config();
 
     // Goes through UpdateFlagValue rather than a typed FLAGS_ assignment: starlet registers an update
     // hook on this flag that resolves the string to the enum its heartbeat path actually reads, and
