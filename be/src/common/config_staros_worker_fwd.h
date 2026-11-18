@@ -177,6 +177,14 @@ CONF_Int32(remote_read_background_weight, "1");
 // ahead. 0 turns the read-ahead off. Applies to the segment readers opened afterwards.
 CONF_mInt32(remote_prefetch_window_blocks, "128");
 
+// Whether starlet's remote I/O scheduler may skip the local-cache write of a block fill while the cache disk is
+// contended: 90% busy or more with reads taking at least 20% of its service time, for two 250 ms samples in a row. Only
+// a fill of the body of a big query scan qualifies, and only once its block is retained in memory (see
+// remote_read_retain_prefetched_bytes), which then serves its readers; a later reader fetches the block again. Helps when
+// the cache disk is slower than the network and a later scan reads back what an earlier one just cached. Has no effect
+// while the remote I/O scheduler is disabled or retains nothing. Forwarded to the starlet gflag of the same name.
+CONF_mBool(remote_read_skip_contended_cache_writes, "false");
+
 CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");
 
 CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");

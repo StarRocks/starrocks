@@ -732,7 +732,8 @@
         "remote_read_load_weight",
         "remote_read_compaction_weight",
         "remote_read_background_weight",
-        "remote_prefetch_window_blocks"
+        "remote_prefetch_window_blocks",
+        "remote_read_skip_contended_cache_writes"
       ]
     },
     {

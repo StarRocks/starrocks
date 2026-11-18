@@ -72,6 +72,9 @@ DECLARE_int64(fslib_azure_storage_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_min_upload_part_size);
 DECLARE_bool(fslib_s3_multipart_equal_part_size);
 DECLARE_bool(fs_enable_buffer_prefetch);
+namespace staros::starlet::fslib {
+DECLARE_bool(remote_read_skip_contended_cache_writes);
+} // namespace staros::starlet::fslib
 #endif
 
 namespace brpc {
@@ -672,6 +675,33 @@ TEST_F(ConfigUpdateHooksTest, remote_io_scheduler_rejects_conflicting_updates) {
     EXPECT_OK(registry->update_config("starlet_fs_read_prefetch_enable", "true"));
     EXPECT_TRUE(config::starlet_fs_read_prefetch_enable);
     EXPECT_TRUE(FLAGS_fs_enable_buffer_prefetch);
+}
+
+TEST_F(ConfigUpdateHooksTest, update_remote_read_skip_contended_cache_writes) {
+    namespace fslib = staros::starlet::fslib;
+    const bool saved = config::remote_read_skip_contended_cache_writes;
+    gflags::FlagSaver flag_saver;
+    // Declared after the FlagSaver so it runs first: the config is restored through set_config, for
+    // the reason ScopedStarletUploadThresholdConfigs gives, and the gflag is restored after it.
+    DeferOp restore_config([saved] {
+        auto st = config::set_config("remote_read_skip_contended_cache_writes", saved ? "true" : "false");
+        EXPECT_TRUE(st.ok()) << st;
+    });
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    // Start from the opposite flag value each time, so both directions are really forwarded.
+    for (bool value : {true, false}) {
+        fslib::FLAGS_remote_read_skip_contended_cache_writes = !value;
+        auto st = registry->update_config("remote_read_skip_contended_cache_writes", value ? "true" : "false");
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(value, config::remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(value, fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    }
+
+    // A value that is not a boolean is refused; neither the config nor the flag moves.
+    EXPECT_FALSE(registry->update_config("remote_read_skip_contended_cache_writes", "maybe").ok());
+    EXPECT_FALSE(config::remote_read_skip_contended_cache_writes);
+    EXPECT_FALSE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
 }
 
 #endif // USE_STAROS

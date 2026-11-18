@@ -56,6 +56,10 @@ void set_starlet_in_shutdown();
 // how those parts are cut. Called during worker init; exposed for tests.
 void apply_starlet_upload_threshold_configs();
 
+// Applies remote_read_skip_contended_cache_writes to the starlet gflag of the same name. Called during worker init;
+// exposed for tests.
+void apply_remote_read_skip_contended_cache_writes();
+
 // Checks the remote I/O scheduler configs when it is going to run (remote_io_scheduler_enable and the cache on).
 // Only reads configs, so that startup can refuse an invalid value before any cache or thread exists.
 Status validate_remote_io_scheduler_config();
