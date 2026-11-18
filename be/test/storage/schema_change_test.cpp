@@ -1418,6 +1418,98 @@ TEST_F(SchemaChangeTest, historical_key_conversion_order_and_aggregation) {
     }
 }
 
+TEST_F(SchemaChangeTest, sorted_key_conversion_generated_columns) {
+    TTabletId next_id = 1415300;
+    for (int mode = 0; mode < 4; ++mode) {
+        SCOPED_TRACE(mode); // ADD, MODIFY, constant NULL, invalid target index.
+        const auto base_id = next_id++;
+        const auto target_id = next_id++;
+        const Version version(2, 2);
+        for (bool target : {false, true}) {
+            auto req = TabletTestHelper::gen_create_tablet_req(target ? target_id : base_id, TKeysType::DUP_KEYS,
+                                                               TStorageType::COLUMN);
+            if (target) req.__set_base_tablet_id(base_id);
+            add_key_column(&req, "k", target ? TPrimitiveType::VARCHAR : TPrimitiveType::BIGINT);
+            if (target) req.tablet_schema.columns[0].column_type.__set_len(32);
+            add_value_column(&req, "v", TPrimitiveType::INT);
+            req.tablet_schema.columns.back().__set_is_allow_null(true);
+            if (target || mode == 1) {
+                add_value_column(&req, "g", TPrimitiveType::INT);
+                req.tablet_schema.columns.back().__set_is_allow_null(true);
+            }
+            req.tablet_schema.__set_short_key_column_count(1);
+            ASSERT_OK(_storage_engine->create_tablet(req));
+        }
+        DeferOp cleanup([&] {
+            (void)_tablet_mgr->drop_tablet(base_id);
+            (void)_tablet_mgr->drop_tablet(target_id);
+        });
+        auto base = _tablet_mgr->get_tablet(base_id);
+        auto target = _tablet_mgr->get_tablet(target_id);
+        auto chunk = ChunkFactory::new_chunk(*base->tablet_schema()->schema(), 4);
+        const std::vector<int64_t> keys{9, 10, 90, 100};
+        for (size_t i = 0; i < keys.size(); ++i) {
+            chunk->get_column_by_index(0)->as_mutable_raw_ptr()->append_datum(Datum(keys[i]));
+            chunk->get_column_by_index(1)->as_mutable_raw_ptr()->append_datum(
+                    i == 1 ? Datum() : Datum(static_cast<int32_t>(i + 1)));
+            if (mode == 1) chunk->get_column_by_index(2)->as_mutable_raw_ptr()->append_datum(Datum(int32_t{99}));
+        }
+        auto writer = TabletTestHelper::create_rowset_writer(*base, next_rowset_id(), version);
+        ASSERT_OK(writer->add_chunk(*chunk));
+        ASSERT_OK(writer->flush());
+        auto rowset = writer->build();
+        ASSERT_OK(rowset.status());
+        ASSERT_OK(base->add_rowset(*rowset, false));
+
+        TExprNode node;
+        node.__set_node_type(mode == 2 ? TExprNodeType::NULL_LITERAL : TExprNodeType::SLOT_REF);
+        node.__set_type(gen_type_desc(TPrimitiveType::INT));
+        node.__set_num_children(0);
+        node.__set_is_nullable(true);
+        if (mode != 2) {
+            TSlotRef slot;
+            slot.__set_slot_id(1);
+            slot.__set_tuple_id(0);
+            node.__set_slot_ref(slot);
+        }
+        TExpr expr;
+        expr.__set_nodes({node});
+        TAlterTabletMaterializedColumnReq materialized;
+        materialized.__set_query_options(TQueryOptions());
+        materialized.__set_query_globals(TQueryGlobals());
+        materialized.__set_mc_exprs({{mode == 3 ? 3 : 2, expr}});
+        auto request = gen_alter_tablet_req(base_id, target_id, version);
+        request.__set_materialized_column_req(materialized);
+        SchemaChangeHandler handler;
+        auto status = handler.process_alter_tablet(request);
+        if (mode == 3) {
+            ASSERT_FALSE(status.ok());
+            EXPECT_NE(std::string::npos, status.message().find("generated column index out of range"));
+            EXPECT_EQ(TABLET_NOTREADY, target->tablet_state());
+            continue;
+        }
+        ASSERT_OK(status);
+        auto iters = TabletTestHelper::create_segment_iterators(*target, version, &_stats);
+        ASSERT_EQ(1, iters.size());
+        auto result = ChunkFactory::new_chunk(*target->tablet_schema()->schema(), 4);
+        ASSERT_OK(iters[0]->get_next(result.get()));
+        ASSERT_EQ(4, result->num_rows());
+        const std::vector<std::string> expected_keys{"10", "100", "9", "90"};
+        const std::vector<int32_t> expected_values{0, 4, 1, 3};
+        for (size_t i = 0; i < 4; ++i) {
+            EXPECT_EQ(expected_keys[i], result->get_column_by_index(0)->get(i).get_slice().to_string());
+            const auto value = result->get_column_by_index(2)->get(i);
+            ASSERT_EQ(mode == 2 || i == 0, value.is_null());
+            if (!value.is_null()) {
+                EXPECT_EQ(expected_values[i], value.get_int32());
+            }
+        }
+        result->reset();
+        EXPECT_TRUE(iters[0]->get_next(result.get()).is_end_of_file());
+        iters[0]->close();
+    }
+}
+
 TEST_F(SchemaChangeTest, order_conversion_exact_and_lossy_numeric) {
     for (const auto& type : {"TINYINT", "SMALLINT", "INT"}) {
         check_order_dispatch(order_schema(type, 0), order_schema("DOUBLE", 0), false);

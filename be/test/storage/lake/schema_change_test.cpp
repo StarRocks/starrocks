@@ -935,6 +935,105 @@ TEST_P(SchemaChangeKeyConversionTest, test_key_conversion_order) {
     }
 }
 
+TEST_P(SchemaChangeKeyConversionTest, test_sorted_generated_columns) {
+    for (int mode = 0; mode < 4; ++mode) {
+        SCOPED_TRACE(mode); // ADD, MODIFY, constant NULL, invalid target index.
+        auto base_metadata = *_base_tablet_metadata;
+        auto target_metadata = *_new_tablet_metadata;
+        base_metadata.set_id(next_id());
+        target_metadata.set_id(next_id());
+        auto base_pb = base_metadata.mutable_schema();
+        auto target_pb = target_metadata.mutable_schema();
+        base_pb->set_id(next_id());
+        target_pb->set_id(next_id());
+        base_pb->mutable_column(1)->set_is_nullable(true);
+        target_pb->mutable_column(1)->set_is_nullable(true);
+        auto* generated = target_pb->add_column();
+        generated->set_unique_id(next_id());
+        generated->set_name("g");
+        generated->set_type("BIGINT");
+        generated->set_is_key(false);
+        generated->set_is_nullable(true);
+        generated->set_aggregation(GetParam().keys_type == DUP_KEYS ? "NONE" : "REPLACE");
+        if (mode == 1) *base_pb->add_column() = *generated;
+        ASSERT_OK(_tablet_manager->put_tablet_metadata(base_metadata));
+        ASSERT_OK(_tablet_manager->put_tablet_metadata(target_metadata));
+        auto base_schema = TabletSchema::create(*base_pb);
+        auto chunk = ChunkFactory::new_chunk(*base_schema->schema(), 4);
+        const std::vector<int64_t> keys{9, 10, 90, 100};
+        for (size_t i = 0; i < keys.size(); ++i) {
+            chunk->get_column_by_index(0)->as_mutable_raw_ptr()->append_datum(Datum(keys[i]));
+            chunk->get_column_by_index(1)->as_mutable_raw_ptr()->append_datum(
+                    i == 1 ? Datum() : Datum(static_cast<int32_t>(i + 1)));
+            if (mode == 1) chunk->get_column_by_index(2)->as_mutable_raw_ptr()->append_datum(Datum(int64_t{99}));
+        }
+        const uint32_t indexes[] = {0, 1, 2, 3};
+        const auto base_id = base_metadata.id();
+        const auto target_id = target_metadata.id();
+        const auto load_txn = next_id();
+        ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                             .set_tablet_manager(_tablet_manager.get())
+                                             .set_tablet_id(base_id)
+                                             .set_txn_id(load_txn)
+                                             .set_partition_id(_partition_id)
+                                             .set_mem_tracker(_mem_tracker.get())
+                                             .set_schema_id(base_schema->id())
+                                             .build());
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(*chunk, indexes, 4));
+        ASSERT_OK(writer->finish_with_txnlog());
+        writer->close();
+        ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_id, 2, load_txn).status());
+
+        TExprNode node;
+        node.__set_node_type(mode == 2 ? TExprNodeType::NULL_LITERAL : TExprNodeType::SLOT_REF);
+        node.__set_type(gen_type_desc(TPrimitiveType::BIGINT));
+        node.__set_num_children(0);
+        node.__set_is_nullable(true);
+        if (mode != 2) {
+            TSlotRef slot;
+            slot.__set_slot_id(1);
+            slot.__set_tuple_id(0);
+            node.__set_slot_ref(slot);
+        }
+        TExpr expr;
+        expr.__set_nodes({node});
+        TAlterTabletMaterializedColumnReq materialized;
+        materialized.__set_query_options(TQueryOptions());
+        materialized.__set_query_globals(TQueryGlobals());
+        materialized.__set_mc_exprs({{mode == 3 ? 3 : 2, expr}});
+        TAlterTabletReqV2 request;
+        request.__set_base_tablet_id(base_id);
+        request.__set_new_tablet_id(target_id);
+        request.__set_alter_version(2);
+        request.__set_txn_id(next_id());
+        request.__set_materialized_column_req(materialized);
+        SchemaChangeHandler handler(_tablet_manager.get());
+        auto status = handler.process_alter_tablet(request);
+        if (mode == 3) {
+            ASSERT_FALSE(status.ok());
+            EXPECT_NE(std::string::npos, status.message().find("generated column index out of range"));
+            EXPECT_FALSE(_tablet_manager->get_txn_log(target_id, request.txn_id).ok());
+            continue;
+        }
+        ASSERT_OK(status);
+        ASSERT_OK(publish_version_for_schema_change(target_id, 3, request.txn_id));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(target_id, 3));
+        auto result = read(tablet, false);
+        ASSERT_EQ(4, result->num_rows());
+        const std::vector<std::string> expected_keys{"10", "100", "9", "90"};
+        const std::vector<int64_t> expected_values{0, 4, 1, 3};
+        for (size_t i = 0; i < 4; ++i) {
+            EXPECT_EQ(expected_keys[i], result->get(i)[0].get_slice().to_string());
+            const auto value = result->get_column_by_index(2)->get(i);
+            ASSERT_EQ(mode == 2 || i == 0, value.is_null());
+            if (!value.is_null()) {
+                EXPECT_EQ(expected_values[i], value.get_int64());
+            }
+        }
+    }
+}
+
 INSTANTIATE_TEST_SUITE_P(SchemaChangeKeyConversionTest, SchemaChangeKeyConversionTest,
                          ::testing::Values(SchemaChangeParam{DUP_KEYS, 1, 0}, SchemaChangeParam{AGG_KEYS, 1, 0}),
                          to_string_param_name);

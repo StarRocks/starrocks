@@ -58,4 +58,11 @@ SET enable_tablet_internal_parallel = false;
 [ORDER] SELECT * FROM string_probe ORDER BY k, suffix;
 [ORDER] SELECT * FROM int_date_probe ORDER BY k, suffix;
 [ORDER] SELECT * FROM widening_probe ORDER BY k,s,d;
+
+CREATE TABLE generated_probe (k BIGINT, v BIGINT, g BIGINT AS(v+1))
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(v) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+INSERT INTO generated_probe(k,v) VALUES (9,10),(10,NULL),(90,30),(100,40);
+ALTER TABLE generated_probe MODIFY COLUMN k VARCHAR(32) KEY, MODIFY COLUMN g BIGINT AS(v+2);
+function: wait_alter_table_finish()
+[ORDER] SELECT k,v,g FROM generated_probe ORDER BY k;
 DROP DATABASE schema_order_${uuid0};

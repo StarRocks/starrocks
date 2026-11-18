@@ -177,6 +177,28 @@ None	0	8
 0	aa	0.0000	2
 32767	z	999999.9900	3
 -- !result
+
+CREATE TABLE generated_probe (k BIGINT, v BIGINT, g BIGINT AS(v+1))
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(v) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO generated_probe(k,v) VALUES (9,10),(10,NULL),(90,30),(100,40);
+-- result:
+-- !result
+ALTER TABLE generated_probe MODIFY COLUMN k VARCHAR(32) KEY, MODIFY COLUMN g BIGINT AS(v+2);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+[ORDER] SELECT k,v,g FROM generated_probe ORDER BY k;
+-- result:
+10	None	None
+100	40	42
+9	10	12
+90	30	32
+-- !result
 DROP DATABASE schema_order_${uuid0};
 -- result:
 -- !result
