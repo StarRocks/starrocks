@@ -1,0 +1,5 @@
+extends: script
+message: "Use backtick inline code instead of an HTML '<code>' tag: replace '<code ...>...</code>' with '`...`'."
+level: error
+scope: raw
+script: HtmlCodeTag.tengo

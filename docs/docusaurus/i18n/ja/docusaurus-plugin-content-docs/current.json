@@ -1,4 +1,12 @@
 {
+  "sidebar.docs.category.Release notes": {
+    "message": "リリースノート",
+    "description": "The label for category Release notes in sidebar docs"
+  },
+  "sidebar.docs.category.Ecosystem": {
+    "message": "エコシステム",
+    "description": "The label for category Ecosystem in sidebar docs"
+  },
   "version.label": {
     "message": "3.3",
     "description": "The label for version current"
