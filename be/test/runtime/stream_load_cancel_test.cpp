@@ -29,6 +29,7 @@
 #include "exec/exec_node.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
+#include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -60,6 +61,8 @@ private:
         TPlanNode node;
         node.__set_node_id(0);
         node.__set_node_type(TPlanNodeType::EMPTY_SET_NODE);
+        node.__set_row_tuples({0});
+        node.__set_nullable_tuples({false});
         node.__set_limit(-1);
         return node;
     }
@@ -294,6 +297,21 @@ TEST_P(StreamLoadCancelTest, LegacyRejectsChannelBeforeBindingPipes) {
     EXPECT_TRUE(_legacy->_stream_load_sinks.empty());
 }
 
+TEST_P(StreamLoadCancelTest, LegacySkipsChannelAfterEmptyNodeAndBindsOrdinaryPipe) {
+    if (is_pipeline()) {
+        GTEST_SKIP() << "Exercises legacy channel detection";
+    }
+    _params.params.per_node_scan_ranges[0] = {};
+    auto channel = make_range(UniqueId::gen_uid().to_thrift());
+    channel.scan_range.broker_scan_range.__set_channel_id(0);
+    _ranges.emplace_back(std::move(channel));
+    auto pipe = add_pipe();
+
+    ASSERT_OK(prepare_pipes(1));
+    cancel();
+    EXPECT_TRUE(pipe->no_block_read().status().is_cancelled());
+}
+
 TEST_P(StreamLoadCancelTest, ChannelOnlyUsesChannelContext) {
     if (GetParam() != ExecutionMode::PIPELINE_DRIVER_RANGES) {
         GTEST_SKIP() << "Channel inputs use per-driver pipeline ranges";
@@ -389,8 +407,14 @@ TEST_P(StreamLoadCancelTest, CloseWakesReaderBeforeWaitingForScanner) {
     if (is_pipeline()) {
         _pipeline->_fragment_ctx.reset();
     } else {
-        DescriptorTbl desc;
-        CloseProbeNode plan(_state->obj_pool(), desc, [&] {
+        TDescriptorTable thrift_desc;
+        TTupleDescriptor tuple_desc;
+        tuple_desc.__set_id(0);
+        tuple_desc.__set_byteSize(0);
+        thrift_desc.tupleDescriptors.push_back(tuple_desc);
+        DescriptorTbl* desc = nullptr;
+        ASSERT_OK(DescriptorTbl::create(_state.get(), _state->obj_pool(), thrift_desc, &desc, _state->chunk_size()));
+        CloseProbeNode plan(_state->obj_pool(), *desc, [&] {
             EXPECT_EQ(std::future_status::ready, done.wait_for(5s))
                     << "pipe must be interrupted before plan->close() waits for scanner exit";
         });
