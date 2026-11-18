@@ -246,6 +246,15 @@ public class JsonTypeTest extends PlanTestBase {
         assertPlanContains("select cast(map{'a': [1, 2]} as json), cast(named_struct('a', 1, 'b', 'x') as json)",
                 "to_json(map{'a':[1,2]})", "to_json(named_struct('a', 1, 'b', 'x'))");
 
+        // Aggregated values, as in CAST(map_agg(k, v) AS JSON).
+        assertPlanContains("select v_id, cast(array_agg(v_array) as json), cast(map_agg(v_id, v_array_decimal) as json) " +
+                        "from tjson_complex group by v_id",
+                "to_json(11: array_agg)", "to_json(CAST(12: map_agg AS MAP<INT,ARRAY<DOUBLE>>))");
+        // A view keeps the conversion of decimals to DOUBLE.
+        starRocksAssert.withView("CREATE VIEW tjson_complex_view AS " +
+                "SELECT cast(v_array_decimal as json) AS j FROM tjson_complex");
+        assertPlanContains("select j from tjson_complex_view", "to_json(CAST(9: v_array_decimal AS ARRAY<DOUBLE>))");
+
         assertExceptionMsgContains("select cast(v_map_decimal as json) from tjson_complex",
                 "Invalid type cast from map<decimal(10, 2),int(11)> to json");
         assertExceptionMsgContains("select cast(v_map_boolean as json) from tjson_complex",

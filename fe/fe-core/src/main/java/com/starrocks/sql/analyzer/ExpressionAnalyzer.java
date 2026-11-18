@@ -96,6 +96,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.common.LargeInPredicateException;
@@ -1069,7 +1070,11 @@ public class ExpressionAnalyzer {
         private void analyzeComplexTypeToJsonCast(CastExpr cast, Type sourceType, Scope scope) {
             Expr value = cast.getChild(0);
             if (!sourceType.equals(value.getType())) {
-                value = TypeManager.addCastExpr(value, sourceType);
+                // An explicit cast, which is kept when the analyzed statement is printed, for example as a view
+                // definition. An implicit cast would be dropped there, and the decimals would become JSON strings.
+                CastExpr toSourceType = new CastExpr(new TypeDef(sourceType), value, cast.getPos());
+                visitCastExpr(toSourceType, scope);
+                value = toSourceType;
             }
             FunctionCallExpr toJson = new FunctionCallExpr(FunctionSet.TO_JSON, Lists.newArrayList(value),
                     cast.getPos());
