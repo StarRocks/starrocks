@@ -126,9 +126,8 @@ bool SinkBuffer::is_full() const {
     }
     bool is_full = buffer_size > max_buffer_size;
 
-    const int64_t mem_limit_per_driver = config::sink_buffer_mem_limit_per_driver;
-    if (!is_full && mem_limit_per_driver > 0) {
-        is_full = _buffered_mem_usage->consumption() > mem_limit_per_driver * static_cast<int64_t>(_sink_ctxs.size());
+    if (!is_full) {
+        is_full = _buffered_mem_usage->consumption() > config::sink_buffer_mem_limit_per_driver * _sink_ctxs.size();
     }
 
     int64_t last_full_timestamp = _last_full_timestamp;
