@@ -22,7 +22,6 @@
 
 #include "exec/pipeline/ai/ai_project_factory.h"
 #include "exec/pipeline/ai/ai_project_processor.h"
-#include "exec/pipeline/ai/ai_provider_config.h"
 #include "platform/llm/ai_provider.h"
 
 namespace starrocks {

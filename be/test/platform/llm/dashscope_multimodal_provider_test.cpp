@@ -205,16 +205,18 @@ TEST(DashScopeMultimodalProviderTest, ErrorsPreserveClassificationAndUsageWithou
 }
 
 TEST(AIProviderFactoryTest, ValidatesExplicitProtocolAndCapability) {
-    EXPECT_TRUE(create_ai_provider(AIProviderProtocol::OPENAI, AICapability::CHAT).ok());
-    EXPECT_TRUE(create_ai_provider(AIProviderProtocol::OPENAI, AICapability::EMBEDDING).ok());
-    EXPECT_TRUE(create_ai_provider(AIProviderProtocol::DASHSCOPE_MULTIMODAL, AICapability::EMBEDDING).ok());
-    EXPECT_TRUE(create_ai_provider(AIProviderProtocol::DASHSCOPE_MULTIMODAL, AICapability::CHAT)
-                        .status()
-                        .is_not_supported());
-    EXPECT_TRUE(
-            create_ai_provider(static_cast<AIProviderProtocol>(99), AICapability::CHAT).status().is_not_supported());
-    EXPECT_TRUE(
-            create_ai_provider(AIProviderProtocol::OPENAI, static_cast<AICapability>(99)).status().is_not_supported());
+    const auto create = [](AIProviderProtocol protocol, AICapability capability) {
+        AIProviderConfig config{.endpoint = "https://unit.test.invalid/v1", .model = "test-model"};
+        config.protocol = protocol;
+        config.capability = capability;
+        return create_ai_provider(config);
+    };
+    EXPECT_TRUE(create(AIProviderProtocol::OPENAI, AICapability::CHAT).ok());
+    EXPECT_TRUE(create(AIProviderProtocol::OPENAI, AICapability::EMBEDDING).ok());
+    EXPECT_TRUE(create(AIProviderProtocol::DASHSCOPE_MULTIMODAL, AICapability::EMBEDDING).ok());
+    EXPECT_TRUE(create(AIProviderProtocol::DASHSCOPE_MULTIMODAL, AICapability::CHAT).status().is_not_supported());
+    EXPECT_TRUE(create(static_cast<AIProviderProtocol>(99), AICapability::CHAT).status().is_not_supported());
+    EXPECT_TRUE(create(AIProviderProtocol::OPENAI, static_cast<AICapability>(99)).status().is_not_supported());
 }
 
 } // namespace

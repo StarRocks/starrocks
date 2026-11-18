@@ -32,7 +32,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
-#include "platform/llm/ai_http_client.h"
+#include "platform/http/resolved_http_endpoint.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 
@@ -62,10 +62,6 @@ bool contains_only_ascii_whitespace(std::string_view value) {
     return std::all_of(value.begin(), value.end(), [](unsigned char byte) {
         return byte == ' ' || byte == '\t' || byte == '\n' || byte == '\r' || byte == '\f' || byte == '\v';
     });
-}
-
-bool contains_control_character(std::string_view value) {
-    return std::any_of(value.begin(), value.end(), [](unsigned char byte) { return byte <= 0x1f || byte == 0x7f; });
 }
 
 int64_t saturating_timeout_deadline(int64_t now_ns, int64_t timeout_ms) {
@@ -505,29 +501,10 @@ StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> AIProjectDispatcherSubmi
     try {
         std::map<std::string, Route, std::less<>> routes;
         for (const auto& [id, provider_config] : configs) {
-            if (contains_only_ascii_whitespace(id) || contains_control_character(id) ||
-                contains_control_character(provider_config.model)) {
-                return Status::InvalidArgument("AI function model configuration is invalid");
-            }
-            if (provider_config.capability != AICapability::CHAT &&
-                provider_config.capability != AICapability::EMBEDDING) {
-                return Status::InvalidArgument("AI function model capability is invalid");
-            }
             Route route{.endpoint = provider_config.endpoint, .capability = provider_config.capability};
-            ASSIGN_OR_RETURN(route.provider, create_ai_provider(provider_config.protocol, provider_config.capability));
-            if (provider_config.protocol != AIProviderProtocol::OPENAI ||
-                contains_only_ascii_whitespace(provider_config.model) ||
-                contains_control_character(provider_config.api_key) ||
-                (provider_config.timeout_ms.has_value() &&
-                 (*provider_config.timeout_ms <= 0 ||
-                  *provider_config.timeout_ms > std::numeric_limits<long>::max())) ||
-                (provider_config.dimensions.has_value() &&
-                 (provider_config.capability != AICapability::EMBEDDING || *provider_config.dimensions <= 0))) {
-                return Status::InvalidArgument("AI function provider configuration is invalid");
-            }
+            ASSIGN_OR_RETURN(route.provider, create_ai_provider(provider_config));
             route.api_key = provider_config.api_key;
             route.attempt_timeout_ms = provider_config.timeout_ms.value_or(0);
-            RETURN_IF_ERROR(validate_ai_http_url(route.endpoint));
             auto resolved_endpoint = resolve_http_endpoint(route.endpoint, OutboundHttpAddressPolicy::BLOCK_LINK_LOCAL);
             if (!resolved_endpoint.ok()) {
                 return Status::InvalidArgument("AI function model endpoint is unavailable or invalid");

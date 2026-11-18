@@ -21,7 +21,7 @@
 
 #include "base/statusor.h"
 #include "common/global_types.h"
-#include "exec/pipeline/ai/ai_provider_config.h"
+#include "platform/llm/ai_provider.h"
 
 namespace starrocks {
 

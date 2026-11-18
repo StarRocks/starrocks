@@ -23,7 +23,6 @@
 #include <utility>
 
 #include "exec/pipeline/ai/ai_project_operator.h"
-#include "exec/pipeline/ai/ai_provider_config.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -106,9 +105,9 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
-    pipeline::AIProviderConfigs configs;
+    AIProviderConfigs configs;
     for (const auto& [id, provider] : thrift_project.ai_provider_mapping) {
-        ASSIGN_OR_RETURN(auto config, pipeline::AIProviderConfigParser::parse(id, provider));
+        ASSIGN_OR_RETURN(auto config, AIProviderConfig::parse(id, provider));
         configs.emplace(id, std::move(config));
     }
 

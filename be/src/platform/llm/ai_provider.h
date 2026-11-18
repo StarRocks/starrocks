@@ -15,6 +15,8 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -30,10 +32,28 @@
 
 namespace starrocks {
 
+class TAIProvider;
+
 enum class AIProviderProtocol {
     OPENAI,
     DASHSCOPE_MULTIMODAL,
 };
+
+// Query-plan snapshot. Provider credentials belong to this query. Never print this object.
+struct AIProviderConfig {
+    std::string endpoint;
+    std::string model;
+    std::string api_key;
+    AICapability capability = AICapability::CHAT;
+    std::optional<int64_t> timeout_ms;
+    std::optional<int32_t> dimensions;
+    AIProviderProtocol protocol = AIProviderProtocol::OPENAI;
+
+    static StatusOr<AIProviderConfig> parse(std::string_view id, const TAIProvider& provider);
+};
+
+// Map keys are Provider registry IDs carried by the AI expressions.
+using AIProviderConfigs = std::map<std::string, AIProviderConfig, std::less<>>;
 
 struct AIChatRequest {
     std::string_view endpoint;
@@ -110,6 +130,6 @@ public:
 };
 
 Status validate_ai_protocol(AIProviderProtocol protocol, AICapability capability);
-StatusOr<std::unique_ptr<AIProvider>> create_ai_provider(AIProviderProtocol protocol, AICapability capability);
+StatusOr<std::unique_ptr<AIProvider>> create_ai_provider(const AIProviderConfig& config);
 
 } // namespace starrocks

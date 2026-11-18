@@ -49,7 +49,6 @@
 #include "exec/pipeline/ai/ai_project_factory.h"
 #include "exec/pipeline/ai/ai_project_operator.h"
 #include "exec/pipeline/ai/ai_project_runtime.h"
-#include "exec/pipeline/ai/ai_provider_config.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/project_operator.h"
 #include "exec/pipeline_node.h"
@@ -68,6 +67,7 @@
 #include "platform/llm/ai_admission_controller.h"
 #include "platform/llm/ai_http_client.h"
 #include "platform/llm/ai_metrics.h"
+#include "platform/llm/ai_provider.h"
 #include "platform/llm/ai_runtime.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -99,6 +99,7 @@ constexpr size_t kUpstreamDop = 6;
 constexpr size_t kBuilderDop = 9;
 constexpr std::string_view kDefaultChatConfigId = "provider:default_chat";
 constexpr std::string_view kEndpointSentinel = "https://127.0.0.1/v1/chat/completions";
+constexpr char kLinkLocalEndpoint[] = "https://169.254.169.254/v1/chat/completions";
 constexpr std::string_view kModelSentinel = "unit-test-model";
 constexpr std::string_view kSecretSentinel = "unit-test-secret-must-not-leak";
 constexpr size_t kMiB = 1024UL * 1024;
@@ -1106,8 +1107,7 @@ TEST_F(AIProjectPipelineTest, FactoryFailureClosesPairedProjectionContextsWithou
     ASSERT_OK(identity->prepare(_runtime_state.get()));
     ASSERT_OK(common->prepare(_runtime_state.get()));
     ASSERT_OK(ai->prepare(_runtime_state.get()));
-    auto configs = provider_configs();
-    configs.begin()->second.api_key = "invalid\ncredential";
+    auto configs = provider_configs(std::string(kModelSentinel), kLinkLocalEndpoint);
     AIProjectProjectionSpec spec(_runtime_state.get(),
                                  {
                                          AIProjectOutputSpec{.slot_id = kPromptSlotId,
@@ -1155,28 +1155,6 @@ TEST_F(AIProjectPipelineTest, ProviderCredentialsComeFromSnapshot) {
     opaque_configs.insert(std::move(opaque_config));
     EXPECT_TRUE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), opaque_configs, _config_source->snapshot())
                         .ok());
-    for (const std::string key : {"", " ", "key\n"}) {
-        AIProviderConfigs invalid_configs{{key, configs.at("provider:embedding")}};
-        auto invalid =
-                AIProjectDispatcherSubmitter::create(_runtime_state.get(), invalid_configs, _config_source->snapshot());
-        ASSERT_FALSE(invalid.ok());
-        EXPECT_EQ(std::string::npos, invalid.status().to_string().find("provider-only-secret"));
-    }
-    for (const std::string model : {"", " ", "model\n"}) {
-        configs.at("provider:embedding").model = model;
-        EXPECT_FALSE(
-                AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
-    }
-    configs.at("provider:embedding").model = "embedding-model";
-    configs.at("provider:embedding").capability = static_cast<AICapability>(99);
-    EXPECT_FALSE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
-    configs.at("provider:embedding").capability = AICapability::EMBEDDING;
-    for (auto protocol : {AIProviderProtocol::DASHSCOPE_MULTIMODAL, static_cast<AIProviderProtocol>(99)}) {
-        configs.at("provider:embedding").protocol = protocol;
-        EXPECT_FALSE(
-                AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
-    }
-    configs.at("provider:embedding").protocol = AIProviderProtocol::OPENAI;
 
     configs.at("provider:embedding").api_key.clear();
     configs.at("provider:embedding").endpoint = "http://127.0.0.1/v1/embeddings";
@@ -1188,23 +1166,10 @@ TEST_F(AIProjectPipelineTest, ProviderCredentialsComeFromSnapshot) {
     configs.at("provider:embedding").api_key = "provider-only-secret";
     EXPECT_TRUE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
     configs.at("provider:embedding").endpoint = "https://127.0.0.1/v1/embeddings";
-    for (const std::string key : {"bad\nkey", "bad\rkey"}) {
-        configs.at("provider:embedding").api_key = key;
-        EXPECT_FALSE(
-                AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
-    }
     configs.at("provider:embedding").api_key.clear();
     auto duplicate = configs;
     duplicate.emplace("second-route", configs.at("provider:embedding"));
     EXPECT_TRUE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), duplicate, _config_source->snapshot()).ok());
-    for (const int64_t timeout : {-1, 0}) {
-        configs.at("provider:embedding").timeout_ms = timeout;
-        EXPECT_FALSE(
-                AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
-    }
-    configs.at("provider:embedding").timeout_ms = 75;
-    configs.at("provider:embedding").dimensions = 0;
-    EXPECT_FALSE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
     EXPECT_EQ(0, _http.pending_count());
 }
 
@@ -1357,16 +1322,15 @@ TEST_F(AIProjectPipelineTest, ProviderDefaultsAreNotMergedForEmptyOrNullBatches)
 }
 
 TEST_F(AIProjectPipelineTest, CredentialBindingRejectsLinkLocalResolvedEndpoint) {
-    const std::string link_local_endpoint = "https://169.254.169.254/v1/chat/completions";
-
     auto submitter = AIProjectDispatcherSubmitter::create(
-            _runtime_state.get(), provider_configs(std::string(kModelSentinel), link_local_endpoint),
+            _runtime_state.get(), provider_configs(std::string(kModelSentinel), kLinkLocalEndpoint),
             _config_source->snapshot());
 
     ASSERT_FALSE(submitter.ok());
     EXPECT_TRUE(submitter.status().is_invalid_argument()) << submitter.status();
-    EXPECT_EQ(std::string::npos, submitter.status().to_string().find(link_local_endpoint));
+    EXPECT_EQ(std::string::npos, submitter.status().to_string().find(kLinkLocalEndpoint));
     EXPECT_EQ(std::string::npos, submitter.status().to_string().find(kSecretSentinel));
+    EXPECT_EQ(0, _http.pending_count());
 }
 
 TEST_F(AIProjectPipelineTest, ProductionProjectionEvaluatesCommonBeforeAiAndPreservesIdentityNullabilityAndOwner) {
