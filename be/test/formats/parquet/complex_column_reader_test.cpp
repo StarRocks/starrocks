@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <optional>
+
 #include "base/testutil/assert.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
@@ -569,7 +571,8 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader(
 }
 
 static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader_with_commit_operation_hint(
-        tparquet::RowGroup& rg, ColumnReaderOptions& opts, ParquetField& root_field) {
+        tparquet::RowGroup& rg, ColumnReaderOptions& opts, ParquetField& root_field, bool null_only = false,
+        std::optional<int64_t> metadata_null_count = std::nullopt) {
     auto scalar_field = [](std::string name, tparquet::Type::type physical_type, int column_index) {
         ParquetField field;
         field.name = std::move(name);
@@ -632,14 +635,70 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader_with
                                             : (i == 6 || i == 8) ? tparquet::Type::INT32 : tparquet::Type::BYTE_ARRAY);
         chunk.meta_data.data_page_offset = i * 10;
         chunk.meta_data.total_compressed_size = 1;
+        if (i == 0 && metadata_null_count.has_value()) {
+            tparquet::Statistics stats;
+            stats.__set_null_count(*metadata_null_count);
+            chunk.meta_data.__set_statistics(stats);
+        }
         rg.columns.emplace_back(std::move(chunk));
     }
     rg.__set_num_rows(5);
     opts.row_group_meta = &rg;
 
     VariantShreddedReadHints hints;
-    RETURN_IF_ERROR(hints.add_path("commit.operation"));
+    if (null_only) {
+        hints.null_only = true;
+    } else {
+        RETURN_IF_ERROR(hints.add_path("commit.operation"));
+    }
     return ColumnReaderFactory::create_variant_column_reader(opts, &root_field, hints);
+}
+
+static std::vector<int64_t> collect_io_range_offsets(ColumnReader* reader) {
+    std::vector<SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    reader->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
+    std::vector<int64_t> offsets;
+    offsets.reserve(ranges.size());
+    for (const auto& range : ranges) {
+        offsets.push_back(range.offset);
+    }
+    return offsets;
+}
+
+// `v IS [NOT] NULL`: only the metadata column (it carries the outer null mask) is read.
+TEST(VariantShreddedPruningTest, NullOnlyCollectIORangeReadsMetadataOnly) {
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader,
+                    make_shredded_variant_reader_with_commit_operation_hint(rg, opts, root_field, true, 2));
+    EXPECT_EQ(std::vector<int64_t>{0}, collect_io_range_offsets(reader.get()));
+}
+
+// Without null_count statistics the null mask still has to be read.
+TEST(VariantShreddedPruningTest, NullOnlyCollectIORangeWithoutStatsReadsMetadata) {
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader_with_commit_operation_hint(rg, opts, root_field, true));
+    EXPECT_EQ(std::vector<int64_t>{0}, collect_io_range_offsets(reader.get()));
+}
+
+// null_count == 0 on the metadata column: no row is null, nothing is read, and read_range fills an all
+// non-null mask over placeholder rows.
+TEST(VariantShreddedPruningTest, NullOnlyNoNullReadsNothing) {
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader,
+                    make_shredded_variant_reader_with_commit_operation_hint(rg, opts, root_field, true, 0));
+    EXPECT_TRUE(collect_io_range_offsets(reader.get()).empty());
+
+    ColumnPtr dst = NullableColumn::create(VariantColumn::create(), NullColumn::create());
+    ASSERT_OK(reader->read_range(Range<uint64_t>(0, 5), nullptr, dst));
+    ASSERT_EQ(5u, dst->size());
+    EXPECT_FALSE(dst->has_null());
 }
 
 TEST(VariantShreddedPruningTest, CollectIORangeSkipsUnrequestedSiblings) {

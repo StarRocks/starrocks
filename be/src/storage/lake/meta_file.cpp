@@ -865,6 +865,27 @@ static int delete_from_protobuf_map(T* protobuf_map, const std::unordered_set<ui
     return erase_cnt;
 }
 
+void retire_idg_entries(TabletMetadataPB* metadata, const std::unordered_set<uint32_t>& rssids) {
+    if (!metadata->has_idg_meta()) {
+        return;
+    }
+    auto* idgs = metadata->mutable_idg_meta()->mutable_idgs();
+    using T_IDG = std::decay_t<decltype(*idgs)>;
+    delete_from_protobuf_map<T_IDG>(idgs, rssids, [&](const T_IDG& gc_map) {
+        for (const auto& each : gc_map) {
+            for (const auto& entry : each.second.entries()) {
+                if (!entry.has_index_file() || entry.index_file().empty()) continue;
+                FileMetaPB file_meta;
+                file_meta.set_name(entry.index_file());
+                if (entry.has_file_size()) file_meta.set_size(entry.file_size());
+                if (entry.has_shared_file()) file_meta.set_shared(entry.shared_file());
+                file_meta.set_version(entry.version());
+                metadata->mutable_orphan_files()->Add(std::move(file_meta));
+            }
+        }
+    });
+}
+
 // When using cloud native persistent index, the del files which are above rebuild point,
 // need to be transfer to compaction's output rowset.
 // Use this function to collect all del files that need to be transfer.
@@ -1095,24 +1116,7 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
     // the schema already declares the index. So once the input rssids are
     // unreachable, their IDG payload is dead and the .idx files become
     // orphans for vacuum.
-    if (_tablet_meta->has_idg_meta()) {
-        auto idgs = _tablet_meta->mutable_idg_meta()->mutable_idgs();
-        using T_IDG = std::decay_t<decltype(*idgs)>;
-        int idg_erase_cnt = delete_from_protobuf_map<T_IDG>(idgs, delete_delvec_sids, [&](const T_IDG& gc_map) {
-            for (const auto& each : gc_map) {
-                for (const auto& entry : each.second.entries()) {
-                    if (!entry.has_index_file() || entry.index_file().empty()) continue;
-                    FileMetaPB file_meta;
-                    file_meta.set_name(entry.index_file());
-                    if (entry.has_file_size()) file_meta.set_size(entry.file_size());
-                    if (entry.has_shared_file()) file_meta.set_shared(entry.shared_file());
-                    file_meta.set_version(entry.version());
-                    _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
-                }
-            }
-        });
-        (void)idg_erase_cnt;
-    }
+    retire_idg_entries(_tablet_meta.get(), delete_delvec_sids);
 
     // remove compacted sst
     remove_compacted_sst(op_compaction);
@@ -1469,7 +1473,8 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, co
         return Status::InternalError("Can't find delvec file name");
     }
     const auto& delvec_name = iter->second.name();
-    RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache};
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
+                                 .remote_read = lake_io_opts.remote_read};
     const std::string delvec_path =
             (lake_io_opts.fs && lake_io_opts.location_provider)
                     ? lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)

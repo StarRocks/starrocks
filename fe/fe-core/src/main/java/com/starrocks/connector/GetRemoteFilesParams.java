@@ -49,6 +49,10 @@ public class GetRemoteFilesParams {
     private long scanFilesCap = -1;
     private long scanRowsCap = -1;
 
+    // The scan node asking, -1 if none (statistics, metadata preparation). Only names the request in the profile;
+    // it is not part of a planning's identity, so scans with the same request still share one planning.
+    private int scanNodeId = -1;
+
     protected GetRemoteFilesParams(Builder builder) {
         this.partitionKeys = builder.partitionKeys;
         this.partitionNames = builder.partitionNames;
@@ -67,6 +71,11 @@ public class GetRemoteFilesParams {
         this.scanBytesCap = builder.scanBytesCap;
         this.scanFilesCap = builder.scanFilesCap;
         this.scanRowsCap = builder.scanRowsCap;
+        this.scanNodeId = builder.scanNodeId;
+    }
+
+    public int getScanNodeId() {
+        return scanNodeId;
     }
 
     public int getPartitionSize() {
@@ -96,7 +105,8 @@ public class GetRemoteFilesParams {
                 .setUsedForDelete(usedForDelete)
                 .setScanBytesCap(scanBytesCap)
                 .setScanFilesCap(scanFilesCap)
-                .setScanRowsCap(scanRowsCap);
+                .setScanRowsCap(scanRowsCap)
+                .setScanNodeId(scanNodeId);
         if (isRecursive.isPresent()) {
             paramsBuilder.setIsRecursive(isRecursive.get());
         }
@@ -227,6 +237,7 @@ public class GetRemoteFilesParams {
         private long scanBytesCap = -1;
         private long scanFilesCap = -1;
         private long scanRowsCap = -1;
+        private int scanNodeId = -1;
 
         public Builder setPartitionKeys(List<PartitionKey> partitionKeys) {
             this.partitionKeys = partitionKeys;
@@ -310,6 +321,11 @@ public class GetRemoteFilesParams {
 
         public Builder setScanRowsCap(long scanRowsCap) {
             this.scanRowsCap = scanRowsCap;
+            return this;
+        }
+
+        public Builder setScanNodeId(int scanNodeId) {
+            this.scanNodeId = scanNodeId;
             return this;
         }
 

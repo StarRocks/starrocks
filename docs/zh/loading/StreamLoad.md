@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 description: "从本地文件系统使用 Stream Load 同步导入或 Broker Load 异步导入数据到 StarRocks，支持多种文件格式。"
 keywords: ['Stream Load']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 从本地文件系统导入数据

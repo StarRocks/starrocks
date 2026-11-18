@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ARRAY_REPEAT関数は指定された要素を指定された回数だけ繰り返した配列を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_repeat

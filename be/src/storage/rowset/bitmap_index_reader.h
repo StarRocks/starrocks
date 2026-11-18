@@ -139,14 +139,15 @@ public:
                                std::unique_ptr<IndexedColumnIterator> bitmap_iter,
                                std::unique_ptr<IndexedColumnIterator> ngram_dict_iter,
                                std::unique_ptr<IndexedColumnIterator> ngram_bitmap_iter, bool has_null,
-                               rowid_t num_bitmap)
+                               rowid_t num_bitmap, std::shared_ptr<bool> file_missing = nullptr)
             : _reader(reader),
               _dict_column_iter(std::move(dict_iter)),
               _bitmap_column_iter(std::move(bitmap_iter)),
               _ngram_dict_column_iter(std::move(ngram_dict_iter)),
               _ngram_bitmap_column_iter(std::move(ngram_bitmap_iter)),
               _has_null(has_null),
-              _num_bitmap(num_bitmap) {}
+              _num_bitmap(num_bitmap),
+              _file_missing(std::move(file_missing)) {}
 
     // Virtual so subclasses can hang extra owned state (e.g. a transient
     // BitmapIndexReader + RandomAccessFile backing an Index Delta Group
@@ -162,6 +163,8 @@ public:
     SegmentBitmapIndexIterator& operator=(const SegmentBitmapIndexIterator&) = delete;
 
     bool has_null_bitmap() const override { return _has_null; }
+
+    bool is_file_missing() const override { return _file_missing != nullptr && *_file_missing; }
 
     rowid_t num_dictionaries() const;
 
@@ -225,6 +228,7 @@ private:
     bool _has_null;
     rowid_t _num_bitmap;
     rowid_t _current_rowid{0};
+    std::shared_ptr<bool> _file_missing;
 };
 
 } // namespace starrocks

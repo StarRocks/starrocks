@@ -444,10 +444,10 @@ GRPC_SOURCE="grpc-1.43.0"
 GRPC_MD5SUM="92559743e7b5d3f67486c4c0de2f5cbe"
 
 # simdutf
-SIMDUTF_DOWNLOAD="https://github.com/simdutf/simdutf/archive/refs/tags/v9.1.0.tar.gz"
-SIMDUTF_NAME="simdutf-9.1.0.tar.gz"
-SIMDUTF_SOURCE="simdutf-9.1.0"
-SIMDUTF_MD5SUM="e55123960edadb8d9987fa30f877e588"
+SIMDUTF_DOWNLOAD="https://github.com/simdutf/simdutf/archive/refs/tags/v9.4.0.tar.gz"
+SIMDUTF_NAME="simdutf-9.4.0.tar.gz"
+SIMDUTF_SOURCE="simdutf-9.4.0"
+SIMDUTF_MD5SUM="d10e794f96eb7522b87aeb0a36521454"
 
 # icu
 ICU_DOWNLOAD="https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.zip"

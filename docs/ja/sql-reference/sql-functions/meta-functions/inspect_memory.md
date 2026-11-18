@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定されたFEモジュールの推定メモリ使用量をJSON形式で返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_memory

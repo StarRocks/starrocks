@@ -232,8 +232,11 @@ struct TAlterTabletReqV2 {
     // ADD INDEX fast-path (lake-only). When true, BE skips data rewrite and
     // builds indexes into standalone .idx files (Index Delta Group). The
     // indexes_to_add list carries the new TabletIndex entries to build.
-    // BE that does not recognize this field falls back to the regular
-    // schema-change path automatically.
+    // A BE that does not recognize this field runs the request as a regular
+    // schema change, and because the fast path sends base_tablet_id ==
+    // new_tablet_id that rewrites the tablet into itself and duplicates its
+    // rows. FE therefore sends it only to nodes reporting
+    // TBackendInfo.support_lake_index_fast_path. Same for only_drop_index.
     20: optional bool only_add_index
     21: optional list<Descriptors.TOlapTableIndex> indexes_to_add
 

@@ -426,7 +426,8 @@ public class ExternalResourceCleanupTest {
             internalMock.when(() -> InternalScanFileUtils.getDeletionVectorDescriptorFromRow(row))
                     .thenReturn((DeletionVectorDescriptor) null);
             scanFileMock.when(() -> ScanFileUtils.convertFromRowToFileScanTask(
-                            Mockito.anyBoolean(), Mockito.eq(row), Mockito.eq(meta), Mockito.anyLong(), Mockito.isNull()))
+                            Mockito.anyBoolean(), Mockito.eq(row), Mockito.any(ScanFileUtils.RowContext.class),
+                            Mockito.anyLong(), Mockito.isNull()))
                     .thenReturn(Pair.create(fileTask, serDe));
 
             // invoke iterator

@@ -29,11 +29,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.TimeZone;
 
-import static org.apache.iceberg.util.SerializationUtil.deserializeFromBase64;
-
 public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     private static final Logger LOG = LogManager.getLogger(AbstractIcebergMetadataScanner.class);
-    protected final String serializedTable;
+    // Dropped once the table is resolved: the base64 payload can be tens of MB.
+    private String serializedTable;
+    private final long tableCacheCapacity;
+    private SharedTableCache.Lease tableLease;
     protected final String[] requiredFields;
     private final String[] metadataColumnNames;
     private final String[] metadataColumnTypes;
@@ -53,16 +54,19 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
         this.metadataColumnTypes = params.get("metadata_column_types").split("#");
         this.serializedTable = params.get("serialized_table");
         this.timezone = params.getOrDefault("time_zone", TimeZone.getDefault().getID());
+        // An older BE does not pass the capacity: keep the per-task table it expects.
+        this.tableCacheCapacity = Long.parseLong(params.getOrDefault("table_cache_capacity", "0"));
         this.classLoader = this.getClass().getClassLoader();
     }
 
     @Override
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            this.table = deserializeFromBase64(serializedTable);
-            // Each scanner owns the FileIO of the table it deserialized and closes it. The credentials come
-            // with that table, so a fresh one is never stale or another user's; the IMDS pressure a FileIO
-            // per scanner used to cause is gone since IcebergAwsClientFactory shares the machine providers.
+            // The scan tasks of one query share the deserialized table and its FileIO (keyed by the payload, so
+            // credentials included). The lease, not the scanner, decides when that FileIO is closed.
+            this.tableLease = SharedTableCache.acquire(serializedTable, tableCacheCapacity);
+            this.serializedTable = null;
+            this.table = tableLease.table();
             this.fileIO = table.io();
             parseRequiredTypes();
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
@@ -93,9 +97,11 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
             try {
                 doClose();
             } finally {
-                if (fileIO != null) {
-                    fileIO.close();
-                    fileIO = null;
+                fileIO = null;
+                table = null;
+                if (tableLease != null) {
+                    tableLease.close();
+                    tableLease = null;
                 }
             }
         } catch (IOException e) {

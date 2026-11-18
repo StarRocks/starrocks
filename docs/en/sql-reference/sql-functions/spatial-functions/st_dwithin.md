@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Tests whether a point is within an inclusive distance of a line or multiline."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_DWITHIN

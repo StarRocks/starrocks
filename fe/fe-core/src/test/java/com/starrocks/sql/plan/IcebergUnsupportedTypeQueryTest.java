@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -24,19 +27,32 @@ import java.io.File;
 
 /**
  * Verifies that querying Iceberg columns with unsupported V3 types
- * (e.g., geometry, timestamp_nano) fails at analysis time with a clear error,
+ * (e.g., geometry with an unsupported CRS, timestamp_nano) fails at analysis time with a clear error,
  * while querying supported columns on the same table works fine.
  */
 public class IcebergUnsupportedTypeQueryTest extends ConnectorPlanTestBase {
     @Test
-    public void testGeographyProjectionAndPredicatesFail() {
-        for (String sql : new String[] {
-                "SELECT geography_col FROM iceberg0.unpartitioned_db.t_unknown_types",
-                "SELECT id FROM iceberg0.unpartitioned_db.t_unknown_types WHERE geography_col IS NULL",
-                "SELECT CAST(geo_col AS VARBINARY) FROM iceberg0.unpartitioned_db.t_unknown_types"}) {
-            SemanticException ex = Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
-            Assertions.assertTrue(ex.getMessage().contains("not supported"), ex.getMessage());
-        }
+    public void testGeographyAccessAndNestedOutput() throws Exception {
+        String table = "iceberg0.unpartitioned_db.t_unknown_types";
+        String sql = "SELECT ST_AsText(geography_col), ST_AsText(locations[1].shape), "
+                + "locations[1].label FROM " + table + " WHERE geography_col IS NOT NULL";
+        var statement = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+        assertContains(StatementPlanner.plan(statement, connectContext).getExplainString(TExplainLevel.NORMAL),
+                "IcebergScanNode");
+
+        SemanticException ex = Assertions.assertThrows(SemanticException.class,
+                () -> getFragmentPlan("SELECT locations FROM " + table));
+        assertContains(ex.getMessage(), "Nested GEOGRAPHY/GEOMETRY query results are not supported");
+        ex = Assertions.assertThrows(SemanticException.class,
+                () -> getFragmentPlan("CREATE VIEW nested_iceberg_geo AS " + sql));
+        assertContains(ex.getMessage(), "Nested GEOGRAPHY/GEOMETRY types are not supported in saved SQL definitions");
+    }
+
+    @Test
+    public void testUnsupportedGeometryCastFails() {
+        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
+                getFragmentPlan("SELECT CAST(geo_col AS VARBINARY) FROM iceberg0.unpartitioned_db.t_unknown_types"));
+        assertContains(ex.getMessage(), "Datatype of external table column [geo_col] is not supported");
     }
 
     @TempDir
@@ -51,8 +67,8 @@ public class IcebergUnsupportedTypeQueryTest extends ConnectorPlanTestBase {
     public void testSelectUnsupportedColumnFails() {
         SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
                 getFragmentPlan("SELECT geo_col FROM iceberg0.unpartitioned_db.t_unknown_types"));
-        Assertions.assertTrue(ex.getMessage().contains("not supported"),
-                "Expected 'not supported' error, got: " + ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("Datatype of external table column [geo_col] is not supported"),
+                ex.getMessage());
     }
 
     @Test

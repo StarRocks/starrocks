@@ -2,9 +2,16 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical s"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # メトリクス s
+
+## `scheduled_tablet_num`
+
+- 単位: カウント
+- タイプ: 瞬間
+- 説明: リーダー FE の tablet スケジューラーがスケジュール中の tablet の数。つまり、Pending 状態と Running 状態の tablet の合計で、BALANCE タイプと REPAIR タイプの両方を含みます。リーダー以外の FE では `0` になります。
 
 ## `schema_change_mem_bytes`
 
@@ -813,7 +820,7 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 瞬間
-- 説明: 各BEノードにおける最高のコンパクションスコアを示します。
+- 説明: 各BEノードにおける最高のコンパクションスコアを示します。これは `tablet_base_max_compaction_score` と `tablet_cumulative_max_compaction_score` のうち大きい方の値です。主キーテーブルのコンパクションスコア (`tablet_update_max_compaction_score`) は含まれません。
 
 ## `starrocks_fe_tablet_num`
 

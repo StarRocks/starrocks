@@ -77,11 +77,22 @@ CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
 // Capacity of the shared-data tablet metadata cache, as a percentage of the process memory limit, clamped to
 // [0, 100]. The cache holds tablet metadata and txn logs, apart from the segment metadata cache, so that segments
 // loaded by queries and compactions cannot evict them. Set to 0 to disable the cache.
-CONF_mInt32(lake_tablet_metadata_cache_limit_percent, "10");
+CONF_mInt32(lake_tablet_metadata_cache_limit_percent, "5");
 
 // Capacity of the shared-data segment metadata cache, as a percentage of the process memory limit, clamped to
 // [0, 100]. The cache holds opened segments, delete vectors and tablet schemas. Set to 0 to disable the cache.
-CONF_mInt32(lake_segment_metadata_cache_limit_percent, "20");
+CONF_mInt32(lake_segment_metadata_cache_limit_percent, "10");
+
+// The capacity, in bytes, that the shared-data tablet metadata cache never shrinks below. While the process memory
+// usage is above memory_high_level, the tablet and segment metadata caches give memory back, and they grow back to the
+// capacities set by lake_tablet_metadata_cache_limit_percent and lake_segment_metadata_cache_limit_percent once it
+// drops below. A value above the configured capacity keeps the cache at the configured capacity.
+CONF_mInt64(lake_tablet_metadata_cache_min_limit, /*1GB=*/"1073741824");
+
+// The capacity, in bytes, that the shared-data segment metadata cache never shrinks below. See
+// lake_tablet_metadata_cache_min_limit. A value above the configured capacity keeps the cache at the configured
+// capacity.
+CONF_mInt64(lake_segment_metadata_cache_min_limit, /*1GB=*/"1073741824");
 
 // Tracked memory budget for synchronously processing one dump_tablet_metadata request. It uses the standard
 // MemTracker accounting granularity. New requests fail closed when the value is non-positive.
@@ -167,6 +178,15 @@ CONF_mBool(lake_enable_del_file_crc_check, "true");
 // the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses the
 // legacy reader and cannot parse files written in the new format.
 CONF_mBool(lake_enable_protobuf_file_checksum, "true");
+
+// Write multi-statement version logs as ordered groups instead of the legacy merged TxnLogPB.
+// Disabled by default for a reader-first rollout; the legacy write path and its limitations remain
+// until enabled. Readers accept both formats regardless of this flag. Enable only after every CN
+// that can publish, replay or clean up these logs has the group reader. Before either enabling or
+// disabling, pause affected schema-change/multi-statement publishers and drain in-flight requests;
+// switching concurrently with publish is not supported. Disabling does not make existing groups
+// downgrade-readable: drain and verify them before rolling back to a pre-reader CN.
+CONF_mBool(lake_enable_txn_vlog_group, "false");
 
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");

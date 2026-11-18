@@ -3,6 +3,7 @@ displayed_sidebar: docs
 sidebar_position: 10
 keywords: ['resource groups', 'isolation']
 description: "How to use resource groups in StarRocks to isolate resources and run multiple workloads concurrently in a single cluster."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 
@@ -47,7 +48,7 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 | exclusive_cpu_percent      | CPU hard isolation percentage for this resource group. Supported from v4.1.                                    | [0, 100] (takes effect when greater than 0)                    | 0                |
 | mem_limit                  | The percentage of memory available for queries by this resource group on the current BE node.                  | (0, 1] (required)                                              | -                |
 | mem_pool                   | Groups resource groups to share a memory limit.                                                                | String                                                         | default_mem_pool |
-| spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.                                                         | (0, 1]                                                         | 1.0              |
+| spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.                                                         | (0, 1)                                                         | 1.0              |
 | concurrency_limit          | Maximum number of concurrent queries in this resource group.                                                   | Integer (takes effect when greater than 0)                     | 0                |
 | mem_used_pct_limit         | Memory usage percentage limit in this resource group. Requires `enable_group_level_query_queue` to be enabled. Only available when `enable_query_queue_v2` is `false`. | [0, 1] (takes effect when greater than 0)                      | 0                |
 | big_query_cpu_second_limit | Maximum CPU time (in seconds) for big query tasks on each BE node.                                             | Integer (takes effect when greater than 0)                     | 0                |
@@ -63,9 +64,9 @@ These parameters specify the CPU scheduling weight of a resource group on a sing
 You can use one of the following parameters to set the CPU scheduling weight:
 
 - `cpu_weight`: Directly sets the CPU scheduling weight. Its value range is (0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` is the average number of CPU cores across all BE nodes. The parameter is effective only when it is set to greater than 0.
-- `cpu_weight_percent`: Supported from v4.1. Sets the CPU scheduling weight as a percentage. Its value range is [0, 100]. The parameter is effective only when it is set to greater than 0. If `min_be_cpu_cores * cpu_weight_percent / 100 < 1`, the system returns an error, where `min_be_cpu_cores` is the minimum number of CPU cores across all BE nodes.
+- `cpu_weight_percent`: Supported from v4.1. Sets the CPU scheduling weight as a percentage. Its value range is [0, 100]. The parameter is effective only when it is set to greater than 0.
 
-At runtime, each BE converts `cpu_weight_percent` to the actual `cpu_weight` based on the number of CPU cores on that BE (`be_cpu_cores`): `cpu_weight = be_cpu_cores * cpu_weight_percent / 100`.
+At runtime, each BE converts `cpu_weight_percent` to the actual `cpu_weight` based on the number of CPU cores on that BE (`be_cpu_cores`): `cpu_weight = max(1, be_cpu_cores * cpu_weight_percent / 100)`, where the division is rounded down.
 
 Only one of `cpu_weight`, `cpu_weight_percent`, `exclusive_cpu_cores`, and `exclusive_cpu_percent` can be greater than 0.
 
@@ -134,12 +135,12 @@ WITH (
 
 ##### `spill_mem_limit_threshold`
 
-Defines the memory usage threshold that triggers spilling to disk. The value range is (0,1], with the default being 1 (inactive). Introduced in v3.1.7.
+Defines the memory usage threshold that triggers spilling to disk. The value range is (0,1), with the default being 1 (inactive). Introduced in v3.1.7.
 
-- When automatic spilling is enabled (`spill_mode` set to `auto`), but resource groups are disabled, the system will spill intermediate results to disk when a query’s memory usage exceeds 80% of `query_mem_limit`.
+- When automatic spilling is enabled (`spill_mode` set to `auto`), but resource groups are disabled, the system will spill intermediate results to disk when a query’s memory usage exceeds 80% of its effective memory limit, which is the smaller of `query_mem_limit` (if it is set) and the memory limit that the query inherits from the BE. In versions earlier than v4.0.16 and v4.1.6, `query_mem_limit` is not taken into account, and the 80% is calculated based only on the memory limit inherited from the BE.
 - When resource groups are enabled, spilling will occur if:
   - The total memory usage of all queries in the group exceeds `current BE memory limit * mem_limit * spill_mem_limit_threshold`, or
-  - The memory usage of the current query exceeds 80% of `query_mem_limit`.
+  - The memory usage of the current query exceeds 80% of its effective memory limit, which is the smallest of `query_mem_limit` (if it is set), `big_query_mem_limit` (if it is set), and the memory limit of the resource group. In versions earlier than v4.0.16 and v4.1.6, only the memory limit of the resource group is taken into account.
 
 #### Query concurrency parameters
 
@@ -185,7 +186,7 @@ There are two system-defined resource groups in each StarRocks instance: `defaul
 
 `default_wg` will be assigned to regular queries that are under the management of resource groups but don't match any classifier. The default resource limits of `default_wg` are as follows:
 
-- `cpu_weight`: The number of CPU cores of the BE.
+- `cpu_weight_percent`: 100, that is, the number of CPU cores of each BE. (If `default_wg` was created before v4.1, it keeps `cpu_weight` set to the average number of CPU cores of the BEs at creation time, even after an upgrade.)
 - `mem_limit`: 100%.
 - `concurrency_limit`: 0.
 - `big_query_cpu_second_limit`: 0.
@@ -198,7 +199,7 @@ There are two system-defined resource groups in each StarRocks instance: `defaul
 
 `default_mv_wg` will be assigned to asynchronous materialized view refresh tasks if no resource group is allocated to the corresponding materialized view in the property `resource_group` during materialized view creation. The default resource limits of `default_mv_wg` are as follows:
 
-- `cpu_weight`: 1.
+- `cpu_weight_percent`: 1, which results in a CPU weight of 1 on BEs with fewer than 200 CPU cores. (If `default_mv_wg` was created before v4.1, it keeps `cpu_weight` set to 1.)
 - `mem_limit`: 80%.
 - `concurrency_limit`: 0.
 - `spill_mem_limit_threshold`: 80%.
@@ -214,9 +215,9 @@ Classifiers support the following conditions:
 - `role`: the role of the user.
 - `query_type`: the type of the query. `SELECT` and `INSERT` (from v2.5) are supported. When INSERT INTO or BROKER LOAD tasks hit a resource group with `query_type` as `insert`, the BE node reserves the specified CPU resources for the tasks.
 - `source_ip`: the CIDR block from which the query is initiated.
-- `db`: the database which the query accesses. It can be specified by strings separated by commas `,`.
-- `plan_cpu_cost_range`: The estimated CPU cost range of the query. The format is `(DOUBLE, DOUBLE]`. The default value is NULL, indicating no such restriction. The `PlanCpuCost` column in `fe.audit.log` represents the system's estimate of the CPU cost for the query. This parameter is supported from v3.1.4 onwards.
-- `plan_mem_cost_range`: The system-estimated memory cost range of a query. The format is `(DOUBLE, DOUBLE]`. The default value is NULL, indicating no such restriction. The `PlanMemCost` column in `fe.audit.log` represents the system's estimate of the memory cost for the query. This parameter is supported from v3.1.4 onwards.
+- `db`: the database which the query accesses. It can be specified by strings separated by commas `,`. A classifier with `db` matches a query only when it includes all the databases that the query accesses.
+- `plan_cpu_cost_range`: The estimated CPU cost range of the query. The format is `[DOUBLE, DOUBLE)`. The default value is NULL, indicating no such restriction. The `PlanCpuCost` column in `fe.audit.log` represents the system's estimate of the CPU cost for the query. This parameter is supported from v3.1.4 onwards.
+- `plan_mem_cost_range`: The system-estimated memory cost range of a query. The format is `[DOUBLE, DOUBLE)`. The default value is NULL, indicating no such restriction. The `PlanMemCost` column in `fe.audit.log` represents the system's estimate of the memory cost for the query. This parameter is supported from v3.1.4 onwards.
 
 A classifier matches a query only when one or all conditions of the classifier match the information about the query. If multiple classifiers match a query, StarRocks calculates the degree of matching between the query and each classifier and identifies the classifier with the highest degree of matching.
 
@@ -228,9 +229,9 @@ StarRocks calculates the degree of matching between a query and a classifier by 
 
 - If the classifier has the same value of `user` as the query, the degree of matching of the classifier increases by 1.
 - If the classifier has the same value of `role` as the query, the degree of matching of the classifier increases by 1.
-- If the classifier has the same value of `query_type` as the query, the degree of matching of the classifier increases by 1 plus the number obtained from the following calculation: 1/Number of `query_type` fields in the classifier.
-- If the classifier has the same value of `source_ip` as the query, the degree of matching of the classifier increases by 1 plus the number obtained from the following calculation: (32 - `cidr_prefix`)/64.
-- If the classifier has the same value of `db` as the query, the degree of matching of the classifier increases by 10.
+- If the classifier has the same value of `query_type` as the query, the degree of matching of the classifier increases by 1 plus the number obtained from the following calculation: 0.1/Number of `query_type` fields in the classifier.
+- If the classifier has the same value of `source_ip` as the query, the degree of matching of the classifier increases by 1 plus the number obtained from the following calculation: `cidr_prefix`/64.
+- If the classifier has the same value of `db` as the query, the degree of matching of the classifier increases by 10 multiplied by the number of databases specified in the classifier.
 - If the query's CPU cost falls within the `plan_cpu_cost_range`, the degree of matching of the classifier increases by 1.
 - If the query's memory cost falls within the `plan_mem_cost_range`, the degree of matching of the classifier increases by 1.
 
@@ -256,15 +257,6 @@ classifier B (user='Alice', source_ip = '192.168.1.0/24')
 -- Classifier C has fewer query types specified in it than Classifier D. Therefore, Classifier C has a higher degree of matching than Classifier D.
 classifier C (user='Alice', query_type in ('select'))
 classifier D (user='Alice', query_type in ('insert','select'))
-```
-
-If multiple classifiers have the same degree of matching, one of the classifiers will be randomly selected.
-
-```Plain
--- If a query simultaneously queries both db1 and db2 and the classifiers E and F have the 
--- highest degree of matching among the hit classifiers, one of E and F will be randomly selected.
-classifier E (db='db1')
-classifier F (db='db2')
 ```
 
 ## Isolate computing resources

@@ -3,17 +3,19 @@ displayed_sidebar: docs
 toc_max_heading_level: 5
 keywords: ['iceberg']
 description: "An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards."
+products: [oss, enterprise, cloud, anywhere]
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
-import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
-import EditionSpecificIcebergCatalogSyntax from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Syntax.mdx'
-import EditionSpecificIcebergCatalogParam from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Param.mdx'
 
 # Iceberg catalog
 
-<QSTip />
+---
+---
+
+:::tip
+This example uses the Local Climatological Data(LCD) dataset featured in the [StarRocks Basics](../../../quick_start/shared-nothing.md) Quick Start. You can load the data and try the example yourself.
+:::
 
 An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards. With Iceberg catalogs, you can:
 
@@ -34,7 +36,21 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
 
 :::
 
-An Iceberg column containing nested geography in a list, map, or struct is exposed as `UNKNOWN_TYPE` and cannot be queried, including its non-geo subfields. Other supported columns and scalar geography remain readable.
+## Iceberg type mapping
+
+| Iceberg type | StarRocks type | Supported reads |
+| --- | --- | --- |
+| `geometry` | `GEOMETRY` | Top-level columns in Parquet-backed tables with Iceberg format version 3 or later. The CRS must be `OGC:CRS84` (the default) or `EPSG:<n>`, where `n` contains only ASCII digits and represents a positive 32-bit signed integer. Other CRS identifiers map to `UNKNOWN_TYPE`. |
+
+StarRocks preserves the CRS identifier as stored. `OGC:CRS84` and `EPSG:4326` are distinct. Use `ST_AsText(g)` or `ST_AsBinary(g)` to return a GEOMETRY value. Direct projection, including `SELECT *` when it includes a GEOMETRY column, fails during query analysis.
+
+For Parquet-backed Iceberg tables with format version 3 or later, StarRocks reads `GEOGRAPHY` in array elements, map values, and struct fields. These containers can be nested, for example an array of structs with a `GEOGRAPHY` field. The supported CRS and edge algorithm are `OGC:CRS84` and spherical.
+
+To return a nested value, select its leaf and serialize it explicitly. For example, use `ST_AsText(places[1])` for an array, `ST_AsText(places_by_id[42])` for a map, or `ST_AsBinary(location.shape)` for a struct. Direct output of a container with GEO fields is unsupported.
+
+A container with a GEO map key, nested `GEOMETRY`, or unsupported geo metadata maps to `UNKNOWN_TYPE` as a whole. GEO comparison, grouping, ordering, spatial bounds pruning, saved SQL definitions with nested GEO, and native table storage of these containers remain unsupported.
+
+During a rolling upgrade, upgrade all BE and CN nodes to a version with the nested Parquet reader before upgrading FE nodes.
 
 ## Usage notes
 
@@ -116,7 +132,18 @@ If Kerberos authentication is enabled for your HDFS cluster or Hive metastore, c
 
 ### Syntax
 
-<EditionSpecificIcebergCatalogSyntax />
+```SQL
+CREATE EXTERNAL CATALOG <catalog_name>
+[COMMENT <comment>]
+PROPERTIES
+(
+    "type" = "iceberg",
+    [SecurityParams],
+    MetastoreParams,
+    StorageCredentialParams,
+    MetadataRelatedParams
+)
+```
 
 ---
 
@@ -141,7 +168,7 @@ The type of your data source. Set the value to `iceberg`.
 
 Parameter(s) about how StarRocks manages data access to the catalog.
 
-<IcebergCatalogIcebergRestSecurityLink />
+For detailed instructions on managing data access for Iceberg Catalogs, see [Security Setup for Iceberg REST Catalog](./iceberg_rest_security.md).
 
 ##### catalog.access.control
 
@@ -840,8 +867,6 @@ Starting from v3.4, StarRocks can obtain statistics of Iceberg tables by reading
 | **Parameter**                                 | **Default**           | **Description**                                         |
 | :-------------------------------------------- | :-------------------- | :-------------------------------------------------------|
 | enable_get_stats_from_external_metadata       | false                 | Whether to obtain statistics from Iceberg metadata. When this item is set to `true`, you can further control which type of statistics to collect through the session variable [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata).  |
-
-<EditionSpecificIcebergCatalogParam />
 
 ### Examples
 

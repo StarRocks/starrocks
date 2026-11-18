@@ -63,3 +63,37 @@ duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"
 insert into input_metadata values (1, named_struct('uri', 'a', 'size', 1)), (2, NULL), (3, named_struct('uri', 'b', 'size', -1));
 select id, try_to_file(s) is null, fl_get_uri(try_to_file(s)) from input_metadata order by id;
 drop database test_try_to_file_${uuid0};
+
+-- name: test_get_presigned
+CREATE STORAGE VOLUME "presign_${uuid0}"
+TYPE = S3
+LOCATIONS = ("s3://${oss_bucket}/test_presign_${uuid0}/")
+PROPERTIES
+(
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}"
+);
+select u like 'http%', u like '%X-Amz-Signature=%', u like '%X-Amz-Expires=3600%', u like '%dir/a.png?%'
+from (select get_presigned_url('presign_${uuid0}', 's3://${oss_bucket}/dir/a.png') u) t;
+select fl_get_uri(f) like 'http%', fl_get_uri(f) like '%X-Amz-Signature=%', fl_get_uri(f) like '%X-Amz-Expires=3600%', fl_get_offset(f), fl_get_size(f), fl_get_content_type(f), fl_get_checksum(f), fl_get_inline(f) is null
+from (select get_presigned_file('presign_${uuid0}', to_file(named_struct('uri', 's3://${oss_bucket}/dir/a.png', 'offset', 0, 'size', 12, 'content_type', 'image/png', 'checksum', 'opaque'))) f) t;
+select fl_get_uri(f) is null, hex(fl_get_inline(f)), fl_get_content_type(f)
+from (select get_presigned_file('presign_${uuid0}', to_file(named_struct('inline', to_binary('610062', 'hex'), 'content_type', 'text/plain')), 60) f) t;
+create database test_get_presigned_${uuid0};
+use test_get_presigned_${uuid0};
+create table media (id int, uri varchar(256), ttl bigint)
+duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+insert into media values
+(1, 's3://${oss_bucket}/dir/a.png', 60),
+(2, NULL, 0),
+(3, 'oss://${oss_bucket}/dir/b c.png', NULL),
+(4, 'https://example.com/c.png', 0);
+select id, u is null, u like '%X-Amz-Signature=%', u like concat('%X-Amz-Expires=', ifnull(ttl, 3600), '%')
+from (select id, ttl, get_presigned_url('presign_${uuid0}', uri, ttl) u from media where id <= 3) t order by id;
+select id, fl_get_uri(f) = uri, fl_get_uri(f) like '%X-Amz-Signature=%', fl_get_uri(f) like concat('%X-Amz-Expires=', ifnull(ttl, 3600), '&%')
+from (select id, uri, ttl, get_presigned_file('presign_${uuid0}', to_file(named_struct('uri', uri)), ttl) f from media where id in (1, 3, 4)) t order by id;
+select count(*) from media where fl_get_uri(get_presigned_file('presign_${uuid0}', try_to_file(named_struct('uri', uri)))) like '%X-Amz-Signature=%';
+select get_presigned_url('presign_${uuid0}', uri, 60) from media where id = 4;
+drop database test_get_presigned_${uuid0};
+DROP STORAGE VOLUME "presign_${uuid0}";

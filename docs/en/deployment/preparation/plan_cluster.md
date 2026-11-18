@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "How to plan node count, CPU, memory, and storage for a StarRocks cluster in production."
+products: [oss, enterprise]
 ---
 
 # Plan StarRocks Cluster
@@ -18,7 +19,7 @@ FE nodes are mainly responsible for metadata management, client connection manag
 
 In production, we recommend you deploy at least **THREE** Follower FE nodes in your StarRocks cluster to prevent single points of failure (SPOFs). The Leader FE will be automatically elected from these three followers.
 
-StarRocks uses the Raft protocol to manage the metadata across FE nodes. StarRocks elects a Leader FE node from all Follower FE nodes. Only the Leader FE node can write metadata. The other Follower FE nodes only update their metadata based on the logs from the Leader FE node. Each time the Leader FE node fails, StarRocks re-elects a new Leader FE node as long as more than half of the Follower FE nodes are alive.
+StarRocks uses BDB JE (Berkeley DB Java Edition) replication to manage the metadata across FE nodes. StarRocks elects a Leader FE node from all Follower FE nodes. Only the Leader FE node can write metadata. The other Follower FE nodes only update their metadata based on the logs from the Leader FE node. Each time the Leader FE node fails, StarRocks re-elects a new Leader FE node as long as more than half of the Follower FE nodes are alive.
 
 If your application generates highly concurrent query requests, you can add Observer FE nodes to your cluster. Observer FE nodes only process the query requests and do not participate in the election for the Leader FE node.
 
@@ -80,7 +81,7 @@ If the BE storage space runs out as your raw data grows, you can supplement it b
 
 - Add extra storage volumes to your BE nodes
 
-  You can also add extra storage volumes to existing BE nodes. For detailed instructions, see [Scale your StarRocks cluster - Scale BE up](../../administration/management/Scale_up_down.md).
+  You can also add extra storage volumes to existing BE nodes. To do so, add the paths of the new storage volumes to the BE configuration item [`storage_root_path`](../../administration/configuration/BE_parameters/stats_storage.md#storage_root_path).
 
   After extra storage volumes are added, StarRocks automatically re-balances the data in all tables.
 

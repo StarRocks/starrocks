@@ -126,6 +126,24 @@ class StatisticSQLBuilderTest {
                 "cleanup delete must never also match the hashed uuid (it holds the fresh data): " + sql);
     }
 
+    // The existence checks must cover exactly the rows the raw-keyed cleanup DELETEs would remove: the raw uuid only
+    // (never the hash), the same partitions and columns, filtering on key columns only.
+    @Test
+    void existsChecksMatchTheRawKeyedCleanupScope() {
+        String hashed = StatisticUtils.hashTableUuidForPkStorage(TABLE_UUID);
+        String sql = StatisticSQLBuilder.buildExistsExternalStatRawPartitionsSQL(
+                TABLE_UUID, ImmutableList.of("p1", "p'2"), ImmutableList.of("col1", "col2"));
+        Assertions.assertEquals("SELECT 1 FROM _statistics_.external_column_statistics WHERE TABLE_UUID = '" +
+                TABLE_UUID + "' AND PARTITION_NAME IN ('p1', 'p''2') AND COLUMN_NAME IN ('col1', 'col2') LIMIT 1", sql);
+        Assertions.assertFalse(sql.contains(hashed), sql);
+
+        String histogramSql = StatisticSQLBuilder.buildExistsExternalHistogramRawColumnsSQL(
+                TABLE_UUID, ImmutableList.of("c'1", "c2"));
+        Assertions.assertEquals("SELECT 1 FROM _statistics_.external_histogram_statistics WHERE TABLE_UUID = '" +
+                TABLE_UUID + "' AND COLUMN_NAME IN ('c''1', 'c2') LIMIT 1", histogramSql);
+        Assertions.assertFalse(histogramSql.contains(hashed), histogramSql);
+    }
+
     @Test
     void buildQueryExternalFullStatisticsSQLDedupsByLatestUpdateTime() {
         // Correctness must not depend on the write-side cleanup delete succeeding: if both a

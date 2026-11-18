@@ -51,10 +51,12 @@
 #include "platform/key_cache.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/memory/process_memory.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/rowset/page_io.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
@@ -204,6 +206,134 @@ TEST_F(SegmentReaderWriterTest, per_column_zstd_page_size_changes_the_pages_writ
     // ~2 MB of values: roughly 32 pages at the 64 KB default, a couple at 1 MB.
     ASSERT_GT(default_pages, 8);
     ASSERT_LT(big_page_pages, default_pages / 4);
+}
+
+// Actual PageIO/footer entry points, not a replacement of their IO routing.
+// BE_TEST verifies scope contracts here; byte accounting needs production hooks.
+TEST_F(SegmentReaderWriterTest, ProcessOwnedMetadataKeepsBorrowedIOUnderCaller) {
+    auto* process = process_memory_tracker();
+    ASSERT_NE(process, nullptr);
+    MemTracker task(-1, "borrowed-io", process);
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&task);
+    struct BorrowedStream final : public io::SeekableInputStream {
+        MemTracker* expected;
+        size_t reads = 0;
+        bool throw_on_read = false;
+        std::unique_ptr<char[]> buffer;
+        explicit BorrowedStream(MemTracker* tracker) : expected(tracker) {}
+        StatusOr<int64_t> read(void*, int64_t) override { return Status::NotSupported("unused"); }
+        Status seek(int64_t) override { return Status::OK(); }
+        StatusOr<int64_t> position() override { return 0; }
+        StatusOr<int64_t> get_size() override {
+            EXPECT_EQ(CurrentThread::mem_tracker(), expected);
+            return 64;
+        }
+        Status read_at_fully(int64_t, void*, int64_t) override {
+            EXPECT_EQ(CurrentThread::mem_tracker(), expected);
+            ++reads;
+            buffer = std::make_unique<char[]>(4096);
+            if (throw_on_read) throw std::bad_alloc();
+            return Status::IOError("borrowed stream read failed");
+        }
+    };
+    auto stream = std::make_shared<BorrowedStream>(&task);
+    RandomAccessFile file(stream, "accounting-test");
+    auto status = with_process_memory(true, [&]() -> Status {
+        SegmentFooterPB footer;
+        return Segment::parse_segment_footer(&file, &footer, nullptr, nullptr, &task).status();
+    });
+    EXPECT_TRUE(status.is_io_error());
+    EXPECT_EQ(CurrentThread::mem_tracker(), &task);
+    EXPECT_EQ(stream->reads, 1);
+
+    PageReadOptions opts;
+    opts.read_file = stream.get();
+    opts.read_file_mem_tracker = &task;
+    opts.use_page_cache = false;
+    opts.page_pointer.size = 64;
+    OlapReaderStatistics stats;
+    opts.stats = &stats;
+    const auto load_page = [&] {
+        return with_process_memory(true, [&] {
+            PageHandle handle;
+            Slice body;
+            PageFooterPB footer;
+            return PageIO::read_and_decompress_page(opts, &handle, &body, &footer);
+        });
+    };
+    status = load_page();
+    EXPECT_TRUE(status.is_io_error());
+    EXPECT_EQ(stream->reads, 2);
+    EXPECT_EQ(CurrentThread::mem_tracker(), &task);
+    stream->throw_on_read = true;
+    EXPECT_THROW(load_page(), std::bad_alloc);
+    EXPECT_EQ(CurrentThread::mem_tracker(), &task);
+    EXPECT_EQ(stream->reads, 3);
+    // The stream, its retained buffer, and the original opts die under task.
+    ASSERT_TRUE(opts.read_file_mem_tracker.has_value());
+    EXPECT_EQ(*opts.read_file_mem_tracker, &task);
+}
+
+TEST_F(SegmentReaderWriterTest, ProcessOwnedFactoryReleasesExternalDependenciesUnderCaller) {
+    auto* process = process_memory_tracker();
+    ASSERT_NE(process, nullptr);
+    MemTracker consumer(-1, "segment consumer", process);
+    MemTracker* fs_released_under = nullptr;
+    MemTracker* schema_released_under = nullptr;
+    std::shared_ptr<Segment> segment;
+    std::weak_ptr<Segment> weak;
+    {
+        auto fs = std::shared_ptr<FileSystem>(new MemoryFileSystem(), [&](FileSystem* p) {
+            fs_released_under = CurrentThread::mem_tracker();
+            delete p;
+        });
+        auto schema = TabletSchemaCSPtr(new TabletSchema(), [&](const TabletSchema* p) {
+            schema_released_under = CurrentThread::mem_tracker();
+            delete p;
+        });
+        FileInfo info{.path = std::string(1024, 'p'), .fs = fs};
+        segment = Segment::create(fs, info, 0, schema, nullptr);
+        weak = segment;
+        ASSERT_TRUE(segment->uses_process_memory());
+    }
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&consumer);
+        segment.reset();
+        EXPECT_EQ(fs_released_under, &consumer);
+        EXPECT_EQ(schema_released_under, &consumer);
+        EXPECT_EQ(CurrentThread::mem_tracker(), &consumer);
+        EXPECT_TRUE(weak.expired());
+        weak.reset();
+        EXPECT_EQ(CurrentThread::mem_tracker(), &consumer);
+    }
+}
+
+TEST_F(SegmentReaderWriterTest, ProcessOwnedSegmentReadsRealFooterAndLazyIndex) {
+    TabletSchemaCSPtr schema = TabletSchemaHelper::create_tablet_schema({create_int_key_pb(1), create_int_value_pb(2)});
+    SegmentWriterOptions options;
+    std::shared_ptr<Segment> original;
+    build_segment(options, schema, schema, 32, DefaultIntGenerator, &original);
+    ASSERT_FALSE(original->uses_process_memory());
+
+    auto* process = process_memory_tracker();
+    ASSERT_NE(process, nullptr);
+    MemTracker producer(-1, "producer", process);
+    MemTracker consumer(-1, "consumer", process);
+    std::shared_ptr<Segment> segment;
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&producer);
+        segment = Segment::create(_fs, original->file_info(), 0, schema, nullptr);
+        ASSERT_OK(segment->open(nullptr, nullptr, {}));
+        EXPECT_EQ(CurrentThread::mem_tracker(), &producer);
+    }
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&consumer);
+        ASSERT_OK(segment->load_index({.use_page_cache = false}));
+        EXPECT_TRUE(segment->has_loaded_index());
+        EXPECT_EQ(segment->num_rows(), 32);
+        segment.reset();
+        EXPECT_EQ(CurrentThread::mem_tracker(), &consumer);
+    }
 }
 
 TEST_F(SegmentReaderWriterTest, estimate_segment_size) {

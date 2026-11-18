@@ -2,6 +2,7 @@
 sidebar_position: 40
 displayed_sidebar: docs
 description: "How to configure the BE and CN Blacklist in StarRocks to exclude problematic nodes from query execution."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Manage BE and CN Blacklist

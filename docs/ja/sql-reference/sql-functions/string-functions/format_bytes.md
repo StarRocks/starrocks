@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "バイト数を人間が読みやすい単位(B、KB、MB、GB、TB、PB、EB)の文字列に変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # format_bytes

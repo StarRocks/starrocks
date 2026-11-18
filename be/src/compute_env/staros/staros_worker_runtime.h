@@ -20,12 +20,17 @@
 #include <memory>
 #include <optional>
 
+#include "common/status.h"
+
 namespace starcache {
 class StarCache;
 } // namespace starcache
 
 namespace staros::starlet {
 class Starlet;
+namespace fslib {
+struct RemoteReadSchedulerOptions;
+} // namespace fslib
 } // namespace staros::starlet
 
 namespace starrocks {
@@ -50,6 +55,28 @@ void set_starlet_in_shutdown();
 // with starlet's own predicate, and s3_multipart_equal_part_size to the starlet gflag that decides
 // how those parts are cut. Called during worker init; exposed for tests.
 void apply_starlet_upload_threshold_configs();
+
+// Checks the remote I/O scheduler configs when it is going to run (remote_io_scheduler_enable and the cache on).
+// Only reads configs, so that startup can refuse an invalid value before any cache or thread exists.
+Status validate_remote_io_scheduler_config();
+
+// Turns io_coalesce_lake_read_enable off, recording false as its set value so that a rejected dynamic update rolls
+// back to false. Returns the value it had. Called when the scheduler starts; exposed for tests.
+bool turn_io_coalesce_lake_read_off();
+
+// The scheduler options the configs give. Exposed for tests.
+staros::starlet::fslib::RemoteReadSchedulerOptions remote_read_scheduler_options();
+
+// Enables the remote I/O scheduler of starlet when remote_io_scheduler_enable is set and the cache is on, and turns
+// the lake read-ahead strategies it replaces off. Without the cache, or when the scheduler cannot start, it logs a
+// warning and leaves the remote reads on their old paths. An invalid config is an error. Startup only: the options
+// are fixed once the scheduler runs, and it cannot be turned off again.
+Status enable_remote_io_scheduler();
+
+// Applies starlet_grpc_client_enable_http_proxy to the starlet gflag grpc_client_enable_http_proxy,
+// which starlet reads whenever it creates a channel to StarMgr or to a peer. Called during worker
+// init, before starlet creates any channel; exposed for tests.
+void apply_starlet_grpc_client_proxy_config();
 
 #ifdef BE_TEST
 void set_staros_worker_for_test(std::shared_ptr<StarOSWorker> worker);

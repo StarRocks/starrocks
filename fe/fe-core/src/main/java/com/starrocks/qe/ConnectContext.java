@@ -247,6 +247,9 @@ public class ConnectContext {
     private ConnectContext parent;
 
     private boolean relationAliasCaseInsensitive = false;
+    // Alias mode of the query outside the outermost connector view being expanded; null when no connector
+    // view is being expanded. A native view nested in a connector view switches back to it.
+    private Boolean relationAliasCaseInsensitiveOutsideConnectorView = null;
 
     // Keys of the views currently being expanded on the analysis path, used to detect cyclic view
     // definitions. It lives on the session (not on a single QueryAnalyzer.Visitor) so the path is
@@ -1418,6 +1421,14 @@ public class ConnectContext {
 
     public boolean isRelationAliasCaseInsensitive() {
         return relationAliasCaseInsensitive;
+    }
+
+    public Boolean getRelationAliasCaseInsensitiveOutsideConnectorView() {
+        return relationAliasCaseInsensitiveOutsideConnectorView;
+    }
+
+    public void setRelationAliasCaseInsensitiveOutsideConnectorView(Boolean value) {
+        this.relationAliasCaseInsensitiveOutsideConnectorView = value;
     }
 
     public Set<String> getViewExpansionPath() {

@@ -291,9 +291,7 @@ public class FunctionAnalyzer {
             FunctionCallExpr functionCallWithoutIf =
                     new FunctionCallExpr(argFuncNameWithoutIf, functionParamsWithOutIf);
             analyzeBuiltinAggFunction(argFuncNameWithoutIf, functionParamsWithOutIf, functionCallWithoutIf);
-        }
-
-        if (fn != null && fn.isAI()) {
+        } else if (fn != null && fn.isAI()) {
             AIFunctionAnalyzer.analyze(functionCallExpr);
         }
     }
@@ -321,6 +319,7 @@ public class FunctionAnalyzer {
             case FunctionSet.ENCODE_SORT_KEY:
             case FunctionSet.ENCODE_FINGERPRINT_SHA256:
             case FunctionSet.ENCODE_FINGERPRINT_SHA256_V2:
+            case FunctionSet.TO_JSON:
                 break;
             default:
                 return;
@@ -1054,6 +1053,12 @@ public class FunctionAnalyzer {
         if (fn != null) {
             return fn;
         }
+        // get fn from the presign builtins, which are bound to the storage volume they sign with
+        fn = AnalyzerUtils.getPresignedFunction(session, node, argumentTypes);
+        if (fn != null) {
+            return fn;
+        }
+
         // get fn from builtin functions
         fn = getAnalyzedBuiltInFunction(session, fnName, params, argumentTypes, node.getPos());
         if (fn != null) {

@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "How to manually deploy a shared-data StarRocks cluster with decoupled storage and computing."
+products: [oss]
 ---
 
 import Tabs from '@theme/Tabs';
@@ -160,7 +161,7 @@ The following procedures are performed on the CN instances. You can deploy CN no
 
       > **NOTE**
       >
-      > The data is cached under the directory **`<storage_root_path>/starlet_cache`**.
+      > From v3.4.0 onwards, the data is cached under the directory **`<storage_root_path>/datacache`**. When the CN starts, the existing cache data in `<storage_root_path>/starlet_cache` is automatically moved to this directory. In earlier versions, the data is cached under the directory **`<storage_root_path>/starlet_cache`**.
 
    b. If any of the CN ports mentioned in the [Environment Configuration Checklist](./preparation/environment_configurations.md) are occupied, you must assign valid alternatives in the CN configuration file.
 
@@ -329,7 +330,7 @@ A high-availability FE cluster requires at least THREE Follower FE nodes in the 
    > **NOTE**
    >
    > - You can use the preceding command to add a single Follower FE nodes each time.
-   > - If you want to add Observer FE nodes, execute `ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"=`. For detailed instructions, see [ALTER SYSTEM - FE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md).
+   > - If you want to add Observer FE nodes, execute `ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"`. For detailed instructions, see [ALTER SYSTEM - FE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md).
 
 3. Launch a terminal on the new FE instance, create a dedicated directory for metadata storage, navigate to the directory that stores the StarRocks FE deployment files, and modify the FE configuration file **fe/conf/fe.conf**. For more instructions, see [Step 1: Start the Leader FE node](#step-1-start-the-leader-fe-node). Basically, you can repeat the procedures in Step 1 **except for the command used to start the FE node**.
   
@@ -625,7 +626,7 @@ Whether to enable the local disk cache.
 
 ##### `datacache.partition_duration`
 
-The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity starting from the current time. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
+The time range of the hot partitions, counted back from the current time. For a table partitioned by a DATE or DATETIME column, when a query scans a partition, StarRocks populates the cache with the scanned data only if the partition's range overlaps this time range (or, for list partitioning, if a partition value falls within it). Queries on other partitions still read data that is already cached, but they do not populate the cache and do not use the in-memory page cache. This property is checked against partition bounds at query time, not against the time when data was loaded, and it does not evict data that is already cached. It has no effect on tables that are neither range-partitioned by a single DATE or DATETIME column nor list-partitioned by a DATE or DATETIME column. This property is a string value in the format `<number> <unit>`, where the unit can be `YEAR`, `MONTH`, `WEEK`, `DAY`, `HOUR`, `MINUTE`, or `SECOND` (case-insensitive, singular or plural), for example, `7 DAY` and `12 HOUR`. You can combine several pairs, such as `1 DAY 12 HOUR`, but `YEAR`, `MONTH`, and `WEEK` cannot be combined with `HOUR`, `MINUTE`, or `SECOND`. If it is not specified, queries on all partitions populate the cache.
 
 > **NOTE**
 >

@@ -3,6 +3,7 @@ sidebar_position: 60
 displayed_sidebar: docs
 description: "StarRocks v2.3 以降の external catalog を通じた外部データソース管理とデータレイク分析の機能サポート。"
 sidebar_label: 機能サポート
+products: [oss, enterprise, anywhere]
 ---
 
 # 機能サポート: データレイク分析

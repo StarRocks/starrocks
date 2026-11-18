@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Routine Load 可以持续从 Apache Kafka® 消费消息并导入数据到 StarRocks。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';
@@ -105,10 +106,33 @@ PARTITION (p1, p2, p3)
 ```SQL
 PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 ```
+
+以下属性也可以使用描述性名称设置。同一条语句不能同时使用一个属性的两个名称。SHOW CREATE ROUTINE LOAD 按属性最近一次设置时使用的名称返回该属性。作业有属性用描述性名称设置过之后，[SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md) 返回的 `JobProperties` 字段除了原有的键（如 `maxBatchIntervalS`），还包含描述性名称对应的键（如 `loadInterval`），两者显示的都是取整后实际生效的值。
+
+| 描述性名称 | 原名称 | 描述性名称的取值 |
+| ---------- | ------ | ---------------- |
+| `max_concurrency` | `desired_concurrent_number` | 与原名称相同。 |
+| `max_error_rows` | `max_error_number` | 与原名称相同。 |
+| `load_interval` | `max_batch_interval` | 带单位 `ms` 或 `s` 的时长，例如 `"500ms"` 或 `"10s"`。最小值：`5s`。取值向上取整到秒。 |
+| `error_window_rows` | `max_batch_rows` | 错误检测窗口的行数，即 `10 * max_batch_rows`。最小值：`2000000`。取值除以 10 后向上取整。 |
+| `max_consume_duration` | `task_consume_second` | 带单位 `ms` 或 `s` 的时长。取值向上取整到秒。 |
+| `load_timeout` | `task_timeout_second` | 带单位 `ms` 或 `s` 的时长。取值向上取整到秒，且取整后必须大于 `max_consume_duration`。 |
+
+不带单位的时长（如 `"10"`）会被拒绝。
+
+只有支持描述性名称的版本才接受这些名称。使用描述性名称的语句，包括对有属性用描述性名称设置过的作业执行 SHOW CREATE ROUTINE LOAD 得到的语句，在更早的版本上会报错，例如 `load_interval is invalid property`。滚动升级期间，请在 Leader FE 升级之后再使用描述性名称。
+
 #### `desired_concurrent_number`
 
 **必需**：否\
-**描述**：单个 Routine Load 作业的期望任务并行度。默认值：`3`。实际任务并行度由多个参数的最小值决定：`min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。<ul><li>`alive_be_number`：存活的 BE 节点数。</li><li>`partition_number`：要消费的分区数。</li><li>`desired_concurrent_number`：单个 Routine Load 作业的期望任务并行度。默认值：`3`。</li><li>`max_routine_load_task_concurrent_num`：Routine Load 作业的默认最大任务并行度，为 `5`。请参见 [FE 动态参数](../../../../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters)。</li></ul>最大实际任务并行度由存活的 BE 节点数或要消费的分区数决定。<br/>
+**描述**：单个 Routine Load 作业的期望任务并行度。默认值：`3`。实际任务并行度由多个参数的最小值决定：`min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。
+
+- `alive_be_number`：存活的 BE 节点数。
+- `partition_number`：要消费的分区数。
+- `desired_concurrent_number`：单个 Routine Load 作业的期望任务并行度。默认值：`3`。
+- `max_routine_load_task_concurrent_num`：Routine Load 作业的默认最大任务并行度，为 `5`。请参见 [FE 动态参数](../../../../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters)。
+
+最大实际任务并行度由存活的 BE 节点数或要消费的分区数决定。
 
 #### `max_batch_interval`
 
@@ -123,12 +147,20 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `max_error_number`
 
 **必需**：否\
-**描述**：错误检测窗口内允许的最大错误数据行数。如果错误数据行数超过此值，导入作业将暂停。您可以执行 [SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md) 并使用 `ErrorLogUrls` 查看错误日志。之后，您可以根据错误日志在 Kafka 中纠正错误。默认值为 `0`，表示不允许错误行。<br />**注意** <br /> <ul><li>当错误数据行数过多时，最后一批任务将在导入作业暂停之前**成功**。也就是说，合格的数据将被导入，不合格的数据将被过滤。如果您不想过滤太多不合格的数据行，请设置参数 `max_filter_ratio`。</li><li>错误数据行不包括 WHERE 子句过滤掉的数据行。</li><li>此参数与下一个参数 `max_filter_ratio` 一起控制最大错误数据记录数。当未设置 `max_filter_ratio` 时，此参数的值生效。当设置了 `max_filter_ratio` 时，一旦错误数据记录数达到此参数或 `max_filter_ratio` 参数设置的阈值，导入作业将暂停。</li></ul>
+**描述**：错误检测窗口内允许的最大错误数据行数。如果错误数据行数超过此值，导入作业将暂停。您可以执行 [SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md) 并使用 `ErrorLogUrls` 查看错误日志。之后，您可以根据错误日志在 Kafka 中纠正错误。默认值为 `0`，表示不允许错误行。<br />**注意**
+
+- 当错误数据行数过多时，最后一批任务将在导入作业暂停之前**成功**。也就是说，合格的数据将被导入，不合格的数据将被过滤。如果您不想过滤太多不合格的数据行，请设置参数 `max_filter_ratio`。
+- 错误数据行不包括 WHERE 子句过滤掉的数据行。
+- 此参数与下一个参数 `max_filter_ratio` 一起控制最大错误数据记录数。当未设置 `max_filter_ratio` 时，此参数的值生效。当设置了 `max_filter_ratio` 时，一旦错误数据记录数达到此参数或 `max_filter_ratio` 参数设置的阈值，导入作业将暂停。
 
 #### `max_filter_ratio`
 
 **必需**：否\
-**描述**：导入作业的最大错误容忍度。错误容忍度是指由于数据质量不足而被过滤掉的数据记录在所有请求导入作业的数据记录中的最大百分比。有效值：`0` 到 `1`。默认值：`1`（这意味着它实际上不会生效）。<br/>建议您将其设置为 `0`。这样，如果检测到不合格的数据记录，导入作业将暂停，从而确保数据的正确性。<br/>如果您想忽略不合格的数据记录，可以将此参数设置为大于 `0` 的值。这样，即使数据文件包含不合格的数据记录，导入作业也可以成功。<br/>**注意**<br/><ul><li>当错误数据行数大于 `max_filter_ratio` 时，最后一批任务将**失败**。这与 `max_error_number` 的效果有些**不同**。</li><li>不合格的数据记录不包括 WHERE 子句过滤掉的数据记录。</li><li>此参数与上一个参数 `max_error_number` 一起控制最大错误数据记录数。当未设置此参数（与设置 `max_filter_ratio = 1` 的效果相同）时，`max_error_number` 参数的值生效。当设置了此参数时，一旦错误数据记录数达到此参数或 `max_error_number` 参数设置的阈值，导入作业将暂停。</li></ul>
+**描述**：导入作业的最大错误容忍度。错误容忍度是指由于数据质量不足而被过滤掉的数据记录在所有请求导入作业的数据记录中的最大百分比。有效值：`0` 到 `1`。默认值：`1`（这意味着它实际上不会生效）。<br/>建议您将其设置为 `0`。这样，如果检测到不合格的数据记录，导入作业将暂停，从而确保数据的正确性。<br/>如果您想忽略不合格的数据记录，可以将此参数设置为大于 `0` 的值。这样，即使数据文件包含不合格的数据记录，导入作业也可以成功。<br/>**注意**
+
+- 当错误数据行数大于 `max_filter_ratio` 时，最后一批任务将**失败**。这与 `max_error_number` 的效果有些**不同**。
+- 不合格的数据记录不包括 WHERE 子句过滤掉的数据记录。
+- 此参数与上一个参数 `max_error_number` 一起控制最大错误数据记录数。当未设置此参数（与设置 `max_filter_ratio = 1` 的效果相同）时，`max_error_number` 参数的值生效。当设置了此参数时，一旦错误数据记录数达到此参数或 `max_error_number` 参数设置的阈值，导入作业将暂停。
 
 #### `strict_mode`      
 
@@ -138,7 +170,13 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `log_rejected_record_num`
 
 **必需**：否\
-**描述**：指定可以记录的最大不合格数据行数。此参数自 v3.1 起支持。有效值：`0`、`-1` 和任何非零正整数。默认值：`0`。<ul><li>值 `0` 指定被过滤掉的数据行不会被记录。</li><li>值 `-1` 指定所有被过滤掉的数据行都会被记录。</li><li>非零正整数如 `n` 指定每个 BE 上最多可以记录 `n` 个被过滤掉的数据行。</li></ul>您可以通过查询 `information_schema.loads` 视图中的 `REJECTED_RECORD_PATH` 字段返回的路径访问导入作业中被过滤掉的所有不合格数据行。
+**描述**：指定可以记录的最大不合格数据行数。此参数自 v3.1 起支持。有效值：`0`、`-1` 和任何非零正整数。默认值：`0`。
+
+- 值 `0` 指定被过滤掉的数据行不会被记录。
+- 值 `-1` 指定所有被过滤掉的数据行都会被记录。
+- 非零正整数如 `n` 指定每个 BE 上最多可以记录 `n` 个被过滤掉的数据行。
+
+您可以通过查询 `information_schema.loads` 视图中的 `REJECTED_RECORD_PATH` 字段返回的路径访问导入作业中被过滤掉的所有不合格数据行。
 
 #### `timezone`    
 
@@ -173,7 +211,10 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `escape`
 
 **必需**：否\
-**描述**：指定用于转义各种特殊字符（如行分隔符、列分隔符、转义字符和 `enclose` 指定的字符）的字符，这些字符随后被 StarRocks 视为普通字符，并被解析为它们所在字段值的一部分。类型：单字节字符。默认值：`NONE`。最常见的字符是斜杠（`\`），在 SQL 语句中必须写为双斜杠（`\\`）。<br />**注意**<br />`escape` 指定的字符适用于每对 `enclose` 指定的字符的内部和外部。<br />以下是两个示例：<br /><ul><li>当您将 `enclose` 设置为 `"` 并将 `escape` 设置为 `\` 时，StarRocks 将 `"say \"Hello world\""` 解析为 `say "Hello world"`。</li><li>假设列分隔符是逗号（`,`）。当您将 `escape` 设置为 `\` 时，StarRocks 将 `a, b\, c` 解析为两个独立的字段值：`a` 和 `b, c`。</li></ul>
+**描述**：指定用于转义各种特殊字符（如行分隔符、列分隔符、转义字符和 `enclose` 指定的字符）的字符，这些字符随后被 StarRocks 视为普通字符，并被解析为它们所在字段值的一部分。类型：单字节字符。默认值：`NONE`。最常见的字符是斜杠（`\`），在 SQL 语句中必须写为双斜杠（`\\`）。<br />**注意**<br />`escape` 指定的字符适用于每对 `enclose` 指定的字符的内部和外部。<br />以下是两个示例：
+
+- 当您将 `enclose` 设置为 `"` 并将 `escape` 设置为 `\` 时，StarRocks 将 `"say \"Hello world\""` 解析为 `say "Hello world"`。
+- 假设列分隔符是逗号（`,`）。当您将 `escape` 设置为 `\` 时，StarRocks 将 `a, b\, c` 解析为两个独立的字段值：`a` 和 `b, c`。
 
 #### `strip_outer_array`
 
@@ -198,17 +239,28 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `task_consume_second`
 
 **必需**：否\
-**描述**：指定 Routine Load 作业中每个 Routine Load 任务的最大数据消费时间。单位：秒。与 [FE 动态参数](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_consume_second`（适用于集群中的所有 Routine Load 作业）不同，此参数特定于单个 Routine Load 作业，更加灵活。此参数自 v3.1.0 起支持。<ul> <li>当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 使用 FE 动态参数 `routine_load_task_consume_second` 和 `routine_load_task_timeout_second` 控制导入行为。</li> <li>仅配置 `task_consume_second` 时，`task_timeout_second` 的默认值计算为 `task_consume_second` * 4。</li> <li>仅配置 `task_timeout_second` 时，`task_consume_second` 的默认值计算为 `task_timeout_second`/4。</li> </ul>
+**描述**：指定 Routine Load 作业中每个 Routine Load 任务的最大数据消费时间。单位：秒。与 [FE 动态参数](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_consume_second`（适用于集群中的所有 Routine Load 作业）不同，此参数特定于单个 Routine Load 作业，更加灵活。此参数自 v3.1.0 起支持。
+
+- 当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 使用 FE 动态参数 `routine_load_task_consume_second` 和 `routine_load_task_timeout_second` 控制导入行为。
+- 仅配置 `task_consume_second` 时，`task_timeout_second` 的默认值计算为 `task_consume_second` * 4。
+- 仅配置 `task_timeout_second` 时，`task_consume_second` 的默认值计算为 `task_timeout_second`/4。
 
 #### `task_timeout_second`
 
 **必需**：否\
-**描述**：指定 Routine Load 作业中每个 Routine Load 任务的超时时间。单位：秒。与 [FE 动态参数](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_timeout_second`（适用于集群中的所有 Routine Load 作业）不同，此参数特定于单个 Routine Load 作业，更加灵活。此参数自 v3.1.0 起支持。<ul> <li>当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 使用 FE 动态参数 `routine_load_task_consume_second` 和 `routine_load_task_timeout_second` 控制导入行为。</li> <li>仅配置 `task_timeout_second` 时，`task_consume_second` 的默认值计算为 `task_timeout_second`/4。</li> <li>仅配置 `task_consume_second` 时，`task_timeout_second` 的默认值计算为 `task_consume_second` * 4。</li> </ul>
+**描述**：指定 Routine Load 作业中每个 Routine Load 任务的超时时间。单位：秒。与 [FE 动态参数](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_timeout_second`（适用于集群中的所有 Routine Load 作业）不同，此参数特定于单个 Routine Load 作业，更加灵活。此参数自 v3.1.0 起支持。
+
+- 当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 使用 FE 动态参数 `routine_load_task_consume_second` 和 `routine_load_task_timeout_second` 控制导入行为。
+- 仅配置 `task_timeout_second` 时，`task_consume_second` 的默认值计算为 `task_timeout_second`/4。
+- 仅配置 `task_consume_second` 时，`task_timeout_second` 的默认值计算为 `task_consume_second` * 4。
 
 #### `pause_on_fatal_parse_error`
 
 **必需**：否\
-**描述**：指定在遇到不可恢复的数据解析错误时是否自动暂停作业。有效值：`true` 和 `false`。默认值：`false`。此参数自 v3.3.12/v3.4.2 起支持。<br />此类解析错误通常由非法数据格式引起，例如：<ul><li>导入 JSON 数组但未设置 `strip_outer_array`。</li><li>导入 JSON 数据，但 Kafka 消息包含非法 JSON，如 `abcd`。</li></ul>
+**描述**：指定在遇到不可恢复的数据解析错误时是否自动暂停作业。有效值：`true` 和 `false`。默认值：`false`。此参数自 v3.3.12/v3.4.2 起支持。<br />此类解析错误通常由非法数据格式引起，例如：
+
+- 导入 JSON 数组但未设置 `strip_outer_array`。
+- 导入 JSON 数据，但 Kafka 消息包含非法 JSON，如 `abcd`。
 
 #### `data_source`, `data_source_properties`
 
@@ -245,7 +297,13 @@ FROM <data_source>
 #### `kafka_offsets`
 
 **必需**：否\
-**描述**：指定在 `kafka_partitions` 中从哪个起始偏移量开始消费数据。如果未指定此属性，Routine Load 作业将从 `kafka_partitions` 中的最新偏移量开始消费数据。有效值：<ul><li>特定偏移量：从特定偏移量开始消费数据。</li><li>`OFFSET_BEGINNING`：从最早的偏移量开始消费数据。</li><li>`OFFSET_END`：从最新的偏移量开始消费数据。</li></ul>多个起始偏移量用逗号（,）分隔，例如，`"kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"`。
+**描述**：指定在 `kafka_partitions` 中从哪个起始偏移量开始消费数据。如果未指定此属性，Routine Load 作业将从 `kafka_partitions` 中的最新偏移量开始消费数据。有效值：
+
+- 特定偏移量：从特定偏移量开始消费数据。
+- `OFFSET_BEGINNING`：从最早的偏移量开始消费数据。
+- `OFFSET_END`：从最新的偏移量开始消费数据。
+
+多个起始偏移量用逗号（,）分隔，例如，`"kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"`。
 
 #### `property.kafka_default_offsets`
 

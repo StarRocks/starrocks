@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "base/testutil/assert.h"
+#include "column/column_access_path.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/schema.h"
 #include "formats/scan_context.h"
@@ -357,6 +358,68 @@ TEST(ParquetMetaHelperTest, RenamedColumnWithoutFieldIdsIsReadThroughMappedNames
     // without the lake schema only the current names match
     std::map<std::string, int32_t> by_name{{"id", 0}, {"c3", 3}};
     EXPECT_EQ(by_name, read(nullptr));
+}
+
+// get_variant_int(payload, '$.a') is read as the virtual column `payload.a`. In a file without field ids it must be
+// bound to the stored `payload` column; looking it up by its own name found nothing and read it as all NULL.
+TEST(ParquetMetaHelperTest, VariantVirtualColumnWithoutFieldIdsReadsSourceColumn) {
+    tparquet::FileMetaData t_meta;
+    std::vector<tparquet::SchemaElement> schema;
+    tparquet::SchemaElement root;
+    root.__set_name("table");
+    root.__set_num_children(2);
+    schema.push_back(root);
+    tparquet::SchemaElement id;
+    id.__set_name("id");
+    id.__set_type(tparquet::Type::INT64);
+    id.__set_num_children(0);
+    schema.push_back(id);
+    tparquet::SchemaElement payload;
+    payload.__set_name("payload");
+    payload.__set_repetition_type(tparquet::FieldRepetitionType::OPTIONAL);
+    payload.__set_num_children(2);
+    schema.push_back(payload);
+    for (const char* name : {"metadata", "value"}) {
+        tparquet::SchemaElement col;
+        col.__set_name(name);
+        col.__set_type(tparquet::Type::BYTE_ARRAY);
+        col.__set_repetition_type(tparquet::FieldRepetitionType::OPTIONAL);
+        col.__set_num_children(0);
+        schema.push_back(col);
+    }
+    t_meta.__set_schema(schema);
+    FileMetaData file_meta;
+    ASSERT_OK(file_meta.init(t_meta, /*case_sensitive=*/false));
+    ASSERT_FALSE(file_meta.schema().exist_filed_id());
+
+    // the extended access path the FE sends for the virtual column: /payload/a, marked extended
+    TColumnAccessPath tleaf;
+    tleaf.__set_type(TAccessPathType::FIELD);
+    tleaf.__set_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT).to_thrift());
+    TColumnAccessPath troot;
+    troot.__set_type(TAccessPathType::ROOT);
+    troot.__set_extended(true);
+    troot.__set_children({tleaf});
+    std::vector<std::string> resolved = {"payload", "a"};
+    size_t resolve_index = 0;
+    auto resolver = [&](const TColumnAccessPath&) -> StatusOr<std::string> { return resolved[resolve_index++]; };
+    ASSIGN_OR_ABORT(auto access_path, ColumnAccessPath::create(troot, resolver));
+    std::vector<ColumnAccessPathPtr> access_paths;
+    access_paths.emplace_back(std::move(access_path));
+
+    SlotDescriptor virtual_slot(1, "payload.a", TypeDescriptor::from_logical_type(TYPE_BIGINT));
+    std::vector<FormatColumnInfo> columns{{0, &virtual_slot, true}};
+
+    ParquetMetaHelper helper(&file_meta, /*case_sensitive=*/false);
+    std::vector<GroupReaderParam::Column> read_cols;
+    std::unordered_set<std::string> existed;
+    helper.prepare_read_columns(columns, &access_paths, read_cols, existed);
+
+    ASSERT_EQ(1u, read_cols.size());
+    EXPECT_EQ(1, read_cols[0].idx_in_parquet);
+    EXPECT_TRUE(read_cols[0].is_extended_variant_virtual);
+    EXPECT_EQ("payload", read_cols[0].source_variant_column_name);
+    EXPECT_EQ("a", read_cols[0].variant_virtual_leaf_path);
 }
 
 } // namespace starrocks::parquet

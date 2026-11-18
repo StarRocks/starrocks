@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从多个异构输入列创建保持顺序的复合二进制键。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # encode_sort_key

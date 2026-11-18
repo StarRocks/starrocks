@@ -16,6 +16,7 @@
 
 #include "compute_env/spill/block_manager.h"
 #include "compute_env/spill/dir_manager.h"
+#include "fs/remote_read_context.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks::spill {
@@ -33,7 +34,9 @@ using FileBlockContainerPtr = std::shared_ptr<FileBlockContainer>;
 
 class FileBlockManager : public BlockManager {
 public:
-    FileBlockManager(const TUniqueId& query_id, DirManager* dir_manager);
+    // `remote_read` is whom the reads of its blocks in starlet storage are for: the load that spills into its tablets'
+    // storage. Other file systems ignore it.
+    FileBlockManager(const TUniqueId& query_id, DirManager* dir_manager, const RemoteReadContext& remote_read = {});
     ~FileBlockManager() override = default;
 
     Status open() override;
@@ -53,6 +56,7 @@ private:
     std::string _last_created_container_dir;
 
     DirManager* _dir_mgr = nullptr;
+    RemoteReadContext _remote_read;
 };
 
 } // namespace starrocks::spill

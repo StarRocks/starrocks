@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "入力の負の値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # negative

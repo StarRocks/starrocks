@@ -617,6 +617,11 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         // loads can race in; if the version chain isn't healthy yet, they will
         // get stuck the same way.
         if (force && jobState == JobState.FINISHED_REWRITING) {
+            // Refuse (operator retries) while an earlier load is not yet visible:
+            // see AlterJobV2#readyToForceSkipPublish.
+            if (!readyToForceSkipPublish(commitVersionMap)) {
+                return false;
+            }
             markLakeNoOpPublishSent();
             if (!lakePublishVersionWithSkip(errMsg)) {
                 // Leave the job at FINISHED_REWRITING so the operator can retry

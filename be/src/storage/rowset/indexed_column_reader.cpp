@@ -34,10 +34,12 @@
 
 #include "storage/rowset/indexed_column_reader.h"
 
+#include "common/logging.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"     // for Substitute
 #include "storage/rowset/encoding_info.h" // for EncodingInfo
 #include "storage/rowset/page_io.h"
+#include "storage/storage_metrics.h"
 #include "storage_primitive/key_coder.h"
 
 namespace starrocks {
@@ -91,6 +93,7 @@ Status IndexedColumnReader::read_page(const IndexReadOptions& opts, const PagePo
                                       Slice* body, PageFooterPB* footer) const {
     PageReadOptions page_opts;
     page_opts.read_file = opts.read_file;
+    page_opts.read_file_mem_tracker = opts.read_file_mem_tracker;
     page_opts.page_pointer = pp;
     page_opts.codec = _compress_codec;
     page_opts.stats = opts.stats;
@@ -115,7 +118,20 @@ Status IndexedColumnIterator::_read_data_page(const PagePointer& pp) {
     PageHandle handle;
     Slice body;
     PageFooterPB footer;
-    RETURN_IF_ERROR(_reader->read_page(_opts, pp, &handle, &body, &footer));
+    Status st = _reader->read_page(_opts, pp, &handle, &body, &footer);
+    if (st.is_not_found() && _opts.idg_bitmap_file_missing != nullptr) {
+        if (!*_opts.idg_bitmap_file_missing) {
+            *_opts.idg_bitmap_file_missing = true;
+            StorageMetrics::instance()->lake_idg_files_missing_total.increment(1);
+            LOG_EVERY_N(WARNING, 100) << "IDG bitmap index file " << _opts.read_file->filename() << " of tablet "
+                                      << _opts.tablet_id << " segment " << _opts.segment_id
+                                      << " is missing during a lazy page read, reading the segment without it: " << st;
+        }
+        // Dictionary predicates interpret NotFound as a value beyond the last key. Keep a missing file
+        // distinct from that semantic miss so EQ/IN cannot turn this I/O failure into an empty result.
+        return Status::IOError("optional IDG bitmap index file is missing: " + st.to_string());
+    }
+    RETURN_IF_ERROR(st);
     // parse data page
     // note that page_index is not used in IndexedColumnIterator, so we pass 0
     return parse_page(&_data_page, std::move(handle), body, footer.data_page_footer(), _reader->encoding_info(), pp, 0);

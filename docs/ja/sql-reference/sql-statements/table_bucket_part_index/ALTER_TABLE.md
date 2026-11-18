@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "既存テーブルの名前変更、コメント修正、パーティション・タブレット修正を行います。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER TABLE
@@ -488,7 +489,7 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     - Tablet のサイズが `tablet_reshard_target_size` の 1.5 倍（すなわち `ceil(1.5 × tablet_reshard_target_size)`）**以上**であること。デフォルトの 10 GB の場合、Tablet が 15 GB に達した時点で分割されます。このしきい値は、バックグラウンドの自動分割と手動で実行する `ALTER TABLE ... SPLIT` の両方に適用されます。自動分割ではテーブルの目標サイズを使用し、手動 SPLIT では `PROPERTIES` で指定した値を使用します（指定しない場合はテーブルの目標サイズを使用します）。Tablet ID を指定した場合も同様で、しきい値未満の Tablet は分割されません。条件を満たす Tablet が 1 つもない場合、ステートメントは `No tablets need to split in table ...` というエラーになります。
     - 現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満であること。
 
-  - また、Tablet が属するマテリアライズドインデックスの Tablet 数が、ウェアハウスのコンピュートノード数（`tablet_reshard_max_split_count` により上限が課されるため、この設定を小さくするとより早く停止します）を下回っており、かつその Tablet のサイズがそのルールのターゲットサイズの 2 倍に達した場合は、上記のしきい値に達する前に分割されます。そのターゲットサイズとは、インデックスのデータ量を上記のスロット数で割ったサイズであり、テーブルの目標サイズを超えず、`tablet_reshard_min_split_size` を下限とします。したがってデフォルトの 2 GB では、データ量がまだこの下限を超えていないインデックスは、Tablet が 4 GB に達した時点で分割されます。このターゲットサイズがテーブルの目標サイズを下回っている間は、これらの分割の後もスロットが残っている場合、残りのスロットを、これらの分割の対象にならなかった Tablet のうち最大のものから順に割り当てて分割します。ただし、分割後の各 Tablet が `tablet_reshard_min_split_size` 以上である場合に限ります。たとえばコンピュートノードが 3 台の場合、Tablet が 2 個になったインデックスは、そのうち 1 つが 4 GB に達した時点で分割されて 3 個になります。これにより、作成直後のパーティションがクラスター全体の書き込み並列度により早く到達できます。このルールは、バックグラウンドの自動分割と、Tablet ID も `tablet_reshard_target_size` も指定しない手動 SPLIT に適用されます。いずれかを指定するとこのルールは無効になり、上記のしきい値のみで判定されます。`tablet_reshard_min_split_size` をテーブルの目標サイズ以上に設定すると、そのテーブルではこのルールが無効になります。クラスター全体で無効にするには、`tablet_reshard_min_split_size` を FE 設定 `tablet_reshard_target_size` 以上、かつ各テーブルに設定されたテーブルプロパティ `tablet_reshard_target_size` 以上に設定します。
+  - また、Tablet が属するマテリアライズドインデックスの Tablet 数が、ウェアハウスのコンピュートノード数（`tablet_reshard_max_split_count` により上限が課されるため、この設定を小さくするとより早く停止します）を下回り、かつインデックスのデータ量がその数とテーブルの目標サイズの積を下回っている間は、上記のしきい値に達する前に分割されます。空いているスロットは、上記のしきい値で分割されない Tablet に 1 つずつ割り当てられ、そのたびに現在の分割数で割った 1 つあたりのサイズが最も大きい Tablet が分割されます。ただし、分割後の各 Tablet が `tablet_reshard_min_split_size` 以上であり、1 つの Tablet の分割数が 1 回の分割の上限を超えない場合に限ります。たとえば `tablet_reshard_min_split_size` がデフォルトの 2 GB の場合、Tablet が 1 つだけのインデックスは、その Tablet が 4 GB に達した時点で分割されます。またコンピュートノードが 3 台の場合、Tablet が 2 個になったインデックスは、そのうち 1 つが 4 GB に達した時点で分割されて 3 個になります。これにより、作成直後のパーティションがクラスター全体の書き込み並列度により早く到達できます。このルールは、バックグラウンドの自動分割と、Tablet ID も `tablet_reshard_target_size` も指定しない手動 SPLIT に適用されます。いずれかを指定するとこのルールは無効になり、上記のしきい値のみで判定されます。`tablet_reshard_min_split_size` をテーブルの目標サイズ以上に設定すると、そのテーブルではこのルールが無効になります。クラスター全体で無効にするには、`tablet_reshard_min_split_size` を FE 設定 `tablet_reshard_target_size` 以上、かつ各テーブルに設定されたテーブルプロパティ `tablet_reshard_target_size` 以上に設定します。
 
   - MERGE を実行するには、FE 設定 `tablet_reshard_enable_tablet_merge` を `true` に設定する必要があります（デフォルト：`false`）。無効の場合、Tablet は自動的にマージされず、`ALTER TABLE ... MERGE` も拒否されます。有効にした場合、MERGE は次のように動作します：
     - 自動マージは、マテリアライズドインデックス内のいずれかの隣接する 2 つの Tablet の合計サイズが `tablet_reshard_target_size` の 80%（すなわち `ceil(0.8 × tablet_reshard_target_size)`）を**下回る**と実行されます。この判定にはテーブルの目標サイズを使用します。デフォルトの 10 GB の場合、隣接する 2 つの Tablet の合計が 8 GB 未満になった時点でマージされます。
@@ -934,9 +935,11 @@ v3.1 以降、StarRocks はユーザーが SQL コマンドを実行して手動
 
 共有データクラスタは v3.3.0 以降でこの機能をサポートしています。
 
+共有データの主キーテーブルに対する Base Compaction は v4.1.4 からサポートされています。`ALTER TABLE ... COMPACT` で手動 Compaction を要求でき、`BASE` キーワードの追加は不要です。v4.1.7 以降の `lake_pk_compaction_base_enable_delete_trigger` は自動トリガーだけを制御し、`false` にしても手動要求には影響しません。手動要求は 2 つの削除しきい値も回避します。削除行がないタブレットは通常の Compaction 選択にフォールバックします。要求は非同期で、1 回でタブレット全体がマージされるとは限りません。[主キーテーブルの Base Compaction](../../../administration/management/compaction.md#primary-key-base-compaction)を参照してください。
+
 > **注意**
 >
-> v3.2.13 以降、プロパティ [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#forbid-base-compaction) を使用して、特定の時間範囲内でベースコンパクションを禁止することができます。
+> [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#ベースコンパクションの禁止) の v3.2.13 での対応は、共有なしの非主キーテーブルが対象です。4.1 系列では、共有データテーブルにこのプロパティを設定できません。共有データの自動 Base Compaction の時間帯と最小間隔の制限は v4.2 からサポートされています。手動の `ALTER TABLE ... COMPACT` はこれらの制限を回避します。
 
 構文:
 
@@ -963,7 +966,7 @@ ALTER TABLE <tbl_name> CUMULATIVE COMPACT (<partition1_name>[,<partition2_name>,
 ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 ```
 
-`information_schema` データベースの `be_compactions` テーブルはコンパクション結果を記録します。コンパクション後のデータバージョンをクエリするには、`SELECT * FROM information_schema.be_compactions;` を実行できます。
+共有なしクラスタでは、`information_schema.be_compactions` で Compaction の結果を確認できます。共有データクラスタでは、`SHOW PROC '/compactions'` でタスク状態、`information_schema.be_cloud_native_compactions` でタブレットの実行詳細を確認します。[Compaction タスクの表示](../../../administration/management/compaction.md#compaction-タスクの表示)を参照してください。
 
 ### 主キー永続性インデックスの削除 (v3.3.9 以降)
 

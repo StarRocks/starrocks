@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "列出原生 GEOGRAPHY 和 GEOMETRY 重载、函数 ID、支持的输入以及运行时行为。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 原生 GEO 函数重载矩阵

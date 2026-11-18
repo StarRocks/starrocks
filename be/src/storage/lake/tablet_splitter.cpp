@@ -40,6 +40,7 @@
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/rowset/segment.h"
+#include "storage/sort_key_bounds.h"
 #include "storage/sort_key_sampler.h"
 #include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
@@ -840,12 +841,21 @@ Status validate_split_inputs(const TabletMetadataPB& source, SplitMetadataVisitB
                 previous = index;
                 first = false;
             }
-            // A segment with rows but without sort key bounds (for example, bounds kept in a field this
-            // binary does not know) cannot be placed in a child range.
-            if (segment.num_rows() > 0 &&
-                !(segment.has_sort_key_min() && segment.has_sort_key_max() &&
-                  segment.sort_key_min().values_size() > 0 && segment.sort_key_max().values_size() > 0)) {
-                fallback = Status::NotSupported("tablet split segment has no sort key bounds");
+            // A segment with rows cannot be placed in a child range without sort key bounds (for example,
+            // bounds kept in a field or format version this binary does not know) or with bounds that do
+            // not decode. Every later bound decode of the split reads only segments with rows, so checking
+            // here makes damaged bounds fall back to an identical tablet instead of failing the split.
+            if (segment.num_rows() > 0) {
+                if (!has_segment_sort_key_bounds(segment)) {
+                    fallback = Status::NotSupported("tablet split segment has no sort key bounds");
+                } else {
+                    VariantTuple segment_min;
+                    VariantTuple segment_max;
+                    if (Status st = decode_segment_sort_key_bounds(segment, &segment_min, &segment_max); !st.ok()) {
+                        fallback = Status::NotSupported(
+                                fmt::format("tablet split segment has unreadable sort key bounds: {}", st.message()));
+                    }
+                }
             }
             RETURN_IF_ERROR(insert_physical_slice(segment, &slices).status());
         }
@@ -923,14 +933,13 @@ Status build_unique_boundary_segments(TabletManager* tablet_manager, const Table
                 weighting_range_arity > 0 && (lower_arity == 0 || upper_arity == 0 || lower_arity == upper_arity);
     }
     const auto sample_weight_of = [&](const SegmentMetadataPB& segment_meta) -> int64_t {
-        if (!weight_by_range || !segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) {
+        if (!weight_by_range || !has_segment_sort_key_bounds(segment_meta)) {
             return segment_meta.num_rows();
         }
         VariantTuple segment_min;
         VariantTuple segment_max;
-        if (!segment_min.from_proto(segment_meta.sort_key_min()).ok() ||
-            !segment_max.from_proto(segment_meta.sort_key_max()).ok() || segment_min.size() != weighting_range_arity ||
-            segment_max.size() != weighting_range_arity) {
+        if (!decode_segment_sort_key_bounds(segment_meta, &segment_min, &segment_max).ok() ||
+            segment_min.size() != weighting_range_arity || segment_max.size() != weighting_range_arity) {
             return segment_meta.num_rows();
         }
         // A segment spans the inclusive interval [min, max] -- the same range
@@ -1001,8 +1010,7 @@ Status build_unique_boundary_segments(TabletManager* tablet_manager, const Table
             SegmentSplitInfo segment;
             segment.source_id = rowset.id();
             segment.segment_meta_pos = meta_pos;
-            RETURN_IF_ERROR(segment.min_key.from_proto(sm.sort_key_min()));
-            RETURN_IF_ERROR(segment.max_key.from_proto(sm.sort_key_max()));
+            RETURN_IF_ERROR(decode_segment_sort_key_bounds(sm, &segment.min_key, &segment.max_key));
             segment.num_rows = sm.num_rows();
             segment.data_size = sm.size();
 
@@ -1662,8 +1670,7 @@ Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<Ta
                 RETURN_IF_ERROR(budget->consume(1, "projector segment declaration"));
                 if (sm.has_num_rows() && sm.num_rows() == 0) continue;
                 SegmentSplitInfo segment;
-                RETURN_IF_ERROR(segment.min_key.from_proto(sm.sort_key_min()));
-                RETURN_IF_ERROR(segment.max_key.from_proto(sm.sort_key_max()));
+                RETURN_IF_ERROR(decode_segment_sort_key_bounds(sm, &segment.min_key, &segment.max_key));
                 segment.num_rows = sm.num_rows();
                 segment.data_size = sm.size();
                 // Samples the planner already computed for THIS segment, if any. They arrive
@@ -1767,10 +1774,19 @@ Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<Ta
                     (effective.is_maximum() || effective.upper_bound_included() == source_range.upper_bound_included());
             const bool all_shared = std::all_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
                                                 [](const auto& segment) { return segment.shared(); });
-            if (rowset.has_range() && rowset.segment_metas_size() > 0 && same_source_range && all_shared) {
-                return Status::NotSupported("tablet split cross-published rowset has no active physical weight");
+            if (!rowset.has_range() || rowset.segment_metas_size() == 0 || !same_source_range || !all_shared) {
+                return Status::Corruption("tablet split positive rowset anchor has zero emitted weight");
             }
-            return Status::Corruption("tablet split positive rowset anchor has zero emitted weight");
+            // A split cross-publish hands every child the parent load's whole rowset: every segment shared,
+            // the child's range, and stats divided by the split count whatever the keys. A child whose range
+            // holds none of the load's rows ends up here with positive stats and no physical weight. The
+            // rowset reads empty and goes to the children it is emitted to as it is, so share the stats that have
+            // no weight out evenly among them, as the cross-publish did; the split does not wait for a compaction
+            // to rewrite the rowset.
+            for (size_t c = 0; c < child_count; ++c) {
+                if (zero_row_weight) row_weights[c] = emit[c] ? 1 : 0;
+                if (zero_byte_weight) byte_weights[c] = emit[c] ? 1 : 0;
+            }
         }
         tablet_reshard_helper::allocate_proportionally(anchor.num_rows, row_weights, &rows);
         tablet_reshard_helper::allocate_proportionally(anchor.data_size, byte_weights, &bytes);
@@ -2071,7 +2087,7 @@ bool can_prune_rowset_segments(const RowsetMetadataPB& rowset, size_t sort_key_a
     // parallel-array shape check is needed.
     for (const auto& segment_meta : rowset.segment_metas()) {
         if (!segment_meta.has_num_rows() || segment_meta.num_rows() == 0) return false;
-        if (!segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) return false;
+        if (!has_segment_sort_key_bounds(segment_meta)) return false;
         // (c) those bounds must be comparable with the new tablets' ranges, which are at the
         // CURRENT sort-key arity. A rowset written before a metadata-only trailing sort-key ADD
         // stores narrower bounds, and VariantTuple::compare orders a shorter prefix-equal tuple
@@ -2083,8 +2099,7 @@ bool can_prune_rowset_segments(const RowsetMetadataPB& rowset, size_t sort_key_a
         // (prefix, default), so padding the MAX with the NULL minimum understates the segment's
         // reach whenever a post-ADD rowset contributed a boundary between the two. Leave such a
         // rowset unpruned instead; the caller keeps every segment on every new tablet as shared.
-        if (sort_key_arity > 0 && (static_cast<size_t>(segment_meta.sort_key_min().values_size()) != sort_key_arity ||
-                                   static_cast<size_t>(segment_meta.sort_key_max().values_size()) != sort_key_arity)) {
+        if (sort_key_arity > 0 && !segment_sort_key_bounds_have_arity(segment_meta, sort_key_arity)) {
             return false;
         }
     }
@@ -2118,8 +2133,7 @@ StatusOr<RowsetOwnership> compute_rowset_segment_ownership(const RowsetMetadataP
         VariantTuple segment_max_key;
         // An unparseable key means we cannot reason about this rowset's geometry;
         // return non-OK so the caller degrades the whole rowset to all-shared.
-        RETURN_IF_ERROR(segment_min_key.from_proto(segment_meta.sort_key_min()));
-        RETURN_IF_ERROR(segment_max_key.from_proto(segment_meta.sort_key_max()));
+        RETURN_IF_ERROR(decode_segment_sort_key_bounds(segment_meta, &segment_min_key, &segment_max_key));
         // The segment spans the inclusive key interval [min, max].
         TabletRange segment_range(segment_min_key, segment_max_key, /*lower_bound_included=*/true,
                                   /*upper_bound_included=*/true);
