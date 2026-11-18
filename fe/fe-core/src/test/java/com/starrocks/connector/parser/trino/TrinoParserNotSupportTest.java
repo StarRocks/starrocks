@@ -79,13 +79,6 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
         analyzeSuccess(sql);
     }
 
-    // refer to https://trino.io/docs/current/functions/conversion.html#format
-    @Test
-    public void testFormat() {
-        String sql = "select format('%03d', 8);";
-        analyzeFail(sql, "No matching function with signature: format");
-    }
-
     // refer to https://trino.io/docs/current/functions/json.html#cast-to-json
     @Test
     public void testJsonCast() {

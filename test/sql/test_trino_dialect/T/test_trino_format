@@ -1,0 +1,25 @@
+-- name: testTrinoFormat
+CREATE TABLE format_tbl
+    (c1 int,
+    c_str varchar(16),
+    c_int int,
+    c_big bigint,
+    c_dec decimal(10, 3),
+    c_bool boolean,
+    c_date date)
+    DUPLICATE KEY(c1)
+    DISTRIBUTED BY HASH(c1)
+    BUCKETS 1
+    PROPERTIES ("replication_num" = "1");
+
+insert into format_tbl values
+(1, 'a', 8, -1234567, 2.675, true, '2026-01-02'),
+(2, 'bc', -8, 0, -0.005, false, '0999-12-31'),
+(3, null, null, null, null, null, null),
+(4, '', 12345, 9223372036854775807, 1234567.891, true, '2026-11-18');
+
+set sql_dialect='trino';
+select c1, format('%s|%s|%s|%s|%s', c_str, c_int, c_big, c_bool, c_date) from format_tbl order by c1;
+select c1, format('%03d|%-5d|%5d|%d', c_int, c_int, c_int, c_big) from format_tbl order by c1;
+select c1, format('%.2f|%.0f|%f|%,.2f', c_dec, c_dec, c_dec, c_dec) from format_tbl order by c1;
+select c1, format('%2$s-%1$s %%', c_str, c_int) from format_tbl order by c1;

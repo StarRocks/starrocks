@@ -371,6 +371,50 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "CAST(json_query(parse_json('{\"a\": {\"b\": 1}}'), '$.a.b') AS VARCHAR)");
     }
 
+    // refer to https://trino.io/docs/current/functions/conversion.html#format
+    @Test
+    public void testFormat() throws Exception {
+        // The expected strings are Java's String.format output for the same values.
+        assertPlanContains("select format('%.2f|%.1f|%f|%.0f|%.3f', 2.675, -0.05, 1.5, 2.5, 1.5)",
+                "'2.68|-0.1|1.500000|3|1.500'");
+        assertPlanContains("select format('%.0f|%.2f', -0.005, -0.001)", "'-0|-0.00'");
+        assertPlanContains("select format('%s|%s|%s|%s|%2$s', 'a', 5, true, DATE '2026-01-02')",
+                "'a|5|true|2026-01-02|5'");
+        assertPlanContains("select format('%s %d %.2f %.0f|%5d|%-5d|', NULL, NULL, NULL, NULL, NULL, NULL)",
+                "'null null nu | null|null |'");
+        assertPlanContains("select format('100%% done%n%s', 'x')", "'100% done\nx'");
+
+        // %d pads to the width without truncating, with zeros after the sign for the '0' flag.
+        assertPlanContains("select format('%03d|%-5d|%2d', tc, tc, tc) from tall",
+                "if(14: char_length >= 3, 13: cast, if(3: tc < 0, concat('-', lpad(substr(13: cast, 2), 2, '0')), " +
+                        "lpad(13: cast, 3, '0')))",
+                "if(14: char_length >= 5, 13: cast, rpad(13: cast, 5, ' '))",
+                "if(14: char_length >= 2, 13: cast, lpad(13: cast, 2, ' '))", "'null '", "CAST(3: tc AS VARCHAR)");
+        // %f rounds the magnitude of a DECIMAL and keeps the sign of the unrounded value.
+        assertPlanContains("select format('%.2f', tj) from tall",
+                "concat(if(13: expr, '-', ''), CAST(CAST(if(13: expr, 0 - CAST(10: tj AS DECIMAL64(13,3)), 10: tj) " +
+                        "AS DECIMAL128(13,2)) AS VARCHAR))", "<slot 13> : 10: tj < 0");
+        assertPlanContains("select format('%,.2f', tj) from tall",
+                "concat(if(13: expr, '-', ''), money_format(if(13: expr, 0 - CAST(10: tj AS DECIMAL64(13,3)), 10: tj)))");
+        assertPlanContains("select format('%s %s %s', ta, td, ti) from tall",
+                "ifnull(1: ta, 'null')", "CAST(4: td AS VARCHAR)", "CAST(9: ti AS VARCHAR)");
+
+        // Arguments whose Java formatting StarRocks does not reproduce are rejected.
+        analyzeFail("select format('%.2f', tf) from tall", "format() does not support %.2f for double values");
+        analyzeFail("select format('%s', tf) from tall", "format() does not support %s for double values");
+        analyzeFail("select format('%s', te) from tall", "format() does not support %s for float values");
+        analyzeFail("select format('%s', th) from tall", "format() does not support %s for datetime values");
+        analyzeFail("select format('%s', tj) from tall", "format() does not support %s for decimal(9, 3) values");
+        analyzeFail("select format('%d', tj) from tall", "format() does not support %d for decimal(9, 3) values");
+        analyzeFail("select format('%.2f', tc) from tall", "format() does not support %.2f for int(11) values");
+        // Unsupported format strings are rejected by the Trino parser, and StarRocks has no format().
+        analyzeFail("select format('%x', 1)", "No matching function with signature: format");
+        analyzeFail("select format('%1$tm', th) from tall", "No matching function with signature: format");
+        analyzeFail("select format('%,.3f|%5s|%+d', 1.5, 'a', 1)", "No matching function with signature: format");
+        analyzeFail("select format(ta, 1) from tall", "No matching function with signature: format");
+        analyzeFail("select format('%s %s', 'a')", "No matching function with signature: format");
+    }
+
     @Test
     public void testExtractFnTransform() throws Exception {
         String sql = "SELECT extract(dow FROM TIMESTAMP '2022-10-20 05:10:00')";
