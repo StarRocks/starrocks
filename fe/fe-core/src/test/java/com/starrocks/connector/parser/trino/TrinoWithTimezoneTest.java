@@ -242,7 +242,10 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                         "'UTC' AS TIMESTAMP)",
                 "select cast(with_timezone(TIMESTAMP '2024-10-27 02:30:00', 'Europe/Berlin') AT TIME ZONE " +
                         "'UTC' AS TIMESTAMP)",
-                // Trino rejects a zoned argument and an offset past +14:00
+                // Trino rejects a zoned argument and an offset past +14:00; a function source may differ on its own
+                // (from_unixtime(-1) is NULL in StarRocks; Trino: 1969)
+                "select year(with_timezone(CAST(from_unixtime(-1) AS TIMESTAMP(6)), 'UTC'))",
+                "select hour(with_timezone(date_add('hour', 1, ts), 'UTC'))" + values,
                 "select CAST(with_timezone(now(), 'UTC') AS DATE)",
                 "select CAST(with_timezone(from_unixtime(0), 'UTC') AS DATE)",
                 "select CAST(with_timezone(ts AT TIME ZONE 'UTC', 'UTC') AS DATE)" + values,

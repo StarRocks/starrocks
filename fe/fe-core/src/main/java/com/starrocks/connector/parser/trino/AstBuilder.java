@@ -254,9 +254,6 @@ import static java.util.stream.Collectors.toList;
 public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     private static final String WITH_TIMEZONE = "with_timezone";
     private static final String AT_TIMEZONE = "at_timezone";
-    private static final Set<String> ZONED_FUNCTIONS = Set.of("now", "current_timestamp", "from_unixtime",
-            "from_unixtime_nanos", "from_iso8601_timestamp", "from_iso8601_timestamp_nanos", "parse_datetime",
-            WITH_TIMEZONE, AT_TIMEZONE);
     // A date or timestamp string in the plain form Trino and StarRocks both take, with its fractional seconds
     private static final Pattern PLAIN_TIMESTAMP = Pattern.compile(
             "\\s*\\d{4}-\\d{1,2}-\\d{1,2}(?:\\s+\\d{1,2}:\\d{1,2}(?::\\d{1,2}(?:\\.(\\d+))?)?)?\\s*");
@@ -1264,8 +1261,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         Optional<ZoneId> fromZone = backendZone(withTimezone.getArguments().get(1));
         Optional<ZoneId> to = toZone == null ? fromZone : backendZone(toZone);
         Optional<String> from = fromZone.flatMap(zone -> attachedOffset(timestamp, zone));
-        if (hasFormatUnlikeTrino || hasMillisecondParse || isZonedValue(timestamp) || !wallClockArguments.contains(node)
-                || from.isEmpty() || to.isEmpty()) {
+        if (hasFormatUnlikeTrino || hasMillisecondParse || !isPlainSource(timestamp)
+                || !wallClockArguments.contains(node) || from.isEmpty() || to.isEmpty()) {
             throw unsupportedWithTimezone(node);
         }
         // Trino promotes a DATE argument to TIMESTAMP. A format rounds the instant to milliseconds, which is rounding ts
@@ -1282,15 +1279,18 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 new com.starrocks.sql.ast.expression.StringLiteral(to.get().getId())));
     }
 
-    // Trino's with_timezone takes only a TIMESTAMP without a zone. StarRocks has no zoned type to tell a zoned
-    // value apart, so the functions and expressions that return one in Trino are rejected, and with them the
-    // CurrentTime forms that Trino accepts (localtimestamp, current_date)
-    private static boolean isZonedValue(Expression expression) {
-        if (expression instanceof AtTimeZone || expression instanceof CurrentTime) {
-            return true;
+    // A column, a TIMESTAMP or DATE literal, or a cast of one. Trino's with_timezone takes only a TIMESTAMP
+    // without a zone, which StarRocks has no type to check, and a function that computes the timestamp may differ
+    // between the dialects on its own (e.g. from_unixtime of a negative epoch is NULL in StarRocks), so any other
+    // source is rejected
+    private static boolean isPlainSource(Expression expression) {
+        if (expression instanceof Cast) {
+            Expression operand = ((Cast) expression).getExpression();
+            return operand instanceof StringLiteral || isPlainSource(operand);
         }
-        return expression instanceof FunctionCall && ZONED_FUNCTIONS.contains(
-                ((FunctionCall) expression).getName().toString().toLowerCase());
+        return expression instanceof Identifier || expression instanceof DereferenceExpression
+                || expression instanceof TimestampLiteral || (expression instanceof GenericLiteral
+                && ((GenericLiteral) expression).getType().equalsIgnoreCase("date"));
     }
 
     private static RuntimeException unsupportedWithTimezone(Expression node) {
