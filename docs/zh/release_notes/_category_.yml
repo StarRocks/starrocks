@@ -1,0 +1,7 @@
+position: 10
+label: '发布说明'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: release_notes

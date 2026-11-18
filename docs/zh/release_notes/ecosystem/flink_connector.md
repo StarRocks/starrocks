@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Connector for Apache Flink 的发布说明和更新日志。"
+products: [oss]
 ---
 
 # Flink connector 版本发布
@@ -8,8 +10,8 @@ displayed_sidebar: docs
 
 **使用文档：**
 
-- [使用 Flink connector 导入数据至 StarRocks](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/)
-- [使用 Flink connector 从 StarRocks 读取数据](https://docs.starrocks.io/zh/docs/unloading/Flink_connector/)
+- [使用 Flink connector 导入数据至 StarRocks](../../loading/Flink-connector-starrocks.md)
+- [使用 Flink connector 从 StarRocks 读取数据](../../unloading/Flink_connector.md)
 
 **源码下载地址：**[starrocks-connector-for-apache-flink](https://github.com/StarRocks/starrocks-connector-for-apache-flink)
 
@@ -23,16 +25,18 @@ displayed_sidebar: docs
 您可以通过以下方式获取 Flink connector 的 JAR 包：
 
 - 从 [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks) 直接下载编译好的 JAR 包。
-- 在 Maven 项目的 pom 文件添加 Flink connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/)。
-- 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/)。
+- 在 Maven 项目的 pom 文件添加 Flink connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](../../loading/Flink-connector-starrocks.md)。
+- 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](../../loading/Flink-connector-starrocks.md)。
 
 **版本要求：**
 
-| Connector | Flink       | StarRocks  | Java | Scala      |
-| --------- | ----------- | ---------- | ---- | ---------- |
-| 1.2.9 | 1.15 ～ 1.18 | 2.1 及以上 | 8 | 2.11、2.12 |
-| 1.2.8     | 1.13 ~ 1.17 | 2.1 及以上 | 8    | 2.11、2.12 |
-| 1.2.7     | 1.11 ~ 1.15 | 2.1 及以上 | 8    | 2.11、2.12 |
+| Connector | Flink                         | StarRocks     | Java | Scala     |
+|-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 及以上     | 8    | 2.11,2.12 |
 
 > **注意**
 >
@@ -41,6 +45,100 @@ displayed_sidebar: docs
 ## 发布记录
 
 ### 1.2
+
+#### 1.2.16
+
+发布日期：2026 年 9 月 24 日
+
+##### 新增特性
+
+- 从 Flink Schema 推导 `json` 的 columns Header。 [#510](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/510)
+
+##### 功能优化
+
+- 多表事务：切换 Batch Chunk，以减少冗余的小批量加载。 [#506](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/506)
+- 仅配置一个 Load URL 时，跳过 Host Probe。 [#502](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/502)
+
+##### 错误修复
+
+- 多表事务：避免 Writer 因无法在 `txnEnd` 前刷新的字节数据而停滞。 [#512](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/)
+- 多表事务：在 Commit Response 丢失时进行恢复，而不是卡住或失败。 [#501](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/501)
+- 多表事务：使 `flushQ` Region Label 与当前生效的共享 Label 保持一致。 [#500](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/500)
+- 修复 Query Plan Visitor 中的共享状态竞争问题。 [#499](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/499)
+
+#### 1.2.15
+
+发布日期：2026年6月18日
+
+##### 新增特性
+
+- 新增对多表事务 Stream Load 的支持。[#487](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/487)
+
+##### 功能优化
+
+- Merge Commit 支持记录数据质量错误消息。[#484](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/484)
+
+##### 错误修复
+
+- 修复多表事务的并发性问题：对每张表的导入操作进行串行化，并协调跨表提交。[#491](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/491)
+- 当处于 PREPARE 状态的滞留事务回滚失败时，回退到 FE 取消 API。[#488](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/488)
+- 在构建列语句时，DEFAULT 子句中不再对 CURRENT_TIMESTAMP 进行引号处理。[#486](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/486)
+
+#### 1.2.14
+
+发布日期：2026年2月11日
+
+##### 新增特性
+
+- 支持合并提交。[#474](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/474)
+
+##### 功能优化
+
+- 支持将 `sink.buffer-flush.interval-ms` 设置为小于 1 秒。[#475](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/475)
+- 支持配置事务 Publish 超时。[#480](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/480)
+
+##### 错误修复
+
+已修复以下问题：
+
+- 通过升级 guava 版本至 `32.0.1-jre` 修复 CVE-2023-2976。[#467](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/467)
+
+#### 1.2.12
+
+发布日期：2025年9月19日
+
+##### 功能优化
+
+- 支持为 Source 指定 Warehouse。 [#423](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/423)
+- 新增安全策略。 [#434](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/434)
+- 对错误日志中的敏感数据进行脱敏。 [#446](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/446)
+- 支持在 Stream Load 事务接口中配置 `prepared_timeout`。 [#453](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/453)
+
+##### 问题修复
+
+修复了以下问题：
+
+- 当 Open 失败时，Source Reader 未被关闭。 [#441](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/441)
+- 在 StreamLoadManagerV2.flush 中遇到异常时错误地返回成功。 [#451](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/451)
+
+#### 1.2.11
+
+发布日期：2025 年 6 月 3 日
+
+**新增特性**
+
+- 支持对 CSV 格式使用 LZ4 压缩。[#408](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/408)
+- 增加对 Flink 1.20 的支持。[#409](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/409)
+
+**功能优化**
+
+- 新增选项用于禁用将 JSON 包装为 JSON 数组的行为。[#344](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/344)
+- 升级 FastJSON 以修复安全漏洞 CVE-2022-25845。[#394](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/394)
+- 移除警告日志中的数据行指标，以避免在日志中暴露 Payload 信息。[#420](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/420)
+
+**问题修复**
+
+- StarRocksDynamicTableSource 的 Shadow Clone 导致下推结果错误的问题（修复后改为使用深拷贝）。[#421](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/421)
 
 #### 1.2.10
 
@@ -67,7 +165,7 @@ displayed_sidebar: docs
 
 #### 1.2.9
 
-本版本发布包含如下新增特性和问题修复。值得注意的变化是，Flink connector 已与 Flink CDC 3.0 集成，可轻松地从 CDC 数据源（如 MySQL、Kafka）构建流式 ELT 管道到 StarRocks。更多信息，您参见 [Flink CDC 同步（支持 schema change）](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/#使用-flink-cdc-30-同步数据支持-schema-change)。
+本版本发布包含如下新增特性和问题修复。值得注意的变化是，Flink connector 已与 Flink CDC 3.0 集成，可轻松地从 CDC 数据源（如 MySQL、Kafka）构建流式 ELT 管道到 StarRocks。更多信息，您参见 [Flink CDC 同步（支持 schema change）](../../loading/Flink-connector-starrocks.md#使用-flink-cdc-30-同步数据支持-schema-change)。
 
 **新增特性**
 
@@ -85,7 +183,7 @@ displayed_sidebar: docs
 本版本发布包含如下功能优化和问题修复。其中重点优化如下：
 
 - 支持 Flink 1.16 和 1.17。
-- Sink 语义配置为 exactly-once 时建议设置 `sink.label-prefix`。使用说明，参考 [Exactly Once](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/#exactly-once)。
+- Sink 语义配置为 exactly-once 时建议设置 `sink.label-prefix`。使用说明，参考 [Exactly Once](../../loading/Flink-connector-starrocks.md#exactly-once)。
 
 **功能优化**
 
