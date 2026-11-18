@@ -12,7 +12,7 @@ keywords: ['shengji']
 :::important
 在升级 StarRocks 之前，您应该：
 
-- 阅读您要升级到的 StarRocks 版本的[发行说明](../release_notes/release_notes.mdx)，以及当前版本和目标版本之间的所有版本，并：
+- 阅读您要升级到的 StarRocks 版本的[发行说明](../release_notes/release_notes.md)，以及当前版本和目标版本之间的所有版本，并：
   - 记录 StarRocks 内的任何行为变化
   - 记录 StarRocks 与用于导入、导出、可视化等的外部系统之间的任何集成变化
 - 验证目标版本的[部署先决条件](./deployment_prerequisites.md)。例如，StarRocks 3.5.x 需要 JDK 17，而 Ubuntu 上的 StarRocks 3.4.x 需要 JDK 11。
