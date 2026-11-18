@@ -15,7 +15,7 @@ products: [oss]
 :::important
 在升级 StarRocks 之前，您应该：
 
-- 阅读您要升级到的目标版本 StarRocks 的[发行说明](../../release_notes/release_notes.mdx)，以及当前版本与目标版本之间所有 all 版本的发行说明，并：
+- 阅读您要升级到的目标版本 StarRocks 的[发行说明](../../release_notes/release_notes.md)，以及当前版本与目标版本之间所有 all 版本的发行说明，并：
   - 记录 StarRocks 内部的任何行为变化
   - 记录 StarRocks 与用于导入、导出、可视化等用途的外部系统之间集成的任何变化
 - 确认目标版本的[部署前提条件](../preparation/deployment_prerequisites.md)。例如，StarRocks 3.5.x 需要 JDK 17，而 StarRocks 3.4.x 在 Ubuntu 上需要 JDK 11。
