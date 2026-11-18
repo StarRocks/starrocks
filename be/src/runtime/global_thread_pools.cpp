@@ -109,7 +109,7 @@ Status GlobalThreadPools::init_execution_thread_pools(MetricRegistry* metrics) {
                             .set_max_queue_size(0)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&_load_rpc_pool));
-    REGISTER_GAUGE_RUNTIME_METRIC(metrics, load_rpc_threadpool_size, [this]() { return _load_rpc_pool->num_threads(); })
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, load_rpc, _load_rpc_pool.get());
 
     RETURN_IF_ERROR(ThreadPoolBuilder("dict_cache")
                             .set_min_threads(1)

@@ -16,6 +16,7 @@
 
 #include <aws/core/Aws.h>
 #include <aws/core/client/ClientConfiguration.h>
+#include <aws/core/client/RetryStrategy.h>
 
 #include <memory>
 #include <mutex>
@@ -41,6 +42,10 @@ struct FileSystemProvider;
 FileSystemProvider new_s3_file_system_provider(int priority = 10);
 
 } // namespace fs
+
+// Wraps `inner` so that every failed attempt is reported to the io::ObjectStorageRequestScope on the
+// calling thread. Every S3 client the factory builds uses one.
+std::shared_ptr<Aws::Client::RetryStrategy> observed_retry_strategy(std::shared_ptr<Aws::Client::RetryStrategy> inner);
 
 class S3ClientFactory {
 public:

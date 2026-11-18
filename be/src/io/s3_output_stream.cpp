@@ -24,6 +24,7 @@
 #include "base/concurrency/stopwatch.hpp"
 #include "common/logging.h"
 #include "io/io_profiler.h"
+#include "io/object_storage_metrics.h"
 #include "io/s3_zero_copy_iostream.h"
 
 namespace starrocks::io {
@@ -112,7 +113,9 @@ Status S3OutputStream::create_multipart_upload() {
     req.SetBucket(_bucket);
     req.SetKey(_object);
     req.SetContentType(_content_type);
+    ObjectStorageRequestScope request_scope(ObjectStorageBackend::kS3, aws_sdk_http_client(), ObjectStorageOp::kPut);
     Aws::S3::Model::CreateMultipartUploadOutcome outcome = _client->CreateMultipartUpload(req);
+    request_scope.set_failed(!outcome.IsSuccess());
     if (outcome.IsSuccess()) {
         _upload_id = outcome.GetResult().GetUploadId();
         return Status::OK();
@@ -130,7 +133,9 @@ Status S3OutputStream::singlepart_upload() {
     req.SetContentType(_content_type);
     req.SetContentLength(static_cast<int64_t>(_buffer.size()));
     req.SetBody(Aws::MakeShared<S3ZeroCopyIOStream>(AWS_ALLOCATE_TAG, _buffer.data(), _buffer.size()));
+    ObjectStorageRequestScope request_scope(ObjectStorageBackend::kS3, aws_sdk_http_client(), ObjectStorageOp::kPut);
     Aws::S3::Model::PutObjectOutcome outcome = _client->PutObject(req);
+    request_scope.set_failed(!outcome.IsSuccess());
     if (!outcome.IsSuccess()) {
         std::string error_msg =
                 fmt::format("S3: Fail to put object {}/{}, msg: {}", _bucket, _object, outcome.GetError().GetMessage());
@@ -176,7 +181,9 @@ Status S3OutputStream::upload_part(const char* data, size_t size) {
     req.SetUploadId(_upload_id);
     req.SetContentLength(static_cast<int64_t>(size));
     req.SetBody(Aws::MakeShared<S3ZeroCopyIOStream>(AWS_ALLOCATE_TAG, data, size));
+    ObjectStorageRequestScope request_scope(ObjectStorageBackend::kS3, aws_sdk_http_client(), ObjectStorageOp::kPut);
     auto outcome = _client->UploadPart(req);
+    request_scope.set_failed(!outcome.IsSuccess());
     if (outcome.IsSuccess()) {
         _etags.push_back(outcome.GetResult().GetETag());
         return Status::OK();
@@ -202,7 +209,9 @@ Status S3OutputStream::complete_multipart_upload() {
         multipart_upload.AddParts(part.WithETag(_etags[i]).WithPartNumber(i + 1));
     }
     req.SetMultipartUpload(multipart_upload);
+    ObjectStorageRequestScope request_scope(ObjectStorageBackend::kS3, aws_sdk_http_client(), ObjectStorageOp::kPut);
     auto outcome = _client->CompleteMultipartUpload(req);
+    request_scope.set_failed(!outcome.IsSuccess());
     if (outcome.IsSuccess()) {
         return Status::OK();
     }
