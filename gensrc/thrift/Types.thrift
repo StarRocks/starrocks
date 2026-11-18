@@ -727,13 +727,13 @@ struct TSinkCommitInfoExt {
 struct TSinkCommitInfo {
     1: optional TIcebergDataFile iceberg_data_file
     2: optional THiveFileInfo hive_file_info
+    3: optional TPaimonCommitInfo paimon_commit_info
     // ... for other tables sink commit info
 
     100: optional bool is_overwrite;
     101: optional string staging_dir
     102: optional bool is_rewrite;
     103: optional TSinkCommitInfoExt ext;
-    104: optional TPaimonCommitInfo paimon_commit_info;
 }
 
 struct TSnapshotInfo {
