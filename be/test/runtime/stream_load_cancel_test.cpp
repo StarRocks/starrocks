@@ -25,47 +25,26 @@
 #include <utility>
 #include <vector>
 
-#include "base/testutil/assert.h"
-#include "base/uid_util.h"
-#include "base/utility/defer_op.h"
 #include "common/object_pool.h"
-#include "common/system/cpu_info.h"
-#include "compute_env/compute_env.h"
-#include "compute_env/data_stream/data_stream_mgr.h"
-#include "compute_env/load/load_stream_mgr.h"
-#include "compute_env/load/stream_context_mgr.h"
-#include "compute_env/load/stream_load_context_handle.h"
-#include "compute_env/load/stream_load_pipe_attachment.h"
-#include "compute_env/result/result_buffer_mgr.h"
-#include "compute_env/workgroup/pipeline_executor_set.h"
-#include "compute_env/workgroup/work_group.h"
-#include "compute_env/workgroup/work_group_schedule_policy.h"
-#include "exec/exec_env.h"
-#include "exec/pipeline/fragment_execution_params.h"
-#include "exec/runtime/fragment_context.h"
-#include "exec_primitive/exec_node.h"
+#include "exec/exec_node.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_executor.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "orchestration/fragment_executor.h"
-#include "orchestration/plan_fragment_executor.h"
-#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/mem_tracker.h"
+#include "runtime/exec_env.h"
+#include "runtime/plan_fragment_executor.h"
 #include "runtime/runtime_state.h"
+#include "runtime/stream_load/load_stream_mgr.h"
+#include "testutil/assert.h"
+#include "util/defer_op.h"
+#include "util/uid_util.h"
 
-namespace starrocks::orchestration {
+namespace starrocks {
 namespace {
 
 using namespace std::chrono_literals;
 
-MemTracker* g_stream_load_test_mem_tracker = nullptr;
-
 enum class ExecutionMode { NON_PIPELINE, PIPELINE_NODE_RANGES, PIPELINE_DRIVER_RANGES };
-
-class TestSchedulePolicy final : public workgroup::WorkGroupSchedulePolicy {
-public:
-    bool should_yield(const workgroup::WorkGroup*) const override { return false; }
-    size_t num_workgroups() const override { return 1; }
-};
 
 // Stand in for a plan whose close must wait for its scanner. The callback has a
 // bounded wait, so a regression fails instead of hanging the test process.
@@ -91,25 +70,11 @@ private:
 class StreamLoadCancelTest : public testing::TestWithParam<ExecutionMode> {
 protected:
     void SetUp() override {
-        // This standalone test binary does not initialize RuntimeEnv's tracker source.
-        CurrentThread::get_mem_tracker_source_for_test(_previous_initialized_fn, _previous_tracker_fn);
-        _previous_tls_tracker = tls_thread_status.set_mem_tracker(nullptr);
-        g_stream_load_test_mem_tracker = &_buffer_tracker;
-        CurrentThread::set_mem_tracker_source([] { return true; }, [] { return g_stream_load_test_mem_tracker; });
-        ASSERT_EQ(&_buffer_tracker, CurrentThread::mem_tracker());
-
-        CpuInfo::init();
-        _compute_env._load_stream_mgr = std::make_unique<LoadStreamMgr>();
-        _compute_env._stream_mgr = std::make_unique<DataStreamMgr>();
-        _compute_env._result_mgr = std::make_unique<ResultBufferMgr>();
-        _exec_env.set_compute_env(&_compute_env);
-
         const auto fragment_id = UniqueId::gen_uid().to_thrift();
         TQueryOptions options;
         options.__set_query_type(TQueryType::LOAD);
         options.__set_load_job_type(TLoadJobType::STREAM_LOAD);
-        _state = std::make_shared<RuntimeState>(fragment_id, options, TQueryGlobals{},
-                                                &_exec_env.query_execution_services(), &_exec_env);
+        _state = std::make_shared<RuntimeState>(fragment_id, options, TQueryGlobals{}, _exec_env);
 
         _params.__set_backend_num(0);
         _params.__set_pipeline_dop(2);
@@ -120,19 +85,13 @@ protected:
         _params.__set_params(exec_params);
 
         if (is_pipeline()) {
-            auto wg = std::make_shared<workgroup::WorkGroup>("stream_load_cancel_test", 1, 0, 1, 1.0, 0, 1.0,
-                                                             TWorkGroupType::WG_NORMAL, "");
-            // No drivers need to run: these tests exercise prepare's input binding
-            // and FragmentContext's real cancellation/cleanup entrypoints.
-            wg->set_shared_executors(&_executors);
-            _pipeline = std::make_unique<FragmentExecutor>();
+            _pipeline = std::make_unique<pipeline::FragmentExecutor>();
             _pipeline->_fragment_ctx = std::make_shared<pipeline::FragmentContext>();
             _pipeline->_fragment_ctx->set_fragment_instance_id(fragment_id);
             _pipeline->_fragment_ctx->set_runtime_state(std::shared_ptr<RuntimeState>(_state));
-            _pipeline->_fragment_ctx->set_workgroup(std::move(wg));
-            _pipeline->_fragment_ctx->attach_to_runtime_state(_state.get());
+            _state->set_fragment_ctx(_pipeline->_fragment_ctx.get());
         } else {
-            _legacy = std::make_unique<PlanFragmentExecutor>(&_exec_env.query_execution_services(), nullptr);
+            _legacy = std::make_unique<PlanFragmentExecutor>(_exec_env, nullptr);
             _legacy->set_runtime_state(_state.get());
             _legacy->_prepared = true;
         }
@@ -143,13 +102,9 @@ protected:
         _legacy.reset();
         _pipeline.reset();
         _state.reset();
-        // Release queued buffers while the test tracker source is still installed.
-        if (_compute_env._load_stream_mgr != nullptr) {
-            _compute_env._load_stream_mgr->close();
+        for (const auto& id : _load_ids) {
+            _exec_env->load_stream_mgr()->remove(id);
         }
-        tls_thread_status.set_mem_tracker(_previous_tls_tracker);
-        CurrentThread::set_mem_tracker_source(_previous_initialized_fn, _previous_tracker_fn);
-        g_stream_load_test_mem_tracker = nullptr;
     }
 
     bool is_pipeline() const { return GetParam() != ExecutionMode::NON_PIPELINE; }
@@ -171,7 +126,7 @@ protected:
     std::shared_ptr<StreamLoadPipe> add_pipe() {
         auto id = UniqueId::gen_uid().to_thrift();
         auto pipe = std::make_shared<StreamLoadPipe>(4, 4);
-        EXPECT_OK(_exec_env.load_stream_mgr()->put(id, pipe));
+        EXPECT_OK(_exec_env->load_stream_mgr()->put(id, pipe));
         _ranges.emplace_back(make_range(id));
         _load_ids.emplace_back(id);
         return pipe;
@@ -189,7 +144,7 @@ protected:
         }
         if (is_pipeline()) {
             pipeline::UnifiedExecPlanFragmentParams request(_params, _params);
-            return _pipeline->_prepare_stream_load_pipe(&_exec_env, request);
+            return _pipeline->_prepare_stream_load_pipe(_exec_env, request);
         }
         return _legacy->_prepare_stream_load_pipe(_params);
     }
@@ -203,10 +158,9 @@ protected:
     }
 
     ByteBufferPtr make_buffer(std::string_view data) {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&_buffer_tracker);
         ASSIGN_OR_ABORT(auto buffer, ByteBuffer::allocate_with_tracker(data.size()));
         buffer->put_bytes(data.data(), data.size());
-        buffer->flip_to_read();
+        buffer->flip();
         return buffer;
     }
 
@@ -243,19 +197,10 @@ protected:
         EXPECT_EQ("Fragment cancelled", status.message());
     }
 
-    // Outlive every buffer, including buffers still held by LoadStreamMgr at teardown.
-    MemTracker _buffer_tracker{MemTrackerType::QUERY, -1, "stream_load_cancel_test"};
-    CurrentThread::IsEnvInitializedFn _previous_initialized_fn = nullptr;
-    CurrentThread::ProcessMemTrackerFn _previous_tracker_fn = nullptr;
-    MemTracker* _previous_tls_tracker = nullptr;
-    ComputeEnv _compute_env;
-    ExecEnv _exec_env;
-    workgroup::PipelineExecutorSetConfig _executor_config{1, 1, 1, 1, {}, false, false, nullptr};
-    TestSchedulePolicy _schedule_policy;
-    workgroup::PipelineExecutorSet _executors{_executor_config, "stream_load_cancel_test", {}, {}, _schedule_policy};
+    ExecEnv* _exec_env = ExecEnv::GetInstance();
     std::shared_ptr<RuntimeState> _state;
     std::unique_ptr<PlanFragmentExecutor> _legacy;
-    std::unique_ptr<FragmentExecutor> _pipeline;
+    std::unique_ptr<pipeline::FragmentExecutor> _pipeline;
     TExecPlanFragmentParams _params;
     std::vector<TScanRangeParams> _ranges;
     std::vector<TUniqueId> _load_ids;
@@ -297,7 +242,7 @@ TEST_P(StreamLoadCancelTest, BindingSurvivesRegistryRemoval) {
     auto pipe = add_pipe();
     ASSERT_OK(prepare_pipes());
     std::weak_ptr<StreamLoadPipe> weak_pipe = pipe;
-    _exec_env.load_stream_mgr()->remove(_load_ids.front());
+    _exec_env->load_stream_mgr()->remove(_load_ids.front());
     pipe.reset();
     ASSERT_FALSE(weak_pipe.expired());
 
@@ -349,11 +294,10 @@ TEST_P(StreamLoadCancelTest, LegacyRejectsChannelBeforeBindingPipes) {
     EXPECT_TRUE(_legacy->_stream_load_sinks.empty());
 }
 
-TEST_P(StreamLoadCancelTest, ChannelOnlyUsesContextHandle) {
+TEST_P(StreamLoadCancelTest, ChannelOnlyUsesChannelContext) {
     if (GetParam() != ExecutionMode::PIPELINE_DRIVER_RANGES) {
         GTEST_SKIP() << "Channel inputs use per-driver pipeline ranges";
     }
-    _compute_env._stream_context_mgr = std::make_unique<StreamContextMgr>(_exec_env.load_stream_mgr());
     const auto load_id = UniqueId::gen_uid().to_thrift();
     auto channel = make_range(load_id);
     auto& broker = channel.scan_range.broker_scan_range;
@@ -365,14 +309,13 @@ TEST_P(StreamLoadCancelTest, ChannelOnlyUsesContextHandle) {
     _ranges.emplace_back(std::move(channel));
     ASSERT_OK(prepare_pipes());
 
-    const auto& attachments = _pipeline->_fragment_ctx->_fragment_attachments;
-    ASSERT_EQ(1, attachments.size());
-    EXPECT_NE(nullptr, dynamic_cast<StreamLoadContextHandle*>(attachments[0].get()));
-    auto pipe = _exec_env.load_stream_mgr()->get(load_id);
+    EXPECT_TRUE(_pipeline->_fragment_ctx->_stream_load_pipes.empty());
+    ASSERT_EQ(1, _pipeline->_fragment_ctx->_stream_load_contexts.size());
+    auto pipe = _exec_env->load_stream_mgr()->get(load_id);
     ASSERT_NE(nullptr, pipe);
     _pipeline->_fragment_ctx.reset();
     EXPECT_TRUE(pipe->no_block_read().status().is_cancelled());
-    EXPECT_EQ(nullptr, _exec_env.load_stream_mgr()->get(load_id));
+    EXPECT_EQ(nullptr, _exec_env->load_stream_mgr()->get(load_id));
 }
 
 TEST_P(StreamLoadCancelTest, MissingPipeFailsPrepare) {
@@ -383,30 +326,13 @@ TEST_P(StreamLoadCancelTest, MissingPipeFailsPrepare) {
 }
 
 TEST_P(StreamLoadCancelTest, PartialBindingFailureCancelsPipeWithOriginalError) {
-    if (!is_pipeline()) {
-        GTEST_SKIP() << "Pipeline prepare holds attachments locally until all pipes are bound";
-    }
     auto pipe = add_pipe();
     _ranges.emplace_back(make_range(UniqueId::gen_uid().to_thrift()));
     const auto status = prepare_pipes();
     ASSERT_TRUE(status.is_internal_error()) << status;
     EXPECT_EQ(status.to_string(false), pipe->no_block_read().status().to_string(false));
-    EXPECT_TRUE(_pipeline->_fragment_ctx->_fragment_attachments.empty());
-}
-
-TEST(StreamLoadPipeAttachmentTest, DestructionCancelsPipeAndPreservesFirstError) {
-    for (bool explicitly_closed : {false, true}) {
-        auto pipe = std::make_shared<StreamLoadPipe>();
-        const auto error = Status::InternalError("injected prepare failure");
-        {
-            std::unique_ptr<FragmentAttachment> attachment = std::make_unique<StreamLoadPipeAttachment>(pipe);
-            if (explicitly_closed) {
-                attachment->close(error);
-            }
-        }
-        const auto status = pipe->no_block_read().status();
-        const auto expected = explicitly_closed ? error : Status::Cancelled("Close the stream load pipe");
-        EXPECT_EQ(expected.to_string(), status.to_string());
+    if (is_pipeline()) {
+        EXPECT_TRUE(_pipeline->_fragment_ctx->_stream_load_pipes.empty());
     }
 }
 
@@ -495,4 +421,4 @@ INSTANTIATE_TEST_SUITE_P(ExecutionModes, StreamLoadCancelTest,
                          });
 
 } // namespace
-} // namespace starrocks::orchestration
+} // namespace starrocks
