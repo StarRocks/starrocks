@@ -28,6 +28,7 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
+#include "runtime/stream_load/stream_load_pipe.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"
@@ -39,6 +40,10 @@ namespace starrocks::pipeline {
 FragmentContext::FragmentContext() : _data_sink(nullptr) {}
 
 FragmentContext::~FragmentContext() {
+    // Wake readers before closing execution groups or waiting for scanners in the plan.
+    for (const auto& pipe : _stream_load_pipes) {
+        pipe->cancel(Status::Cancelled("Close the stream load pipe"));
+    }
     _close_stream_load_contexts();
     _data_sink.reset();
     _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
@@ -220,6 +225,12 @@ void FragmentContext::set_final_status(const Status& status) {
             }
         });
 
+        // finish() also reaches this path with OK. Let readers drain a finished pipe.
+        if (!_s_status.ok()) {
+            for (const auto& pipe : _stream_load_pipes) {
+                pipe->cancel(_s_status);
+            }
+        }
         for (const auto& stream_load_context : _stream_load_contexts) {
             if (stream_load_context->body_sink) {
                 stream_load_context->body_sink->cancel(_s_status);
