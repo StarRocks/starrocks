@@ -4,9 +4,9 @@ description: "本文档版本对应的 StarRocks 发布说明，以及 Kafka、S
 products: [oss]
 ---
 
-# Release notes
+# 发布说明
 
-For release notes for newer major versions please switch the documentation version in the drop-down at the top of the page.
+如需查看更新的主要版本的发布说明，请使用页面顶部的下拉菜单切换文档版本。
 
 import DocCardList from '@theme/DocCardList';
 

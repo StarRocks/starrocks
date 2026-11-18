@@ -24,7 +24,7 @@ products: [oss]
 
 您可以通过以下方式获取 Flink connector 的 JAR 包：
 
-- 从 [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks) 直接下载编译好的 JAR 包。
+- 从 [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks/) 直接下载编译好的 JAR 包。
 - 在 Maven 项目的 pom 文件添加 Flink connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](../../loading/Flink-connector-starrocks.md)。
 - 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](../../loading/Flink-connector-starrocks.md)。
 
