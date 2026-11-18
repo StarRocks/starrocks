@@ -252,8 +252,11 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                 // Trino rounds digits past microseconds, which StarRocks drops, also from a text column (Trino: 42)
                 "select second(CAST(with_timezone(CAST(s AS TIMESTAMP(6)), 'UTC') AS TIMESTAMP(0))) " +
                         "from (values '2024-08-19 14:36:41.4999995') t(s)",
+                "select 1 from (values '2024-08-19 14:36:41.9999995') t(s) where CAST(with_timezone(" +
+                        "TIMESTAMP '2024-08-19 14:36:42', 'UTC') AS TIMESTAMP(6)) = CAST(s AS TIMESTAMP(6))",
                 // time_slice doesn't take year 0
                 "select CAST(with_timezone(TIMESTAMP '0000-06-01 12:00:00', 'UTC') AS TIMESTAMP)",
+                "select CAST(with_timezone(DATE '0000-06-01', 'UTC') AS TIMESTAMP)",
                 "select second(CAST(with_timezone(CAST('2024-08-19 14:36:41.4999995' AS TIMESTAMP(6)), 'UTC') " +
                         "AS TIMESTAMP(0)))",
                 "select CAST(with_timezone(now(), 'UTC') AS DATE)",

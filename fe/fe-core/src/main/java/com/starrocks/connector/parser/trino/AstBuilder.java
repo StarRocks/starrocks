@@ -1288,18 +1288,17 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     private static boolean isPlainSource(Expression expression) {
         if (expression instanceof Cast) {
             Expression operand = ((Cast) expression).getExpression();
-            if (operand instanceof StringLiteral) {
+            if (isTimestampText(operand)) {
                 return isPlainTimestamp(timestampText(operand), 6);
             }
             // A column may hold text, whose digits past microseconds Trino rounds and StarRocks drops. Below
             // microseconds rounding the dropped digits gives the same result, so only those casts take a column
             return isPlainSource(operand) && (!isColumn(operand) || castsBelowMicroseconds((Cast) expression));
         }
-        if (expression instanceof TimestampLiteral) {
-            return isPlainTimestamp(timestampText(expression), 6);
+        if (isTimestampText(expression)) {
+            return !(expression instanceof StringLiteral) && isPlainTimestamp(timestampText(expression), 6);
         }
-        return isColumn(expression) || (expression instanceof GenericLiteral
-                && ((GenericLiteral) expression).getType().equalsIgnoreCase("date"));
+        return isColumn(expression);
     }
 
     private static boolean isColumn(Expression expression) {
@@ -1868,6 +1867,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             if (isTimestampText(node.getExpression()) && !isPlainTimestamp(timestampText(node.getExpression()), 6)) {
                 throw unsupportedWithTimezone(node);
             }
+            // Other operands may be text with digits past microseconds too. Below microseconds rounding the dropped
+            // digits gives the same result, so a cast to TIMESTAMP(6) or above takes only a literal or NULL
+            if (precision >= 6 && !isTimestampText(node.getExpression())
+                    && !(node.getExpression() instanceof io.trino.sql.tree.NullLiteral)) {
+                throw unsupportedWithTimezone(node);
+            }
             return fitsPrecision(node.getExpression(), precision) ? cast : roundHalfUp(cast, precision);
         }
         return cast;
@@ -1879,19 +1884,22 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         if (expression instanceof io.trino.sql.tree.NullLiteral) {
             return true;
         }
-        if (expression instanceof GenericLiteral) {
-            return ((GenericLiteral) expression).getType().equalsIgnoreCase("date");
-        }
         return isTimestampText(expression) && isPlainTimestamp(timestampText(expression), precision);
     }
 
+    // A TIMESTAMP, DATE or string literal
     private static boolean isTimestampText(Expression expression) {
-        return expression instanceof TimestampLiteral || expression instanceof StringLiteral;
+        return expression instanceof TimestampLiteral || expression instanceof StringLiteral
+                || (expression instanceof GenericLiteral
+                && ((GenericLiteral) expression).getType().equalsIgnoreCase("date"));
     }
 
     private static String timestampText(Expression expression) {
-        return expression instanceof TimestampLiteral ? ((TimestampLiteral) expression).getValue()
-                : ((StringLiteral) expression).getValue();
+        if (expression instanceof TimestampLiteral) {
+            return ((TimestampLiteral) expression).getValue();
+        }
+        return expression instanceof StringLiteral ? ((StringLiteral) expression).getValue()
+                : ((GenericLiteral) expression).getValue();
     }
 
     // Whether text is a date or timestamp in the plain form with at most maxDigits fractional digits, from year 1
