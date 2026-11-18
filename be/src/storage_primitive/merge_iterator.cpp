@@ -353,7 +353,8 @@ inline Status HeapMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
         DCHECK_GT(append_row_num, 0);
 
         if (batch_append) {
-            _runs.push_back(Run{min_chunk._order, static_cast<uint32_t>(offset), static_cast<uint32_t>(append_row_num)});
+            _runs.push_back(
+                    Run{min_chunk._order, static_cast<uint32_t>(offset), static_cast<uint32_t>(append_row_num)});
         } else {
             chunk->append(*min_chunk._chunk, offset, append_row_num);
         }
@@ -397,7 +398,8 @@ void HeapMergeIterator::flush_runs(Chunk* chunk) {
         return;
     }
     const uint32_t first_child = _runs.front().child;
-    const bool one_child = std::all_of(_runs.begin(), _runs.end(), [&](const Run& r) { return r.child == first_child; });
+    const bool one_child =
+            std::all_of(_runs.begin(), _runs.end(), [&](const Run& r) { return r.child == first_child; });
     if (one_child) {
         for (const Run& r : _runs) {
             chunk->append(*_chunk_pool[r.child], r.offset, r.count);

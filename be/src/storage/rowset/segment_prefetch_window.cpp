@@ -166,7 +166,7 @@ void SegmentPrefetchWindow::advance(rowid_t row) {
     // The first page of a cold reader is always still being fetched, so growth waits until the reader passed one.
     if (_ahead_limit < _ahead_max && _consumed_any) {
         for (const auto& e : _inflight) {
-            if (e.begin_row <= row && row < e.end_row && static_cast<int64_t>(e.begin_row) > _last_grow_begin_row &&
+            if (e.begin_row <= row && row<e.end_row&& static_cast<int64_t>(e.begin_row)> _last_grow_begin_row &&
                 e.handle != nullptr && e.handle->pending_blocks() > 0) {
                 _ahead_limit = std::min(_ahead_max, _ahead_limit * 2);
                 _last_grow_begin_row = e.begin_row;
