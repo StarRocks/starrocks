@@ -14,6 +14,13 @@
 
 package com.starrocks.connector.parser.trino;
 
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import org.apache.commons.lang3.StringUtils;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -49,6 +56,61 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select count_if(v1) from t0;";
         assertPlanContains(sql, "  2:AGGREGATE (update finalize)\n" +
                 "  |  output: count(if(CAST(1: v1 AS BOOLEAN), 1, NULL))");
+    }
+
+    @Test
+    public void testSequence() throws Exception {
+        String sql = "select sequence(1, 5)";
+        assertPlanContains(sql, "trino_sequence(1, 5)");
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        Assertions.assertEquals(new ArrayType(IntegerType.BIGINT),
+                statement.getQueryRelation().getOutputExpression().get(0).getType());
+
+        // The two-argument form stays two arguments: execution picks the direction from the evaluated bounds.
+        sql = "select sequence(v1, v2), sequence(v1, v2, v3) from t0";
+        assertPlanContains(sql, "trino_sequence(1: v1, 2: v2)", "trino_sequence(1: v1, 2: v2, 3: v3)");
+
+        // Each argument appears once, so a non-deterministic bound is evaluated once.
+        sql = "select sequence(1, cast(rand() * 10 as bigint))";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertEquals(1, StringUtils.countMatches(plan, "rand()"), plan);
+        assertPlanContains("select sequence(1, (select max(v1) from t0))", "trino_sequence(1, ");
+
+        // Other bound types aren't cast to BIGINT.
+        analyzeFail("select sequence('1', '3')", "Unexpected parameters (varchar, varchar) for function sequence");
+    }
+
+    @Test
+    public void testTemporalSequence() throws Exception {
+        // An interval step becomes its signed magnitude and unit; the backend applies the calendar.
+        assertPlanContains("select sequence(date '2024-01-31', date '2024-04-30', interval '1' month)",
+                "trino_sequence('2024-01-31', '2024-04-30', 1, 'month')");
+        assertPlanContains("select sequence(date '2024-01-03', date '2024-01-01', interval -'1' day)",
+                "trino_sequence('2024-01-03', '2024-01-01', -1, 'day')");
+        assertPlanContains("select sequence(date '2024-01-01', date '2024-01-03', interval '24' hour)",
+                "trino_sequence('2024-01-01', '2024-01-03', 24, 'hour')");
+
+        // The analyzed bound types choose the overload.
+        assertOutputType("select sequence(date '2024-01-01', date '2024-01-03')", DateType.DATE);
+        assertOutputType("select sequence(date '2024-01-01', date '2024-03-01', interval '1' month)", DateType.DATE);
+        assertOutputType("select sequence(timestamp '2024-01-01 00:00:00', timestamp '2024-01-01 01:00:00', " +
+                "interval '25' minute)", DateType.DATETIME);
+
+        // As in Trino, timestamps need a step.
+        analyzeFail("select sequence(timestamp '2024-01-01 00:00:00', timestamp '2024-01-03 00:00:00')",
+                "Unexpected parameters (datetime, datetime) for function sequence");
+        analyzeFail("select sequence(date '2024-01-01', date '2024-01-03', 1)",
+                "Unexpected parameters (date, date, tinyint(4)) for function sequence");
+
+        // A step that isn't a whole number of a supported unit is rejected instead of rounded.
+        analyzeFail("select sequence(timestamp '2024-01-01 00:00:00', timestamp '2024-01-01 00:00:03', " +
+                "interval '1.5' second)", "does not support the sequence step INTERVAL '1.5' SECOND");
+    }
+
+    private static void assertOutputType(String sql, Type elementType) {
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        Assertions.assertEquals(new ArrayType(elementType),
+                statement.getQueryRelation().getOutputExpression().get(0).getType());
     }
 
     @Test

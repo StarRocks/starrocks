@@ -1079,8 +1079,23 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitIntervalLiteral(IntervalLiteral node, ParseTreeContext context) {
+        // StarRocks intervals have a single unit, so translating DAY TO SECOND as DAY would change the value.
+        if (node.getEndField().isPresent()) {
+            throw unsupportedException(String.format("Trino parser on StarRocks does not support the interval " +
+                    "qualifier %s TO %s now", node.getStartField(), node.getEndField().get()));
+        }
+        // Trino keeps the sign of INTERVAL -'1' DAY apart from its value. Apply it to the value, so that -'1' is
+        // -1 day and -'-1' is 1 day.
+        String value = node.getValue().trim();
+        if (node.getSign() == IntervalLiteral.Sign.NEGATIVE) {
+            if (value.startsWith("-")) {
+                value = value.substring(1);
+            } else {
+                value = "-" + (value.startsWith("+") ? value.substring(1) : value);
+            }
+        }
         return new com.starrocks.sql.ast.expression.IntervalLiteral(
-                new com.starrocks.sql.ast.expression.StringLiteral(node.getValue()),
+                new com.starrocks.sql.ast.expression.StringLiteral(value),
                 new UnitIdentifier(node.getStartField().toString()));
     }
 
