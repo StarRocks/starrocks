@@ -708,6 +708,7 @@
         "starlet_fslib_s3client_connect_timeout_ms",
         "starlet_fslib_s3client_nonread_max_retries",
         "starlet_fslib_s3client_nonread_retry_scale_factor",
+        "starlet_grpc_client_enable_http_proxy",
         "starlet_port",
         "starlet_s3_client_max_cache_capacity",
         "starlet_s3_client_num_instances_per_cache",

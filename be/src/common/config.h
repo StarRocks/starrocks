@@ -1744,6 +1744,20 @@ CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
 // the compute nodes. An unrecognized value is reported and falls back to "none" rather than
 // keeping the node from starting.
 CONF_mString_enum_or_default(starlet_starmgr_client_compression_type, "none", "none,zstd");
+// Whether the gRPC channels that starlet opens from this node to StarMgr (GetShard, the worker
+// heartbeat, the shard replica info update) and to peer nodes (cache replication) go through the
+// HTTP proxy that the process environment names. starlet's gRPC library reads only the lowercase
+// grpc_proxy, https_proxy and http_proxy variables, and exempts only the hosts listed in the
+// lowercase no_grpc_proxy or no_proxy. false, the default, ignores them and connects directly:
+// these channels only connect cluster nodes, and a proxy inherited for other outbound traffic that
+// does not exempt the cluster addresses breaks shard lookups and heartbeats. Other outbound traffic
+// of the process, such as object storage access, is not affected either way.
+//
+// Immutable: starlet reads it whenever it creates a channel, and it creates channels at unrelated
+// times (a channel to StarMgr is rebuilt after repeated transport failures or an address change, a
+// channel to a peer is kept for the life of the process), so a runtime change would reach some
+// channels and never others.
+CONF_Bool(starlet_grpc_client_enable_http_proxy, "false");
 CONF_mBool(starlet_write_file_with_tag, "false");
 #endif
 
