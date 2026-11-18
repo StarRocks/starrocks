@@ -28,7 +28,6 @@ import org.apache.paimon.fs.Path;
 import org.apache.paimon.schema.Schema;
 import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.table.FileStoreTable;
-import org.apache.paimon.table.sink.BatchWriteBuilder;
 import org.apache.paimon.types.DataTypes;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -50,7 +49,7 @@ public class PaimonTableSinkTest {
     @Test
     public void testFrozenWriterContractAndRedactedExplain() {
         FileStoreTable nativeTable = nativeTable(-1);
-        PaimonTable table = table(nativeTable);
+        PaimonTable table = table(nativeTable).copyForWrite();
         PaimonSinkExtra extra = PaimonSinkExtra.from(table, "APPEND", Map.of("p", "2026-10-29"),
                 "operation_1", "Asia/Shanghai");
         clearInvocations(nativeTable);
@@ -81,7 +80,6 @@ public class PaimonTableSinkTest {
             Assertions.assertEquals(List.of(), writer.getPrimary_key_columns());
             Assertions.assertEquals(-1, writer.getBucket_count());
             Assertions.assertEquals("starrocks-operation_1", writer.getCommit_user());
-            Assertions.assertEquals(BatchWriteBuilder.COMMIT_IDENTIFIER, writer.getCommit_identifier());
             Assertions.assertEquals("operation_1", writer.getOperation_id());
             Assertions.assertEquals("APPEND", writer.getOverwrite_mode());
             Assertions.assertEquals(Map.of("p", "2026-10-29"), writer.getStatic_partition());
@@ -116,7 +114,7 @@ public class PaimonTableSinkTest {
     @Test
     public void testFixedBucketsRequireInstalledRouting() {
         FileStoreTable nativeTable = nativeTable(4);
-        PaimonTable table = table(nativeTable);
+        PaimonTable table = table(nativeTable).copyForWrite();
         PaimonSinkExtra extra = PaimonSinkExtra.from(table, "APPEND", Map.of(), "operation_2", "UTC");
         GlobalStateMgr state = mock(GlobalStateMgr.class, RETURNS_DEEP_STUBS);
         when(state.getConnectorMgr().getConnector("paimon_write").getMetadata().getCloudConfiguration())
@@ -135,26 +133,32 @@ public class PaimonTableSinkTest {
     }
 
     @Test
-    public void testIdentityIsLoadedWithMetadataAndUpdatedOnRefresh() {
+    public void testReadIdentityIsLazyAndWriteTargetKeepsItsIdentity() {
         FileStoreTable nativeTable = nativeTable(-1);
         PaimonTable table = table(nativeTable);
-        verify(nativeTable).uuid();
-        clearInvocations(nativeTable);
         Assertions.assertTrue(table.supportInsert());
         Assertions.assertFalse(table.supportsUpdate());
-        Assertions.assertEquals("native-identity", table.getNativeWriteIdentity());
-        Assertions.assertTrue(table.getUUID().contains("native-identity"));
         verify(nativeTable, never()).uuid();
-        when(nativeTable.uuid()).thenReturn("refreshed-identity");
-        table.setPaimonNativeTable(nativeTable);
-        Assertions.assertEquals("refreshed-identity", table.getNativeWriteIdentity());
+
+        PaimonTable writeTarget = table.copyForWrite();
+        Assertions.assertEquals("native-identity", writeTarget.getNativeWriteIdentity());
+        verify(nativeTable).uuid();
+
+        FileStoreTable refreshed = nativeTable(-1);
+        when(refreshed.uuid()).thenReturn("refreshed-identity");
+        table.setPaimonNativeTable(refreshed);
+        verify(refreshed, never()).uuid();
+        Assertions.assertSame(nativeTable, writeTarget.getNativeTable());
+        Assertions.assertEquals("native-identity", writeTarget.getNativeWriteIdentity());
         Assertions.assertTrue(table.getUUID().contains("refreshed-identity"));
+        Assertions.assertEquals("refreshed-identity", table.copyForWrite().getNativeWriteIdentity());
+        verify(refreshed).uuid();
     }
 
     @Test
     public void testChangedSchemaCannotUseFrozenContract() {
         FileStoreTable nativeTable = nativeTable(-1);
-        PaimonTable table = table(nativeTable);
+        PaimonTable table = table(nativeTable).copyForWrite();
         PaimonSinkExtra extra = PaimonSinkExtra.from(table, "APPEND", Map.of(), "operation_3", "UTC");
         TableSchema changed = TableSchema.create(18, Schema.newBuilder().column("other", DataTypes.INT()).build());
         when(nativeTable.schema()).thenReturn(changed);

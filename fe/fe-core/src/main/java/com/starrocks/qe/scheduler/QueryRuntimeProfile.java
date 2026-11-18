@@ -29,8 +29,6 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.paimon.PaimonSinkCommitValidator;
 import com.starrocks.connector.paimon.PaimonSinkExtra;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.datacache.LoadDataCacheMetrics;
@@ -141,7 +139,7 @@ public class QueryRuntimeProfile {
     // Fields for external table sink
     // ------------------------------------------------------------------------------------
     private final List<TSinkCommitInfo> sinkCommitInfos = Lists.newCopyOnWriteArrayList();
-    private PaimonSinkCommitValidator paimonSinkCommitValidator;
+    private PaimonSinkExtra paimonOperation;
 
     // Fields for datacache
     private final DataCacheSelectMetrics dataCacheSelectMetrics = new DataCacheSelectMetrics();
@@ -209,25 +207,19 @@ public class QueryRuntimeProfile {
     }
 
     public synchronized void initPaimonSink(PaimonSinkExtra operation, Map<TUniqueId, Integer> sinkInstanceDops) {
-        Preconditions.checkState(paimonSinkCommitValidator == null, "Paimon sink producers were already initialized");
-        paimonSinkCommitValidator = new PaimonSinkCommitValidator(operation, sinkInstanceDops, queryProfile);
+        Preconditions.checkState(paimonOperation == null, "Paimon sink producers were already initialized");
+        operation.initCommitValidator(sinkInstanceDops, queryProfile);
+        paimonOperation = operation;
     }
 
     public synchronized boolean hasPaimonSink() {
-        return paimonSinkCommitValidator != null;
+        return paimonOperation != null;
     }
 
     public synchronized void recordPaimonReportFailure() {
-        if (paimonSinkCommitValidator != null) {
-            paimonSinkCommitValidator.recordAggregationFailure();
+        if (paimonOperation != null) {
+            paimonOperation.getCommitValidator().recordAggregationFailure();
         }
-    }
-
-    public synchronized void validatePaimonSinkCommitInfos(long loadedRows) {
-        if (paimonSinkCommitValidator == null) {
-            throw new StarRocksConnectorException("Paimon scheduled producer layout is unavailable");
-        }
-        paimonSinkCommitValidator.validateComplete(loadedRows);
     }
 
     public List<String> getExportFiles() {
@@ -445,7 +437,7 @@ public class QueryRuntimeProfile {
         }
         if (paimonSink) {
             // A sink instance must report its producers even when no commit payload was received.
-            updates.add(() -> paimonSinkCommitValidator.validateReport(execState.getInstanceId(), params));
+            updates.add(() -> paimonOperation.getCommitValidator().validateReport(execState.getInstanceId(), params));
         }
         return updates;
     }

@@ -110,9 +110,6 @@ public:
 
     std::vector<std::string> owned_files() const;
     StatusOr<int64_t> owned_file_bytes() const;
-    // Call only after external publication succeeds. All paths must have closed
-    // successfully. Idempotent; published paths cannot be mutated or rolled back.
-    Status mark_published(const std::vector<std::string>& paths);
     // Close/destroy SDK writers first. Seals the attempt against further writes;
     // retries failed deletions, continues past errors and never recursively deletes.
     Status rollback();
@@ -124,7 +121,6 @@ private:
         bool open = true;
         bool closed_ok = false;
         bool owned = true;
-        bool published = false;
         int64_t bytes = 0;
     };
 

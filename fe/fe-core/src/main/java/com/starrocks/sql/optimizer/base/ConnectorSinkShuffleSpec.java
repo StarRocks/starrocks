@@ -19,12 +19,14 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorSinkShuffleMode;
+import com.starrocks.planner.DataSink;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.InsertPartitionEstimator;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -74,6 +76,10 @@ public interface ConnectorSinkShuffleSpec {
                               ColumnRefFactory columnRefFactory,
                               OptExpression root,
                               ColumnRefSet requiredColumns);
+
+    /** Complete the write distribution once the physical plan and sink are available. */
+    default void applyToExecPlan(ExecPlan plan, DataSink sink) {
+    }
 
     /**
      * Optional sort property override (Iceberg may want host-level sort by the

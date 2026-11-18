@@ -360,7 +360,6 @@ TEST_F(PaimonFileSystemWriteTest, ShortWriteAndAppendFailureRemainErrorsThroughC
         EXPECT_EQ(error, output->Write("x", 1).status().ToString());
         EXPECT_EQ(error, output->Close().ToString());
         EXPECT_EQ(error, output->Close().ToString());
-        EXPECT_FALSE(_tracker->mark_published(_tracker->owned_files()).ok());
         EXPECT_FALSE(_tracker->owned_file_bytes().ok());
     }
     EXPECT_EQ(2, _fs->faults->append_calls);
@@ -387,7 +386,7 @@ TEST_F(PaimonFileSystemWriteTest, FlushAndCloseFailuresAreNotDiscarded) {
     status = _adapter->WriteFile(path("close-failed"), "data", false);
     EXPECT_TRUE(status.IsIOError());
     EXPECT_NE(std::string::npos, status.ToString().find("injected close failure"));
-    EXPECT_FALSE(_tracker->mark_published(_tracker->owned_files()).ok());
+    EXPECT_FALSE(_tracker->owned_file_bytes().ok());
     ASSERT_OK(_tracker->rollback());
 }
 
@@ -419,25 +418,6 @@ TEST_F(PaimonFileSystemWriteTest, ObjectStoreFlushFinalizesOnceAndRejectsMoreWri
     EXPECT_EQ(0, _fs->faults->flush_calls);
     EXPECT_TRUE(_adapter->AtomicStore(path("metadata"), "not atomic").IsNotImplemented());
     expect_content("object", "data");
-}
-
-TEST_F(PaimonFileSystemWriteTest, PublicationIsValidatedAllOrNothingAndProtectsFiles) {
-    ASSERT_TRUE(_adapter->WriteFile(path("published"), "keep", false).ok());
-    auto result = _adapter->Create(path("unpublished"), false);
-    ASSERT_TRUE(result.ok());
-    auto output = std::move(result).value();
-    EXPECT_FALSE(_tracker->mark_published({path("published"), path("unpublished")}).ok());
-    EXPECT_EQ(2, _tracker->owned_files().size());
-    ASSERT_TRUE(output->Close().ok());
-    ASSERT_OK(_tracker->mark_published({path("published")}));
-    ASSERT_OK(_tracker->mark_published({path("published")}));
-    EXPECT_TRUE(_adapter->Delete(path("published"), true).IsInvalid());
-    EXPECT_TRUE(_adapter->Create(path("published"), true).status().IsExist());
-    EXPECT_TRUE(_adapter->Rename(path("published"), path("moved")).IsInvalid());
-    ASSERT_OK(_tracker->rollback());
-    expect_content("published", "keep");
-    EXPECT_TRUE(_local_fs->path_exists(path("unpublished")).is_not_found());
-    EXPECT_FALSE(_tracker->mark_published({path("published")}).ok());
 }
 
 TEST_F(PaimonFileSystemWriteTest, RenamePreservesOwnershipAndNeverReplacesExistingPaths) {
@@ -484,12 +464,12 @@ TEST_F(PaimonFileSystemWriteTest, DeleteAndRollbackAreBoundedRetryableAndIdempot
     expect_content("old", "keep");
 }
 
-TEST_F(PaimonFileSystemWriteTest, OpenOutputBlocksCleanupAndPublication) {
+TEST_F(PaimonFileSystemWriteTest, OpenOutputBlocksCleanupAndPreparedFileAccounting) {
     auto result = _adapter->Create(path("active"), false);
     ASSERT_TRUE(result.ok());
     auto output = std::move(result).value();
     EXPECT_TRUE(_adapter->Delete(path("active"), false).IsInvalid());
-    EXPECT_FALSE(_tracker->mark_published({path("active")}).ok());
+    EXPECT_FALSE(_tracker->owned_file_bytes().ok());
     EXPECT_FALSE(_tracker->rollback().ok());
     EXPECT_EQ(0, _fs->delete_calls);
     ASSERT_TRUE(output->Close().ok());
@@ -514,11 +494,11 @@ TEST_F(PaimonFileSystemWriteTest, CreationAndExistenceErrorsDoNotAcquireOwnershi
     EXPECT_EQ(0, _fs->delete_calls);
 }
 
-TEST_F(PaimonFileSystemWriteTest, FailedOwnedOverwriteCannotPublishEarlierClosedVersion) {
+TEST_F(PaimonFileSystemWriteTest, FailedOwnedOverwriteInvalidatesEarlierClosedVersion) {
     ASSERT_TRUE(_adapter->WriteFile(path("owned"), "old data", false).ok());
     _fs->create_error = true;
     EXPECT_TRUE(_adapter->Create(path("owned"), true).status().IsIOError());
-    EXPECT_FALSE(_tracker->mark_published({path("owned")}).ok());
+    EXPECT_FALSE(_tracker->owned_file_bytes().ok());
     EXPECT_EQ(std::vector<std::string>{path("owned")}, _tracker->owned_files());
     ASSERT_OK(_tracker->rollback());
     EXPECT_TRUE(_local_fs->path_exists(path("owned")).is_not_found());

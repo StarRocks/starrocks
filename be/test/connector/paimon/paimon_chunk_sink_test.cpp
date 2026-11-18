@@ -23,7 +23,6 @@
 
 #include <chrono>
 #include <filesystem>
-#include <limits>
 #include <string>
 #include <thread>
 #include <utility>
@@ -93,7 +92,6 @@ protected:
         sink.__set_bucket_count(fixed ? 8 : -1);
         sink.__set_options({{"bucket", fixed ? "8" : "-1"}, {"file.format", "parquet"}});
         sink.__set_commit_user("starrocks-unit-test");
-        sink.__set_commit_identifier(std::numeric_limits<int64_t>::max());
         sink.__set_operation_id("op-1");
         sink.__set_overwrite_mode("APPEND");
         sink.__set_time_zone("UTC");
@@ -165,6 +163,8 @@ TEST_F(PaimonChunkSinkTest, EmptyDriverReportsVersionedTerminalProducerAndNoSnap
     EXPECT_EQ(std::string(4, '\0'), info.commit_messages); // SerializeList: big-endian count, no version prefix.
     EXPECT_TRUE(info.owned_files.empty());
     EXPECT_EQ(0, state.num_rows_load_sink());
+    EXPECT_EQ(0, COUNTER_VALUE(profile.get_counter("NativeBackgroundThreads")));
+    EXPECT_EQ(0, COUNTER_VALUE(profile.get_counter("PaimonWriteBatches")));
     EXPECT_FALSE(std::filesystem::exists(root + "/snapshot"));
     ASSERT_OK(sink.finish()); // one-shot and idempotent at connector lifecycle boundary
     EXPECT_EQ(1, state.sink_commit_infos().size());
@@ -181,6 +181,7 @@ TEST_F(PaimonChunkSinkTest, FullRowsGroupedByActualPartitionAndPreparedFilesSurv
     for (uint8_t value : {0, 1, 0, 0}) nulls->append(value);
     rows->append_column(NullableColumn::create(std::move(strings), std::move(nulls)), 1);
     ASSERT_OK(sink.add(rows));
+    EXPECT_EQ(3, COUNTER_VALUE(profile.get_counter("PaimonWriteBatches")));
     ASSERT_OK(sink.finish());
     ASSERT_TRUE(await(sink));
     ASSERT_OK(sink.status());
@@ -303,6 +304,23 @@ TEST_F(PaimonChunkSinkTest, RejectsSchemaChangeBeforeWritingAndNeverRemovesSchem
     sink.rollback();
     EXPECT_TRUE(std::filesystem::exists(root + "/schema/schema-0"));
     EXPECT_TRUE(std::filesystem::exists(root + "/schema/schema-1"));
+    EXPECT_TRUE(state.sink_commit_infos().empty());
+}
+
+TEST_F(PaimonChunkSinkTest, RejectsSchemaChangeBetweenWriteAndPrepare) {
+    auto ctx = context();
+    connector::PaimonChunkSink sink(ctx, 0);
+    ASSERT_OK(sink.init(nullptr, &profile, &manager));
+    ASSERT_OK(sink.add(chunk({1})));
+    auto changed = ctx->sink.schema_json;
+    changed.replace(changed.find("\"id\":0"), 6, "\"id\":1");
+    ASSIGN_OR_ABORT(auto file, fs->new_writable_file(root + "/schema/schema-1"));
+    ASSERT_OK(file->append(changed));
+    ASSERT_OK(file->close());
+
+    ASSERT_OK(sink.finish());
+    ASSERT_TRUE(await(sink));
+    EXPECT_FALSE(sink.status().ok());
     EXPECT_TRUE(state.sink_commit_infos().empty());
 }
 

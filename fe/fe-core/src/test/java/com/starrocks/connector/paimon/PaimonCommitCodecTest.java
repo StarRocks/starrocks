@@ -15,7 +15,14 @@
 package com.starrocks.connector.paimon;
 
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.thrift.TPaimonCommitInfo;
+import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.paimon.data.BinaryRow;
+import org.apache.paimon.data.BinaryRowWriter;
+import org.apache.paimon.io.CompactIncrement;
+import org.apache.paimon.io.DataIncrement;
 import org.apache.paimon.io.DataOutputSerializer;
+import org.apache.paimon.table.sink.CommitMessageImpl;
 import org.apache.paimon.table.sink.CommitMessageSerializer;
 import org.junit.jupiter.api.Test;
 
@@ -27,9 +34,12 @@ import java.util.Base64;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class PaimonCommitCodecTest {
     @Test
@@ -60,6 +70,50 @@ class PaimonCommitCodecTest {
             assertEquals(1, PaimonCommitCodec.decode(12, list).size());
             assertArrayEquals(single, serializer.serialize(PaimonCommitCodec.decode(12, list).get(0)));
         }
+    }
+
+    @Test
+    void testIndividuallyValidProducerPayloadsMayExceed64MiBTogether() throws IOException {
+        int limit = 64 * 1024 * 1024;
+        byte[] partitionBytes = new byte[24 * 1024 * 1024];
+        BinaryRow partition = new BinaryRow(1);
+        BinaryRowWriter writer = new BinaryRowWriter(partition, partitionBytes.length + 1024);
+        writer.writeBinary(0, partitionBytes, 0, partitionBytes.length);
+        writer.complete();
+        CommitMessageSerializer serializer = new CommitMessageSerializer();
+        DataOutputSerializer output = new DataOutputSerializer(partitionBytes.length + 1024);
+        serializer.serializeList(List.of(new CommitMessageImpl(partition, 0, null,
+                DataIncrement.emptyIncrement(), CompactIncrement.emptyIncrement())), output);
+        byte[] payload = output.getCopyOfBuffer();
+        assertTrue(payload.length < limit);
+        assertTrue(payload.length * 3 > limit);
+
+        PaimonSinkExtra operation = mock(PaimonSinkExtra.class);
+        when(operation.getOperationId()).thenReturn("operation");
+        when(operation.getTableIdentity()).thenReturn("table");
+        when(operation.getLocation()).thenReturn("file:/paimon");
+        when(operation.getPartitionColumns()).thenReturn(List.of("p"));
+        when(operation.getBucketCount()).thenReturn(-1);
+
+        List<TSinkCommitInfo> reports = List.of(
+                producerReport("driver-1", serializer.getVersion(), payload),
+                producerReport("driver-2", serializer.getVersion(), payload),
+                producerReport("driver-3", serializer.getVersion(), payload));
+        assertDoesNotThrow(() -> PaimonCommitCodec.collect(reports, operation));
+    }
+
+    private static TSinkCommitInfo producerReport(String producerId, int version, byte[] payload) {
+        TPaimonCommitInfo info = new TPaimonCommitInfo();
+        info.setOperation_id("operation");
+        info.setTable_identity("table");
+        info.setSchema_id(0);
+        info.setProducer_id(producerId);
+        info.setAttempt_id(0);
+        info.setSerializer_version(version);
+        info.setCommit_messages(payload);
+        info.setPrepare_complete(true);
+        info.setRow_count(0);
+        return new TSinkCommitInfo().setPaimon_commit_info(info);
     }
 
     @Test

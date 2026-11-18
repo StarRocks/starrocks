@@ -138,26 +138,6 @@ StatusOr<int64_t> PaimonWriteFileTracker::owned_file_bytes() const {
     return total;
 }
 
-Status PaimonWriteFileTracker::mark_published(const std::vector<std::string>& paths) {
-    std::lock_guard<std::mutex> lock(_mutex);
-    if (_rolled_back) {
-        return Status::InvalidArgument("Cannot publish a rolled back Paimon write attempt");
-    }
-    for (const auto& path : paths) {
-        auto it = _files.find(path);
-        if (it == _files.end() || (!it->second.owned && !it->second.published) || it->second.open ||
-            !it->second.closed_ok) {
-            return Status::InvalidArgument(fmt::format("Paimon file is not successfully closed and owned: {}", path));
-        }
-    }
-    for (const auto& path : paths) {
-        auto& state = _files.at(path);
-        state.owned = false;
-        state.published = true;
-    }
-    return Status::OK();
-}
-
 void PaimonWriteFileTracker::_stream_closed(const std::string& path, bool success, int64_t bytes) {
     std::lock_guard<std::mutex> lock(_mutex);
     auto& state = _files.at(path);
@@ -706,9 +686,6 @@ paimon::Status PaimonFileSystem::Delete(const std::string& path, bool /*recursiv
     auto it = _write_tracker->_files.find(path);
     if (it == _write_tracker->_files.end()) {
         return paimon::Status::Invalid(fmt::format("Refusing to delete an unowned Paimon file or directory: {}", path));
-    }
-    if (it->second.published) {
-        return paimon::Status::Invalid(fmt::format("Refusing to delete a published Paimon file: {}", path));
     }
     if (!it->second.owned) {
         // Tombstones make repeated SDK cleanup idempotent without touching a

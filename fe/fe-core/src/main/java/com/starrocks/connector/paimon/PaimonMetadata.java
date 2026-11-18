@@ -281,6 +281,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             if (operation.getPublicationState() != PaimonSinkExtra.PublicationState.WRITING) {
                 throw new StarRocksConnectorException("Paimon operation is not eligible for publication");
             }
+            operation.validateCommitReports(commitInfos);
             PaimonCommitCodec.CollectedMessages collected = PaimonCommitCodec.collect(commitInfos, operation);
             Identifier identifier = new Identifier(dbName, tableName);
             FileStoreTable table = loadWriteTarget(identifier, operation);

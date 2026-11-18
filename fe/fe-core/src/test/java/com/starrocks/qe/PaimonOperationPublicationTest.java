@@ -246,7 +246,7 @@ public class PaimonOperationPublicationTest {
         assertThrows(StarRocksConnectorException.class,
                 () -> profile.buildLoadInformationUpdates(execution, report(INSTANCE_ID, List.of(first)))
                         .forEach(Runnable::run));
-        assertThrows(StarRocksConnectorException.class, () -> profile.validatePaimonSinkCommitInfos(0));
+        assertThrows(StarRocksConnectorException.class, () -> operation.validateCommitReports(profile.getSinkCommitInfos()));
         assertEquals(List.of(first), profile.getSinkCommitInfos(), "partial payload remains available for native abort");
     }
 
@@ -257,7 +257,7 @@ public class PaimonOperationPublicationTest {
         assertThrows(StarRocksConnectorException.class,
                 () -> profile.buildLoadInformationUpdates(execution(INSTANCE_ID), report(INSTANCE_ID, List.of()))
                         .forEach(Runnable::run));
-        assertThrows(StarRocksConnectorException.class, () -> profile.validatePaimonSinkCommitInfos(0));
+        assertThrows(StarRocksConnectorException.class, () -> operation.validateCommitReports(profile.getSinkCommitInfos()));
     }
 
     @Test
@@ -269,7 +269,7 @@ public class PaimonOperationPublicationTest {
         profile.buildLoadInformationUpdates(execution(INSTANCE_ID), report(INSTANCE_ID, List.of(
                 marker(operation, INSTANCE_ID, 0, 0), marker(operation, INSTANCE_ID, 1, 0))))
                 .forEach(Runnable::run);
-        profile.validatePaimonSinkCommitInfos(0);
+        operation.validateCommitReports(profile.getSinkCommitInfos());
         assertEquals("2", profile.getQueryProfile().getInfoString("PaimonPreparedProducers"));
     }
 
@@ -279,7 +279,7 @@ public class PaimonOperationPublicationTest {
         QueryRuntimeProfile profile = profile(operation, 1);
         profile.buildLoadInformationUpdates(execution(INSTANCE_ID), report(INSTANCE_ID,
                 List.of(marker(operation, INSTANCE_ID, 0, 1)))).forEach(Runnable::run);
-        assertThrows(StarRocksConnectorException.class, () -> profile.validatePaimonSinkCommitInfos(0));
+        assertThrows(StarRocksConnectorException.class, () -> operation.validateCommitReports(profile.getSinkCommitInfos()));
     }
 
     @Test
@@ -295,7 +295,7 @@ public class PaimonOperationPublicationTest {
         assertEquals(List.of(marker), profile.getSinkCommitInfos());
         // The coordinator marks this failure before retiring the instance, so later validation cannot pass.
         profile.recordPaimonReportFailure();
-        assertThrows(StarRocksConnectorException.class, () -> profile.validatePaimonSinkCommitInfos(0));
+        assertThrows(StarRocksConnectorException.class, () -> operation.validateCommitReports(profile.getSinkCommitInfos()));
     }
 
     @Test
@@ -327,7 +327,7 @@ public class PaimonOperationPublicationTest {
         coordinator.updateFragmentExecStatus(report(INSTANCE_ID, List.of()));
 
         assertFalse(coordinator.getExecStatus().ok());
-        assertThrows(StarRocksConnectorException.class, () -> profile.validatePaimonSinkCommitInfos(0));
+        assertThrows(StarRocksConnectorException.class, () -> operation.validateCommitReports(profile.getSinkCommitInfos()));
         assertTrue(profile.isFinished(), "malformed reports must fail closed without hanging the query");
     }
 
@@ -394,6 +394,7 @@ public class PaimonOperationPublicationTest {
     private static QueryRuntimeProfile profile(PaimonSinkExtra operation, int dop) {
         QueryRuntimeProfile profile = new QueryRuntimeProfile(null, mock(JobSpec.class), false);
         profile.initPaimonSink(operation, Map.of(INSTANCE_ID, dop));
+        operation.setLoadedRows(0);
         return profile;
     }
 

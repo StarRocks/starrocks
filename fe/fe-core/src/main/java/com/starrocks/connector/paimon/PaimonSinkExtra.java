@@ -16,7 +16,10 @@ package com.starrocks.connector.paimon;
 
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.thrift.TSinkCommitInfo;
+import com.starrocks.thrift.TUniqueId;
 import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.sink.BatchWriteBuilder;
@@ -27,7 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-/** The immutable, query-owned contract shared by planning, publication and abort. */
+/** The query-owned write contract and state shared by scheduling, publication and abort. */
 public final class PaimonSinkExtra {
     public static final int WRITER_PROTOCOL_VERSION = 1;
 
@@ -53,6 +56,8 @@ public final class PaimonSinkExtra {
     private final String commitUser;
     private final long commitIdentifier;
     private PublicationState publicationState = PublicationState.WRITING;
+    private PaimonSinkCommitValidator commitValidator;
+    private Long loadedRows;
 
     private PaimonSinkExtra(FileStoreTable table, String tableIdentity, String mode,
                            Map<String, String> staticPartition, String operationId, String timeZone) {
@@ -117,6 +122,31 @@ public final class PaimonSinkExtra {
             throw new StarRocksConnectorException("Paimon target identity or schema changed during the write");
         }
         PaimonWriteCapabilities.validateWrite(table);
+    }
+
+    public synchronized void initCommitValidator(Map<TUniqueId, Integer> instanceDops, RuntimeProfile profile) {
+        if (commitValidator != null) {
+            throw new IllegalStateException("Paimon sink producers were already initialized");
+        }
+        commitValidator = new PaimonSinkCommitValidator(this, instanceDops, profile);
+    }
+
+    public synchronized PaimonSinkCommitValidator getCommitValidator() {
+        if (commitValidator == null) {
+            throw new StarRocksConnectorException("Paimon scheduled producer layout is unavailable");
+        }
+        return commitValidator;
+    }
+
+    public synchronized void setLoadedRows(long loadedRows) {
+        this.loadedRows = loadedRows;
+    }
+
+    public synchronized void validateCommitReports(List<TSinkCommitInfo> commitInfos) {
+        if (loadedRows == null) {
+            throw new StarRocksConnectorException("Paimon completed load row count is unavailable");
+        }
+        getCommitValidator().validateComplete(commitInfos, loadedRows);
     }
 
     public synchronized PublicationState getPublicationState() {

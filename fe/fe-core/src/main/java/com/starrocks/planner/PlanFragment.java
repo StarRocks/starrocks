@@ -353,8 +353,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setHasPaimonTableSink() {
         this.hasPaimonTableSink = true;
-        disableRuntimeAdaptiveDop();
-        setForceSetTableSinkDop();
     }
 
     public boolean hasTableFunctionTableSink() {

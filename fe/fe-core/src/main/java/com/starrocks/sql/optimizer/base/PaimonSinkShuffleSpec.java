@@ -21,9 +21,11 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.planner.DataPartition;
+import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DataStreamSink;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.ExchangeNode;
+import com.starrocks.planner.PaimonTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ProjectNode;
 import com.starrocks.planner.SlotDescriptor;
@@ -77,6 +79,15 @@ public final class PaimonSinkShuffleSpec implements ConnectorSinkShuffleSpec {
         // A SQL hash of bucket keys is NOT Paimon's bucket calculator. The mandatory native
         // calculation and exchange are installed after physical planning, including LIMIT/VALUES.
         return new PreOptimizeResult(root, requiredColumns, Collections.emptyList());
+    }
+
+    @Override
+    public void applyToExecPlan(ExecPlan plan, DataSink sink) {
+        PaimonTableSink paimonSink = (PaimonTableSink) sink;
+        int routeSlotId = installBucketRouting(plan, paimonSink.getThriftTableSink());
+        if (routeSlotId >= 0) {
+            paimonSink.setBucketRouting(routeSlotId);
+        }
     }
 
     /**
@@ -164,7 +175,6 @@ public final class PaimonSinkShuffleSpec implements ConnectorSinkShuffleSpec {
         transportExprs.add(new SlotRef(bucket));
         input.setOutputExprs(transportExprs);
         output.setOutputExprs(schemaExprs);
-        output.setHasPaimonTableSink();
         plan.getFragments().add(0, output);
         plan.getOutputExprs().clear();
         plan.getOutputExprs().addAll(schemaExprs);

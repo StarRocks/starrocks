@@ -357,7 +357,7 @@ struct TPaimonTableSink {
     11: optional i32 bucket_count
     12: optional map<string, string> options
     13: optional string commit_user
-    14: optional i64 commit_identifier
+    // Field 14 is reserved.
     15: optional string operation_id
     16: optional string overwrite_mode
     17: optional map<string, string> static_partition

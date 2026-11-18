@@ -16,6 +16,8 @@
 
 #include <arrow/api.h>
 #include <arrow/c/bridge.h>
+#include <arrow/compute/api_vector.h>
+#include <arrow/compute/exec.h>
 #include <fmt/format.h>
 #include <paimon/bucket/bucket_id_calculator.h>
 #include <paimon/catalog/table.h>
@@ -194,7 +196,7 @@ private:
     arrow::ProxyMemoryPool _delegate;
 };
 
-Status validate_contract(const TPaimonTableSink& sink, bool writing) {
+Status validate_contract(const TPaimonTableSink& sink) {
     if (!sink.__isset.writer_protocol_version || sink.writer_protocol_version != 1) {
         return Status::NotSupported("Paimon writer protocol must be 1; upgrade FE and BE together");
     }
@@ -205,18 +207,18 @@ Status validate_contract(const TPaimonTableSink& sink, bool writing) {
         !sink.__isset.bucket_count) {
         return Status::InvalidArgument("Paimon sink is missing its frozen table/schema contract");
     }
-    if (writing && (!sink.__isset.operation_id || sink.operation_id.empty() || !sink.__isset.commit_user ||
-                    sink.commit_user.empty() || !sink.__isset.commit_identifier || !sink.__isset.overwrite_mode)) {
+    if (!sink.__isset.operation_id || sink.operation_id.empty() || !sink.__isset.commit_user ||
+        sink.commit_user.empty() || !sink.__isset.overwrite_mode) {
         return Status::InvalidArgument("Paimon sink is missing its operation/commit identity");
     }
-    if (writing && sink.overwrite_mode != "APPEND") {
+    if (sink.overwrite_mode != "APPEND") {
         return Status::InvalidArgument("Unknown Paimon overwrite mode");
     }
     if (sink.bucket_count == 0 || sink.bucket_count < -1 ||
         (!sink.primary_key_columns.empty() && sink.bucket_count <= 0)) {
         return Status::NotSupported("Paimon writes require fixed PK buckets or fixed/unaware append buckets");
     }
-    if (writing && sink.bucket_count > 0 &&
+    if (sink.bucket_count > 0 &&
         (!sink.__isset.bucket_routed || !sink.bucket_routed || !sink.__isset.routing_bucket_slot_id)) {
         return Status::NotSupported("Paimon fixed-bucket writes require native pre-exchange bucket ownership routing");
     }
@@ -313,10 +315,15 @@ StatusOr<std::shared_ptr<arrow::Field>> add_length_bounds(const std::shared_ptr<
 struct FrozenSchema {
     std::shared_ptr<paimon::DataSchema> native;
     std::shared_ptr<arrow::Schema> arrow;
-    std::vector<std::string> bucket_keys;
 };
 
-StatusOr<FrozenSchema> load_frozen_schema(const TPaimonTableSink& sink, const std::shared_ptr<paimon::FileSystem>& fs) {
+struct CheckedSchema {
+    std::shared_ptr<paimon::DataSchema> native;
+    rapidjson::Document json;
+};
+
+StatusOr<CheckedSchema> check_current_schema(const TPaimonTableSink& sink,
+                                             const std::shared_ptr<paimon::FileSystem>& fs) {
     // Identifier is only the catalog-independent diagnostic identity; location is authoritative.
     ASSIGN_OR_RETURN(auto table,
                      native_result(paimon::Table::Create(fs, sink.location, paimon::Identifier(sink.table_identity)),
@@ -368,11 +375,16 @@ StatusOr<FrozenSchema> load_frozen_schema(const TPaimonTableSink& sink, const st
         return Status::InvalidArgument("Paimon table schema/options changed since FE planning; retry the statement");
     }
     // Empty append bucket keys are intentional: Java hashes an empty BinaryRow, not all fields.
-    auto bucket_keys = native->BucketKeys();
-    if (bucket_keys != sink.bucket_columns) {
+    if (native->BucketKeys() != sink.bucket_columns) {
         return Status::InvalidArgument("Paimon native bucket keys differ from FE's frozen bucket keys");
     }
-    ASSIGN_OR_RETURN(auto c_schema, native_result(native->GetArrowSchema(), "read Arrow schema"));
+    return CheckedSchema{std::move(native), std::move(expected)};
+}
+
+StatusOr<FrozenSchema> load_frozen_schema(const TPaimonTableSink& sink, const std::shared_ptr<paimon::FileSystem>& fs) {
+    ASSIGN_OR_RETURN(auto checked, check_current_schema(sink, fs));
+    const auto& expected = checked.json;
+    ASSIGN_OR_RETURN(auto c_schema, native_result(checked.native->GetArrowSchema(), "read Arrow schema"));
     ASSIGN_OR_RETURN(auto arrow_schema, arrow_result(arrow::ImportSchema(c_schema.get())));
     if (!expected.HasMember("fields") || !expected["fields"].IsArray() ||
         expected["fields"].Size() != arrow_schema->num_fields()) {
@@ -403,7 +415,7 @@ StatusOr<FrozenSchema> load_frozen_schema(const TPaimonTableSink& sink, const st
             return Status::NotSupported("Pinned Paimon SDK supports only boolean/integer/string/date partitions");
         }
     }
-    return FrozenSchema{std::move(native), std::move(result_schema), std::move(bucket_keys)};
+    return FrozenSchema{std::move(checked.native), std::move(result_schema)};
 }
 
 // The SDK accepts raw canonical values and performs partition path escaping itself. In particular,
@@ -790,7 +802,7 @@ public:
             return Status::InvalidArgument(
                     "Paimon sink requires runtime, bounded executor, profile and memory manager");
         }
-        RETURN_IF_ERROR(validate_contract(context->sink, true));
+        RETURN_IF_ERROR(validate_contract(context->sink));
         if (context->output_exprs.size() != context->sink.column_names.size()) {
             return Status::InvalidArgument("Paimon sink output must contain every native field in schema order");
         }
@@ -808,7 +820,8 @@ public:
         files_counter = ADD_COUNTER(profile, "WriteFiles", TUnit::UNIT);
         rows_counter = ADD_COUNTER(profile, "WriteFileRecords", TUnit::UNIT);
         bytes_counter = ADD_COUNTER(profile, "WriteFileBytes", TUnit::BYTES);
-        COUNTER_SET(ADD_COUNTER(profile, "NativeBackgroundThreads", TUnit::UNIT), int64_t{5});
+        batches_counter = ADD_COUNTER(profile, "PaimonWriteBatches", TUnit::UNIT);
+        native_threads_counter = ADD_COUNTER(profile, "NativeBackgroundThreads", TUnit::UNIT);
         profile->add_info_string("NativeBackgroundThreadsMeaning",
                                  "per-driver bound: SDK compaction 4 + supplied executor 1");
         auto memory_manager = std::make_unique<NativeSinkMemoryManager>(occupied);
@@ -830,10 +843,6 @@ public:
         auto budget = std::make_shared<WriteMemoryBudget>(max_memory);
         native_pool = std::make_shared<WriteNativePool>(state()->query_mem_tracker_ptr().get(), budget);
         arrow_pool = std::make_unique<WriteArrowPool>(state()->query_mem_tracker_ptr().get(), budget);
-        // Do not use a global native executor. Public 0.3 also creates a fixed four-thread
-        // compaction executor per writer, even in write-only mode; profile includes those four.
-        ASSIGN_OR_RETURN(native_executor,
-                         native_result(paimon::CreateDefaultExecutor(1), "create bounded native executor"));
         RETURN_IF_ERROR(ExprFactory::create_expr_trees(&expr_pool, context->output_exprs, &exprs, state()));
         RETURN_IF_ERROR(ExprExecutor::prepare(exprs, state()));
         RETURN_IF_ERROR(ExprExecutor::open(exprs, state()));
@@ -845,7 +854,7 @@ public:
         if (writer) return Status::OK();
         // FileStoreWrite::Create reopens LatestSchema itself. Check before AND after its creation,
         // and again before first Write, so it cannot silently adopt an altered native schema.
-        ASSIGN_OR_RETURN(auto fresh, load_frozen_schema(context->sink, native_fs));
+        RETURN_IF_ERROR(check_current_schema(context->sink, native_fs).status());
         std::map<std::string, std::string> options = schema.native->Options();
         for (const auto& [key, value] : context->sink.options) {
             if (key.rfind("starrocks.paimon.", 0) == 0) continue;
@@ -868,6 +877,9 @@ public:
         options["write-buffer-spillable"] = "false"; // No uncontrolled native spill threads/temp paths.
         profile->add_info_string("PaimonEffectiveWriteBufferBytes", std::to_string(buffer));
         profile->add_info_string("PaimonWriterMemoryLimitBytes", std::to_string(max_memory));
+        // Public 0.3 also creates a four-thread compaction executor in write-only mode.
+        ASSIGN_OR_RETURN(native_executor,
+                         native_result(paimon::CreateDefaultExecutor(1), "create bounded native executor"));
         paimon::WriteContextBuilder builder(context->sink.location, context->sink.commit_user);
         builder.WithMemoryPool(native_pool)
                 .WithFileSystem(native_fs)
@@ -879,8 +891,8 @@ public:
         ASSIGN_OR_RETURN(auto write_context, native_result(builder.Finish(), "build write context"));
         ASSIGN_OR_RETURN(writer,
                          native_result(paimon::FileStoreWrite::Create(std::move(write_context)), "create writer"));
-        ASSIGN_OR_RETURN(fresh, load_frozen_schema(context->sink, native_fs));
-        return Status::OK();
+        COUNTER_SET(native_threads_counter, int64_t{5});
+        return check_current_schema(context->sink, native_fs).status();
     }
 
     Status add(const ChunkPtr& chunk) {
@@ -915,11 +927,10 @@ public:
             }
         }
         using Group = std::pair<std::map<std::string, std::string>, int32_t>;
-        std::vector<Group> row_groups;
+        std::map<Group, std::vector<int64_t>> group_rows;
         if (batch->num_rows() > max_memory / static_cast<int64_t>(sizeof(Group))) {
             return Status::MemoryLimitExceeded("Paimon routing groups exceed the per-driver writer bound");
         }
-        row_groups.reserve(batch->num_rows());
         auto all_groups = active_groups;
         std::string default_name = "__DEFAULT_PARTITION__";
         auto default_it = schema.native->Options().find("partition.default-name");
@@ -939,32 +950,44 @@ public:
                     return Status::InvalidArgument("Paimon input does not match the static partition specification");
                 }
             }
-            Group group{std::move(partition), ids[row]};
-            all_groups.insert(group);
-            if (all_groups.size() > max_writers) {
-                return Status::MemoryLimitExceeded(
-                        "Paimon max-active-writers exceeded; increase the per-driver bound or sink DOP");
+            auto [group, inserted] = group_rows.try_emplace(Group{std::move(partition), ids[row]});
+            if (inserted) {
+                all_groups.insert(group->first);
+                if (all_groups.size() > max_writers) {
+                    return Status::MemoryLimitExceeded(
+                            "Paimon max-active-writers exceeded; increase the per-driver bound or sink DOP");
+                }
             }
-            row_groups.push_back(std::move(group));
+            group->second.push_back(row);
         }
-        // Group adjacent full rows without Arrow copies. Nonadjacent groups reuse the same SDK
-        // partition/bucket writer; no first-row partition assumption and no loss of row ordering.
         if (row_count == 0) {
-            ASSIGN_OR_RETURN(auto fresh, load_frozen_schema(context->sink, native_fs));
+            RETURN_IF_ERROR(check_current_schema(context->sink, native_fs).status());
         }
         SCOPED_TIMER(write_time);
-        for (int64_t start = 0; start < batch->num_rows();) {
-            int64_t end = start + 1;
-            while (end < batch->num_rows() && row_groups[end] == row_groups[start]) ++end;
-            auto slice = batch->Slice(start, end - start);
+        for (const auto& [group, rows] : group_rows) {
+            const auto count = static_cast<int64_t>(rows.size());
+            std::shared_ptr<arrow::RecordBatch> grouped_batch;
+            if (rows.back() - rows.front() + 1 == count) {
+                grouped_batch = batch->Slice(rows.front(), count);
+            } else {
+                // Gather interleaved rows in input order so PK updates within a bucket stay ordered.
+                arrow::Int64Builder index_builder(arrow_pool.get());
+                RETURN_IF_ERROR(arrow_status(index_builder.AppendValues(rows)));
+                ASSIGN_OR_RETURN(auto indices, arrow_result(index_builder.Finish()));
+                arrow::compute::ExecContext exec_context(arrow_pool.get());
+                ASSIGN_OR_RETURN(auto selected,
+                                 arrow_result(arrow::compute::Take(
+                                         batch, indices, arrow::compute::TakeOptions::Defaults(), &exec_context)));
+                grouped_batch = selected.record_batch();
+            }
             ArrowArray array{};
-            RETURN_IF_ERROR(arrow_status(arrow::ExportRecordBatch(*slice, &array)));
+            RETURN_IF_ERROR(arrow_status(arrow::ExportRecordBatch(*grouped_batch, &array)));
             paimon::RecordBatchBuilder builder(&array); // Takes ownership of the C export.
-            builder.SetPartition(row_groups[start].first).SetBucket(row_groups[start].second);
+            builder.SetPartition(group.first).SetBucket(group.second);
             ASSIGN_OR_RETURN(auto native_batch, native_result(builder.Finish(), "build full-row batch"));
             RETURN_IF_ERROR(native_status(writer->Write(std::move(native_batch)), "write full-row batch"));
-            row_count += end - start;
-            start = end;
+            COUNTER_UPDATE(batches_counter, 1);
+            row_count += count;
             RETURN_IF_ERROR(check_memory());
         }
         active_groups = std::move(all_groups);
@@ -982,15 +1005,20 @@ public:
 
     Status prepare_commit() {
         RETURN_IF_CANCELLED(state());
-        RETURN_IF_ERROR(ensure_writer()); // Empty drivers must still validate schema and emit a terminal marker.
-        ASSIGN_OR_RETURN(auto fresh, load_frozen_schema(context->sink, native_fs));
         SCOPED_TIMER(prepare_time);
-        ASSIGN_OR_RETURN(auto messages, native_result(writer->PrepareCommit(), "prepare commit"));
+        std::vector<std::shared_ptr<paimon::CommitMessage>> messages;
+        if (writer) {
+            RETURN_IF_ERROR(check_current_schema(context->sink, native_fs).status());
+            ASSIGN_OR_RETURN(messages, native_result(writer->PrepareCommit(), "prepare commit"));
+        }
+        // Drivers that validated their schema in init but saw no rows still send an empty prepare marker.
         ASSIGN_OR_RETURN(auto serialized, native_result(paimon::CommitMessage::SerializeList(messages, native_pool),
                                                         "serialize commit list"));
-        RETURN_IF_ERROR(native_status(writer->Close(), "close prepared writer"));
-        writer.reset();
-        native_executor->ShutdownNow();
+        if (writer) {
+            RETURN_IF_ERROR(native_status(writer->Close(), "close prepared writer"));
+            writer.reset();
+            native_executor->ShutdownNow();
+        }
         // Cancellation before handoff is still unambiguously unpublished. Once recorded below,
         // FE owns abort/commit: a later client cancellation must NEVER delete these data files.
         RETURN_IF_CANCELLED(state());
@@ -1010,7 +1038,7 @@ public:
         TSinkCommitInfo commit;
         commit.__set_paimon_commit_info(info);
         state()->add_sink_commit_info(commit);
-        handed_off = true; // Deliberately NOT mark_published(): publication only happens in FE.
+        handed_off = true; // FE owns publication and cleanup after handoff.
         state()->update_num_rows_load_sink(row_count);
         state()->update_num_bytes_load_sink(bytes);
         COUNTER_SET(files_counter, static_cast<int64_t>(owned.size()));
@@ -1143,6 +1171,8 @@ public:
     RuntimeProfile::Counter* prepare_time = nullptr;
     RuntimeProfile::Counter* convert_time = nullptr;
     RuntimeProfile::Counter* writers_counter = nullptr;
+    RuntimeProfile::Counter* batches_counter = nullptr;
+    RuntimeProfile::Counter* native_threads_counter = nullptr;
     RuntimeProfile::Counter* files_counter = nullptr;
     RuntimeProfile::Counter* rows_counter = nullptr;
     RuntimeProfile::Counter* bytes_counter = nullptr;

@@ -17,6 +17,7 @@ package com.starrocks.connector.paimon;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
@@ -27,7 +28,11 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TPaimonCommitInfo;
+import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TSinkCommitInfo;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TUniqueId;
 import org.apache.paimon.Snapshot;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
@@ -98,6 +103,8 @@ import static org.mockito.Mockito.when;
  * Java writers below only manufacture data fixtures and public SerializeList reports; these tests do not execute C++.
  */
 public class PaimonWriteMetadataTest {
+    private static final TUniqueId SINK_INSTANCE = new TUniqueId(1, 2);
+    private static final String PRODUCER = DebugUtil.printId(SINK_INSTANCE) + ":0";
     private static final String CATALOG = "paimon_write";
     private static final String DB = "write_db";
     private static final String TABLE = "target";
@@ -124,7 +131,7 @@ public class PaimonWriteMetadataTest {
     }
 
     @Test
-    public void testMetadataLoadsAndCachesNativeIdentity() throws Exception {
+    public void testMetadataLookupDoesNotResolveWriteIdentity() throws Exception {
         createTarget();
         FileStoreTable nativeTarget = spy(nativeTable());
         Catalog observedCatalog = spy(catalog);
@@ -132,12 +139,10 @@ public class PaimonWriteMetadataTest {
         PaimonMetadata checked = newMetadata(observedCatalog);
 
         PaimonTable table = (PaimonTable) checked.getTable(null, DB, TABLE);
-        assertNotNull(table.getNativeWriteIdentity());
-        verify(nativeTarget).uuid();
-        clearInvocations(nativeTarget);
         assertSame(table, checked.getTable(null, DB, TABLE));
-        assertNotNull(table.getNativeWriteIdentity());
         verify(nativeTarget, never()).uuid();
+        assertNotNull(table.copyForWrite().getNativeWriteIdentity());
+        verify(nativeTarget).uuid();
     }
 
     @Test
@@ -176,8 +181,9 @@ public class PaimonWriteMetadataTest {
                 PaimonSinkExtra operation = operation("APPEND", Map.of(), "traced_" + outcome);
                 assertPublicationTrace(operation, WRITING);
                 if (outcome == COMMITTED) {
-                    metadata.finishSink(DB, TABLE, List.of(report(operation, "empty", List.of())),
-                            null, operation, null);
+                    List<TSinkCommitInfo> reports = List.of(report(operation, PRODUCER, List.of()));
+                    completeProducerReports(operation, reports);
+                    metadata.finishSink(DB, TABLE, reports, null, operation, null);
                 } else if (outcome == ABORTED) {
                     metadata.abortSink(DB, TABLE, List.of(), operation, null);
                 } else {
@@ -205,7 +211,7 @@ public class PaimonWriteMetadataTest {
         FileStoreTable nativeTarget = spy(nativeTable());
         Map<String, String> sourceOptions = new HashMap<>(nativeTarget.options());
         doReturn(sourceOptions).when(nativeTarget).options();
-        PaimonTable target = new PaimonTable(CATALOG, DB, TABLE, List.of(), nativeTarget);
+        PaimonTable target = new PaimonTable(CATALOG, DB, TABLE, List.of(), nativeTarget).copyForWrite();
         Map<String, String> partition = new HashMap<>(Map.of("p", "one"));
         PaimonSinkExtra first = PaimonSinkExtra.from(target, "APPEND", partition, "first_operation", "Asia/Shanghai");
         PaimonSinkExtra second = PaimonSinkExtra.from(target, "APPEND", Map.of(), "second_operation", "UTC");
@@ -249,9 +255,11 @@ public class PaimonWriteMetadataTest {
         createTarget();
         PaimonSinkExtra operation = operation("APPEND", Map.of(), "schema_change");
         String frozen = operation.getSchemaJson();
+        List<TSinkCommitInfo> reports = List.of(report(operation, PRODUCER, List.of()));
+        completeProducerReports(operation, reports);
         catalog.alterTable(TARGET, SchemaChange.setOption("file.compression", "gzip"), false);
         assertThrows(StarRocksConnectorException.class,
-                () -> metadata.finishSink(DB, TABLE, List.of(), null, operation, null));
+                () -> metadata.finishSink(DB, TABLE, reports, null, operation, null));
         assertEquals(WRITING, operation.getPublicationState());
         assertEquals(frozen, operation.getSchemaJson());
         try (Catalog fresh = newCatalog()) {
@@ -263,6 +271,32 @@ public class PaimonWriteMetadataTest {
     }
 
     @Test
+    public void testFinishRequiresAllScheduledReportsBeforeDecodingOrLoadingTarget() throws Exception {
+        createTarget();
+        PaimonSinkExtra operation = operation("APPEND", Map.of(), "missing_report");
+        Catalog noIo = mock(Catalog.class);
+        PaimonMetadata checked = newMetadata(noIo);
+        operation.setLoadedRows(0);
+        assertThrows(StarRocksConnectorException.class,
+                () -> checked.finishSink(DB, TABLE, List.of(), null, operation, null));
+
+        TSinkCommitInfo marker = report(operation, PRODUCER, List.of());
+        TSinkCommitInfo second = report(operation, DebugUtil.printId(SINK_INSTANCE) + ":1", List.of());
+        completeProducerReports(operation, List.of(marker, second));
+
+        TSinkCommitInfo malformed = marker.deepCopy();
+        malformed.getPaimon_commit_info().setCommit_messages(new byte[3]);
+        StarRocksConnectorException incomplete = assertThrows(StarRocksConnectorException.class,
+                () -> checked.finishSink(DB, TABLE, List.of(malformed), null, operation, null));
+        assertTrue(incomplete.getMessage().contains("Missing Paimon sink driver prepare markers"));
+        StarRocksConnectorException invalidPayload = assertThrows(StarRocksConnectorException.class,
+                () -> checked.finishSink(DB, TABLE, List.of(malformed, second), null, operation, null));
+        assertTrue(invalidPayload.getMessage().contains("Invalid Paimon native commit payload size"));
+        assertEquals(WRITING, operation.getPublicationState());
+        verifyNoInteractions(noIo);
+    }
+
+    @Test
     public void testEmptyAppendIsCommittedNoOp() throws Exception {
         createTarget();
         seed(row(1, "one", 10), row(2, "two", 20));
@@ -270,8 +304,8 @@ public class PaimonWriteMetadataTest {
         PaimonTable cached = table();
         for (String mode : List.of("APPEND")) {
             PaimonSinkExtra operation = operation(mode, Map.of(), "empty_" + mode);
-            List<TSinkCommitInfo> reports = mode.equals("APPEND") ? List.of()
-                    : List.of(report(operation, "empty_producer", List.of()));
+            List<TSinkCommitInfo> reports = List.of(report(operation, PRODUCER, List.of()));
+            completeProducerReports(operation, reports);
             metadata.finishSink(DB, TABLE, reports, null, operation, null);
             assertEquals(COMMITTED, operation.getPublicationState());
             assertFalse(operation.canAbort());
@@ -294,7 +328,7 @@ public class PaimonWriteMetadataTest {
         seed(row(1, "one", 10));
         long before = latestSnapshot().id();
         PaimonSinkExtra operation = operation("APPEND", Map.of(), "known_abort");
-        TSinkCommitInfo producer = report(operation, "producer_0", prepare(row(2, "two", 20)));
+        TSinkCommitInfo producer = report(operation, PRODUCER, prepare(row(2, "two", 20)));
         List<String> ownedFiles = producer.getPaimon_commit_info().getOwned_files();
         assertFalse(ownedFiles.isEmpty());
         assertFilesExist(ownedFiles, true);
@@ -315,7 +349,8 @@ public class PaimonWriteMetadataTest {
         seed(row(1, "one", 10));
         long before = latestSnapshot().id();
         PaimonSinkExtra operation = operation("APPEND", Map.of(), "cancel_before_publish");
-        TSinkCommitInfo producer = report(operation, "producer_0", prepare(row(2, "two", 20)));
+        TSinkCommitInfo producer = report(operation, PRODUCER, prepare(row(2, "two", 20)));
+        completeProducerReports(operation, List.of(producer));
         ConnectContext context = new ConnectContext();
         StmtExecutor executor = mock(StmtExecutor.class);
         when(executor.isCancelled()).thenReturn(true);
@@ -337,7 +372,8 @@ public class PaimonWriteMetadataTest {
     public void testUnknownPublicationNeverAbortsOrRetries() throws Exception {
         createTarget();
         PaimonSinkExtra operation = operation("APPEND", Map.of(), "unknown_publication");
-        List<TSinkCommitInfo> reports = List.of(report(operation, "producer_0", prepare(row(2, "two", 20))));
+        List<TSinkCommitInfo> reports = List.of(report(operation, PRODUCER, prepare(row(2, "two", 20))));
+        completeProducerReports(operation, reports);
         Catalog isolated = mock(Catalog.class);
         FileStoreTable target = spy(nativeTable());
         TableCommitImpl commit = mock(TableCommitImpl.class);
@@ -370,7 +406,8 @@ public class PaimonWriteMetadataTest {
         seed(row(1, "one", 10));
         long before = latestSnapshot().id();
         PaimonSinkExtra operation = operation("APPEND", Map.of(), "visible_after_close_failure");
-        List<TSinkCommitInfo> reports = List.of(report(operation, "producer_0", prepare(row(2, "two", 20))));
+        List<TSinkCommitInfo> reports = List.of(report(operation, PRODUCER, prepare(row(2, "two", 20))));
+        completeProducerReports(operation, reports);
         Catalog isolated = mock(Catalog.class);
         FileStoreTable target = spy(nativeTable());
         TableCommitImpl commit = spy(target.newCommit(operation.getCommitUser()));
@@ -396,7 +433,8 @@ public class PaimonWriteMetadataTest {
         PaimonSinkExtra operation = operation("APPEND", Map.of(), "malformed_reports");
         Catalog noIo = mock(Catalog.class);
         PaimonMetadata checked = newMetadata(noIo);
-        TSinkCommitInfo valid = report(operation, "producer_0", List.of());
+        TSinkCommitInfo valid = report(operation, PRODUCER, List.of());
+        completeProducerReports(operation, List.of(valid));
         List<Consumer<TPaimonCommitInfo>> corruptions = List.of(
                 info -> info.setOperation_id("another_operation"),
                 info -> info.setTable_identity("another_table"),
@@ -442,7 +480,7 @@ public class PaimonWriteMetadataTest {
     public void testCodecDeduplicatesOnlyIdenticalProducerAttempts() throws Exception {
         createTarget();
         PaimonSinkExtra operation = operation("APPEND", Map.of(), "duplicate_reports");
-        TSinkCommitInfo valid = report(operation, "producer_0", List.of());
+        TSinkCommitInfo valid = report(operation, PRODUCER, List.of());
         assertTrue(PaimonCommitCodec.collect(List.of(valid, valid.deepCopy(),
                 report(operation, "producer_1", List.of())), operation).validateOwnership(nativeTable()).isEmpty());
         List<Consumer<TPaimonCommitInfo>> conflicts = List.of(
@@ -463,7 +501,7 @@ public class PaimonWriteMetadataTest {
         createTarget();
         PaimonSinkExtra operation = operation("APPEND", Map.of(), "invalid_file_contract");
         List<CommitMessage> prepared = prepare(row(1, "one", 10));
-        TSinkCommitInfo valid = report(operation, "producer_0", prepared);
+        TSinkCommitInfo valid = report(operation, PRODUCER, prepared);
         assertFalse(PaimonCommitCodec.collect(List.of(valid), operation).validateOwnership(nativeTable()).isEmpty());
         List<TSinkCommitInfo> invalid = new ArrayList<>();
         TSinkCommitInfo unowned = valid.deepCopy();
@@ -473,7 +511,7 @@ public class PaimonWriteMetadataTest {
         outside.getPaimon_commit_info().setOwned_files(List.of("file:///another-table/not-owned.parquet"));
         invalid.add(outside);
         CommitMessageImpl message = (CommitMessageImpl) prepared.get(0);
-        invalid.add(report(operation, "producer_0", List.of(new CommitMessageImpl(message.partition(), 1,
+        invalid.add(report(operation, PRODUCER, List.of(new CommitMessageImpl(message.partition(), 1,
                 message.totalBuckets(), message.newFilesIncrement(), message.compactIncrement()))));
         TSinkCommitInfo wrongPartition = valid.deepCopy();
         DataOutputSerializer wrongPartitionPayload = new DataOutputSerializer(256);
@@ -481,15 +519,15 @@ public class PaimonWriteMetadataTest {
                 message.totalBuckets(), message.newFilesIncrement(), message.compactIncrement())), wrongPartitionPayload);
         wrongPartition.getPaimon_commit_info().setCommit_messages(wrongPartitionPayload.getCopyOfBuffer());
         invalid.add(wrongPartition);
-        invalid.add(report(operation, "producer_0", List.of(new CommitMessageImpl(message.partition(), message.bucket(),
+        invalid.add(report(operation, PRODUCER, List.of(new CommitMessageImpl(message.partition(), message.bucket(),
                 8, message.newFilesIncrement(), message.compactIncrement()))));
-        invalid.add(report(operation, "producer_0", List.of(new CommitMessageImpl(message.partition(), message.bucket(),
+        invalid.add(report(operation, PRODUCER, List.of(new CommitMessageImpl(message.partition(), message.bucket(),
                 message.totalBuckets(), new DataIncrement(message.newFilesIncrement().newFiles(),
                 message.newFilesIncrement().newFiles(), List.of()), message.compactIncrement()))));
         var file = message.newFilesIncrement().newFiles().get(0);
         for (var unsupported : List.of(file.newExternalPath(valid.getPaimon_commit_info().getOwned_files().get(0)),
                 file.copy(List.of("auxiliary.index")))) {
-            invalid.add(report(operation, "producer_0", List.of(new CommitMessageImpl(message.partition(), message.bucket(),
+            invalid.add(report(operation, PRODUCER, List.of(new CommitMessageImpl(message.partition(), message.bucket(),
                     message.totalBuckets(), new DataIncrement(List.of(unsupported), List.of(), List.of()),
                     message.compactIncrement()))));
         }
@@ -513,13 +551,13 @@ public class PaimonWriteMetadataTest {
         createTarget();
         PaimonSinkExtra operation = operation("APPEND", Map.of(), "partition_receipt_mismatch");
         List<CommitMessage> prepared = prepare(row(1, "one", 10));
-        TSinkCommitInfo valid = report(operation, "producer_0", prepared);
+        TSinkCommitInfo valid = report(operation, PRODUCER, prepared);
         CommitMessageImpl message = (CommitMessageImpl) prepared.get(0);
         BinaryRow otherPartition = new BinaryRow(1);
         BinaryRowWriter writer = new BinaryRowWriter(otherPartition);
         writer.writeString(0, BinaryString.fromString("two"));
         writer.complete();
-        TSinkCommitInfo misrouted = report(operation, "producer_0", List.of(new CommitMessageImpl(otherPartition,
+        TSinkCommitInfo misrouted = report(operation, PRODUCER, List.of(new CommitMessageImpl(otherPartition,
                 message.bucket(), message.totalBuckets(), message.newFilesIncrement(), message.compactIncrement())));
         misrouted.getPaimon_commit_info().setOwned_files(valid.getPaimon_commit_info().getOwned_files());
         assertOwnershipMismatchRejected(operation, misrouted);
@@ -533,10 +571,10 @@ public class PaimonWriteMetadataTest {
                 + "properties ('bucket'='4', 'bucket-key'='id', 'file.format'='parquet', 'write-only'='true')")));
         PaimonSinkExtra operation = operation("APPEND", Map.of(), "bucket_receipt_mismatch");
         List<CommitMessage> prepared = prepare(row(1, "one", 10));
-        TSinkCommitInfo valid = report(operation, "producer_0", prepared);
+        TSinkCommitInfo valid = report(operation, PRODUCER, prepared);
         CommitMessageImpl message = (CommitMessageImpl) prepared.get(0);
         int otherBucket = (message.bucket() + 1) % operation.getBucketCount();
-        TSinkCommitInfo misrouted = report(operation, "producer_0", List.of(new CommitMessageImpl(message.partition(),
+        TSinkCommitInfo misrouted = report(operation, PRODUCER, List.of(new CommitMessageImpl(message.partition(),
                 otherBucket, message.totalBuckets(), message.newFilesIncrement(), message.compactIncrement())));
         misrouted.getPaimon_commit_info().setOwned_files(valid.getPaimon_commit_info().getOwned_files());
         assertOwnershipMismatchRejected(operation, misrouted);
@@ -548,9 +586,10 @@ public class PaimonWriteMetadataTest {
         createTarget();
         PaimonSinkExtra operation = operation("APPEND", Map.of(), "encoded_partition_receipts");
         List<CommitMessage> prepared = prepare(row(1, "a/b=50%雪", 10), GenericRow.of(2, null, 20));
-        TSinkCommitInfo valid = report(operation, "producer_0", prepared);
+        TSinkCommitInfo valid = report(operation, PRODUCER, prepared);
         assertEquals(prepared.size(), PaimonCommitCodec.collect(List.of(valid), operation)
                 .validateOwnership(nativeTable()).size());
+        completeProducerReports(operation, List.of(valid));
         metadata.finishSink(DB, TABLE, List.of(valid), null, operation, null);
         assertEquals(COMMITTED, operation.getPublicationState());
         assertEquals(operation.getCommitUser(), latestSnapshot().commitUser());
@@ -562,6 +601,7 @@ public class PaimonWriteMetadataTest {
         Catalog checkedCatalog = mock(Catalog.class);
         when(checkedCatalog.getTable(TARGET)).thenReturn(target);
         PaimonMetadata checked = newMetadata(checkedCatalog);
+        completeProducerReports(operation, List.of(misrouted));
         StarRocksConnectorException publishError = assertThrows(StarRocksConnectorException.class,
                 () -> checked.finishSink(DB, TABLE, List.of(misrouted), null, operation, null));
         assertTrue(publishError.getMessage().contains("exact operation ownership receipt"));
@@ -580,11 +620,12 @@ public class PaimonWriteMetadataTest {
         catalog.alterTable(TARGET, SchemaChange.setOption("file.compression", "gzip"), false);
         catalog.invalidateTable(TARGET);
         FileStoreTable changed = nativeTable();
-        PaimonTable target = new PaimonTable(CATALOG, DB, TABLE, List.of(), changed);
+        PaimonTable target = new PaimonTable(CATALOG, DB, TABLE, List.of(), changed).copyForWrite();
         PaimonSinkExtra operation = PaimonSinkExtra.from(target, "APPEND", Map.of(), "wrong_file_schema", "UTC");
         assertTrue(operation.getSchemaId() > ((CommitMessageImpl) oldSchemaFiles.get(0))
                 .newFilesIncrement().newFiles().get(0).schemaId());
-        TSinkCommitInfo stale = report(operation, "producer_0", oldSchemaFiles);
+        TSinkCommitInfo stale = report(operation, PRODUCER, oldSchemaFiles);
+        completeProducerReports(operation, List.of(stale));
         Catalog noIo = mock(Catalog.class);
         assertThrows(StarRocksConnectorException.class,
                 () -> newMetadata(noIo).finishSink(DB, TABLE, List.of(stale), null, operation, null));
@@ -628,8 +669,7 @@ public class PaimonWriteMetadataTest {
     }
 
     private PaimonSinkExtra operation(String mode, Map<String, String> partition, String operationId) {
-        PaimonTable table = table();
-        return PaimonSinkExtra.from(table, mode, partition, operationId, "UTC");
+        return PaimonSinkExtra.from(table().copyForWrite(), mode, partition, operationId, "UTC");
     }
 
     private static GenericRow row(int id, String partition, int value) {
@@ -683,6 +723,17 @@ public class PaimonWriteMetadataTest {
         info.setOwned_files(ownedFiles);
         info.setPrepare_complete(true);
         return new TSinkCommitInfo().setPaimon_commit_info(info);
+    }
+
+    private static void completeProducerReports(PaimonSinkExtra operation, List<TSinkCommitInfo> reports) {
+        operation.initCommitValidator(Map.of(SINK_INSTANCE, reports.size()), new RuntimeProfile("Paimon write"));
+        TReportExecStatusParams finalReport = new TReportExecStatusParams();
+        finalReport.setFragment_instance_id(SINK_INSTANCE);
+        finalReport.setStatus(new TStatus(TStatusCode.OK));
+        finalReport.setDone(true);
+        finalReport.setSink_commit_infos(reports);
+        operation.getCommitValidator().validateReport(SINK_INSTANCE, finalReport);
+        operation.setLoadedRows(reports.stream().mapToLong(info -> info.getPaimon_commit_info().getRow_count()).sum());
     }
 
     private Snapshot latestSnapshot() throws Exception {

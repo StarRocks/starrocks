@@ -101,7 +101,6 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.EmptyDistributionProperty;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.PaimonSinkShuffleSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
 import com.starrocks.sql.optimizer.base.SortProperty;
@@ -734,15 +733,7 @@ public class InsertPlanner {
                 }
             }
 
-            if (dataSink instanceof PaimonTableSink paimonSink) {
-                int routeSlotId = PaimonSinkShuffleSpec.installBucketRouting(execPlan, paimonSink.getThriftTableSink());
-                if (paimonSink.getPaimonSinkExtra().getBucketCount() > 0) {
-                    if (routeSlotId < 0) {
-                        throw new SemanticException("Fixed-bucket Paimon writes require native partition/bucket-owner routing");
-                    }
-                    paimonSink.setBucketRouting(routeSlotId);
-                }
-            }
+            ConnectorSinkShuffleSpec.forTable(targetTable).ifPresent(spec -> spec.applyToExecPlan(execPlan, dataSink));
             PlanFragment sinkFragment = execPlan.getFragments().get(0);
             if (canUsePipeline && (targetTable instanceof OlapTable || targetTable.isIcebergTable() ||
                     targetTable.isHiveTable() || targetTable.isPaimonTable() || targetTable.isTableFunctionTable())) {

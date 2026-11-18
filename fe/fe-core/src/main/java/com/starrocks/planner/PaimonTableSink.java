@@ -105,7 +105,6 @@ public class PaimonTableSink extends DataSink {
         sink.setBucket_count(sinkExtra.getBucketCount());
         sink.setOptions(new LinkedHashMap<>(sinkExtra.getOptions()));
         sink.setCommit_user(sinkExtra.getCommitUser());
-        sink.setCommit_identifier(sinkExtra.getCommitIdentifier());
         sink.setOperation_id(sinkExtra.getOperationId());
         sink.setOverwrite_mode(sinkExtra.getOverwriteMode());
         sink.setStatic_partition(new LinkedHashMap<>(sinkExtra.getStaticPartition()));

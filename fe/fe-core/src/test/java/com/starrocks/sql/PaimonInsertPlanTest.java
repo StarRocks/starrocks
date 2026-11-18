@@ -54,6 +54,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -211,6 +213,10 @@ public class PaimonInsertPlanTest extends PlanTestBase {
         Planned fixed = plan("insert into " + target("fixed")
                 + " select cast('2026-10-29' as date), v1, cast(v2 as varchar) from t0 limit 5");
         PlanFragment fragment = fixed.plan().getTopFragment();
+        Assertions.assertTrue(fragment.hasPaimonTableSink());
+        Assertions.assertTrue(fragment.hasTableSink());
+        Assertions.assertTrue(fragment.forceSetTableSinkDop());
+        Assertions.assertFalse(fragment.isUseRuntimeAdaptiveDop());
         Assertions.assertEquals(4, fragment.getPipelineDop());
         Assertions.assertEquals(TPartitionType.HASH_PARTITIONED, fragment.getDataPartition().getType());
         Assertions.assertEquals(2, fragment.getDataPartition().getPartitionExprs().size());
@@ -287,43 +293,36 @@ public class PaimonInsertPlanTest extends PlanTestBase {
                 .plan().getOutputExprs().size());
     }
 
-    @Test
-    public void testMetadataIdentityDoesNotDependOnGenericRefreshFlags() throws Exception {
-        boolean preparse = Config.enable_experimental_external_table_preparse;
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testWriteIdentityResolvedOnceRegardlessOfPreparse(boolean enablePreparse) throws Exception {
+        boolean originalPreparse = Config.enable_experimental_external_table_preparse;
         PaimonTable original = TARGETS.get("target");
         FileStoreTable nativeTable = (FileStoreTable) original.getNativeTable();
         PaimonTable table = new PaimonTable(CATALOG, "db", "target", original.getFullSchema(), nativeTable);
         TARGETS.put("target", table);
         clearInvocations(nativeTable);
-        Config.enable_experimental_external_table_preparse = false;
+        Config.enable_experimental_external_table_preparse = enablePreparse;
         try {
             Planned planned = plan("insert into " + target("target") + " values ('2026-10-29', 1, 'a')");
             Assertions.assertEquals("native-target", planned.sink().getPaimonSinkExtra().getTableIdentity());
-            verify(nativeTable, never()).uuid();
+            verify(nativeTable).uuid();
         } finally {
-            Config.enable_experimental_external_table_preparse = preparse;
+            Config.enable_experimental_external_table_preparse = originalPreparse;
             TARGETS.put("target", original);
         }
     }
 
     @Test
-    public void testSourceRefreshUpdatesResolvedWriteIdentity() {
+    public void testSourceRefreshDoesNotResolveWriteIdentity() {
         PaimonTable original = TARGETS.get("target");
         FileStoreTable first = (FileStoreTable) original.getNativeTable();
         PaimonTable table = new PaimonTable(CATALOG, "db", "target", original.getFullSchema(), first);
         FileStoreTable refreshed = mock(FileStoreTable.class);
         when(refreshed.uuid()).thenReturn("refreshed-identity");
         table.setPaimonNativeTable(refreshed);
-        Assertions.assertEquals("refreshed-identity", table.getNativeWriteIdentity());
+        verify(refreshed, never()).uuid();
         Assertions.assertSame(refreshed, table.getNativeTable());
-    }
-
-    @Test
-    public void testWriteIdentityIsNotReloadedInPlanner() throws Exception {
-        FileStoreTable nativeTable = (FileStoreTable) TARGETS.get("target").getNativeTable();
-        clearInvocations(nativeTable);
-        plan("insert into " + target("target") + " values ('2026-10-29', 1, 'a')");
-        verify(nativeTable, never()).uuid();
     }
 
     private static void register(String name, Schema schema) {

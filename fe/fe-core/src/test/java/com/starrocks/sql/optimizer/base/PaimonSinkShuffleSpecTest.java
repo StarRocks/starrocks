@@ -85,10 +85,6 @@ public class PaimonSinkShuffleSpecTest {
             PlanFragment output = plan.getTopFragment();
             Assertions.assertInstanceOf(ExchangeNode.class, output.getPlanRoot());
             Assertions.assertEquals(TPartitionType.HASH_PARTITIONED, output.getDataPartition().getType());
-            Assertions.assertTrue(output.hasPaimonTableSink());
-            Assertions.assertTrue(output.hasTableSink());
-            Assertions.assertTrue(output.forceSetTableSinkDop());
-            Assertions.assertFalse(output.isUseRuntimeAdaptiveDop());
             List<Expr> keys = output.getDataPartition().getPartitionExprs();
             Assertions.assertEquals(2, keys.size());
             Assertions.assertEquals(new SlotId(bucket), ((SlotRef) keys.get(1)).getSlotId());

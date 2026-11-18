@@ -692,22 +692,21 @@ public class DefaultCoordinator extends Coordinator {
 
     private void prepareProfile() {
         this.queryProfile.initFragmentProfiles(executionDAG.getFragmentsInCreatedOrder().size());
-        for (ExecutionFragment fragment : executionDAG.getFragmentsInCreatedOrder()) {
-            if (fragment.getPlanFragment().getSink() instanceof PaimonTableSink sink) {
-                if (!jobSpec.isEnablePipeline() || fragment.getPlanFragment().isUseRuntimeAdaptiveDop()) {
-                    throw new StarRocksConnectorException("Paimon publication requires fixed-DOP pipeline producers");
-                }
-                Map<TUniqueId, Integer> sinkInstanceDops = new HashMap<>();
-                for (FragmentInstance instance : fragment.getInstances()) {
-                    // This is the same fixed DOP sent as pipeline_sink_dop by TFragmentInstanceFactory.
-                    sinkInstanceDops.put(instance.getInstanceId(), instance.getTableSinkDop());
-                }
-                queryProfile.initPaimonSink(sink.getPaimonSinkExtra(), sinkInstanceDops);
+        ExecutionFragment rootExecFragment = executionDAG.getRootFragment();
+        PlanFragment rootPlanFragment = rootExecFragment.getPlanFragment();
+        if (rootPlanFragment.getSink() instanceof PaimonTableSink sink) {
+            if (!jobSpec.isEnablePipeline() || rootPlanFragment.isUseRuntimeAdaptiveDop()) {
+                throw new StarRocksConnectorException("Paimon publication requires fixed-DOP pipeline producers");
             }
+            Map<TUniqueId, Integer> sinkInstanceDops = new HashMap<>();
+            for (FragmentInstance instance : rootExecFragment.getInstances()) {
+                // This is the same fixed DOP sent as pipeline_sink_dop by TFragmentInstanceFactory.
+                sinkInstanceDops.put(instance.getInstanceId(), instance.getTableSinkDop());
+            }
+            queryProfile.initPaimonSink(sink.getPaimonSinkExtra(), sinkInstanceDops);
         }
 
-        ExecutionFragment rootExecFragment = executionDAG.getRootFragment();
-        boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
+        boolean isLoadType = !(rootPlanFragment.getSink() instanceof ResultSink);
         if (isLoadType) {
             // for non-pipeline engine, enable_profile is renamed from is_report_success,
             // which is not only for report profile but also for report success.

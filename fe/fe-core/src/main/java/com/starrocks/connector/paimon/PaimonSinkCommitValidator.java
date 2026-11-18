@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /** Validates the native prepare protocol against the actual scheduled sink drivers. */
@@ -65,7 +66,7 @@ public final class PaimonSinkCommitValidator {
         reportFailure = "Cannot aggregate the final Paimon producer report";
     }
 
-    public synchronized void validateComplete(long loadedRows) {
+    public synchronized void validateComplete(List<TSinkCommitInfo> commitInfos, long loadedRows) {
         if (reportFailure != null) {
             throw new StarRocksConnectorException(reportFailure);
         }
@@ -82,6 +83,23 @@ public final class PaimonSinkCommitValidator {
         }
         if (reportedRows != loadedRows) {
             fail("Paimon producer row counts do not match the completed load");
+        }
+        // Check the actual submission, including zero-row producers, before decoding native payloads.
+        PaimonCommitCodec.validateReportCount(commitInfos);
+        Set<String> submitted = new HashSet<>();
+        for (TSinkCommitInfo commitInfo : commitInfos) {
+            if (commitInfo == null || !commitInfo.isSetPaimon_commit_info()) {
+                throw new StarRocksConnectorException("Missing native Paimon prepare marker");
+            }
+            TPaimonCommitInfo info = commitInfo.getPaimon_commit_info();
+            if (!info.isSetAttempt_id() || info.getAttempt_id() != 0 || !info.isSetRow_count()
+                    || !Objects.equals(producerRows.get(info.getProducer_id()), info.getRow_count())) {
+                throw new StarRocksConnectorException("Unexpected Paimon producer in the commit payload");
+            }
+            submitted.add(info.getProducer_id());
+        }
+        if (submitted.size() != producerRows.size()) {
+            throw new StarRocksConnectorException("Missing Paimon sink driver prepare markers in the commit payload");
         }
         profile.addInfoString("PaimonPreparedProducers", Integer.toString(producerRows.size()));
     }

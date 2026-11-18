@@ -3998,10 +3998,7 @@ public class StmtExecutor {
                 if (isCancelled() || context.isStatementCancelled()) {
                     throw new StarRocksConnectorException("Paimon operation was cancelled before publication");
                 }
-                if (!(coord instanceof DefaultCoordinator coordinator)) {
-                    throw new StarRocksConnectorException("Paimon producer completeness cannot be verified");
-                }
-                coordinator.getQueryRuntimeProfile().validatePaimonSinkCommitInfos(loadedRows);
+                paimonOperation.setLoadedRows(loadedRows);
                 // Validate even empty writes; the connector confirms an empty append as a no-op.
                 context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName,
                         coord.getSinkCommitInfos(), null, paimonOperation, context);

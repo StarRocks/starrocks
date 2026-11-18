@@ -114,15 +114,18 @@ public final class PaimonCommitCodec {
         }
     }
 
-    public static CollectedMessages collect(List<TSinkCommitInfo> reports, PaimonSinkExtra operation) {
+    static void validateReportCount(List<TSinkCommitInfo> reports) {
         if (reports == null || reports.size() > MAX_PRODUCERS) {
             throw new StarRocksConnectorException("Invalid Paimon producer report count");
         }
+    }
+
+    public static CollectedMessages collect(List<TSinkCommitInfo> reports, PaimonSinkExtra operation) {
+        validateReportCount(reports);
         Map<String, TPaimonCommitInfo> producers = new LinkedHashMap<>();
         Map<String, byte[]> digests = new LinkedHashMap<>();
         List<CommitMessage> messages = new ArrayList<>();
         List<ProducerFiles> producerFiles = new ArrayList<>();
-        long totalBytes = 0;
         for (TSinkCommitInfo report : reports) {
             if (report == null || !report.isSetPaimon_commit_info()) {
                 throw new StarRocksConnectorException("Paimon write received a non-Paimon producer report");
@@ -153,10 +156,6 @@ public final class PaimonCommitCodec {
                     throw new StarRocksConnectorException("Conflicting Paimon producer attempts or duplicate payloads");
                 }
                 continue;
-            }
-            totalBytes += payload.length;
-            if (totalBytes > MAX_PAYLOAD_BYTES) {
-                throw new StarRocksConnectorException("Paimon operation commit payload exceeds the report limit");
             }
             List<CommitMessage> decoded = decode(info.getSerializer_version(), payload);
             if (info.getRow_count() > 0 && decoded.isEmpty()) {

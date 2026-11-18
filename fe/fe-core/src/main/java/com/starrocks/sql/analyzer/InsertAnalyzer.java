@@ -952,14 +952,14 @@ public class InsertAnalyzer {
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
         TableName tableNameObj = new TableName(catalogName, dbName, tableName, tableRef.getPos());
-        // An external target was resolved before the lock was taken; see PreResolvedState#WRITE_TARGET.
-        Table table = session.getPreResolvedState().takeOrResolve(PreResolvedState.WRITE_TARGET, tableNameObj, () -> {
+        Table table = session.getPreResolvedState().get(PreResolvedState.WRITE_TARGET, tableNameObj);
+        if (table == null) {
             Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
             if (database == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
-            return MetaUtils.getSessionAwareTable(session, database, tableNameObj);
-        });
+            table = MetaUtils.getSessionAwareTable(session, database, tableNameObj);
+        }
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }
