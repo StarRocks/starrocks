@@ -45,6 +45,12 @@ Release Date: November 18, 2026
 - Iceberg equality delete files of partitions that runtime filters reject are skipped, and per-file partition work is skipped when planning Iceberg scan ranges. [#81437](https://github.com/StarRocks/starrocks/pull/81437) [#81438](https://github.com/StarRocks/starrocks/pull/81438)
 - Added the `TABLET_HASH` value to the `blacklist_backup_routing` session variable to spread the shared-data backup nodes of a down node by tablet hash. The default remains `CIRCULAR`. [#81436](https://github.com/StarRocks/starrocks/pull/81436)
 
+### Security
+
+- Bumped FE ZooKeeper to 3.9.6. [#81292](https://github.com/StarRocks/starrocks/pull/81292)
+- Bumped pprof to release/20261022. [#81300](https://github.com/StarRocks/starrocks/pull/81300)
+- Bumped guava to 33.7.2 and snappy-java to 1.1.10.9. [#81859](https://github.com/StarRocks/starrocks/pull/81859)
+
 ### Bug Fixes
 
 The following issues have been fixed:
@@ -109,11 +115,8 @@ The following issues have been fixed:
 - `HAVING` was not normalized after a constant group-by key was folded into it. [#81919](https://github.com/StarRocks/starrocks/pull/81919)
 - Month-based date arithmetic was rewritten as if it were invertible. [#81979](https://github.com/StarRocks/starrocks/pull/81979)
 - Materialized view force drop recursed when the retention period is 0. [#81953](https://github.com/StarRocks/starrocks/pull/81953)
-- Upgraded StarOS and StarCache to v4.1.6. [#81508](https://github.com/StarRocks/starrocks/pull/81508)
+- Upgraded StarMgr, Starlet, and StarCache to v4.1.6, which reduces lock contention in shard reads and replay, bounds on-demand placement waits by client deadlines, and fixes gRPC reclaimer leaks during connection churn and cache publication and eviction races. [#81508](https://github.com/StarRocks/starrocks/pull/81508)
 - Upgraded Starlet and StarCache to v4.1.7, which fixes empty and oversized S3 read ranges, reads overlay files from the layer that has the data, refills drained LRU shards of the cache on eviction, and rejects stale block file versions when filling disk blocks from metadata. [#83014](https://github.com/StarRocks/starrocks/pull/83014)
-- Bumped FE ZooKeeper to 3.9.6. [#81292](https://github.com/StarRocks/starrocks/pull/81292)
-- Bumped pprof to release/20261022. [#81300](https://github.com/StarRocks/starrocks/pull/81300)
-- Bumped guava to 33.7.2 and snappy-java to 1.1.10.9. [#81859](https://github.com/StarRocks/starrocks/pull/81859)
 
 ## 4.1.7
 
