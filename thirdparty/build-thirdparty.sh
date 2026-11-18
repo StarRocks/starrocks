@@ -1910,6 +1910,95 @@ build_azure() {
     unset PKG_CONFIG_LIBDIR
 }
 
+# prometheus-cpp, crc32c, nlohmann_json and google-cloud-cpp are dependencies of starlet
+# (USE_STAROS). They are built here with the options starlet's third_party uses, so that BE
+# takes them from this tree instead of from the starlet artifacts.
+
+# prometheus-cpp: the core library only; starlet and BE use its metric types.
+build_prometheus_cpp() {
+    check_if_source_exist $PROMETHEUS_CPP_SOURCE
+    cd $TP_SOURCE_DIR/$PROMETHEUS_CPP_SOURCE
+
+    rm -rf $BUILD_DIR
+    ${CMAKE_CMD} -S . -B $BUILD_DIR -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=17 \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DBUILD_TESTING=OFF \
+        -DENABLE_TESTING=OFF \
+        -DUSE_THIRDPARTY_LIBRARIES=OFF \
+        -DENABLE_PUSH=OFF \
+        -DENABLE_PULL=OFF \
+        -DZLIB_LIBRARY_RELEASE=${TP_LIB_DIR}/libz.a
+    ${BUILD_SYSTEM} -C $BUILD_DIR -j "${PARALLEL}"
+    ${BUILD_SYSTEM} -C $BUILD_DIR install
+}
+
+build_crc32c() {
+    check_if_source_exist $CRC32C_SOURCE
+    cd $TP_SOURCE_DIR/$CRC32C_SOURCE
+
+    rm -rf $BUILD_DIR
+    ${CMAKE_CMD} -S . -B $BUILD_DIR -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=17 \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DCRC32C_BUILD_TESTS=OFF \
+        -DCRC32C_BUILD_BENCHMARKS=OFF \
+        -DCRC32C_USE_GLOG=OFF
+    ${BUILD_SYSTEM} -C $BUILD_DIR -j "${PARALLEL}"
+    ${BUILD_SYSTEM} -C $BUILD_DIR install
+}
+
+# nlohmann_json is header only; this installs the headers and its CMake package.
+build_nlohmann_json() {
+    check_if_source_exist $NLOHMANN_JSON_SOURCE
+    cd $TP_SOURCE_DIR/$NLOHMANN_JSON_SOURCE
+
+    rm -rf $BUILD_DIR
+    ${CMAKE_CMD} -S . -B $BUILD_DIR -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
+        -DJSON_BuildTests=OFF
+    ${BUILD_SYSTEM} -C $BUILD_DIR install
+}
+
+# google-cloud-cpp: only the storage client, which is what starlet's GCS file system uses.
+# storage is a REST client, so gRPC and the googleapis protos (downloaded at configure time)
+# are not needed.
+build_google_cloud_cpp() {
+    check_if_source_exist $GOOGLE_CLOUD_CPP_SOURCE
+    cd $TP_SOURCE_DIR/$GOOGLE_CLOUD_CPP_SOURCE
+
+    rm -rf $BUILD_DIR
+    ${CMAKE_CMD} -S . -B $BUILD_DIR -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_STANDARD=17 \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DBUILD_TESTING=OFF \
+        -DGOOGLE_CLOUD_CPP_ENABLE=storage \
+        -DGOOGLE_CLOUD_CPP_ENABLE_GRPC=OFF \
+        -DGOOGLE_CLOUD_CPP_WITH_MOCKS=OFF \
+        -DGOOGLE_CLOUD_CPP_ENABLE_EXAMPLES=OFF \
+        -DOPENSSL_ROOT_DIR=${TP_INSTALL_DIR} \
+        -DOPENSSL_USE_STATIC_LIBS=TRUE \
+        -DCURL_INCLUDE_DIR=${TP_INCLUDE_DIR} \
+        -DCURL_LIBRARY=${TP_LIB_DIR}/libcurl.a \
+        -DZLIB_INCLUDE_DIR=${TP_INCLUDE_DIR} \
+        -DZLIB_LIBRARY=${TP_LIB_DIR}/libz.a
+    ${BUILD_SYSTEM} -C $BUILD_DIR -j "${PARALLEL}"
+    ${BUILD_SYSTEM} -C $BUILD_DIR install
+}
+
 build_libdivide() {
     check_if_source_exist $LIBDIVIDE_SOURCE
     cd $TP_SOURCE_DIR/$LIBDIVIDE_SOURCE
@@ -2104,6 +2193,7 @@ MINIMAL_DEBUG_INFO_PACKAGES=(
     aws_cpp_sdk
     azure
     benchgen
+    google_cloud_cpp
     grpc
     paimon_cpp
     poco
