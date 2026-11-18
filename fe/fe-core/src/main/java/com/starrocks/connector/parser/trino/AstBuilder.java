@@ -135,6 +135,7 @@ import io.trino.sql.tree.CurrentSchema;
 import io.trino.sql.tree.CurrentTime;
 import io.trino.sql.tree.CurrentUser;
 import io.trino.sql.tree.DataType;
+import io.trino.sql.tree.DataTypeParameter;
 import io.trino.sql.tree.DateTimeDataType;
 import io.trino.sql.tree.DereferenceExpression;
 import io.trino.sql.tree.DoubleLiteral;
@@ -256,7 +257,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     private static final String AT_TIMEZONE = "at_timezone";
     // A date or timestamp string in the plain form Trino and StarRocks both take, with its fractional seconds
     private static final Pattern PLAIN_TIMESTAMP = Pattern.compile(
-            "\\s*\\d{4}-\\d{1,2}-\\d{1,2}(?:\\s+\\d{1,2}:\\d{1,2}(?::\\d{1,2}(?:\\.(\\d+))?)?)?\\s*");
+            "\\s*(\\d{4})-\\d{1,2}-\\d{1,2}(?:\\s+\\d{1,2}:\\d{1,2}(?::\\d{1,2}(?:\\.(\\d+))?)?)?\\s*");
     private static final Set<String> MILLISECOND_PARSE_FUNCTIONS = Set.of("date_parse", "parse_datetime",
             "from_iso8601_timestamp");
     // Trino functions that read only the wall-clock fields of their first argument and return a value without a zone
@@ -1287,15 +1288,32 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     private static boolean isPlainSource(Expression expression) {
         if (expression instanceof Cast) {
             Expression operand = ((Cast) expression).getExpression();
-            return (operand instanceof StringLiteral && isPlainTimestamp(timestampText(operand), 6))
-                    || isPlainSource(operand);
+            if (operand instanceof StringLiteral) {
+                return isPlainTimestamp(timestampText(operand), 6);
+            }
+            // A column may hold text, whose digits past microseconds Trino rounds and StarRocks drops. Below
+            // microseconds rounding the dropped digits gives the same result, so only those casts take a column
+            return isPlainSource(operand) && (!isColumn(operand) || castsBelowMicroseconds((Cast) expression));
         }
         if (expression instanceof TimestampLiteral) {
             return isPlainTimestamp(timestampText(expression), 6);
         }
-        return expression instanceof Identifier || expression instanceof DereferenceExpression
-                || (expression instanceof GenericLiteral
+        return isColumn(expression) || (expression instanceof GenericLiteral
                 && ((GenericLiteral) expression).getType().equalsIgnoreCase("date"));
+    }
+
+    private static boolean isColumn(Expression expression) {
+        return expression instanceof Identifier || expression instanceof DereferenceExpression;
+    }
+
+    // A cast to DATE, TIMESTAMP or TIMESTAMP(0) to TIMESTAMP(5)
+    private static boolean castsBelowMicroseconds(Cast cast) {
+        if (!(cast.getType() instanceof DateTimeDataType)) {
+            return isWallClockType(cast.getType());
+        }
+        Optional<DataTypeParameter> precision = ((DateTimeDataType) cast.getType()).getPrecision();
+        return precision.isEmpty() || (precision.get() instanceof NumericParameter
+                && Integer.parseInt(((NumericParameter) precision.get()).getValue()) < 6);
     }
 
     private static RuntimeException unsupportedWithTimezone(Expression node) {
@@ -1876,10 +1894,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 : ((StringLiteral) expression).getValue();
     }
 
-    // Whether text is a date or timestamp in the plain form with at most maxDigits fractional digits
+    // Whether text is a date or timestamp in the plain form with at most maxDigits fractional digits, from year 1
+    // on, where time_slice and date_trunc round it
     private static boolean isPlainTimestamp(String text, int maxDigits) {
         Matcher timestamp = PLAIN_TIMESTAMP.matcher(text);
-        return timestamp.matches() && (timestamp.group(1) == null || timestamp.group(1).length() <= maxDigits);
+        return timestamp.matches() && Integer.parseInt(timestamp.group(1)) > 0
+                && (timestamp.group(2) == null || timestamp.group(2).length() <= maxDigits);
     }
 
     // A with_timezone value, or a cast of one to TIMESTAMP(p), which Trino rounds again in a cast to a lower precision
