@@ -31,6 +31,7 @@ import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.thrift.TDropIndexInfo;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.type.IntegerType;
@@ -284,7 +285,7 @@ public class AlterJobV2CopyForPersistTest {
         assertFieldsEqual(dropJob, dropJob.copyForPersist(), "historySchema");
     }
 
-    /** Every journal entry must retain independent catalog definitions and DROP names. */
+    /** Every journal entry must retain independent catalog definitions and the DROP payload. */
     @Test
     public void testLakeTableIndexFastPathJobsCopySubclassFields() throws Exception {
         LakeTableAddIndexJob addJob = newLakeTableAddIndexJob();
@@ -295,9 +296,9 @@ public class AlterJobV2CopyForPersistTest {
 
         LakeTableDropIndexJob dropJob = newLakeTableDropIndexJob();
         assertCollectionsEqual(dropJob, dropJob.copyForPersist(),
-                "dropIndexIds", "dropIndexNames", "dropBfColumns");
+                "dropIndexIds", "dropInfos", "dropBfColumns");
         assertCollectionsIndependent(AlterJobV2CopyForPersistTest::newLakeTableDropIndexJob,
-                "dropIndexIds", "dropIndexNames", "dropBfColumns");
+                "dropIndexIds", "dropInfos", "dropBfColumns");
     }
 
     private static LakeTableAddIndexJob newLakeTableAddIndexJob() {
@@ -310,8 +311,10 @@ public class AlterJobV2CopyForPersistTest {
     }
 
     private static LakeTableDropIndexJob newLakeTableDropIndexJob() {
-        return new LakeTableDropIndexJob(1L, 2L, 3L, "tbl", 1000L, List.of(-1L), List.of("ix_bm"), List.of(),
-                List.of("c2"));
+        TDropIndexInfo dropInfo = new TDropIndexInfo();
+        dropInfo.setIndex_id(-1L);
+        return new LakeTableDropIndexJob(1L, 2L, 3L, "tbl", 1000L, List.of(-1L), List.of("ix_bm"),
+                List.of(dropInfo), List.of("c2"));
     }
 
     @Test
