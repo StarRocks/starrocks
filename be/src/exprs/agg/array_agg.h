@@ -460,7 +460,12 @@ class ArrayAggAggregateFunctionV2 final
 public:
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
         auto* state = new (ptr) AggState;
-        state->initialize(ctx);
+        try {
+            state->initialize(ctx);
+        } catch (...) {
+            state->~AggState();
+            throw;
+        }
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,

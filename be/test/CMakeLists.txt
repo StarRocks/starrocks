@@ -1,5 +1,7 @@
 add_subdirectory(testutil)
 
+ADD_BE_TEST(exec/sorted_streaming_aggregator_test)
+
 set(EXEC_FILES
         ./exec/aggregator_limited_mem_state_test.cpp
         ./agent/agent_metrics_test.cpp

@@ -228,11 +228,19 @@ public:
     virtual void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const = 0;
     virtual void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const = 0;
 
+    // Report only create calls that returned successfully. Preserve this count if a later create call throws.
     virtual void batch_create_with_selection(FunctionContext* ctx, size_t chunk_size, Buffer<AggDataPtr>& states,
-                                             size_t state_offset, const Filter& selection) const {
+                                             size_t state_offset, const Filter& selection,
+                                             size_t* num_created_states = nullptr) const {
+        if (num_created_states != nullptr) {
+            *num_created_states = 0;
+        }
         for (size_t i = 0; i < chunk_size; i++) {
             if (selection[i] == 0) {
                 create(ctx, states[i] + state_offset);
+                if (num_created_states != nullptr) {
+                    ++*num_created_states;
+                }
             }
         }
     }
@@ -476,10 +484,17 @@ template <typename State, typename Derived>
 class AggregateFunctionBatchHelper : public AggregateFunctionStateHelper<State> {
 public:
     void batch_create_with_selection(FunctionContext* ctx, size_t chunk_size, Buffer<AggDataPtr>& states,
-                                     size_t state_offset, const Filter& selection) const override {
+                                     size_t state_offset, const Filter& selection,
+                                     size_t* num_created_states = nullptr) const override {
+        if (num_created_states != nullptr) {
+            *num_created_states = 0;
+        }
         for (size_t i = 0; i < chunk_size; i++) {
             if (selection[i] == 0) {
                 static_cast<const Derived*>(this)->create(ctx, states[i] + state_offset);
+                if (num_created_states != nullptr) {
+                    ++*num_created_states;
+                }
             }
         }
     }

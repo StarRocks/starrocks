@@ -49,7 +49,13 @@ private:
 
     Status _build_group_by_columns(size_t chunk_size, const Filter& selector, MutableColumns& agg_group_by_columns);
 
+    void _release_agg_memory() override;
+
     AggDataPtr _last_state = nullptr;
+    // New group states use consecutive buffer slots. Counts record completed create calls for each function.
+    AggDataPtr _batch_state_begin = nullptr;
+    std::vector<size_t> _num_created_states;
+    bool _has_pending_batch = false;
     Columns _last_columns;
     std::vector<uint8_t> _cmp_vector;
     std::shared_ptr<StateAllocator> _streaming_state_allocator;

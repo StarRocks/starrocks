@@ -88,8 +88,14 @@ public:
     using KeyColumnType = RunTimeColumnType<KT>;
 
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
-        auto* state = new (ptr) MapAggAggregateFunctionState<KT, MyHashMap>;
-        state->value_column = FunctionHelper::create_column(*ctx->get_arg_type(1), true);
+        using State = MapAggAggregateFunctionState<KT, MyHashMap>;
+        auto* state = new (ptr) State;
+        try {
+            state->value_column = FunctionHelper::create_column(*ctx->get_arg_type(1), true);
+        } catch (...) {
+            state->~State();
+            throw;
+        }
         const LogicalType value_type = ctx->get_arg_type(1)->type;
         state->use_datum = get_size_of_fixed_length_type(value_type) != 0 || is_string_type(value_type) ||
                            is_binary_type(value_type);
