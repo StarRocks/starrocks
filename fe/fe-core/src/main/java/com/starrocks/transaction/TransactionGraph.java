@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.LongPredicate;
 import java.util.stream.Collectors;
 
 /**
@@ -243,6 +244,12 @@ public class TransactionGraph {
 
     // The size of ins of node with txnId must be zero
     public List<Long> getTxnsWithTxnDependencyBatch(int minBatchSize, int maxBatchSize, long txnId) {
+        return getTxnsWithTxnDependencyBatch(minBatchSize, maxBatchSize, txnId, id -> true);
+    }
+
+    // Same as above, but the batch ends at the first txn canJoin rejects.
+    public List<Long> getTxnsWithTxnDependencyBatch(int minBatchSize, int maxBatchSize, long txnId,
+                                                    LongPredicate canJoin) {
         List<Long> txns = new ArrayList<>();
         if (nodes.containsKey(txnId)) {
             Node node = nodes.get(txnId);
@@ -253,7 +260,8 @@ public class TransactionGraph {
             int count = 0;
             // can not judge by ins.size()
             // for the ins.size of the txn with multi table can be one
-            while (count < maxBatchSize && node != null && (node.writeTableIds.size() == 1)) {
+            while (count < maxBatchSize && node != null && (node.writeTableIds.size() == 1)
+                    && canJoin.test(node.txnId)) {
                 count++;
                 txns.add(node.txnId);
 

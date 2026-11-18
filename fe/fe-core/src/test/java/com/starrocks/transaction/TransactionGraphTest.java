@@ -307,4 +307,13 @@ public class TransactionGraphTest {
                 "8\n";
         assertEquals(graphPrint, graph.debug());
     }
+
+    @Test
+    public void testBatchOnlyTakesTxnsThatCanJoin() {
+        TransactionGraph graph = new TransactionGraph();
+        for (long txnId = 1; txnId <= 4; txnId++) {
+            graph.add(txnId, Lists.newArrayList(1L));
+        }
+        assertEquals(Lists.newArrayList(1L, 2L), graph.getTxnsWithTxnDependencyBatch(1, 10, 1, id -> id <= 2));
+    }
 }

@@ -211,6 +211,12 @@ products: [oss, enterprise, cloud, anywhere]
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
 
+## `lake_publish_batch_retry_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：存算分离集群中重试批量发布的次数，即批次的首个事务在之前的尝试中已经发出、但那次尝试没有完成。`lake_enable_batch_publish_retry_freeze` 为 `true` 时，这类重试只包含上一次尝试中的事务。仅 Leader FE 递增该计数器。
+
 ## `lake_vacuum_del_file_batch_size_minute`
 
 - 单位：文件数（每批次）
