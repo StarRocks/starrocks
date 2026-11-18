@@ -1568,4 +1568,43 @@ TEST_F(JsonScannerTest, test_duplicate_key) {
     EXPECT_EQ("[2, 2]", chunk->debug_row(1));
 }
 
+TEST_F(JsonScannerTest, cancelled_pipe_does_not_report_bad_row) {
+    _state->_query_options.__set_query_type(TQueryType::LOAD);
+    for (bool read_first_buffer : {false, true}) {
+        TBrokerRangeDesc range;
+        range.__set_file_type(TFileType::FILE_STREAM);
+        range.__set_format_type(TFileFormatType::FORMAT_JSON);
+        auto scanner = create_json_scanner({TypeDescriptor(TYPE_INT)}, {range}, {"k"});
+        ASSERT_OK(scanner->open());
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_state->instance_mem_tracker());
+        auto pipe = std::make_shared<StreamLoadPipe>();
+        auto file =
+                std::make_shared<SequentialFile>(std::make_shared<StreamLoadPipeInputStream>(pipe), "stream-load-pipe");
+        JsonReader reader(_state.get(), _counter, scanner.get(), file, true, scanner->_src_slot_descriptors,
+                          scanner->_json_types, range);
+        ChunkPtr chunk;
+        ASSERT_OK(scanner->_create_src_chunk(&chunk));
+        if (read_first_buffer) {
+            const std::string data = R"({"k":1})";
+            auto buffer_or = ByteBuffer::allocate_with_tracker(data.size());
+            ASSERT_OK(buffer_or.status());
+            auto buffer = std::move(buffer_or).value();
+            buffer->put_bytes(data.data(), data.size());
+            buffer->flip();
+            ASSERT_OK(pipe->append(std::move(buffer)));
+            ASSERT_OK(reader.open());
+            ASSERT_OK(reader.read_chunk(chunk.get(), 1));
+            ASSERT_EQ(1, chunk->num_rows());
+        }
+
+        const auto error = Status::Cancelled("Fragment cancelled");
+        pipe->cancel(error);
+        auto status = read_first_buffer ? reader.read_chunk(chunk.get(), 1) : reader.open();
+        EXPECT_EQ(error.to_string(false), status.to_string(false));
+        EXPECT_EQ(0, _counter->num_rows_filtered);
+        EXPECT_EQ(nullptr, _state->_error_log_file);
+        EXPECT_EQ(0, _state->_num_print_error_rows.load());
+    }
+}
+
 } // namespace starrocks
