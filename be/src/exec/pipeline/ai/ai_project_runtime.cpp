@@ -152,8 +152,8 @@ StatusOr<std::shared_ptr<AIProjectExpressionProjection>> AIProjectExpressionProj
                 if (ai_expression == nullptr) {
                     return invalid_projection();
                 }
-                const auto route = spec.model_configs().find(ai_expression->provider_id());
-                if (route == spec.model_configs().end() || route->second.capability != ai_expression->capability() ||
+                const auto route = spec.provider_configs().find(ai_expression->provider_id());
+                if (route == spec.provider_configs().end() || route->second.capability != ai_expression->capability() ||
                     contains_only_ascii_whitespace(route->second.model)) {
                     return invalid_projection();
                 }
@@ -417,10 +417,10 @@ StatusOr<AIProjectPreparedSubchunk> AIProjectExpressionProjection::prepare_subch
             if (ai_expression == nullptr) {
                 return invalid_projection();
             }
-            const auto& model_config = _spec.model_configs().at(std::string(ai_expression->provider_id()));
-            ASSIGN_OR_RETURN(
-                    AIFunctionInputBatch batch,
-                    ai_expression->build_input_batch(context, input.get(), model_config.model, _max_input_file_bytes));
+            const auto& provider_config = _spec.provider_configs().at(std::string(ai_expression->provider_id()));
+            ASSIGN_OR_RETURN(AIFunctionInputBatch batch,
+                             ai_expression->build_input_batch(context, input.get(), provider_config.model,
+                                                              _max_input_file_bytes));
             if (batch.rows.size() != rows) {
                 return Status::InternalError("AI project expression returned an invalid input batch");
             }
@@ -428,7 +428,7 @@ StatusOr<AIProjectPreparedSubchunk> AIProjectExpressionProjection::prepare_subch
 
             // Provider defaults are constant for this expression. Merge once for the
             // subchunk and let every dispatched row borrow the immutable result.
-            if (model_config.dimensions.has_value() &&
+            if (provider_config.dimensions.has_value() &&
                 (batch.options == nullptr ||
                  std::none_of(batch.options->members().begin(), batch.options->members().end(),
                               [](const auto& member) { return member.key == "dimensions"; })) &&
@@ -437,7 +437,7 @@ StatusOr<AIProjectPreparedSubchunk> AIProjectExpressionProjection::prepare_subch
                 AIProviderOptions::Members members =
                         batch.options == nullptr ? AIProviderOptions::Members{} : batch.options->members();
                 members.emplace_back(AIProviderOption{.key = "dimensions",
-                                                      .serialized_json = std::to_string(*model_config.dimensions),
+                                                      .serialized_json = std::to_string(*provider_config.dimensions),
                                                       .kind = AIProviderOptionKind::NUMBER});
                 ASSIGN_OR_RETURN(auto options, AIProviderOptions::create(std::move(members)));
                 batch.options = std::make_shared<const AIProviderOptions>(std::move(options));
@@ -466,7 +466,7 @@ StatusOr<AIProjectPreparedSubchunk> AIProjectExpressionProjection::prepare_subch
 }
 
 StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> AIProjectDispatcherSubmitter::create(
-        RuntimeState* state, const AIProjectModelConfigs& configs, AIRuntimeConfig config) {
+        RuntimeState* state, const AIProviderConfigs& configs, AIRuntimeConfig config) {
     if (state == nullptr) {
         return Status::InvalidArgument("AI project dispatcher requires a runtime state");
     }
@@ -504,27 +504,29 @@ StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> AIProjectDispatcherSubmi
 
     try {
         std::map<std::string, Route, std::less<>> routes;
-        for (const auto& [id, model_config] : configs) {
+        for (const auto& [id, provider_config] : configs) {
             if (contains_only_ascii_whitespace(id) || contains_control_character(id) ||
-                contains_control_character(model_config.model)) {
+                contains_control_character(provider_config.model)) {
                 return Status::InvalidArgument("AI function model configuration is invalid");
             }
-            if (model_config.capability != AICapability::CHAT && model_config.capability != AICapability::EMBEDDING) {
+            if (provider_config.capability != AICapability::CHAT &&
+                provider_config.capability != AICapability::EMBEDDING) {
                 return Status::InvalidArgument("AI function model capability is invalid");
             }
-            Route route{.endpoint = model_config.endpoint, .capability = model_config.capability};
-            ASSIGN_OR_RETURN(route.provider, create_ai_provider(model_config.protocol, model_config.capability));
-            if (model_config.protocol != AIProviderProtocol::OPENAI ||
-                contains_only_ascii_whitespace(model_config.model) ||
-                contains_control_character(model_config.api_key) ||
-                (model_config.timeout_ms.has_value() &&
-                 (*model_config.timeout_ms <= 0 || *model_config.timeout_ms > std::numeric_limits<long>::max())) ||
-                (model_config.dimensions.has_value() &&
-                 (model_config.capability != AICapability::EMBEDDING || *model_config.dimensions <= 0))) {
+            Route route{.endpoint = provider_config.endpoint, .capability = provider_config.capability};
+            ASSIGN_OR_RETURN(route.provider, create_ai_provider(provider_config.protocol, provider_config.capability));
+            if (provider_config.protocol != AIProviderProtocol::OPENAI ||
+                contains_only_ascii_whitespace(provider_config.model) ||
+                contains_control_character(provider_config.api_key) ||
+                (provider_config.timeout_ms.has_value() &&
+                 (*provider_config.timeout_ms <= 0 ||
+                  *provider_config.timeout_ms > std::numeric_limits<long>::max())) ||
+                (provider_config.dimensions.has_value() &&
+                 (provider_config.capability != AICapability::EMBEDDING || *provider_config.dimensions <= 0))) {
                 return Status::InvalidArgument("AI function provider configuration is invalid");
             }
-            route.api_key = model_config.api_key;
-            route.attempt_timeout_ms = model_config.timeout_ms.value_or(0);
+            route.api_key = provider_config.api_key;
+            route.attempt_timeout_ms = provider_config.timeout_ms.value_or(0);
             RETURN_IF_ERROR(validate_ai_http_url(route.endpoint));
             auto resolved_endpoint = resolve_http_endpoint(route.endpoint, OutboundHttpAddressPolicy::BLOCK_LINK_LOCAL);
             if (!resolved_endpoint.ok()) {

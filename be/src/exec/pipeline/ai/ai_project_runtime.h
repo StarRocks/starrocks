@@ -22,6 +22,7 @@
 
 #include "exec/pipeline/ai/ai_project_factory.h"
 #include "exec/pipeline/ai/ai_project_processor.h"
+#include "exec/pipeline/ai/ai_provider_config.h"
 #include "platform/llm/ai_provider.h"
 
 namespace starrocks {
@@ -79,7 +80,7 @@ private:
 class AIProjectDispatcherSubmitter final : public AIProjectTaskSubmitter {
 public:
     static StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> create(RuntimeState* state,
-                                                                          const AIProjectModelConfigs& configs,
+                                                                          const AIProviderConfigs& configs,
                                                                           AIRuntimeConfig config);
 
     AIProjectDispatcherSubmitter(const AIProjectDispatcherSubmitter&) = delete;

@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/ai/ai_provider_config_parser.h"
+#include "exec/pipeline/ai/ai_provider_config.h"
 
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+
+#include "gen_cpp/PlanNodes_types.h"
 
 namespace starrocks::pipeline {
 namespace {
@@ -48,12 +50,12 @@ StatusOr<std::optional<int32_t>> parse_positive_int(std::string_view value) {
 
 } // namespace
 
-StatusOr<AIProjectModelConfig> AIProviderConfigParser::parse(std::string_view id, const TAIProvider& provider) {
+StatusOr<AIProviderConfig> AIProviderConfigParser::parse(std::string_view id, const TAIProvider& provider) {
     if (!provider.__isset.id || provider.id != id || !is_non_blank(id) || contains_control_character(id) ||
         !provider.__isset.type || !provider.__isset.protocol || !provider.__isset.params) {
         return invalid_provider();
     }
-    AIProjectModelConfig config;
+    AIProviderConfig config;
     switch (provider.type) {
     case TAIProviderType::CHAT:
         config.capability = AICapability::CHAT;

@@ -49,6 +49,7 @@
 #include "exec/pipeline/ai/ai_project_factory.h"
 #include "exec/pipeline/ai/ai_project_operator.h"
 #include "exec/pipeline/ai/ai_project_runtime.h"
+#include "exec/pipeline/ai/ai_provider_config.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/project_operator.h"
 #include "exec/pipeline_node.h"
@@ -102,11 +103,11 @@ constexpr std::string_view kModelSentinel = "unit-test-model";
 constexpr std::string_view kSecretSentinel = "unit-test-secret-must-not-leak";
 constexpr size_t kMiB = 1024UL * 1024;
 
-AIProjectModelConfigs provider_model_configs(std::string model = std::string(kModelSentinel),
-                                             std::string endpoint = std::string(kEndpointSentinel)) {
-    return {{std::string(kDefaultChatConfigId), AIProjectModelConfig{.endpoint = std::move(endpoint),
-                                                                     .model = std::move(model),
-                                                                     .api_key = std::string(kSecretSentinel)}}};
+AIProviderConfigs provider_configs(std::string model = std::string(kModelSentinel),
+                                   std::string endpoint = std::string(kEndpointSentinel)) {
+    return {{std::string(kDefaultChatConfigId), AIProviderConfig{.endpoint = std::move(endpoint),
+                                                                 .model = std::move(model),
+                                                                 .api_key = std::string(kSecretSentinel)}}};
 }
 
 TypeDescriptor varchar_type() {
@@ -707,12 +708,12 @@ protected:
                                              },
                                      },
                                      {AIProjectCommonSpec{.slot_id = kCommonSlotId, .expr_ctx = common}},
-                                     provider_model_configs(std::move(default_model)));
+                                     provider_configs(std::move(default_model)));
         return AIProjectExpressionProjection::create(std::move(spec));
     }
 
     StatusOr<std::shared_ptr<AIProjectExpressionProjection>> create_embedding_projection(
-            const AIProjectModelConfigs& configs, const std::vector<std::string>& options) {
+            const AIProviderConfigs& configs, const std::vector<std::string>& options) {
         auto* pool = _runtime_state->obj_pool();
         std::vector<AIProjectOutputSpec> outputs;
         for (size_t index = 0; index < options.size(); ++index) {
@@ -784,7 +785,7 @@ protected:
         AIProjectProjectionSpec spec(
                 _runtime_state.get(),
                 {{.slot_id = kAnswerSlotId, .expr_ctx = ai, .nullable = true, .kind = AIProjectOutputKind::AI}}, {},
-                provider_model_configs());
+                provider_configs());
         return AIProjectExpressionProjection::create(std::move(spec));
     }
 
@@ -793,7 +794,7 @@ protected:
         AIProjectProjectionSpec spec(
                 _runtime_state.get(),
                 {{.slot_id = kAnswerSlotId, .expr_ctx = ai, .nullable = true, .kind = AIProjectOutputKind::AI}}, {},
-                provider_model_configs());
+                provider_configs());
         return AIProjectExpressionProjection::create(std::move(spec), max_input_file_bytes);
     }
 
@@ -1105,7 +1106,7 @@ TEST_F(AIProjectPipelineTest, FactoryFailureClosesPairedProjectionContextsWithou
     ASSERT_OK(identity->prepare(_runtime_state.get()));
     ASSERT_OK(common->prepare(_runtime_state.get()));
     ASSERT_OK(ai->prepare(_runtime_state.get()));
-    auto configs = provider_model_configs();
+    auto configs = provider_configs();
     configs.begin()->second.api_key = "invalid\ncredential";
     AIProjectProjectionSpec spec(_runtime_state.get(),
                                  {
@@ -1133,14 +1134,14 @@ TEST_F(AIProjectPipelineTest, FactoryFailureClosesPairedProjectionContextsWithou
 }
 
 TEST_F(AIProjectPipelineTest, ProviderCredentialsComeFromSnapshot) {
-    AIProjectModelConfigs configs{{"provider:embedding", AIProjectModelConfig{
-                                                                 .endpoint = "https://127.0.0.1/v1/embeddings",
-                                                                 .model = "embedding-model",
-                                                                 .api_key = "provider-only-secret",
-                                                                 .capability = AICapability::EMBEDDING,
-                                                                 .timeout_ms = 75,
-                                                                 .dimensions = 3,
-                                                         }}};
+    AIProviderConfigs configs{{"provider:embedding", AIProviderConfig{
+                                                             .endpoint = "https://127.0.0.1/v1/embeddings",
+                                                             .model = "embedding-model",
+                                                             .api_key = "provider-only-secret",
+                                                             .capability = AICapability::EMBEDDING,
+                                                             .timeout_ms = 75,
+                                                             .dimensions = 3,
+                                                     }}};
     auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot());
     ASSERT_TRUE(submitter.ok()) << submitter.status();
     const auto& route = submitter.value()->_routes.at("provider:embedding");
@@ -1155,7 +1156,7 @@ TEST_F(AIProjectPipelineTest, ProviderCredentialsComeFromSnapshot) {
     EXPECT_TRUE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), opaque_configs, _config_source->snapshot())
                         .ok());
     for (const std::string key : {"", " ", "key\n"}) {
-        AIProjectModelConfigs invalid_configs{{key, configs.at("provider:embedding")}};
+        AIProviderConfigs invalid_configs{{key, configs.at("provider:embedding")}};
         auto invalid =
                 AIProjectDispatcherSubmitter::create(_runtime_state.get(), invalid_configs, _config_source->snapshot());
         ASSERT_FALSE(invalid.ok());
@@ -1212,7 +1213,7 @@ TEST_F(AIProjectPipelineTest, HttpAndHttpsCarryOptionalCredentialsAndExplicitMod
     for (const std::string scheme : {"http", "https"}) {
         for (const bool with_key : {false, true}) {
             SCOPED_TRACE(scheme + (with_key ? " authenticated" : " keyless"));
-            auto configs = provider_model_configs();
+            auto configs = provider_configs();
             auto& config = configs.begin()->second;
             config.endpoint = scheme + "://127.0.0.1/v1/chat/completions";
             config.api_key = with_key ? "request-test-key" : "";
@@ -1244,13 +1245,13 @@ TEST_F(AIProjectPipelineTest, HttpAndHttpsCarryOptionalCredentialsAndExplicitMod
 
 TEST_F(AIProjectPipelineTest, ProviderDimensionsArePreparedOncePerExpressionBatch) {
     set_query_deadline_ns(120'000'000'000);
-    AIProjectModelConfigs configs{{"provider:embedding", AIProjectModelConfig{
-                                                                 .endpoint = "http://127.0.0.1/v1/embeddings",
-                                                                 .model = "embedding-model",
-                                                                 .capability = AICapability::EMBEDDING,
-                                                                 .timeout_ms = 75,
-                                                                 .dimensions = 3,
-                                                         }}};
+    AIProviderConfigs configs{{"provider:embedding", AIProviderConfig{
+                                                             .endpoint = "http://127.0.0.1/v1/embeddings",
+                                                             .model = "embedding-model",
+                                                             .capability = AICapability::EMBEDDING,
+                                                             .timeout_ms = 75,
+                                                             .dimensions = 3,
+                                                     }}};
     const std::vector<std::string> options = {"{}", R"({"user":"user-a"})", R"({"dimensions":2})",
                                               R"({"dimensions":null})"};
     for (bool has_default : {true, false}) {
@@ -1328,12 +1329,12 @@ TEST_F(AIProjectPipelineTest, ProviderDimensionsArePreparedOncePerExpressionBatc
 }
 
 TEST_F(AIProjectPipelineTest, ProviderDefaultsAreNotMergedForEmptyOrNullBatches) {
-    AIProjectModelConfigs configs{{"provider:embedding", AIProjectModelConfig{
-                                                                 .endpoint = "http://127.0.0.1/v1/embeddings",
-                                                                 .model = "embedding-model",
-                                                                 .capability = AICapability::EMBEDDING,
-                                                                 .dimensions = 3,
-                                                         }}};
+    AIProviderConfigs configs{{"provider:embedding", AIProviderConfig{
+                                                             .endpoint = "http://127.0.0.1/v1/embeddings",
+                                                             .model = "embedding-model",
+                                                             .capability = AICapability::EMBEDDING,
+                                                             .dimensions = 3,
+                                                     }}};
     auto projection = create_embedding_projection(configs, {"{}"});
     ASSERT_TRUE(projection.ok()) << projection.status();
     ASSERT_OK(projection.value()->prepare(_runtime_state.get(), 1));
@@ -1359,7 +1360,7 @@ TEST_F(AIProjectPipelineTest, CredentialBindingRejectsLinkLocalResolvedEndpoint)
     const std::string link_local_endpoint = "https://169.254.169.254/v1/chat/completions";
 
     auto submitter = AIProjectDispatcherSubmitter::create(
-            _runtime_state.get(), provider_model_configs(std::string(kModelSentinel), link_local_endpoint),
+            _runtime_state.get(), provider_configs(std::string(kModelSentinel), link_local_endpoint),
             _config_source->snapshot());
 
     ASSERT_FALSE(submitter.ok());
@@ -1566,7 +1567,7 @@ TEST_F(AIProjectPipelineTest, TypedResponseFailuresPreserveTaskUsageAndReachProf
         ASSERT_TRUE(projection.ok()) << projection.status();
         auto config = _config_source->snapshot();
         config.on_error = on_error;
-        auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_model_configs(), config);
+        auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_configs(), config);
         ASSERT_TRUE(submitter.ok()) << submitter.status();
         auto buffer = AIChunkBuffer::create(2, 32 * kMiB);
         ASSERT_TRUE(buffer.ok()) << buffer.status();
@@ -1637,14 +1638,14 @@ TEST_F(AIProjectPipelineTest, MixedDefaultAndExplicitProviderRoutesKeepCredentia
     const std::string chat_endpoint = "https://127.0.0.1/provider/chat";
     const std::string embed_endpoint = "https://127.0.0.1/provider/embeddings";
 
-    auto configs = provider_model_configs();
-    configs.emplace("provider:chat", AIProjectModelConfig{.endpoint = chat_endpoint,
-                                                          .model = "provider-chat-model",
-                                                          .api_key = "chat-provider-secret"});
-    configs.emplace("provider:embedding", AIProjectModelConfig{.endpoint = embed_endpoint,
-                                                               .model = "provider-embed-model",
-                                                               .api_key = "embed-provider-secret",
-                                                               .capability = AICapability::EMBEDDING});
+    auto configs = provider_configs();
+    configs.emplace("provider:chat", AIProviderConfig{.endpoint = chat_endpoint,
+                                                      .model = "provider-chat-model",
+                                                      .api_key = "chat-provider-secret"});
+    configs.emplace("provider:embedding", AIProviderConfig{.endpoint = embed_endpoint,
+                                                           .model = "provider-embed-model",
+                                                           .api_key = "embed-provider-secret",
+                                                           .capability = AICapability::EMBEDDING});
     auto make_provider_call = [&](bool embedding) {
         auto expression = make_ai_complete_with_explicit_model(_tuple_id, kPromptSlotId);
         auto& call = expression.nodes.front();
@@ -1741,7 +1742,7 @@ TEST_F(AIProjectPipelineTest, MixedDefaultAndExplicitProviderRoutesKeepCredentia
 
 TEST_F(AIProjectPipelineTest, OpenAITextAndImageRoutesPreserveRequestsAndNulls) {
     set_query_deadline_ns(120'000'000'000);
-    auto configs = provider_model_configs();
+    auto configs = provider_configs();
     auto text = create_expr_context(make_ai_complete(_tuple_id, kPromptSlotId));
     auto image = create_expr_context(make_ai_file_call(_tuple_id, false));
     ASSERT_TRUE(text.ok()) << text.status();
@@ -1953,8 +1954,7 @@ TEST_F(AIProjectPipelineTest, DispatcherSnapshotsConfigAndSeparatesLiveQueryFrom
         snapshot.connect_timeout_ms = 0;
         snapshot.max_response_bytes = 12'345;
 
-        auto submitter_or =
-                AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_model_configs(), snapshot);
+        auto submitter_or = AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_configs(), snapshot);
         ASSERT_TRUE(submitter_or.ok()) << submitter_or.status();
         auto submitter = std::move(submitter_or).value();
 
@@ -2023,7 +2023,7 @@ TEST_F(AIProjectPipelineTest, QueryCancellationRemainsLifecycleCancelledAndDoesN
     config.request_timeout_ms = 5'000;
     config.connect_timeout_ms = 0;
     config.on_error = "ignore";
-    auto submitter_or = AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_model_configs(), config);
+    auto submitter_or = AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_configs(), config);
     ASSERT_TRUE(submitter_or.ok()) << submitter_or.status();
     auto submitter = std::move(submitter_or).value();
 
@@ -2078,7 +2078,7 @@ TEST_F(AIProjectPipelineTest, FragmentCancellationCancelsSourceRequestAndDrainsP
     auto projection_or = create_expression_projection();
     ASSERT_TRUE(projection_or.ok()) << projection_or.status();
     auto production_submitter_or =
-            AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_model_configs(), config);
+            AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_configs(), config);
     ASSERT_TRUE(production_submitter_or.ok()) << production_submitter_or.status();
     auto submitter = std::make_shared<RecordingTaskSubmitter>(std::move(production_submitter_or).value());
     auto buffer_or = AIChunkBuffer::create(2, 32 * kMiB);

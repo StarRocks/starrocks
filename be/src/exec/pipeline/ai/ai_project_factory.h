@@ -16,17 +16,12 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <map>
 #include <memory>
-#include <optional>
-#include <string>
 #include <vector>
 
 #include "base/statusor.h"
 #include "common/global_types.h"
-#include "gen_cpp/Types_types.h"
-#include "platform/llm/ai_provider.h"
-#include "platform/llm/ai_rate_limiter.h"
+#include "exec/pipeline/ai/ai_provider_config.h"
 
 namespace starrocks {
 
@@ -38,20 +33,6 @@ namespace pipeline {
 class AISinkOperatorFactory;
 class AISourceOperatorFactory;
 class PipelineBuilderContext;
-
-// Query-plan snapshot. Provider credentials belong to this query. Never print this object.
-// Map keys are Provider registry IDs carried by the AI expressions.
-struct AIProjectModelConfig {
-    std::string endpoint;
-    std::string model;
-    std::string api_key;
-    AICapability capability = AICapability::CHAT;
-    std::optional<int64_t> timeout_ms;
-    std::optional<int32_t> dimensions;
-    AIProviderProtocol protocol = AIProviderProtocol::OPENAI;
-};
-
-using AIProjectModelConfigs = std::map<std::string, AIProjectModelConfig, std::less<>>;
 
 enum class AIProjectOutputKind : uint8_t {
     PASSTHROUGH,
@@ -78,7 +59,7 @@ class AIProjectProjectionSpec {
 public:
     AIProjectProjectionSpec() = default;
     AIProjectProjectionSpec(RuntimeState* state, std::vector<AIProjectOutputSpec> outputs,
-                            std::vector<AIProjectCommonSpec> common_outputs, AIProjectModelConfigs model_configs);
+                            std::vector<AIProjectCommonSpec> common_outputs, AIProviderConfigs provider_configs);
     ~AIProjectProjectionSpec();
 
     AIProjectProjectionSpec(const AIProjectProjectionSpec&) = delete;
@@ -94,14 +75,14 @@ public:
     bool valid() const noexcept { return !_closed; }
     const std::vector<AIProjectOutputSpec>& outputs() const noexcept { return _outputs; }
     const std::vector<AIProjectCommonSpec>& common_outputs() const noexcept { return _common_outputs; }
-    const AIProjectModelConfigs& model_configs() const noexcept { return _model_configs; }
+    const AIProviderConfigs& provider_configs() const noexcept { return _provider_configs; }
     RuntimeState* runtime_state() const noexcept { return _state; }
 
 private:
     RuntimeState* _state = nullptr;
     std::vector<AIProjectOutputSpec> _outputs;
     std::vector<AIProjectCommonSpec> _common_outputs;
-    AIProjectModelConfigs _model_configs;
+    AIProviderConfigs _provider_configs;
     bool _closed = false;
 };
 

@@ -27,7 +27,7 @@
 #include "base/testutil/assert.h"
 #include "common/config_exec_fwd.h"
 #include "exec/exec_factory.h"
-#include "exec/pipeline/ai/ai_provider_config_parser.h"
+#include "exec/pipeline/ai/ai_provider_config.h"
 #include "exec_primitive/exec_node.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/PlanNodes_types.h"
