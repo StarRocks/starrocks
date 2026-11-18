@@ -18,6 +18,7 @@ Agent entrypoint for this repository. Start with the nearest nested `AGENTS.md`;
 - `test/`: SQL integration tests.
 - `docs/`: user and admin documentation.
 - `java-extensions/`: JNI and external source integrations.
+- `contrib/starrocks-python-client/`: the SQLAlchemy dialect and Alembic integration (Python package `starrocks`).
 
 ## Quick Commands
 
@@ -85,3 +86,4 @@ If a current briefing exists, treat it as review focus, not a finding list:
 - [`gensrc/AGENTS.md`](./gensrc/AGENTS.md)
 - [`java-extensions/AGENTS.md`](./java-extensions/AGENTS.md)
 - [`test/AGENTS.md`](./test/AGENTS.md)
+- [`contrib/starrocks-python-client/AGENTS.md`](./contrib/starrocks-python-client/AGENTS.md)
