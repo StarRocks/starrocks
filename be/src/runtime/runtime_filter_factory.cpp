@@ -161,17 +161,18 @@ struct TryCreateRuntimeBitsetFilter {
         const size_t l3_cache_size = CpuInfo::get_l3_cache_size();
 
         const auto [min_value, max_value] = calc_min_max_from_columns<LT>(columns, column_offset);
-        const size_t value_interval = static_cast<size_t>(RuntimeBitsetFilter<LT>::to_numeric(max_value)) -
-                                      RuntimeBitsetFilter<LT>::to_numeric(min_value) + 1;
-
-        VLOG_FILE << "[BITSET] min_value=" << min_value << ", max_value=" << max_value
-                  << ", value_interval=" << value_interval;
-
-        if (min_value > max_value || value_interval == 0) {
+        if (min_value > max_value) {
             return nullptr;
         }
+        // max - min in size_t is exact for every pair (it is at most 2^64 - 1); adding 1 and 7 to it is
+        // not, and used to wrap the size of a near-full-domain BIGINT range to 0 bytes.
+        const size_t span = static_cast<size_t>(RuntimeBitsetFilter<LT>::to_numeric(max_value)) -
+                            RuntimeBitsetFilter<LT>::to_numeric(min_value);
+        const size_t bitset_memory_usage = Bitset<LT>::num_bytes_for_span(span);
 
-        const size_t bitset_memory_usage = (value_interval + 7) / 8;
+        VLOG_FILE << "[BITSET] min_value=" << min_value << ", max_value=" << max_value << ", span=" << span
+                  << ", bitset_memory_usage=" << bitset_memory_usage;
+
         const size_t bloom_memory_usage = row_count;
         if (bitset_memory_usage <= bloom_memory_usage ||
             (bitset_memory_usage <= bloom_memory_usage * 4 && bitset_memory_usage <= l2_cache_size) ||

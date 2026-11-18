@@ -24,6 +24,7 @@
 #include "column/column_helper.h"
 #include "exec/runtime_filter_compat/runtime_filter_merger.h"
 #include "exec/runtime_filter_compat/runtime_filter_serde.h"
+#include "runtime/runtime_filter_factory.h"
 #include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
 
@@ -1465,6 +1466,41 @@ TEST_F(RuntimeFilterTest, TestMergerMaxSizeNonPositiveMeansNoLimit) {
 
     params.__set_runtime_filter_max_size(64L * 1024 * 1024);
     EXPECT_EQ(64UL * 1024 * 1024, RuntimeFilterMerger::resolve_max_size(params));
+}
+
+TEST_F(RuntimeMembershipFilterTest, TestBitsetSizeDoesNotWrap) {
+    EXPECT_EQ(1, Bitset<TYPE_BIGINT>::num_bytes_for_span(0));
+    EXPECT_EQ(1, Bitset<TYPE_BIGINT>::num_bytes_for_span(7));
+    EXPECT_EQ(2, Bitset<TYPE_BIGINT>::num_bytes_for_span(8));
+    EXPECT_EQ(size_t{1} << 61, Bitset<TYPE_BIGINT>::num_bytes_for_span(std::numeric_limits<size_t>::max()));
+}
+
+// A BIGINT key whose max - min is in [2^64 - 8, 2^64 - 2] used to size the bitset as 0 bytes, so the
+// filter was always preferred over the bloom filter and the first insert wrote through a null pointer.
+TEST_F(RuntimeMembershipFilterTest, TestNoBitsetFilterForNearFullBigintRange) {
+    constexpr int64_t kMin = std::numeric_limits<int64_t>::min();
+    constexpr int64_t kMax = std::numeric_limits<int64_t>::max();
+    ObjectPool pool;
+    for (int64_t lo_offset : {0, 1, 2, 7, 8}) {
+        Columns columns{ColumnTestHelper::build_column<int64_t>({kMin + lo_offset, kMax})};
+        EXPECT_EQ(nullptr, RuntimeFilterFactory::try_create_bitset_filter(&pool, TYPE_BIGINT, columns, 0, 2))
+                << "lo_offset=" << lo_offset;
+    }
+
+    Columns columns{ColumnTestHelper::build_column<int64_t>({kMax - 20, kMax - 3, kMax})};
+    auto* rf = RuntimeFilterFactory::try_create_bitset_filter(&pool, TYPE_BIGINT, columns, 0, 3);
+    ASSERT_NE(nullptr, rf);
+    auto* bitset_rf = down_cast<ComposedRuntimeBitsetFilter<TYPE_BIGINT>*>(rf);
+    bitset_rf->membership_filter().init(3);
+    EXPECT_EQ(3, bitset_rf->membership_filter().bitset().size());
+    for (int64_t v : {kMax - 20, kMax - 3, kMax}) {
+        bitset_rf->insert(v);
+    }
+    const auto probe = ColumnTestHelper::build_column<int64_t>({kMax - 20, kMax - 19, kMax});
+    RuntimeFilter::RunningContext ctx;
+    ctx.use_merged_selection = false;
+    bitset_rf->evaluate(probe.get(), &ctx);
+    _check_equal(ctx.selection, {1, 0, 1});
 }
 
 INSTANTIATE_TEST_SUITE_P(RuntimeFilterTest, RuntimeFilterTestFixture, ::testing::Values(RF_VERSION_V2, RF_VERSION_V3));
