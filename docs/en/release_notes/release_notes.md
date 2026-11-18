@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks release notes for this documentation version, plus release notes for the Kafka, Spark, and Flink connectors and the Kubernetes operator."
 products: [oss]
 ---
 
