@@ -1,0 +1,160 @@
+diff --git a/src/lib/krb5/ccache/ccbase.c b/src/lib/krb5/ccache/ccbase.c
+index f53ba50..7c16114 100644
+--- a/src/lib/krb5/ccache/ccbase.c
++++ b/src/lib/krb5/ccache/ccbase.c
+@@ -195,8 +195,8 @@ krb5_cc_register(krb5_context context, const krb5_cc_ops *ops,
+ krb5_error_code KRB5_CALLCONV
+ krb5_cc_resolve (krb5_context context, const char *name, krb5_ccache *cache)
+ {
+-    char *pfx, *cp;
+-    const char *resid;
++    char *pfx;
++    const char *cp, *resid;
+     unsigned int pfxlen;
+     krb5_error_code err;
+     const krb5_cc_ops *ops;
+diff --git a/src/lib/krb5/os/expand_path.c b/src/lib/krb5/os/expand_path.c
+index 4ce466c..b094264 100644
+--- a/src/lib/krb5/os/expand_path.c
++++ b/src/lib/krb5/os/expand_path.c
+@@ -454,7 +454,8 @@ k5_expand_path_tokens_extra(krb5_context context, const char *path_in,
+ {
+     krb5_error_code ret;
+     struct k5buf buf;
+-    char *tok_begin, *tok_end, *tok_val, **extra_tokens = NULL;
++    const char *tok_begin, *tok_end;
++    char *tok_val, **extra_tokens = NULL;
+     const char *path_left;
+     size_t nargs = 0, i;
+     va_list ap;
+diff --git a/src/lib/krb5/os/locate_kdc.c b/src/lib/krb5/os/locate_kdc.c
+index edca5ac..47e15c8 100644
+--- a/src/lib/krb5/os/locate_kdc.c
++++ b/src/lib/krb5/os/locate_kdc.c
+@@ -188,8 +188,8 @@ oom:
+ }
+ 
+ static void
+-parse_uri_if_https(const char *host_or_uri, k5_transport *transport,
+-                   const char **host, const char **uri_path)
++parse_uri_if_https(char *host_or_uri, k5_transport *transport,
++                   char **host, const char **uri_path)
+ {
+     char *cp;
+ 
+@@ -229,8 +229,7 @@ locate_srv_conf_1(krb5_context context, const krb5_data *realm,
+                   k5_transport transport, int udpport)
+ {
+     const char *realm_srv_names[4];
+-    char **hostlist = NULL, *realmstr = NULL, *host = NULL;
+-    const char *hostspec;
++    char **hostlist = NULL, *realmstr = NULL, *host = NULL, *hostspec;
+     krb5_error_code code;
+     int i, default_port;
+ 
+@@ -535,8 +534,8 @@ prof_locate_server(krb5_context context, const krb5_data *realm,
+  * Return a NULL *host_out if there are any problems parsing the URI.
+  */
+ static void
+-parse_uri_fields(const char *uri, k5_transport *transport_out,
+-                 const char **host_out, int *primary_out)
++parse_uri_fields(char *uri, k5_transport *transport_out,
++                 char **host_out, int *primary_out)
+ 
+ {
+     k5_transport transport;
+@@ -604,8 +603,8 @@ locate_uri(krb5_context context, const krb5_data *realm,
+     krb5_error_code ret;
+     k5_transport transport, host_trans;
+     struct srv_dns_entry *answers, *entry;
+-    char *host;
+-    const char *host_field, *path;
++    char *host, *host_field;
++    const char *path;
+     int port, def_port, primary;
+ 
+     ret = k5_make_uri_query(context, realm, req_service, &answers);
+diff --git a/src/plugins/preauth/pkinit/pkinit_crypto.h b/src/plugins/preauth/pkinit/pkinit_crypto.h
+index 77d5c61..a6b1cf9 100644
+--- a/src/plugins/preauth/pkinit/pkinit_crypto.h
++++ b/src/plugins/preauth/pkinit/pkinit_crypto.h
+@@ -510,7 +510,7 @@ krb5_error_code crypto_load_cas_and_crls
+ 		    defines the storage type (file, directory, etc) */
+ 	int catype,					/* IN
+ 		    defines the ca type (anchor, intermediate, crls) */
+-	char *id);					/* IN
++	const char *id);				/* IN
+ 		    defines the location (filename, directory name, etc) */
+ 
+ /*
+diff --git a/src/plugins/preauth/pkinit/pkinit_crypto_openssl.c b/src/plugins/preauth/pkinit/pkinit_crypto_openssl.c
+index e5940a5..4f683db 100644
+--- a/src/plugins/preauth/pkinit/pkinit_crypto_openssl.c
++++ b/src/plugins/preauth/pkinit/pkinit_crypto_openssl.c
+@@ -5134,7 +5134,7 @@ load_cas_and_crls(krb5_context context,
+                   pkinit_req_crypto_context req_cryptoctx,
+                   pkinit_identity_crypto_context id_cryptoctx,
+                   int catype,
+-                  char *filename)
++                  const char *filename)
+ {
+     STACK_OF(X509_INFO) *sk = NULL;
+     STACK_OF(X509) *ca_certs = NULL;
+@@ -5292,7 +5292,7 @@ load_cas_and_crls_dir(krb5_context context,
+                       pkinit_req_crypto_context req_cryptoctx,
+                       pkinit_identity_crypto_context id_cryptoctx,
+                       int catype,
+-                      char *dirname)
++                      const char *dirname)
+ {
+     krb5_error_code retval = EINVAL;
+     DIR *d = NULL;
+@@ -5344,7 +5344,7 @@ crypto_load_cas_and_crls(krb5_context context,
+                          pkinit_identity_crypto_context id_cryptoctx,
+                          int idtype,
+                          int catype,
+-                         char *id)
++                         const char *id)
+ {
+     switch (idtype) {
+     case IDTYPE_FILE:
+diff --git a/src/plugins/preauth/pkinit/pkinit_identity.c b/src/plugins/preauth/pkinit/pkinit_identity.c
+index 4046b15..18811a7 100644
+--- a/src/plugins/preauth/pkinit/pkinit_identity.c
++++ b/src/plugins/preauth/pkinit/pkinit_identity.c
+@@ -471,7 +471,7 @@ process_option_ca_crl(krb5_context context,
+                       const char *value,
+                       int catype)
+ {
+-    char *residual;
++    const char *residual;
+     unsigned int typelen;
+     int idtype;
+ 
+diff --git a/src/plugins/preauth/pkinit/pkinit_matching.c b/src/plugins/preauth/pkinit/pkinit_matching.c
+index b042c74..c1dc108 100644
+--- a/src/plugins/preauth/pkinit/pkinit_matching.c
++++ b/src/plugins/preauth/pkinit/pkinit_matching.c
+@@ -263,7 +263,7 @@ parse_rule_component(krb5_context context,
+     char err_buf[128];
+     int ret;
+     struct keyword_desc *kw, *nextkw;
+-    char *nk;
++    const char *nk;
+     int found_next_kw = 0;
+     char *value = NULL;
+     size_t len;
+diff --git a/src/tests/responder.c b/src/tests/responder.c
+index 82f870e..4221a20 100644
+--- a/src/tests/responder.c
++++ b/src/tests/responder.c
+@@ -282,8 +282,7 @@ responder(krb5_context ctx, void *rawdata, krb5_responder_context rctx)
+     /* Provide a particular response for an OTP challenge. */
+     if (data->otp_answer != NULL) {
+         if (krb5_responder_otp_get_challenge(ctx, rctx, &ochl) == 0) {
+-            key = strchr(data->otp_answer, '=');
+-            if (key != NULL) {
++            if (strchr(data->otp_answer, '=') != NULL) {
+                 /* Make a copy of the answer that we can chop up. */
+                 key = strdup(data->otp_answer);
+                 if (key == NULL)

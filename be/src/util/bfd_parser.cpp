@@ -221,9 +221,9 @@ int BfdParser::load_symbols() {
         // No need to load symbols;
         return 0;
     }
-    _num_symbols = bfd_read_minisymbols(_abfd, FALSE, (void**)&_syms, &_symbol_size);
+    _num_symbols = bfd_read_minisymbols(_abfd, false, (void**)&_syms, &_symbol_size);
     if (_num_symbols == 0) {
-        _num_symbols = bfd_read_minisymbols(_abfd, TRUE /* dynamic */, (void**)&_syms, &_symbol_size);
+        _num_symbols = bfd_read_minisymbols(_abfd, true /* dynamic */, (void**)&_syms, &_symbol_size);
     }
     if (_num_symbols == 0) {
         LOG(WARNING) << "Load symbols failed because errmsg=" << bfd_errmsg(bfd_get_error());

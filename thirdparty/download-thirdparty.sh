@@ -503,10 +503,20 @@ fi
 cd -
 echo "Finished patching $AVRO_SOURCE-c"
 
+# patch krb5
+cd $TP_SOURCE_DIR/$KRB5_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $KRB5_SOURCE = "krb5-1.19.4" ]; then
+    patch -p1 < $TP_PATCH_DIR/krb5-1.19.4-c23-strchr.patch
+    touch $PATCHED_MARK
+fi
+echo "Finished patching $KRB5_SOURCE"
+cd -
+
 # patch serdes
 cd $TP_SOURCE_DIR/$SERDES_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $SERDES_SOURCE = "libserdes-7.3.1" ]; then
     patch -p0 < $TP_PATCH_DIR/libserdes-7.3.1.patch
+    patch -p1 < $TP_PATCH_DIR/libserdes-7.3.1-call-once.patch
     touch $PATCHED_MARK
 fi
 echo "Finished patching $SERDES_SOURCE"

@@ -1074,8 +1074,15 @@ if (NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libstdc++ -static-libgcc)
 endif()
 
+# Check if libsframe exists (needed for binutils 2.40+ on newer distros like Ubuntu 24.04)
+find_library(SFRAME_LIB sframe)
+if(SFRAME_LIB)
+    message(STATUS "Found libsframe: ${SFRAME_LIB}, linking it explicitly.")
+    set(SFRAME_LINK_LIB -lsframe)
+endif()
+
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    ${WL_LINK_STATIC} -lbfd
+    ${WL_LINK_STATIC} -lbfd ${SFRAME_LINK_LIB}
     ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf
 )
 
