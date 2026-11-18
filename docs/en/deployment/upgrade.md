@@ -11,7 +11,7 @@ This topic describes how to upgrade your StarRocks cluster.
 :::important
 Before upgrading StarRocks you should:
 
-- Read the [release notes](https://docs.starrocks.io/releasenotes/release-3.5/) for the StarRocks version that you are upgrading to, and all versions between the current version and the target version and:
+- Read the [release notes](../release_notes/release_notes.md) for the StarRocks version that you are upgrading to, and all versions between the current version and the target version and:
   - Make notes of any behavior changes within StarRocks
   - Make notes of any changes with integrations between StarRocks and external systems used for importing, exporting, visualization, etc
 - Verify the [deployment prerequisites](./deployment_prerequisites.md) for the target version. For example, StarRocks 3.5.x requires JDK 17 and StarRocks 3.4.x on Ubuntu requires JDK 11.
