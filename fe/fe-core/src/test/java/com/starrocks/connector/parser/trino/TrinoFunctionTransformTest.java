@@ -79,6 +79,16 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select contains_sequence(array[1,2,3], array[1,2])";
         assertPlanContains(sql, "array_contains_seq([1,2,3], [1,2])");
 
+        sql = "select flatten(array[array[1, 2], array[3]])";
+        assertPlanContains(sql, "array_flatten([[1,2],[3]])");
+
+        // ARRAY[] and ARRAY[NULL] are ARRAY<NULL>; Trino flattens them to an empty array
+        sql = "select flatten(array[])";
+        assertPlanContains(sql, "array_flatten([])");
+
+        sql = "select flatten(array[null])";
+        assertPlanContains(sql, "array_flatten([NULL])");
+
         sql = "select concat_ws('_', array['1','2','3'])";
         assertPlanContains(sql, "concat_ws('_', ['1','2','3'])");
 
@@ -405,6 +415,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     public void testMathFnTransform() throws Exception {
         String sql = "select truncate(19.25)";
         assertPlanContains(sql, "truncate(19.25, 0)");
+
+        sql = "select from_base(cast(v1 as varchar), 16) from t0";
+        assertPlanContains(sql, "CAST(conv(CAST(1: v1 AS VARCHAR), 16, -10) AS BIGINT)");
     }
 
     @Test

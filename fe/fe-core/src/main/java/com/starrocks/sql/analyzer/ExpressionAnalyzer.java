@@ -1591,6 +1591,18 @@ public class ExpressionAnalyzer {
                         throw new SemanticException("The only one input of " + fnName +
                                 " should be an array of arrays, rather than " + inputType.toSql(), node.getPos());
                     }
+                    if (inputType.isArrayType() && ((ArrayType) inputType).getItemType().isNull()) {
+                        // ARRAY[] and ARRAY[NULL] are typed ARRAY<NULL>. Their items can only be NULL, which
+                        // flattens to nothing, so read them as ARRAY<ARRAY<BOOLEAN>> (as ARRAY_CONTAINS does for
+                        // ARRAY<NULL>) and return an empty array, as Trino's flatten does.
+                        inputType = new ArrayType(ArrayType.ARRAY_BOOLEAN);
+                        try {
+                            ExprCastFunction.castChild(node, inputType, 0);
+                        } catch (AnalysisException e) {
+                            throw new SemanticException(e.getMessage(), node.getPos());
+                        }
+                        argumentTypes[0] = inputType;
+                    }
                     if (inputType.isArrayType() && !((ArrayType) inputType).getItemType().isArrayType()) {
                         throw new SemanticException("The only one input of " + fnName +
                                 " should be an array of arrays, rather than " + inputType.toSql(), node.getPos());

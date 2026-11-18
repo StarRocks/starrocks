@@ -33,6 +33,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.type.AnyMapType;
 import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 
 import java.util.Collections;
@@ -73,6 +74,11 @@ public class ComplexFunctionCallTransformer {
             Expr child = args[0];
             return new FunctionCallExpr("sha2", ImmutableList.of(new FunctionCallExpr("from_binary",
                     ImmutableList.of(child, new StringLiteral("utf8"))), new IntLiteral(256)));
+        } else if (functionName.equalsIgnoreCase("from_base") && args.length == 2) {
+            // from_base(string, radix) -> CAST(conv(string, radix, -10) AS BIGINT). The negative target radix
+            // makes conv return a signed value, so '-ff' is -255 as in Trino.
+            return new CastExpr(IntegerType.BIGINT,
+                    new FunctionCallExpr("conv", ImmutableList.of(args[0], args[1], new IntLiteral(-10))));
         } else if (functionName.equalsIgnoreCase("last_day_of_month")) {
             Expr child = args[0];
             return new FunctionCallExpr("last_day", ImmutableList.of(child, new StringLiteral("month")));

@@ -221,6 +221,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -817,12 +818,20 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 orderByElements.forEach(e -> arguments.add(e.getExpr()));
             }
             Optional<Expression> filterExpr = node.getFilter();
-            if (filterExpr.isPresent()) {
+            if (filterExpr.isPresent() && functionName.equalsIgnoreCase(FunctionSet.COUNT) && isDistinct && !isStar) {
+                // count_if has no DISTINCT form, so move the filter into the arguments instead:
+                // count(DISTINCT x) FILTER (WHERE c) -> count(DISTINCT if(c, x, NULL)).
+                // count(DISTINCT ...) skips rows with a NULL argument, which drops exactly the rows the
+                // filter rejects (including those where c is NULL).
+                Expr booleanExpr = (Expr) visit(filterExpr.get(), context);
+                List<Expr> filteredArguments = arguments.stream()
+                        .map(arg -> (Expr) new FunctionCallExpr(FunctionSet.IF,
+                                Lists.newArrayList(booleanExpr.clone(), arg, new NullLiteral())))
+                        .collect(Collectors.toList());
+                callExpr = new FunctionCallExpr(functionName, new FunctionParams(true, filteredArguments, orderByElements));
+            } else if (filterExpr.isPresent()) {
                 // convert agg filter to agg_if
                 boolean isCountFunc = functionName.equalsIgnoreCase(FunctionSet.COUNT);
-                if (isCountFunc && isDistinct) {
-                    throw new ParsingException("Aggregation filter does not support COUNT DISTINCT");
-                }
                 Expr booleanExpr = (Expr) visit(filterExpr.get(), context);
                 arguments.add(booleanExpr);
                 functionName = functionName + FunctionSet.AGG_STATE_IF_SUFFIX;
@@ -1054,7 +1063,74 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 throw new RuntimeException(e);
             }
         }
-        throw new ParsingException("Parse Error : unknown type " + node.getType());
+        // The other Trino types that StarRocks has. Trino reads the value as Java does and rejects one that isn't
+        // valid for the type, where a StarRocks string cast would return NULL, so build the literal here.
+        switch (node.getType().toUpperCase(Locale.ROOT)) {
+            case "BOOLEAN":
+                return booleanLiteral(node.getValue());
+            case "TINYINT":
+                return integerLiteral(node.getValue(), "TINYINT", IntegerType.TINYINT, Byte.MIN_VALUE, Byte.MAX_VALUE);
+            case "SMALLINT":
+                return integerLiteral(node.getValue(), "SMALLINT", IntegerType.SMALLINT, Short.MIN_VALUE,
+                        Short.MAX_VALUE);
+            case "INTEGER":
+            case "INT":
+                return integerLiteral(node.getValue(), "INTEGER", IntegerType.INT, Integer.MIN_VALUE,
+                        Integer.MAX_VALUE);
+            case "BIGINT":
+                return integerLiteral(node.getValue(), "BIGINT", IntegerType.BIGINT, Long.MIN_VALUE, Long.MAX_VALUE);
+            case "DOUBLE":
+                return doubleLiteral(node);
+            case "VARCHAR":
+                return new com.starrocks.sql.ast.expression.StringLiteral(node.getValue());
+            default:
+                throw new ParsingException("Parse Error : unknown type " + node.getType());
+        }
+    }
+
+    // Trino accepts true/t/1 and false/f/0 in any case. A StarRocks string cast doesn't know 't' and 'f'
+    private static BoolLiteral booleanLiteral(String value) {
+        switch (value.toLowerCase(Locale.ROOT)) {
+            case "true":
+            case "t":
+            case "1":
+                return new BoolLiteral(true);
+            case "false":
+            case "f":
+            case "0":
+                return new BoolLiteral(false);
+            default:
+                throw new ParsingException("'%s' is not a valid BOOLEAN literal", value);
+        }
+    }
+
+    // Trino takes a decimal integer within the type's range, with surrounding spaces, a sign and leading zeros
+    private static IntLiteral integerLiteral(String value, String typeName, Type type, long min, long max) {
+        long parsed;
+        try {
+            parsed = Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            throw new ParsingException("'%s' is not a valid %s literal", value, typeName);
+        }
+        if (parsed < min || parsed > max) {
+            throw new ParsingException("'%s' is not a valid %s literal", value, typeName);
+        }
+        return new IntLiteral(parsed, type);
+    }
+
+    // StarRocks has no NaN or infinite DOUBLE, and its string cast would return NULL for them, so reject those
+    private static FloatLiteral doubleLiteral(GenericLiteral node) {
+        double value;
+        try {
+            value = Double.parseDouble(node.getValue());
+        } catch (NumberFormatException e) {
+            throw new ParsingException("'%s' is not a valid DOUBLE literal", node.getValue());
+        }
+        if (!Double.isFinite(value)) {
+            throw unsupportedException(String.format("Trino parser on StarRocks does not support NaN or " +
+                    "infinite DOUBLE literals: %s", node));
+        }
+        return new FloatLiteral(value, FloatType.DOUBLE);
     }
 
     @Override
