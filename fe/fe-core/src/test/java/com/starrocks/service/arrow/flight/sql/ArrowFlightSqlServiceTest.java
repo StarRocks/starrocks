@@ -61,9 +61,10 @@ public class ArrowFlightSqlServiceTest {
                 times = 1;
             }
 
+            // start() must return to the FE main thread instead of parking in the server
             {
                 server.awaitTermination();
-                times = 1;
+                times = 0;
             }
 
             {
