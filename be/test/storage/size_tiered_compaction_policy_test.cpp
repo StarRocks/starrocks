@@ -37,7 +37,11 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
+<<<<<<< HEAD
 #include "testutil/assert.h"
+=======
+#include "storage/tablet_reader.h"
+>>>>>>> 11cf399 ([BugFix] Respect segment overlap after online optimize version overwrite (#83411))
 
 namespace starrocks {
 
@@ -279,6 +283,93 @@ public:
         return Status::OK();
     }
 
+    void check_single_rowset_compaction(int segments, bool overlapping, bool force_base, bool expected) {
+        const auto saved_strategy = config::enable_size_tiered_compaction_strategy;
+        const auto saved_min_deltas = config::min_cumulative_compaction_num_singleton_deltas;
+        const auto saved_level_multiple = config::size_tiered_level_multiple;
+        DeferOp restore_config([&] {
+            config::enable_size_tiered_compaction_strategy = saved_strategy;
+            config::min_cumulative_compaction_num_singleton_deltas = saved_min_deltas;
+            config::size_tiered_level_multiple = saved_level_multiple;
+        });
+        // Use the production default policy and segment threshold instead of the fixture's threshold of two.
+        config::enable_size_tiered_compaction_strategy = true;
+        config::min_cumulative_compaction_num_singleton_deltas = 5;
+        config::size_tiered_level_multiple = 5;
+        create_tablet_schema(AGG_KEYS);
+        auto tablet_meta = std::make_shared<TabletMeta>();
+        create_tablet_meta(tablet_meta.get());
+        tablet_meta->set_enable_shortcut_compaction(true);
+        auto tablet = Tablet::create_tablet_from_meta(tablet_meta, _engine->get_stores()[0]);
+        ASSERT_OK(tablet->init());
+        ASSERT_FALSE(tablet->need_compaction());
+        ASSERT_FALSE(tablet->force_base_compaction());
+
+        RowsetWriterContext context;
+        create_rowset_writer_context(&context, 2);
+        context.segments_overlap = overlapping ? OVERLAPPING : NONOVERLAPPING;
+        std::unique_ptr<RowsetWriter> writer;
+        ASSERT_OK(RowsetFactory::create_rowset_writer(context, &writer));
+        auto schema = ChunkHelper::convert_schema(_tablet_schema);
+        for (int segment = 0; segment < segments; ++segment) {
+            auto chunk = ChunkFactory::new_chunk(schema, 2);
+            for (int i = 1; i <= 2; ++i) {
+                int32_t key = i + (overlapping ? 0 : segment * 2);
+                chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(key));
+                chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(Slice("key")));
+                chunk->get_column_by_index(2)->as_mutable_ptr()->append_datum(Datum(key * 10));
+            }
+            ASSERT_OK(writer->add_chunk(*chunk));
+            ASSERT_OK(writer->flush());
+        }
+        ASSIGN_OR_ABORT(auto source, writer->build());
+        ASSERT_EQ(segments, source->num_segments());
+        ASSERT_OK(tablet->overwrite_rowset(source, 2));
+        ASSERT_EQ(Version(0, 2), source->version());
+        ASSERT_EQ(1, tablet->version_count());
+
+        ASSERT_EQ(expected, force_base ? tablet->force_base_compaction() : tablet->need_compaction());
+        auto task = tablet->create_compaction_task();
+        if (!expected) {
+            ASSERT_EQ(nullptr, task);
+            return;
+        }
+        ASSERT_EQ(BASE_COMPACTION, tablet->compaction_type());
+        ASSERT_NE(nullptr, task);
+        task->run();
+        ASSERT_EQ(COMPACTION_SUCCESS, task->compaction_task_state());
+        EXPECT_FALSE(task->is_shortcut_compaction());
+        auto output = tablet->get_rowset_by_version(Version(0, 2));
+        ASSERT_NE(nullptr, output);
+        EXPECT_NE(source->rowset_id(), output->rowset_id());
+        EXPECT_EQ(NONOVERLAPPING, output->rowset_meta()->segments_overlap());
+        EXPECT_EQ(2, output->num_rows());
+        ASSERT_OK(output->verify());
+
+        TabletReader reader(tablet, Version(0, 2), schema);
+        TabletReaderParams params;
+        params.skip_aggregation = false;
+        ASSERT_OK(reader.prepare());
+        ASSERT_OK(reader.open(params));
+        auto chunk = ChunkFactory::new_chunk(schema, 2);
+        int rows = 0;
+        while (true) {
+            chunk->reset();
+            auto st = reader.get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            ASSERT_OK(st);
+            for (size_t i = 0; i < chunk->num_rows(); ++i) {
+                const auto key = chunk->get_column_by_index(0)->get(i).get_int32();
+                EXPECT_EQ(++rows, key);
+                EXPECT_EQ(key * 10 * segments, chunk->get_column_by_index(2)->get(i).get_int32());
+            }
+        }
+        EXPECT_EQ(2, rows);
+        reader.close();
+        EXPECT_FALSE(tablet->need_compaction());
+        EXPECT_FALSE(tablet->force_base_compaction());
+    }
+
     void SetUp() override {
         // The test binary shares one process and gtest runs all value-parameterized suites after the
         // TEST_F ones, so anything left here reaches them. A leaked size_tiered_min_level_size=10240
@@ -366,6 +457,30 @@ protected:
     int64_t _rowset_id;
     int64_t _version;
 };
+
+TEST_F(SizeTieredCompactionPolicyTest, single_overlapping_rowset_compacts_at_default_threshold) {
+    check_single_rowset_compaction(5, true, false, true);
+}
+
+TEST_F(SizeTieredCompactionPolicyTest, single_overlapping_rowset_below_default_threshold) {
+    check_single_rowset_compaction(4, true, false, false);
+}
+
+TEST_F(SizeTieredCompactionPolicyTest, single_overlapping_rowset_force_base_compaction) {
+    check_single_rowset_compaction(2, true, true, true);
+}
+
+TEST_F(SizeTieredCompactionPolicyTest, single_nonoverlapping_rowset_is_skipped) {
+    check_single_rowset_compaction(5, false, false, false);
+}
+
+TEST_F(SizeTieredCompactionPolicyTest, single_nonoverlapping_rowset_force_base_is_skipped) {
+    check_single_rowset_compaction(5, false, true, false);
+}
+
+TEST_F(SizeTieredCompactionPolicyTest, single_segment_rowset_is_skipped) {
+    check_single_rowset_compaction(1, true, false, false);
+}
 
 TEST_F(SizeTieredCompactionPolicyTest, test_candidate_rowsets_empty) {
     TabletSchemaPB schema_pb;

@@ -123,7 +123,8 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
     std::vector<RowsetSharedPtr> candidate_rowsets;
     _tablet->pick_all_candicate_rowsets(&candidate_rowsets);
 
-    if (candidate_rowsets.size() <= 1) {
+    if (candidate_rowsets.empty() ||
+        (candidate_rowsets.size() == 1 && !candidate_rowsets[0]->rowset_meta()->is_segments_overlapping())) {
         VLOG(2) << "no suitable rowset to compact. tablet_id=" << _tablet->tablet_id()
                 << " candidate_rowsets.size=" << candidate_rowsets.size();
         return Status::NotFound("compaction no suitable version error.");
