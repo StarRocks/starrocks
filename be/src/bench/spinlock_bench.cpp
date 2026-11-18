@@ -155,8 +155,16 @@ void BM_ContendedCriticalSection(benchmark::State& state) {
 }
 
 template <typename LockType>
+struct PooledLatencyAggregator {
+    std::mutex mu;
+    std::vector<uint64_t> pooled_samples;
+    int completed_threads{0};
+};
+
+template <typename LockType>
 void BM_AcquireLatency(benchmark::State& state) {
     static SharedLockState<LockType> shared;
+    static PooledLatencyAggregator<LockType> aggregator;
     static constexpr size_t kMaxSamples = 1U << 16;
     static constexpr uint64_t kSampleMask = 63; // Sample 1 in 64 acquisitions.
 
@@ -188,15 +196,27 @@ void BM_AcquireLatency(benchmark::State& state) {
         }
     }
 
-    if (!samples.empty()) {
-        std::sort(samples.begin(), samples.end());
-        const auto percentile = [&samples](double q) -> double {
-            const size_t idx = static_cast<size_t>(q * static_cast<double>(samples.size() - 1));
-            return static_cast<double>(samples[idx]);
-        };
-        state.counters["p50_ns"] = benchmark::Counter(percentile(0.50), benchmark::Counter::kAvgThreads);
-        state.counters["p99_ns"] = benchmark::Counter(percentile(0.99), benchmark::Counter::kAvgThreads);
-        state.counters["p999_ns"] = benchmark::Counter(percentile(0.999), benchmark::Counter::kAvgThreads);
+    {
+        std::lock_guard<std::mutex> lock(aggregator.mu);
+        if (aggregator.completed_threads == 0) {
+            aggregator.pooled_samples.clear();
+        }
+        aggregator.pooled_samples.insert(aggregator.pooled_samples.end(), samples.begin(), samples.end());
+        ++aggregator.completed_threads;
+        if (aggregator.completed_threads == state.threads()) {
+            aggregator.completed_threads = 0;
+            if (!aggregator.pooled_samples.empty()) {
+                std::sort(aggregator.pooled_samples.begin(), aggregator.pooled_samples.end());
+                const auto& pooled = aggregator.pooled_samples;
+                const auto percentile = [&pooled](double q) -> double {
+                    const size_t idx = static_cast<size_t>(q * static_cast<double>(pooled.size() - 1));
+                    return static_cast<double>(pooled[idx]);
+                };
+                state.counters["p50_ns"] = benchmark::Counter(percentile(0.50));
+                state.counters["p99_ns"] = benchmark::Counter(percentile(0.99));
+                state.counters["p999_ns"] = benchmark::Counter(percentile(0.999));
+            }
+        }
     }
     state.SetItemsProcessed(state.iterations());
 }
