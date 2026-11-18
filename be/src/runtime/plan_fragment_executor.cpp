@@ -39,18 +39,7 @@
 
 #include "common/logging.h"
 #include "common/object_pool.h"
-<<<<<<< HEAD:be/src/runtime/plan_fragment_executor.cpp
 #include "exec/data_sink.h"
-=======
-#include "compute_env/data_stream/data_stream_mgr.h"
-#include "compute_env/global_dict/fragment_dict_state.h"
-#include "compute_env/load/load_stream_mgr.h"
-#include "compute_env/load/stream_context_mgr.h"
-#include "compute_env/load/stream_load_context.h"
-#include "compute_env/profile_report_worker.h"
-#include "compute_env/result/result_buffer_mgr.h"
-#include "compute_env/result/result_queue_mgr.h"
->>>>>>> 6506f99 ([BugFix] Propagate fragment cancellation to stream load pipes (#82741)):be/src/orchestration/plan_fragment_executor.cpp
 #include "exec/exchange_node.h"
 #include "exec/exec_node.h"
 #include "exec/scan_node.h"
@@ -65,6 +54,7 @@
 #include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
+#include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/parse_util.h"
@@ -533,24 +523,14 @@ void PlanFragmentExecutor::close() {
 }
 
 Status PlanFragmentExecutor::_prepare_stream_load_pipe(const TExecPlanFragmentParams& request) {
-    auto check_channel_stream_load = [&]() -> Status {
-        const auto& scan_range_map = request.params.per_node_scan_ranges;
-        if (scan_range_map.size() == 0) {
-            return Status::OK();
+    for (const auto& [node_id, scan_ranges] : request.params.per_node_scan_ranges) {
+        for (const auto& scan_range : scan_ranges) {
+            if (scan_range.scan_range.__isset.broker_scan_range &&
+                scan_range.scan_range.broker_scan_range.__isset.channel_id) {
+                return Status::NotSupported("Non-pipeline engine does not support channel stream load");
+            }
         }
-        auto iter = scan_range_map.begin();
-        if (iter->second.size() == 0) {
-            return Status::OK();
-        }
-        if (!iter->second[0].scan_range.__isset.broker_scan_range) {
-            return Status::OK();
-        }
-        if (!iter->second[0].scan_range.broker_scan_range.__isset.channel_id) {
-            return Status::OK();
-        }
-        return Status::NotSupported("Non-pipeline engine does not support channel stream load");
-    };
-    RETURN_IF_ERROR(check_channel_stream_load());
+    }
 
     for (const auto& [node_id, scan_ranges] : request.params.per_node_scan_ranges) {
         for (const auto& scan_range : scan_ranges) {
@@ -558,16 +538,17 @@ Status PlanFragmentExecutor::_prepare_stream_load_pipe(const TExecPlanFragmentPa
                 continue;
             }
             const auto& broker_range = scan_range.scan_range.broker_scan_range;
-            if (broker_range.__isset.channel_id) {
-                continue;
-            }
             for (const auto& range : broker_range.ranges) {
                 if (range.file_type != TFileType::FILE_STREAM) {
                     continue;
                 }
-                auto pipe = runtime_services(_query_execution_services).load_stream_mgr->get(range.load_id);
+                auto pipe = _exec_env->load_stream_mgr()->get(range.load_id);
                 if (pipe == nullptr) {
-                    return Status::InternalError("Invalid or outdated load id " + print_id(range.load_id));
+                    auto st = Status::InternalError("Invalid or outdated load id " + print_id(range.load_id));
+                    for (const auto& sink : _stream_load_sinks) {
+                        sink->cancel(st);
+                    }
+                    return st;
                 }
                 _stream_load_sinks.emplace_back(std::move(pipe));
             }
