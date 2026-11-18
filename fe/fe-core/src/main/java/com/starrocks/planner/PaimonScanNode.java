@@ -80,7 +80,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 public class PaimonScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(PaimonScanNode.class);
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
-    private final PaimonTable paimonTable;
+    private PaimonTable paimonTable;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private CloudConfiguration cloudConfiguration = null;
@@ -148,6 +148,14 @@ public class PaimonScanNode extends ScanNode {
 
         PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         PaimonSplitsInfo splitsInfo = remoteFileDesc.getPaimonSplitsInfo();
+        if (splitsInfo.getNativeTable() != null) {
+            // Use the same branch/schema/options for reader selection and BE serialization.
+            // Each scan needs its own table id: descriptor tables deduplicate by id, while
+            // aliases of one catalog table may read different branches or snapshots.
+            paimonTable = new PaimonTable(paimonTable.getCatalogName(), paimonTable.getCatalogDBName(),
+                    paimonTable.getCatalogTableName(), paimonTable.getFullSchema(), splitsInfo.getNativeTable());
+            tupleDescriptor.setTable(paimonTable);
+        }
         String predicateInfo = encodeObjectToString(splitsInfo.getPredicate());
         List<Split> splits = splitsInfo.getPaimonSplits();
 
