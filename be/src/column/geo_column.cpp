@@ -33,10 +33,9 @@ namespace {
 
 Status check_transport_descriptor(const GeoColumnDescriptor& descriptor) {
     const auto& type = descriptor.type;
-    const bool geography = type.logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY &&
-                           GeoEdgeAlgorithmPB_IsValid(type.edge_algorithm) &&
-                           type.edge_algorithm != GEO_EDGE_ALGORITHM_UNKNOWN &&
-                           type.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR;
+    const bool geography =
+            type.logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY && GeoEdgeAlgorithmPB_IsValid(type.edge_algorithm) &&
+            type.edge_algorithm != GEO_EDGE_ALGORITHM_UNKNOWN && type.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR;
     const bool geometry =
             type.logical_type == GEO_LOGICAL_TYPE_GEOMETRY && type.edge_algorithm == GEO_EDGE_ALGORITHM_PLANAR;
     if ((!geography && !geometry) || type.crs.empty() || type.crs.size() > 65536) {
