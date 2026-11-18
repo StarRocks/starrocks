@@ -36,6 +36,15 @@ CONF_mInt32(thrift_rpc_timeout_ms, "5000");
 // The connection will be closed if it has existed in the connection pool for longer than this value.
 CONF_Int32(thrift_rpc_connection_max_valid_time_ms, "5000");
 
+// Backoff in milliseconds between the retries of an RPC towards another backend that failed before
+// being sent (EHOSTDOWN/ECONNREFUSED). While a peer is restarting, its cached socket stays failed
+// until the next brpc health check (`-health_check_interval`, 3s by default), so retries without any
+// backoff are all spent within microseconds and the RPC fails even though the peer has been back.
+// brpc waits this long before every retry (the value is not multiplied by the retry index), so
+// with max_retry=3 the attempts land at 1x/2x/3x this value and the accumulated delay covers the
+// health check interval although a single backoff is shorter than it. 0 disables the backoff.
+CONF_mInt32(brpc_retry_backoff_ms, "2000");
+
 // brpc connection types, "single", "pooled", "short".
 CONF_String_enum(brpc_connection_type, "single", "single,pooled,short");
 

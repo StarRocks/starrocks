@@ -313,6 +313,15 @@ This topic introduces the following types of BE configurations:
 - Description: The BE bRPC port, which is used to view the network statistics of bRPCs.
 - Introduced in: -
 
+### brpc_retry_backoff_ms
+
+- Default: 2000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The time a bRPC waits before retrying after a failure that happened before the request was written, namely `EHOSTDOWN` or `ECONNREFUSED`. Such a failure means the peer Backend is restarting or unreachable, and bRPC marks the cached connection as failed and re-checks it only every `health_check_interval` (3 seconds by default). Without a backoff, all retries of a failing RPC are spent within microseconds, so an RPC that spans a restart fails even though the peer is already listening again. bRPC waits this long before every retry instead of an increasing multiple of it, so the attempts are made after 1x, 2x, and 3x this value, and the accumulated delay covers the health check interval. Errors raised after the request was written, for example `ECONNRESET`, are not backed off, because the peer may have seen the request already. A value less than or equal to `0` disables the backoff.
+- Introduced in: -
+
 ### brpc_socket_max_unwritten_bytes
 
 - Default: 1073741824
