@@ -1,0 +1,148 @@
+diff --git a/src/bthread/context.cpp b/src/bthread/context.cpp
+index bafa927..730fabb 100644
+--- a/src/bthread/context.cpp
++++ b/src/bthread/context.cpp
+@@ -900,3 +900,129 @@ __asm (
+ );
+ 
+ #endif
++
++// riscv64 implementation (LP64D ABI). Mirrors the aarch64 design: ra is both a
++// saved register (offset 192) and double-written to a PC slot (offset 200), so
++// that make_fcontext can seed func into the PC slot and finish into the ra slot
++// independently. Callee-saved: fs0-fs11, s0-s11. Frame layout (jump/make agree):
++//   0..95 fs0-fs11, 96..191 s0-s11, 192 ra-slot, 200 PC-slot. Total 208 bytes.
++#if defined(BTHREAD_CONTEXT_PLATFORM_linux_riscv64) && defined(BTHREAD_CONTEXT_COMPILER_gcc)
++__asm (
++".text\n"
++".align  3\n"
++".global bthread_jump_fcontext\n"
++".type   bthread_jump_fcontext, @function\n"
++"bthread_jump_fcontext:\n"
++"    # reserve context-data on current stack\n"
++"    addi sp, sp, -208\n"
++
++"    # save fs0-fs11 (0..95)\n"
++"    fsd fs0,  0(sp)\n"
++"    fsd fs1,  8(sp)\n"
++"    fsd fs2, 16(sp)\n"
++"    fsd fs3, 24(sp)\n"
++"    fsd fs4, 32(sp)\n"
++"    fsd fs5, 40(sp)\n"
++"    fsd fs6, 48(sp)\n"
++"    fsd fs7, 56(sp)\n"
++"    fsd fs8, 64(sp)\n"
++"    fsd fs9, 72(sp)\n"
++"    fsd fs10, 80(sp)\n"
++"    fsd fs11, 88(sp)\n"
++
++"    # save s0-s11 (96..191)\n"
++"    sd s0,  96(sp)\n"
++"    sd s1, 104(sp)\n"
++"    sd s2, 112(sp)\n"
++"    sd s3, 120(sp)\n"
++"    sd s4, 128(sp)\n"
++"    sd s5, 136(sp)\n"
++"    sd s6, 144(sp)\n"
++"    sd s7, 152(sp)\n"
++"    sd s8, 160(sp)\n"
++"    sd s9, 168(sp)\n"
++"    sd s10, 176(sp)\n"
++"    sd s11, 184(sp)\n"
++
++"    # save ra into its register slot (192) and double-write into PC slot (200)\n"
++"    sd ra, 192(sp)\n"
++"    sd ra, 200(sp)\n"
++
++"    # store current sp into *ofc (a0)\n"
++"    sd sp, 0(a0)\n"
++"    # switch sp to nfc (a1)\n"
++"    mv sp, a1\n"
++
++"    # restore fs0-fs11\n"
++"    fld fs0,  0(sp)\n"
++"    fld fs1,  8(sp)\n"
++"    fld fs2, 16(sp)\n"
++"    fld fs3, 24(sp)\n"
++"    fld fs4, 32(sp)\n"
++"    fld fs5, 40(sp)\n"
++"    fld fs6, 48(sp)\n"
++"    fld fs7, 56(sp)\n"
++"    fld fs8, 64(sp)\n"
++"    fld fs9, 72(sp)\n"
++"    fld fs10, 80(sp)\n"
++"    fld fs11, 88(sp)\n"
++
++"    # restore s0-s11\n"
++"    ld s0,  96(sp)\n"
++"    ld s1, 104(sp)\n"
++"    ld s2, 112(sp)\n"
++"    ld s3, 120(sp)\n"
++"    ld s4, 128(sp)\n"
++"    ld s5, 136(sp)\n"
++"    ld s6, 144(sp)\n"
++"    ld s7, 152(sp)\n"
++"    ld s8, 160(sp)\n"
++"    ld s9, 168(sp)\n"
++"    ld s10, 176(sp)\n"
++"    ld s11, 184(sp)\n"
++
++"    # vp (a2) becomes return value (a0) of resumed context\n"
++"    mv a0, a2\n"
++"    # restore ra from its register slot (192); on first entry from make it is finish\n"
++"    ld ra, 192(sp)\n"
++"    # load resumed PC from PC slot (200); on first entry from make it is the func\n"
++"    ld t0, 200(sp)\n"
++"    # pop context-data\n"
++"    addi sp, sp, 208\n"
++"    # jump to resumed PC\n"
++"    jr t0\n"
++".size   bthread_jump_fcontext,.-bthread_jump_fcontext\n"
++"# Mark that we don't need executable stack.\n"
++".section .note.GNU-stack,\"\",%progbits\n"
++);
++#endif
++
++#if defined(BTHREAD_CONTEXT_PLATFORM_linux_riscv64) && defined(BTHREAD_CONTEXT_COMPILER_gcc)
++__asm (
++".text\n"
++".align  3\n"
++".global bthread_make_fcontext\n"
++".type   bthread_make_fcontext, @function\n"
++"bthread_make_fcontext:\n"
++"    # align a0 (allocated stack top) to 16 bytes\n"
++"    andi a0, a0, -16\n"
++"    # reserve context-data\n"
++"    addi a0, a0, -208\n"
++
++"    # a2 == context-function entry; store as resumed PC (200)\n"
++"    sd a2, 200(a0)\n"
++"    # store finish as ra (192): when the context-function returns, 'ret' jumps\n"
++"    # to ra == finish\n"
++"    lla t0, finish\n"
++"    sd t0, 192(a0)\n"
++
++"    ret\n"
++"finish:\n"
++"    # exit code zero\n"
++"    li a0, 0\n"
++"    call _exit\n"
++".size   bthread_make_fcontext,.-bthread_make_fcontext\n"
++"# Mark that we don't need executable stack.\n"
++".section .note.GNU-stack,\"\",%progbits\n"
++);
++#endif
+diff --git a/src/bthread/context.h b/src/bthread/context.h
+index 8de85af..3f3485b 100644
+--- a/src/bthread/context.h
++++ b/src/bthread/context.h
+@@ -42,6 +42,9 @@
+         #elif __loongarch64
+             #define BTHREAD_CONTEXT_PLATFORM_linux_loongarch64
+             #define BTHREAD_CONTEXT_CALL_CONVENTION
++        #elif __riscv && (__riscv_xlen == 64)
++            #define BTHREAD_CONTEXT_PLATFORM_linux_riscv64
++            #define BTHREAD_CONTEXT_CALL_CONVENTION
+ 	#endif
+ 
+   #elif defined(__MINGW32__) || defined (__MINGW64__)
