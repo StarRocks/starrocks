@@ -20,16 +20,7 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.ha.FrontendNodeType;
-import com.starrocks.lake.Utils;
-import com.starrocks.persist.DropFrontendInfo;
->>>>>>> 22ea614 ([BugFix][RB-439] Fix failover, mixed-version and downgrade issues in the lake IDG index fast path (#83414))
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -42,12 +33,8 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.IndexDef;
-<<<<<<< HEAD
-=======
 import com.starrocks.system.BackendHbResponse;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.system.Frontend;
->>>>>>> 22ea614 ([BugFix][RB-439] Fix failover, mixed-version and downgrade issues in the lake IDG index fast path (#83414))
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AlterReplicaTask;

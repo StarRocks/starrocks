@@ -284,24 +284,6 @@ public class AlterJobV2CopyForPersistTest {
         assertFieldsEqual(dropJob, dropJob.copyForPersist(), "historySchema");
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * The index fast-path jobs copy the fields of their base class one by one into the persisted copy. A commit
-     * gtid missing from the FINISHED_REWRITING journal entry would make a new leader publish the commit
-     * versions under gtid 0.
-     */
-    @Test
-    public void testLakeTableIndexFastPathJobsCopyCommitGtid() throws Exception {
-        LakeTableAddIndexJob addJob = new LakeTableAddIndexJob();
-        setField(addJob, "commitGtid", 77L);
-        assertFieldsEqual(addJob, addJob.copyForPersist(), "commitGtid");
-
-        LakeTableDropIndexJob dropJob = new LakeTableDropIndexJob();
-        setField(dropJob, "commitGtid", 77L);
-        assertFieldsEqual(dropJob, dropJob.copyForPersist(), "commitGtid");
-    }
-
     /** Every journal entry must retain independent catalog definitions and DROP names. */
     @Test
     public void testLakeTableIndexFastPathJobsCopySubclassFields() throws Exception {
@@ -330,7 +312,6 @@ public class AlterJobV2CopyForPersistTest {
         return new LakeTableDropIndexJob(1L, 2L, 3L, "tbl", 1000L, List.of(-1L), List.of("ix_bm"), List.of("c2"));
     }
 
->>>>>>> 22ea614 ([BugFix][RB-439] Fix failover, mixed-version and downgrade issues in the lake IDG index fast path (#83414))
     @Test
     public void testLakeTableAlterMetaJobCopyForPersist() throws Exception {
         LakeTableAlterMetaJob job = newLakeTableAlterMetaJob();
