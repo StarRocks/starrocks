@@ -1,12 +1,14 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Connector for Apache Kafka のリリースノート・変更履歴。"
+products: [oss]
 ---
 
 # Releases of StarRocks Connector for Kafka
 
 ## Notifications
 
-**User guide:** [Load data using Kafka connector](https://docs.starrocks.io/docs/loading/Kafka-connector-starrocks/)
+**User guide:** [Load data using Kafka connector](../../loading/kafka/Kafka-connector-starrocks.md)
 
 **Source codes:** [starrocks-connector-for-kafka](https://github.com/StarRocks/starrocks-connector-for-kafka)
 
