@@ -1240,7 +1240,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Retry a lake publish batch that did not finish with only the transactions " +
             "of the previous attempt. Effective only when lake_enable_batch_publish_version is true.")
-    public static boolean lake_enable_batch_publish_retry_freeze = false;
+    public static boolean lake_enable_batch_publish_retry_freeze = true;
 
     @ConfField(mutable = true)
     public static int lake_batch_publish_max_version_num = 10;

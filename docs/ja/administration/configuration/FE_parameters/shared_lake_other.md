@@ -767,7 +767,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `lake_enable_batch_publish_retry_freeze`
 
-- デフォルト：false
+- デフォルト：true
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
