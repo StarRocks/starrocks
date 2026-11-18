@@ -219,7 +219,8 @@ void ExchangeSinkOperator::Channel::_on_chunk_buffer_appended(int32_t driver_seq
     const Chunk& chunk = *_chunks[driver_sequence];
     const size_t container = chunk.container_memory_usage();
     const size_t reference = chunk.reference_memory_usage(from, size);
-    const int64_t delta = static_cast<int64_t>(container) - static_cast<int64_t>(_chunk_container_usages[driver_sequence]) +
+    const int64_t delta = static_cast<int64_t>(container) -
+                          static_cast<int64_t>(_chunk_container_usages[driver_sequence]) +
                           static_cast<int64_t>(reference);
     _chunk_container_usages[driver_sequence] = container;
     _chunk_reference_usages[driver_sequence] += reference;
@@ -229,7 +230,8 @@ void ExchangeSinkOperator::Channel::_on_chunk_buffer_appended(int32_t driver_seq
 void ExchangeSinkOperator::Channel::_on_chunk_buffer_reset(int32_t driver_sequence) {
     // set_num_rows(0) destroys the referenced objects but keeps the containers' capacity.
     const size_t container = _chunks[driver_sequence]->container_memory_usage();
-    const int64_t delta = static_cast<int64_t>(container) - static_cast<int64_t>(_chunk_container_usages[driver_sequence]) -
+    const int64_t delta = static_cast<int64_t>(container) -
+                          static_cast<int64_t>(_chunk_container_usages[driver_sequence]) -
                           static_cast<int64_t>(_chunk_reference_usages[driver_sequence]);
     _chunk_container_usages[driver_sequence] = container;
     _chunk_reference_usages[driver_sequence] = 0;
