@@ -298,6 +298,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: 4
 * **Introduced in**: v3.2.5, v3.3.0
 
+### enable_exchange_sink_buffer_flush
+
+* **Description**: Whether to limit the memory that an exchange sink uses to buffer rows for a shuffle before they are sent. The exchange sink keeps one partial chunk per destination pipeline driver and normally sends it only when the chunk is full; when this variable is `true` and the partial chunks of a driver retain more memory than the BE configuration item `exchange_sink_buffer_flush_threshold_bytes`, they are sent immediately. Set it to `false` to restore the previous behavior for a session.
+* **Default**: true
+* **Introduced in**: -
+
+
 ### enable_force_rule_based_mv_rewrite
 
 * **Description**: Whether to enable query rewrite for queries against multiple tables in the optimizer's rule-based optimization phase. Enabling this feature will improve the robustness of the query rewrite. However, it will also increase the time consumption if the query misses the materialized view.

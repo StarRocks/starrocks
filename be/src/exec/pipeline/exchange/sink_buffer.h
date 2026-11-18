@@ -178,6 +178,12 @@ private:
     SinkContext& sink_ctx(int64_t instance_id) { return *_sink_ctxs[instance_id]; }
 
     std::atomic<int32_t> _total_in_flight_rpc = 0;
+    // Peak statistics exposed by update_profile(): requests waiting in the per-destination queues and
+    // requests already in flight.
+    std::atomic<int32_t> _peak_in_flight_rpc = 0;
+    std::atomic<int64_t> _num_buffered_requests = 0;
+    std::atomic<int64_t> _peak_buffered_requests = 0;
+    std::atomic<int64_t> _peak_buffered_bytes = 0;
     std::atomic<int32_t> _num_uncancelled_sinkers = 0;
     std::atomic<int32_t> _num_remaining_eos = 0;
 
