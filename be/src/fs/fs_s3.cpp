@@ -18,7 +18,9 @@
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
 #include <aws/core/auth/STSCredentialsProvider.h>
 #include <aws/core/client/SpecifiedRetryableErrorsRetryStrategy.h>
+#include <aws/core/http/HttpTypes.h>
 #include <aws/identity-management/auth/STSAssumeRoleCredentialsProvider.h>
+#include <aws/s3/S3Client.h>
 #include <aws/s3/model/CopyObjectRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
 #include <aws/s3/model/DeleteObjectsRequest.h>
@@ -448,6 +450,8 @@ public:
 
     StatusOr<SpaceInfo> space(const std::string& path) override;
 
+    StatusOr<std::string> presign_read(const std::string& path, int64_t expiration_seconds) override;
+
 private:
     Status iterate_dir_v1(const std::string& dir, const std::function<bool(std::string_view)>& cb);
     Status iterate_dir2_v1(const std::string& dir, const std::function<bool(DirEntry)>& cb);
@@ -591,6 +595,50 @@ StatusOr<SpaceInfo> S3FileSystem::space(const std::string& path) {
     return SpaceInfo{.capacity = std::numeric_limits<int64_t>::max(),
                      .free = std::numeric_limits<int64_t>::max(),
                      .available = std::numeric_limits<int64_t>::max()};
+}
+
+// Signature Version 4 limits the lifetime of a presigned URL to seven days.
+static constexpr int64_t kMaxPresignExpirationSeconds = 7 * 24 * 3600;
+
+// Whether |url| carries a SigV4 signature. Query parameter names are matched case-insensitively.
+static bool is_valid_presigned_url(std::string_view url) {
+    static constexpr std::string_view kSignatureParameter = "x-amz-signature=";
+    auto it = std::search(
+            url.begin(), url.end(), kSignatureParameter.begin(), kSignatureParameter.end(),
+            [](char actual, char expected) { return ::tolower(static_cast<unsigned char>(actual)) == expected; });
+    return it != url.end();
+}
+
+StatusOr<std::string> S3FileSystem::presign_read(const std::string& path, int64_t expiration_seconds) {
+    if (expiration_seconds <= 0 || expiration_seconds > kMaxPresignExpirationSeconds) {
+        return Status::InvalidArgument(fmt::format("S3: presign expiration must be between 1 and {} seconds, got {}",
+                                                   kMaxPresignExpirationSeconds, expiration_seconds));
+    }
+    // S3URI drops everything from the first '?' as a query string. Reading such a path fails with a missing
+    // object, but presigning it would silently grant access to a different object, so it is rejected.
+    if (path.find('?') != std::string::npos) {
+        return Status::InvalidArgument(fmt::format("S3: cannot presign a URI with a query string: {}", path));
+    }
+    S3URI uri;
+    if (!uri.parse(path)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
+    }
+    if (uri.key().empty()) {
+        return Status::InvalidArgument(fmt::format("S3: cannot presign a URI without an object key: {}", path));
+    }
+    auto client = new_s3client(uri, _options);
+    // A read is an HTTP GET of the object. Signing is a local computation: no request is sent.
+    const Aws::String url = client->GeneratePresignedUrl(uri.bucket(), uri.key(), Aws::Http::HttpMethod::HTTP_GET,
+                                                         static_cast<uint64_t>(expiration_seconds));
+    if (url.empty()) {
+        return Status::InternalError(fmt::format(
+                "S3: fail to presign {}: the endpoint could not be resolved or the request could not be signed", path));
+    }
+    // Without credentials the SDK returns an unsigned URL instead of reporting an error.
+    if (!is_valid_presigned_url(std::string_view(url.data(), url.size()))) {
+        return Status::InternalError(fmt::format("S3: fail to presign {}: no credentials to sign with", path));
+    }
+    return std::string(url.data(), url.size());
 }
 
 Status S3FileSystem::iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) {

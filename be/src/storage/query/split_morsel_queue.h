@@ -82,6 +82,9 @@ public:
     std::string name() const override { return "physical_split_morsel_queue"; }
     Type type() const override { return PHYSICAL_SPLIT; }
 
+    // An independent AND on the query's key-range union, applied before producing children.
+    void set_candidate_rowid_ranges(RowidRangeOptionPtr ranges) { _candidate_rowid_ranges = std::move(ranges); }
+
 private:
     bool _is_last_split_of_current_morsel();
 
@@ -118,6 +121,7 @@ private:
     SparseRangeIterator<> _segment_range_iter;
     // The number of unprocessed rows of the current segment.
     size_t _num_segment_rest_rows = 0;
+    RowidRangeOptionPtr _candidate_rowid_ranges;
 
     MemPool _mempool;
 };

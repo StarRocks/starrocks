@@ -23,6 +23,7 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.util.Attribute;
 import io.netty.util.ReferenceCountUtil;
+import io.netty.util.concurrent.ImmediateEventExecutor;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -165,7 +166,8 @@ public class HttpServerHandlerTest extends HttpServerTestUtils {
 
     /**
      * The SQL actions on a channel share its ConnectContext. Two pipelined requests must not run on it at
-     * once: the second starts only after the first has finished, whatever the executor's parallelism.
+     * once: the second starts only after the first has finished, whatever the executor's parallelism, since the
+     * requests of one connection are handled one at a time.
      */
     @Test
     public void testSqlRequestsOnOneChannelRunOneAtATime() throws Exception {
@@ -175,6 +177,7 @@ public class HttpServerHandlerTest extends HttpServerTestUtils {
         CountDownLatch releaseFirst = new CountDownLatch(1);
         AtomicInteger running = new AtomicInteger();
         AtomicInteger overlapped = new AtomicInteger();
+        CountDownLatch bothHandled = new CountDownLatch(2);
         BaseAction sqlAction = new BaseAction(controller) {
             @Override
             public boolean isSqlAction() {
@@ -198,6 +201,7 @@ public class HttpServerHandlerTest extends HttpServerTestUtils {
                     Thread.currentThread().interrupt();
                 } finally {
                     running.decrementAndGet();
+                    bothHandled.countDown();
                 }
             }
 
@@ -212,8 +216,10 @@ public class HttpServerHandlerTest extends HttpServerTestUtils {
         Mockito.when(attribute.get()).thenReturn(shared);
         Channel channel = Mockito.mock(Channel.class);
         Mockito.when(channel.attr(Mockito.same(HttpServerHandler.HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY))).thenReturn(attribute);
+        Mockito.when(channel.isActive()).thenReturn(true);
         ChannelHandlerContext context = Mockito.mock(ChannelHandlerContext.class);
         Mockito.when(context.channel()).thenReturn(channel);
+        Mockito.when(context.executor()).thenReturn(ImmediateEventExecutor.INSTANCE);
 
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
@@ -224,12 +230,235 @@ public class HttpServerHandlerTest extends HttpServerTestUtils {
             Thread.sleep(300);
             assertEquals(1, running.get(), "the second request waits for the first");
             releaseFirst.countDown();
+            // The second request goes to the executor only once the first is done.
+            assertTrue(bothHandled.await(5, TimeUnit.SECONDS));
             pool.shutdown();
             assertTrue(pool.awaitTermination(5, TimeUnit.SECONDS));
             assertEquals(0, overlapped.get(), "no two SQL requests of one channel ran at the same time");
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    private static DefaultFullHttpRequest get(String uri) {
+        return new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri);
+    }
+
+    /**
+     * A client that pipelines requests gets them handled one at a time, in the order sent. A synchronous action
+     * pipelined behind one still running on the executor used to answer at once on the event loop, inside the
+     * first response; it now waits until the first is done.
+     */
+    @Test
+    public void testPipelinedRequestWaitsForTheOneBefore() throws Exception {
+        ActionController controller = new ActionController();
+        MockAction streaming = new MockAction(controller, true);
+        MockAction health = new MockAction(controller, false);
+        controller.registerHandler(HttpMethod.GET, "/test/stream", streaming);
+        controller.registerHandler(HttpMethod.GET, "/test/health", health);
+        MockExecutor executor = new MockExecutor();
+        MockChannelHandlerContext context = createChannelHandlerContext();
+        HttpServerHandler handler = new HttpServerHandler(controller, executor);
+        DefaultFullHttpRequest first = get("/test/stream");
+        DefaultFullHttpRequest second = get("/test/health");
+
+        handler.channelRead(context, first);
+        handler.channelRead(context, second);
+
+        assertEquals(0, streaming.executeCount());
+        assertEquals(0, health.executeCount(), "the second request waits for the first");
+        assertEquals(1, ReferenceCountUtil.refCnt(second), "a waiting request is kept until it is handled");
+
+        executor.runOneTask();
+
+        assertEquals(1, streaming.executeCount());
+        assertEquals(1, health.executeCount(), "the second request runs once the first is done");
+        assertEquals(0, executor.pendingTaskCount());
+        assertEquals(0, ReferenceCountUtil.refCnt(first));
+        assertEquals(0, ReferenceCountUtil.refCnt(second));
+    }
+
+    /**
+     * Each pipelined request is handled by the action its own uri maps to, even when the next request on the
+     * connection is read before the executor gets to it.
+     */
+    @Test
+    public void testPipelinedAsyncRequestsAreEachHandledByTheirOwnAction() throws Exception {
+        ActionController controller = new ActionController();
+        MockAction first = new MockAction(controller, true);
+        MockAction second = new MockAction(controller, true);
+        controller.registerHandler(HttpMethod.GET, "/test/first", first);
+        controller.registerHandler(HttpMethod.GET, "/test/second", second);
+        MockExecutor executor = new MockExecutor();
+        MockChannelHandlerContext context = createChannelHandlerContext();
+        HttpServerHandler handler = new HttpServerHandler(controller, executor);
+
+        handler.channelRead(context, get("/test/first"));
+        handler.channelRead(context, get("/test/second"));
+        executor.runOneTask();
+
+        assertEquals(1, first.executeCount());
+        assertEquals(0, second.executeCount());
+
+        executor.runOneTask();
+
+        assertEquals(1, first.executeCount());
+        assertEquals(1, second.executeCount());
+    }
+
+    @Test
+    public void testRequestsWaitingWhenTheConnectionClosesAreReleased() throws Exception {
+        ActionController controller = new ActionController();
+        MockAction streaming = new MockAction(controller, true);
+        MockAction health = new MockAction(controller, false);
+        controller.registerHandler(HttpMethod.GET, "/test/stream", streaming);
+        controller.registerHandler(HttpMethod.GET, "/test/health", health);
+        MockExecutor executor = new MockExecutor();
+        MockChannelHandlerContext context = createChannelHandlerContext();
+        HttpServerHandler handler = new HttpServerHandler(controller, executor);
+        DefaultFullHttpRequest second = get("/test/health");
+
+        handler.channelActive(context);
+        handler.channelRead(context, get("/test/stream"));
+        handler.channelRead(context, second);
+        handler.channelInactive(context);
+
+        assertEquals(0, ReferenceCountUtil.refCnt(second));
+        executor.runOneTask();
+        assertEquals(1, streaming.executeCount());
+        assertEquals(0, health.executeCount(), "nothing is handled for a connection that is gone");
+    }
+
+    /**
+     * A client cannot pile requests up in memory behind a slow one: past a few waiting requests it loses the
+     * connection.
+     */
+    @Test
+    public void testTooManyWaitingRequestsCloseTheConnection() throws Exception {
+        ActionController controller = new ActionController();
+        MockAction streaming = new MockAction(controller, true);
+        MockAction health = new MockAction(controller, false);
+        controller.registerHandler(HttpMethod.GET, "/test/stream", streaming);
+        controller.registerHandler(HttpMethod.GET, "/test/health", health);
+        MockExecutor executor = new MockExecutor();
+        MockChannelHandlerContext context = createChannelHandlerContext();
+        HttpServerHandler handler = new HttpServerHandler(controller, executor);
+
+        handler.channelRead(context, get("/test/stream"));
+        for (int i = 0; i < 8; i++) {
+            handler.channelRead(context, get("/test/health"));
+        }
+        Mockito.verify(context, Mockito.never()).close();
+        DefaultFullHttpRequest ninth = get("/test/health");
+        handler.channelRead(context, ninth);
+
+        Mockito.verify(context).close();
+        assertEquals(0, ReferenceCountUtil.refCnt(ninth));
+        assertEquals(0, health.executeCount());
+    }
+
+    @Test
+    public void testWaitingRequestsOfAClosedConnectionAreNotHandled() throws Exception {
+        ActionController controller = new ActionController();
+        MockAction streaming = new MockAction(controller, true);
+        MockAction health = new MockAction(controller, false);
+        controller.registerHandler(HttpMethod.GET, "/test/stream", streaming);
+        controller.registerHandler(HttpMethod.GET, "/test/health", health);
+        MockExecutor executor = new MockExecutor();
+        MockChannelHandlerContext context = createChannelHandlerContext();
+        HttpServerHandler handler = new HttpServerHandler(controller, executor);
+        DefaultFullHttpRequest second = get("/test/health");
+
+        handler.channelRead(context, get("/test/stream"));
+        handler.channelRead(context, second);
+        // The connection goes away while the first request runs, before netty reports it inactive.
+        Mockito.when(context.channel().isActive()).thenReturn(false);
+        executor.runOneTask();
+
+        assertEquals(1, streaming.executeCount());
+        assertEquals(0, health.executeCount());
+        assertEquals(0, ReferenceCountUtil.refCnt(second));
+    }
+
+    @Test
+    public void testErrorInAWaitingRequestClosesTheConnection() throws Exception {
+        ActionController controller = new ActionController();
+        MockAction streaming = new MockAction(controller, true);
+        MockAction health = new MockAction(controller, false);
+        BaseAction broken = new BaseAction(controller) {
+            @Override
+            public boolean supportAsyncHandler() {
+                return false;
+            }
+
+            @Override
+            public void handleRequest(BaseRequest request) {
+                throw new AssertionError("broken action");
+            }
+
+            @Override
+            public void execute(BaseRequest request, BaseResponse response) {
+            }
+        };
+        controller.registerHandler(HttpMethod.GET, "/test/stream", streaming);
+        controller.registerHandler(HttpMethod.GET, "/test/broken", broken);
+        controller.registerHandler(HttpMethod.GET, "/test/health", health);
+        MockExecutor executor = new MockExecutor();
+        MockChannelHandlerContext context = createChannelHandlerContext();
+        HttpServerHandler handler = new HttpServerHandler(controller, executor);
+        DefaultFullHttpRequest third = get("/test/health");
+
+        handler.channelRead(context, get("/test/stream"));
+        handler.channelRead(context, get("/test/broken"));
+        handler.channelRead(context, third);
+        executor.runOneTask();
+
+        Mockito.verify(context).close();
+        assertEquals(0, health.executeCount(), "nothing more is handled on a connection being closed");
+        handler.channelInactive(context);
+        assertEquals(0, ReferenceCountUtil.refCnt(third));
+    }
+
+    @Test
+    public void testWaitingRequestWithABadUriIsAnswered() throws Exception {
+        ActionController controller = new ActionController();
+        MockAction streaming = new MockAction(controller, true);
+        controller.registerHandler(HttpMethod.GET, "/test/stream", streaming);
+        MockExecutor executor = new MockExecutor();
+        MockChannelHandlerContext context = createChannelHandlerContext();
+        HttpServerHandler handler = new HttpServerHandler(controller, executor);
+        DefaultFullHttpRequest bad = get("/test/%ZZ");
+
+        handler.channelRead(context, get("/test/stream"));
+        handler.channelRead(context, bad);
+        assertEquals(0, context.numResponses());
+        executor.runOneTask();
+
+        verifyResponse(context.pollResponse(), HttpResponseStatus.BAD_REQUEST, "Invalid request uri");
+        assertEquals(0, ReferenceCountUtil.refCnt(bad));
+    }
+
+    @Test
+    public void testWaitingRequestTheExecutorRejectsIsAnswered() throws Exception {
+        ActionController controller = new ActionController();
+        MockAction streaming = new MockAction(controller, true);
+        MockAction health = new MockAction(controller, false);
+        controller.registerHandler(HttpMethod.GET, "/test/stream", streaming);
+        controller.registerHandler(HttpMethod.GET, "/test/health", health);
+        MockExecutor executor = new MockExecutor();
+        MockChannelHandlerContext context = createChannelHandlerContext();
+        HttpServerHandler handler = new HttpServerHandler(controller, executor);
+
+        handler.channelRead(context, get("/test/stream"));
+        handler.channelRead(context, get("/test/stream"));
+        handler.channelRead(context, get("/test/health"));
+        executor.setRejectExecute(true);
+        executor.runOneTask();
+
+        // The second request cannot go to the executor: it is answered with an error, and the third still runs.
+        verifyResponse(context.pollResponse(), HttpResponseStatus.INTERNAL_SERVER_ERROR, "mock reject");
+        assertEquals(1, streaming.executeCount());
+        assertEquals(1, health.executeCount());
     }
 
     private void verifyResponse(Object response, HttpResponseStatus expectStatus, String expectContent) {

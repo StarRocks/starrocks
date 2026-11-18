@@ -184,7 +184,7 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
     public void testUnsupportedIcebergTypeReturnsUnknown() {
         // Unsupported V3 types should degrade to UNKNOWN_TYPE, not throw.
         // The query analyzer will reject queries on these columns at analysis time.
-        Assertions.assertTrue(fromIcebergType(Types.GeometryType.crs84()).isUnknown());
+        Assertions.assertTrue(fromIcebergType(Types.GeometryType.of("IGNF:ATI")).isUnknown());
         Assertions.assertTrue(fromIcebergType(Types.FixedType.ofLength(16)).isUnknown());
     }
 
@@ -205,6 +205,8 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
         Assertions.assertTrue(fromIcebergType(Types.VariantType.get()).isVariantType());
         Assertions.assertEquals(PrimitiveType.GEOGRAPHY,
                 fromIcebergType(Types.GeographyType.crs84()).getPrimitiveType());
+        Assertions.assertEquals(PrimitiveType.GEOMETRY,
+                fromIcebergType(Types.GeometryType.crs84()).getPrimitiveType());
     }
 
     @Test
@@ -232,7 +234,7 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
     public void testToFullSchemasDegradesToUnknownForUnsupportedType() {
         // Unsupported V3 types should degrade to UNKNOWN_TYPE, not throw,
         // so that queries not involving the column still work.
-        Types.NestedField field = Types.NestedField.optional(1, "geo_col", Types.GeometryType.crs84());
+        Types.NestedField field = Types.NestedField.optional(1, "geo_col", Types.GeometryType.of("IGNF:ATI"));
         Schema schema = new Schema(field);
 
         List<Column> columns = IcebergApiConverter.toFullSchemas(schema);

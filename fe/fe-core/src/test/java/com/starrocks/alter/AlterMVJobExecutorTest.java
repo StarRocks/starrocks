@@ -148,10 +148,9 @@ public class AlterMVJobExecutorTest {
 
     @Test
     public void testAlterMvOrderByExecutorRejectsUnknownColumn() {
-        // AlterMVJobExecutor#resolveSortKey re-validates column existence independently of the earlier
-        // AlterMVClauseAnalyzerVisitor gate (defense-in-depth against the schema changing between analyze
-        // and execute). Calling process() directly, as this test does, skips that earlier analyzer gate
-        // entirely, so it exercises resolveSortKey's own check in isolation.
+        // Calling process() directly, as this test does, skips the statement-level analyzer gate. The executor
+        // analyzes the clause again on the view it locked, so that re-analysis rejects the unknown column
+        // before resolveSortKey is reached.
         ReorderColumnsClause clause = new ReorderColumnsClause(List.of("no_such_col"), null, null, NodePosition.ZERO);
         AlterMaterializedViewStmt stmt = new AlterMaterializedViewStmt(mvTableRef(), clause, NodePosition.ZERO);
 

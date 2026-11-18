@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN CANCEL REPAIR は、指定されたテーブルまたはパーティションに対する修復操作の優先スケジュールをキャンセルします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN CANCEL REPAIR

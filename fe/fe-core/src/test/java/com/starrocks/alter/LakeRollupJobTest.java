@@ -22,6 +22,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
@@ -31,10 +32,14 @@ import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.PartitionIdentifier;
+import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
@@ -49,6 +54,7 @@ import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
@@ -68,6 +74,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -430,6 +437,72 @@ public class LakeRollupJobTest {
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, lakeRollupJob3.getJobState());
     }
 
+    /**
+     * StarRocksTest#12647: the base table does not compact while the rollup waits for earlier transactions. Once a
+     * partition's compaction score is above lake_compaction_score_upper_bound, every commit into it is rejected, the
+     * commits of those transactions included, so the job is cancelled and the table is NORMAL again.
+     */
+    @Test
+    public void testCancelledWhileWaitingTxnOnceCommitsAreRejected() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_table_rejecting\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    k3 int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2022-02-01'),('2022-02-16'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3;");
+        LakeRollupJob job = createJob(
+                "create materialized view mv_rejecting as select k2, k1 from base_table_rejecting order by k2;");
+        OlapTable baseTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(DB).getTable("base_table_rejecting");
+        long txnId = ConcurrentLoad.begin(db, baseTable);
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+
+        PhysicalPartition physicalPartition = baseTable.getAllPhysicalPartitions().iterator().next();
+        long externalPinVersion = physicalPartition.getVisibleVersion();
+        physicalPartition.setMinRetainVersion(externalPinVersion);
+        PartitionIdentifier partition =
+                new PartitionIdentifier(job.getDbId(), baseTable.getId(), physicalPartition.getId());
+        CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        long oldUpperBound = Config.lake_compaction_score_upper_bound;
+        Config.lake_enable_ingest_slowdown = true;
+        Config.lake_compaction_score_upper_bound = 100;
+        try {
+            // At the bound commits still go through, and the job keeps waiting.
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 100.0));
+            job.runWaitingTxnJob();
+            Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 101.0));
+            // Run the job as the rollup handler does: for a rollup, the handler returns the table to NORMAL once the
+            // job is done (MaterializedViewHandler#onJobDone), not the job's own cancel.
+            MaterializedViewHandler rollupHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
+            rollupHandler.addAlterJobV2(job);
+            rollupHandler.runAfterLeaseValid();
+            Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+            Assertions.assertTrue(job.errMsg.contains("partition " + physicalPartition.getId()), job.errMsg);
+            Assertions.assertTrue(job.errMsg.contains("lake_compaction_score_upper_bound 100"), job.errMsg);
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, baseTable.getState());
+            Assertions.assertEquals(externalPinVersion, physicalPartition.getMinRetainVersion());
+        } finally {
+            physicalPartition.setMinRetainVersion(0);
+            GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_compaction_score_upper_bound = oldUpperBound;
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(0.0, 0.0, 0.0));
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), txnId, "test done");
+        }
+    }
+
     @Test
     public void testLightWeightTabletCreationSkipsSendTask() throws Exception {
         starRocksAssert.withTable("CREATE TABLE base_table_lw\n" +
@@ -685,7 +758,10 @@ public class LakeRollupJobTest {
         Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
         Assertions.assertTrue(job.rollupBatchTask.getTaskNum() > 0);
 
+        PhysicalPartition partition = baseTable.getPhysicalPartitions().iterator().next();
+        Assertions.assertEquals(partition.getVisibleVersion(), partition.getMinRetainVersion());
         Assertions.assertTrue(job.cancel("cancel"));
+        Assertions.assertEquals(0, partition.getMinRetainVersion());
 
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
         assertPruned(job);
@@ -739,6 +815,70 @@ public class LakeRollupJobTest {
         }
     }
 
+    /**
+     * A load that commits while the job builds the rollup takes a version below the one the job commits, so the
+     * gtid that labels the job's version must be drawn after the load's: when the job reserves the version, and
+     * journaled with the reservation so that a new leader publishes the same gtid. The WAITING_TXN entry carries
+     * a gtid as well, so that an older FE resuming the job from it still publishes a positive one.
+     */
+    @Test
+    public void testCommitVersionGtid() throws Exception {
+        new MockUp<LakeRollupJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+        List<TxnInfoPB> publishedTxns = new CopyOnWriteArrayList<>();
+        List<Long> publishedVersions = new CopyOnWriteArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       ComputeResource computeResource, boolean useAggregatePublish,
+                                       boolean isRetryPublish) {
+                publishedTxns.add(txnInfo);
+                publishedVersions.add(newVersion);
+            }
+        };
+        ConcurrentLoad.holdPublishDaemon();
+        starRocksAssert.withTable("CREATE TABLE base_table_gtid (k1 date, k2 int, k3 int) "
+                + "DISTRIBUTED BY HASH(k2) BUCKETS 3 PROPERTIES('file_bundling' = 'false')");
+        OlapTable baseTable = (OlapTable) db.getTable("base_table_gtid");
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        LakeRollupJob job = createJob("create materialized view mv_gtid as select k2, k1 from base_table_gtid order by k2;");
+
+        job.runPendingJob();
+        job.runWaitingTxnJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        TransactionState load = ConcurrentLoad.commit(db, baseTable);
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        ConcurrentLoad.makeVisible(db, load);
+        runToFinished(job);
+
+        long loadVersion = ConcurrentLoad.versionIn(load, baseTable,
+                baseTable.getAllPhysicalPartitions().iterator().next().getId());
+        Assertions.assertFalse(publishedTxns.isEmpty());
+        Assertions.assertEquals(Set.of(loadVersion + 1), Set.copyOf(publishedVersions));
+        // The rollup tablets and the base tablets advance to the same version under one gtid.
+        Set<Long> publishedGtids = publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet());
+        Assertions.assertEquals(1, publishedGtids.size(), publishedGtids.toString());
+        long commitGtid = publishedGtids.iterator().next();
+        Assertions.assertTrue(load.getGlobalTransactionId() > 0);
+        Assertions.assertTrue(commitGtid > load.getGlobalTransactionId(),
+                "commit version gtid " + commitGtid + " is not after the gtid " + load.getGlobalTransactionId()
+                        + " of the load committed below it");
+
+        List<LakeRollupJob> entries = readJournaledEntries(job.getJobId());
+        LakeRollupJob waitingTxnEntry = entries.stream()
+                .filter(entry -> entry.getJobState() == AlterJobV2.JobState.WAITING_TXN).findFirst().orElseThrow();
+        Assertions.assertTrue(waitingTxnEntry.commitGtid > 0);
+        LakeRollupJob finishedRewritingEntry = entries.stream()
+                .filter(entry -> entry.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING)
+                .findFirst().orElseThrow();
+        Assertions.assertEquals(commitGtid, finishedRewritingEntry.commitGtid);
+    }
+
     @Test
     public void testFailedAddRollupRemovesTabletsOfBuiltClauses() throws Exception {
         OlapTable baseTable = createBaseTable("base_table_add_rollup_fails");
@@ -752,6 +892,53 @@ public class LakeRollupJobTest {
 
         Assertions.assertEquals(tabletCountBefore, invertedIndex.getTabletCount());
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, baseTable.getState());
+    }
+
+    @Test
+    public void testPublishRetrySetsIsRetryPublishPerPartition() throws Exception {
+        createBaseTable("base_table_publish_retry");
+        LakeRollupJob job = createJob("create materialized view mv_publish_retry as "
+                + "select k2, k1 from base_table_publish_retry order by k2;");
+        new MockUp<LakeRollupJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+        job.runPendingJob();
+        job.runWaitingTxnJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        // The table has two partitions. The first attempt fails on the first partition's request, so the second
+        // partition is never sent: the next attempt is a retry for the first partition only.
+        List<Boolean> flags = new ArrayList<>();
+        AtomicBoolean failSend = new AtomicBoolean(true);
+        new MockUp<Utils>() {
+            @Mock
+            public void createSubRequestForAggregatePublish(List<com.starrocks.catalog.Tablet> tablets,
+                    List<com.starrocks.proto.TxnInfoPB> txnInfos, long baseVersion, long newVersion,
+                    Map<com.starrocks.system.ComputeNode, List<Long>> nodeToTablets, ComputeResource computeResource,
+                    AggregatePublishVersionRequest request, boolean preferSharedInitialMetadata,
+                    boolean isRetryPublish) {
+                flags.add(isRetryPublish);
+            }
+
+            @Mock
+            public void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request,
+                    long baseVersion, ComputeResource computeResource,
+                    Map<Long, Double> compactionScores,
+                    Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+                    java.util.List<com.starrocks.proto.VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
+                if (failSend.getAndSet(false)) {
+                    throw new RuntimeException("injected publish failure");
+                }
+            }
+        };
+        Assertions.assertFalse(job.lakePublishVersion());
+        Assertions.assertTrue(job.lakePublishVersion());
+        // Rollup tablets then origin tablets of each partition.
+        Assertions.assertEquals(List.of(false, false, true, true, false, false), flags);
     }
 
     private static OlapTable createBaseTable(String tableName) throws Exception {

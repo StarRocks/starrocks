@@ -119,6 +119,8 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     private final ComputeResource loadComputeResource;
     // Non-null only for a pipeline built by forDerivedBoundaries; null for every sampled pipeline.
     private final DerivedBoundarySource derivedBoundarySource;
+    // The reason the derived preSubmit returned no job, already recorded in the skip metric; null otherwise.
+    private SkipReason derivedSkipReason;
 
     public DefaultPreSplitPipeline(
             MetaTierSampler metaTierSampler,
@@ -290,7 +292,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         recordSamplerInvocation();
 
         int requestedTabletCount = TabletPreSplitCoordinator.selectPreSplitTabletCount(
-                new Estimates(fileTotalBytes, 0L), activeComputeNodeCount);
+                new Estimates(fileTotalBytes, 0L), activeComputeNodeCount, table);
 
         Map<Long, List<TabletRange>> oldTabletIdToRanges = new LinkedHashMap<>();
         for (IndexPreSplitTarget indexTarget : indexTargets) {
@@ -329,7 +331,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         PreSplitProfile.recordSourceTier(TIER_LABEL_DERIVED_TIER);
         PreSplitProfile.recordEstimatedInputBytes(fileTotalBytes);
         int requestedTabletCount = TabletPreSplitCoordinator.selectPreSplitTabletCount(
-                new Estimates(fileTotalBytes, 0L), activeComputeNodeCount);
+                new Estimates(fileTotalBytes, 0L), activeComputeNodeCount, table);
 
         Map<Long, List<TabletRange>> oldTabletIdToRanges = new LinkedHashMap<>();
         try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
@@ -339,8 +341,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
                 if (derived.skipReason() != null) {
                     LOG.info("Sample-Based Tablet Pre-Split: derived tier produced no boundaries for table {}: {}",
                             table.getName(), derived.skipReason());
-                    PreSplitMetrics.recordEligibilitySkip(derived.skipReason());
-                    return Optional.empty();
+                    return skipDerived(derived.skipReason());
                 }
                 List<Tuple> boundaries = derived.boundaries().getBoundaries();
                 validateDerivedBoundaries(boundaries, indexTarget.sortKey());
@@ -356,8 +357,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         } catch (StarRocksException | RuntimeException derivationFailed) {
             LOG.warn("Sample-Based Tablet Pre-Split: derived boundaries unusable for table {}",
                     table.getName(), derivationFailed);
-            PreSplitMetrics.recordEligibilitySkip(SkipReason.DERIVATION_FAILED);
-            return Optional.empty();
+            return skipDerived(SkipReason.DERIVATION_FAILED);
         }
         // Job construction is reported separately from derivation, because by here the cuts ARE derived:
         // the factory rejects on table state, table type or colocate stability, none of which say anything
@@ -368,15 +368,29 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
             Optional<PreparedReshardJob> preparedJob = buildPreparedJob(oldTabletIdToRanges);
             if (preparedJob.isEmpty()) {
                 // Not "no useful cuts" -- cuts were derived. The visible-index set moved under us.
-                PreSplitMetrics.recordEligibilitySkip(SkipReason.STALE_CATALOG_STATE);
+                return skipDerived(SkipReason.STALE_CATALOG_STATE);
             }
             return preparedJob;
         } catch (StarRocksException | RuntimeException cannotBuildJob) {
             LOG.warn("Sample-Based Tablet Pre-Split: derived cuts could not be turned into a job for table {}",
                     table.getName(), cannotBuildJob);
-            PreSplitMetrics.recordEligibilitySkip(SkipReason.SUBMIT_FAILED);
-            return Optional.empty();
+            return skipDerived(SkipReason.SUBMIT_FAILED);
         }
+    }
+
+    /**
+     * Records why the derived preSubmit produces no job and keeps the reason, so the coordinator reports it as
+     * the outcome instead of the generic {@link SkipReason#NO_USEFUL_CUTS}.
+     */
+    private Optional<PreparedReshardJob> skipDerived(SkipReason reason) {
+        PreSplitMetrics.recordEligibilitySkip(reason);
+        derivedSkipReason = reason;
+        return Optional.empty();
+    }
+
+    @Override
+    public SkipReason emptyPreSubmitReason() {
+        return derivedSkipReason != null ? derivedSkipReason : SkipReason.NO_USEFUL_CUTS;
     }
 
     /**
@@ -546,7 +560,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
                 PreSplitProfile.Phase.PARTITION_AND_BOUNDARY_PLANNING)) {
             result = BoundaryPlanner.planRowQuantileBoundaries(
-                    sampleSet, effectiveTabletCount(sampleSet, requestedTabletCount, activeComputeNodeCount),
+                    sampleSet, effectiveTabletCount(sampleSet, requestedTabletCount, activeComputeNodeCount, table),
                     request.getSortKey());
         }
         return new TierOutcome(result, TIER_LABEL_DATA_TIER);
@@ -569,12 +583,12 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
      * than collapsing to the two-tablet floor on no evidence.
      */
     private static int effectiveTabletCount(SampleSet sampleSet, int requestedTabletCount,
-                                            int activeComputeNodeCount) {
+                                            int activeComputeNodeCount, OlapTable table) {
         Estimates sampledEstimates = sampleSet.getEstimates();
         if (sampledEstimates == null || sampledEstimates.totalBytes() <= 0L) {
             return requestedTabletCount;
         }
-        return TabletPreSplitCoordinator.selectPreSplitTabletCount(sampledEstimates, activeComputeNodeCount);
+        return TabletPreSplitCoordinator.selectPreSplitTabletCount(sampledEstimates, activeComputeNodeCount, table);
     }
 
     /**

@@ -547,6 +547,19 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
                     f"key column '{col_list[last_key_col_index].name}'."
                 )
 
+    def _refresh_clause_for_server(self, refresh: str, object_name: str) -> str:
+        rendered = utils.render_refresh_for_server(refresh, self.dialect.server_version_info or ())
+        if rendered != refresh and utils.is_untimed_async_refresh(refresh):
+            import warnings
+
+            warnings.warn(
+                f"REFRESH ASYNC without EVERY is rejected from StarRocks 26.2 on; it was sent as "
+                f"REFRESH ON_CHANGE for '{object_name}'. Declare ON_CHANGE in the metadata instead.",
+                DeprecationWarning,
+                stacklevel=4,
+            )
+        return rendered
+
     def post_create_table(self, table: sa_schema.Table, **kw: Any) -> str:
         """
         Appends StarRocks-specific clauses to a CREATE TABLE or CREATE MATERIALIZED VIEW statement.
@@ -623,6 +636,19 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
                 )
                 distributed_by = starrocks_distribution
 
+        if distributed_by and utils.is_range_distribution(distributed_by):
+            # Range distribution has no DISTRIBUTED BY syntax: StarRocks applies it when the clause
+            # is omitted from a table that declares a key type or ORDER BY.
+            parsed_distribution = StarRocksTableDefinitionParser.parse_distribution(distributed_by)
+            if parsed_distribution and parsed_distribution.buckets is not None:
+                logger.warning(
+                    "Table %r: BUCKETS is ignored for RANGE distribution, which has no bucket count.", table.name)
+            if not key_desc and not opts.get(TableInfoKey.ORDER_BY) and not opts.get(TableInfoKey.REFRESH):
+                logger.warning(
+                    "Table %r: RANGE distribution requires a key type or ORDER BY; without one, "
+                    "StarRocks creates the table with RANDOM distribution.", table.name)
+            distributed_by = None
+
         if distributed_by:
             table_opts.append(f'DISTRIBUTED BY {distributed_by}')
 
@@ -633,7 +659,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
 
         # Handle MV-specific REFRESH clause
         if refresh := opts.get(TableInfoKey.REFRESH):
-            table_opts.append(f"REFRESH {str(refresh)}")
+            table_opts.append(f"REFRESH {self._refresh_clause_for_server(str(refresh), table.name)}")
 
         # Properties
         properties = opts.get(TableInfoKey.PROPERTIES)
@@ -1073,7 +1099,8 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
 
         # ALTER REFRESH
         if alter.refresh is not None:
-            statements.append(f"ALTER MATERIALIZED VIEW {mv_name} REFRESH {alter.refresh}")
+            refresh = self._refresh_clause_for_server(str(alter.refresh), alter.mv_name)
+            statements.append(f"ALTER MATERIALIZED VIEW {mv_name} REFRESH {refresh}")
 
         # ALTER PROPERTIES
         if alter.properties is not None:
@@ -1201,6 +1228,10 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         """Compile ALTER TABLE DISTRIBUTED BY DDL for StarRocks."""
         # TODO:
         table_name = format_table_name(self, alter.table_name, alter.schema)
+        if utils.is_range_distribution(alter.distribution_method):
+            raise exc.CompileError(
+                f"Cannot ALTER table {table_name} to RANGE distribution: StarRocks has no "
+                "DISTRIBUTED BY RANGE syntax. Range distribution can only be set when the table is created.")
         distribution_clause = f"DISTRIBUTED BY {alter.distribution_method}"
         if alter.buckets is not None:
             distribution_clause += f" BUCKETS {alter.buckets}"

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回指定列所有值的总和，忽略NULL值并支持DISTINCT运算符。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 

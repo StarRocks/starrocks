@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DATE 型の値の範囲と形式、テーブル作成時の使用方法。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import DateTip from '../../../_assets/commonMarkdown/dateTimeTip.mdx'

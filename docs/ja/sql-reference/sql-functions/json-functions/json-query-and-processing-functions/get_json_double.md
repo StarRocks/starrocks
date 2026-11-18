@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定されたパスからJSON文字列内の浮動小数点値を抽出します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # get_json_double

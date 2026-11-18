@@ -152,7 +152,6 @@ TEST_F(MysqlResultWriterTest, geography_matches_varbinary_output) {
     desc.type.coordinate_system = GEO_COORDINATE_SYSTEM_SPHERICAL;
     desc.type.edge_algorithm = GEO_EDGE_ALGORITHM_SPHERICAL;
     desc.type.crs = "OGC:CRS84";
-    desc.storage.encoding = GEO_ENCODING_WKB;
     auto geo_type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, desc.type);
 
     for (bool binary : {false, true}) {

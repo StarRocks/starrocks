@@ -46,6 +46,7 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTableHelper;
+import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.planner.expression.ExprToThrift;
@@ -202,7 +203,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         // and getInfo dereferences the field, so fresh-empty rather than null. No AgentTaskQueue
         // cleanup needed - the demotion drain (abandonInFlightAgentTasks) already emptied the
         // queue before this hook runs, which is also why abandonCreateReplicaTasks() below just
-        // clears the PENDING-phase transients. watershedTxnId/Gtid stay - they are durable with
+        // clears the PENDING-phase transients. watershedTxnId and commitGtid stay - they are durable with
         // the WAITING_TXN entry, and runPendingJob reassigns them unconditionally at PENDING.
         schemaChangeBatchTask = new AgentBatchTask();
         abandonCreateReplicaTasks();
@@ -522,6 +523,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
      */
     @Override
     protected void onComputeResourceUnavailable() {
+        super.onComputeResourceUnavailable();
         if (jobState != JobState.PENDING || createReplicaLatch == null) {
             return;
         }
@@ -550,7 +552,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             OlapTable table = getTableOrThrow();
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             watershedTxnId = getNextTransactionId();
-            watershedGtid = getNextGtid();
+            // Only for an older FE taking the job over after a downgrade; this FE redraws it when reserving versions.
+            commitGtid = getNextGtid();
             addShadowIndexToCatalog(table, watershedTxnId);
         }
 
@@ -724,6 +727,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         try {
             if (!isPreviousLoadFinished(dbId, tableId, watershedTxnId)) {
                 LOG.info("wait transactions before {} to be finished, schema change job: {}", watershedTxnId, jobId);
+                LakeAlterWaitGuard.cancelIfCommitsRejected(this, watershedTxnId);
                 return;
             }
         } catch (AnalysisException e) {
@@ -879,7 +883,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     }
                 }
 
-                physicalPartition.setMinRetainVersion(visibleVersion);
+                pinVersionForRewrite(physicalPartition, visibleVersion);
 
             } // end for partitions
         }
@@ -920,11 +924,13 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
             OlapTable table = getTableOrThrow();
+            // Same lock as the version reservation, so the gtid falls between those of commits before and after.
+            commitGtid = getNextGtid();
             commitVersionMap = new HashMap<>();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Preconditions.checkNotNull(physicalPartition, physicalPartitionId);
-                physicalPartition.setMinRetainVersion(0);
+                releaseRewriteVersionPin(physicalPartition);
                 long commitVersion = physicalPartition.getNextVersion();
                 commitVersionMap.put(physicalPartitionId, commitVersion);
                 LOG.debug("commit version of partition {} is {}. jobId={}", physicalPartitionId, commitVersion, jobId);
@@ -1011,32 +1017,27 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
     protected boolean lakePublishVersion() {
         try {
-            TxnInfoPB txnInfo = new TxnInfoPB();
-            txnInfo.txnId = watershedTxnId;
-            txnInfo.combinedTxnLog = false;
-            txnInfo.txnType = TxnTypePB.TXN_NORMAL;
-            txnInfo.commitTime = finishedTimeMs / 1000;
-            txnInfo.gtid = watershedGtid;
+            TxnInfoPB txnInfo = TxnInfoHelper.forJobPublish(watershedTxnId, TxnTypePB.TXN_NORMAL, finishedTimeMs,
+                    commitGtid);
 
             // txnId is -1 means that BE do nothing, just upgrade the tablet_meta version
-            TxnInfoPB originTxnInfo = new TxnInfoPB();
-            originTxnInfo.txnId = -1L;
-            originTxnInfo.combinedTxnLog = false;
-            originTxnInfo.commitTime = finishedTimeMs / 1000;
-            originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
-            originTxnInfo.gtid = watershedGtid;
+            TxnInfoPB originTxnInfo = TxnInfoHelper.forJobPublish(-1L, TxnTypePB.TXN_EMPTY, finishedTimeMs,
+                    commitGtid);
 
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
                 long commitVersion = commitVersionMap.get(physicalPartitionId);
+                // A retry lets the tablets an earlier attempt already published answer from storage.
+                boolean isRetryPublish = getAndMarkLakePublishSent(physicalPartitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                     if (!isFileBundling) {
                         Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, computeResource,
-                                isFileBundling);
+                                isFileBundling, isRetryPublish);
                     } else {
                         Utils.createSubRequestForAggregatePublish(shadowIndex.getTablets(),
-                                Lists.newArrayList(txnInfo), 1, commitVersion, null, computeResource, request);
+                                Lists.newArrayList(txnInfo), 1, commitVersion, null, computeResource, request,
+                                false, isRetryPublish);
                     }
                 }
 
@@ -1055,10 +1056,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
                 if (!isFileBundling) {
                     Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1, commitVersion, 
-                            computeResource, isFileBundling);
+                            computeResource, isFileBundling, isRetryPublish);
                 } else {
                     Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo),
-                            commitVersion - 1, commitVersion, null, computeResource, request);
+                            commitVersion - 1, commitVersion, null, computeResource, request, false, isRetryPublish);
                 }
 
                 if (isFileBundling) {
@@ -1133,7 +1134,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             }
             tabletsByPartition.put(physicalPartitionId, regularTablets);
         }
-        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, watershedGtid, commitVersionMap,
+        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, commitGtid, commitVersionMap,
                 tabletsByPartition, computeResource, useAggregatePublish);
     }
 
@@ -1203,7 +1204,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             this.indexChange = other.indexChange;
             this.indexes = other.indexes;
             this.watershedTxnId = other.watershedTxnId;
-            this.watershedGtid = other.watershedGtid;
+            this.commitGtid = other.commitGtid;
             this.startTime = other.startTime;
             this.commitVersionMap = other.commitVersionMap;
             this.indexSortKeyIdxes = other.indexSortKeyIdxes;
@@ -1244,6 +1245,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     advanceVisibleVersionForForceSkip(table, commitVersionMap);
                 }
                 removeShadowIndex(table);
+                GlobalStateMgr.getCurrentState().getCompactionMgr().resumeCompactionAfterAlter(dbId, table);
             } else {
                 throw new RuntimeException("unknown job state '{}'" + jobState.name());
             }
@@ -1273,7 +1275,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
             PhysicalPartition partition = table.getPhysicalPartition(physicalPartitionId);
             Preconditions.checkNotNull(partition, physicalPartitionId);
-            partition.setMinRetainVersion(0);
+            releaseRewriteVersionPin(partition);
             for (MaterializedIndex shadowIdx : physicalPartitionIndexMap.row(physicalPartitionId).values()) {
                 partition.deleteMaterializedIndexByMetaId(shadowIdx.getMetaId());
             }
@@ -1423,6 +1425,12 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         // See LakeTableAlterMetaJobBase.cancelImpl for the same pattern.
         boolean advanceVersionForForce = force && jobState == JobState.FINISHED_REWRITING && tableExists();
         if (advanceVersionForForce) {
+            // Refuse (operator retries) while an earlier load is not yet visible:
+            // see AlterJobV2#readyToForceSkipPublish.
+            if (!readyToForceSkipPublish(commitVersionMap)) {
+                return false;
+            }
+            markLakeNoOpPublishSent();
             if (!lakePublishVersionWithSkip(errMsg)) {
                 return false;
             }
@@ -1457,6 +1465,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                         advanceVisibleVersionForForceSkip(table, commitVersionMap);
                     }
                     removeShadowIndex(table);
+                    GlobalStateMgr.getCurrentState().getCompactionMgr().resumeCompactionAfterAlter(dbId, table);
                 }
             }
         });
@@ -1489,6 +1498,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
      */
     @Override
     public void pruneMeta() {
+        super.pruneMeta();
         physicalPartitionIndexTabletMap = HashBasedTable.create();
         physicalPartitionIndexMap = HashBasedTable.create();
         indexMetaIdToSchema = Maps.newHashMap();

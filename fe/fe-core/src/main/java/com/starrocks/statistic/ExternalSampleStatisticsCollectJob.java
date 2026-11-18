@@ -115,6 +115,7 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
         }
         flushInsertStatisticsData(context, true);
         cleanupStaleRawKeyedRows(context, jobId);
+        cleanupDroppedPartitionStats(context, jobId);
         reportToleratedFailures(analyzeStatus, jobId);
     }
 

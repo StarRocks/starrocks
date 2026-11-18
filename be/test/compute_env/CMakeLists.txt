@@ -76,6 +76,7 @@ add_executable(compute_env_test
         data_stream_mgr_test.cpp
         fragment_dict_state_test.cpp
         load/load_stream_mgr_test.cpp
+        load/stream_context_mgr_test.cpp
         load/stream_load_context_test.cpp
         load/stream_load_metrics_test.cpp
         load/stream_load_pipe_test.cpp
@@ -89,6 +90,7 @@ add_executable(compute_env_test
         query/partition_scan_range_pruner_test.cpp
         query/query_scan_metrics_test.cpp
         query/query_scan_helpers_test.cpp
+        query/query_remote_read_test.cpp
         query/query_runtime_state_test.cpp
         query_cache_test.cpp
         rejected_record_writer_test.cpp

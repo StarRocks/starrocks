@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks で作成されたリポジトリを表示します。"
+products: [oss, enterprise, anywhere]
 ---
 
 # SHOW REPOSITORIES

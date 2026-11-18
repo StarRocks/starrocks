@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "AWS IAM ポリシーが宣言するある AWS リソースに対する一連の権限について説明。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # AWS IAM ポリシー

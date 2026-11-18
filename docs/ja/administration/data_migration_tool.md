@@ -2,6 +2,7 @@
 sidebar_position: 50
 displayed_sidebar: docs
 description: "StarRocks コミュニティ提供のクロスクラスターデータ移行ツールを使用して異なるクラスター間のデータ移行を実施。"
+products: [oss, enterprise, anywhere]
 ---
 
 import Tabs from '@theme/Tabs';
@@ -179,11 +180,13 @@ Range 分散テーブルの移行は、共有データクラスター間での�
    enable_execute_script_on_frontend = true
    ```
 
-3. ターゲットクラスターでは、目標サイズを非常に大きな値に設定して、サイズによってトリガーされる Tablet の自動分割を抑止します。
+3. ターゲットクラスターでは、目標サイズを `0` に設定して、Tablet の自動分割と自動マージを無効にします。
 
    ```SQL
-   ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "9223372036854775807");
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "0");
    ```
+
+   非常に大きな値では代用できません。移行ツールはソーステーブルの定義からターゲットテーブルを作成するため、ソーステーブルに設定されたテーブルプロパティ `tablet_reshard_target_size` はターゲットテーブルにも引き継がれ、そのテーブルでは大きな値より優先されます。`0` を設定すると、すべてのテーブルで自動分割と自動マージが無効になります。移行ツールが送信する分割は正確な境界を使用するため、この設定には依存しません。
 
 4. ツールを起動する前に、ソースクラスターとターゲットクラスターで次のクエリを個別に実行します。
 

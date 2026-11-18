@@ -2693,7 +2693,7 @@ build_xxhash() {
         "${TP_INSTALL_DIR}/lib/pkgconfig/libxxhash.pc"
 
     "${CMAKE_CMD}" -G "${CMAKE_GENERATOR}" \
-        -S cmake_unofficial -B "${BUILD_DIR}" \
+        -S build/cmake -B "${BUILD_DIR}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
         -DCMAKE_INSTALL_LIBDIR=lib \

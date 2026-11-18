@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "16 バイト符号付き整数型で BIGINT の範囲を超える数値を格納。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # LARGEINT

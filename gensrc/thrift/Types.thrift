@@ -587,6 +587,9 @@ struct TUserIdentity {
     3: optional bool is_domain
     4: optional bool is_ephemeral
     5: optional TUserRoles current_role_ids
+    // The groups of the session (directory memberOf, token claims, group providers), so that an FE rebuilding the
+    // caller from this identity also grants the roles mapped to those groups.
+    6: optional list<string> groups
 }
 
 const i32 TSNAPSHOT_REQ_VERSION1 = 3; // corresponding to alpha rowset

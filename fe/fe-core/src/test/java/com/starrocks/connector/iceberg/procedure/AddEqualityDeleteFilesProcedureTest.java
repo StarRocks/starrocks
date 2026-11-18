@@ -48,6 +48,7 @@ import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.MessageTypeParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.Mockito;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -75,6 +76,21 @@ public class AddEqualityDeleteFilesProcedureTest {
 
     @TempDir
     File tempDir;
+
+    @Test
+    public void testRefusesAnEncryptedTable() {
+        // Like add_files: the registered delete files bypass the sinks, so they would carry no key_metadata
+        // in a table declared encrypted.
+        Table table = Mockito.mock(Table.class);
+        Mockito.when(table.properties()).thenReturn(Map.of("encryption.key-id", "my-kms-key"));
+        Mockito.when(table.name()).thenReturn("db.enc_tbl");
+        IcebergTableProcedureContext context = new IcebergTableProcedureContext(
+                null, table, null, null, new HdfsEnvironment(), null, null);
+        StarRocksConnectorException exception = assertThrows(StarRocksConnectorException.class,
+                () -> AddEqualityDeleteFilesProcedure.getInstance().execute(context, args("deletes", "parquet", "id")));
+        assertTrue(exception.getMessage().contains("add_equality_delete_files is not supported on encrypted"),
+                exception.getMessage());
+    }
 
     @Test
     public void testPartitionedDeleteIsScopedToItsPartition() throws Exception {

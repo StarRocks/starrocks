@@ -200,15 +200,12 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
 
             manager.alterProvider(name, Map.of("protocol", "anthropic"), false);
             retry.setRetryTime(1);
-            RpcException failure = new RpcException("mock protocol retry");
-            Assertions.assertSame(failure, Assertions.assertThrows(RpcException.class,
-                    () -> ExecuteExceptionHandler.handle(failure, retry)));
-            Assertions.assertSame(altered, retry.getExecPlan());
+            ExecuteExceptionHandler.handle(new RpcException("mock protocol retry"), retry);
+            Assertions.assertNotSame(altered, retry.getExecPlan());
+            assertProviderConfiguration(retry.getExecPlan(), "altered", TAIProviderProtocol.ANTHROPIC);
             assertProviderConfiguration(altered, "altered");
             assertProviderConfiguration(original, "original");
-            SemanticException error = Assertions.assertThrows(SemanticException.class, () -> getExecPlan(sql));
-            Assertions.assertEquals("AI functions only support an OPENAI provider protocol now, not ANTHROPIC",
-                    error.getDetailMsg());
+            assertProviderConfiguration(getExecPlan(sql), "altered", TAIProviderProtocol.ANTHROPIC);
         } finally {
             manager.dropProvider(name, true);
         }
@@ -292,6 +289,10 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
     }
 
     private static void assertProviderConfiguration(ExecPlan plan, String version) {
+        assertProviderConfiguration(plan, version, TAIProviderProtocol.OPENAI);
+    }
+
+    private static void assertProviderConfiguration(ExecPlan plan, String version, TAIProviderProtocol protocol) {
         List<Map<String, TAIProvider>> configurations = plan.getFragments().stream()
                 .flatMap(fragment -> fragment.getPlanRoot().treeToThrift().getNodes().stream())
                 .filter(node -> node.getNode_type() == TPlanNodeType.AI_PROJECT_NODE)
@@ -305,7 +306,7 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
             Assertions.assertEquals(version + "-test-key", configuration.getParams().get("api_key"));
             Assertions.assertEquals("https://" + version + ".example.test/v1/chat/completions",
                     configuration.getParams().get("endpoint"));
-            Assertions.assertEquals(TAIProviderProtocol.OPENAI, configuration.getProtocol());
+            Assertions.assertEquals(protocol, configuration.getProtocol());
             Assertions.assertEquals("1200", configuration.getParams().get("timeout_ms"));
         });
     }

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从日期中减去指定的时间间隔。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # date_sub,subdate

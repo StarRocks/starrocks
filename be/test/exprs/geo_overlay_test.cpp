@@ -68,7 +68,7 @@ ColumnPtr geometries(std::initializer_list<const char*> values, const TypeDescri
 }
 
 ColumnPtr raw_geometry(std::string_view wkb) {
-    GeoColumnDescriptor descriptor{geo_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
+    GeoColumnDescriptor descriptor{geo_type().geo_type.value()};
     auto column = GeoColumn::create(descriptor);
     column->append_datum(Datum(Slice(wkb)));
     return column;
@@ -477,8 +477,7 @@ TEST(GeoOverlayTest, RejectsMalformedNonFiniteDimensionsAndReturnDescriptor) {
         EXPECT_FALSE(fn(bad_return.get(), {geometries({square}), geometries({square})}).ok());
         auto wrong_kind =
                 GeoColumn::create(GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                                       GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326},
-                                                      {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+                                                       GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326}});
         wrong_kind->append_datum(Datum(Slice(wkb)));
         EXPECT_FALSE(fn(ctx.get(), {wrong_kind, geometries({square})}).ok());
     }
@@ -630,7 +629,6 @@ TEST(GeoOverlayTest, IntersectionReturnsAreaLinePointAndEmptyWithInputCrs) {
         ASSERT_TRUE(result.ok()) << result.status();
         const auto* data = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(*result));
         EXPECT_EQ(type.geo_type.value(), data->descriptor().type);
-        EXPECT_EQ(GEO_DIMENSION_XY, data->descriptor().storage.dimension);
     }
 }
 TEST(GeoOverlayTest, IntersectionCrossingsRemainPolygonForDownstreamOverlays) {

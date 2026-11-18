@@ -42,7 +42,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
+import com.google.common.collect.RangeMap;
 import com.google.common.collect.Sets;
+import com.google.common.collect.TreeRangeMap;
 import com.google.gson.annotations.SerializedName;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
@@ -85,7 +87,6 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.ColocatePersistInfo;
-import com.starrocks.persist.ColocateRangePersistInfo;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.qe.ConnectContext;
@@ -2546,6 +2547,19 @@ public class OlapTable extends Table {
         return tableProperty.getBucketSize();
     }
 
+    // The table's own split/merge target size, or 0 when it follows the cluster-wide target.
+    // The table's size is in force only while the cluster-wide target is positive.
+    public long getTabletReshardTargetSizeOverride(long clusterTargetSize) {
+        return clusterTargetSize > 0 ? tableProperty.getTabletReshardTargetSize() : 0L;
+    }
+
+    // Effective tablet split/merge target size of this table.
+    public long getTabletReshardTargetSize() {
+        long clusterTargetSize = Config.tablet_reshard_target_size;
+        long override = getTabletReshardTargetSizeOverride(clusterTargetSize);
+        return override > 0 ? override : clusterTargetSize;
+    }
+
     public Long getMutableBucketNum() {
         return tableProperty.getMutableBucketNum();
     }
@@ -2559,6 +2573,13 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE,
                         String.valueOf(bucketSize));
         tableProperty.buildBucketSize();
+    }
+
+    public void setTabletReshardTargetSize(long size) {
+        Preconditions.checkArgument(size > 0, "tablet_reshard_target_size must be positive: %s", size);
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE,
+                String.valueOf(size));
+        tableProperty.buildTabletReshardTargetSize();
     }
 
     public void setMutableBucketNum(long bucketNum) {
@@ -2725,6 +2746,57 @@ public class OlapTable extends Table {
             tempPartitions.dropPartition(partitionName, needDropTablet);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
+            }
+        }
+    }
+
+    /**
+     * Checks that {@link #replaceMatchPartitions} can promote the given temporary partitions without leaving two
+     * formal partitions whose ranges overlap. A temporary partition replaces the formal partition its name points
+     * at, if there is one, so it may overlap that partition and no other.
+     */
+    public void checkReplaceMatchPartitions(List<String> tempPartitionNames) throws DdlException {
+        if (!(partitionInfo instanceof RangePartitionInfo rangeInfo)) {
+            return;
+        }
+        Map<Long, Range<PartitionKey>> tempRanges = rangeInfo.getIdToRange(true);
+        // temporary ranges never overlap each other, every one is checked against the others when it is created
+        RangeMap<PartitionKey, String> promotedRanges = TreeRangeMap.create();
+        Set<Long> replacedPartitionIds = Sets.newHashSet();
+        for (String tempPartitionName : tempPartitionNames) {
+            Partition tempPartition = tempPartitions.getPartition(tempPartitionName);
+            if (tempPartition == null) {
+                continue;
+            }
+            Partition replaced = nameToPartition.get(tempPartitionName.substring(
+                    tempPartitionName.indexOf(AnalyzerUtils.PARTITION_NAME_PREFIX_SPLIT) + 1));
+            if (replaced != null) {
+                replacedPartitionIds.add(replaced.getId());
+            }
+            Range<PartitionKey> range = tempRanges.get(tempPartition.getId());
+            if (range != null && !range.isEmpty()) {
+                promotedRanges.put(range, tempPartitionName);
+            }
+        }
+        if (promotedRanges.asMapOfRanges().isEmpty()) {
+            return;
+        }
+        // All formal ranges rather than the range index: on a table whose ranges already overlap, the index can hold
+        // one entry for two partitions that start at the same key.
+        for (Map.Entry<Long, Range<PartitionKey>> entry : rangeInfo.getIdToRange(false).entrySet()) {
+            if (replacedPartitionIds.contains(entry.getKey()) || entry.getValue().isEmpty()) {
+                continue;
+            }
+            Map<Range<PartitionKey>, String> overlapping = promotedRanges.subRangeMap(entry.getValue()).asMapOfRanges();
+            if (!overlapping.isEmpty()) {
+                String tempPartitionName = overlapping.values().iterator().next();
+                Range<PartitionKey> tempRange = tempRanges.get(tempPartitions.getPartition(tempPartitionName).getId());
+                Partition partition = idToPartition.get(entry.getKey());
+                throw new DdlException(String.format(
+                        "temporary partition %s [%s, %s) overlaps partition %s [%s, %s), which it does not replace",
+                        tempPartitionName, tempRange.lowerEndpoint().toSql(), tempRange.upperEndpoint().toSql(),
+                        partition == null ? entry.getKey() : partition.getName(),
+                        entry.getValue().lowerEndpoint().toSql(), entry.getValue().upperEndpoint().toSql()));
             }
         }
     }
@@ -3071,22 +3143,14 @@ public class OlapTable extends Table {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         if (colocateTableIndex.isColocateTable(getId())) {
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(getId());
-            // For range colocate groups, journal the range mgr state ahead of OP_COLOCATE_ADD_TABLE_V2
-            // so the record lands after OP_CREATE_TABLE is durably written. A crash between this
-            // record and the add-table record leaves only an orphan range entry on a fresh grpId,
-            // which is harmless because the next create on the same colocate_with name allocates a
-            // new grpId via getNextId().
             if (colocateTableIndex.isRangeColocateGroup(groupId)) {
-                List<ColocateRange> ranges = colocateTableIndex.getColocateRanges(groupId.grpId);
-                if (!ranges.isEmpty()) {
-                    GlobalStateMgr.getCurrentState().getEditLog().logColocateRangeUpdate(
-                            ColocateRangePersistInfo.create(groupId.grpId, ranges));
-                }
+                colocateTableIndex.logAddTableToRangeGroup(groupId, getId());
+            } else {
+                List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+                ColocatePersistInfo colocatePersistInfo = ColocatePersistInfo.createForAddTable(groupId, getId(),
+                        backendsPerBucketSeq);
+                GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(colocatePersistInfo);
             }
-            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
-            ColocatePersistInfo colocatePersistInfo = ColocatePersistInfo.createForAddTable(groupId, getId(),
-                    backendsPerBucketSeq);
-            GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(colocatePersistInfo);
         }
 
         DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), this);
@@ -3382,6 +3446,13 @@ public class OlapTable extends Table {
         Long bucketSize = getAutomaticBucketSize();
         if (bucketSize > 0) {
             properties.put(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, bucketSize.toString());
+        }
+
+        // tablet split/merge target size of a range-distributed table
+        long tabletReshardTargetSize = tableProperty.getTabletReshardTargetSize();
+        if (tabletReshardTargetSize > 0) {
+            properties.put(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE,
+                    String.valueOf(tabletReshardTargetSize));
         }
 
         // mutable bucket num

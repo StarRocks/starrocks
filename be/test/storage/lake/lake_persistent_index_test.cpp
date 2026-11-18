@@ -27,6 +27,7 @@
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <thread>
 #include <utility>
@@ -986,6 +987,85 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_lower_tail_watermark) 
     ASSERT_OK(reloaded->get(keys.size(), keys.data(), values.data()));
     EXPECT_EQ(IndexValue(kDirectValue), values[0]);
     EXPECT_EQ(IndexValue(kTailValue), values[1]);
+}
+
+// Every sstable open of the index hands the size recorded in the metadata to the filesystem: without it a
+// shared-data read looks the size up, which is a synchronous HEAD request to the object storage when the star
+// cache does not hold the size. Covers ingesting an sstable, flushing the memtable, loading the index from the
+// tablet metadata and looking keys up.
+TEST_F(LakePersistentIndexTest, test_sstable_opens_pass_recorded_size) {
+    constexpr uint64_t kIngestedValue = (static_cast<uint64_t>(100) << 32) | (UINT32_MAX - 1);
+    constexpr uint64_t kFlushedValue = static_cast<uint64_t>(200) << 32;
+    const int64_t tablet_id = _tablet_metadata->id();
+    const std::string ingested_key = "ingested-key";
+    const std::string flushed_key = "flushed-key";
+    const std::string filename = "open-recorded-size.sst";
+
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> entries;
+    entries.emplace(ingested_key, std::make_pair(int64_t{1}, IndexValue(kIngestedValue)));
+    ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(_tablet_mgr->sst_location(tablet_id, filename)));
+    uint64_t filesize = 0;
+    PersistentIndexSstableRangePB range;
+    ASSERT_OK(PersistentIndexSstable::build_sstable(entries, wf.get(), &filesize, &range));
+    ASSERT_OK(wf->close());
+    FileMetaPB sst_meta;
+    sst_meta.set_name(filename);
+    sst_meta.set_size(filesize);
+
+    // Path and size of each open; -1 is an open without a size. Opens also run on the flush and PK index
+    // execution threads.
+    std::mutex mutex;
+    std::vector<std::pair<std::string, int64_t>> opened;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::open_sstable_file", [&](void* arg) {
+        auto* info = static_cast<FileInfo*>(arg);
+        std::lock_guard<std::mutex> l(mutex);
+        opened.emplace_back(info->path, info->size.value_or(-1));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::open_sstable_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    // Each step opens at least one sstable, and every open carries the size of the file on disk.
+    size_t checked = 0;
+    auto check_new_opens = [&](const std::string& step) {
+        std::lock_guard<std::mutex> l(mutex);
+        ASSERT_GT(opened.size(), checked) << step;
+        for (; checked < opened.size(); ++checked) {
+            const auto& [path, size] = opened[checked];
+            auto file_size = FileSystem::Default()->get_file_size(path);
+            ASSERT_TRUE(file_size.ok()) << step << ": " << path << ": " << file_size.status();
+            ASSERT_EQ(static_cast<int64_t>(*file_size), size) << step << ": " << path;
+        }
+    };
+
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+    DelvecPagePB delvec_page;
+    ASSERT_OK(index->ingest_sst(sst_meta, range, /*rssid=*/100, /*version=*/1, delvec_page, nullptr));
+    ASSERT_NO_FATAL_FAILURE(check_new_opens("ingest_sst"));
+
+    const Slice flushed_slice(flushed_key);
+    const IndexValue flushed_value(kFlushedValue);
+    ASSERT_OK(index->insert(1, &flushed_slice, &flushed_value, /*version=*/2));
+    ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
+    ASSERT_NO_FATAL_FAILURE(check_new_opens("memtable flush"));
+
+    auto committed = std::make_shared<TabletMetadata>();
+    committed->CopyFrom(*_tablet_metadata);
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    MetaFileBuilder builder(tablet, committed);
+    ASSERT_OK(index->commit(&builder));
+    auto reloaded = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(reloaded->init(committed));
+    ASSERT_NO_FATAL_FAILURE(check_new_opens("load from the tablet metadata"));
+
+    std::array<Slice, 2> keys = {Slice(ingested_key), Slice(flushed_key)};
+    std::array<IndexValue, 2> values;
+    ASSERT_OK(reloaded->get(keys.size(), keys.data(), values.data()));
+    EXPECT_EQ(IndexValue(kIngestedValue), values[0]);
+    EXPECT_EQ(IndexValue(kFlushedValue), values[1]);
+    ASSERT_NO_FATAL_FAILURE(check_new_opens("get"));
 }
 
 // memory_stats() splits memory_usage() into memtables, sstable index blocks and bloom filters, and also reports
@@ -2588,9 +2668,48 @@ TEST_F(LakePersistentIndexTest, test_load_dels_non_origin_filters_stale_deletes)
     EXPECT_EQ(values[3], got[3]);                  // rssid 50 >  20 -> stale delete skipped
 }
 
-// Origin-skip: a del file whose origin_rowset_id == the rebuilt rowset id skips get() entirely and
-// erases every key regardless of its current rssid. Same keys/rssids as the non-origin test above,
-// but here even the rssid-50 keys (which the non-origin path keeps) are erased.
+// An origin del file also filters when the index contains an entry newer than the delete. This is
+// required when replay order differs from rssid order: replaying an older delete after a newer rowset
+// must not erase that rowset's keys.
+TEST_F(LakePersistentIndexTest, test_load_dels_origin_filters_stale_deletes) {
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+
+    std::vector<std::string> keys = {"k0", "k1", "k2", "k3"};
+    std::vector<uint32_t> rssids = {5, 5, 50, 50};
+    std::vector<Slice> key_slices;
+    std::vector<IndexValue> values;
+    for (size_t i = 0; i < keys.size(); ++i) {
+        key_slices.emplace_back(keys[i]);
+        values.emplace_back((uint64_t{rssids[i]} << 32) | i);
+    }
+    ASSERT_OK(index->insert(keys.size(), key_slices.data(), values.data(), /*version=*/1));
+    ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
+
+    write_binary_del_file(tablet_id, "del_origin_stale", keys);
+    RowsetMetadataPB rowset_meta;
+    rowset_meta.set_id(20);
+    auto* d = rowset_meta.add_del_files();
+    d->set_name("del_origin_stale");
+    d->set_origin_rowset_id(20);
+    d->set_op_offset(0);
+
+    auto tablet_schema = make_varchar_pk_schema();
+    auto rowset = std::make_shared<Rowset>(_tablet_mgr.get(), tablet_id, &rowset_meta, /*index=*/0, tablet_schema);
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, std::vector<ColumnId>{0});
+    ASSERT_OK(index->load_dels(rowset, pkey_schema, /*rowset_version=*/10));
+
+    std::vector<IndexValue> got(keys.size());
+    ASSERT_OK(index->get(keys.size(), key_slices.data(), got.data()));
+    EXPECT_EQ(IndexValue(NullIndexValue), got[0]);
+    EXPECT_EQ(IndexValue(NullIndexValue), got[1]);
+    EXPECT_EQ(values[2], got[2]);
+    EXPECT_EQ(values[3], got[3]);
+}
+
+// When the index has no entry newer than an origin delete, load_dels skips the lookup and erases
+// every key. Same keys as above, but the delete's rssid 777 is newer than every current entry.
 TEST_F(LakePersistentIndexTest, test_load_dels_origin_erases_all_keys) {
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
@@ -2902,9 +3021,11 @@ TEST_F(LakePersistentIndexTest, test_load_dels_parallel_get_propagates_sst_error
     std::vector<std::string> keys = {"k0", "k1", "k2", "k3", "k4"};
     std::vector<Slice> slices;
     std::vector<IndexValue> values;
+    // The entries are newer than the deletes below (rssid 50 against origin 20), so load_dels has to look
+    // their keys up; against entries no newer than a delete the lookup could skip nothing and is not made.
     for (size_t i = 0; i < keys.size(); ++i) {
         slices.emplace_back(keys[i]);
-        values.emplace_back((uint64_t{5} << 32) | i);
+        values.emplace_back((uint64_t{50} << 32) | i);
     }
     ASSERT_OK(index->insert(keys.size(), slices.data(), values.data(), 1));
     ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
@@ -2954,9 +3075,11 @@ TEST_F(LakePersistentIndexTest, test_load_dels_parallel_load_error_drains_get_ta
     std::vector<std::string> keys = {"k0", "k1", "k2", "k3", "k4"};
     std::vector<Slice> slices;
     std::vector<IndexValue> values;
+    // The entries are newer than the deletes below (rssid 50 against origin 20), so load_dels has to look
+    // their keys up; against entries no newer than a delete the lookup could skip nothing and is not made.
     for (size_t i = 0; i < keys.size(); ++i) {
         slices.emplace_back(keys[i]);
-        values.emplace_back((uint64_t{5} << 32) | i);
+        values.emplace_back((uint64_t{50} << 32) | i);
     }
     ASSERT_OK(index->insert(keys.size(), slices.data(), values.data(), 1));
     ASSERT_OK(index->sync_flush_all_memtables(10'000'000));

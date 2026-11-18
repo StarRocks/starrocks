@@ -78,4 +78,83 @@ public class ExternalNdvExtrapolateTest {
         Assertions.assertEquals(500, StatisticsUtils.extrapolateNdv(500, 1000, 0, 300), 0.001);
     }
 
+    // A column whose merged distinct count after k partitions is a - b * r^k.
+    private static double curve(double a, double b, double r, int k) {
+        return a - b * Math.pow(r, k);
+    }
+
+    private static double growth(double thirdNdv, long thirdPartitions, double twoThirdsNdv,
+                                 long twoThirdsPartitions, double mergedNdv, int sampled, int total) {
+        return StatisticsUtils.extrapolateNdvFromGrowth(thirdNdv, thirdPartitions, twoThirdsNdv, twoThirdsPartitions,
+                mergedNdv, sampled, total);
+    }
+
+    @Test
+    public void testGrowthCurveRecoversAGeometricCurve() {
+        // Each partition adds 0.995 of what the one before it added: the three points over 300 partitions
+        // pin the curve down, and the estimate is the same curve at 1800.
+        double a = 2_000_000;
+        double r = 0.995;
+        double ndv = growth(curve(a, a, r, 100), 100, curve(a, a, r, 200), 200, curve(a, a, r, 300), 300, 1800);
+
+        Assertions.assertEquals(curve(a, a, r, 1800), ndv, curve(a, a, r, 1800) * 1e-6);
+    }
+
+    @Test
+    public void testGrowthCurveUsesTheReportedSubsetSizes() {
+        // A hash pick does not split 300 partitions into exact thirds; the curve has to be fitted at the
+        // sizes the subsets actually have, here 115 and 207.
+        double a = 1_000_000;
+        double r = 0.99;
+        double ndv = growth(curve(a, a, r, 115), 115, curve(a, a, r, 207), 207, curve(a, a, r, 300), 300, 1000);
+
+        Assertions.assertEquals(curve(a, a, r, 1000), ndv, curve(a, a, r, 1000) * 1e-6);
+    }
+
+    @Test
+    public void testGrowthCurveIsLinearForSteadyGrowth() {
+        // A fixed set of hot values next to a steady stream of new ones: every partition adds the same
+        // number of values, so the overlap the occupancy model sees does not stop the growth.
+        Assertions.assertEquals(1801000, growth(101000, 100, 201000, 200, 301000, 300, 1800), 1e-6);
+        // Faster than linear carries on at the latest rate rather than accelerating; the caller's ceiling
+        // bounds it further.
+        Assertions.assertEquals(301000 + 150000.0 * 15, growth(101000, 100, 151000, 200, 301000, 300, 1800), 1e-6);
+    }
+
+    @Test
+    public void testGrowthCurveIgnoresGrowthInsideTheSketchError() {
+        // A column that stopped growing reads as a few HLL-noise increments; extrapolating their ratio
+        // over 1500 partitions would turn noise into a large number.
+        Assertions.assertEquals(0, growth(10000, 100, 10050, 200, 10100, 300, 1800));
+        Assertions.assertEquals(0, growth(10000, 100, 10100, 200, 10050, 300, 1800));
+        Assertions.assertEquals(0, growth(10000, 100, 20000, 200, 20100, 300, 1800));
+    }
+
+    @Test
+    public void testGrowthCurveWithoutUsableSubsetsSaysNothing() {
+        // A backend too old to report them.
+        Assertions.assertEquals(0, growth(0, 0, 0, 0, 300, 300, 1800));
+        // Subsets that do not nest strictly inside the collected partitions: empty, equal, or all of them.
+        Assertions.assertEquals(0, growth(100, 0, 200, 200, 300, 300, 1800));
+        Assertions.assertEquals(0, growth(100, 200, 200, 200, 300, 300, 1800));
+        Assertions.assertEquals(0, growth(100, 100, 200, 300, 300, 300, 1800));
+        // Nothing to scale to.
+        Assertions.assertEquals(0, growth(100, 100, 200, 200, 300, 300, 300));
+    }
+
+    @Test
+    public void testGrowthCurveCatchesWhatTheOccupancyModelMisses() {
+        // 1000 values every partition holds plus 1000 new ones per partition. The overlap makes the
+        // occupancy model read a nearly exhausted domain; the growth curve sees the new values keep coming.
+        int sampled = 300;
+        int total = 1800;
+        double merged = 1000 + 1000.0 * sampled;
+        double perPartitionSum = 2000.0 * sampled;
+        double occupancy = StatisticsUtils.extrapolateNdv(merged, perPartitionSum, sampled, total);
+        double grown = growth(1000 + 1000.0 * 100, 100, 1000 + 1000.0 * 200, 200, merged, sampled, total);
+        double truth = 1000 + 1000.0 * total;
+
+        Assertions.assertTrue(occupancy < truth * 0.3, "occupancy model got " + occupancy);
+        Assertions.assertEquals(truth, grown, 1e-6);
+    }
 }

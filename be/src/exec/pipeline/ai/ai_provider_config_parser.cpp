@@ -72,7 +72,7 @@ StatusOr<AIProjectModelConfig> AIProviderConfigParser::parse(std::string_view id
     config.model = get("model");
     config.api_key = get("api_key");
     if (provider.protocol != TAIProviderProtocol::OPENAI) {
-        return invalid_provider();
+        return Status::NotSupported("AI provider protocol is not supported");
     }
     config.protocol = AIProviderProtocol::OPENAI;
     if (!is_non_blank(config.endpoint) || contains_control_character(config.endpoint) || !is_non_blank(config.model) ||

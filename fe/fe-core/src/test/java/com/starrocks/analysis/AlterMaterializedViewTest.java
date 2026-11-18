@@ -254,6 +254,14 @@ public class AlterMaterializedViewTest extends MVTestBase  {
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
             Assertions.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
         }
+
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"file_bundling\" = \"true\")";
+            Exception e = Assertions.assertThrows(AnalysisException.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext));
+            Assertions.assertTrue(e.getMessage().contains("only support cloud native table or materialized view"),
+                    e.getMessage());
+        }
     }
 
     @Test
@@ -1143,7 +1151,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         Assertions.assertNotNull(thrown, "the breaking error must propagate, not be swallowed");
         Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv);
         Assertions.assertEquals(1, task.getConsecutiveFailCount());
-        Assertions.assertNotEquals(Constants.TaskState.PAUSE, task.getState());
+        Assertions.assertEquals(Constants.TaskState.PAUSE, task.getState());
         Assertions.assertFalse(mv.isActive());
         Assertions.assertTrue(mv.getInactiveReason().contains("incremental refresh broken"),
                 "inactive reason: " + mv.getInactiveReason());

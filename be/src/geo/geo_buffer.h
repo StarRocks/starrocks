@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <functional>
 #include <memory>
 
 #include "common/statusor.h"
@@ -31,8 +30,7 @@ inline constexpr size_t kGeoBufferMaxOutputCoordinates = 10'000;
 class PreparedGeoBuffer {
 public:
     ~PreparedGeoBuffer();
-    static StatusOr<std::unique_ptr<PreparedGeoBuffer>> prepare(Slice wkb,
-                                                                const std::function<Status()>& checkpoint = {});
+    static StatusOr<std::unique_ptr<PreparedGeoBuffer>> prepare(Slice wkb);
     StatusOr<WkbGeometry> buffer(double distance) const;
 
 private:

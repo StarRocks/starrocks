@@ -211,7 +211,6 @@ Status drive_coverage_analytor(size_t chunk_rows, const std::vector<int32_t>& ke
             const auto* geo =
                     down_cast<const GeoColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
             EXPECT_EQ(geo->descriptor().type, *type.geo_type);
-            EXPECT_EQ(geo->descriptor().storage.dimension, GEO_DIMENSION_XY);
             ASSIGN_OR_RETURN(auto measured, GeoFunctions::st_geometry_area(nullptr, {result}));
             ColumnViewer<TYPE_DOUBLE> area(measured);
             ASSIGN_OR_RETURN(auto rendered, GeoFunctions::st_geometry_as_text(nullptr, {result}));

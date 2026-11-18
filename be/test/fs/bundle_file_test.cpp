@@ -282,4 +282,45 @@ TEST_F(BundleFileTest, test_touch_cache_and_statistics) {
     ASSIGN_OR_ABORT(auto numeric_stats, reader->get_numeric_statistics());
 }
 
+namespace {
+
+class BundleWarmHandle final : public io::CacheWarmHandle {
+public:
+    size_t submitted_blocks() const override { return 1; }
+    size_t pending_blocks() const override { return 0; }
+};
+
+// The bundle object the slices read from; it records the warm-ups it is asked for.
+class BundleObjectStream final : public io::SeekableInputStream {
+public:
+    StatusOr<int64_t> read(void*, int64_t) override { return 0; }
+    Status skip(int64_t) override { return Status::OK(); }
+    Status seek(int64_t) override { return Status::OK(); }
+    StatusOr<int64_t> position() override { return 0; }
+    StatusOr<int64_t> get_size() override { return 1 << 20; }
+    StatusOr<std::shared_ptr<io::CacheWarmHandle>> warm_cache_async(int64_t offset, size_t length,
+                                                                    bool urgent) override {
+        last_offset = offset;
+        last_length = length;
+        last_urgent = urgent;
+        return std::make_shared<BundleWarmHandle>();
+    }
+    int64_t last_offset = -1;
+    size_t last_length = 0;
+    bool last_urgent = false;
+};
+
+} // namespace
+
+// Cache blocks belong to the bundle object: a slice warms the object range its own offsets map to.
+TEST_F(BundleFileTest, test_warm_cache_async_uses_object_offsets) {
+    auto object = std::make_shared<BundleObjectStream>();
+    BundleSeekableInputStream slice(object, /*offset=*/4096, /*size=*/1000);
+    ASSIGN_OR_ABORT(auto handle, slice.warm_cache_async(10, 20, true));
+    EXPECT_EQ(1u, handle->submitted_blocks());
+    EXPECT_EQ(4106, object->last_offset);
+    EXPECT_EQ(20u, object->last_length);
+    EXPECT_TRUE(object->last_urgent);
+}
+
 } // namespace starrocks

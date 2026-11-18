@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将字符串中符合指定模式的所有字符替换为其他字符。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # replace

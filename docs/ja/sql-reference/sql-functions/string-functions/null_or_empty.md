@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列がNULLまたは空の場合にtrueを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # null_or_empty

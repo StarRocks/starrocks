@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Creates resources."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE RESOURCE

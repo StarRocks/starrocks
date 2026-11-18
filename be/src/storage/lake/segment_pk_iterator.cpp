@@ -22,12 +22,13 @@
 #include "runtime/current_thread.h"
 #include "storage/lake/cross_publish_context.h"
 #include "storage/lake/pk_index_utils.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
 Status SegmentPKIterator::_load() {
-    TRY_CATCH_BAD_ALLOC(_pk_column_chunk = ChunkFactory::new_chunk(_pkey_schema, 4096));
+    TRY_CATCH_BAD_ALLOC(_pk_column_chunk = ChunkFactory::new_chunk(_pkey_schema, get_pk_vector_chunk_size()));
     auto chunk_container = _pk_column_chunk->clone_empty();
     const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
     if (_iter != nullptr) {

@@ -17,17 +17,23 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <optional>
 
+#include "base/concurrency/countdown_latch.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
+#include "base/time/monotime.h"
+#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_starlet_fwd.h"
+#include "common/thread/threadpool.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "fs/remote_read_context.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/persistent_index_sstable.h"
@@ -1107,6 +1113,111 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_concurrent_compaction_tas
 }
 
 // ============================================================================
+// Tests for AsyncCompactCB
+// ============================================================================
+
+// A real compaction task that records how it reported into its AsyncCompactCB: whether it ran or was cancelled, and
+// whether the AsyncCompactCB had already destroyed its members at that point. Its input is empty, because a task
+// reports into its AsyncCompactCB whatever its input.
+class RecordingCompactTask : public LakePersistentIndexParallelCompactTask {
+public:
+    RecordingCompactTask(TabletManager* tablet_mgr, TabletMetadataPtr metadata,
+                         const std::atomic<bool>* cb_members_destroyed, std::function<void()> before_run)
+            : LakePersistentIndexParallelCompactTask({}, tablet_mgr, std::move(metadata), false, UniqueId::gen_uid(),
+                                                     SstSeekRange()),
+              _cb_members_destroyed(cb_members_destroyed),
+              _before_run(std::move(before_run)) {}
+
+    void run() override {
+        if (_before_run) {
+            _before_run();
+        }
+        _ran = true;
+        _reported_into_destroyed_cb = _cb_members_destroyed->load();
+        LakePersistentIndexParallelCompactTask::run();
+    }
+
+    void cancel() override {
+        _cancelled = true;
+        _reported_into_destroyed_cb = _cb_members_destroyed->load();
+        LakePersistentIndexParallelCompactTask::cancel();
+    }
+
+    bool ran() const { return _ran; }
+    bool cancelled() const { return _cancelled; }
+    bool reported_into_destroyed_cb() const { return _reported_into_destroyed_cb; }
+
+private:
+    const std::atomic<bool>* _cb_members_destroyed;
+    std::function<void()> _before_run;
+    std::atomic<bool> _ran{false};
+    std::atomic<bool> _cancelled{false};
+    std::atomic<bool> _reported_into_destroyed_cb{false};
+};
+
+// A publish that fails after starting an early sst compaction destroys the AsyncCompactCB while its tasks are still
+// queued or running. The tasks report into the AsyncCompactCB, so destroying it must cancel the queued task and wait
+// for the running one while its members are still alive.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_destroy_cb_with_tasks_in_flight) {
+    // One worker, so the second task stays queued while the first one runs.
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("destroy_cb_test").set_min_threads(1).set_max_threads(1).build(&pool));
+
+    std::atomic<bool> cb_members_destroyed{false};
+    CountDownLatch running(1);
+    CountDownLatch destroying(1);
+    std::atomic<bool> hold_timed_out{false};
+
+    // The AsyncCompactCB destroys its callback after the members its tasks report into, so the callback holds an
+    // object that sets the flag when destroyed.
+    auto set_flag_when_destroyed =
+            std::make_shared<DeferOp<std::function<void()>>>([&]() { cb_members_destroyed = true; });
+    auto cb = std::make_unique<AsyncCompactCB>(
+            pool->new_token(ThreadPool::ExecutionMode::CONCURRENT),
+            [set_flag_when_destroyed](const std::vector<PersistentIndexSstablePB>&) { return Status::OK(); });
+    set_flag_when_destroyed.reset();
+    // Releases the running task if an assertion below returns early, so that destroying the AsyncCompactCB does not
+    // wait for it forever.
+    DeferOp release_running_task([&]() { destroying.count_down(); });
+
+    auto running_task =
+            std::make_shared<RecordingCompactTask>(_tablet_mgr.get(), _tablet_metadata, &cb_members_destroyed, [&]() {
+                running.count_down();
+                destroying.wait();
+                // Hold the only worker until the AsyncCompactCB destructor has done all it does before waiting for
+                // this task: without the fix it has destroyed the members; with it, it has shut the token down, which
+                // takes the queued task off the queue.
+                const MonoTime deadline = MonoTime::Now() + MonoDelta::FromSeconds(30);
+                while (!cb_members_destroyed && pool->num_queued_tasks() > 0) {
+                    if (MonoTime::Now() > deadline) {
+                        hold_timed_out = true;
+                        break;
+                    }
+                    SleepFor(MonoDelta::FromMilliseconds(1));
+                }
+            });
+    auto queued_task =
+            std::make_shared<RecordingCompactTask>(_tablet_mgr.get(), _tablet_metadata, &cb_members_destroyed, nullptr);
+    running_task->set_cb(cb.get());
+    queued_task->set_cb(cb.get());
+    ASSERT_OK(cb->thread_pool_token()->submit(running_task));
+    ASSERT_TRUE(running.wait_for(MonoDelta::FromSeconds(30)));
+    ASSERT_OK(cb->thread_pool_token()->submit(queued_task));
+    ASSERT_EQ(1, pool->num_queued_tasks());
+
+    destroying.count_down();
+    cb.reset();
+
+    ASSERT_TRUE(cb_members_destroyed);
+    ASSERT_FALSE(hold_timed_out);
+    ASSERT_TRUE(running_task->ran());
+    ASSERT_FALSE(running_task->reported_into_destroyed_cb());
+    ASSERT_TRUE(queued_task->cancelled());
+    ASSERT_FALSE(queued_task->ran());
+    ASSERT_FALSE(queued_task->reported_into_destroyed_cb());
+}
+
+// ============================================================================
 // Tests for sample_keys_from_sstable
 // ============================================================================
 
@@ -1659,6 +1770,39 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_multi_column
     ASSERT_EQ(output_sstables.size(), 1);
     ASSERT_EQ(output_sstables[0].range().start_key(), encode_key(100, "abc"));
     ASSERT_EQ(output_sstables[0].range().end_key(), encode_key(150, "mmm"));
+}
+
+// A merge task runs on the index compaction pool, whose threads carry no remote read context: it reads as the work that
+// created it -- a compaction, or the publish that compacts the index early -- and as a load of its own without one.
+TEST(LakePersistentIndexParallelCompactTaskTest, reads_as_the_work_that_created_it) {
+    const auto compaction = RemoteReadContext::for_background(RemoteReadContext::Workload::COMPACTION, 42);
+    std::unique_ptr<LakePersistentIndexParallelCompactTask> task;
+    {
+        ScopedRemoteReadContext scope(compaction);
+        task = std::make_unique<LakePersistentIndexParallelCompactTask>(
+                std::vector<std::vector<PersistentIndexSstablePB>>{}, nullptr, nullptr, false, UniqueId::gen_uid(),
+                SstSeekRange());
+    }
+    EXPECT_TRUE(task->_remote_read.is_set);
+    EXPECT_EQ(RemoteReadContext::Workload::COMPACTION, task->_remote_read.workload);
+    EXPECT_EQ(42, task->_remote_read.flow_id);
+
+    const auto publish = RemoteReadContext::for_load(7);
+    {
+        ScopedRemoteReadContext scope(publish);
+        task = std::make_unique<LakePersistentIndexParallelCompactTask>(
+                std::vector<std::vector<PersistentIndexSstablePB>>{}, nullptr, nullptr, false, UniqueId::gen_uid(),
+                SstSeekRange());
+    }
+    EXPECT_EQ(RemoteReadContext::Workload::LOAD, task->_remote_read.workload);
+    EXPECT_EQ(7, task->_remote_read.flow_id);
+
+    task = std::make_unique<LakePersistentIndexParallelCompactTask>(
+            std::vector<std::vector<PersistentIndexSstablePB>>{}, nullptr, nullptr, false, UniqueId::gen_uid(),
+            SstSeekRange());
+    EXPECT_TRUE(task->_remote_read.is_set);
+    EXPECT_EQ(RemoteReadContext::Workload::LOAD, task->_remote_read.workload);
+    EXPECT_EQ(0, task->_remote_read.flow_id);
 }
 
 } // namespace starrocks::lake

@@ -2,9 +2,9 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical i - p"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
-import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 # Metrics i through p
 
@@ -19,7 +19,36 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 :::
 
-<MetricsIP />
+## `iceberg_delete_bytes`
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `delete_type` (`position` or `metadata`)
+- Description: Total deleted bytes from Iceberg `DELETE` tasks. For `metadata` delete, this represents the size of deleted data files. For `position` delete, this represents the size of position delete files created.
+
+## `iceberg_delete_duration_ms_total`
+
+- Unit: Millisecond
+- Type: Cumulative
+- Labels: `delete_type` (`position` or `metadata`)
+- Description: Total execution time of Iceberg `DELETE` tasks in milliseconds. The duration of each task is added after it ends. `delete_type` distinguishes between two delete methods.
+
+## `iceberg_delete_rows`
+
+- Unit: Rows
+- Type: Cumulative
+- Labels: `delete_type` (`position` or `metadata`)
+- Description: Total deleted rows from Iceberg `DELETE` tasks. For `metadata` delete, this represents the number of rows in deleted data files. For `position` delete, this represents the number of position deletes created.
+
+## `iceberg_delete_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels:
+  - `status` (`success` or `failed`)
+  - `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`)
+  - `delete_type` (`position` or `metadata`)
+- Description: Total number of `DELETE` tasks that target Iceberg tables. The metric is incremented by 1 after each task ends, regardless of success or failure. `delete_type` distinguishes between two delete methods: `position` (generates position delete files) and `metadata` (metadata-level delete).
 
 ## `iceberg_compaction_duration_ms_total`
 
@@ -354,6 +383,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Counter of successful lake compaction jobs.
 
+## `lake_idg_files_missing_total`
+
+- Unit: Operations
+- Type: Counter
+- Description: In shared-data mode, counts missing-file fallbacks during Index Delta Group (IDG) `.idx` initialization and the first missing lazy page read per bitmap-index iterator. Lazy bloom-filter page failures are excluded. Reopening the same missing file can increment the counter again; this is not a distinct-file count. An increase indicates reduced index pruning, for example after vacuum races with a query or after a downgrade and re-upgrade.
+
 ## `lake_pk_index_cache_delvec_bytes`
 
 - Unit: Bytes
@@ -402,11 +437,23 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Cumulative
 - Description: Total number of batch publishes in shared-data clusters that retry an attempt that did not finish, that is, whose first transaction was already sent by an earlier attempt. When `lake_enable_batch_publish_retry_freeze` is `true`, such a retry contains only the transactions of the earlier attempt. Only the Leader FE increments this counter.
 
+## `lake_publish_partial_meta_written`
+
+- Unit: Count
+- Type: Gauge
+- Description: Cumulative number of times since this BE/CN started that it wrote a tablet's publish result to its local data cache. Counted only when the BE configuration item `lake_enable_publish_partial_meta` is `true`, and only for tables with file bundling. A result is written when the tablet's publish finished more than the publish RPC timeout plus 3 seconds after the request arrived, or when the publish is a retry; a retry answered from the kept result writes it again. A later retry on the same node reads it back instead of applying again, see `lake_publish_skipped_by_partial_meta`. Shared-data clusters only. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+
+## `lake_publish_skipped_by_partial_meta`
+
+- Unit: Count
+- Type: Gauge
+- Description: Cumulative number of tablet publishes since this BE/CN started that a retried publish answered from the tablet's publish result kept in this node's local data cache (see `lake_publish_partial_meta_written`), instead of applying the transactions again. Counted only when the BE configuration item `lake_enable_publish_partial_meta` is `true`, and only for tables with file bundling. Shared-data clusters only. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+
 ## `lake_publish_version_skipped_durable`
 
 - Unit: Count
 - Type: Gauge
-- Description: Cumulative number of tablet publishes since this BE/CN started that a retried publish answered from the new version's tablet metadata already written in storage, instead of applying the transactions again. Only a retry (a publish of a partition whose earlier publish failed) whose new version is not in the metadata cache is counted; tablets answered from the metadata cache and first attempts are not. Shared-data clusters only. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+- Description: Cumulative number of tablet publishes since this BE/CN started that a retried publish answered from the new version's tablet metadata already written in storage, instead of applying the transactions again. Only a retry (a publish of a partition whose earlier request was sent and did not finish) whose new version is not in the metadata cache is counted; tablets answered from the metadata cache and first attempts are not. Shared-data clusters only. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
 
 ## `lake_segment_cache_hit_minute`
 

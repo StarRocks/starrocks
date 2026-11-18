@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP INDEX drops a specified bitmap index on a table."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP INDEX

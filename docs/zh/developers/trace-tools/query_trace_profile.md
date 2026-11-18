@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "收集和分析查询追踪配置文件以诊断 StarRocks 查询执行。"
+products: [oss]
 ---
 
 # Query Trace Profile
@@ -23,7 +24,7 @@ TRACE { TIMES | VALUES | LOGS | ALL } [ <module> ] <query_statement>
   - `BASE`：基础模块。
   - `MV`：物化视图模块。
   - `OPTIMIZER`：优化器模块。
-  - `SCHEDULE`：调度模块。
+  - `SCHEDULER`：调度模块。
   - `EXTERNAL`：外表相关模块。
 
   如果未指定模块，默认使用 `BASE`。

@@ -2,9 +2,9 @@
 displayed_sidebar: docs
 toc_max_heading_level: 4
 description: "STREAM LOAD allows you to load data from a local file system or a streaming data source."
+products: [oss, enterprise, cloud, anywhere]
 ---
 import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';
-import TableURL from '../../../_assets/commonMarkdown/stream_load_table_url.mdx';
 import TableURLTip from '../../../_assets/commonMarkdown/stream_load_table_url_tip.mdx';
 
 # STREAM LOAD
@@ -58,7 +58,22 @@ Specifies the HTTP request method. This is a required parameter. Stream Load sup
 
 Specifies the URL of the table. Syntax:
 
-<TableURL />
+```Plain
+http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
+```
+
+The following table describes the parameters in the URL.
+
+| Parameter     | Required | Description                                                  |
+| ------------- | -------- | ------------------------------------------------------------ |
+| fe_host       | Yes      | The IP address of the FE node in your cluster.<br/>**NOTE**<br/>If you submit the load job to a specific BE or CN node, you must input the IP address of the BE or CN node. |
+| fe_http_port  | Yes      | The HTTP port number of the FE node in your cluster. The default port number is `8030`.<br/>**NOTE**<br/>If you submit the load job to a specific BE or CN node, you must input the HTTP port number of the BE or CN node. The default port number is `8030`. |
+| database_name | Yes      | The name of the database to which the table belongs.         |
+| table_name    | Yes      | The name of the table.                                       |
+
+:::note
+You can use [SHOW FRONTENDS](../cluster-management/nodes_processes/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
+:::
 
 ### data_desc
 
@@ -127,7 +142,10 @@ Description: Specifies the character that is used to wrap the field values in th
 
 Required: No
 
-Description: Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br />**NOTE**<br />The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br />Two examples are as follows:<ul><li>When you set `enclose` to `"` and `escape` to `\`, the system parses `"say \"Hello world\""` into `say "Hello world"`.</li><li>Assume that the column separator is comma (`,`). When you set `escape` to `\`, the system parses `a, b\, c` into two separate field values: `a` and `b, c`.</li></ul>
+Description: Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br />**NOTE**<br />The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br />Two examples are as follows:
+
+- When you set `enclose` to `"` and `escape` to `\`, the system parses `"say \"Hello world\""` into `say "Hello world"`.
+- Assume that the column separator is comma (`,`). When you set `escape` to `\`, the system parses `a, b\, c` into two separate field values: `a` and `b, c`.
 
 :::note
 - For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.

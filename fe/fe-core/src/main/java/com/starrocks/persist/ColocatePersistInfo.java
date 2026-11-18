@@ -37,6 +37,7 @@ package com.starrocks.persist;
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.io.Writable;
 
@@ -54,6 +55,11 @@ public class ColocatePersistInfo implements Writable {
     private long tableId;
     @SerializedName("bs")
     private List<List<Long>> backendsPerBucketSeq = Lists.newArrayList();
+    // Set only on the add-table record of a range colocate member: the group's ColocateRanges when the member joined,
+    // applied by replay together with the membership. Absent (null) on every other record and on records from older
+    // versions.
+    @SerializedName("cr")
+    private List<ColocateRange> colocateRanges;
 
     public ColocatePersistInfo() {
 
@@ -62,6 +68,14 @@ public class ColocatePersistInfo implements Writable {
     public static ColocatePersistInfo createForAddTable(GroupId groupId, long tableId,
                                                         List<List<Long>> backendsPerBucketSeq) {
         return new ColocatePersistInfo(groupId, tableId, backendsPerBucketSeq);
+    }
+
+    public static ColocatePersistInfo createForAddTable(GroupId groupId, long tableId,
+                                                        List<List<Long>> backendsPerBucketSeq,
+                                                        List<ColocateRange> colocateRanges) {
+        ColocatePersistInfo info = new ColocatePersistInfo(groupId, tableId, backendsPerBucketSeq);
+        info.colocateRanges = new ArrayList<>(colocateRanges);
+        return info;
     }
 
     public static ColocatePersistInfo createForBackendsPerBucketSeq(GroupId groupId,
@@ -99,6 +113,10 @@ public class ColocatePersistInfo implements Writable {
         return backendsPerBucketSeq;
     }
 
+    public List<ColocateRange> getColocateRanges() {
+        return colocateRanges == null ? List.of() : colocateRanges;
+    }
+
 
 
 
@@ -121,7 +139,8 @@ public class ColocatePersistInfo implements Writable {
 
         return tableId == info.tableId
                 && groupId.equals(info.groupId)
-                && backendsPerBucketSeq.equals(info.backendsPerBucketSeq);
+                && backendsPerBucketSeq.equals(info.backendsPerBucketSeq)
+                && Objects.equal(colocateRanges, info.colocateRanges);
     }
 
     @Override
@@ -130,6 +149,9 @@ public class ColocatePersistInfo implements Writable {
         sb.append("table id: ").append(tableId);
         sb.append(" group id: ").append(groupId);
         sb.append(" backendsPerBucketSeq: ").append(backendsPerBucketSeq);
+        if (colocateRanges != null) {
+            sb.append(" colocateRanges: ").append(colocateRanges);
+        }
         return sb.toString();
     }
 }

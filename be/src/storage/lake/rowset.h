@@ -139,6 +139,8 @@ struct PreparedTabletReadState {
 
 class Rowset : public BaseRowset {
 public:
+    // One Rowset per rowset of |tablet_metadata|. Rowsets written with the same schema share one TabletSchema,
+    // looked up in GlobalTabletSchemaMap once per call.
     static std::vector<RowsetPtr> get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata);
 
     // Does NOT take the ownership of |tablet_mgr| and |metadata|.
@@ -148,14 +150,18 @@ public:
     // Create a Rowset based on the rowset metadata of index |rowset_index| saved in the tablet metadata
     // pointed by |tablet_metadata|.
     //
+    // |tablet_schema| is the schema the rowset was written with. When it is nullptr, the constructor looks
+    // it up in GlobalTabletSchemaMap.
+    //
     // Note: the caller must ensure that the object pointed by |tablet_metadata| will not be updated during
     // the lifecycle of this Rowset, otherwise the behavior is undefined.
     //
     // Requires:
     //  - |tablet_mgr| and |tablet_metadata| is not nullptr
     //  - 0 <= |rowset_index| && |rowset_index| < tablet_metadata->rowsets_size()
+    //  - |tablet_schema|, when not nullptr, is built from the schema this rowset maps to in |tablet_metadata|
     explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index,
-                    size_t compaction_segment_limit);
+                    size_t compaction_segment_limit, TabletSchemaPtr tablet_schema = nullptr);
 
     // Create a Rowset with a specific segment range [segment_start, segment_end).
     // Used for large rowset split compaction where a single rowset is split into multiple subtasks.
@@ -179,7 +185,9 @@ public:
             const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>& prepared_segments,
             size_t segment_idx, const PreparedSegmentReadStatePtr& prepared_segment_state,
             std::vector<ChunkIteratorPtr>* reusable_segment_iterators = nullptr);
-    StatusOr<std::optional<SeekRange>> get_seek_range() const;
+    // Default to archived ordinals. A grouped reader may request its current ID space
+    // after validating that both schemas retain the same ordered sort-key UIDs.
+    StatusOr<std::optional<SeekRange>> get_seek_range(const TabletSchemaCSPtr& decoding_schema = nullptr) const;
     Status init_segment_read_options(const RowsetReadOptions& options, const LakeIOOptions& lake_io_opts,
                                      const DisjunctivePredicates& delete_predicates, OlapReaderStatistics* stats,
                                      SegmentReadOptions* segment_options) const;
@@ -194,12 +202,14 @@ public:
     // simply get iterators to iterate all rows without complex options like predicates
     // |schema| read schema
     // |stats| used for iterator read stats
+    // |chunk_size| rows per chunk, 0 keeps the SegmentReadOptions default
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
     // this function does not expect segment schema will be changed, so return error if record predicate exists
     // but does not match its chunk schema
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema, bool file_data_cache,
-                                                                      OlapReaderStatistics* stats);
+                                                                      OlapReaderStatistics* stats,
+                                                                      size_t chunk_size = 0);
 
     // used for primary index load, it will get segment iterator by specifice version and it's delvec,
     // without complex options like predicates
@@ -288,6 +298,9 @@ public:
 
     [[nodiscard]] std::vector<SegmentSharedPtr> get_segments() override;
     [[nodiscard]] StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked() override;
+    [[nodiscard]] StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked(const LakeIOOptions& lake_io_opts,
+                                                                               OlapReaderStatistics* stats,
+                                                                               const std::atomic<bool>* is_cancelled);
 
     StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
@@ -392,15 +405,5 @@ private:
     int32_t _segment_range_start = 0;
     int32_t _segment_range_end = 0;
 };
-
-inline std::vector<RowsetPtr> Rowset::get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata) {
-    std::vector<RowsetPtr> rowsets;
-    rowsets.reserve(tablet_metadata->rowsets_size());
-    for (int i = 0, size = tablet_metadata->rowsets_size(); i < size; ++i) {
-        auto rowset = std::make_shared<Rowset>(tablet_mgr, tablet_metadata, i, 0 /* compaction_segment_limit */);
-        rowsets.emplace_back(std::move(rowset));
-    }
-    return rowsets;
-}
 
 } // namespace starrocks::lake

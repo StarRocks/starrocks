@@ -4,6 +4,7 @@ displayed_sidebar: docs
 sidebar_label: "拒否レコード"
 keywords: ['rejected', 'records', 'max_filter_ratio', 'replay']
 description: "max_filter_ratio > 0 の場合に StarRocks がフィルタリングされた行を _statistics_.rejected_records に永続化する方法、および拒否レコードを照会・リプレイする方法。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 拒否レコード

@@ -1090,6 +1090,7 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_TIME, DateToTime);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_TIME, DatetimeToTime);
 
 SELF_CAST(TYPE_JSON);
+SELF_CAST(TYPE_VARBINARY);
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
@@ -1240,8 +1241,8 @@ public:
             }
         } else if constexpr (lt_is_decimal<FromType> && lt_is_decimal<ToType>) {
             if (context != nullptr && context->error_if_overflow()) {
-                return VectorizedUnaryFunction<DecimalToDecimal<OverflowMode::REPORT_ERROR>>::evaluate<FromType,
-                                                                                                       ToType>(
+                return VectorizedDecimalCastFunction<DecimalToDecimal, OverflowMode::REPORT_ERROR>::evaluate<FromType,
+                                                                                                             ToType>(
                         column, to_type.precision, to_type.scale);
             } else {
                 return VectorizedUnaryFunction<DecimalToDecimal<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
@@ -1249,7 +1250,7 @@ public:
             }
         } else if constexpr (lt_is_decimal<FromType>) {
             if (context != nullptr && context->error_if_overflow()) {
-                return VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
+                return VectorizedDecimalCastFunction<DecimalTo, OverflowMode::REPORT_ERROR>::evaluate<FromType, ToType>(
                         column);
             } else {
                 return VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
@@ -1257,7 +1258,8 @@ public:
             }
         } else if constexpr (lt_is_decimal<ToType>) {
             if (context != nullptr && context->error_if_overflow()) {
-                return VectorizedUnaryFunction<DecimalFrom<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
+                return VectorizedDecimalCastFunction<DecimalFrom, OverflowMode::REPORT_ERROR>::evaluate<FromType,
+                                                                                                        ToType>(
                         column, to_type.precision, to_type.scale);
             } else {
                 return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(

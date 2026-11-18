@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.transformer;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
@@ -202,6 +201,7 @@ public class QueryTransformer {
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
         Map<Expr, ColumnRefOperator> currentExpressionMappings = Maps.newHashMap();
         Map<ColumnRefOperator, ScalarOperator> currentConstOperators = Maps.newHashMap();
+        Map<ScalarOperator, ColumnRefOperator> expressionColumns = Maps.newHashMap();
         List<Expr> outputExprList = Lists.newArrayList(outputExpression);
 
         int outputExprIdx = 0;
@@ -214,7 +214,8 @@ public class QueryTransformer {
                     SubqueryUtils.rewriteScalarOperator(scalarOperator, subOpt, subqueryPlaceholders);
             scalarOperator = pair.first;
             subOpt = pair.second;
-            ColumnRefOperator columnRefOperator = getOrCreateColumnRefOperator(expression, scalarOperator, projections);
+            ColumnRefOperator columnRefOperator =
+                    getOrCreateColumnRefOperator(expression, scalarOperator, expressionColumns);
             projections.put(columnRefOperator, scalarOperator);
 
             if (outputExprInOrderByScope.contains(outputExprIdx)) {
@@ -297,6 +298,7 @@ public class QueryTransformer {
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
         Map<Expr, ColumnRefOperator> currentExpressionMappings = Maps.newHashMap();
         Map<ColumnRefOperator, ScalarOperator> currentConstOperators = Maps.newHashMap();
+        Map<ScalarOperator, ColumnRefOperator> expressionColumns = Maps.newHashMap();
         for (Expr expression : expressions) {
             Map<ScalarOperator, SubqueryOperator> subqueryPlaceholders = Maps.newHashMap();
             ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expression,
@@ -306,7 +308,8 @@ public class QueryTransformer {
                     SubqueryUtils.rewriteScalarOperator(scalarOperator, subOpt, subqueryPlaceholders);
             scalarOperator = pair.first;
             subOpt = pair.second;
-            ColumnRefOperator columnRefOperator = getOrCreateColumnRefOperator(expression, scalarOperator, projections);
+            ColumnRefOperator columnRefOperator =
+                    getOrCreateColumnRefOperator(expression, scalarOperator, expressionColumns);
             projections.put(columnRefOperator, scalarOperator);
             outputTranslations.put(expression, columnRefOperator);
             currentExpressionMappings.put(expression, columnRefOperator);
@@ -443,7 +446,7 @@ public class QueryTransformer {
                 if (rewriteOperator.isForceMergeSort()) {
                     windowOperator.setForceMergeSort();
                 }
-                windowOperator.addFunction(analyticExpr);
+                windowOperator.addFunction(analyticExpr, rewriteOperator);
             } else {
                 windowOperators.add(rewriteOperator);
             }
@@ -847,21 +850,19 @@ public class QueryTransformer {
         }
     }
 
+    // A variable expression that repeats in a projection reuses the column of its first occurrence.
+    // |expressionColumns| maps each variable expression of the projection so far to its column; finding the
+    // column by hash keeps a projection of N expressions linear, where scanning the projection's expressions for
+    // each one made it quadratic (5,000 JSON path functions spent about 1.6 s here).
     private ColumnRefOperator getOrCreateColumnRefOperator(Expr expression, ScalarOperator scalarOperator,
-                                                           Map<ColumnRefOperator, ScalarOperator> projections) {
-        ColumnRefOperator columnRefOperator;
+                                                           Map<ScalarOperator, ColumnRefOperator> expressionColumns) {
         if (scalarOperator.isColumnRef()) {
-            columnRefOperator = (ColumnRefOperator) scalarOperator;
-        } else if (scalarOperator.isVariable() && projections.containsValue(scalarOperator)) {
-            columnRefOperator = projections.entrySet().stream()
-                    .filter(e -> scalarOperator.equals(e.getValue()))
-                    .findAny()
-                    .map(Map.Entry::getKey)
-                    .orElse(null);
-            Preconditions.checkNotNull(columnRefOperator);
-        } else {
-            columnRefOperator = columnRefFactory.create(expression, expression.getType(), scalarOperator.isNullable());
+            return (ColumnRefOperator) scalarOperator;
         }
-        return columnRefOperator;
+        if (!scalarOperator.isVariable()) {
+            return columnRefFactory.create(expression, expression.getType(), scalarOperator.isNullable());
+        }
+        return expressionColumns.computeIfAbsent(scalarOperator,
+                op -> columnRefFactory.create(expression, expression.getType(), op.isNullable()));
     }
 }

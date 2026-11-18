@@ -1,3 +1,7 @@
+---
+products: [oss, enterprise, cloud, anywhere]
+---
+
 # ds_hll_count_distinct
 
 返回聚合函数的近似值，结果类似于 COUNT(DISTINCT col)。相似函数为 APPROX_COUNT_DISTINCT(expr)。

@@ -259,6 +259,9 @@ static void add_read_file_io_stats(const RandomAccessFile& file, OlapReaderStati
     stats->io_count += io.io_count_local_disk + io.io_count_remote;
     stats->io_ns_read_local_disk += io.io_ns_read_local_disk;
     stats->io_ns_remote += io.io_ns_read_remote;
+    stats->remote_io_queue_wait_ns += io.remote_queue_wait_ns;
+    stats->remote_io_fill_wait_ns += io.remote_fill_wait_ns;
+    stats->remote_io_fill_joins += io.remote_fill_joins;
 }
 
 Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
@@ -286,6 +289,7 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     SegmentFooterPB footer;
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                  .buffer_size = lake_io_opts.buffer_size};
+    opts.remote_read = lake_io_opts.remote_read;
 
     if (!_segment_file_info.encryption_meta.empty()) {
         ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_segment_file_info.encryption_meta));
@@ -293,6 +297,13 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
         _encryption_info = std::make_unique<FileEncryptionInfo>(opts.encryption_info);
     }
 
+#ifdef BE_TEST
+    {
+        // Lets a test check which cache options a given file's footer read was opened with.
+        std::pair<const std::string*, const RandomAccessFileOptions*> path_and_opts{&_segment_file_info.path, &opts};
+        TEST_SYNC_POINT_CALLBACK("Segment::_open:footer_file_options", &path_and_opts);
+    }
+#endif
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
     {
         const int64_t footer_start_ns = stats != nullptr ? MonotonicNanos() : 0;
@@ -441,6 +452,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> Segment::new_segment_read_file(const
     // the right offset on bundled/encrypted segments. Don't cache into _encryption_info here (OnceFlag owns it).
     RandomAccessFileOptions file_opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                       .buffer_size = lake_io_opts.buffer_size};
+    file_opts.remote_read = lake_io_opts.remote_read;
     if (_encryption_info) {
         file_opts.encryption_info = *_encryption_info;
     } else if (!_segment_file_info.encryption_meta.empty()) {
@@ -454,6 +466,7 @@ Status Segment::_load_index(const LakeIOOptions& lake_io_opts, OlapReaderStatist
     // read and parse short key index page
     RandomAccessFileOptions file_opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                       .buffer_size = lake_io_opts.buffer_size};
+    file_opts.remote_read = lake_io_opts.remote_read;
     if (_encryption_info) {
         file_opts.encryption_info = *_encryption_info;
     } else if (!_segment_file_info.encryption_meta.empty()) {
@@ -717,7 +730,9 @@ Status Segment::new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& 
 }
 
 StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
-                                                            const TabletSchemaCSPtr& read_tablet_schema) {
+                                                            const TabletSchemaCSPtr& read_tablet_schema,
+                                                            const LakeIOOptions& lake_io_opts,
+                                                            OlapReaderStatistics* stats) {
     std::shared_ptr<TabletSchema> tablet_schema;
     if (read_tablet_schema != nullptr) {
         tablet_schema = TabletSchema::create_with_uid(read_tablet_schema, dcg.column_ids()[idx]);
@@ -734,7 +749,9 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     if (idx < dcg.encryption_metas().size()) {
         info.encryption_meta = dcg.encryption_metas()[idx];
     }
-    return Segment::open(_fs, info, 0, tablet_schema, nullptr);
+    auto segment = std::make_shared<Segment>(_fs, std::move(info), 0, std::move(tablet_schema), nullptr);
+    RETURN_IF_ERROR(segment->open(nullptr, nullptr, lake_io_opts, stats));
+    return segment;
 }
 
 Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
@@ -767,7 +784,7 @@ void Segment::turn_off_batch_update_cache_size() {
                 // a path-only key would miss for bundled slices (non-zero bundle_file_offset) and
                 // their cache entries would never get the post-open memory cost, defeating
                 // metacache capacity control.
-                _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost, this);
+                _tablet_manager->update_segment_cache_size(_segment_file_info, mem_cost, this);
             }
         }
     }
@@ -778,7 +795,7 @@ void Segment::update_cache_size() {
         // could be race condition on this `_batch_on_flags_counter` check, but it is ok to be inaccurate in such case.
         if (_batch_on_flags_counter.load(std::memory_order_relaxed) == 0) {
             auto mem_cost = mem_usage();
-            _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost, this);
+            _tablet_manager->update_segment_cache_size(_segment_file_info, mem_cost, this);
         } else {
             // under batch mode, only increase the _dirty_cache_counter
             _dirty_cache_counter.fetch_add(1, std::memory_order_relaxed);

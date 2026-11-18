@@ -20,6 +20,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.proto.BinaryPredicatePB;
 import com.starrocks.proto.DeleteDataRequest;
@@ -38,6 +40,10 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.transaction.DatabaseTransactionMgr;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -229,5 +235,52 @@ public class LakeDeleteJobTest {
                 "schemaKey.tableId should match table ID");
         Assertions.assertEquals(expectedSchemaId, schemaKey.getSchemaId(),
                 "schemaKey.schemaId should match schema ID from base index meta");
+    }
+
+    @Test
+    public void testAbortTransactionWhenCommitLockTimesOut(@Mocked LakeService lakeService) throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
+        TableName tblName = new TableName("test", "commit_lock_timeout_table");
+        String createTableSql = "CREATE TABLE " + tblName + " (id INT, name String) DUPLICATE KEY(id) " +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1 " + "PROPERTIES('replication_num' = '1');";
+        Assertions.assertDoesNotThrow(() -> starRocksAssert.withDatabase(tblName.getDb()).withTable(createTableSql));
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tblName.getDb());
+        DeleteStmt deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(
+                "DELETE FROM " + tblName + " WHERE id = 1;", ctx);
+
+        // The CN deletes successfully, then the commit cannot get the table lock in time.
+        LakeServiceWithMetrics wrappedLakeService = new LakeServiceWithMetrics(lakeService);
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            Future<DeleteDataResponse> deleteData(DeleteDataRequest request) {
+                return CompletableFuture.completedFuture(new DeleteDataResponse());
+            }
+        };
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) throws RpcException {
+                return wrappedLakeService;
+            }
+        };
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public boolean commitAndPublishTransaction(Database db, long transactionId,
+                                                       List<TabletCommitInfo> tabletCommitInfos,
+                                                       List<TabletFailInfo> tabletFailInfos, long timeoutMillis) {
+                throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR,
+                        "get database write lock timeout, database=" + db.getFullName() + ", timeout=30000ms");
+            }
+        };
+
+        DatabaseTransactionMgr txnMgr =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getDatabaseTransactionMgr(db.getId());
+        int runningBefore = txnMgr.getRunningTxnNums();
+        Exception exception = Assertions.assertThrows(Exception.class,
+                () -> GlobalStateMgr.getCurrentState().getDeleteMgr().process(deleteStmt));
+        Assertions.assertTrue(exception.getMessage().contains("lock timeout"), exception.getMessage());
+        // The failed delete must not leave its transaction PREPARED until it times out.
+        Assertions.assertEquals(runningBefore, txnMgr.getRunningTxnNums());
     }
 }

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW TABLET displays tablet related information for debugging and administration."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW TABLET
@@ -64,9 +65,9 @@ SHOW TABLET <tablet_id>
 | TabletId | ReplicaId | BackendId | SchemaHash | Version | VersionHash | LstSuccessVersion | LstSuccessVersionHash | LstFailedVersion | LstFailedVersionHash | LstFailedTime | DataSize | RowCount | State  | LstConsistencyCheckTime | CheckVersion | CheckVersionHash | VersionCount | PathHash | MetaUrl  | CompactionStatus  | DiskRootPath  |
 +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+------------------+--------------+----------+----------+-------------------+---------------+
 -- 共有データクラスタにおいて
-+----------+-----------+----------+----------+------------+
-| TabletId | BackendId | DataSize | RowCount | MinVersion |
-+----------+-----------+----------+----------+------------+
++----------+-----------+----------+----------+------------+-------+
+| TabletId | BackendId | DataSize | RowCount | MinVersion | Range |
++----------+-----------+----------+----------+------------+-------+
 ```
 
 | **フィールド**                | **説明**                        |
@@ -94,6 +95,7 @@ SHOW TABLET <tablet_id>
 | CompactionStatus        | データバージョンの Compaction ステータスをクエリするために使用される URL。    |
 | DiskRootPath            | レプリカが配置されているディスク。    |
 | MinVersion              | タブレットに保持される最小データバージョン。共有データクラスタのみ |
+| Range                   | タブレットのキー範囲。Range 分散を使用しないテーブルのタブレットでは `null` が返されます。共有データクラスタのみ。v4.1 以降でサポートされています。 |
 
 ### 特定の tablet の情報をクエリする
 

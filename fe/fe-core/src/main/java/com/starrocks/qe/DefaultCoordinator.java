@@ -537,8 +537,9 @@ public class DefaultCoordinator extends Coordinator {
             }
         }
         if (jobSpec.getScanNodes().stream()
-                .anyMatch(scan -> scan instanceof OlapScanNode nativeScan && nativeScan.isParallelRangeScan())) {
-            // Native parallel tablet tasks use the ordinary one-shot assignment and deployment lifecycle.
+                .anyMatch(scan -> scan instanceof OlapScanNode nativeScan
+                        && (nativeScan.isParallelRangeScan() || nativeScan.isGroupedRangeScan()))) {
+            // Captured native tablet/group tasks use the ordinary one-shot deployment lifecycle.
             jobSpec.setIncrementalScanRanges(false);
         }
 
@@ -757,6 +758,12 @@ public class DefaultCoordinator extends Coordinator {
     private void deliverExecFragments(ScheduleOption option) throws RpcException, StarRocksException {
         lock();
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployLockInternalTime")) {
+            if (!queryStatus.ok()) {
+                // Preparation may publish a receiver and instances after cancel() has run.
+                // Clean them up and reject deployment under the same lock used by cancellation.
+                cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
+                dealStatusToTryRetry(queryStatus);
+            }
             Deployer deployer =
                     new Deployer(connectContext, jobSpec, executionDAG, coordinatorPreprocessor.getCoordAddress(),
                             this::handleErrorExecution, option.doDeploy);
@@ -1445,14 +1452,16 @@ public class DefaultCoordinator extends Coordinator {
             LOG.warn("update profile failed {}", instanceId, e);
         }
 
-        // update load profile
-        try {
-            lock();
-            queryProfile.updateLoadChannelProfile(params);
-        } catch (Throwable e) {
-            LOG.warn("update load channel profile failed {}", instanceId, e);
-        } finally {
-            unlock();
+        // A status-only report must not wait for deployment while updating absent load data.
+        if (params.isSetLoad_channel_profile()) {
+            try {
+                lock();
+                queryProfile.updateLoadChannelProfile(params);
+            } catch (Throwable e) {
+                LOG.warn("update load channel profile failed {}", instanceId, e);
+            } finally {
+                unlock();
+            }
         }
 
         // update job progress
@@ -1495,12 +1504,19 @@ public class DefaultCoordinator extends Coordinator {
                     instanceId, DebugUtil.printId(params.getQuery_id())));
         }
         try {
-            lock();
-            queryProfile.updateLoadInformation(execState, params);
+            List<Runnable> loadUpdates = queryProfile.buildLoadInformationUpdates(execState, params);
+            if (!loadUpdates.isEmpty()) {
+                lock();
+                try {
+                    for (Runnable update : loadUpdates) {
+                        update.run();
+                    }
+                } finally {
+                    unlock();
+                }
+            }
         } catch (Throwable e) {
             LOG.warn("update load information failed {}", instanceId, e);
-        } finally {
-            unlock();
         }
 
         // NOTE: it's critical for query execution, and must be put after the profile update

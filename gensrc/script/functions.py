@@ -1910,4 +1910,26 @@ vectorized_functions = [
          ],
          'ai': ai_metadata('CHAT', 'FILTER', 'BOOLEAN', inputs=('input', 'condition'))
      }],
+
+    # file functions
+    [210000, 'to_file', True, False, 'FILE', ['ANY_STRUCT'], 'FileFunctions::to_file'],
+    # [210001, 'to_file', True, False, 'FILE', ['VARCHAR', 'VARCHAR'], 'FileFunctions::to_file'],
+    [210002, 'try_to_file', True, False, 'FILE', ['ANY_STRUCT'], 'FileFunctions::try_to_file'],
+    # [210003, 'try_to_file', True, False, 'FILE', ['VARCHAR', 'VARCHAR'], 'FileFunctions::try_to_file'],
+    [210010, 'fl_get_uri', True, False, 'VARCHAR', ['FILE'], 'FileFunctions::fl_get_uri'],
+    [210011, 'fl_get_offset', True, False, 'BIGINT', ['FILE'], 'FileFunctions::fl_get_offset'],
+    [210012, 'fl_get_size', True, False, 'BIGINT', ['FILE'], 'FileFunctions::fl_get_size'],
+    [210013, 'fl_get_content_type', True, False, 'VARCHAR', ['FILE'], 'FileFunctions::fl_get_content_type'],
+    [210014, 'fl_get_checksum', True, False, 'VARCHAR', ['FILE'], 'FileFunctions::fl_get_checksum'],
+    [210015, 'fl_get_inline', True, False, 'VARBINARY', ['FILE'], 'FileFunctions::fl_get_inline'],
+    # get_presigned_url(storage_volume, absolute_uri [, expiration_seconds])
+    [210016, 'get_presigned_url', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
+     'FileFunctions::get_presigned_url'],
+    [210017, 'get_presigned_url', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'],
+     'FileFunctions::get_presigned_url_with_expiration'],
+    # get_presigned_file(storage_volume, file [, expiration_seconds])
+    [210018, 'get_presigned_file', True, False, 'FILE', ['VARCHAR', 'FILE'],
+     'FileFunctions::get_presigned_file'],
+    [210019, 'get_presigned_file', True, False, 'FILE', ['VARCHAR', 'FILE', 'BIGINT'],
+     'FileFunctions::get_presigned_file_with_expiration'],
 ]

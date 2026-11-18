@@ -57,6 +57,7 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
@@ -79,6 +80,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 public class OptimizeJobV2Test extends DDLTestBase {
@@ -97,10 +99,30 @@ public class OptimizeJobV2Test extends DDLTestBase {
         // the spy, so its failure cancels the job and drops the spy's temp partitions.
         try {
             UtFrameUtils.stopBackgroundSchemaChangeHandler(60000);
+            stopPublishVersionDaemon(60000);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
         UtFrameUtils.setUpForPersistTest();
+    }
+
+    /**
+     * Stop the background publish. The cases commit a rewrite or a load with commitTxnWithoutPublish() and expect
+     * it to stay COMMITTED until they finish it themselves, but the daemon would publish it on its own, because the
+     * mocked backends acknowledge every publish task. Each test class runs in its own JVM, so this only affects
+     * this class.
+     */
+    private static void stopPublishVersionDaemon(long timeoutMs) throws Exception {
+        PublishVersionDaemon publishVersionDaemon = GlobalStateMgr.getCurrentState().getPublishVersionDaemon();
+        publishVersionDaemon.setStop();
+        long endTime = System.currentTimeMillis() + timeoutMs;
+        // wait until the worker has left its loop, so that no publish round is still running
+        while (publishVersionDaemon.isRunning()) {
+            if (System.currentTimeMillis() > endTime) {
+                throw new TimeoutException(String.format("failed to stop PublishVersionDaemon after %s ms", timeoutMs));
+            }
+            Thread.sleep(10);
+        }
     }
 
     @BeforeEach
@@ -473,7 +495,8 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
     /**
      * Write into the given partition and commit, without letting the transaction publish, which is the
-     * state a rewrite is in when its data is durable but not visible yet.
+     * state a rewrite is in when its data is durable but not visible yet. Nothing publishes it in this class,
+     * as beforeAll() stops the publish daemon; the case finishes it with finishTransaction() when it needs to.
      * Additional planned partitions are registered before commit without contributing any committed tablets.
      */
     private long commitTxnWithoutPublish(Database db, OlapTable table, Partition partition,

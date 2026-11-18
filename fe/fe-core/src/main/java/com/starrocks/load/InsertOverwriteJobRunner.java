@@ -947,6 +947,9 @@ public class InsertOverwriteJobRunner {
                         stats.setSourceRows(sumSourceRows);
                     }
                     LOG.info("dynamic overwrite job {} replace tmpPartitionNames:{}", job.getJobId(), tmpPartitionNames);
+                    // replaceMatchPartitions swaps by name only; refuse a swap that would leave two formal
+                    // partitions with overlapping ranges, which reads and later loads cannot tell apart
+                    targetTable.checkReplaceMatchPartitions(tmpPartitionNames);
                     ensureTempPartitionsVisible(targetTable, tmpPartitionIds);
                 } else {
                     ensureTempPartitionsVisible(targetTable, tmpPartitionIds);

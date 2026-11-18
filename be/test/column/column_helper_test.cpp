@@ -69,6 +69,30 @@ protected:
     }
 };
 
+// A const column may report size 1 for a chunk of N rows; the row count comes from a non-const column (RB-1379).
+TEST_F(ColumnHelperTest, num_packed_rows_with_size_one_const) {
+    auto const_data = Int32Column::create();
+    const_data->append(7);
+    ColumnPtr const_column = ConstColumn::create(std::move(const_data), 1);
+    auto vector_data = Int32Column::create();
+    for (int32_t v : {1, 2, 3, 4}) {
+        vector_data->append(v);
+    }
+    ColumnPtr vector_column = std::move(vector_data);
+
+    auto [all_const, num_rows] = ColumnHelper::num_packed_rows(Columns{const_column, vector_column});
+    ASSERT_FALSE(all_const);
+    ASSERT_EQ(4, num_rows);
+
+    std::tie(all_const, num_rows) = ColumnHelper::num_packed_rows(Columns{vector_column, const_column});
+    ASSERT_FALSE(all_const);
+    ASSERT_EQ(4, num_rows);
+
+    std::tie(all_const, num_rows) = ColumnHelper::num_packed_rows(Columns{const_column, const_column});
+    ASSERT_TRUE(all_const);
+    ASSERT_EQ(1, num_rows);
+}
+
 TEST_F(ColumnHelperTest, mark_binary_columns_skips_const_null) {
     const auto binary_type = TYPE_VARBINARY_DESC;
     for (const auto& type : {binary_type, TypeDescriptor::create_array_type(binary_type)}) {
@@ -388,6 +412,20 @@ TEST_F(ColumnHelperTest, update_nested_has_null_struct) {
     EXPECT_FALSE(b_col->has_null());
 }
 
+#ifndef NDEBUG
+TEST(ColumnHelperDeathTest, create_geo_requires_descriptor) {
+    testing::FLAGS_gtest_death_test_style = "threadsafe";
+    for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        EXPECT_DEATH((void)ColumnHelper::create_column(TypeDescriptor(primitive), false), "geo_type");
+        TypeDescriptor mismatched(primitive);
+        mismatched.geo_type = GeoTypeDescriptor{};
+        mismatched.geo_type->logical_type =
+                primitive == TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOMETRY : GEO_LOGICAL_TYPE_GEOGRAPHY;
+        EXPECT_DEATH((void)ColumnHelper::create_column(mismatched, false), "Check failed");
+    }
+}
+#endif
+
 TEST_F(ColumnHelperTest, create_geo_placeholder_and_copy) {
     for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
         const auto type = geo_type(primitive);
@@ -398,8 +436,6 @@ TEST_F(ColumnHelperTest, create_geo_placeholder_and_copy) {
         EXPECT_FALSE(geo->is_binary());
         // Generic creation preserves semantic metadata; storage starts unvalidated.
         EXPECT_EQ(*type.geo_type, geo->descriptor().type);
-        EXPECT_EQ(GEO_ENCODING_WKB, geo->descriptor().storage.encoding);
-        EXPECT_EQ(GEO_DIMENSION_UNKNOWN, geo->descriptor().storage.dimension);
         for (size_t i = 0; i < geo->size(); ++i) {
             EXPECT_TRUE(geo->get_wkb(i).empty());
         }
@@ -418,28 +454,6 @@ TEST_F(ColumnHelperTest, create_geo_placeholder_and_copy) {
         ASSERT_NE(nullptr, destination_geo);
         EXPECT_EQ(geo->descriptor(), destination_geo->descriptor());
         EXPECT_EQ("payload", destination_geo->get_wkb(0).to_string());
-    }
-}
-
-TEST_F(ColumnHelperTest, create_geo_does_not_infer_metadata) {
-    for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
-        TypeDescriptor type(primitive);
-        auto absent = ColumnHelper::create_column(type, false);
-        const auto* absent_geo = dynamic_cast<const GeoColumn*>(absent.get());
-        ASSERT_NE(nullptr, absent_geo);
-        const auto& descriptor = absent_geo->descriptor().type;
-        EXPECT_EQ(GEO_LOGICAL_TYPE_UNKNOWN, descriptor.logical_type);
-        EXPECT_EQ(GEO_COORDINATE_SYSTEM_UNKNOWN, descriptor.coordinate_system);
-        EXPECT_EQ(GEO_EDGE_ALGORITHM_UNKNOWN, descriptor.edge_algorithm);
-        EXPECT_TRUE(descriptor.crs.empty());
-        EXPECT_FALSE(descriptor.srid.has_value());
-
-        type.geo_type = GeoTypeDescriptor{};
-        auto empty = ColumnHelper::create_column(type, false);
-        const auto* empty_geo = dynamic_cast<const GeoColumn*>(empty.get());
-        ASSERT_NE(nullptr, empty_geo);
-        EXPECT_EQ(*type.geo_type, empty_geo->descriptor().type);
-        EXPECT_EQ(GEO_LOGICAL_TYPE_UNKNOWN, empty_geo->descriptor().type.logical_type);
     }
 }
 

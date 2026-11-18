@@ -626,7 +626,7 @@ void check_rejected(const ::parquet::schema::NodePtr& node) {
 }
 
 TypeDescriptor varbinary_type() {
-    return TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    return TYPE_VARBINARY_DESC;
 }
 
 } // namespace

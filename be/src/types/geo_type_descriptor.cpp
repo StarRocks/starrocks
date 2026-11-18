@@ -14,6 +14,10 @@
 
 #include "types/geo_type_descriptor.h"
 
+#include <charconv>
+
+#include "types/geo_srid.h"
+
 namespace starrocks {
 namespace {
 
@@ -32,6 +36,17 @@ static_assert(static_cast<int>(TGeoEdgeAlgorithm::KARNEY) == GEO_EDGE_ALGORITHM_
 static_assert(static_cast<int>(TGeoEdgeAlgorithm::PLANAR) == GEO_EDGE_ALGORITHM_PLANAR);
 
 } // namespace
+
+std::optional<int32_t> derive_geo_srid(std::string_view crs) {
+    if (crs == "OGC:CRS84") return kCrs84Srid;
+    constexpr std::string_view prefix = "EPSG:";
+    if (!crs.starts_with(prefix)) return std::nullopt;
+    int32_t srid;
+    const auto* begin = crs.data() + prefix.size();
+    const auto* end = crs.data() + crs.size();
+    auto [parsed_end, error] = std::from_chars(begin, end, srid);
+    return error == std::errc() && parsed_end == end ? std::optional<int32_t>(srid) : std::nullopt;
+}
 
 // Normalize unknown Thrift enum numbers at the input boundary; support policy belongs to callers.
 GeoTypeDescriptor GeoTypeDescriptor::from_thrift(const TGeoTypeDesc& thrift) {
@@ -81,28 +96,13 @@ GeoTypeDescPB GeoTypeDescriptor::to_protobuf() const {
     return result;
 }
 
-GeoStorageDescriptor GeoStorageDescriptor::from_protobuf(const GeoStorageDescPB& protobuf) {
-    GeoStorageDescriptor result;
-    result.encoding = protobuf.encoding();
-    result.dimension = protobuf.dimension();
-    return result;
-}
-
-GeoStorageDescPB GeoStorageDescriptor::to_protobuf() const {
-    GeoStorageDescPB result;
-    result.set_encoding(encoding);
-    result.set_dimension(dimension);
-    return result;
-}
-
 GeoColumnDescriptor GeoColumnDescriptor::from_protobuf(const GeoColumnDescPB& protobuf) {
-    return {GeoTypeDescriptor::from_protobuf(protobuf.type()), GeoStorageDescriptor::from_protobuf(protobuf.storage())};
+    return {GeoTypeDescriptor::from_protobuf(protobuf.type())};
 }
 
 GeoColumnDescPB GeoColumnDescriptor::to_protobuf() const {
     GeoColumnDescPB result;
     *result.mutable_type() = type.to_protobuf();
-    *result.mutable_storage() = storage.to_protobuf();
     return result;
 }
 

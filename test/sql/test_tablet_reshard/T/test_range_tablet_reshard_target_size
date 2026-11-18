@@ -1,0 +1,42 @@
+-- name: test_range_tablet_reshard_target_size @cloud
+
+create database test_range_tablet_reshard_target_size_${uuid0};
+use test_range_tablet_reshard_target_size_${uuid0};
+
+SET enable_range_distribution = true;
+
+-- A range-distributed table can carry its own target tablet size for split and merge.
+CREATE TABLE t_ddl (k BIGINT, v BIGINT) DUPLICATE KEY(k)
+PROPERTIES ('replication_num' = '1', 'tablet_reshard_target_size' = '1073741824');
+SHOW CREATE TABLE t_ddl;
+
+ALTER TABLE t_ddl SET ('tablet_reshard_target_size' = '2147483648');
+SHOW CREATE TABLE t_ddl;
+
+-- An empty string removes it; the table follows the FE configuration tablet_reshard_target_size again.
+ALTER TABLE t_ddl SET ('tablet_reshard_target_size' = '');
+SHOW CREATE TABLE t_ddl;
+
+-- Zero and negative values are rejected.
+ALTER TABLE t_ddl SET ('tablet_reshard_target_size' = '0');
+ALTER TABLE t_ddl SET ('tablet_reshard_target_size' = '-1');
+CREATE TABLE t_zero (k BIGINT) DUPLICATE KEY(k) PROPERTIES ('replication_num' = '1', 'tablet_reshard_target_size' = '0');
+
+-- The property is only supported on range-distributed tables.
+CREATE TABLE t_hash (k BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'tablet_reshard_target_size' = '1073741824');
+CREATE TABLE t_random (k BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY RANDOM
+PROPERTIES ('replication_num' = '1', 'tablet_reshard_target_size' = '1073741824');
+
+-- Automatic split sizes against the table's own target. 1 MiB is far below the cluster-wide
+-- tablet_reshard_target_size and below tablet_reshard_min_split_size, so only this table's property can
+-- make a tablet of a few MiB split.
+CREATE TABLE t_split (k BIGINT, p1 VARCHAR(64), p2 VARCHAR(64)) DUPLICATE KEY(k)
+PROPERTIES ('replication_num' = '1', 'tablet_reshard_target_size' = '1048576');
+INSERT INTO t_split
+SELECT generate_series, md5(cast(generate_series AS STRING)), md5(cast(generate_series * 7 AS STRING))
+FROM TABLE(generate_series(1, 200000));
+function: wait_reshard_job_finish("t_split", "SPLIT_TABLET", 1, 120)
+SELECT count(*) FROM t_split;
+
+drop database test_range_tablet_reshard_target_size_${uuid0};

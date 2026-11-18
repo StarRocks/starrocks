@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "System view showing role grant relationships between users and roles in StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # role_edges

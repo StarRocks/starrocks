@@ -124,7 +124,7 @@ private:
     template <typename ParserType>
     Status _read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read);
 
-    Status _read_and_parse_json();
+    Status _read_payload();
     Status _read_file_stream();
     Status _read_file_broker();
     Status _read_seekable_stream(io::SeekableInputStream* seekable_stream);
@@ -141,6 +141,7 @@ private:
 
     Status _check_ndjson();
 
+    bool _report_truncated_tail();
     void _append_error_msg(const std::string&, const std::string& error_msg);
 
     RuntimeState* _state = nullptr;
