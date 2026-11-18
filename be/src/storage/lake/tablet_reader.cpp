@@ -38,6 +38,7 @@
 #include "fs/fs_factory.h"
 #include "fs/remote_read_context.h"
 #include "gutil/stl_util.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/type_info_allocator_adapter.h"
@@ -96,11 +97,13 @@ static bool should_open_segments_in_parallel(ReaderType reader_type) {
 // Runs every task on the load segment thread pool, or on this thread when the pool refuses it, and waits for all of
 // them, also when it returns early. The tasks read on behalf of the query of |query_remote_read|, or of the scan
 // running on this thread when it is not set: the pool threads do not see this thread's scoped context. A task still
-// queued once |is_cancelled| is set does not start its IO. Returns the first error in task order.
+// queued once |is_cancelled| is set does not start its IO. The tasks charge their memory to the caller's tracker.
+// Returns the first error in task order.
 static Status run_on_load_segment_pool(std::vector<std::function<Status()>>& tasks,
                                        const RemoteReadContext& query_remote_read,
                                        const std::atomic<bool>* is_cancelled) {
     const RemoteReadContext remote_read = ScopedRemoteReadContext::or_current(query_remote_read);
+    MemTracker* mem_tracker = CurrentThread::mem_tracker();
     std::vector<std::future<Status>> futures;
     futures.reserve(tasks.size());
     // The tasks refer to |tasks| and |remote_read|: none may outlive this call.
@@ -112,13 +115,15 @@ static Status run_on_load_segment_pool(std::vector<std::function<Status()>>& tas
         }
     });
     for (auto& task : tasks) {
-        auto packaged = std::make_shared<std::packaged_task<Status()>>([&task, &remote_read, is_cancelled]() {
-            if (cancel_requested(is_cancelled)) {
-                return Status::Cancelled("cancelled while opening segments");
-            }
-            ScopedRemoteReadContext remote_read_scope(remote_read);
-            return task();
-        });
+        auto packaged =
+                std::make_shared<std::packaged_task<Status()>>([&task, &remote_read, mem_tracker, is_cancelled]() {
+                    if (cancel_requested(is_cancelled)) {
+                        return Status::Cancelled("cancelled while opening segments");
+                    }
+                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+                    ScopedRemoteReadContext remote_read_scope(remote_read);
+                    return task();
+                });
         futures.emplace_back(packaged->get_future());
         Status submit_st;
         TEST_SYNC_POINT_CALLBACK("TabletReader::open_segments_in_parallel::submit", &submit_st);
@@ -1652,6 +1657,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     };
     std::vector<RowsetIterators> rowset_iters;
     rowset_iters.reserve(_rowsets.size());
+    MemTracker* mem_tracker = CurrentThread::mem_tracker();
     // The parallel tasks capture local variables and |this| by reference.
     // Must wait for all tasks to complete before returning, otherwise
     // dangling references to |rs_opts| and |this| cause use-after-free.
@@ -1681,6 +1687,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             rowset_opts.stats = _parallel_rowset_stats.back().get();
             auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>(
                     [&, rowset_idx, rowset_opts]() {
+                        // Pool threads do not inherit the scan's tracker: charge the iterators to it.
+                        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
 #ifdef BE_TEST
                         Status injected_st;
                         TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
