@@ -74,127 +74,6 @@ template <PhmapSeed seed>
 using DateAggHashMap = phmap::flat_hash_map<DateValue, AggDataPtr, StdHashWithSeed<DateValue, seed>>;
 template <PhmapSeed seed>
 using TimeStampAggHashMap = phmap::flat_hash_map<TimestampValue, AggDataPtr, StdHashWithSeed<TimestampValue, seed>>;
-
-// Key of the slice agg hash maps. It is exactly sizeof(Slice): `size` is narrowed to 32 bits and the freed 4 bytes
-// cache the key's crc, so a rehash never walks the key bytes again. The size of the map slot and of the agg state
-// prefix (which holds a copy of the key, see AllocateState) stay unchanged.
-//
-// A key of kEscape bytes or more stores kEscape in `size` and its real length in the kEscapeHeader bytes in front of
-// `data`. Such keys are always materialized by make_agg_slice_key() or persist_agg_slice_key().
-template <PhmapSeed seed>
-struct SliceWithHash32 {
-    static constexpr uint32_t kEscape = std::numeric_limits<uint32_t>::max();
-    static constexpr size_t kEscapeHeader = sizeof(uint64_t);
-
-    const char* data = nullptr;
-    uint32_t size = 0;
-    uint32_t hash = 0;
-
-    SliceWithHash32() = default;
-    // Only for keys shorter than kEscape.
-    explicit SliceWithHash32(const Slice& s) : data(s.data), size(static_cast<uint32_t>(s.size)), hash(hash_of(s)) {
-        DCHECK_LT(s.size, kEscape);
-    }
-
-    static uint32_t hash_of(const Slice& s) {
-        if (LIKELY(s.size <= kMaxHashPiece)) {
-            return static_cast<uint32_t>(SliceHashWithSeed<seed>()(s));
-        }
-        return hash_of_huge(s);
-    }
-
-    ALWAYS_INLINE size_t real_size() const {
-        if (LIKELY(size != kEscape)) {
-            return size;
-        }
-        uint64_t v;
-        memcpy(&v, data - kEscapeHeader, sizeof(v));
-        return v;
-    }
-    ALWAYS_INLINE Slice slice() const { return {data, real_size()}; }
-    // convert_hash_map_to_chunk copies the key into a Buffer<Slice>.
-    operator Slice() const { return slice(); }
-
-private:
-    // SliceHashWithSeed takes an int32 length.
-    static constexpr size_t kMaxHashPiece = std::numeric_limits<int32_t>::max();
-
-    // Hashes the key in int32-sized pieces, chaining each piece's hash into the next one's seed.
-    static ALWAYS_NOINLINE uint32_t hash_of_huge(const Slice& s) {
-        size_t h = SliceHashWithSeed<seed>()(Slice(s.data, kMaxHashPiece));
-        for (size_t offset = kMaxHashPiece; offset < s.size; offset += kMaxHashPiece) {
-            const size_t piece = std::min(kMaxHashPiece, s.size - offset);
-            h = crc_hash_64(s.data + offset, static_cast<int32_t>(piece), h);
-        }
-        return static_cast<uint32_t>(h);
-    }
-};
-static_assert(sizeof(SliceWithHash32<PhmapSeed1>) == sizeof(Slice));
-static_assert(alignof(SliceWithHash32<PhmapSeed1>) == alignof(Slice));
-
-template <PhmapSeed seed>
-struct SliceWithHash32Hash {
-    // The crc has 32 bits of entropy, the mix spreads them over 64 bits so H1 keeps its high bits.
-    size_t operator()(const SliceWithHash32<seed>& s) const { return phmap_mix_with_seed<8, seed>()(s.hash); }
-};
-
-template <PhmapSeed seed>
-struct SliceWithHash32Equal {
-    bool operator()(const SliceWithHash32<seed>& x, const SliceWithHash32<seed>& y) const {
-        return x.hash == y.hash && memequal_padded(x.data, x.real_size(), y.data, y.real_size());
-    }
-};
-
-// Builds the key of `data[0, size)`. A key of kEscape bytes or more is copied into `scratch` behind its length
-// header, because the bytes in front of `data` are not ours to write.
-template <typename Key>
-ALWAYS_INLINE Key make_agg_slice_key(const char* data, size_t size, uint32_t hash, MemPool* scratch) {
-    Key key;
-    if (LIKELY(size < Key::kEscape)) {
-        key.data = data;
-        key.size = static_cast<uint32_t>(size);
-    } else {
-        uint8_t* pos = scratch->allocate_with_reserve(Key::kEscapeHeader + size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-        uint64_t real_size = size;
-        memcpy(pos, &real_size, sizeof(real_size));
-        strings::memcpy_inlined(pos + Key::kEscapeHeader, data, size);
-        key.data = reinterpret_cast<const char*>(pos + Key::kEscapeHeader);
-        key.size = Key::kEscape;
-    }
-    key.hash = hash;
-    return key;
-}
-
-template <typename Key>
-ALWAYS_INLINE Key make_agg_slice_key(const Slice& s, MemPool* scratch) {
-    return make_agg_slice_key<Key>(s.data, s.size, Key::hash_of(s), scratch);
-}
-
-// Copies the key bytes into `pool` so the key can live in the hash map.
-template <typename Key>
-ALWAYS_INLINE Key persist_agg_slice_key(const Key& key, MemPool* pool) {
-    const size_t size = key.real_size();
-    Key pk = key;
-    if (LIKELY(key.size != Key::kEscape)) {
-        uint8_t* pos = pool->allocate_with_reserve(size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-        strings::memcpy_inlined(pos, key.data, size);
-        pk.data = reinterpret_cast<const char*>(pos);
-    } else {
-        uint8_t* pos = pool->allocate_with_reserve(Key::kEscapeHeader + size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-        strings::memcpy_inlined(pos, key.data - Key::kEscapeHeader, Key::kEscapeHeader + size);
-        pk.data = reinterpret_cast<const char*>(pos + Key::kEscapeHeader);
-    }
-    return pk;
-}
-
-// Frees the escaped probe keys once the chunk is probed: a single one holds 4 GiB or more, which must not outlive the
-// chunk that needed it.
-inline void reset_agg_escape_pool(MemPool* pool) {
-    if (UNLIKELY(pool->total_reserved_bytes() > 0)) {
-        pool->free_all();
-    }
-}
-
 template <PhmapSeed seed>
 using SliceAggHashMap =
         phmap::flat_hash_map<SliceWithHash32<seed>, AggDataPtr, SliceWithHash32Hash<seed>, SliceWithHash32Equal<seed>>;
@@ -686,10 +565,15 @@ struct AggHashMapWithOneStringKeyWithNullable
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
         size_t const column_size = column->size();
+        const uint8_t* base = column->raw_bytes();
         caches.resize(column_size);
-        for (size_t i = 0; i < column_size; i++) {
-            caches[i] = make_agg_slice_key<KeyType>(column->get_slice(i), &escape_pool);
-        }
+        column->get_offset().visit_storage([&](const auto& offsets) {
+            const auto* off = offsets.data();
+            for (size_t i = 0; i < column_size; i++) {
+                const Slice s(base + off[i], off[i + 1] - off[i]);
+                caches[i] = make_agg_slice_key<KeyType>(s, &escape_pool);
+            }
+        });
         size_t* hash_values = reinterpret_cast<size_t*>(agg_states->data());
         for (size_t i = 0; i < column_size; i++) {
             hash_values[i] = this->hash_map.hash_function()(caches[i]);
@@ -723,45 +607,13 @@ struct AggHashMapWithOneStringKeyWithNullable
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
         size_t num_rows = column->size();
+        const uint8_t* base = column->raw_bytes();
 
-        for (size_t i = 0; i < num_rows; i++) {
-            const auto key = make_agg_slice_key<KeyType>(column->get_slice(i), &escape_pool);
-            if constexpr (HTBuildOp::process_limit) {
-                if (hash_table_size < extra->limits) {
-                    this->template _emplace_key<Func>(key, pool, std::forward<Func>(allocate_func), (*agg_states)[i],
-                                                      [&]() { hash_table_size++; });
-                } else {
-                    _find_key((*agg_states)[i], (*not_founds)[i], key);
-                }
-            } else if constexpr (HTBuildOp::allocate) {
-                this->template _emplace_key<Func>(key, pool, std::forward<Func>(allocate_func), (*agg_states)[i],
-                                                  FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
-            } else if constexpr (HTBuildOp::fill_not_found) {
-                _find_key((*agg_states)[i], (*not_founds)[i], key);
-            }
-        }
-    }
-
-    template <AllocFunc<Self> Func, typename HTBuildOp>
-    ALWAYS_NOINLINE void compute_agg_through_null_data(size_t chunk_size, const NullableColumn* nullable_column,
-                                                       Buffer<AggDataPtr>* agg_states, MemPool* pool,
-                                                       Func&& allocate_func, ExtraAggParam* extra) {
-        [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
-        auto* __restrict not_founds = extra->not_founds;
-        const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
-        const auto& null_data = nullable_column->null_column_data();
-
-        for (size_t i = 0; i < chunk_size; i++) {
-            if (null_data[i]) {
-                if (UNLIKELY(null_key_data == nullptr)) {
-                    null_key_data = allocate_func(nullptr);
-                    if constexpr (HTBuildOp::mark_null_key) {
-                        (*not_founds)[i] = 1;
-                    }
-                }
-                (*agg_states)[i] = null_key_data;
-            } else {
-                const auto key = make_agg_slice_key<KeyType>(data_column->get_slice(i), &escape_pool);
+        column->get_offset().visit_storage([&](const auto& offsets) {
+            const auto* off = offsets.data();
+            for (size_t i = 0; i < num_rows; i++) {
+                const Slice s(base + off[i], off[i + 1] - off[i]);
+                const auto key = make_agg_slice_key<KeyType>(s, &escape_pool);
                 if constexpr (HTBuildOp::process_limit) {
                     if (hash_table_size < extra->limits) {
                         this->template _emplace_key<Func>(key, pool, std::forward<Func>(allocate_func),
@@ -773,11 +625,54 @@ struct AggHashMapWithOneStringKeyWithNullable
                     this->template _emplace_key<Func>(key, pool, std::forward<Func>(allocate_func), (*agg_states)[i],
                                                       FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
                 } else if constexpr (HTBuildOp::fill_not_found) {
-                    DCHECK(not_founds);
                     _find_key((*agg_states)[i], (*not_founds)[i], key);
                 }
             }
-        }
+        });
+    }
+
+    template <AllocFunc<Self> Func, typename HTBuildOp>
+    ALWAYS_NOINLINE void compute_agg_through_null_data(size_t chunk_size, const NullableColumn* nullable_column,
+                                                       Buffer<AggDataPtr>* agg_states, MemPool* pool,
+                                                       Func&& allocate_func, ExtraAggParam* extra) {
+        [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
+        auto* __restrict not_founds = extra->not_founds;
+        const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
+        const auto& null_data = nullable_column->null_column_data();
+        const uint8_t* base = data_column->raw_bytes();
+
+        data_column->get_offset().visit_storage([&](const auto& offsets) {
+            const auto* off = offsets.data();
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (null_data[i]) {
+                    if (UNLIKELY(null_key_data == nullptr)) {
+                        null_key_data = allocate_func(nullptr);
+                        if constexpr (HTBuildOp::mark_null_key) {
+                            (*not_founds)[i] = 1;
+                        }
+                    }
+                    (*agg_states)[i] = null_key_data;
+                } else {
+                    const Slice s(base + off[i], off[i + 1] - off[i]);
+                    const auto key = make_agg_slice_key<KeyType>(s, &escape_pool);
+                    if constexpr (HTBuildOp::process_limit) {
+                        if (hash_table_size < extra->limits) {
+                            this->template _emplace_key<Func>(key, pool, std::forward<Func>(allocate_func),
+                                                              (*agg_states)[i], [&]() { hash_table_size++; });
+                        } else {
+                            _find_key((*agg_states)[i], (*not_founds)[i], key);
+                        }
+                    } else if constexpr (HTBuildOp::allocate) {
+                        this->template _emplace_key<Func>(key, pool, std::forward<Func>(allocate_func),
+                                                          (*agg_states)[i],
+                                                          FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                    } else if constexpr (HTBuildOp::fill_not_found) {
+                        DCHECK(not_founds);
+                        _find_key((*agg_states)[i], (*not_founds)[i], key);
+                    }
+                }
+            }
+        });
     }
 
     template <AllocFunc<Self> Func, typename EmplaceCallBack>

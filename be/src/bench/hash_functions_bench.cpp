@@ -24,7 +24,13 @@
 
 #include "base/hash/hash.h"
 #include "base/phmap/phmap.h"
+#include "base/string/memcmp.h"
 #include "bench/bench_util.h"
+#include "column/binary_column.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/runtime_profile.h"
+#include "common/system/cpu_info.h"
+#include "exec/aggregate/agg_hash_set.h"
 #include "exprs/function_context.h"
 #include "exprs/hash_functions.h"
 #include "exprs/time_functions.h"
@@ -295,6 +301,200 @@ static void BM_FromUnixtime_HourExtract(benchmark::State& state) {
 // BM_FromUnixtime_HourExtract     656650 ns       651969 ns         1445
 BENCHMARK(BM_HourFromUnixtime);
 BENCHMARK(BM_FromUnixtime_HourExtract);
+
+static void BM_CrcHash64_StringLengths(benchmark::State& state) {
+    const int len = static_cast<int>(state.range(0));
+    std::vector<std::string> strs(1024);
+    for (int i = 0; i < 1024; ++i) {
+        strs[i] = std::string(len + (i & 3), static_cast<char>(i));
+    }
+    for (auto _ : state) {
+        uint64_t acc = 0;
+        for (const auto& s : strs) {
+            acc ^= crc_hash_64(s.data(), static_cast<int32_t>(s.size()), kCRC32HashSeed);
+        }
+        benchmark::DoNotOptimize(acc);
+    }
+}
+BENCHMARK(BM_CrcHash64_StringLengths)->Arg(3)->Arg(8)->Arg(16)->Arg(24)->Arg(32)->Arg(64);
+
+static void BM_Memequal_StringLengths(benchmark::State& state) {
+    const int len = static_cast<int>(state.range(0));
+    std::vector<std::string> a(1024), b(1024);
+    for (int i = 0; i < 1024; ++i) {
+        a[i] = std::string(len + (i & 3), static_cast<char>(i + 1));
+        b[i] = a[i];
+    }
+    for (auto _ : state) {
+        int eq = 0;
+        for (int i = 0; i < 1024; ++i) {
+            eq += memequal(a[i].data(), a[i].size(), b[i].data(), b[i].size());
+        }
+        benchmark::DoNotOptimize(eq);
+    }
+}
+BENCHMARK(BM_Memequal_StringLengths)->Arg(3)->Arg(7)->Arg(12)->Arg(20)->Arg(32)->Arg(64);
+
+static void BM_Memcompare_StringLengths(benchmark::State& state) {
+    const int len = static_cast<int>(state.range(0));
+    std::vector<std::string> a(1024), b(1024);
+    for (int i = 0; i < 1024; ++i) {
+        const int l = len + (i & 1);
+        a[i] = std::string(l, 'a');
+        b[i] = a[i];
+        b[i][l - 1] = 'b';
+    }
+    for (auto _ : state) {
+        int acc = 0;
+        for (int i = 0; i < 1024; ++i) {
+            acc += memcompare(a[i].data(), a[i].size(), b[i].data(), b[i].size());
+        }
+        benchmark::DoNotOptimize(acc);
+    }
+}
+BENCHMARK(BM_Memcompare_StringLengths)->Arg(4)->Arg(12)->Arg(24)->Arg(64);
+
+static void BM_SliceAggHashSet_Insert(benchmark::State& state) {
+    const int n = static_cast<int>(state.range(0));
+    std::vector<std::string> pool(n);
+    for (int i = 0; i < n; ++i) {
+        pool[i] = "str_key_value_" + std::to_string(i);
+    }
+    MemPool scratch;
+    for (auto _ : state) {
+        SliceAggHashSet<PhmapSeed1> set;
+        for (int i = 0; i < n; ++i) {
+            Slice s(pool[i].data(), pool[i].size());
+            set.insert(make_agg_slice_key<SliceWithHash32<PhmapSeed1>>(s, &scratch));
+        }
+        benchmark::DoNotOptimize(set);
+    }
+}
+// ----------------------------------------------------------------------------
+// Benchmark                                  Time             CPU   Iterations
+// ----------------------------------------------------------------------------
+// BM_CrcHash64_StringLengths/3            1658 ns         1653 ns        37070
+// BM_CrcHash64_StringLengths/8             934 ns          930 ns        80444
+// BM_CrcHash64_StringLengths/16           1107 ns         1102 ns        55404
+// BM_CrcHash64_StringLengths/24           1297 ns         1286 ns        54481
+// BM_CrcHash64_StringLengths/32           1665 ns         1663 ns        47354
+// BM_CrcHash64_StringLengths/64           2140 ns         2139 ns        32986
+// BM_Memequal_StringLengths/3              795 ns          795 ns        87123
+// BM_Memequal_StringLengths/7              722 ns          722 ns        98285
+// BM_Memequal_StringLengths/12             705 ns          705 ns        96428
+// BM_Memequal_StringLengths/20             940 ns          940 ns        76030
+// BM_Memequal_StringLengths/32            1137 ns         1137 ns        61690
+// BM_Memequal_StringLengths/64            2073 ns         2068 ns        40246
+// BM_Memcompare_StringLengths/4            956 ns          956 ns        69325
+// BM_Memcompare_StringLengths/12          1010 ns         1007 ns        70625
+// BM_Memcompare_StringLengths/24          1875 ns         1875 ns        34972
+// BM_Memcompare_StringLengths/64          2339 ns         2338 ns        29856
+// BM_SliceAggHashSet_Insert/1000         20874 ns        20868 ns         3416
+// BM_SliceAggHashSet_Insert/100000     2056348 ns      2055800 ns           34
+// BM_SliceAggHashSet_Insert/1000000   74175602 ns     74170807 ns            1
+BENCHMARK(BM_SliceAggHashSet_Insert)->Arg(1000)->Arg(100000)->Arg(1000000);
+
+namespace {
+constexpr size_t kQ23ChunkSize = 4096;
+
+std::vector<Columns> make_url_chunks(size_t num_rows, size_t distinct_urls, uint64_t seed) {
+    std::vector<std::string> universe(distinct_urls);
+    for (size_t i = 0; i < distinct_urls; ++i) {
+        universe[i] = "https://example.yandex.ru/search/touch?text=clickbench_q23_url_" + std::to_string(i) +
+                      "&lr=213&clid=2270455";
+    }
+    std::mt19937_64 rng(seed);
+    std::uniform_int_distribution<size_t> dist(0, distinct_urls - 1);
+    const size_t num_chunks = (num_rows + kQ23ChunkSize - 1) / kQ23ChunkSize;
+    std::vector<Columns> chunks;
+    chunks.reserve(num_chunks);
+    for (size_t c = 0; c < num_chunks; ++c) {
+        auto col = BinaryColumn::create();
+        col->reserve(kQ23ChunkSize, kQ23ChunkSize * 80);
+        for (size_t i = 0; i < kQ23ChunkSize; ++i) {
+            const std::string& s =
+                    (seed == 0) ? universe[(c * kQ23ChunkSize + i) % distinct_urls] : universe[dist(rng)];
+            col->append(Slice(s));
+        }
+        chunks.push_back(Columns{std::move(col)});
+    }
+    return chunks;
+}
+} // namespace
+
+// Sweeps L1D (1K-2K), L2 (8K-32K), and L3 (128K-512K) resident cache bands for AggHashSetOfOneStringKey::build_set_prefetch.
+static void BM_SliceAggHashSet_PrefetchProbe_CacheBands(benchmark::State& state) {
+    CpuInfo::init();
+    const size_t target_size = static_cast<size_t>(state.range(0));
+    const double saved_ratio = config::agg_prefetch_l2_ratio;
+    const int32_t saved_dist = config::agg_hash_map_prefetch_dist;
+    config::agg_prefetch_l2_ratio = 0.0;
+    config::agg_hash_map_prefetch_dist = 16;
+
+    RuntimeProfile profile("q23_cache_band_bench");
+    AggStatistics agg_stat(&profile);
+    MemPool pool;
+    AggHashSetOfOneStringKey<SliceAggHashSet<PhmapSeed1>> wrapper(kQ23ChunkSize, &agg_stat);
+
+    const auto prefill = make_url_chunks(target_size, target_size, 0);
+    for (const auto& cols : prefill) {
+        wrapper.build_hash_set(kQ23ChunkSize, cols, &pool);
+    }
+    const size_t probe_rows = std::max<size_t>(target_size, 64 * 1024);
+    const auto probe_chunks = make_url_chunks(probe_rows, target_size, 0xBEEFCAFEULL);
+
+    int64_t total_rows = 0;
+    for (auto _ : state) {
+        for (const auto& cols : probe_chunks) {
+            wrapper.build_hash_set(kQ23ChunkSize, cols, &pool);
+            total_rows += kQ23ChunkSize;
+        }
+        benchmark::ClobberMemory();
+    }
+
+    const auto& cache_sizes = CpuInfo::get_cache_sizes();
+    if (cache_sizes.size() > static_cast<size_t>(CpuInfo::L3_CACHE)) {
+        state.counters["l1_bytes"] = static_cast<double>(cache_sizes[CpuInfo::L1_CACHE]);
+        state.counters["l2_bytes"] = static_cast<double>(cache_sizes[CpuInfo::L2_CACHE]);
+        state.counters["l3_bytes"] = static_cast<double>(cache_sizes[CpuInfo::L3_CACHE]);
+    }
+    state.counters["resident_slot_bytes"] =
+            static_cast<double>(wrapper.hash_set.capacity() * (sizeof(SliceWithHash32<PhmapSeed1>) + 1));
+    state.SetItemsProcessed(total_rows);
+
+    config::agg_prefetch_l2_ratio = saved_ratio;
+    config::agg_hash_map_prefetch_dist = saved_dist;
+}
+BENCHMARK(BM_SliceAggHashSet_PrefetchProbe_CacheBands)
+        ->Arg(1024)
+        ->Arg(2048)
+        ->Arg(8192)
+        ->Arg(32768)
+        ->Arg(131072)
+        ->Arg(524288);
+
+// Exercises SliceAggTwoLevelHashSet in the DRAM Q23 regime (~80% duplicate URLs across 16 subtables).
+static void BM_SliceAggTwoLevelHashSet_Q23_BuildAndProbe(benchmark::State& state) {
+    CpuInfo::init();
+    const size_t total_rows_per_iter = static_cast<size_t>(state.range(0));
+    const size_t distinct_urls = total_rows_per_iter / 5; // 20% unique, 80% duplicates (ClickBench Q23 shape)
+    const auto stream_chunks = make_url_chunks(total_rows_per_iter, distinct_urls, 0xC0FFEE1234ULL);
+
+    int64_t total_rows = 0;
+    for (auto _ : state) {
+        RuntimeProfile profile("q23_two_level_bench");
+        AggStatistics agg_stat(&profile);
+        MemPool pool;
+        AggHashSetOfOneStringKey<SliceAggTwoLevelHashSet<PhmapSeed1>> wrapper(kQ23ChunkSize, &agg_stat);
+        for (const auto& cols : stream_chunks) {
+            wrapper.build_hash_set(kQ23ChunkSize, cols, &pool);
+            total_rows += kQ23ChunkSize;
+        }
+        benchmark::DoNotOptimize(wrapper.hash_set.size());
+    }
+    state.SetItemsProcessed(total_rows);
+}
+BENCHMARK(BM_SliceAggTwoLevelHashSet_Q23_BuildAndProbe)->Arg(262144)->Arg(1048576);
 
 } // namespace starrocks
 
