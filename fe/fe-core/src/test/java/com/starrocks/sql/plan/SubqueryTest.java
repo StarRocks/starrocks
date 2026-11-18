@@ -730,6 +730,21 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "<slot 9> : CASE WHEN 10: ifnull = 0 THEN 10: ifnull ELSE NULL END");
             assertContains(plan, "<slot 10> : ifnull(8: count_if, 0)");
         }
+        {
+            // A correlated HAVING is rejected, even without ONLY_FULL_GROUP_BY, so the HAVING moved into the
+            // subquery output above is never correlated.
+            long sqlMode = connectContext.getSessionVariable().getSqlMode();
+            try {
+                connectContext.getSessionVariable().setSqlMode(0);
+                String sql = "select v1, (select count_if(v6 > 0) from t1 where t1.v4 = t0.v1 " +
+                        "having count_if(v6 > 0) = t0.v2) c from t0";
+                Throwable exception = assertThrows(Exception.class, () -> getFragmentPlan(sql));
+                assertThat(exception.getMessage(),
+                        containsString("Only support use correlated columns in the where clause of subqueries"));
+            } finally {
+                connectContext.getSessionVariable().setSqlMode(sqlMode);
+            }
+        }
     }
 
     @Test
