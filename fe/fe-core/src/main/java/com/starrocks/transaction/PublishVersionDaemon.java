@@ -515,6 +515,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                         continue;
                     }
                     publishingLakeTransactionsBatchTableId.addAll(tableIdList);
+                    countBatchRetry(state);
                     CompletableFuture<Void> future = publishLakeTransactionAsync(state);
                     future.thenRun(() -> tableIdList.forEach(publishingLakeTransactionsBatchTableId::remove));
                 }
@@ -553,11 +554,19 @@ public class PublishVersionDaemon extends FrontendDaemon {
                         continue;
                     }
                     publishingLakeTransactionsBatchTableId.addAll(batchTableIdList);
+                    countBatchRetry(txnStateBatch.transactionStates.get(0));
 
                     CompletableFuture<Void> future = publishLakeTransactionBatchAsync(txnStateBatch);
                     future.thenRun(() -> batchTableIdList.forEach(publishingLakeTransactionsBatchTableId::remove));
                 }
             }
+        }
+    }
+
+    // A batch whose first txn was already sent retries an attempt that did not finish.
+    private static void countBatchRetry(TransactionState head) {
+        if (head.hasSendTask()) {
+            MetricRepo.COUNTER_LAKE_PUBLISH_BATCH_RETRY.increase(1L);
         }
     }
 
@@ -578,7 +587,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             return CompletableFuture.completedFuture(null);
         }
 
-        txnState.setHasSendTask(true);
+        txnState.updateSendTaskTime();
         CompletableFuture<Boolean> publishFuture;
         Collection<TableCommitInfo> tableCommitInfos = txnState.getIdToTableCommitInfos().values();
         if (tableCommitInfos.size() == 1) {
@@ -731,11 +740,13 @@ public class PublishVersionDaemon extends FrontendDaemon {
                             }
                         }
                     }
+                    stateBatch.getTransactionStates().forEach(TransactionState::markPublishTaskSent);
                     Utils.publishLogVersionBatch(shadowIndexTablets, txnInfoList, versionList, computeResource);
                 }
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
+                stateBatch.getTransactionStates().forEach(TransactionState::markPublishTaskSent);
                 List<Tablet> publishTablets = new ArrayList<>();
                 publishTablets.addAll(normalTablets);
 
@@ -1055,7 +1066,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         List<TransactionState> states = txnStateBatch.getTransactionStates();
         Map<Long, PartitionPublishVersionData> publishVersionDataMap = new HashMap<>();
 
-        states.forEach(state -> state.setHasSendTask(true));
+        states.forEach(TransactionState::updateSendTaskTime);
         for (TransactionState state : states) {
             for (TableCommitInfo tableCommitInfo : state.getIdToTableCommitInfos().values()) {
                 long tableId = tableCommitInfo.getTableId();
@@ -1287,9 +1298,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long rpcStartMs = System.currentTimeMillis();
         try {
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
+                txnState.markPublishTaskSent();
                 Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, computeResource);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
+                txnState.markPublishTaskSent();
                 Map<Long, Double> compactionScores = new HashMap<>();
                 // Per-tablet stats from the publish response: first-load row counts for statistics
                 // collection, and range-distribution tablet sizes for real-time reshard triggering.

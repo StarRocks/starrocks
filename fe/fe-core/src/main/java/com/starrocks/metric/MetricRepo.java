@@ -249,6 +249,10 @@ public final class MetricRepo {
                     () -> new LongCounterMetric("failed_stats_collect_job", MetricUnit.REQUESTS,
                             "the number of failed statistics collect jobs"));
 
+    public static final LongCounterMetric COUNTER_LAKE_PUBLISH_BATCH_RETRY =
+            new LongCounterMetric("lake_publish_batch_retry_total", MetricUnit.OPERATIONS,
+                    "counter of lake publish batches whose first txn was already sent by an earlier attempt");
+
     public static final LongCounterMetric COUNTER_PUBLISH_VERSION_DAEMON_LOOP =
             new LongCounterMetric("publish_version_daemon_loop_total",
                     MetricUnit.OPERATIONS, "counter of publish version daemon loop runs");
@@ -1019,6 +1023,7 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_RUNNING_TASKS);
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_PUBLISH_VERSION_DAEMON_LOOP);
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LAKE_PUBLISH_BATCH_RETRY);
         COUNTER_ROUTINE_LOAD_ROWS =
                 new LongCounterMetric("routine_load_rows", MetricUnit.ROWS, "total rows of routine load");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ROUTINE_LOAD_ROWS);

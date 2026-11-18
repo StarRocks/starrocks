@@ -333,7 +333,7 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
 
     // these states need not be serialized
     private final Map<Long, PublishVersionTask> publishVersionTasks; // Only for OlapTable
-    private boolean hasSendTask;
+    private volatile boolean hasSendTask;
     private long publishVersionTime = -1;
     private long publishVersionFinishTime = -1;
     // The time when canTxnFinish() first returns true. -1 means unset.
@@ -639,6 +639,10 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
     public void setHasSendTask(boolean hasSendTask) {
         this.hasSendTask = hasSendTask;
         this.publishVersionTime = System.currentTimeMillis();
+    }
+
+    void markPublishTaskSent() {
+        this.hasSendTask = true;
     }
 
     public void updateSendTaskTime() {

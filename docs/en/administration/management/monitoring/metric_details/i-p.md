@@ -291,6 +291,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Counter of successful lake compaction jobs.
 
+## `lake_publish_batch_retry_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of batch publishes in shared-data clusters that retry an attempt that did not finish, that is, whose first transaction was already sent by an earlier attempt. When `lake_enable_batch_publish_retry_freeze` is `true`, such a retry contains only the transactions of the earlier attempt. Only the Leader FE increments this counter.
+
 ## `lake_vacuum_del_file_batch_size_minute`
 
 - Unit: Count (files per batch)

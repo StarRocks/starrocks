@@ -15,6 +15,7 @@
 #include "service/service_be/lake_service.h"
 
 #include <brpc/controller.h>
+#include <bthread/bthread.h>
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
 #include <butil/time.h> // NOLINT
@@ -50,6 +51,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/thread.h"
 #include "util/threadpool.h"
 #include "util/time.h"
@@ -195,6 +197,9 @@ LakeServiceImpl::LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr) 
 
 LakeServiceImpl::~LakeServiceImpl() = default;
 
+DEFINE_FAIL_POINT(lake_publish_version_rpc_fail);
+DEFINE_FAIL_POINT(lake_publish_version_rpc_delay_after_success);
+
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
                                       const ::starrocks::PublishVersionRequest* request,
                                       ::starrocks::PublishVersionResponse* response,
@@ -205,6 +210,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     // Used to attribute the FE-measured publish_rpc cost vs BE handler cost gap.
     // cntl can be nullptr in unit tests, so guard the access.
     int64_t brpc_queue_us = (cntl != nullptr) ? cntl->latency_us() : 0;
+
+    if (cntl != nullptr) {
+        FAIL_POINT_TRIGGER_RETURN(lake_publish_version_rpc_fail,
+                                  cntl->SetFailed("inject lake_publish_version_rpc_fail"));
+    }
 
     if (!request->has_base_version()) {
         cntl->SetFailed("missing base version");
@@ -595,6 +605,16 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                   << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
                   << "us brpc_queue_us=" << brpc_queue_us << ", trace: " << trace->MetricsAsJSON();
     }
+#ifdef FIU_ENABLE
+    if (cntl != nullptr && response->status().status_code() == 0 && response->failed_tablets().empty()) {
+        FAIL_POINT_TRIGGER_EXECUTE(lake_publish_version_rpc_delay_after_success, {
+            LOG(INFO) << "Delaying successful publish response: txns=" << get_txn_ids_string(request)
+                      << " tablets=" << JoinInts(request->tablet_ids(), ",")
+                      << " base_version=" << request->base_version() << " new_version=" << request->new_version();
+            bthread_usleep((timeout_ms + 1000L) * 1000L);
+        });
+    }
+#endif
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
 }
 
