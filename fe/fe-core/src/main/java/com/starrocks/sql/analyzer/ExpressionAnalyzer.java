@@ -1045,6 +1045,13 @@ public class ExpressionAnalyzer {
                 castType = cast.getTargetTypeDef().getType();
             }
             Type fromType = cast.getChild(0).getType();
+            if (!cast.isImplicit() && castType.isJsonType() && fromType.isComplexType()) {
+                Type sourceType = toJsonSourceType(fromType);
+                if (sourceType != null) {
+                    analyzeComplexTypeToJsonCast(cast, sourceType, context);
+                    return null;
+                }
+            }
             if (!TypeManager.canCastTo(fromType, castType)) {
                 throw new SemanticException("Invalid type cast from " + fromType.toSql() + " to "
                         + castType.toSql() + " in sql `" +
@@ -1053,6 +1060,55 @@ public class ExpressionAnalyzer {
             }
 
             cast.setType(castType);
+            return null;
+        }
+
+        // An explicit CAST(<ARRAY | MAP | STRUCT> AS JSON) is evaluated as CAST(to_json(<value>) AS JSON).
+        // Decimals are cast to DOUBLE first, so that they become JSON numbers as in CAST(<decimal> AS JSON)
+        // instead of the JSON strings that to_json() writes for them.
+        private void analyzeComplexTypeToJsonCast(CastExpr cast, Type sourceType, Scope scope) {
+            Expr value = cast.getChild(0);
+            if (!sourceType.equals(value.getType())) {
+                value = TypeManager.addCastExpr(value, sourceType);
+            }
+            FunctionCallExpr toJson = new FunctionCallExpr(FunctionSet.TO_JSON, Lists.newArrayList(value),
+                    cast.getPos());
+            visitFunctionCall(toJson, scope);
+            cast.setChild(0, toJson);
+            cast.setType(JsonType.JSON);
+        }
+
+        // Returns the type to pass to to_json() for a CAST of the given type to JSON, or null when the cast is not
+        // supported. Map keys must be strings or integers, which to_json() writes as their text.
+        private static Type toJsonSourceType(Type type) {
+            if (type.isArrayType()) {
+                Type itemType = toJsonSourceType(((ArrayType) type).getItemType());
+                return itemType == null ? null : new ArrayType(itemType);
+            } else if (type.isMapType()) {
+                MapType mapType = (MapType) type;
+                Type keyType = mapType.getKeyType();
+                if (!keyType.isNull() && !keyType.isStringType() && !keyType.isIntegerType()) {
+                    return null;
+                }
+                Type valueType = toJsonSourceType(mapType.getValueType());
+                return valueType == null ? null : new MapType(keyType, valueType);
+            } else if (type.isStructType()) {
+                StructType structType = (StructType) type;
+                List<StructField> fields = new ArrayList<>();
+                for (StructField field : structType.getFields()) {
+                    Type fieldType = toJsonSourceType(field.getType());
+                    if (fieldType == null) {
+                        return null;
+                    }
+                    fields.add(new StructField(field.getName(), fieldType, field.getComment()));
+                }
+                return new StructType(fields, true);
+            } else if (type.isDecimalOfAnyVersion()) {
+                return FloatType.DOUBLE;
+            } else if (type.isNull() || type.isBoolean() || type.isIntegerType() || type.isFloatingPointType()
+                    || type.isStringType() || type.isJsonType() || type.isDateType()) {
+                return type;
+            }
             return null;
         }
 

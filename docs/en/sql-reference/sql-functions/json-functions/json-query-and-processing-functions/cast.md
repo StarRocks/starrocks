@@ -34,7 +34,7 @@ cast(sql_expr AS JSON)
 
 - `sql_data_type`: the SQL data type to which you want to convert the JSON value. Only the STRING, VARCHAR, CHAR, BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DOUBLE, and FLOAT data types are supported.
 
-- `sql_expr`: the expression that represents the SQL value you want to convert to a JSON value. This parameter supports all SQL data types that are supported by the `sql_data_type` parameter.
+- `sql_expr`: the expression that represents the SQL value you want to convert to a JSON value. This parameter supports all SQL data types that are supported by the `sql_data_type` parameter. It also supports ARRAY, MAP, and STRUCT values whose elements, values, and fields are of these types, DECIMAL, DATE, DATETIME, JSON, or nested ARRAY, MAP, and STRUCT types, and whose MAP keys are strings or integers.
 
 ## Return value
 
@@ -49,6 +49,8 @@ cast(sql_expr AS JSON)
   - If the SQL value exceeds the precision that is supported by JSON, the cast function returns `NULL` to prevent an arithmetic overflow.
 
   - If the SQL value is `NULL`, the cast function does not convert the SQL value `NULL` to a JSON value of `NULL`. The return value is still an SQL value of `NULL`.
+
+  - An ARRAY, MAP, or STRUCT value is converted in the same way as [to_json](./to_json.md): an ARRAY becomes a JSON array, and a MAP or STRUCT becomes a JSON object. `NULL` elements, values, and fields become JSON `null`. DECIMAL values inside them are converted to DOUBLE first, so they become JSON numbers, as in a cast of a single DECIMAL value. For example, `cast([1, 2] AS JSON)` returns `[1, 2]`, and `cast(map{'a': 1.5} AS JSON)` returns `{"a": 1.5}`.
 
 - Conversion from JSON to SQL
 
