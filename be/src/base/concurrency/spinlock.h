@@ -21,11 +21,15 @@
 namespace starrocks {
 
 // Lightweight spinlock.
+//
+// Keeps `bool _locked` (1 byte, trivially movable) rather than `std::atomic<bool>`
+// so containers such as `ObjectPool` can default their move constructors while all
+// accesses to `_locked` go through explicit C++11-model `__atomic_*` builtins.
 class SpinLock {
 public:
     SpinLock() = default;
 
-    // Acquires the lock, spins until the lock becomes available
+    // Acquires the lock, spins until the lock becomes available.
     void lock() {
         if (!try_lock()) {
             slow_acquire();
@@ -33,40 +37,30 @@ public:
     }
 
     void unlock() {
-        // Memory barrier here. All updates before the unlock need to be made visible.
-        __sync_synchronize();
-        DCHECK(_locked);
-        _locked = false;
+        DCHECK(__atomic_load_n(&_locked, __ATOMIC_RELAXED));
+        // Release store: ensures all prior reads and writes in the critical section
+        // are visible before `_locked` becomes false (emits `stlrb` on ARM64 and
+        // plain `movb` on x86_64 without a full `dmb ish` / `mfence`).
+        __atomic_store_n(&_locked, false, __ATOMIC_RELEASE);
     }
 
-    // Tries to acquire the lock
-    inline bool try_lock() { return __sync_bool_compare_and_swap(&_locked, false, true); }
+    // Tries to acquire the lock using Test-and-Test-and-Set (TTAS):
+    // 1. Relaxed load avoids taking exclusive cache-line ownership when already locked.
+    // 2. Acquire exchange (`swpab` / `ldaxrb`+`stxrb` on ARM64, `xchgb` on x86_64)
+    //    avoids the full `SEQ_CST` barrier of `__sync_bool_compare_and_swap`.
+    inline bool try_lock() {
+        return !__atomic_load_n(&_locked, __ATOMIC_RELAXED) && !__atomic_exchange_n(&_locked, true, __ATOMIC_ACQUIRE);
+    }
 
-    void dcheck_locked() { DCHECK(_locked); }
+    void dcheck_locked() const { DCHECK(__atomic_load_n(&_locked, __ATOMIC_RELAXED)); }
 
 private:
-    // Out-of-line definition of the actual spin loop. The primary goal is to have the
-    // actual lock method as short as possible to avoid polluting the i-cache with
-    // unnecessary instructions in the non-contested case.
+    // Out-of-line definition of the actual spin loop to keep the inlined fast path compact.
     void slow_acquire();
 
-    // In typical spin lock implements, we want to spin (and keep the core fully busy),
-    // for some number of cycles before yielding. Consider these three cases:
-    //  1) lock is un-contended - spinning doesn't kick in and has no effect.
-    //  2) lock is taken by another thread and that thread finishes quickly.
-    //  3) lock is taken by another thread and that thread is slow (e.g. scheduled away).
-    //
-    // In case 3), we'd want to yield so another thread can do work. This thread
-    // won't be able to do anything useful until the thread with the lock runs again.
-    // In case 2), we don't want to yield (and give up our scheduling time slice)
-    // since we will get to run soon after.
-    // To try to get the best of everything, we will busy spin for a while before
-    // yielding to another thread.
-    // TODO: how do we set this.
-    static const int NUM_SPIN_CYCLES = 70;
-    // TODO: Revisit using std::atomic<bool> for stricter memory-model semantics once
-    // ObjectPool/other users no longer rely on SpinLock being movable.
-    // TODO: pad this to be a cache line?
+    // Number of single-pause TTAS probes before yielding the OS thread slice.
+    static constexpr int NUM_SPIN_CYCLES = 70;
+
     bool _locked{false};
 };
 

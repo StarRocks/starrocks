@@ -17,30 +17,40 @@
 
 #include "base/concurrency/spinlock.h"
 
+#include <sched.h>
+
 namespace starrocks {
+
+namespace {
+
+inline void cpu_relax() {
+#if defined(__i386) || defined(__x86_64__)
+    asm volatile("pause\n" : : : "memory");
+#elif defined(__aarch64__)
+    // A "yield" instruction in aarch64 is essentially a nop, and does
+    // not cause enough delay to help backoff. "isb" is a barrier that,
+    // especially inside a loop, creates a small delay without consuming
+    // ALU resources.
+    asm volatile("isb\n" : : : "memory");
+#else
+    asm volatile("" : : : "memory");
+#endif
+}
+
+} // namespace
 
 void SpinLock::slow_acquire() {
     while (true) {
-        if (try_lock()) {
-            return;
-        }
         for (int i = 0; i < NUM_SPIN_CYCLES; ++i) {
-#if (defined(__i386) || defined(__x86_64__))
-            asm volatile("pause\n" : : : "memory");
-#elif defined(__aarch64__)
-            // A "yield" instruction in aarch64 is essentially a nop, and does
-            // not cause enough delay to help backoff. "isb" is a barrier that,
-            // especially inside a loop, creates a small delay without consuming
-            // ALU resources.  Experiments shown that adding the isb instruction
-            // improves stability and reduces result jitter. Adding more delay
-            // to the UT_RELAX_CPU than a single isb reduces performance.
-            asm volatile("isb\n" ::: "memory");
-#endif
-        }
-        if (try_lock()) {
-            return;
+            cpu_relax();
+            if (try_lock()) {
+                return;
+            }
         }
         sched_yield();
+        if (try_lock()) {
+            return;
+        }
     }
 }
 
