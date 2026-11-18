@@ -25,7 +25,7 @@ Due to an unstable load order issue in the v4.1.0 container image, BE processes 
 
 ## 4.1.8
 
-Release Date: November 16, 2026
+Release Date: November 18, 2026
 
 ### Behavior Changes
 
@@ -114,6 +114,7 @@ The following issues have been fixed:
 - Month-based date arithmetic was rewritten as if it were invertible. [#81979](https://github.com/StarRocks/starrocks/pull/81979)
 - Materialized view force drop recursed when the retention period is 0. [#81953](https://github.com/StarRocks/starrocks/pull/81953)
 - Upgraded StarOS and StarCache to v4.1.6. [#81508](https://github.com/StarRocks/starrocks/pull/81508)
+- Upgraded Starlet and StarCache to v4.1.7, which fixes empty and oversized S3 read ranges, reads overlay files from the layer that has the data, refills drained LRU shards of the cache on eviction, and rejects stale block file versions when filling disk blocks from metadata. [#83014](https://github.com/StarRocks/starrocks/pull/83014)
 
 ## 4.1.7
 
