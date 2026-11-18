@@ -6400,6 +6400,81 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(snap3.snapshotId(), delta.end().get());
     }
 
+    private Map<String, String> createTableWithProperties(IcebergCatalog icebergCatalog, Map<String, String> props)
+            throws DdlException {
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, String>> propsCaptor = ArgumentCaptor.forClass(Map.class);
+        Mockito.when(icebergCatalog.createTable(Mockito.eq(connectContext), Mockito.eq("db"), Mockito.eq("tbl"),
+                Mockito.any(Schema.class), Mockito.any(PartitionSpec.class), Mockito.isNull(), Mockito.isNull(),
+                propsCaptor.capture())).thenReturn(true);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), new IcebergCatalogProperties(DEFAULT_CONFIG));
+        Assertions.assertTrue(metadata.createTable(connectContext,
+                buildIcebergCreateTableStmt("db", "tbl", new HashMap<>(props))));
+        return propsCaptor.getValue();
+    }
+
+    @Test
+    public void testCreateTableRejectsValuesIcebergCannotParse() {
+        List<Map<String, String>> invalid = List.of(
+                Map.of("write.parquet.compression-codec", "xxx"),
+                Map.of("write.parquet.compression-codec", "zlib"),
+                Map.of("write.parquet.compression-codec", "none"),
+                Map.of("write.delete.parquet.compression-codec", "xxx"),
+                Map.of("write.format.default", "xxx"),
+                Map.of("write.format.default", "metadata"),
+                Map.of("write.target-file-size-bytes", "-100"),
+                Map.of("write.target-file-size-bytes", "0"),
+                Map.of("write.target-file-size-bytes", "abc"),
+                Map.of("write.target-file-size-bytes", " 134217728 "),
+                // the SR alias lands on the parquet codec key of a parquet table
+                Map.of("compression_codec", "xxx"),
+                Map.of("compression_codec", "zlib"),
+                Map.of("compression_codec", "none"));
+        for (Map<String, String> props : invalid) {
+            IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+            String value = props.values().iterator().next();
+            StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                    () -> createTableWithProperties(icebergCatalog, props), props.toString());
+            Assertions.assertTrue(e.getMessage().contains("'" + value + "'"), e.getMessage());
+            Mockito.verify(icebergCatalog, Mockito.never()).createTable(Mockito.any(), Mockito.any(), Mockito.any(),
+                    Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any());
+        }
+    }
+
+    @Test
+    public void testCreateTableKeepsValidValues() throws DdlException {
+        Map<String, String> passed = createTableWithProperties(Mockito.mock(IcebergCatalog.class), Map.of(
+                "write.parquet.compression-codec", "ZSTD",
+                "write.delete.parquet.compression-codec", "lzo",
+                "write.target-file-size-bytes", "134217728",
+                "WRITE.PARQUET.COMPRESSION-CODEC", "xxx",
+                "foo.bar", "baz"));
+        Assertions.assertEquals("ZSTD", passed.get("write.parquet.compression-codec"));
+        Assertions.assertEquals("lzo", passed.get("write.delete.parquet.compression-codec"));
+        Assertions.assertEquals("134217728", passed.get("write.target-file-size-bytes"));
+        Assertions.assertEquals("xxx", passed.get("WRITE.PARQUET.COMPRESSION-CODEC"));
+
+        // an alias codec without a format lands on the parquet codec key
+        passed = createTableWithProperties(Mockito.mock(IcebergCatalog.class), Map.of("compression_codec", "snappy"));
+        Assertions.assertEquals("snappy", passed.get("write.parquet.compression-codec"));
+
+        passed = createTableWithProperties(Mockito.mock(IcebergCatalog.class), Map.of("write.format.default", "avro"));
+        Assertions.assertEquals("avro", passed.get("write.format.default"));
+
+        // an alias codec that lands on the ORC key is not checked against the parquet codecs
+        passed = createTableWithProperties(Mockito.mock(IcebergCatalog.class),
+                Map.of("file_format", "orc", "compression_codec", "lzo"));
+        Assertions.assertEquals("orc", passed.get("write.format.default"));
+        Assertions.assertEquals("lzo", passed.get("write.orc.compression-codec"));
+
+        // without the file_format alias, the alias codec follows the native default format
+        passed = createTableWithProperties(Mockito.mock(IcebergCatalog.class),
+                Map.of("write.format.default", "orc", "compression_codec", "zlib"));
+        Assertions.assertEquals("zlib", passed.get("write.orc.compression-codec"));
+        Assertions.assertFalse(passed.containsKey("write.parquet.compression-codec"));
+    }
+
     @Test
     public void testListTableDeltaTraitsSkipsReplacePreservesContiguousBoundaries() {
         // snap1: APPEND
