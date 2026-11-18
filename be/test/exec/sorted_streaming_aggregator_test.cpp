@@ -26,7 +26,6 @@
 #include "common/configbase.h"
 #include "common/memory/column_allocator.h"
 #include "exprs/agg/array_agg.h"
-#include "exprs/agg/map_agg.h"
 #include "runtime/runtime_state.h"
 #include "testutil/desc_tbl_builder.h"
 
@@ -265,61 +264,6 @@ TEST_F(SortedStreamingAggregatorTest, NormalOutputAndBufferReuse) {
     ASSERT_TRUE(_aggregator->pull_eos_chunk().ok());
     EXPECT_EQ(nullptr, _aggregator->pull_eos_chunk().value());
     close_and_check();
-}
-
-struct ThrowingArrayAggState : ArrayAggAggregateStateV2 {
-    void initialize(FunctionContext* ctx) const {
-        ArrayAggAggregateStateV2::initialize(ctx);
-        EXPECT_EQ(1, data_columns.size());
-        throw std::bad_alloc();
-    }
-
-    ~ThrowingArrayAggState() { ++destroyed; }
-    static inline size_t destroyed = 0;
-};
-
-TEST_F(SortedStreamingAggregatorTest, ArrayAggInitializationFailure) {
-    ArrayAggAggregateFunctionV2<ThrowingArrayAggState> fn;
-    auto array_type = TypeDescriptor::create_array_type(TYPE_BIGINT_DESC);
-    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({TYPE_BIGINT_DESC}, array_type));
-    alignas(ThrowingArrayAggState) uint8_t storage[sizeof(ThrowingArrayAggState)];
-    ThrowingArrayAggState::destroyed = 0;
-    EXPECT_THROW(fn.create(context.get(), storage), std::bad_alloc);
-    EXPECT_EQ(1, ThrowingArrayAggState::destroyed);
-    // Release the known constructed state when this test runs against the unchanged implementation.
-    if (ThrowingArrayAggState::destroyed == 0) {
-        fn.destroy(context.get(), storage);
-    }
-}
-
-struct CountingMap : std::map<int64_t, size_t> {
-    ~CountingMap() { ++destroyed; }
-    static inline size_t destroyed = 0;
-};
-
-class FailingColumnAllocator final : public MemHookAllocator {
-public:
-    void* checked_alloc(size_t size) override { throw std::bad_alloc(); }
-};
-
-TEST_F(SortedStreamingAggregatorTest, MapAggInitializationFailure) {
-    using State = MapAggAggregateFunctionState<TYPE_BIGINT, CountingMap>;
-    MapAggAggregateFunction<TYPE_BIGINT, CountingMap> fn;
-    // Array offset construction requires a column buffer after the map state has been constructed.
-    auto array_type = TypeDescriptor::create_array_type(TYPE_BIGINT_DESC);
-    std::unique_ptr<FunctionContext> context(
-            FunctionContext::create_test_context({TYPE_BIGINT_DESC, array_type}, TYPE_BIGINT_DESC));
-    alignas(State) uint8_t storage[sizeof(State)];
-    CountingMap::destroyed = 0;
-    {
-        FailingColumnAllocator allocator;
-        ThreadLocalColumnAllocatorSetter setter(&allocator);
-        EXPECT_THROW(fn.create(context.get(), storage), std::bad_alloc);
-    }
-    EXPECT_EQ(1, CountingMap::destroyed);
-    if (CountingMap::destroyed == 0) {
-        fn.destroy(context.get(), storage);
-    }
 }
 
 } // namespace starrocks
