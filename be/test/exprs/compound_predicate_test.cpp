@@ -373,6 +373,74 @@ TEST_F(VectorizedCompoundPredicateTest, OnlyNullOrExpr) {
     }
 }
 
+// The value under a NULL row is undefined (producers such as IN or append_nulls leave it uninitialized).
+// TRUE OR NULL must still come out as exactly 1, not 1 | <byte under the NULL>.
+TEST_F(VectorizedCompoundPredicateTest, orIgnoresValueUnderNull) {
+    expr_node.opcode = TExprOpcode::COMPOUND_OR;
+    expr_node.is_nullable = true;
+    std::unique_ptr<Expr> expr(VectorizedCompoundPredicateFactory::from_thrift(expr_node));
+
+    // row:                       0     1     2     3     4     5  6  7
+    std::vector<uint8_t> l_data = {17, 0xFE, 1, 0, 0x11, 0, 1, 0x80};
+    std::vector<uint8_t> l_null = {1, 1, 0, 0, 1, 0, 0, 1};
+    std::vector<uint8_t> r_data = {1, 1, 0x55, 0xAA, 0x22, 0, 0, 0};
+    std::vector<uint8_t> r_null = {0, 0, 1, 1, 1, 0, 0, 0};
+    std::vector<int> expected = {1, 1, 1, -1, -1, 0, 1, -1}; // -1 is NULL
+
+    auto make_column = [](const std::vector<uint8_t>& data, const std::vector<uint8_t>& nulls) {
+        auto data_column = BooleanColumn::create();
+        data_column->get_data().assign(data.begin(), data.end());
+        auto null_column = NullColumn::create();
+        null_column->get_data().assign(nulls.begin(), nulls.end());
+        return NullableColumn::create(std::move(data_column), std::move(null_column));
+    };
+    MockColumnExpr col1(expr_node, make_column(l_data, l_null));
+    MockColumnExpr col2(expr_node, make_column(r_data, r_null));
+    expr->_children.push_back(&col1);
+    expr->_children.push_back(&col2);
+
+    ColumnPtr v = expr->evaluate(nullptr, nullptr);
+    ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state, [&expected](ColumnPtr const& v) {
+        ASSERT_TRUE(v->is_nullable());
+        ASSERT_EQ(expected.size(), v->size());
+        auto data = BooleanColumn::static_pointer_cast(NullableColumn::static_pointer_cast(v)->data_column());
+        for (size_t j = 0; j < expected.size(); ++j) {
+            if (expected[j] < 0) {
+                ASSERT_TRUE(v->is_null(j)) << "row " << j;
+            } else {
+                ASSERT_FALSE(v->is_null(j)) << "row " << j;
+                ASSERT_EQ(expected[j], (int)data->get_data()[j]) << "row " << j;
+            }
+        }
+    });
+}
+
+TEST_F(VectorizedCompoundPredicateTest, orWithConstTrueIgnoresValueUnderNull) {
+    expr_node.opcode = TExprOpcode::COMPOUND_OR;
+    expr_node.is_nullable = true;
+    std::unique_ptr<Expr> expr(VectorizedCompoundPredicateFactory::from_thrift(expr_node));
+
+    auto data_column = BooleanColumn::create();
+    data_column->get_data() = {17, 0, 0xFE, 1};
+    auto null_column = NullColumn::create();
+    null_column->get_data() = {1, 0, 1, 0};
+    MockColumnExpr col1(expr_node, NullableColumn::create(std::move(data_column), std::move(null_column)));
+    expr_node.is_nullable = false;
+    MockConstVectorizedExpr<TYPE_BOOLEAN> col2(expr_node, 1);
+    expr->_children.push_back(&col1);
+    expr->_children.push_back(&col2);
+
+    ColumnPtr v = expr->evaluate(nullptr, nullptr);
+    ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state, [](ColumnPtr const& v) {
+        ASSERT_EQ(4, v->size());
+        ColumnViewer<TYPE_BOOLEAN> viewer(v);
+        for (size_t j = 0; j < v->size(); ++j) {
+            ASSERT_FALSE(viewer.is_null(j)) << "row " << j;
+            ASSERT_EQ(1, (int)viewer.value(j)) << "row " << j;
+        }
+    });
+}
+
 TEST_F(VectorizedCompoundPredicateTest, notExpr) {
     expr_node.opcode = TExprOpcode::COMPOUND_NOT;
     expr_node.is_nullable = false;
