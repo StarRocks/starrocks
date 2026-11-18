@@ -56,24 +56,24 @@ StarRocks Flink Connector 支持多表事务，可将 Flink 中的数据原子�
 
 #### `sink.transaction.multi-table.mini-switch-interval-ms`
 
-- Type: Long
-- Default: `-1`（自动）
-- Unit: ms
-- Description: 每个分区执行 Chunk 切换之间的最小间隔（毫秒）。在此间隔内，源事务会被批量合并到一次 Stream Load 中，从而限制 HTTP 请求数量。`-1` 表示自动计算为 `min(1000, max(500, sink.buffer-flush.interval-ms/4))`；设置正数时则使用指定值。
+- 类型：Long
+- 默认值：`-1`（自动）
+- 单位：毫秒
+- 描述：每个分区执行 Chunk 切换之间的最小间隔（毫秒）。在此间隔内，源事务会被批量合并到一次 Stream Load 中，从而限制 HTTP 请求数量。`-1` 表示自动计算为 `min(1000, max(500, sink.buffer-flush.interval-ms/4))`；设置正数时则使用指定值。
 
 #### `sink.transaction.multi-table.min-switch-bytes`
 
-- Type: Long
-- Default: `1048576`（1 MB）
-- Unit: Bytes
-- Description: 基于时间间隔触发的 Chunk 切换仅在某个 Region 的活动 Chunk 至少累积了此字节数后才会执行。这样，低流量分区可以将更多源事务批量合并到一次 Stream Load 中，而不是产生大量微小请求。达到半满时的预留空间、缓冲区大小导致的内存压力，或者自该分区上次切换后经过完整的 `sink.buffer-flush.interval-ms`，都会强制执行切换，不受此大小阈值限制。因此，即使设置了较大的阈值，持续的低流量数据流仍会大约按照 flush 间隔进行切换，不会被无限期地延迟。设置为 `<=0` 可禁用大小限制，恢复之前按时间间隔切换的行为。当 `mini-switch-interval-ms` 等于（或大于）`sink.buffer-flush.interval-ms` 时，此选项对 txnEnd 时的切换不起作用（参见块生命周期与 `miniInterval` 批处理）。
+- 类型：Long
+- 默认值：`1048576`（1 MB）
+- 单位：字节
+- 描述：基于时间间隔触发的 Chunk 切换仅在某个 Region 的活动 Chunk 至少累积了此字节数后才会执行。这样，低流量分区可以将更多源事务批量合并到一次 Stream Load 中，而不是产生大量微小请求。达到半满时的预留空间、缓冲区大小导致的内存压力，或者自该分区上次切换后经过完整的 `sink.buffer-flush.interval-ms`，都会强制执行切换，不受此大小阈值限制。因此，即使设置了较大的阈值，持续的低流量数据流仍会大约按照 flush 间隔进行切换，不会被无限期地延迟。设置为 `<=0` 可禁用大小限制，恢复之前按时间间隔切换的行为。当 `mini-switch-interval-ms` 等于（或大于）`sink.buffer-flush.interval-ms` 时，此选项对 txnEnd 时的切换不起作用（参见块生命周期与 `miniInterval` 批处理）。
 
 #### `sink.transaction.multi-table.max-txn-bytes`
 
-- Type: Long
-- Default: `0`（无限制）
-- Unit: Bytes
-- Description: 在等待 `txnEnd` 期间，单个 sink 子任务可以缓冲的正在进行中的源事务数据的硬上限（字节）。对于在 `txnEnd` 之前无法 flush 的数据，Writer 不会阻塞（参见限制 7），因此单个源事务可能增长到超过 `2 × buffer-size`。此选项用于限制这种增长；超过限制时，任务将因明确的错误而失败。`0` 表示不限制大小，此时唯一的限制是 TaskManager 的堆内存。
+- 类型：Long
+- 默认值：`0`（无限制）
+- 单位：字节
+- 描述：在等待 `txnEnd` 期间，单个 sink 子任务可以缓冲的正在进行中的源事务数据的硬上限（字节）。对于在 `txnEnd` 之前无法 flush 的数据，Writer 不会阻塞（参见限制 7），因此单个源事务可能增长到超过 `2 × buffer-size`。此选项用于限制这种增长；超过限制时，任务将因明确的错误而失败。`0` 表示不限制大小，此时唯一的限制是 TaskManager 的堆内存。
 
 ### 加载相关配置
 
@@ -571,17 +571,17 @@ invoke(record)                                           [Flink task thread]
 
 管理线程以 `scanningFrequency` 的频率运行扫描循环。每次迭代：
 
-1. **Ensure shared transaction**: 打开一个新连接（即时），或在当前连接接近 StarRocks 服务端超时时主动回收该连接（`timeout` 标头的 80%，默认 480 秒）。
+1. **确保共享事务**: 开启一个新的共享事务（提前开启），或在当前共享事务接近 StarRocks 服务端超时时主动回收它（`timeout` 标头的 80%，默认 480 秒）。
 
 2. **源空闲回退**: 对于所有 region **都**处于干净边界的分区，一旦其累积的数据达到 `min-switch-bytes`，且自其上次切换以来已经过 `miniSwitchIntervalMs`，就强制切换该分区；在内存压力下则立即强制切换（参见块生命周期与 `miniInterval` 批处理）。低于大小阈值时，空闲数据不会在此处切换——而是由下文的时间驱动提交对其进行切分并提交（参见步骤 3），因此即使源暂停，其数据仍会在一个 `commitInterval` 内变为可见。这用于处理「源在若干次 txnEnd 后暂停」的情况，即任务线程在发起新一次切换之前就已停止。
 
-3. **时间驱动的提交触发器**: 调用 `tryStartTimerDrivenCommit()`，如果满足条件则设置 `commitInFlight=true`**两者** 条件成立：
+3. **时间驱动的提交触发器**: 调用 `tryStartTimerDrivenCommit()`，该方法在以下**两个**条件均成立时设置 `commitInFlight=true`：
 
    - `now - lastCommitTimeMs >= commitInterval`（已配置的 `sink.buffer-flush.interval-ms`）。
 
    - 存在待提交的数据——`txnCoordinator.hasDataLoaded()` 为 true，至少有一个 region 有待处理的 inactiveChunks，或者某个分区整体处于干净边界，且有缓冲的活动行（因低于大小限制而被推迟），提交切分会将这些行冻结。最后这项检查在分区范围内进行，因此单独一个干净的 region（其兄弟表仍处于事务中途）不会触发一个无法推进的提交周期。
 
-4. **自主刷新**：通过 `FlushAndCommitStrategy` 排空任何 `inactiveChunks` 非空的 region。多表模式的 `flush()` 仅流出已冻结的非活跃 chunk——它**从不**不会触碰 `activeChunk`。这保证了在共享标签下到达 StarRocks 的每个 chunk 均来自已完成的源事务这一不变量。
+4. **自主刷新**：通过 `FlushAndCommitStrategy` 排空任何 `inactiveChunks` 非空的 region。多表模式的 `flush()` 仅流出已冻结的非活跃 chunk——它**从不**触碰 `activeChunk`。这保证了在共享标签下到达 StarRocks 的每个 chunk 均来自已完成的源事务这一不变量。
 
 当 `commitInFlight=true` 时，主循环进入 `processMultiTableCommit`。其第一步是**提交切分**（commit cut），用于决定哪些数据进入当前标签。切分按分区进行，不会等待每个分区都到达干净边界。在持有该分区各 region 写锁的情况下（这样并发的 txnEnd 切换就无法插入其间）：
 
@@ -607,7 +607,7 @@ invoke(record)                                           [Flink task thread]
 
 - `onWrite(partition)` 在首次写入时将分区注册为 `ACTIVE`。
 
-- `onTxnEnd(partition)` 将分区转换为 `TXN_END_SEEN`（粘性——后续写入**不会**不会将其降级回 `ACTIVE`）。
+- `onTxnEnd(partition)` 将分区转换为 `TXN_END_SEEN`（粘性——后续写入**不会**将其降级回 `ACTIVE`）。
 
 - `getPartitionsWithoutTxnEnd()` 列出已写入数据但从未收到 txnEnd 的分区。用于保存点和回收操作在上游合约违规（从未关闭的源事务）时快速失败。
 
@@ -617,7 +617,7 @@ invoke(record)                                           [Flink task thread]
 
 ### 使用共享标签的自主刷新
 
-当 region 的 `inactiveChunks` 变为非空时，管理线程的自主刷新循环通过 `/api/transaction/load` 在**当前共享标签**当前共享标签下将其流式传输到 StarRocks。由于共享事务始终在任何数据加载之前开启，因此不存在数据在独立（孤儿）标签下被加载的窗口。在多表模式下，`flush()` 从不触发 `switchChunk`——它仅排空已冻结的非活跃 chunk——因此「在共享标签下到达 StarRocks 的每个 chunk 均来自已完成的源事务」这一不变量无条件成立。
+当 region 的 `inactiveChunks` 变为非空时，管理线程的自主刷新循环通过 `/api/transaction/load` 在**当前共享标签**下将其流式传输到 StarRocks。由于共享事务始终在任何数据加载之前开启，因此不存在数据在独立（孤儿）标签下被加载的窗口。在多表模式下，`flush()` 从不触发 `switchChunk`——它仅排空已冻结的非活跃 chunk——因此「在共享标签下到达 StarRocks 的每个 chunk 均来自已完成的源事务」这一不变量无条件成立。
 
 ### 安全保证
 
@@ -658,13 +658,13 @@ commitInterval elapsed
 
 3. **所有表必须在同一数据库中**：StarRocks 多表事务是数据库范围的；不支持跨数据库事务。
 
-4. **事务范围为每个 sink 子任务 + 每个分区**：每个 sink 子任务独立维护其自身的 StarRocks 事务。原子性在**在单个源事务内**（某一分区上单次 txnEnd 涉及的所有行，跨该分区写入的所有表）范围内得到保证。不同**不同**源分区的数据可见性可以交错：一旦分区 P0 的源事务已完全到达且提交间隔已过，P0 的数据即会被提交，即使分区 P1 的源事务仍在进行中。需要在 StarRocks 层面实现跨分区原子性的应用，必须使用单一源分区或在上游协调提交。简而言之，源事务保证仅在每个 lane 内成立，其中一个 lane 指一个 sink 子任务上的一个 `sourcePartition`。在同一个 Label 下提交的所有内容（包括来自多个 lane 的行）会原子地变为可见，但无法控制不同 lane 的哪些源事务会进入同一个 Label：另一个 lane 上的相关事务可能落入更早或更晚的 Label，而不同 sink 子任务上的 lane 永远不会共享同一个 Label。
+4. **事务范围为每个 sink 子任务 + 每个分区**：每个 sink 子任务独立维护其自身的 StarRocks 事务。原子性**在单个源事务内**（某一分区上单次 txnEnd 涉及的所有行，跨该分区写入的所有表）得到保证。**不同**源分区的数据可见性可以交错：一旦分区 P0 的源事务已完全到达且提交间隔已过，P0 的数据即会被提交，即使分区 P1 的源事务仍在进行中。需要在 StarRocks 层面实现跨分区原子性的应用，必须使用单一源分区或在上游协调提交。简而言之，源事务保证仅在每个 lane 内成立，其中一个 lane 指一个 sink 子任务上的一个 `sourcePartition`。在同一个 Label 下提交的所有内容（包括来自多个 lane 的行）会原子地变为可见，但无法控制不同 lane 的哪些源事务会进入同一个 Label：另一个 lane 上的相关事务可能落入更早或更晚的 Label，而不同 sink 子任务上的 lane 永远不会共享同一个 Label。
 
 5. **数据可见性延迟**：由 `sink.buffer-flush.interval-ms`（提交间隔）控制。已完成的源事务首先会从 `activeChunk` 中冻结出来——要么在分区达到 `sink.transaction.multi-table.min-switch-bytes`（默认 1 MB）时立即冻结，要么对于低于该阈值的低流量分区，最迟在其上次切换后一个 `commitInterval` 时冻结（即任务线程在 txnEnd 时强制执行的新鲜度上限）——然后由下一次时间驱动的提交发布。因此，在持续流动的 CDC 流中，如果分区足够繁忙、能够达到大小限制，单行数据会在大约一个 `commitInterval` 内可见；在低流量的最坏情况下，则最多需要两个 `commitInterval` 窗口（一个用于冻结低于阈值的 Chunk，一个用于提交它）。在源暂停期间，已提交的数据保持可见，而最后一个低于阈值的空闲 Chunk 会通过时间驱动提交的干净边界检测，在最多再经过一个 `commitInterval` 后被提交。设置 `min-switch-bytes <= 0` 可在每个间隔都执行切换（延迟最低，但加载次数更多、单次数据量更小）。
 
 6. **取决于 StarRocks 集群事务设置**：监控运行中的事务数量限制、事务超时时间以及 Label 保留情况。事务超时时间是指连接器在 BEGIN 请求中发送的 `timeout` 标头——除非被 `sink.properties.timeout` 覆盖，否则为 600 秒——StarRocks 将其视为从 BEGIN 开始计算的绝对截止时间，而非空闲超时：向该 Label 加载数据不会延长它。连接器会在达到该超时时间的 80% 时（默认 480 秒）回收共享事务。确保 `sink.buffer-flush.interval-ms` 显著短于此超时时间。
 
-7. **长源事务下 `activeChunk` 内存增长**：由于多表模式会禁用基于 Chunk 大小触发的内部切换（以保持干净的事务边界不变量），因此 `activeChunk` 可能一直增长到下一个 `txnEnd` 到达。`sink.transaction.multi-table.buffer-size`（软限制）和 `2 × buffer-size`（通过 `blockIfCacheFull` 实现的硬限制）仅限制缓冲区中*可 flush 的*部分。冻结的 Chunk 和所有 clean 分区不受此限制。无法在 `txnEnd` 之前从缓冲区中移出的数据（正在进行中的事务本身，以及同一分区中因 lockstep 规则而被暂时保留的兄弟表已完成数据）不会触发等待：当缓冲区达到硬上限且没有任何可 flush 数据时，Writer 会记录 WARN（`Write-block cap ... reached with nothing flushable`），并继续缓冲直到 `txnEnd` 到达；之后，该分区会被切换并排空。因此，单个源事务可能超过 `2 × buffer-size`；其大小仅受 `sink.transaction.multi-table.max-txn-bytes`（默认为无限制）和 TaskManager 堆内存的限制。应根据预期的最大源事务大小 × 每个 TaskManager 上的 sink 子任务数来规划堆内存；如果希望在内存压力过大时直接明确失败，请设置 `max-txn-bytes`。对于无界事务（批量初始化），应在上游拆分事务。在切换时，如果冻结的 Chunk 大于 Load Body 限制（默认为 `sink.chunk-limit` 的 3 GB 与 `sink.transaction.multi-table.buffer-size` 两者中的较小值），则会在相同的共享 Label 下重新切分为多个 Load 请求。因此，除了单行数据本身就超过该限制的情况外，单个 `/api/transaction/load` 请求体都不会超过此限制。
+7. **长源事务下 `activeChunk` 内存增长**：由于多表模式会禁用基于 Chunk 大小触发的内部切换（以保持干净的事务边界不变量），因此 `activeChunk` 可能一直增长到下一个 `txnEnd` 到达。`sink.transaction.multi-table.buffer-size`（软限制）和 `2 × buffer-size`（通过 `blockIfCacheFull` 实现的硬限制）仅限制缓冲区中*可 flush 的*部分，即冻结的 Chunk 和所有 clean 分区。无法在 `txnEnd` 之前从缓冲区中移出的数据（正在进行中的事务本身，以及同一分区中因 lockstep 规则而被暂时保留的兄弟表已完成数据）不会触发等待：当缓冲区达到硬上限且没有任何可 flush 数据时，Writer 会记录 WARN（`Write-block cap ... reached with nothing flushable`），并继续缓冲直到 `txnEnd` 到达；之后，该分区会被切换并排空。因此，单个源事务可能超过 `2 × buffer-size`；其大小仅受 `sink.transaction.multi-table.max-txn-bytes`（默认为无限制）和 TaskManager 堆内存的限制。应根据预期的最大源事务大小 × 每个 TaskManager 上的 sink 子任务数来规划堆内存；如果希望在内存压力过大时直接明确失败，请设置 `max-txn-bytes`。对于无界事务（批量初始化），应在上游拆分事务。在切换时，如果冻结的 Chunk 大于 Load Body 限制（默认为 `sink.chunk-limit` 的 3 GB 与 `sink.transaction.multi-table.buffer-size` 两者中的较小值），则会在相同的共享 Label 下重新切分为多个 Load 请求。因此，除了单行数据本身就超过该限制的情况外，单个 `/api/transaction/load` 请求体都不会超过此限制。
 
 8. **跨数据库写入将被拒绝**：多表事务会验证所有 region 是否属于同一数据库。在同一提交周期内向不同数据库的表写入数据将抛出错误。
 

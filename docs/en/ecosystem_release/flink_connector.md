@@ -30,11 +30,9 @@ products: [oss]
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.17    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
 
 > **NOTICE**
 >
@@ -43,6 +41,20 @@ products: [oss]
 ## Release notes
 
 ### 1.2
+
+#### 1.2.17
+
+Release date: November 18, 2026
+
+##### Improvements
+
+- Reuse HTTP connections for Stream Load and transaction requests when the new option `sink.http.keep-alive.enabled` is set to `true`. [#532](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/532)
+- Multi-table transaction: report the first-row time and latency of each shared transaction through the new `sharedTxnLatencyMs` metric and the commit log. [#527](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/527)
+
+##### BugFix
+
+- Fix silent data loss in Merge Commit when `sink.merge-commit.max-concurrent-requests` is set. [#528](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/528)
+- Respect projection pushdown in lookup joins. [#526](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/526)
 
 #### 1.2.16
 
@@ -59,7 +71,7 @@ Release date: September 24, 2026
 
 ##### BugFix
 
-- Multi-table transaction: never park the writer on bytes that cannot be flushed before `txnEnd`. [#512](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/)
+- Multi-table transaction: never park the writer on bytes that cannot be flushed before `txnEnd`. [#512](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/512)
 - Multi-table transaction: recover a lost commit response instead of hanging/failing. [#501](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/501)
 - Multi-table transaction: reconcile `flushQ` region labels to the live shared label. [#500](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/500)
 - Fix a shared-state race in the query plan visitor. [#499](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/499)

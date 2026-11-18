@@ -30,11 +30,9 @@ products: [oss]
 
 | コネクタ   | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.17    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
 | 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
-| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
-| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
-| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 以降       | 8    | 2.11,2.12 |
 
 > **注意**
 >
@@ -43,6 +41,20 @@ products: [oss]
 ## リリースノート
 
 ### 1.2
+
+#### 1.2.17
+
+リリース日: 2026年11月18日
+
+##### 改善点
+
+- 新しいオプション `sink.http.keep-alive.enabled` を `true` に設定すると、Stream Load リクエストとトランザクションリクエストで HTTP 接続を再利用します。 [#532](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/532)
+- マルチテーブルトランザクション: 新しい `sharedTxnLatencyMs` メトリクスとコミットログで、各共有トランザクションの最初の行の時刻とレイテンシを報告します。 [#527](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/527)
+
+##### バグ修正
+
+- `sink.merge-commit.max-concurrent-requests` を設定した場合に、Merge Commit でデータが通知なく失われる問題を修正します。 [#528](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/528)
+- Lookup Join でプロジェクションプッシュダウンが適用されない問題を修正します。 [#526](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/526)
 
 #### 1.2.16
 
@@ -59,7 +71,7 @@ products: [oss]
 
 ##### バグ修正
 
-- マルチテーブルトランザクション: `txnEnd` 前にフラッシュできないバイトデータによって writer が停止したままにならないようにします。 [#512](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/)
+- マルチテーブルトランザクション: `txnEnd` 前にフラッシュできないバイトデータによって writer が停止したままにならないようにします。 [#512](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/512)
 - マルチテーブルトランザクション: コミット応答が失われた場合にハングまたは失敗するのではなく、リカバリします。 [#501](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/501)
 - マルチテーブルトランザクション: `flushQ` のリージョンラベルを、稼働中の共有ラベルと整合させます。 [#500](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/500)
 - クエリプランビジターにおける共有状態の競合を修正します。 [#499](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/499)

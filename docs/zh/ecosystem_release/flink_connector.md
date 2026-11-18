@@ -32,11 +32,9 @@ products: [oss]
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.17    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
 | 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
-| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
-| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
-| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 及以上     | 8    | 2.11,2.12 |
 
 > **注意**
 >
@@ -45,6 +43,20 @@ products: [oss]
 ## 发布记录
 
 ### 1.2
+
+#### 1.2.17
+
+发布日期：2026 年 11 月 18 日
+
+##### 功能优化
+
+- 将新参数 `sink.http.keep-alive.enabled` 设置为 `true` 后，Stream Load 请求和事务请求会复用 HTTP 连接。 [#532](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/532)
+- 多表事务：通过新增的 `sharedTxnLatencyMs` 指标和提交日志，报告每个共享事务的首行时间和延迟。 [#527](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/527)
+
+##### 错误修复
+
+- 修复设置 `sink.merge-commit.max-concurrent-requests` 时 Merge Commit 静默丢失数据的问题。 [#528](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/528)
+- 修复 Lookup Join 未应用投影下推的问题。 [#526](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/526)
 
 #### 1.2.16
 
@@ -61,7 +73,7 @@ products: [oss]
 
 ##### 错误修复
 
-- 多表事务：避免 Writer 因无法在 `txnEnd` 前刷新的字节数据而停滞。 [#512](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/)
+- 多表事务：避免 Writer 因无法在 `txnEnd` 前刷新的字节数据而停滞。 [#512](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/512)
 - 多表事务：在 Commit Response 丢失时进行恢复，而不是卡住或失败。 [#501](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/501)
 - 多表事务：使 `flushQ` Region Label 与当前生效的共享 Label 保持一致。 [#500](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/500)
 - 修复 Query Plan Visitor 中的共享状态竞争问题。 [#499](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/499)
