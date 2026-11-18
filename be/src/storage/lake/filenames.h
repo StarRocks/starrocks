@@ -58,6 +58,11 @@ inline bool is_txn_vlog(std::string_view file_name) {
     return HasSuffixString(file_name, ".vlog");
 }
 
+// A statement-group version log, which is_txn_vlog() also matches.
+inline bool is_txn_vlog_group_file(std::string_view file_name) {
+    return HasSuffixString(file_name, ".group.vlog");
+}
+
 inline bool is_tablet_metadata(std::string_view file_name) {
     return HasSuffixString(file_name, ".meta");
 }
@@ -129,6 +134,13 @@ inline std::string txn_slog_filename(int64_t tablet_id, int64_t txn_id) {
 
 inline std::string txn_vlog_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.vlog", tablet_id, version);
+}
+
+// The ordered statement group of a multi-statement version log. It is a separate file, never written over the
+// legacy version log, and keeps the ".vlog" suffix and the tablet/version prefix so that name-based cleanup and
+// parse_txn_vlog_filename() treat it as a version log.
+inline std::string txn_vlog_group_filename(int64_t tablet_id, int64_t version) {
+    return fmt::format("{:016X}_{:016X}.group.vlog", tablet_id, version);
 }
 
 inline std::string combined_txn_log_filename(int64_t txn_id) {
