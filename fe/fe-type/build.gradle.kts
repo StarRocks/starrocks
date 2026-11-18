@@ -24,6 +24,7 @@ java {
 group = "com.starrocks"
 
 dependencies {
+    implementation(project(":fe-spi"))
     implementation("com.google.guava:guava")
     implementation("com.google.code.gson:gson")
     implementation("org.apache.commons:commons-lang3")

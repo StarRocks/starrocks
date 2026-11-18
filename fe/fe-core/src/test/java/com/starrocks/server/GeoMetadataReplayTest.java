@@ -245,7 +245,7 @@ class GeoMetadataReplayTest {
             geoType = payload.getAsJsonObject("t").getAsJsonArray("fullSchema").get(0)
                     .getAsJsonObject().getAsJsonObject("type");
         }
-        geoType.add("geo", JsonNull.INSTANCE);
+        geoType.add("crs", JsonNull.INSTANCE);
         return payload;
     }
 

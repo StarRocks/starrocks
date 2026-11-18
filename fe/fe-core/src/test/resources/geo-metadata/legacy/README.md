@@ -1,7 +1,7 @@
 # Legacy GEO metadata fixtures
 
 Generated on 2026-11-18 with the unmodified production writer from StarRocks
-main `60c3ba60b6261cd2d2e3b9bc994f4b733df4ea7e`, before the GEO metadata adapter.
+main `60c3ba60b6261cd2d2e3b9bc994f4b733df4ea7e`, before GEO descriptors were persisted.
 The writer, test generator and fixtures use the repository's Apache-2.0 license;
 no external implementation or dataset is used.
 
@@ -22,7 +22,7 @@ initializes before replay. `fixtures.sql` records the generating SQL, including
 both GEO kinds, EPSG:3857, EPSG:4326, `custom:local` and DECIMAL control columns.
 
 The baseline test deliberately fails its descriptor equality assertion after
-the complete export: the old writer retains the GEO primitive but omits `geo`.
+the complete export: the old writer retains the GEO primitive but omits the descriptor.
 Production classes were not modified, and no descriptor field was removed from
 the output to manufacture a legacy record. The candidate test consumes these
 bytes and checks load/replay, query analysis, DESCRIBE/SHOW and another checkpoint.

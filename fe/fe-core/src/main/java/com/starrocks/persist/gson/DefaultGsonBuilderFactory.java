@@ -28,7 +28,6 @@ import com.starrocks.persist.gson.internal.MapTypeDeserializer;
 import com.starrocks.persist.gson.internal.ProcessHookTypeAdapterFactory;
 import com.starrocks.persist.gson.internal.RangeAdapter;
 import com.starrocks.persist.gson.internal.RuntimeTypeAdapterTypes;
-import com.starrocks.persist.gson.internal.ScalarTypeAdapterFactory;
 import com.starrocks.persist.gson.internal.StructTypeDeserializer;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.sql.optimizer.dump.HiveTableDumpInfo;
@@ -62,7 +61,6 @@ public class DefaultGsonBuilderFactory implements IGsonBuilderFactory {
                 .registerTypeHierarchyAdapter(ColumnId.class, new ColumnIdAdapter())
                 .registerTypeHierarchyAdapter(Range.class, new RangeAdapter())
                 .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
-                .registerTypeAdapterFactory(new ScalarTypeAdapterFactory())
                 // For call constructor with selectedFields
                 .registerTypeAdapter(MapType.class, new MapTypeDeserializer())
                 .registerTypeAdapter(StructType.class, new StructTypeDeserializer());

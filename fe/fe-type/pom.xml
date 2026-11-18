@@ -20,6 +20,10 @@
     </properties>
     <dependencies>
         <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-spi</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
         </dependency>

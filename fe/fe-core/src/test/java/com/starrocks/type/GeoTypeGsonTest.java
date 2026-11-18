@@ -21,11 +21,14 @@ import com.starrocks.persist.gson.GsonUtils;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -52,9 +55,12 @@ public class GeoTypeGsonTest {
             assertScalarRoundTrip(geo(PrimitiveType.GEOMETRY, "custom:local", GeoTypeDescriptor.EdgeAlgorithm.PLANAR, srid));
         }
         ScalarType explicitNull = GsonUtils.GSON.fromJson(json("GEOMETRY",
-                "{\"crs\":\"EPSG:3857\",\"edgeAlgorithm\":\"PLANAR\",\"srid\":null}"), ScalarType.class);
+                "\"crs\":\"EPSG:3857\",\"edgeAlgorithm\":\"PLANAR\",\"srid\":null"), ScalarType.class);
         assertEquals(absent, explicitNull);
-        assertFalse(GsonUtils.GSON.toJsonTree(explicitNull).getAsJsonObject().getAsJsonObject("geo").has("srid"));
+        assertFalse(GsonUtils.GSON.toJsonTree(explicitNull, Type.class).getAsJsonObject().has("srid"));
+        // Only the three descriptor fields are added to the ordinary scalar fields.
+        assertEquals("{\"clazz\":\"GeoType\",\"crs\":\"EPSG:3857\",\"edgeAlgorithm\":\"PLANAR\",\"srid\":3857,"
+                + "\"type\":\"GEOMETRY\",\"len\":-1,\"precision\":0,\"scale\":0}", GsonUtils.GSON.toJson(present, Type.class));
     }
 
     @Test
@@ -90,10 +96,15 @@ public class GeoTypeGsonTest {
             for (Class<? extends Type> declared : List.of(Type.class, ScalarType.class)) {
                 Type restored = GsonUtils.GSON.fromJson(legacy, declared);
                 assertEquals(primitive, restored.getPrimitiveType());
+                assertSame(ScalarType.class, restored.getClass());
                 assertNull(((ScalarType) restored).getGeoDescriptor());
+                // Another checkpoint writes the legacy bytes back unchanged.
                 String rewritten = GsonUtils.GSON.toJson(restored, declared);
-                assertFalse(GsonUtils.GSON.fromJson(rewritten, JsonObject.class).has("geo"));
+                assertEquals(legacy, rewritten);
                 assertEquals(restored, GsonUtils.GSON.fromJson(rewritten, declared));
+                assertNotEquals(restored, ScalarType.createGeoType(primitive, GeoTypeDescriptor.of(primitive,
+                        primitive == PrimitiveType.GEOGRAPHY ? GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL
+                                : GeoTypeDescriptor.EdgeAlgorithm.PLANAR, "OGC:CRS84", 4326)));
             }
             Column column = new Column("legacy", GsonUtils.GSON.fromJson(legacy, Type.class));
             Column restoredColumn = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(column), Column.class);
@@ -105,26 +116,33 @@ public class GeoTypeGsonTest {
 
     @Test
     public void testRejectPresentInvalidMetadata() {
-        for (String invalid : List.of("null", "[]", "1", "\"geo\"", "true", "{}",
-                "{\"crs\":\"EPSG:3857\"}", "{\"edgeAlgorithm\":\"PLANAR\"}",
-                "{\"crs\":null,\"edgeAlgorithm\":\"PLANAR\"}",
-                "{\"crs\":4326,\"edgeAlgorithm\":\"PLANAR\"}",
-                "{\"crs\":{},\"edgeAlgorithm\":\"PLANAR\"}",
-                "{\"crs\":\"\",\"edgeAlgorithm\":\"PLANAR\"}")) {
+        for (String invalid : List.of("", "\"crs\":\"EPSG:3857\"", "\"edgeAlgorithm\":\"PLANAR\"",
+                "\"crs\":null,\"edgeAlgorithm\":\"PLANAR\"",
+                "\"crs\":4326,\"edgeAlgorithm\":\"PLANAR\"",
+                "\"crs\":{},\"edgeAlgorithm\":\"PLANAR\"",
+                "\"crs\":[],\"edgeAlgorithm\":\"PLANAR\"",
+                "\"crs\":true,\"edgeAlgorithm\":\"PLANAR\"",
+                "\"crs\":\"\",\"edgeAlgorithm\":\"PLANAR\"")) {
             assertInvalid("GEOMETRY", invalid);
         }
         for (String edge : List.of("null", "1", "true", "{}", "\"UNKNOWN\"", "\"FUTURE\"", "\"planar\"")) {
-            assertInvalid("GEOMETRY", "{\"crs\":\"EPSG:3857\",\"edgeAlgorithm\":" + edge + "}");
+            assertInvalid("GEOMETRY", "\"crs\":\"EPSG:3857\",\"edgeAlgorithm\":" + edge);
         }
         for (String srid : List.of("\"3857\"", "true", "[]", "{}", "3857.1", "2147483648", "-2147483649", "4326")) {
-            assertInvalid("GEOMETRY", "{\"crs\":\"EPSG:3857\",\"edgeAlgorithm\":\"PLANAR\",\"srid\":" + srid + "}");
+            assertInvalid("GEOMETRY", "\"crs\":\"EPSG:3857\",\"edgeAlgorithm\":\"PLANAR\",\"srid\":" + srid);
         }
-        assertInvalid("GEOMETRY", "{\"crs\":\"OGC:CRS84\",\"edgeAlgorithm\":\"SPHERICAL\"}");
-        assertInvalid("GEOGRAPHY", "{\"crs\":\"OGC:CRS84\",\"edgeAlgorithm\":\"PLANAR\"}");
-        assertInvalid("INT", "{\"crs\":\"EPSG:3857\",\"edgeAlgorithm\":\"PLANAR\"}");
-        assertInvalid("NOT_EXIST", "{\"crs\":\"EPSG:3857\",\"edgeAlgorithm\":\"PLANAR\"}");
+        assertInvalid("GEOMETRY", "\"crs\":\"OGC:CRS84\",\"edgeAlgorithm\":\"SPHERICAL\"");
+        assertInvalid("GEOGRAPHY", "\"crs\":\"OGC:CRS84\",\"edgeAlgorithm\":\"PLANAR\"");
+        assertInvalid("INT", "\"crs\":\"EPSG:3857\",\"edgeAlgorithm\":\"PLANAR\"");
+        assertInvalid("NOT_EXIST", "\"crs\":\"EPSG:3857\",\"edgeAlgorithm\":\"PLANAR\"");
+        // A GeoType without a primitive type is rejected instead of becoming INVALID_TYPE.
+        for (Class<? extends Type> declared : List.of(Type.class, ScalarType.class)) {
+            JsonParseException error = assertThrows(JsonParseException.class, () -> GsonUtils.GSON.fromJson(
+                    "{\"clazz\":\"GeoType\",\"crs\":\"EPSG:3857\",\"edgeAlgorithm\":\"PLANAR\"}", declared));
+            assertTrue(error.getMessage().contains("geo"), error.getMessage());
+        }
         assertThrows(JsonParseException.class, () -> GsonUtils.GSON.fromJson(
-                "{\"clazz\":\"ScalarType\",\"type\":\"GEOMETRY\",\"geo\":", Type.class));
+                "{\"clazz\":\"GeoType\",\"type\":\"GEOMETRY\",\"crs\":", Type.class));
     }
 
     @Test
@@ -133,7 +151,9 @@ public class GeoTypeGsonTest {
                 TypeFactory.createCharType(5), TypeFactory.createDecimalV2Type(10, 2),
                 TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 30, 7))) {
             assertEquals(type, GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(type), Type.class));
-            assertFalse(GsonUtils.GSON.toJsonTree(type).getAsJsonObject().has("geo"));
+            JsonObject written = GsonUtils.GSON.toJsonTree(type).getAsJsonObject();
+            written.remove("clazz");
+            assertEquals(Set.of("type", "len", "precision", "scale"), written.keySet());
             assertEquals(new ArrayType(type), roundTrip(new ArrayType(type)));
             Column column = new Column("control", type);
             assertEquals(column, GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(column), Column.class));
@@ -143,6 +163,8 @@ public class GeoTypeGsonTest {
         for (Class<? extends Type> declared : List.of(Type.class, ScalarType.class)) {
             assertThrows(JsonParseException.class, () -> GsonUtils.GSON.toJson(IntegerType.INT, declared));
         }
+        assertEquals("{\"clazz\":\"ScalarType\",\"type\":\"INT\",\"len\":-1,\"precision\":0,\"scale\":0}",
+                GsonUtils.GSON.toJson(new ScalarType(PrimitiveType.INT), Type.class));
         ScalarType invalid = GsonUtils.GSON.fromJson("{\"clazz\":\"ScalarType\",\"type\":\"NOT_EXIST\"}", ScalarType.class);
         assertEquals(PrimitiveType.INVALID_TYPE, invalid.getPrimitiveType());
         assertNull(GsonUtils.GSON.fromJson("null", Type.class));
@@ -153,21 +175,19 @@ public class GeoTypeGsonTest {
     }
 
     private static ScalarType geo(PrimitiveType primitive, String crs, GeoTypeDescriptor.EdgeAlgorithm edge, Integer srid) {
-        boolean geography = primitive == PrimitiveType.GEOGRAPHY;
-        return ScalarType.createGeoType(primitive, new GeoTypeDescriptor(
-                geography ? GeoTypeDescriptor.LogicalType.GEOGRAPHY : GeoTypeDescriptor.LogicalType.GEOMETRY,
-                geography ? GeoTypeDescriptor.CoordinateSystem.SPHERICAL : GeoTypeDescriptor.CoordinateSystem.CARTESIAN,
-                edge, crs, srid));
+        return ScalarType.createGeoType(primitive, GeoTypeDescriptor.of(primitive, edge, crs, srid));
     }
 
     private static void assertScalarRoundTrip(ScalarType type) {
         for (Class<? extends Type> declared : List.of(Type.class, ScalarType.class)) {
             String json = GsonUtils.GSON.toJson(type, declared);
             ScalarType restored = (ScalarType) GsonUtils.GSON.fromJson(json, declared);
+            assertInstanceOf(GeoType.class, restored);
             assertEquals(type, restored);
             assertEquals(type.hashCode(), restored.hashCode());
             assertEquals(type.getGeoDescriptor(), restored.getGeoDescriptor());
-            JsonObject descriptor = GsonUtils.GSON.fromJson(json, JsonObject.class).getAsJsonObject("geo");
+            JsonObject descriptor = GsonUtils.GSON.fromJson(json, JsonObject.class);
+            assertEquals("GeoType", descriptor.get("clazz").getAsString());
             assertEquals(type.getGeoDescriptor().crs(), descriptor.get("crs").getAsString());
             assertEquals(type.getGeoDescriptor().edgeAlgorithm().name(), descriptor.get("edgeAlgorithm").getAsString());
             assertEquals(type.getGeoDescriptor().srid() != null, descriptor.has("srid"));
@@ -180,8 +200,9 @@ public class GeoTypeGsonTest {
         return GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(type, Type.class), Type.class);
     }
 
-    private static String json(String primitive, String geo) {
-        return "{\"clazz\":\"ScalarType\",\"type\":\"" + primitive + "\",\"geo\":" + geo + "}";
+    private static String json(String primitive, String descriptorFields) {
+        return "{\"clazz\":\"GeoType\",\"type\":\"" + primitive + "\"" + (descriptorFields.isEmpty() ? "" : ",")
+                + descriptorFields + "}";
     }
 
     private static void assertInvalid(String primitive, String geo) {

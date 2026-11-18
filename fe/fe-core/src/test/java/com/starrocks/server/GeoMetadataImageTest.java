@@ -14,6 +14,8 @@
 
 package com.starrocks.server;
 
+import com.google.gson.JsonNull;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -115,7 +117,7 @@ class GeoMetadataImageTest {
     @EnumSource(value = PrimitiveType.class, names = {"GEOGRAPHY", "GEOMETRY"})
     void testFullImageLegacyMissingRemainsUnresolvedAfterCheckpoint(PrimitiveType kind) throws Exception {
         ScalarType original = writeImage(kind, true);
-        replaceDescriptor(original, "");
+        replaceType(original, GsonUtils.GSON.toJson(new ScalarType(kind), Type.class));
         assertChecksumMatches();
         loadIntoFreshState();
         assertEquals(kind, loadedType().getPrimitiveType());
@@ -123,7 +125,8 @@ class GeoMetadataImageTest {
 
         state.saveImage(new ImageWriter(imageDirectory.toString(), IMAGE_ID), imageFile.toFile());
         assertChecksumMatches();
-        assertFalse(imageJson().contains("\"geo\":"));
+        assertFalse(imageJson().contains("GeoType"));
+        assertFalse(imageJson().contains("\"crs\":"));
         loadIntoFreshState();
         assertEquals(kind, loadedType().getPrimitiveType());
         assertNull(loadedType().getGeoDescriptor());
@@ -138,10 +141,12 @@ class GeoMetadataImageTest {
     @MethodSource("malformedImages")
     void testExplicitNullDescriptorRejectsImageWithValidChecksum(PrimitiveType kind, boolean fullImage) throws Exception {
         ScalarType original = writeImage(kind, fullImage);
-        replaceDescriptor(original, ",\"geo\":null");
+        JsonObject nullCrs = GsonUtils.GSON.toJsonTree(original, Type.class).getAsJsonObject();
+        nullCrs.add("crs", JsonNull.INSTANCE);
+        replaceType(original, nullCrs.toString());
         assertChecksumMatches();
         JsonParseException error = assertThrows(JsonParseException.class, this::loadIntoFreshState);
-        assertEquals("geo must be an object", error.getMessage());
+        assertEquals("Invalid geo type metadata: crs and edgeAlgorithm are required", error.getMessage());
         assertNull(state.getLocalMetastore().getDb("geo_image"));
     }
 
@@ -220,11 +225,11 @@ class GeoMetadataImageTest {
         return (ScalarType) view.getColumn("g").getType();
     }
 
-    private void replaceDescriptor(ScalarType original, String replacement) throws IOException {
+    private void replaceType(ScalarType original, String replacement) throws IOException {
         byte[] bytes = Files.readAllBytes(imageFile);
         int headerLength = headerLength(bytes);
         String json = new String(bytes, headerLength, bytes.length - headerLength, StandardCharsets.UTF_8);
-        String field = ",\"geo\":" + GsonUtils.GSON.toJsonTree(original, Type.class).getAsJsonObject().get("geo");
+        String field = GsonUtils.GSON.toJson(original, Type.class);
         assertTrue(json.contains(field), json);
         assertEquals(json.indexOf(field), json.lastIndexOf(field));
         ByteArrayOutputStream changed = new ByteArrayOutputStream();

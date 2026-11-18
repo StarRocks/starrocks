@@ -282,8 +282,9 @@ class GeoMetadataPersistenceTest {
         byte[] globalImage = saveGlobalImage();
         for (byte[] bytes : List.of(localImage, globalImage)) {
             String json = new String(bytes, StandardCharsets.UTF_8);
-            assertFalse(json.contains("\"geo\":null"));
-            assertEquals(!legacy, json.contains("\"geo\":"));
+            assertFalse(json.contains("\"crs\":null"));
+            assertEquals(!legacy, json.contains("\"clazz\":\"GeoType\""));
+            assertEquals(!legacy, json.contains("\"crs\":"));
         }
         loadImages(localImage, globalImage);
         assertOwners(legacy, altered);

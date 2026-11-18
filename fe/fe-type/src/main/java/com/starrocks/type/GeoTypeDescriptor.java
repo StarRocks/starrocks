@@ -43,6 +43,16 @@ public record GeoTypeDescriptor(LogicalType logicalType, CoordinateSystem coordi
                 EdgeAlgorithm.PLANAR, crs, deriveSrid(crs));
     }
 
+    /** Builds a descriptor whose logical type and coordinate system follow from the native primitive type. */
+    public static GeoTypeDescriptor of(PrimitiveType primitive, EdgeAlgorithm edgeAlgorithm, String crs, Integer srid) {
+        if (primitive != PrimitiveType.GEOGRAPHY && primitive != PrimitiveType.GEOMETRY) {
+            throw new IllegalArgumentException("a geo descriptor requires a GEOGRAPHY or GEOMETRY type, got " + primitive);
+        }
+        boolean geography = primitive == PrimitiveType.GEOGRAPHY;
+        return new GeoTypeDescriptor(geography ? LogicalType.GEOGRAPHY : LogicalType.GEOMETRY,
+                geography ? CoordinateSystem.SPHERICAL : CoordinateSystem.CARTESIAN, edgeAlgorithm, crs, srid);
+    }
+
     public void validate(PrimitiveType primitive) {
         if (crs.isEmpty()) {
             throw new IllegalArgumentException("Native geo types require a non-empty CRS");
