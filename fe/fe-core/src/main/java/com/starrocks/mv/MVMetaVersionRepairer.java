@@ -25,6 +25,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorTableInfo;
+import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -253,6 +254,7 @@ public class MVMetaVersionRepairer {
         GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
                 newBaseTableInfo.getCatalogName(), newBaseTableInfo.getDbName(),
                 newBaseTableInfo.getTableIdentifier(), newConnectorTableInfo);
-        // TODO: update edit log for followers' fe
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterMvBaseTableInfos(
+                new AlterMaterializedViewBaseTableInfosLog(null, mv));
     }
 }
