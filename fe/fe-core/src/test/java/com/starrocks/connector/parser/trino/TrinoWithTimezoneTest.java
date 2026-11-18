@@ -136,6 +136,9 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
         plan = getFragmentPlan("select 1" + values + " where CAST(with_timezone(ts, 'UTC') AS TIMESTAMP) >= " +
                 "CAST('2024-08-01' AS TIMESTAMP)");
         Assertions.assertEquals(1, StringUtils.countMatches(plan, "time_slice("), plan);
+        // A literal in another form is rounded: Trino takes one-digit seconds (Trino: 2)
+        assertPlanContains("select second(with_timezone(CAST('2024-08-19 14:36:1.6' AS TIMESTAMP(0)), 'UTC'))",
+                "date_trunc('second', microseconds_add(");
     }
 
     // Below a day, truncation is exact only in a fixed-offset zone; Trino promotes a DATE argument to TIMESTAMP

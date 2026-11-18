@@ -257,8 +257,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     private static final Set<String> ZONED_FUNCTIONS = Set.of("now", "current_timestamp", "from_unixtime",
             "from_unixtime_nanos", "from_iso8601_timestamp", "from_iso8601_timestamp_nanos", "parse_datetime",
             WITH_TIMEZONE, AT_TIMEZONE);
-    // The fractional seconds of a timestamp string
-    private static final Pattern SECONDS_FRACTION = Pattern.compile(":\\d{2}\\.(\\d*)");
+    // A date or timestamp string in the plain form Trino and StarRocks both take, with its fractional seconds
+    private static final Pattern PLAIN_TIMESTAMP = Pattern.compile(
+            "\\s*\\d{4}-\\d{1,2}-\\d{1,2}(?:\\s+\\d{1,2}:\\d{1,2}(?::\\d{1,2}(?:\\.(\\d+))?)?)?\\s*");
     private static final Set<String> MILLISECOND_PARSE_FUNCTIONS = Set.of("date_parse", "parse_datetime",
             "from_iso8601_timestamp");
     // Trino functions that read only the wall-clock fields of their first argument and return a value without a zone
@@ -1844,7 +1845,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return cast;
     }
 
-    // A NULL, a DATE literal, or a TIMESTAMP or string literal with at most `precision` fractional digits
+    // A NULL, a DATE literal, or a TIMESTAMP or string literal in the plain form with at most `precision` fractional
+    // digits. Any other literal is rounded, which is exact wherever Trino takes it
     private static boolean fitsPrecision(Expression expression, int precision) {
         if (expression instanceof io.trino.sql.tree.NullLiteral) {
             return true;
@@ -1860,8 +1862,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         } else {
             return false;
         }
-        Matcher fraction = SECONDS_FRACTION.matcher(value);
-        return !fraction.find() || fraction.group(1).length() <= precision;
+        Matcher timestamp = PLAIN_TIMESTAMP.matcher(value);
+        return timestamp.matches() && (timestamp.group(1) == null || timestamp.group(1).length() <= precision);
     }
 
     // A with_timezone value, or a cast of one to TIMESTAMP(p), which Trino rounds again in a cast to a lower precision
