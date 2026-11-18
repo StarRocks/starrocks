@@ -89,6 +89,33 @@ public class RangerHiveAccessController extends RangerAccessController {
                 PrivilegeType.ANY);
     }
 
+    // In the Hive Ranger service model a view or materialized view is just a table, so those
+    // privilege checks reuse the table resource. Without these overrides they would fall through
+    // to the AccessController default that always throws.
+    @Override
+    public void checkViewAction(ConnectContext context, TableName tableName, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        checkTableAction(context, tableName, privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnView(ConnectContext context, TableName tableName)
+            throws AccessDeniedException {
+        checkAnyActionOnTable(context, tableName);
+    }
+
+    @Override
+    public void checkMaterializedViewAction(ConnectContext context, TableName tableName, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        checkTableAction(context, tableName, privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnMaterializedView(ConnectContext context, TableName tableName)
+            throws AccessDeniedException {
+        checkAnyActionOnTable(context, tableName);
+    }
+
     @Override
     public void checkColumnAction(ConnectContext context, TableName tableName,
                                   String column, PrivilegeType privilegeType) throws AccessDeniedException {

@@ -14,51 +14,26 @@
 
 package com.starrocks.authorization;
 
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
-import java.util.Objects;
 
 /**
  * View is a subclass of table, only the table type is different
  */
 public class ViewPEntryObject extends TablePEntryObject {
+    protected ViewPEntryObject(long catalogId, String dbUUID, String tblUUID) {
+        super(catalogId, dbUUID, tblUUID);
+    }
+
     protected ViewPEntryObject(String dbUUID, String tblUUID) {
         super(dbUUID, tblUUID);
     }
 
     public static ViewPEntryObject generate(List<String> tokens) throws PrivilegeException {
-        if (tokens.size() != 2) {
-            throw new PrivilegeException("invalid object tokens, should have two: " + tokens);
-        }
-        String dbUUID;
-        String tblUUID;
-
-        if (Objects.equals(tokens.get(0), "*")) {
-            dbUUID = PrivilegeBuiltinConstants.ALL_DATABASES_UUID;
-            tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
-        } else {
-            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tokens.get(0));
-            if (database == null) {
-                throw new PrivObjNotFoundException("cannot find db: " + tokens.get(0));
-            }
-            dbUUID = database.getUUID();
-
-            if (Objects.equals(tokens.get(1), "*")) {
-                tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
-            } else {
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(database.getFullName(), tokens.get(1));
-                if (table == null || !table.isOlapView()) {
-                    throw new PrivObjNotFoundException("cannot find view " + tokens.get(1) + " in db " + tokens.get(0));
-                }
-                tblUUID = table.getUUID();
-            }
-        }
-
-        return new ViewPEntryObject(dbUUID, tblUUID);
+        return (ViewPEntryObject) generateTableLikeObject(tokens, ViewPEntryObject::new,
+                (catalogName, dbToken, viewToken) ->
+                        resolveObjectUUID(catalogName, dbToken, viewToken, Table::isOlapView, "view"));
     }
 
     @Override
@@ -68,6 +43,6 @@ public class ViewPEntryObject extends TablePEntryObject {
 
     @Override
     public ViewPEntryObject clone() {
-        return new ViewPEntryObject(this.databaseUUID, this.tableUUID);
+        return new ViewPEntryObject(getCatalogId(), this.databaseUUID, this.tableUUID);
     }
 }
