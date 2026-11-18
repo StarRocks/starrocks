@@ -40,7 +40,9 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.type.Type;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.Term;
 import org.apache.iceberg.types.Types;
@@ -55,6 +57,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergPartitionTransform.YEAR;
 
@@ -439,5 +443,96 @@ public class IcebergPartitionUtils {
             }
             return ExprUtils.compoundOr(result);
         }
+    }
+    /**
+     * Decide whether partition-change-tracking (PCT) refresh can work on an Iceberg table whose partition spec
+     * has evolved.
+     * <p>
+     * PCT maps a base partition onto an MV partition by position: the MV's ref partition columns are located in
+     * the current spec, and the values at the same positions are read from every partition name. Partition
+     * names are rendered per file spec, in partition-field-id order, and only contain that spec's fields. So
+     * the mapping stays correct when:
+     * <ol>
+     * <li>every historical spec, ignoring its void fields (fields dropped from a format v1 table, which keep
+     * their slot with a void transform), is a positional prefix of the current spec (same field id, source
+     * column and transform at each position), so in practice the current spec must extend every earlier spec
+     * by appending fields: for example (a, b) -&gt; (a) -&gt; (a, c) is rejected because (a, b) is not a prefix
+     * of (a, c),</li>
+     * <li>the current spec's field ids ascend with position, so id order equals position order,</li>
+     * <li>the current spec has no void field, so the table's partition columns are exactly its fields,</li>
+     * <li>every MV ref partition column sits inside the prefix shared by all specs, so no partition name lacks
+     * a value for it.</li>
+     * </ol>
+     * Appending a partition field that the MV does not partition on is the typical tolerated case.
+     * <p>
+     * An empty {@code refPartitionColumnNames} still enforces conditions 1-3. A non-ref base table does not need
+     * them, because its partition names are only compared for change detection, but they guard a ref base table
+     * whose partition columns could not be resolved and is therefore checked as a non-ref one.
+     *
+     * @param table                   the native Iceberg table
+     * @param refPartitionColumnNames the base table columns the MV partitions by; empty for a non-ref base table
+     * @return empty when PCT refresh is safe, otherwise the reason it is not
+     */
+    public static Optional<String> checkPartitionEvolutionCompatible(Table table,
+                                                                     List<String> refPartitionColumnNames) {
+        PartitionSpec current = table.spec();
+        List<PartitionField> currentFields = current.fields();
+        for (int i = 0; i < currentFields.size(); i++) {
+            PartitionField field = currentFields.get(i);
+            if (field.transform().isVoid()) {
+                return Optional.of(String.format("current partition spec %d still contains dropped field %s",
+                        current.specId(), field.name()));
+            }
+            if (i > 0 && field.fieldId() <= currentFields.get(i - 1).fieldId()) {
+                return Optional.of(String.format("fields of current partition spec %d are not in the order they " +
+                        "were added (field %s)", current.specId(), field.name()));
+            }
+        }
+
+        int sharedPrefix = currentFields.size();
+        for (PartitionSpec spec : table.specs().values()) {
+            if (spec.specId() == current.specId()) {
+                continue;
+            }
+            List<PartitionField> fields = spec.fields().stream()
+                    .filter(field -> !field.transform().isVoid())
+                    .collect(Collectors.toList());
+            if (fields.size() > currentFields.size()) {
+                return Optional.of(String.format("partition spec %d has more fields than current partition spec %d",
+                        spec.specId(), current.specId()));
+            }
+            for (int i = 0; i < fields.size(); i++) {
+                PartitionField old = fields.get(i);
+                PartitionField cur = currentFields.get(i);
+                if (old.fieldId() != cur.fieldId() || old.sourceId() != cur.sourceId()
+                        || !old.transform().toString().equals(cur.transform().toString())) {
+                    return Optional.of(String.format("field %s of partition spec %d differs from field %s of " +
+                                    "current partition spec %d (field id, source column or transform)",
+                            old.name(), spec.specId(), cur.name(), current.specId()));
+                }
+            }
+            sharedPrefix = Math.min(sharedPrefix, fields.size());
+        }
+
+        Schema schema = table.schema();
+        for (String columnName : refPartitionColumnNames) {
+            int position = -1;
+            for (int i = 0; i < currentFields.size(); i++) {
+                String sourceName = schema.findColumnName(currentFields.get(i).sourceId());
+                if (sourceName != null && sourceName.equalsIgnoreCase(columnName)) {
+                    position = i;
+                    break;
+                }
+            }
+            if (position < 0) {
+                return Optional.of(String.format("partition column %s is not a partition field of current " +
+                        "partition spec %d", columnName, current.specId()));
+            }
+            if (position >= sharedPrefix) {
+                return Optional.of(String.format("partition column %s is not in every historical partition spec " +
+                        "(only the first %d field(s) are shared)", columnName, sharedPrefix));
+            }
+        }
+        return Optional.empty();
     }
 }

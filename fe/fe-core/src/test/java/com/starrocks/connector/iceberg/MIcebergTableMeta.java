@@ -191,6 +191,55 @@ public class MIcebergTableMeta {
         }
     };
 
+    // partition evolution that PCT refresh tolerates: spec 0 = (id), spec 1 = (id, data).
+    // Partition names of spec-0 files carry only id; spec-1 names carry id and data.
+    // The names are hand-written and bypass IcebergCatalog#getPartitions, so tests on this table do not verify
+    // the field-id ordering of IcebergPartitionUtils#convertIcebergPartitionToPartitionName.
+    public static final MIcebergTable T0_EVOLUTION_APPEND = new MIcebergTable() {
+        @Override
+        public String getTableName() {
+            return "t0_evolution_append";
+        }
+
+        @Override
+        public TestTables.TestTable getTestTable(Schema schema) throws IOException {
+            PartitionSpec spec = PartitionSpec.builderFor(schema).identity("id").build();
+            String tableName = getTableName();
+            TestTables.TestTable table = TestTables.create(
+                    new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
+                            + tableName), tableName, schema, spec, 2);
+            table.updateSpec().addField("data").commit();
+            return table;
+        }
+
+        @Override
+        public List<String> getTransformTablePartitionNames(String tblName) {
+            return Lists.newArrayList("id=1", "id=2", "id=3/data=a", "id=3/data=b");
+        }
+    };
+
+    // single spec (id) when created; a test evolves it after creating an MV on it, so no other test may use it.
+    public static final MIcebergTable T0_EVOLUTION_AFTER_MV = new MIcebergTable() {
+        @Override
+        public String getTableName() {
+            return "t0_evolution_after_mv";
+        }
+
+        @Override
+        public TestTables.TestTable getTestTable(Schema schema) throws IOException {
+            PartitionSpec spec = PartitionSpec.builderFor(schema).identity("id").build();
+            String tableName = getTableName();
+            return TestTables.create(
+                    new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
+                            + tableName), tableName, schema, spec, 2);
+        }
+
+        @Override
+        public List<String> getTransformTablePartitionNames(String tblName) {
+            return Lists.newArrayList("id=1", "id=2");
+        }
+    };
+
     public static Map<String, MIcebergTable> MOCKED_ICEBERG_TABLES = ImmutableMap.<String, MIcebergTable>builder()
             .put(T0_MULTI_HOUR.getTableName(), T0_MULTI_HOUR)
             .put(T0_MULTI_DAY.getTableName(), T0_MULTI_DAY)
@@ -198,5 +247,7 @@ public class MIcebergTableMeta {
             .put(T0_MULTI_YEAR.getTableName(), T0_MULTI_YEAR)
             .put(T0_MULTI_BUCKET.getTableName(), T0_MULTI_BUCKET)
             .put(T0_MULTI_DAY_TZ.getTableName(), T0_MULTI_DAY_TZ)
+            .put(T0_EVOLUTION_APPEND.getTableName(), T0_EVOLUTION_APPEND)
+            .put(T0_EVOLUTION_AFTER_MV.getTableName(), T0_EVOLUTION_AFTER_MV)
             .build();
 }
