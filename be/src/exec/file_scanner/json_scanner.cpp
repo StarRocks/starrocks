@@ -832,7 +832,6 @@ Status JsonReader::_read_payload() {
 }
 
 Status JsonReader::_parse_payload() {
-    const auto& file_type = _scanner->_scan_range.ranges[0].file_type;
     RETURN_IF_ERROR(_check_ndjson());
 
     if (!_scanner->_root_paths.empty()) {
