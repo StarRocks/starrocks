@@ -389,6 +389,10 @@ struct TQueryOptions {
   215: optional string http_request_host_allowlist_regexp = "";
   216: optional bool http_request_allow_private_in_allowlist = false;
   217: optional bool enable_cache_udaf = false;
+
+  // Whether an exchange sink bounds the memory of the partial chunks it buffers while shuffling
+  // (BE config exchange_sink_buffer_flush_threshold_bytes is the threshold).
+  227: optional bool enable_exchange_sink_buffer_flush = true;
 }
 
 // A scan range plus the parameters needed to execute that scan.

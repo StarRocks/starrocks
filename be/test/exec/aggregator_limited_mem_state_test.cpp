@@ -15,17 +15,13 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
 #include "common/config.h"
-=======
-#include "base/testutil/assert.h"
-#include "common/config_exec_flow_fwd.h"
->>>>>>> 04b5bb7 ([BugFix] Stop the streaming aggregate sink from reading a hash table handed to the source (#83452))
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_streaming_sink_operator.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -200,6 +196,8 @@ TEST_F(StreamingAggSinkHandoffTest, streaming_sink_reads_hash_map_it_owns) {
     auto aggregator = aggregator_factory->get_or_create(0);
     auto* sink = static_cast<AggregateStreamingSinkOperator*>(op.get());
 
+    // prepare() creates the pool, and allocated_memory_usage() reads it unconditionally on this branch.
+    aggregator->_mem_pool = std::make_unique<MemPool>();
     aggregator->_hash_map_variant.init(&_state, AggHashMapVariant::Type::phase1_int32, &_agg_stat);
     ASSERT_FALSE(aggregator->is_streaming_all_states());
 

@@ -14,13 +14,16 @@
 
 package com.starrocks.alter.reshard;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TTabletReshardJobsItem;
@@ -218,6 +221,12 @@ public abstract class TabletReshardJob implements Writable {
     }
 
     protected void setJobState(JobState jobState) {
+        if (jobState == JobState.CLEANING) {
+            // A job with no layout to install; split and merge install theirs through journalCleaningThenInstall.
+            journalCleaningThenInstall(newCleaningRecord(), () -> {
+            });
+            return;
+        }
         long currentTimeMs = System.currentTimeMillis();
 
         if (jobState.isFinalState()) {
@@ -231,6 +240,73 @@ public abstract class TabletReshardJob implements Writable {
         GlobalStateMgr.getCurrentState().getEditLog().logUpdateTabletReshardJob(this);
 
         LOG.info("Tablet reshard job set job state. {}", this);
+    }
+
+    /**
+     * Moves the job to CLEANING, the state in which its new layout -- the replacement indexes, and the commit version
+     * they make visible -- is in place. The CLEANING record is journaled first; only once it is durable does the
+     * record's applier install the layout and change the state. The caller holds the table WRITE lock across the call
+     * and has checked that the layout can be installed.
+     *
+     * <p>The order matters because a load committed at the version right above the job's finishes, and journals its
+     * VISIBLE record, as soon as it sees the job's version visible, and replaying that record needs the job's version
+     * to be visible already. A load checks the version under the table READ lock and journals VISIBLE under the WRITE
+     * lock, so with the caller holding the WRITE lock, no load can do either before the CLEANING record is in the
+     * journal and the layout is installed.
+     *
+     * <p>If the record cannot be journaled, nothing has changed: the caller changes the job only from
+     * installNewLayout, which runs once the record is durable. The install cannot fail then, because the caller
+     * checked it under the same lock: an install stopping halfway would leave this FE's catalog different from the
+     * one every replay of the record builds.
+     *
+     * @param record the job's CLEANING record, from {@link #newCleaningRecord}
+     */
+    protected void journalCleaningThenInstall(TabletReshardJob record, Runnable installNewLayout) {
+        record.stateStartedTimeMs = System.currentTimeMillis();
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTabletReshardJob(record, wal -> {
+            // Set before the install, which stamps the visible version with it, as the replay of the record does.
+            stateStartedTimeMs = record.stateStartedTimeMs;
+            installNewLayout.run();
+            jobState = JobState.CLEANING;
+        });
+        LOG.info("Tablet reshard job set job state. {}", this);
+    }
+
+    /**
+     * A copy of the job as its CLEANING record, for {@link #journalCleaningThenInstall}. The copy carries every new
+     * tablet, so the caller takes it before the table lock it journals under, and adds under that lock only what is
+     * decided there.
+     */
+    protected TabletReshardJob newCleaningRecord() {
+        TabletReshardJob record = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(this), getClass());
+        record.jobState = JobState.CLEANING;
+        return record;
+    }
+
+    /**
+     * Checks, under the caller's table WRITE lock, what installing the replacement indexes requires, so that a layout
+     * that cannot be installed is found before anything of it is journaled or changed: every partition still there is
+     * at the version right below the job's, and every replacement index can be added to its partition.
+     */
+    protected static void checkNewIndexesInstallable(OlapTable olapTable,
+            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            PhysicalPartition physicalPartition = olapTable
+                    .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                continue;
+            }
+            long commitVersion = reshardingPhysicalPartition.getCommitVersion();
+            Preconditions.checkState(commitVersion == physicalPartition.getVisibleVersion() + 1,
+                    "partition: " + physicalPartition.getId() + ", commit version: " + commitVersion
+                            + ", visible version: " + physicalPartition.getVisibleVersion());
+            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
+                    .getReshardingIndexes().values()) {
+                MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
+                physicalPartition.checkMaterializedIndexAddable(newIndex,
+                        newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
+            }
+        }
     }
 
     public long getCreatedTimeMs() {

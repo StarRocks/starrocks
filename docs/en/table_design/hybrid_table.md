@@ -22,7 +22,13 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
    ![img](../_assets/table_design/hybrid_table.png)
 
-- Scenarios: supports the user scenarios of both row-by-row and column-by-column storage, but incurs additional storage costs.<ul><li>User scenarios of row-by-row storage:</li><ul><li>High concurrency point queries based on primary keys.</li><li>Queries against most fields from tables that consist of a small number of fields.</li><li>Partial column updates (more specifically, multiple columns and a small number of data rows need to be updated)</li></ul><li>User scenarios of column-by-column storage: Complex data analysis.</li></ul>
+- Scenarios: supports the user scenarios of both row-by-row and column-by-column storage, but incurs additional storage costs.
+
+  - User scenarios of row-by-row storage:
+    - High concurrency point queries based on primary keys.
+    - Queries against most fields from tables that consist of a small number of fields.
+    - Partial column updates (more specifically, multiple columns and a small number of data rows need to be updated)
+  - User scenarios of column-by-column storage: Complex data analysis.
 
 **Column-oriented**
 
@@ -30,7 +36,10 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
   ![img](../_assets/table_design/columnar_table.png)
 
-- Scenarios: Complex data analysis. <ul><li>Complex queries and analyses on massive datasets, such as aggregate analysis and multi-table join queries.</li><li>Tables consist of many fields (such as wide tables), but queries against these tables involve only a few columns.</li></ul>
+- Scenarios: Complex data analysis.
+
+  - Complex queries and analyses on massive datasets, such as aggregate analysis and multi-table join queries.
+  - Tables consist of many fields (such as wide tables), but queries against these tables involve only a few columns.
 
 ## Basic usages  
 

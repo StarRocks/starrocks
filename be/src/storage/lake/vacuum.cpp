@@ -1327,7 +1327,59 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         }
     }
 
+    // A retry that straddled a writer-flag change can leave a damaged version log next to a valid one in the other
+    // format for the same version. Publish reads the valid one and never deletes the other format's file, so the
+    // damaged one stays until the tablet is dropped. Both hold the same statements of one transaction and name the
+    // same data files, so the walk below needs only the valid one. Delete the damaged one first and synchronously:
+    // should this drop fail later, its retry then finds the valid one alone instead of a damaged file it cannot walk.
+    std::vector<std::string> damaged_vlogs;
     for (const auto& log_name : txn_logs) {
+        if (!is_txn_vlog_group_file(log_name)) {
+            continue;
+        }
+        const auto [tablet_id, version] = parse_txn_vlog_filename(log_name);
+        auto legacy_name = txn_vlog_filename(tablet_id, version);
+        if (txn_logs.count(legacy_name) == 0) {
+            continue;
+        }
+        auto group = tablet_mgr->get_txn_vlog_group(join_path(log_dir, log_name), false);
+        auto legacy = tablet_mgr->get_txn_vlog_group(join_path(log_dir, legacy_name), false);
+        if (group.status().is_corruption() && legacy.ok()) {
+            LOG(WARNING) << "Deleting damaged version log " << join_path(log_dir, log_name) << ": the same version's "
+                         << legacy_name << " is valid. error: " << group.status();
+            damaged_vlogs.push_back(log_name);
+        } else if (legacy.status().is_corruption() && group.ok()) {
+            LOG(WARNING) << "Deleting damaged version log " << join_path(log_dir, legacy_name)
+                         << ": the same version's " << log_name << " is valid. error: " << legacy.status();
+            damaged_vlogs.push_back(std::move(legacy_name));
+        }
+    }
+    for (const auto& log_name : damaged_vlogs) {
+        auto [tablet_id, version] = parse_txn_vlog_filename(log_name);
+        tablet_mgr->metacache()->erase(
+                join_path(tablet_mgr->location_provider()->txn_log_root_location(tablet_id), log_name));
+        RETURN_IF_ERROR(ignore_not_found(fs->delete_file(join_path(log_dir, log_name))));
+        txn_logs.erase(log_name);
+    }
+
+    for (const auto& log_name : txn_logs) {
+        if (is_txn_vlog_group_file(log_name)) {
+            // A statement group holds the logs of several statements and is never in the metacache. Every other
+            // txn log is read below as before statement groups existed.
+            auto group = tablet_mgr->get_txn_vlog_group(join_path(log_dir, log_name), false);
+            if (group.status().is_not_found()) {
+                continue;
+            }
+            RETURN_IF_ERROR(group.status());
+            // As below: the data of a range distribution tablet may have been applied to new tablets.
+            if (!is_range_distribution) {
+                for (const auto& log : *group) {
+                    RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, *log, false, false, deleter));
+                }
+            }
+            RETURN_IF_ERROR(deleter.delete_file(join_path(log_dir, log_name)));
+            continue;
+        }
         auto res = tablet_mgr->get_txn_log(join_path(log_dir, log_name), false);
         if (res.status().is_not_found()) {
             continue;
