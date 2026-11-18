@@ -4,9 +4,9 @@ description: "このドキュメントバージョンの StarRocks リリース�
 products: [oss]
 ---
 
-# Release notes
+# リリースノート
 
-For release notes for newer major versions please switch the documentation version in the drop-down at the top of the page.
+より新しいメジャーバージョンのリリースノートについては、ページ上部のドロップダウンでドキュメントのバージョンを切り替えてください。
 
 import DocCardList from '@theme/DocCardList';
 
