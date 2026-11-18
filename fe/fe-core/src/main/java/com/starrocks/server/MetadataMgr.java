@@ -71,7 +71,6 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.Partition;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
-import com.starrocks.connector.paimon.PaimonSinkExtra;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.qe.ConnectContext;
@@ -1113,9 +1112,6 @@ public class MetadataMgr {
                            List<TSinkCommitInfo> sinkCommitInfos, String branch, Object extra,
                            ConnectContext context) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        if (extra instanceof PaimonSinkExtra && connectorMetadata.isEmpty()) {
-            throw new StarRocksConnectorException("Paimon publication metadata is unavailable");
-        }
         connectorMetadata.ifPresent(metadata -> {
             try {
                 metadata.finishSink(dbName, tableName, sinkCommitInfos, branch, extra, context);

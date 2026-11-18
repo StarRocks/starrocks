@@ -43,12 +43,10 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.DebugUtil;
-import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergRowLineageUtils;
 import com.starrocks.connector.paimon.PaimonSinkExtra;
-import com.starrocks.connector.paimon.PaimonWriteCapabilities;
+import com.starrocks.connector.paimon.PaimonUtils;
 import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
@@ -80,7 +78,6 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
-import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -134,14 +131,12 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.paimon.CoreOptions;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -467,25 +462,7 @@ public class InsertPlanner {
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
         Table targetTable = insertStmt.getTargetTable();
         if (targetTable instanceof PaimonTable paimonTable) {
-            try {
-                PaimonWriteCapabilities.validateWrite(paimonTable.getNativeTable());
-            } catch (StarRocksConnectorException e) {
-                throw new SemanticException(e.getMessage());
-            }
-            if (insertStmt.usePartialUpdate()) {
-                throw new SemanticException("Paimon writes do not support partial-update mode");
-            }
-            List<org.apache.paimon.types.DataField> nativeFields = paimonTable.getNativeTable().rowType().getFields();
-            List<Column> schema = paimonTable.getFullSchema();
-            if (schema.size() != nativeFields.size()) {
-                throw new SemanticException("Paimon target schema changed during planning; refresh the table and retry");
-            }
-            for (int i = 0; i < schema.size(); ++i) {
-                if (!schema.get(i).getName().equals(nativeFields.get(i).name())
-                        || !schema.get(i).getType().equals(ColumnTypeConverter.fromPaimonType(nativeFields.get(i).type()))) {
-                    throw new SemanticException("Paimon target schema changed during planning; refresh the table and retry");
-                }
-            }
+            PaimonUtils.validateWriteTarget(insertStmt, paimonTable);
         }
 
         // Decided per planning attempt and recorded on this attempt's ExecPlan, never on the statement:
@@ -567,7 +544,7 @@ public class InsertPlanner {
         session.setSessionVariable(currentVariable);
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
         boolean canUsePipeline = isEnablePipeline
-                && (targetTable.isPaimonTable() || DataSink.canTableSinkUsePipeline(targetTable));
+                && DataSink.canTableSinkUsePipeline(targetTable);
         if (targetTable.isPaimonTable() && !canUsePipeline) {
             throw new SemanticException("Paimon writes require the pipeline engine");
         }
@@ -617,10 +594,7 @@ public class InsertPlanner {
                 boolean nullable = column.isAllowNull() || (shadowRewriteSubsetWrite
                         && !shadowRewriteTargetIndexColumns.contains(column.getName().toLowerCase(Locale.ROOT)));
                 if (targetTable instanceof PaimonTable paimonTable) {
-                    nullable = paimonTable.getNativeTable().rowType().getFields().stream()
-                            .filter(field -> field.name().equals(column.getName()))
-                            .findFirst().orElseThrow(() -> new SemanticException("Paimon target column changed during planning"))
-                            .type().isNullable();
+                    nullable = PaimonUtils.isWriteColumnNullable(paimonTable, column.getName());
                 }
                 slotDescriptor.setIsNullable(nullable);
                 if (column.getType().isVarchar() &&
@@ -737,8 +711,8 @@ public class InsertPlanner {
             } else if (targetTable instanceof PaimonTable paimonTable) {
                 try {
                     PaimonSinkExtra extra = PaimonSinkExtra.from(paimonTable, "APPEND",
-                            paimonStaticPartition(insertStmt, paimonTable), paimonOperationId(session),
-                            session.getSessionVariable().getTimeZone());
+                            PaimonUtils.getStaticPartitionValues(insertStmt, paimonTable),
+                            PaimonUtils.getWriteOperationId(session), session.getSessionVariable().getTimeZone());
                     dataSink = new PaimonTableSink(paimonTable, tupleDesc, extra);
                 } catch (StarRocksConnectorException e) {
                     throw new SemanticException(e.getMessage());
@@ -1422,48 +1396,6 @@ public class InsertPlanner {
         }
         Preconditions.checkState(dataColumnIndex == dataColumns.size(), "Paimon static partition output mismatch");
         return root.withNewRoot(new LogicalProjectOperator(projection));
-    }
-
-    private static Map<String, String> paimonStaticPartition(InsertStmt insertStmt, PaimonTable table) {
-        if (!insertStmt.isStaticKeyPartitionInsert()) {
-            return Collections.emptyMap();
-        }
-        Map<String, String> partition = new LinkedHashMap<>();
-        List<String> names = insertStmt.getTargetPartitionNames().getPartitionColNames();
-        List<Expr> values = insertStmt.getTargetPartitionNames().getPartitionColValues();
-        String nullPartition = table.getNativeTable().options().getOrDefault(
-                CoreOptions.PARTITION_DEFAULT_NAME.key(), CoreOptions.PARTITION_DEFAULT_NAME.defaultValue());
-        for (String column : table.getPartitionColumnNames()) {
-            int index = -1;
-            for (int i = 0; i < names.size(); ++i) {
-                if (column.equalsIgnoreCase(names.get(i))) {
-                    index = i;
-                    break;
-                }
-            }
-            Preconditions.checkState(index >= 0, "Paimon static partition target mismatch");
-            LiteralExpr value = (LiteralExpr) values.get(index);
-            String partitionValue;
-            if (value.isConstantNull()) {
-                partitionValue = nullPartition;
-            } else if (value instanceof BoolLiteral boolLiteral) {
-                partitionValue = Boolean.toString(boolLiteral.getValue());
-            } else {
-                partitionValue = value.getStringValue();
-            }
-            partition.put(column, partitionValue);
-        }
-        return partition;
-    }
-
-    private static String paimonOperationId(ConnectContext session) {
-        if (session.getQueryId() != null) {
-            return session.getQueryId().toString().replace('-', '_');
-        }
-        if (session.getExecutionId() != null) {
-            return DebugUtil.printId(session.getExecutionId()).replace('-', '_');
-        }
-        throw new SemanticException("Paimon writes require a query execution identity");
     }
 
     private OptExprBuilder fillKeyPartitionsColumn(ColumnRefFactory columnRefFactory,

@@ -217,6 +217,26 @@ public class PaimonOperationPublicationTest {
     }
 
     @Test
+    public void testMissingMetadataCannotAcknowledgeVisible() throws Exception {
+        try (Fixture fixture = new Fixture("APPEND", 0, 0)) {
+            MetadataMgr unavailable = metadata(null);
+            doAnswer(invocation -> {
+                unavailable.finishSink("p", "db", "t", fixture.profile.getSinkCommitInfos(), null,
+                        fixture.operation, fixture.context);
+                return null;
+            }).when(fixture.metadata).finishSink(eq("p"), eq("db"), eq("t"), anyList(), isNull(),
+                    eq(fixture.operation), eq(fixture.context));
+
+            StarRocksException failure = assertThrows(StarRocksException.class,
+                    () -> fixture.executor.handleDMLStmt(fixture.plan, fixture.statement));
+
+            assertTrue(failure.getMessage().contains("Paimon publication was not confirmed"));
+            assertEquals(QueryState.MysqlStateType.ERR, fixture.queryState.getStateType());
+            verifyNoInteractions(fixture.transactions, fixture.loads);
+        }
+    }
+
+    @Test
     public void testMissingZeroRowDriverBlocksEmptyAppend() {
         PaimonSinkExtra operation = operation("APPEND");
         QueryRuntimeProfile profile = profile(operation, 2);
@@ -224,7 +244,8 @@ public class PaimonOperationPublicationTest {
         TSinkCommitInfo first = marker(operation, INSTANCE_ID, 0, 0);
 
         assertThrows(StarRocksConnectorException.class,
-                () -> profile.updateLoadInformation(execution, report(INSTANCE_ID, List.of(first))));
+                () -> profile.buildLoadInformationUpdates(execution, report(INSTANCE_ID, List.of(first)))
+                        .forEach(Runnable::run));
         assertThrows(StarRocksConnectorException.class, () -> profile.validatePaimonSinkCommitInfos(0));
         assertEquals(List.of(first), profile.getSinkCommitInfos(), "partial payload remains available for native abort");
     }
@@ -234,7 +255,8 @@ public class PaimonOperationPublicationTest {
         PaimonSinkExtra operation = operation("APPEND");
         QueryRuntimeProfile profile = profile(operation, 1);
         assertThrows(StarRocksConnectorException.class,
-                () -> profile.updateLoadInformation(execution(INSTANCE_ID), report(INSTANCE_ID, List.of())));
+                () -> profile.buildLoadInformationUpdates(execution(INSTANCE_ID), report(INSTANCE_ID, List.of()))
+                        .forEach(Runnable::run));
         assertThrows(StarRocksConnectorException.class, () -> profile.validatePaimonSinkCommitInfos(0));
     }
 
@@ -243,9 +265,10 @@ public class PaimonOperationPublicationTest {
         PaimonSinkExtra operation = operation("APPEND");
         QueryRuntimeProfile profile = profile(operation, 2);
         TUniqueId sourceId = new TUniqueId(1, 3);
-        profile.updateLoadInformation(execution(sourceId), report(sourceId, List.of()));
-        profile.updateLoadInformation(execution(INSTANCE_ID), report(INSTANCE_ID, List.of(
-                marker(operation, INSTANCE_ID, 0, 0), marker(operation, INSTANCE_ID, 1, 0))));
+        profile.buildLoadInformationUpdates(execution(sourceId), report(sourceId, List.of())).forEach(Runnable::run);
+        profile.buildLoadInformationUpdates(execution(INSTANCE_ID), report(INSTANCE_ID, List.of(
+                marker(operation, INSTANCE_ID, 0, 0), marker(operation, INSTANCE_ID, 1, 0))))
+                .forEach(Runnable::run);
         profile.validatePaimonSinkCommitInfos(0);
         assertEquals("2", profile.getQueryProfile().getInfoString("PaimonPreparedProducers"));
     }
@@ -254,8 +277,8 @@ public class PaimonOperationPublicationTest {
     public void testPreparedRowsMustMatchLoadCounters() {
         PaimonSinkExtra operation = operation("APPEND");
         QueryRuntimeProfile profile = profile(operation, 1);
-        profile.updateLoadInformation(execution(INSTANCE_ID), report(INSTANCE_ID,
-                List.of(marker(operation, INSTANCE_ID, 0, 1))));
+        profile.buildLoadInformationUpdates(execution(INSTANCE_ID), report(INSTANCE_ID,
+                List.of(marker(operation, INSTANCE_ID, 0, 1)))).forEach(Runnable::run);
         assertThrows(StarRocksConnectorException.class, () -> profile.validatePaimonSinkCommitInfos(0));
     }
 
@@ -266,8 +289,9 @@ public class PaimonOperationPublicationTest {
         TSinkCommitInfo marker = marker(operation, INSTANCE_ID, 0, 0);
         TReportExecStatusParams report = report(INSTANCE_ID, List.of(marker));
         report.setLoad_counters(Map.of(LoadEtlTask.DPP_NORMAL_ALL, "malformed"));
-        assertThrows(NumberFormatException.class,
-                () -> profile.updateLoadInformation(execution(INSTANCE_ID), report));
+        List<Runnable> updates = profile.buildLoadInformationUpdates(execution(INSTANCE_ID), report);
+        assertTrue(profile.getSinkCommitInfos().isEmpty(), "Building updates must not modify the profile");
+        assertThrows(NumberFormatException.class, () -> updates.forEach(Runnable::run));
         assertEquals(List.of(marker), profile.getSinkCommitInfos());
         // The coordinator marks this failure before retiring the instance, so later validation cannot pass.
         profile.recordPaimonReportFailure();
@@ -343,7 +367,7 @@ public class PaimonOperationPublicationTest {
                 mock(ConnectorMgr.class), mock(ConnectorTblMetaInfoMgr.class)) {
             @Override
             public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
-                return Optional.of(connector);
+                return Optional.ofNullable(connector);
             }
         };
     }
@@ -443,8 +467,8 @@ public class PaimonOperationPublicationTest {
             ConnectContext.threadLocalInfo.set(context);
             operation = operation(mode);
             profile = profile(operation, 1);
-            profile.updateLoadInformation(execution(INSTANCE_ID), report(INSTANCE_ID,
-                    List.of(marker(operation, INSTANCE_ID, 0, rows))));
+            profile.buildLoadInformationUpdates(execution(INSTANCE_ID), report(INSTANCE_ID,
+                    List.of(marker(operation, INSTANCE_ID, 0, rows)))).forEach(Runnable::run);
             TableRef target = new TableRef(QualifiedName.of(List.of("p", "db", "t")), null, NodePosition.ZERO);
             statement = new InsertStmt(target, null, null, null, mock(QueryStatement.class), !mode.equals("APPEND"),
                     Map.of(), NodePosition.ZERO);
