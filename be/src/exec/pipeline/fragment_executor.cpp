@@ -44,6 +44,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/result_sink.h"
+#include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
@@ -619,6 +620,55 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
 Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     const TExecPlanFragmentParams& unique_request = request.unique();
+    if (request.common().query_options.query_type == TQueryType::LOAD) {
+        std::vector<std::shared_ptr<StreamLoadPipe>> pipes;
+        auto bind_pipes = [&](const std::vector<TScanRangeParams>& scan_ranges) -> Status {
+            for (const auto& scan_range : scan_ranges) {
+                if (!scan_range.scan_range.__isset.broker_scan_range) {
+                    continue;
+                }
+                const auto& broker_range = scan_range.scan_range.broker_scan_range;
+                // Channel and merge-commit contexts are created and registered below.
+                if (broker_range.__isset.channel_id) {
+                    continue;
+                }
+                for (const auto& range : broker_range.ranges) {
+                    if (range.file_type != TFileType::FILE_STREAM) {
+                        continue;
+                    }
+                    auto pipe = exec_env->load_stream_mgr()->get(range.load_id);
+                    if (pipe == nullptr) {
+                        auto status = Status::InternalError("Invalid or outdated load id " + print_id(range.load_id));
+                        for (const auto& bound_pipe : pipes) {
+                            bound_pipe->cancel(status);
+                        }
+                        return status;
+                    }
+                    pipes.emplace_back(std::move(pipe));
+                }
+            }
+            return Status::OK();
+        };
+        for (const auto& [node_id, scan_ranges] : unique_request.params.per_node_scan_ranges) {
+            if (request.per_driver_seq_scan_ranges_of_node(node_id).empty()) {
+                RETURN_IF_ERROR(bind_pipes(scan_ranges));
+            }
+        }
+        if (unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
+            for (const auto& [node_id, per_driver_ranges] : unique_request.params.node_to_per_driver_seq_scan_ranges) {
+                for (const auto& [driver_seq, scan_ranges] : per_driver_ranges) {
+                    RETURN_IF_ERROR(bind_pipes(scan_ranges));
+                }
+            }
+        }
+        // FE creates one input mode per fragment: existing BE-local pipes or channel inputs.
+        // Channel-only fragments fall through to the existing channel setup below.
+        if (!pipes.empty()) {
+            _fragment_ctx->set_stream_load_pipes(std::move(pipes));
+            return Status::OK();
+        }
+    }
+
     if (!unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
         return Status::OK();
     }
