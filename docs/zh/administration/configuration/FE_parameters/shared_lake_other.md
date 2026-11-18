@@ -636,7 +636,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `lake_enable_batch_publish_retry_freeze`
 
-- 默认值: false
+- 默认值: true
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes

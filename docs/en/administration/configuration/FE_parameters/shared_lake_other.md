@@ -626,7 +626,7 @@ This topic introduces the following types of FE configurations:
 
 ### `lake_enable_batch_publish_retry_freeze`
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
