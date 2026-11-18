@@ -30,6 +30,8 @@ class TabletWriter;
 
 class Rowset : public BaseRowset {
 public:
+    // One Rowset per rowset of |tablet_metadata|. Rowsets written with the same schema share one TabletSchema,
+    // looked up in GlobalTabletSchemaMap once per call.
     static std::vector<RowsetPtr> get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata);
 
     // Does NOT take the ownership of |tablet_mgr| and |metadata|.
@@ -39,14 +41,18 @@ public:
     // Create a Rowset based on the rowset metadata of index |rowset_index| saved in the tablet metadata
     // pointed by |tablet_metadata|.
     //
+    // |tablet_schema| is the schema the rowset was written with. When it is nullptr, the constructor looks
+    // it up in GlobalTabletSchemaMap.
+    //
     // Note: the caller must ensure that the object pointed by |tablet_metadata| will not be updated during
     // the lifecycle of this Rowset, otherwise the behavior is undefined.
     //
     // Requires:
     //  - |tablet_mgr| and |tablet_metadata| is not nullptr
     //  - 0 <= |rowset_index| && |rowset_index| < tablet_metadata->rowsets_size()
+    //  - |tablet_schema|, when not nullptr, is built from the schema this rowset maps to in |tablet_metadata|
     explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index,
-                    size_t compaction_segment_limit);
+                    size_t compaction_segment_limit, TabletSchemaPtr tablet_schema = nullptr);
 
     virtual ~Rowset();
 
@@ -123,6 +129,8 @@ public:
 
     int64_t tablet_id() const { return _tablet_id; }
 
+    TabletSchemaPtr tablet_schema() const { return _tablet_schema; }
+
     [[nodiscard]] int64_t version() const { return metadata().version(); }
 
     bool has_data_files() const override { return num_segments() > 0 || num_dels() > 0; }
@@ -149,15 +157,5 @@ private:
     // only used for compaction
     size_t _compaction_segment_limit;
 };
-
-inline std::vector<RowsetPtr> Rowset::get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata) {
-    std::vector<RowsetPtr> rowsets;
-    rowsets.reserve(tablet_metadata->rowsets_size());
-    for (int i = 0, size = tablet_metadata->rowsets_size(); i < size; ++i) {
-        auto rowset = std::make_shared<Rowset>(tablet_mgr, tablet_metadata, i, 0 /* compaction_segment_limit */);
-        rowsets.emplace_back(std::move(rowset));
-    }
-    return rowsets;
-}
 
 } // namespace starrocks::lake
