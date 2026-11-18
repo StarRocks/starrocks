@@ -45,14 +45,21 @@ namespace starrocks {
 
 // Compare a column with datum, store result into a vector
 // For column-wise compare, only consider rows that are equal at previous columns
-// @return number of rows that are equal
+// @return number of rows that are equal (or 0 when need_equal_count is false)
 template <class DataComparator>
-static inline size_t compare_column_helper(CompareVector& cmp_vector, DataComparator cmp) {
+static inline size_t compare_column_helper(CompareVector& cmp_vector, DataComparator cmp,
+                                           ptrdiff_t known_equal_count = -1, bool need_equal_count = true) {
     DCHECK(std::all_of(cmp_vector.begin(), cmp_vector.end(), [](int8_t x) { return x == 0 || x == -1 || x == 1; }));
+
+    const size_t zero_count =
+            (known_equal_count >= 0) ? static_cast<size_t>(known_equal_count) : SIMD::count_zero(cmp_vector);
+    if (zero_count == 0) {
+        return 0;
+    }
 
     // For sparse array, use SIMD to skip data.
     // For dense array, just iterate all bytes.
-    if (SIMD::count_zero(cmp_vector) > cmp_vector.size() / 8) {
+    if (zero_count > cmp_vector.size() / 8) {
         for (size_t i = 0; i < cmp_vector.size(); i++) {
             // Only consider rows that are queal at previous columns
             if (cmp_vector[i] == 0) {
@@ -72,7 +79,7 @@ static inline size_t compare_column_helper(CompareVector& cmp_vector, DataCompar
         }
     }
 
-    return SIMD::count_zero(cmp_vector);
+    return need_equal_count ? SIMD::count_zero(cmp_vector) : 0;
 }
 
 template <typename T>
@@ -83,23 +90,25 @@ static inline int8_t compare_scalar_with_order(const T& lhs, const T& rhs, int s
 
 template <typename T>
 static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, const T* lhs_data, T rhs_data,
-                                                  int sort_order) {
+                                                  int sort_order, ptrdiff_t known_equal_count = -1,
+                                                  bool need_equal_count = true) {
     const size_t size = cmp_vector.size();
     if (size == 0) {
+        return 0;
+    }
+
+    const size_t zero_count =
+            (known_equal_count >= 0) ? static_cast<size_t>(known_equal_count) : SIMD::count_zero(cmp_vector);
+    if (zero_count == 0) {
         return 0;
     }
 
     // Fast path: many zeros in cmp_vector -> block-compare and write results.
     const auto scalar_cmp = [&](size_t idx) { return compare_scalar_with_order(lhs_data[idx], rhs_data, sort_order); };
 
-    if (SIMD::count_zero(cmp_vector) > size / 8) {
+    if (zero_count > size / 8) {
         size_t i = 0;
-        // On AVX-512 builds the compiler auto-vectorises the scalar fallback
-        // (the simple `if (cmp_vector[i] == 0) cmp_vector[i] = scalar_cmp(i);`
-        // loop below) to wider AVX-512 mask-merge code that beats the
-        // hand-written AVX2 block-skip path. Only opt into the hand-written
-        // SIMD on AVX2-only builds.
-#if defined(__AVX2__) && !defined(__AVX512F__)
+#if defined(__AVX2__)
         if constexpr (sizeof(T) == 1) {
             constexpr size_t kBlock = 32;
             const __m256i zero = _mm256_setzero_si256();
@@ -110,7 +119,6 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
             if constexpr (std::is_unsigned_v<T>) {
                 rhs_vec = _mm256_xor_si256(rhs_vec, sign_mask);
             }
-            const __m256i ones = _mm256_set1_epi8(1);
             for (; i + kBlock <= size; i += kBlock) {
                 __m256i cmp_bytes = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(cmp_vector.data() + i));
                 __m256i zeros = _mm256_cmpeq_epi8(cmp_bytes, zero);
@@ -130,19 +138,15 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
                     lhs = _mm256_xor_si256(lhs, sign_mask);
                 }
 
+                // _mm256_cmpgt_epi8 yields -1 (0xFF) for true and 0 for false.
+                // Therefore lt - gt yields -1 (<), +1 (>), or 0 (==) directly.
                 __m256i gt = _mm256_cmpgt_epi8(lhs, rhs_vec);
                 __m256i lt = _mm256_cmpgt_epi8(rhs_vec, lhs);
-                __m256i gt01 = _mm256_and_si256(gt, ones);
-                __m256i lt01 = _mm256_and_si256(lt, ones);
-                __m256i cmp = _mm256_sub_epi8(gt01, lt01);
-                if (sort_order < 0) {
-                    cmp = _mm256_sub_epi8(zero, cmp);
-                }
+                __m256i cmp = (sort_order >= 0) ? _mm256_sub_epi8(lt, gt) : _mm256_sub_epi8(gt, lt);
                 _mm256_storeu_si256(reinterpret_cast<__m256i*>(cmp_vector.data() + i), cmp);
             }
         } else if constexpr (sizeof(T) == 2) {
             constexpr size_t kBlock = 16;
-            const __m256i zero = _mm256_setzero_si256();
             __m256i rhs_vec = _mm256_set1_epi16(static_cast<int16_t>(rhs_data));
             const __m256i sign_mask =
                     std::is_unsigned_v<T> ? _mm256_set1_epi16(static_cast<int16_t>(0x8000)) : _mm256_setzero_si256();
@@ -150,7 +154,6 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
             if constexpr (std::is_unsigned_v<T>) {
                 rhs_vec = _mm256_xor_si256(rhs_vec, sign_mask);
             }
-            const __m256i ones = _mm256_set1_epi16(1);
             const __m128i zero128 = _mm_setzero_si128();
             for (; i + kBlock <= size; i += kBlock) {
                 __m128i cmp_bytes = _mm_loadu_si128(reinterpret_cast<const __m128i*>(cmp_vector.data() + i));
@@ -172,12 +175,7 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
 
                 __m256i gt = _mm256_cmpgt_epi16(lhs, rhs_vec);
                 __m256i lt = _mm256_cmpgt_epi16(rhs_vec, lhs);
-                __m256i gt01 = _mm256_and_si256(gt, ones);
-                __m256i lt01 = _mm256_and_si256(lt, ones);
-                __m256i cmp16 = _mm256_sub_epi16(gt01, lt01);
-                if (sort_order < 0) {
-                    cmp16 = _mm256_sub_epi16(zero, cmp16);
-                }
+                __m256i cmp16 = (sort_order >= 0) ? _mm256_sub_epi16(lt, gt) : _mm256_sub_epi16(gt, lt);
 
                 __m128i lo = _mm256_castsi256_si128(cmp16);
                 __m128i hi = _mm256_extracti128_si256(cmp16, 1);
@@ -186,15 +184,12 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
             }
         } else if constexpr (sizeof(T) == 4) {
             constexpr size_t kBlock = 8;
-            const __m256i zero = _mm256_setzero_si256();
             __m256i rhs_vec = _mm256_set1_epi32(static_cast<int32_t>(rhs_data));
             const __m256i sign_mask = std::is_unsigned_v<T> ? _mm256_set1_epi32(0x8000'0000) : _mm256_setzero_si256();
             // For unsigned compare, flip sign bit to reuse signed compares.
             if constexpr (std::is_unsigned_v<T>) {
                 rhs_vec = _mm256_xor_si256(rhs_vec, sign_mask);
             }
-            const __m256i ones = _mm256_set1_epi32(1);
-            alignas(32) int32_t tmp[8];
             for (; i + kBlock <= size; i += kBlock) {
                 uint64_t block_mask = 0;
                 std::memcpy(&block_mask, cmp_vector.data() + i, sizeof(block_mask));
@@ -215,20 +210,17 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
 
                 __m256i gt = _mm256_cmpgt_epi32(lhs, rhs_vec);
                 __m256i lt = _mm256_cmpgt_epi32(rhs_vec, lhs);
-                __m256i gt01 = _mm256_and_si256(gt, ones);
-                __m256i lt01 = _mm256_and_si256(lt, ones);
-                __m256i cmp32 = _mm256_sub_epi32(gt01, lt01);
-                if (sort_order < 0) {
-                    cmp32 = _mm256_sub_epi32(zero, cmp32);
-                }
-                _mm256_storeu_si256(reinterpret_cast<__m256i*>(tmp), cmp32);
-                for (size_t k = 0; k < kBlock; ++k) {
-                    cmp_vector[i + k] = static_cast<int8_t>(tmp[k]);
-                }
+                __m256i cmp32 = (sort_order >= 0) ? _mm256_sub_epi32(lt, gt) : _mm256_sub_epi32(gt, lt);
+                // Narrow 8x32-bit lanes in {-1, 0, +1} to 8x8-bit lanes in registers.
+                __m128i lo = _mm256_castsi256_si128(cmp32);
+                __m128i hi = _mm256_extracti128_si256(cmp32, 1);
+                __m128i p16 = _mm_packs_epi32(lo, hi);
+                __m128i p8 = _mm_packs_epi16(p16, p16);
+                _mm_storel_epi64(reinterpret_cast<__m128i*>(cmp_vector.data() + i), p8);
             }
         } else if constexpr (sizeof(T) == 8) {
-            constexpr size_t kBlock = 4;
-            const __m256i zero = _mm256_setzero_si256();
+            constexpr size_t kBlock = 8;
+            const __m256i perm_idx = _mm256_setr_epi32(0, 2, 4, 6, 0, 2, 4, 6);
             __m256i rhs_vec = _mm256_set1_epi64x(static_cast<int64_t>(rhs_data));
             const __m256i sign_mask = std::is_unsigned_v<T>
                                               ? _mm256_set1_epi64x(static_cast<int64_t>(0x8000'0000'0000'0000ULL))
@@ -237,10 +229,8 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
             if constexpr (std::is_unsigned_v<T>) {
                 rhs_vec = _mm256_xor_si256(rhs_vec, sign_mask);
             }
-            const __m256i ones = _mm256_set1_epi64x(1);
-            alignas(32) int64_t tmp[4];
             for (; i + kBlock <= size; i += kBlock) {
-                uint32_t block_mask = 0;
+                uint64_t block_mask = 0;
                 std::memcpy(&block_mask, cmp_vector.data() + i, sizeof(block_mask));
                 // Mixed block: fall back to scalar for elements still equal.
                 if (block_mask != 0) {
@@ -252,23 +242,25 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
                     continue;
                 }
 
-                __m256i lhs = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(lhs_data + i));
+                __m256i lhs0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(lhs_data + i));
+                __m256i lhs1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(lhs_data + i + 4));
                 if constexpr (std::is_unsigned_v<T>) {
-                    lhs = _mm256_xor_si256(lhs, sign_mask);
+                    lhs0 = _mm256_xor_si256(lhs0, sign_mask);
+                    lhs1 = _mm256_xor_si256(lhs1, sign_mask);
                 }
 
-                __m256i gt = _mm256_cmpgt_epi64(lhs, rhs_vec);
-                __m256i lt = _mm256_cmpgt_epi64(rhs_vec, lhs);
-                __m256i gt01 = _mm256_and_si256(gt, ones);
-                __m256i lt01 = _mm256_and_si256(lt, ones);
-                __m256i cmp64 = _mm256_sub_epi64(gt01, lt01);
-                if (sort_order < 0) {
-                    cmp64 = _mm256_sub_epi64(zero, cmp64);
-                }
-                _mm256_storeu_si256(reinterpret_cast<__m256i*>(tmp), cmp64);
-                for (size_t k = 0; k < kBlock; ++k) {
-                    cmp_vector[i + k] = static_cast<int8_t>(tmp[k]);
-                }
+                __m256i gt0 = _mm256_cmpgt_epi64(lhs0, rhs_vec);
+                __m256i lt0 = _mm256_cmpgt_epi64(rhs_vec, lhs0);
+                __m256i gt1 = _mm256_cmpgt_epi64(lhs1, rhs_vec);
+                __m256i lt1 = _mm256_cmpgt_epi64(rhs_vec, lhs1);
+                __m256i cmp64_0 = (sort_order >= 0) ? _mm256_sub_epi64(lt0, gt0) : _mm256_sub_epi64(gt0, lt0);
+                __m256i cmp64_1 = (sort_order >= 0) ? _mm256_sub_epi64(lt1, gt1) : _mm256_sub_epi64(gt1, lt1);
+                // Gather low 32-bit half of each 64-bit lane in {-1, 0, +1} and pack 8x32 -> 8x16 -> 8x8.
+                __m128i p0 = _mm256_castsi256_si128(_mm256_permutevar8x32_epi32(cmp64_0, perm_idx));
+                __m128i p1 = _mm256_castsi256_si128(_mm256_permutevar8x32_epi32(cmp64_1, perm_idx));
+                __m128i p16 = _mm_packs_epi32(p0, p1);
+                __m128i p8 = _mm_packs_epi16(p16, p16);
+                _mm_storel_epi64(reinterpret_cast<__m128i*>(cmp_vector.data() + i), p8);
             }
         }
 #elif defined(__ARM_NEON) && defined(__aarch64__)
@@ -351,17 +343,11 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
                 vst1_s8(reinterpret_cast<int8_t*>(cmp_vector.data() + i), cmp8);
             }
         } else if constexpr (sizeof(T) == 4) {
-            constexpr size_t kBlock = 4;
-            uint32x4_t rhs_vec = vdupq_n_u32(static_cast<uint32_t>(rhs_data));
-            const uint32x4_t sign_mask = std::is_unsigned_v<T> ? vdupq_n_u32(0x8000'0000) : vdupq_n_u32(0);
-            // For unsigned compare, flip sign bit to reuse signed compares.
-            if constexpr (std::is_unsigned_v<T>) {
-                rhs_vec = veorq_u32(rhs_vec, sign_mask);
-            }
-            const uint32x4_t ones = vdupq_n_u32(1);
-            alignas(16) int32_t tmp[4];
+            constexpr size_t kBlock = 8;
+            [[maybe_unused]] const uint32x4_t rhs_u = vdupq_n_u32(static_cast<uint32_t>(rhs_data));
+            [[maybe_unused]] const int32x4_t rhs_s = vdupq_n_s32(static_cast<int32_t>(rhs_data));
             for (; i + kBlock <= size; i += kBlock) {
-                uint32_t block_mask = 0;
+                uint64_t block_mask = 0;
                 std::memcpy(&block_mask, cmp_vector.data() + i, sizeof(block_mask));
                 // Mixed block: fall back to scalar for elements still equal.
                 if (block_mask != 0) {
@@ -373,37 +359,45 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
                     continue;
                 }
 
-                uint32x4_t lhs_u = vld1q_u32(reinterpret_cast<const uint32_t*>(lhs_data + i));
+                uint32x4_t gt0, gt1, lt0, lt1;
                 if constexpr (std::is_unsigned_v<T>) {
-                    lhs_u = veorq_u32(lhs_u, sign_mask);
+                    uint32x4_t l0 = vld1q_u32(reinterpret_cast<const uint32_t*>(lhs_data + i));
+                    uint32x4_t l1 = vld1q_u32(reinterpret_cast<const uint32_t*>(lhs_data + i + 4));
+                    gt0 = vcgtq_u32(l0, rhs_u);
+                    gt1 = vcgtq_u32(l1, rhs_u);
+                    lt0 = vcgtq_u32(rhs_u, l0);
+                    lt1 = vcgtq_u32(rhs_u, l1);
+                } else {
+                    int32x4_t l0 = vld1q_s32(reinterpret_cast<const int32_t*>(lhs_data + i));
+                    int32x4_t l1 = vld1q_s32(reinterpret_cast<const int32_t*>(lhs_data + i + 4));
+                    gt0 = vcgtq_s32(l0, rhs_s);
+                    gt1 = vcgtq_s32(l1, rhs_s);
+                    lt0 = vcgtq_s32(rhs_s, l0);
+                    lt1 = vcgtq_s32(rhs_s, l1);
                 }
-                int32x4_t lhs_s = vreinterpretq_s32_u32(lhs_u);
-                int32x4_t rhs_s = vreinterpretq_s32_u32(rhs_vec);
-                uint32x4_t gt = vcgtq_s32(lhs_s, rhs_s);
-                uint32x4_t lt = vcgtq_s32(rhs_s, lhs_s);
-                uint32x4_t gt01 = vandq_u32(gt, ones);
-                uint32x4_t lt01 = vandq_u32(lt, ones);
-                int32x4_t cmp = vreinterpretq_s32_u32(vsubq_u32(gt01, lt01));
-                if (sort_order < 0) {
-                    cmp = vnegq_s32(cmp);
-                }
-                vst1q_s32(tmp, cmp);
-                for (size_t k = 0; k < kBlock; ++k) {
-                    cmp_vector[i + k] = static_cast<int8_t>(tmp[k]);
-                }
+                int8x8_t gt_mask = vreinterpret_s8_u8(
+                        vmovn_u16(vuzp1q_u16(vreinterpretq_u16_u32(gt0), vreinterpretq_u16_u32(gt1))));
+                int8x8_t lt_mask = vreinterpret_s8_u8(
+                        vmovn_u16(vuzp1q_u16(vreinterpretq_u16_u32(lt0), vreinterpretq_u16_u32(lt1))));
+                int8x8_t cmp = (sort_order >= 0) ? vsub_s8(lt_mask, gt_mask) : vsub_s8(gt_mask, lt_mask);
+                vst1_s8(reinterpret_cast<int8_t*>(cmp_vector.data() + i), cmp);
             }
         } else if constexpr (sizeof(T) == 8) {
-            constexpr size_t kBlock = 2;
-            uint64x2_t rhs_vec = vdupq_n_u64(static_cast<uint64_t>(rhs_data));
-            const uint64x2_t sign_mask = std::is_unsigned_v<T> ? vdupq_n_u64(0x8000'0000'0000'0000ULL) : vdupq_n_u64(0);
-            // For unsigned compare, flip sign bit to reuse signed compares.
-            if constexpr (std::is_unsigned_v<T>) {
-                rhs_vec = veorq_u64(rhs_vec, sign_mask);
-            }
-            const uint64x2_t ones = vdupq_n_u64(1);
-            alignas(16) int64_t tmp[2];
+            constexpr size_t kBlock = 8;
+            // vcgtq_* produces all-ones (0xFFFFFFFFFFFFFFFF) for true and 0 for false.
+            // Narrowing to int8x8_t yields 0xFF (-1 in two's complement) for true and 0 for false.
+            auto narrow_mask_64_to_8 = [](uint64x2_t m0, uint64x2_t m1, uint64x2_t m2, uint64x2_t m3) -> int8x8_t {
+                uint32x4_t u01 = vuzp1q_u32(vreinterpretq_u32_u64(m0), vreinterpretq_u32_u64(m1));
+                uint32x4_t u23 = vuzp1q_u32(vreinterpretq_u32_u64(m2), vreinterpretq_u32_u64(m3));
+                uint16x8_t u0123 = vuzp1q_u16(vreinterpretq_u16_u32(u01), vreinterpretq_u16_u32(u23));
+                return vreinterpret_s8_u8(vmovn_u16(u0123));
+            };
+
+            [[maybe_unused]] const uint64x2_t rhs_u = vdupq_n_u64(static_cast<uint64_t>(rhs_data));
+            [[maybe_unused]] const int64x2_t rhs_s = vdupq_n_s64(static_cast<int64_t>(rhs_data));
+
             for (; i + kBlock <= size; i += kBlock) {
-                uint16_t block_mask = 0;
+                uint64_t block_mask = 0;
                 std::memcpy(&block_mask, cmp_vector.data() + i, sizeof(block_mask));
                 // Mixed block: fall back to scalar for elements still equal.
                 if (block_mask != 0) {
@@ -415,24 +409,44 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
                     continue;
                 }
 
-                uint64x2_t lhs_u = vld1q_u64(reinterpret_cast<const uint64_t*>(lhs_data + i));
+                uint64x2_t gt0, gt1, gt2, gt3;
+                uint64x2_t lt0, lt1, lt2, lt3;
                 if constexpr (std::is_unsigned_v<T>) {
-                    lhs_u = veorq_u64(lhs_u, sign_mask);
+                    uint64x2_t l0 = vld1q_u64(reinterpret_cast<const uint64_t*>(lhs_data + i));
+                    uint64x2_t l1 = vld1q_u64(reinterpret_cast<const uint64_t*>(lhs_data + i + 2));
+                    uint64x2_t l2 = vld1q_u64(reinterpret_cast<const uint64_t*>(lhs_data + i + 4));
+                    uint64x2_t l3 = vld1q_u64(reinterpret_cast<const uint64_t*>(lhs_data + i + 6));
+                    gt0 = vcgtq_u64(l0, rhs_u);
+                    gt1 = vcgtq_u64(l1, rhs_u);
+                    gt2 = vcgtq_u64(l2, rhs_u);
+                    gt3 = vcgtq_u64(l3, rhs_u);
+                    lt0 = vcgtq_u64(rhs_u, l0);
+                    lt1 = vcgtq_u64(rhs_u, l1);
+                    lt2 = vcgtq_u64(rhs_u, l2);
+                    lt3 = vcgtq_u64(rhs_u, l3);
+                } else {
+                    int64x2_t l0 = vld1q_s64(reinterpret_cast<const int64_t*>(lhs_data + i));
+                    int64x2_t l1 = vld1q_s64(reinterpret_cast<const int64_t*>(lhs_data + i + 2));
+                    int64x2_t l2 = vld1q_s64(reinterpret_cast<const int64_t*>(lhs_data + i + 4));
+                    int64x2_t l3 = vld1q_s64(reinterpret_cast<const int64_t*>(lhs_data + i + 6));
+                    gt0 = vcgtq_s64(l0, rhs_s);
+                    gt1 = vcgtq_s64(l1, rhs_s);
+                    gt2 = vcgtq_s64(l2, rhs_s);
+                    gt3 = vcgtq_s64(l3, rhs_s);
+                    lt0 = vcgtq_s64(rhs_s, l0);
+                    lt1 = vcgtq_s64(rhs_s, l1);
+                    lt2 = vcgtq_s64(rhs_s, l2);
+                    lt3 = vcgtq_s64(rhs_s, l3);
                 }
-                int64x2_t lhs_s = vreinterpretq_s64_u64(lhs_u);
-                int64x2_t rhs_s = vreinterpretq_s64_u64(rhs_vec);
-                uint64x2_t gt = vcgtq_s64(lhs_s, rhs_s);
-                uint64x2_t lt = vcgtq_s64(rhs_s, lhs_s);
-                uint64x2_t gt01 = vandq_u64(gt, ones);
-                uint64x2_t lt01 = vandq_u64(lt, ones);
-                int64x2_t cmp = vreinterpretq_s64_u64(vsubq_u64(gt01, lt01));
-                if (sort_order < 0) {
-                    cmp = vnegq_s64(cmp);
-                }
-                vst1q_s64(tmp, cmp);
-                for (size_t k = 0; k < kBlock; ++k) {
-                    cmp_vector[i + k] = static_cast<int8_t>(tmp[k]);
-                }
+
+                int8x8_t gt_mask = narrow_mask_64_to_8(gt0, gt1, gt2, gt3);
+                int8x8_t lt_mask = narrow_mask_64_to_8(lt0, lt1, lt2, lt3);
+                // Since true masks are -1 (0xFF) and false masks are 0 (0x00) in int8_t:
+                //   lhs < rhs => lt_mask = -1, gt_mask =  0 => lt_mask - gt_mask = -1
+                //   lhs > rhs => lt_mask =  0, gt_mask = -1 => lt_mask - gt_mask = +1
+                //   lhs == rhs => lt_mask = 0, gt_mask =  0 => lt_mask - gt_mask =  0
+                int8x8_t cmp = (sort_order >= 0) ? vsub_s8(lt_mask, gt_mask) : vsub_s8(gt_mask, lt_mask);
+                vst1_s8(reinterpret_cast<int8_t*>(cmp_vector.data() + i), cmp);
             }
         }
 #endif
@@ -441,7 +455,7 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
                 cmp_vector[i] = scalar_cmp(i);
             }
         }
-        return SIMD::count_zero(cmp_vector);
+        return need_equal_count ? SIMD::count_zero(cmp_vector) : 0;
     }
 
     size_t idx = 0;
@@ -454,7 +468,7 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
         idx = pos + 1;
     }
 
-    return SIMD::count_zero(cmp_vector);
+    return need_equal_count ? SIMD::count_zero(cmp_vector) : 0;
 }
 
 template <typename T, typename Underlying>
@@ -464,6 +478,9 @@ static inline const Underlying* raw_column_as(const T* data) {
     static_assert(sizeof(T) == sizeof(Underlying));
     return reinterpret_cast<const Underlying*>(data);
 }
+
+static inline int compare_column_internal(const ColumnPtr& column, CompareVector& cmp_vector, Datum rhs_value,
+                                          const SortDesc& desc, ptrdiff_t known_equal_count, bool need_equal_count);
 
 // ColumnCompare compare a chunk with a row
 // A plain implementation is iterate all rows in chunk, and compare the left row with right row.
@@ -479,14 +496,35 @@ static inline const Underlying* raw_column_as(const T* data) {
 // bit of memory footprint and could support fast navigate.
 class ColumnCompare final : public ColumnVisitorAdapter<ColumnCompare> {
 public:
-    explicit ColumnCompare(CompareVector& cmp_vector, Datum rhs_value, const SortDesc& sort_desc)
+    explicit ColumnCompare(CompareVector& cmp_vector, Datum rhs_value, const SortDesc& sort_desc,
+                           ptrdiff_t known_equal_count = -1, bool need_equal_count = true)
             : ColumnVisitorAdapter(this),
               _cmp_vector(cmp_vector),
               _rhs_value(std::move(rhs_value)),
               _sort_order(sort_desc.sort_order),
-              _null_first(sort_desc.null_first) {}
+              _null_first(sort_desc.null_first),
+              _known_equal_count(known_equal_count),
+              _need_equal_count(need_equal_count) {}
 
     Status do_visit(const NullableColumn& column) {
+        if (!column.has_null()) {
+            DCHECK_EQ(SIMD::count_zero(column.immutable_null_column_data()), column.size());
+            if (!_rhs_value.is_null()) {
+                _equal_count = compare_column_internal(column.data_column(), _cmp_vector, _rhs_value,
+                                                       SortDesc(_sort_order, _null_first), _known_equal_count,
+                                                       _need_equal_count);
+                return Status::OK();
+            }
+            const int8_t nan_cmp = static_cast<int8_t>(-(_sort_order * _null_first));
+            for (size_t i = 0; i < _cmp_vector.size(); ++i) {
+                if (_cmp_vector[i] == 0) {
+                    _cmp_vector[i] = nan_cmp;
+                }
+            }
+            _equal_count = 0;
+            return Status::OK();
+        }
+
         // Two step compare:
         // 1. Compare null values, store at temporary result
         // 2. Mask notnull values, and compare not-null values
@@ -553,8 +591,8 @@ public:
                 notnull_vector[i] = null_data[i];
             }
 
-            notnull_equal_count = compare_column(column.data_column(), notnull_vector, _rhs_value,
-                                                 SortDesc(_sort_order, _null_first));
+            notnull_equal_count = compare_column_internal(column.data_column(), notnull_vector, _rhs_value,
+                                                          SortDesc(_sort_order, _null_first), -1, _need_equal_count);
             for (size_t i = 0; i < null_data.size(); i++) {
                 if (null_data[i] == 0) {
                     cmp_vector[i] = notnull_vector[i];
@@ -572,7 +610,8 @@ public:
 
     Status do_visit(const ConstColumn& column) {
         _equal_count =
-                compare_column(column.data_column(), _cmp_vector, _rhs_value, SortDesc(_sort_order, _null_first));
+                compare_column_internal(column.data_column(), _cmp_vector, _rhs_value,
+                                        SortDesc(_sort_order, _null_first), _known_equal_count, _need_equal_count);
 
         return Status::OK();
     }
@@ -584,7 +623,7 @@ public:
         auto cmp = [&](int lhs_index) {
             return column.compare_at(lhs_index, 0, *rhs_column, _null_first) * _sort_order;
         };
-        _equal_count = compare_column_helper(_cmp_vector, cmp);
+        _equal_count = compare_column_helper(_cmp_vector, cmp, _known_equal_count, _need_equal_count);
         return Status::OK();
     }
 
@@ -595,7 +634,7 @@ public:
         auto cmp = [&](int lhs_index) {
             return column.compare_at(lhs_index, 0, *rhs_column, _null_first) * _sort_order;
         };
-        _equal_count = compare_column_helper(_cmp_vector, cmp);
+        _equal_count = compare_column_helper(_cmp_vector, cmp, _known_equal_count, _need_equal_count);
         return Status::OK();
     }
 
@@ -606,7 +645,7 @@ public:
         auto cmp = [&](int lhs_index) {
             return column.compare_at(lhs_index, 0, *rhs_column, _null_first) * _sort_order;
         };
-        _equal_count = compare_column_helper(_cmp_vector, cmp);
+        _equal_count = compare_column_helper(_cmp_vector, cmp, _known_equal_count, _need_equal_count);
 
         return Status::OK();
     }
@@ -617,7 +656,7 @@ public:
         auto cmp = [&](int lhs_index) {
             return column.compare_at(lhs_index, 0, *rhs_column, _null_first) * _sort_order;
         };
-        _equal_count = compare_column_helper(_cmp_vector, cmp);
+        _equal_count = compare_column_helper(_cmp_vector, cmp, _known_equal_count, _need_equal_count);
 
         return Status::OK();
     }
@@ -628,10 +667,10 @@ public:
 
         if (_sort_order == 1) {
             auto cmp = [&](int lhs_row) { return SorterComparator<Slice>::compare(lhs_datas[lhs_row], rhs_data); };
-            _equal_count = compare_column_helper(_cmp_vector, cmp);
+            _equal_count = compare_column_helper(_cmp_vector, cmp, _known_equal_count, _need_equal_count);
         } else {
             auto cmp = [&](int lhs_row) { return -1 * SorterComparator<Slice>::compare(lhs_datas[lhs_row], rhs_data); };
-            _equal_count = compare_column_helper(_cmp_vector, cmp);
+            _equal_count = compare_column_helper(_cmp_vector, cmp, _known_equal_count, _need_equal_count);
         }
 
         return Status::OK();
@@ -643,22 +682,25 @@ public:
         const auto lhs_data = column.immutable_data();
 
         if constexpr (std::is_integral_v<T> && sizeof(T) <= 8) {
-            _equal_count = compare_integral_column_simd(_cmp_vector, lhs_data.data(), rhs_data, _sort_order);
+            _equal_count = compare_integral_column_simd(_cmp_vector, lhs_data.data(), rhs_data, _sort_order,
+                                                        _known_equal_count, _need_equal_count);
         } else if constexpr (std::is_same_v<T, DateValue>) {
             using Underlying = std::decay_t<decltype(rhs_data.julian())>;
             const auto* lhs_raw = raw_column_as<T, Underlying>(lhs_data.data());
-            _equal_count = compare_integral_column_simd(_cmp_vector, lhs_raw, rhs_data.julian(), _sort_order);
+            _equal_count = compare_integral_column_simd(_cmp_vector, lhs_raw, rhs_data.julian(), _sort_order,
+                                                        _known_equal_count, _need_equal_count);
         } else if constexpr (std::is_same_v<T, TimestampValue>) {
             using Underlying = std::decay_t<decltype(rhs_data.timestamp())>;
             const auto* lhs_raw = raw_column_as<T, Underlying>(lhs_data.data());
-            _equal_count = compare_integral_column_simd(_cmp_vector, lhs_raw, rhs_data.timestamp(), _sort_order);
+            _equal_count = compare_integral_column_simd(_cmp_vector, lhs_raw, rhs_data.timestamp(), _sort_order,
+                                                        _known_equal_count, _need_equal_count);
         } else {
             if (_sort_order == 1) {
                 auto cmp = [&](int lhs_row) { return SorterComparator<T>::compare(lhs_data[lhs_row], rhs_data); };
-                _equal_count = compare_column_helper(_cmp_vector, cmp);
+                _equal_count = compare_column_helper(_cmp_vector, cmp, _known_equal_count, _need_equal_count);
             } else {
                 auto cmp = [&](int lhs_row) { return -1 * SorterComparator<T>::compare(lhs_data[lhs_row], rhs_data); };
-                _equal_count = compare_column_helper(_cmp_vector, cmp);
+                _equal_count = compare_column_helper(_cmp_vector, cmp, _known_equal_count, _need_equal_count);
             }
         }
 
@@ -683,11 +725,11 @@ public:
 
         if (_sort_order == 1) {
             auto cmp = [&](int lhs_row) { return lhs_data[lhs_row]->compare(rhs_json); };
-            _equal_count = compare_column_helper(_cmp_vector, cmp);
+            _equal_count = compare_column_helper(_cmp_vector, cmp, _known_equal_count, _need_equal_count);
 
         } else {
             auto cmp = [&](int lhs_row) { return -1 * lhs_data[lhs_row]->compare(rhs_json); };
-            _equal_count = compare_column_helper(_cmp_vector, cmp);
+            _equal_count = compare_column_helper(_cmp_vector, cmp, _known_equal_count, _need_equal_count);
         }
         return Status::OK();
     }
@@ -699,6 +741,8 @@ private:
     Datum _rhs_value;
     int _sort_order;
     int _null_first;
+    ptrdiff_t _known_equal_count = -1;
+    bool _need_equal_count = true;
 
     size_t _equal_count = 0; // Output equal count of compare
 };
@@ -799,12 +843,17 @@ private:
     const NullColumnPtr _nullable_column;
 };
 
-int compare_column(const ColumnPtr& column, CompareVector& cmp_vector, Datum rhs_value, const SortDesc& desc) {
-    ColumnCompare compare(cmp_vector, std::move(rhs_value), desc);
+static inline int compare_column_internal(const ColumnPtr& column, CompareVector& cmp_vector, Datum rhs_value,
+                                          const SortDesc& desc, ptrdiff_t known_equal_count, bool need_equal_count) {
+    ColumnCompare compare(cmp_vector, std::move(rhs_value), desc, known_equal_count, need_equal_count);
 
     [[maybe_unused]] Status st = column->accept(&compare);
     DCHECK(st.ok());
     return compare.get_equal_count();
+}
+
+int compare_column(const ColumnPtr& column, CompareVector& cmp_vector, Datum rhs_value, const SortDesc& desc) {
+    return compare_column_internal(column, cmp_vector, std::move(rhs_value), desc, -1, true);
 }
 
 void compare_columns(const Columns& columns, CompareVector& cmp_vector, const Buffer<Datum>& rhs_values,
@@ -817,13 +866,21 @@ void compare_columns(const Columns& columns, CompareVector& cmp_vector, const Bu
     DCHECK_EQ(columns[0]->size(), cmp_vector.size());
     DCHECK(std::all_of(cmp_vector.begin(), cmp_vector.end(), [](int8_t x) { return x == 1 || x == -1 || x == 0; }));
 
-    for (size_t col_idx = 0; col_idx < columns.size(); col_idx++) {
+    const size_t num_cols = columns.size();
+    ptrdiff_t known_equal_count = -1;
+    for (size_t col_idx = 0; col_idx < num_cols; col_idx++) {
         const Datum& rhs_value = rhs_values[col_idx];
+        const bool need_equal_count = (col_idx + 1 < num_cols);
 
-        int equal_count = compare_column(columns[col_idx], cmp_vector, rhs_value, sort_desc.get_column_desc(col_idx));
-        if (equal_count == 0) {
+        int equal_count =
+                compare_column_internal(columns[col_idx], cmp_vector, rhs_value, sort_desc.get_column_desc(col_idx),
+                                        known_equal_count, need_equal_count);
+        if (!need_equal_count || equal_count == 0) {
             break;
         }
+        // NullableColumn with nulls computes null_equal_count + notnull_equal_count on local masks before merging
+        // with prior columns' cmp_vector, so recompute exact zero count if a subsequent column follows.
+        known_equal_count = columns[col_idx]->has_null() ? -1 : static_cast<ptrdiff_t>(equal_count);
     }
 }
 

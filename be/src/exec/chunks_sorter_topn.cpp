@@ -39,21 +39,22 @@ DEFINE_FAIL_POINT(chunks_sorter_topn_sort_bad_alloc);
 void get_compare_results_colwise(size_t rows_to_sort, const Columns& order_by_columns,
                                  std::vector<CompareVector>& compare_results_array,
                                  const std::vector<DataSegment>& data_segments, const SortDescs& sort_desc) {
-    size_t dats_segment_size = data_segments.size();
+    size_t data_segment_size = data_segments.size();
 
-    for (size_t i = 0; i < dats_segment_size; ++i) {
+    for (size_t i = 0; i < data_segment_size; ++i) {
         size_t rows = data_segments[i].chunk->num_rows();
         compare_results_array[i].resize(rows, 0);
     }
 
     size_t order_by_column_size = order_by_columns.size();
+    Buffer<Datum> rhs_values;
+    rhs_values.reserve(order_by_column_size);
+    for (size_t col_idx = 0; col_idx < order_by_column_size; col_idx++) {
+        rhs_values.push_back(order_by_columns[col_idx]->get(rows_to_sort));
+    }
 
-    for (size_t i = 0; i < dats_segment_size; i++) {
-        Buffer<Datum> rhs_values;
+    for (size_t i = 0; i < data_segment_size; i++) {
         auto& segment = data_segments[i];
-        for (size_t col_idx = 0; col_idx < order_by_column_size; col_idx++) {
-            rhs_values.push_back(order_by_columns[col_idx]->get(rows_to_sort));
-        }
         compare_columns(segment.order_by_columns, compare_results_array[i], rhs_values, sort_desc);
     }
 }
@@ -73,7 +74,8 @@ ChunksSorterTopn::ChunksSorterTopn(RuntimeState* state, const std::vector<ExprCo
           _topn_type(topn_type) {
     DCHECK_GT(_get_number_of_rows_to_sort(), 0) << "output rows can't be empty";
     DCHECK(_topn_type == TTopNType::ROW_NUMBER || _offset == 0);
-    _init_buffered_chunks = tunning_buffered_chunks(_get_number_of_rows_to_sort());
+    _init_buffered_chunks =
+            std::max<size_t>(1, std::min(tunning_buffered_chunks(_get_number_of_rows_to_sort()), max_buffered_chunks));
     _buffered_chunks_capacity = _init_buffered_chunks;
     auto& raw_chunks = _raw_chunks.chunks;
     // avoid too large buffer chunks
@@ -381,6 +383,13 @@ Status ChunksSorterTopn::_filter_and_sort_data(RuntimeState* state, std::pair<Pe
             filtered_rows += segment.chunk->num_rows();
         }
 
+        if (smaller_num == 0 && include_num == 0) {
+            if (_sort_filter_rows) {
+                COUNTER_UPDATE(_sort_filter_rows, filtered_rows);
+            }
+            return Status::OK();
+        }
+
         {
             SCOPED_TIMER(_build_timer);
             permutations.first.resize(smaller_num);
@@ -459,40 +468,57 @@ Status ChunksSorterTopn::_build_filter_from_high_low_comparison(const DataSegmen
     get_compare_results_colwise(max_rid, run->orderby, compare_results_array, data_segments, sort_descs);
 
     include_num = 0;
-    filter_array.resize(data_segment_size);
-    for (size_t i = 0; i < data_segment_size; ++i) {
-        const DataSegment& segment = data_segments[i];
-        size_t rows = segment.chunk->num_rows();
-        filter_array[i].resize(rows);
-
-        for (size_t j = 0; j < rows; ++j) {
-            if (compare_results_array[i][j] <= 0) {
-                filter_array[i][j] = DataSegment::INCLUDE_IN_SEGMENT;
-                ++include_num;
-            }
-        }
-    }
-
-    // Second compare with first row of this chunk, use rows from first compare.
-    {
-        for (size_t i = 0; i < data_segment_size; i++) {
-            for (auto& cmp : compare_results_array[i]) {
-                if (cmp < 0) {
-                    cmp = 0;
-                }
-            }
-        }
-        get_compare_results_colwise(0, _lowest_merged_run().orderby, compare_results_array, data_segments, sort_descs);
-    }
-
     smaller_num = 0;
+    static_assert(DataSegment::LARGER_THAN_MAX_OF_SEGMENT == 0);
+    static_assert(DataSegment::INCLUDE_IN_SEGMENT == 1);
     for (size_t i = 0; i < data_segment_size; ++i) {
-        const DataSegment& segment = data_segments[i];
-        size_t rows = segment.chunk->num_rows();
-
+        auto& cmp_vec = compare_results_array[i];
+        const size_t rows = cmp_vec.size();
+        uint32_t seg_include = 0;
         for (size_t j = 0; j < rows; ++j) {
-            if (compare_results_array[i][j] < 0) {
-                filter_array[i][j] = DataSegment::SMALLER_THAN_MIN_OF_SEGMENT;
+            seg_include += (cmp_vec[j] <= 0);
+        }
+        if (seg_include > 0) {
+            if (filter_array.empty()) {
+                filter_array.resize(data_segment_size);
+            }
+            filter_array[i].resize(rows);
+            uint8_t* __restrict dst = filter_array[i].data();
+            int8_t* __restrict src = cmp_vec.data();
+            for (size_t j = 0; j < rows; ++j) {
+                uint8_t le = static_cast<uint8_t>(src[j] <= 0);
+                dst[j] = le;
+                src[j] = static_cast<int8_t>(1 - le);
+            }
+            include_num += seg_include;
+        }
+    }
+
+    if (include_num == 0) {
+        return Status::OK();
+    }
+
+    // Second compare with first row of this chunk, only on segments that have qualifying rows.
+    const Columns& low_order_by = _lowest_merged_run().orderby;
+    const size_t order_by_column_size = low_order_by.size();
+    Buffer<Datum> low_rhs_values;
+    low_rhs_values.reserve(order_by_column_size);
+    for (size_t col_idx = 0; col_idx < order_by_column_size; ++col_idx) {
+        low_rhs_values.push_back(low_order_by[col_idx]->get(0));
+    }
+
+    for (size_t i = 0; i < data_segment_size; ++i) {
+        if (filter_array[i].empty()) {
+            continue;
+        }
+        compare_columns(data_segments[i].order_by_columns, compare_results_array[i], low_rhs_values, sort_descs);
+
+        const size_t rows = compare_results_array[i].size();
+        const int8_t* __restrict src = compare_results_array[i].data();
+        uint8_t* __restrict dst = filter_array[i].data();
+        for (size_t j = 0; j < rows; ++j) {
+            if (src[j] < 0) {
+                dst[j] = DataSegment::SMALLER_THAN_MIN_OF_SEGMENT;
                 ++smaller_num;
             }
         }

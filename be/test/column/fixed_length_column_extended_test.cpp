@@ -14,8 +14,13 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
+#include <limits>
+#include <random>
+
 #include "base/testutil/assert.h"
 #include "column/column_helper.h"
+#include "column/column_sorter_comparator.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -23,6 +28,7 @@
 #include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "types/date_value.h"
+#include "types/timestamp_value.h"
 
 namespace starrocks {
 
@@ -626,6 +632,175 @@ TEST(FixedLengthColumnTest, test_fill_range) {
     ASSERT_EQ(0, p[2]);
     ASSERT_EQ(values[3], p[3]);
     ASSERT_EQ(0, p[4]);
+}
+
+namespace {
+
+template <typename T>
+int scalar_oracle_compare_val(const T& lhs, const T& rhs) {
+    if constexpr (std::is_same_v<T, TimestampValue>) {
+        int64_t l = lhs.timestamp();
+        int64_t r = rhs.timestamp();
+        return (l < r) ? -1 : ((l > r) ? 1 : 0);
+    } else {
+        return SorterComparator<T>::compare(lhs, rhs);
+    }
+}
+
+template <typename ColType, typename T>
+void test_simd_int64_type_driver(const std::vector<size_t>& test_sizes, const std::vector<int>& tie_ratios,
+                                 const std::vector<int>& sort_orders, const std::vector<T>& boundary_values) {
+    std::mt19937_64 rng(0xABCD1234E);
+
+    for (size_t size : test_sizes) {
+        for (int sort_order : sort_orders) {
+            for (int tie_ratio : tie_ratios) {
+                for (const auto& rhs_val : boundary_values) {
+                    auto col = ColType::create();
+                    std::vector<T> lhs_vals(size);
+                    for (size_t i = 0; i < size; ++i) {
+                        if (i % 3 == 0 && !boundary_values.empty()) {
+                            lhs_vals[i] = boundary_values[(i / 3) % boundary_values.size()];
+                        } else {
+                            if constexpr (std::is_same_v<T, TimestampValue>) {
+                                TimestampValue tv;
+                                tv.set_timestamp(static_cast<int64_t>(rng()));
+                                lhs_vals[i] = tv;
+                            } else {
+                                lhs_vals[i] = static_cast<T>(rng());
+                            }
+                        }
+                        col->append(lhs_vals[i]);
+                    }
+
+                    CompareVector cmp_actual(size, 0);
+                    CompareVector cmp_expected(size, 0);
+                    std::uniform_int_distribution<int> pct_dist(0, 99);
+                    std::uniform_int_distribution<int> sign_dist(0, 1);
+                    for (size_t i = 0; i < size; ++i) {
+                        int8_t init_val = 0;
+                        if (tie_ratio < 100 && pct_dist(rng) >= tie_ratio) {
+                            init_val = sign_dist(rng) == 0 ? -1 : 1;
+                        }
+                        cmp_actual[i] = init_val;
+                        cmp_expected[i] = init_val;
+                    }
+
+                    size_t oracle_equal_count = 0;
+                    for (size_t i = 0; i < size; ++i) {
+                        if (cmp_expected[i] == 0) {
+                            int c = scalar_oracle_compare_val(lhs_vals[i], rhs_val) * sort_order;
+                            cmp_expected[i] = static_cast<int8_t>(c);
+                            if (c == 0) {
+                                oracle_equal_count++;
+                            }
+                        }
+                    }
+
+                    int actual_equal_count = compare_column(col, cmp_actual, Datum(rhs_val), SortDesc(sort_order, 1));
+                    ASSERT_EQ(actual_equal_count, static_cast<int>(oracle_equal_count));
+                    ASSERT_EQ(cmp_actual.size(), cmp_expected.size());
+                    for (size_t i = 0; i < size; ++i) {
+                        ASSERT_EQ(cmp_actual[i], cmp_expected[i])
+                                << "Direct column mismatch at i=" << i << ", size=" << size
+                                << ", sort_order=" << sort_order << ", tie_ratio=" << tie_ratio;
+                    }
+
+                    // Odd-offset sliced column test via Filter
+                    if (size > 0) {
+                        auto sliced_col = col->clone();
+                        Filter filter(size, 1);
+                        filter[0] = 0; // Drop the first element -> odd offset slicing
+                        sliced_col->filter(filter);
+                        size_t sliced_size = size - 1;
+
+                        CompareVector sliced_cmp_actual(sliced_size, 0);
+                        CompareVector sliced_cmp_expected(sliced_size, 0);
+                        for (size_t i = 0; i < sliced_size; ++i) {
+                            int8_t init_val = 0;
+                            if (tie_ratio < 100 && pct_dist(rng) >= tie_ratio) {
+                                init_val = sign_dist(rng) == 0 ? -1 : 1;
+                            }
+                            sliced_cmp_actual[i] = init_val;
+                            sliced_cmp_expected[i] = init_val;
+                        }
+
+                        size_t sliced_oracle_equal_count = 0;
+                        for (size_t i = 0; i < sliced_size; ++i) {
+                            if (sliced_cmp_expected[i] == 0) {
+                                int c = scalar_oracle_compare_val(lhs_vals[i + 1], rhs_val) * sort_order;
+                                sliced_cmp_expected[i] = static_cast<int8_t>(c);
+                                if (c == 0) {
+                                    sliced_oracle_equal_count++;
+                                }
+                            }
+                        }
+
+                        int sliced_actual_count =
+                                compare_column(sliced_col, sliced_cmp_actual, Datum(rhs_val), SortDesc(sort_order, 1));
+                        ASSERT_EQ(sliced_actual_count, static_cast<int>(sliced_oracle_equal_count));
+                        ASSERT_EQ(sliced_cmp_actual.size(), sliced_cmp_expected.size());
+                        for (size_t i = 0; i < sliced_size; ++i) {
+                            ASSERT_EQ(sliced_cmp_actual[i], sliced_cmp_expected[i])
+                                    << "Sliced column mismatch at i=" << i << ", sliced_size=" << sliced_size
+                                    << ", sort_order=" << sort_order << ", tie_ratio=" << tie_ratio;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+} // namespace
+
+TEST(FixedLengthColumnTest, test_compare_column_simd_int64_comprehensive) {
+    const std::vector<size_t> test_sizes = {0, 1, 2, 7, 8, 9, 15, 16, 17, 31, 32, 33, 100, 4096, 4097};
+    const std::vector<int> tie_ratios = {0, 1, 12, 50, 90, 100};
+    const std::vector<int> sort_orders = {1, -1};
+
+    // 1. Int64Column
+    {
+        const std::vector<int64_t> int64_boundary_values = {
+                std::numeric_limits<int64_t>::min(),     std::numeric_limits<int64_t>::min() + 1, -1, 0, 1,
+                std::numeric_limits<int64_t>::max() - 1, std::numeric_limits<int64_t>::max(),
+        };
+        test_simd_int64_type_driver<Int64Column, int64_t>(test_sizes, tie_ratios, sort_orders, int64_boundary_values);
+    }
+
+    // 2. UInt64Column
+    {
+        const std::vector<uint64_t> uint64_boundary_values = {
+                0ULL,
+                1ULL,
+                static_cast<uint64_t>(std::numeric_limits<int64_t>::max()),
+                static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1ULL,
+                std::numeric_limits<uint64_t>::max() - 1ULL,
+                std::numeric_limits<uint64_t>::max(),
+        };
+        test_simd_int64_type_driver<UInt64Column, uint64_t>(test_sizes, tie_ratios, sort_orders,
+                                                            uint64_boundary_values);
+    }
+
+    // 3. TimestampColumn (TimestampValue)
+    {
+        auto make_ts = [](int64_t v) {
+            TimestampValue tv;
+            tv.set_timestamp(v);
+            return tv;
+        };
+        const std::vector<TimestampValue> ts_boundary_values = {
+                make_ts(std::numeric_limits<int64_t>::min()),
+                make_ts(std::numeric_limits<int64_t>::min() + 1),
+                make_ts(-1),
+                make_ts(0),
+                make_ts(1),
+                make_ts(std::numeric_limits<int64_t>::max() - 1),
+                make_ts(std::numeric_limits<int64_t>::max()),
+        };
+        test_simd_int64_type_driver<TimestampColumn, TimestampValue>(test_sizes, tie_ratios, sort_orders,
+                                                                     ts_boundary_values);
+    }
 }
 
 } // namespace starrocks
