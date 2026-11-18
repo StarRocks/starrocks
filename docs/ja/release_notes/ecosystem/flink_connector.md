@@ -22,7 +22,7 @@ products: [oss]
 
 **JAR ファイルを取得する方法:**
 
-- [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks) から直接 Flink コネクタ JAR ファイルをダウンロードします。
+- [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks/) から直接 Flink コネクタ JAR ファイルをダウンロードします。
 - Flink コネクタを Maven プロジェクトの `pom.xml` ファイルに依存関係として追加し、ダウンロードします。具体的な手順は [ユーザーガイド](../../loading/Flink-connector-starrocks.md#obtain-flink-connector) を参照してください。
 - ソースコードをコンパイルして Flink コネクタ JAR ファイルを作成します。具体的な手順は [ユーザーガイド](../../loading/Flink-connector-starrocks.md#obtain-flink-connector) を参照してください。
 
