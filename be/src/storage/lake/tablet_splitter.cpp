@@ -1037,7 +1037,8 @@ Status build_unique_boundary_segments(TabletManager* tablet_manager, const Table
                 if (sm.has_encryption_meta()) file_info.encryption_meta = sm.encryption_meta();
                 const int segment_id = sm.has_segment_idx() ? sm.segment_idx() : meta_pos;
                 TEST_SYNC_POINT_CALLBACK("tablet_splitter:segment_open", nullptr);
-                auto opened = tablet_manager->load_segment(file_info, segment_id, LakeIOOptions{},
+                const LakeIOOptions io_opts{.fill_data_cache = false};
+                auto opened = tablet_manager->load_segment(file_info, segment_id, io_opts,
                                                            /*fill_meta_cache=*/false, historical_schema);
                 // Sampling only ever ADDS precision: a segment that fails to open, whose short key
                 // index fails to parse, or whose historical schema does not resolve degrades to its
@@ -1049,7 +1050,7 @@ Status build_unique_boundary_segments(TabletManager* tablet_manager, const Table
                     }
                     // load_index() is what parses the short key index page the free sampling path
                     // reads; failing it leaves this segment coarse.
-                    if (opened.value()->load_index().ok()) {
+                    if (opened.value()->load_index(io_opts).ok()) {
                         // Charge the samples this segment can publish before decoding any. Only one
                         // of the two paths runs -- the data-page path is the escalation when the
                         // short-key one yields nothing -- so the bound is the larger target, not
