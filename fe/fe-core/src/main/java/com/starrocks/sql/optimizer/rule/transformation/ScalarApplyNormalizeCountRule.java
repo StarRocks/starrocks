@@ -14,8 +14,10 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -38,12 +40,13 @@ import com.starrocks.type.Type;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /*
  * The scalar aggregation in the subquery will be converted into a vector aggregation in scalar sub-query
  * but the scalar aggregation will return at least one row.
- * So we need to do special processing on count,
- * other aggregate functions do not need special processing because they return NULL
+ * So we need to do special processing on count and the other count-like aggregate functions,
+ * most other aggregate functions do not need special processing because they return NULL
  *
  * before:
  *          Apply(subquery operator = count)
@@ -83,13 +86,39 @@ public class ScalarApplyNormalizeCountRule extends TransformationRule {
         return Lists.newArrayList(OptExpression.create(newApply, input.getInputs()));
     }
 
-    // Replaces every count aggregation used by the subquery operator with ifnull(count, 0). Returns the subquery
-    // operator itself if it uses no count.
+    // Count-like aggregations that return 0, never NULL, on an empty input.
+    private static final Set<String> ZERO_ON_EMPTY_FUNCTIONS = ImmutableSet.of(
+            FunctionSet.COUNT,
+            FunctionSet.COUNT_IF,
+            FunctionSet.MULTI_DISTINCT_COUNT,
+            FunctionSet.NDV,
+            FunctionSet.APPROX_COUNT_DISTINCT,
+            FunctionSet.BITMAP_UNION_COUNT,
+            FunctionSet.BITMAP_UNION_INT,
+            FunctionSet.HLL_UNION_AGG,
+            FunctionSet.DS_HLL_COUNT_DISTINCT,
+            FunctionSet.DS_THETA_COUNT_DISTINCT);
+
+    public static boolean isZeroOnEmpty(CallOperator aggregation) {
+        return ZERO_ON_EMPTY_FUNCTIONS.contains(aggregation.getFnName()) && aggregation.getType().isBigint();
+    }
+
+    // Whether the aggregation returns a non-NULL value on an empty input, e.g. 0 for count or an empty bitmap for
+    // bitmap_union.
+    public static boolean isNonNullOnEmpty(CallOperator aggregation) {
+        Function fn = aggregation.getFunction();
+        return isZeroOnEmpty(aggregation)
+                || FunctionSet.alwaysReturnNonNullableFunctions.contains(aggregation.getFnName())
+                || (fn instanceof AggregateFunction && ((AggregateFunction) fn).returnsNonNullOnEmpty());
+    }
+
+    // Replaces every count-like aggregation used by the subquery operator with ifnull(count, 0), see
+    // isZeroOnEmpty. Returns the subquery operator itself if it uses none.
     public static ScalarOperator normalizeCount(ScalarOperator subqueryOperator,
                                                 Map<ColumnRefOperator, CallOperator> aggregations) {
         List<ColumnRefOperator> countRefs = Lists.newArrayList();
         aggregations.forEach((k, v) -> {
-            if (FunctionSet.COUNT.equals(v.getFnName())) {
+            if (isZeroOnEmpty(v)) {
                 countRefs.add(k);
             }
         });

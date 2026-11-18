@@ -33,6 +33,9 @@ SELECT id, (SELECT max(v) FROM ne_inner i WHERE i.k = o.k AND i.ts < o.ts) m FRO
 -- several aggregations and two subqueries over the same outer row
 SELECT id, (SELECT sum(v) FROM ne_inner i WHERE i.k = o.k AND i.ts <= o.ts) s, (SELECT count(v) FROM ne_inner i WHERE i.k = o.k AND i.ts > o.ts) c FROM ne_outer o ORDER BY id;
 
+-- count_if is also 0, not NULL, when no inner row qualifies
+SELECT id, (SELECT count_if(i.v > 150) FROM ne_inner i WHERE i.k = o.k AND i.ts < o.ts) c FROM ne_outer o ORDER BY id;
+
 -- a NULL outer value must still match its own distinct row: the predicate is true for id 4 (k IS NULL)
 SELECT id, (SELECT count(*) FROM ne_inner i WHERE i.k = 1 AND (o.k IS NULL OR i.ts < o.ts)) c FROM ne_outer o ORDER BY id;
 

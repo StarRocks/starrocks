@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -29,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.CorrelatedPredicateRewriter;
@@ -208,7 +210,16 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
             throw new SemanticException(SubqueryUtils.EXIST_NON_EQ_PREDICATE);
         }
 
-        // the scalar aggregation returns a row even when no inner row qualifies, but the outer join returns NULL
+        // The scalar aggregation returns a row even when no inner row qualifies, but the outer join returns NULL.
+        // ifnull(x, 0) restores count-like aggregations, other aggregations with a non-NULL empty result (e.g.
+        // bitmap_union) are not supported.
+        ColumnRefSet usedColumns = apply.getSubqueryOperator().getUsedColumns();
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregate.getAggregations().entrySet()) {
+            if (usedColumns.contains(entry.getKey()) && ScalarApplyNormalizeCountRule.isNonNullOnEmpty(entry.getValue())
+                    && !ScalarApplyNormalizeCountRule.isZeroOnEmpty(entry.getValue())) {
+                throw new SemanticException(SubqueryUtils.EXIST_NON_EQ_PREDICATE);
+            }
+        }
         ScalarOperator applyOutput =
                 ScalarApplyNormalizeCountRule.normalizeCount(apply.getSubqueryOperator(), aggregate.getAggregations());
 

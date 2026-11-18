@@ -683,6 +683,29 @@ public class SubqueryTest extends PlanTestBase {
     }
 
     @Test
+    public void testCorrelatedCountLikeAggSubqueryOnEmptyInput() throws Exception {
+        {
+            String sql = "select v1, (select count_if(v6 > 0) from t1 where t1.v4 = t0.v1 and t1.v5 < t0.v2) c " +
+                    "from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "ifnull(8: count_if, 0)");
+        }
+        {
+            // equality-only correlation
+            String sql = "select v1, (select count_if(v6 > 0) from t1 where t1.v4 = t0.v1) c from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "ifnull(8: count_if, 0)");
+        }
+        {
+            // the empty result of bitmap_union is an empty bitmap, not NULL
+            String sql = "select v1, bitmap_to_string((select bitmap_union(to_bitmap(v6)) from t1 " +
+                    "where t1.v4 = t0.v1 and t1.v5 < t0.v2)) c from t0";
+            Throwable exception = assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+            assertThat(exception.getMessage(), containsString("Not support Non-EQ correlated predicate"));
+        }
+    }
+
+    @Test
     public void testNonEQCorrelatedExistsSubqueryOutsideWhereConjuncts() throws Exception {
         {
             String sql = "select v1, exists (select 1 from t1 where t1.v4 = t0.v1 and t1.v5 > t0.v2) e from t0";
