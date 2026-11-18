@@ -3033,21 +3033,25 @@ public class SchemaChangeHandler extends AlterHandler {
             LOG.info("lake index fast path not admissible for table {} (state={}); "
                     + "falling through to regular path", olapTable.getName(), olapTable.getState());
         } else if (SchemaChangeIndexFastPathClassifier.shouldUseAddIndexFastPath(olapTable, alterClauses)) {
-            AlterJobV2 fastPathJob = tryBuildLakeAddIndexJob(db, olapTable, alterClauses);
-            if (fastPathJob != null) {
-                LOG.info("ADD INDEX fast path selected for table {}", olapTable.getName());
-                return fastPathJob;
+            if (everyNodeHandlesLakeIndexFastPath(olapTable)) {
+                AlterJobV2 fastPathJob = tryBuildLakeAddIndexJob(db, olapTable, alterClauses);
+                if (fastPathJob != null) {
+                    LOG.info("ADD INDEX fast path selected for table {}", olapTable.getName());
+                    return fastPathJob;
+                }
+                LOG.info("ADD INDEX fast path eligible but build failed; falling through to regular path "
+                        + "for table {}", olapTable.getName());
             }
-            LOG.info("ADD INDEX fast path eligible but build failed; falling through to regular path "
-                    + "for table {}", olapTable.getName());
         } else if (SchemaChangeIndexFastPathClassifier.shouldUseDropIndexFastPath(olapTable, alterClauses)) {
-            AlterJobV2 fastPathJob = tryBuildLakeDropIndexJob(db, olapTable, alterClauses);
-            if (fastPathJob != null) {
-                LOG.info("DROP INDEX fast path selected for table {}", olapTable.getName());
-                return fastPathJob;
+            if (everyNodeHandlesLakeIndexFastPath(olapTable)) {
+                AlterJobV2 fastPathJob = tryBuildLakeDropIndexJob(db, olapTable, alterClauses);
+                if (fastPathJob != null) {
+                    LOG.info("DROP INDEX fast path selected for table {}", olapTable.getName());
+                    return fastPathJob;
+                }
+                LOG.info("DROP INDEX fast path eligible but build failed; falling through to regular path "
+                        + "for table {}", olapTable.getName());
             }
-            LOG.info("DROP INDEX fast path eligible but build failed; falling through to regular path "
-                    + "for table {}", olapTable.getName());
         } else {
             // Plain bloom filter fast path — triggered by ALTER TABLE SET
             // ("bloom_filter_columns" = ...). Only pure-add and pure-drop
@@ -3055,7 +3059,7 @@ public class SchemaChangeHandler extends AlterHandler {
             // the legacy segment-rewrite SchemaChangeJobV2.
             SchemaChangeIndexFastPathClassifier.BloomFilterDelta bfDelta =
                     SchemaChangeIndexFastPathClassifier.classifyBloomFilterChange(olapTable, alterClauses);
-            if (bfDelta != null) {
+            if (bfDelta != null && everyNodeHandlesLakeIndexFastPath(olapTable)) {
                 AlterJobV2 fastPathJob = null;
                 if (bfDelta.isPureAdd()) {
                     // A column may carry at most one of {plain bloom filter, ngram
@@ -4582,6 +4586,24 @@ public class SchemaChangeHandler extends AlterHandler {
                 // the regular schema-change path, which rebuilds the index into the data itself, so
                 // ADD INDEX still succeeds; it just does not take the sidecar shortcut.
                 && !isSeparateSortKeyRangePrimaryKey(olapTable);
+    }
+
+    /**
+     * Whether every node that may serve the fast-path job reports it handles
+     * the fast path. A node that does not would take the request for a regular
+     * schema change of the tablet into itself and duplicate its rows, so the
+     * alter must use the regular path instead. Checks every CN group of the
+     * warehouse the builders below assign to the job.
+     */
+    private static boolean everyNodeHandlesLakeIndexFastPath(OlapTable olapTable) {
+        List<Long> unsupported = LakeTableIndexFastPathJobBase.computeNodesWithoutFastPath(
+                WarehouseManager.DEFAULT_RESOURCE.getWarehouseId());
+        if (unsupported.isEmpty()) {
+            return true;
+        }
+        LOG.info("lake index fast path not taken for table {}: compute nodes {} do not report support for it; "
+                + "falling through to regular path", olapTable.getName(), unsupported);
+        return false;
     }
 
     /**
