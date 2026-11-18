@@ -10,8 +10,8 @@ products: [oss]
 
 **使用文档：**
 
-- [使用 Spark connector 导入数据至 StarRocks](https://docs.starrocks.io/zh/docs/loading/spark/Spark-connector-starrocks/)
-- [使用 Spark connector 从 StarRocks 读取数据](https://docs.starrocks.io/zh/docs/unloading/Spark_connector/)
+- [使用 Spark connector 导入数据至 StarRocks](../loading/spark/Spark-connector-starrocks.md)
+- [使用 Spark connector 从 StarRocks 读取数据](../unloading/Spark_connector.md)
 
 **源码下载地址：**[starrocks-connector-for-apache-spark](https://github.com/StarRocks/starrocks-connector-for-apache-spark)
 
@@ -22,23 +22,30 @@ products: [oss]
 您可以通过以下方式获取 Spark connector 的 JAR 包：
 
 - 从 [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks) 直接下载编译好的 JAR 包。
-- 在 Maven 项目的 pom 文件添加 Spark connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/spark/Spark-connector-starrocks/)。
-- 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/spark/Spark-connector-starrocks/)。
+- 在 Maven 项目的 pom 文件添加 Spark connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](../loading/spark/Spark-connector-starrocks.md)。
+- 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](../loading/spark/Spark-connector-starrocks.md)。
 
 **版本要求：**
 
 | Spark connector | Spark              | StarRocks     | Java | Scala |
 | --------------- | ------------------ | ------------- | ---- | ----- |
+| 1.1.5           | 4.0, 4.1           | 2.5 及以上     | 17   | 2.13  |
+| 1.1.5           | 3.3, 3.4, 3.5      | 2.5 及以上     | 8    | 2.12  |
 | 1.1.4           | 4.0, 4.1           | 2.5 及以上     | 17   | 2.13  |
 | 1.1.4           | 3.3, 3.4, 3.5      | 2.5 及以上     | 8    | 2.12  |
 | 1.1.3           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上     | 8    | 2.12  |
-| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上     | 8    | 2.12  |
-| 1.1.1           | 3.2, 3.3, or 3.4   | 2.5 及以上     | 8    | 2.12  |
-| 1.1.0           | 3.2, 3.3, or 3.4   | 2.5 及以上     | 8    | 2.12  |
 
 ## 发布记录
 
 ### 1.1
+
+#### 1.1.5
+
+该版本主要包含一项读取数据相关的功能优化。
+
+**功能优化**
+
+- 新增 `starrocks.request.warehouse` 参数，用于在存算分离集群中指定执行读取的 Warehouse。[#172](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/172)
 
 #### 1.1.4
 
@@ -99,7 +106,7 @@ products: [oss]
 
 > **注意**
 >
-> 升级至本版本，涉及行为变更。详细信息，参见[升级 Spark connector](https://docs.starrocks.io/zh/docs/loading/spark/Spark-connector-starrocks/#升级-spark-connector)。
+> 升级至本版本，涉及行为变更。详细信息，参见[升级 Spark connector](../loading/spark/Spark-connector-starrocks.md#升级-spark-connector)。
 
 **新增特性**
 

@@ -10,8 +10,8 @@ products: [oss]
 
 **User guide:**
 
-- [Load data into StarRocks using Spark connector](https://docs.starrocks.io/docs/loading/spark/Spark-connector-starrocks/)
-- [Read data from StarRocks using Spark connector](https://docs.starrocks.io/docs/unloading/Spark_connector/)
+- [Load data into StarRocks using Spark connector](../loading/spark/Spark-connector-starrocks.md)
+- [Read data from StarRocks using Spark connector](../unloading/Spark_connector.md)
 
 **Source codes**: [starrocks-connector-for-apache-spark](https://github.com/StarRocks/starrocks-connector-for-apache-spark)
 
@@ -20,25 +20,30 @@ products: [oss]
 **Methods to obtain the JAR file:**
 
 - Directly download the Spark connector JAR file from the [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks).
-- Add the Spark connector as a dependency in your Maven project's `pom.xml` file and download it. For specific instructions, see [user guide](https://docs.starrocks.io/docs/loading/spark/Spark-connector-starrocks/#obtain-spark-connector).
-- Compile the source codes into Spark connector JAR file. For specific instructions, see [user guide](https://docs.starrocks.io/docs/loading/spark/Spark-connector-starrocks/#obtain-spark-connector).
+- Add the Spark connector as a dependency in your Maven project's `pom.xml` file and download it. For specific instructions, see [user guide](../loading/spark/Spark-connector-starrocks.md#obtain-spark-connector).
+- Compile the source codes into Spark connector JAR file. For specific instructions, see [user guide](../loading/spark/Spark-connector-starrocks.md#obtain-spark-connector).
 
 **Version requirements:**
 
 | Spark connector | Spark              | StarRocks      | Java | Scala |
 | --------------- | ------------------ | -------------- | ---- | ----- |
+| 1.1.5           | 4.0, 4.1           | 2.5 and later  | 17   | 2.13  |
+| 1.1.5           | 3.3, 3.4, 3.5      | 2.5 and later  | 8    | 2.12  |
 | 1.1.4           | 4.0, 4.1           | 2.5 and later  | 17   | 2.13  |
 | 1.1.4           | 3.3, 3.4, 3.5      | 2.5 and later  | 8    | 2.12  |
 | 1.1.3           | 3.2, 3.3, 3.4, 3.5 | 2.5 and later  | 8    | 2.12  |
-| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 and later  | 8    | 2.12  |
-| 1.1.1           | 3.2, 3.3, or 3.4   | 2.5 and later  | 8    | 2.12  |
-| 1.1.0           | 3.2, 3.3, or 3.4   | 2.5 and later  | 8    | 2.12  |
-| 1.0.0           | 3.x                | 1.18 and later | 8    | 2.12  |
-| 1.0.0           | 2.x                | 1.18 and later | 8    | 2.11  |
 
 ## Release notes
 
 ### 1.1
+
+#### 1.1.5
+
+This release mainly includes an improvement for reading data from StarRocks.
+
+**Improvements**
+
+- Added the `starrocks.request.warehouse` parameter to choose the warehouse that serves reads on a shared-data cluster. [#172](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/172)
 
 #### 1.1.4
 
@@ -99,7 +104,7 @@ This release mainly includes some features and improvements for loading data to 
 
 > **NOTICE**
 >
-> Take note of the some changes when you upgrade the Spark connector to this version. For details, see [Upgrade Spark connector](https://docs.starrocks.io/docs/loading/spark/Spark-connector-starrocks/#upgrade-from-version-110-to-111).
+> Take note of the some changes when you upgrade the Spark connector to this version. For details, see [Upgrade Spark connector](../loading/spark/Spark-connector-starrocks.md#upgrade-from-version-110-to-111).
 
 **Features**
 
