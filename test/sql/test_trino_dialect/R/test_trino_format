@@ -51,3 +51,10 @@ select c1, format('%2$s-%1$s %%', c_str, c_int) from format_tbl order by c1;
 3	null-null %
 4	12345- %
 -- !result
+select c1, format('%,d|%,d|%,.0f', c_int, c_big, c_dec) from format_tbl order by c1;
+-- result:
+1	8|-1,234,567|3
+2	-8|0|-0
+3	null|null|
+4	12,345|9,223,372,036,854,775,807|1,234,568
+-- !result

@@ -46,8 +46,8 @@ import java.util.regex.Pattern;
  * <p>Only conversions whose output can be reproduced exactly are supported:
  * <ul>
  *   <li>%s of a VARCHAR, integer, BOOLEAN or DATE value</li>
- *   <li>%d of an integer value, with an optional width and '-' or '0' flag</li>
- *   <li>%f of a DECIMAL value, with an optional precision (6 by default), and %,.2f</li>
+ *   <li>%d of an integer value, with an optional width and '-' or '0' flag, and %,d</li>
+ *   <li>%f of a DECIMAL value, with an optional precision (6 by default), and %,.2f and %,.0f</li>
  *   <li>%% and %n</li>
  * </ul>
  * Arguments can be referenced by index, as in %2$s. A NULL argument is formatted as "null", as in Java. Anything else
@@ -157,14 +157,15 @@ public final class TrinoFormatFunction {
                 return;
             case 'd':
                 // Java requires a width for '-' and '0', and does not allow both.
-                if (precision != -1 || !(flags.isEmpty() || flags.equals("-") || flags.equals("0")) ||
-                        (!flags.isEmpty() && width == -1)) {
+                if (precision != -1 || !(flags.isEmpty() || flags.equals("-") || flags.equals("0") ||
+                        flags.equals(",")) || ((flags.equals("-") || flags.equals("0")) && width == -1) ||
+                        (flags.equals(",") && width != -1)) {
                     throw unsupported(text);
                 }
                 return;
             case 'f':
                 if (width != -1 || !(flags.isEmpty() || flags.equals(",")) ||
-                        (flags.equals(",") && precision != 2)) {
+                        (flags.equals(",") && precision != 2 && precision != 0)) {
                     throw unsupported(text);
                 }
                 return;
@@ -263,6 +264,10 @@ public final class TrinoFormatFunction {
     }
 
     private static Expr formatInteger(Specifier specifier, Expr argument, UnaryOperator<Expr> analyzer) {
+        if (specifier.flags.equals(",")) {
+            // money_format groups the digits with commas and adds ".00".
+            return withoutCents(call(analyzer, FunctionSet.MONEY_FORMAT, argument), analyzer);
+        }
         Expr digits = toVarchar(argument, analyzer);
         if (specifier.width == -1) {
             return digits;
@@ -300,9 +305,16 @@ public final class TrinoFormatFunction {
         Expr negated = analyzer.apply(new ArithmeticExpr(ArithmeticExpr.Operator.SUBTRACT, new IntLiteral(0), argument));
         Expr magnitude = call(analyzer, FunctionSet.IF, negative, negated, argument);
         Expr digits;
-        if (specifier.flags.equals(",")) {
+        if (specifier.flags.equals(",") && specifier.precision == 2) {
             // money_format rounds half up to 2 digits and groups the integer digits with commas.
             digits = call(analyzer, FunctionSet.MONEY_FORMAT, magnitude);
+        } else if (specifier.flags.equals(",")) {
+            // %,.0f: money_format of the value rounded to an integer ends with ".00".
+            Expr rounded = roundToDecimal(0, magnitude, analyzer);
+            if (rounded == null) {
+                return null;
+            }
+            digits = withoutCents(call(analyzer, FunctionSet.MONEY_FORMAT, rounded), analyzer);
         } else {
             digits = roundToVarchar(specifier, magnitude, analyzer);
             if (digits == null) {
@@ -314,8 +326,15 @@ public final class TrinoFormatFunction {
     }
 
     private static Expr roundToVarchar(Specifier specifier, Expr argument, UnaryOperator<Expr> analyzer) {
-        Type type = argument.getType();
         int precision = specifier.precision == -1 ? DEFAULT_PRECISION : specifier.precision;
+        Expr rounded = roundToDecimal(precision, argument, analyzer);
+        return rounded == null ? null : toVarchar(rounded, analyzer);
+    }
+
+    // Rounds a DECIMAL half up to the given number of digits, or returns null when the result needs more than 38
+    // digits.
+    private static Expr roundToDecimal(int precision, Expr argument, UnaryOperator<Expr> analyzer) {
+        Type type = argument.getType();
         ScalarType decimalType = (ScalarType) type;
         int integerDigits = decimalType.getScalarPrecision() - decimalType.getScalarScale();
         // One more integer digit for a carry when rounding.
@@ -325,8 +344,14 @@ public final class TrinoFormatFunction {
             return null;
         }
         Type targetType = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, targetPrecision, precision);
-        Expr rounded = analyzer.apply(new CastExpr(new TypeDef(targetType), argument));
-        return toVarchar(rounded, analyzer);
+        return analyzer.apply(new CastExpr(new TypeDef(targetType), argument));
+    }
+
+    private static Expr withoutCents(Expr moneyFormatted, UnaryOperator<Expr> analyzer) {
+        Expr length = call(analyzer, FunctionSet.CHAR_LENGTH, moneyFormatted);
+        Expr withoutCentsLength = analyzer.apply(
+                new ArithmeticExpr(ArithmeticExpr.Operator.SUBTRACT, length, new IntLiteral(3)));
+        return call(analyzer, FunctionSet.SUBSTR, moneyFormatted, new IntLiteral(1), withoutCentsLength);
     }
 
     private static boolean isInteger(Type type) {

@@ -396,6 +396,11 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
                         "AS DECIMAL128(13,2)) AS VARCHAR))", "<slot 13> : 10: tj < 0");
         assertPlanContains("select format('%,.2f', tj) from tall",
                 "concat(if(13: expr, '-', ''), money_format(if(13: expr, 0 - CAST(10: tj AS DECIMAL64(13,3)), 10: tj)))");
+        // %,d and %,.0f use money_format without its ".00".
+        assertPlanContains("select format('%,d|%,.0f', td, tj) from tall",
+                "substr(13: money_format, 1, CAST(CAST(char_length(13: money_format) AS BIGINT) - 3 AS INT))",
+                "<slot 13> : money_format(4: td)", "<slot 18> : CAST(17: if AS DECIMAL128(11,0))",
+                "<slot 19> : money_format(18: cast)");
         assertPlanContains("select format('%s %s %s', ta, td, ti) from tall",
                 "ifnull(1: ta, 'null')", "CAST(4: td AS VARCHAR)", "CAST(9: ti AS VARCHAR)");
 
