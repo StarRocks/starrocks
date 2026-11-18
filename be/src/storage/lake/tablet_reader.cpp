@@ -1853,6 +1853,16 @@ bool TabletReader::union_reads_ahead(const TabletReaderParams& params) const {
            config::remote_prefetch_window_blocks > 0;
 }
 
+// PROTOTYPE (req_eba3f260): merge options of a query scan; loads and compaction keep the plain merge.
+static HeapMergeOptions query_merge_options(ReaderType reader_type) {
+    HeapMergeOptions options;
+    if (reader_type == ReaderType::READER_QUERY) {
+        options.start_read_ahead = config::lake_merge_start_read_ahead && remote_io_scheduler_enabled();
+        options.batch_append = config::lake_merge_batch_append;
+    }
+    return options;
+}
+
 Status TabletReader::init_collector(const TabletReaderParams& params) {
     _union_reads_ahead = union_reads_ahead(params);
     std::vector<ChunkIteratorPtr> seg_iters;
@@ -1955,7 +1965,7 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
             if (_is_vertical_merge && !_is_key) {
                 _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer, _selection_buffer);
             } else {
-                _collect_iter = new_heap_merge_iterator(seg_iters);
+                _collect_iter = new_heap_merge_iterator(seg_iters, query_merge_options(params.reader_type));
             }
             _collect_iter = timed_chunk_iterator(_collect_iter, sort_timer);
             if (!_is_vertical_merge) {
@@ -1968,7 +1978,7 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
             if (_is_vertical_merge && !_is_key) {
                 _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer, _selection_buffer);
             } else {
-                _collect_iter = new_heap_merge_iterator(seg_iters);
+                _collect_iter = new_heap_merge_iterator(seg_iters, query_merge_options(params.reader_type));
             }
             if (!_is_vertical_merge) {
                 _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0);

@@ -45,6 +45,14 @@ ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
 
 ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children, const bool need_rssid_rowids);
 
+// PROTOTYPE (req_eba3f260): options of a query merge (lake_merge_start_read_ahead, lake_merge_batch_append).
+struct HeapMergeOptions {
+    bool start_read_ahead = false;
+    bool batch_append = false;
+};
+ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
+                                         const HeapMergeOptions& options);
+
 // new_mask_merge_iterator create a merge iterator based on source masks.
 // the order of rows is determined by mask sequence.
 ChunkIteratorPtr new_mask_merge_iterator(const std::vector<ChunkIteratorPtr>& children,

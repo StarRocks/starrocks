@@ -181,6 +181,12 @@ CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
 // ahead. 0 turns the read-ahead off. Applies to the segment readers opened afterwards.
 CONF_mInt32(remote_prefetch_window_blocks, "128");
 
+// PROTOTYPE (req_eba3f260, not for merge): when above 0 and below remote_prefetch_window_blocks, a segment reader's
+// read-ahead window starts at this many blocks and doubles, up to remote_prefetch_window_blocks, each time the reader
+// reaches a page whose blocks are still being fetched; a reader that never waits keeps the small window. 0 keeps the
+// fixed window. Applies to the segment readers opened afterwards.
+CONF_mInt32(remote_prefetch_window_min_blocks, "0");
+
 // With late materialization, the columns read only for the rows that pass the predicates are fetched per chunk once
 // those rows are known. From the fourth chunk of a segment reader on, once those rows have touched at least this
 // share of the pages they span, these columns are read ahead like the predicate columns. Above 1, never. Applies to

@@ -27,9 +27,10 @@ static constexpr int kLateReadAheadMinBatches = 4;
 
 SegmentPrefetchWindow::SegmentPrefetchWindow(std::vector<Column> columns, const SparseRange<>* scan_range,
                                              rowid_t start_row, size_t ahead_blocks, double late_read_ahead_ratio,
-                                             size_t block_size, OlapReaderStatistics* stats)
+                                             size_t block_size, OlapReaderStatistics* stats, size_t min_blocks)
         : _scan_range(scan_range),
-          _ahead_limit(ahead_blocks),
+          _ahead_limit(min_blocks > 0 && min_blocks < ahead_blocks ? min_blocks : ahead_blocks),
+          _ahead_max(ahead_blocks),
           _late_read_ahead_ratio(late_read_ahead_ratio),
           _block_size(std::max<int64_t>(1, static_cast<int64_t>(block_size))),
           _stats(stats) {
@@ -155,7 +156,25 @@ void SegmentPrefetchWindow::advance(rowid_t row) {
         }
         return false;
     });
+    if (consumed != _inflight.end()) {
+        _consumed_any = true;
+    }
     _inflight.erase(consumed, _inflight.end());
+
+    // PROTOTYPE window growth: the reader is about to read `row`. If a page holding it is still being fetched, the
+    // window is shorter than what the fetch latency needs at this reader's pace: double it, at most once per page.
+    // The first page of a cold reader is always still being fetched, so growth waits until the reader passed one.
+    if (_ahead_limit < _ahead_max && _consumed_any) {
+        for (const auto& e : _inflight) {
+            if (e.begin_row <= row && row < e.end_row && static_cast<int64_t>(e.begin_row) > _last_grow_begin_row &&
+                e.handle != nullptr && e.handle->pending_blocks() > 0) {
+                _ahead_limit = std::min(_ahead_max, _ahead_limit * 2);
+                _last_grow_begin_row = e.begin_row;
+                _stats->remote_prefetch_window_grows++;
+                break;
+            }
+        }
+    }
 
     while (_ahead_blocks < _ahead_limit && !_disabled) {
         size_t next = _cursors.size();

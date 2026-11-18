@@ -72,6 +72,16 @@ CONF_mBool(lake_scan_parallel_segment_open, "true");
 // window. 0 starts each segment's read-ahead only when its turn comes.
 CONF_mInt32(lake_scan_read_ahead_segments, "16");
 
+// PROTOTYPE (req_eba3f260, not for merge): in a lake query scan that merges segments (AGG/UNIQUE without
+// skip_aggregation), start the read-ahead of every merged segment before the merge reads the first row of any,
+// instead of one segment after another as the merge fills them. Only while the remote I/O scheduler is enabled.
+CONF_mBool(lake_merge_start_read_ahead, "false");
+
+// PROTOTYPE (req_eba3f260, not for merge): the heap merge of a lake query scan collects the rows it picks for an
+// output chunk and copies them column by column with typed gathers, instead of appending each run of rows to every
+// column as it is picked.
+CONF_mBool(lake_merge_batch_append, "false");
+
 // Whether to use accurate row count for lake primary key tablets by reading delete vectors from object storage.
 // When enabled, each rowset's delete vector is fetched from remote storage to deduct deleted rows, which may
 // significantly increase the overhead of get_tablet_stats RPC.

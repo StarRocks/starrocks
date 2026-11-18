@@ -50,9 +50,11 @@ public:
     };
 
     // `scan_range` (ascending) must outlive the window; the pages before `start_row` are skipped.
+    // PROTOTYPE: with 0 < `min_blocks` < `ahead_blocks`, the window starts at `min_blocks` and doubles, up to
+    // `ahead_blocks`, each time the reader reaches a page still being fetched (see advance()).
     SegmentPrefetchWindow(std::vector<Column> columns, const SparseRange<>* scan_range, rowid_t start_row,
                           size_t ahead_blocks, double late_read_ahead_ratio, size_t block_size,
-                          OlapReaderStatistics* stats);
+                          OlapReaderStatistics* stats, size_t min_blocks = 0);
 
     // The reader is about to read the rows from `row` on: forget what it has consumed and top the
     // window up again.
@@ -111,7 +113,12 @@ private:
 
     std::vector<Cursor> _cursors;
     const SparseRange<>* _scan_range;
-    const size_t _ahead_limit;
+    size_t _ahead_limit;
+    const size_t _ahead_max;
+    // PROTOTYPE window growth: whether the reader has passed a page yet, and the first row of the latest page that
+    // made the window grow.
+    bool _consumed_any = false;
+    int64_t _last_grow_begin_row = -1;
     const double _late_read_ahead_ratio;
     const int64_t _block_size;
     OlapReaderStatistics* _stats;

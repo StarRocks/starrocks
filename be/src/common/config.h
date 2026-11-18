@@ -914,6 +914,14 @@ CONF_mBool(lake_scan_parallel_segment_open, "true");
 // remote_prefetch_window_blocks blocks not read yet, so the segment started last can take that to about twice the
 // window. 0 starts each segment's read-ahead only when its turn comes.
 CONF_mInt32(lake_scan_read_ahead_segments, "16");
+// PROTOTYPE (req_eba3f260, not for merge): in a lake query scan that merges segments (AGG/UNIQUE without
+// skip_aggregation), start the read-ahead of every merged segment before the merge reads the first row of any,
+// instead of one segment after another as the merge fills them. Only while the remote I/O scheduler is enabled.
+CONF_mBool(lake_merge_start_read_ahead, "false");
+// PROTOTYPE (req_eba3f260, not for merge): the heap merge of a lake query scan collects the rows it picks for an
+// output chunk and copies them column by column with typed gathers, instead of appending each run of rows to every
+// column as it is picked.
+CONF_mBool(lake_merge_batch_append, "false");
 // Fragment thread pool
 CONF_Int32(fragment_pool_thread_num_min, "64");
 CONF_Int32(fragment_pool_thread_num_max, "4096");
@@ -1704,6 +1712,11 @@ CONF_Int32(remote_read_background_weight, "1");
 // when the blocks are fetched is the scheduler's decision. Loads, compaction and other background reads do not read
 // ahead. 0 turns the read-ahead off. Applies to the segment readers opened afterwards.
 CONF_mInt32(remote_prefetch_window_blocks, "128");
+// PROTOTYPE (req_eba3f260, not for merge): when above 0 and below remote_prefetch_window_blocks, a segment reader's
+// read-ahead window starts at this many blocks and doubles, up to remote_prefetch_window_blocks, each time the reader
+// reaches a page whose blocks are still being fetched; a reader that never waits keeps the small window. 0 keeps the
+// fixed window. Applies to the segment readers opened afterwards.
+CONF_mInt32(remote_prefetch_window_min_blocks, "0");
 // With late materialization, the columns read only for the rows that pass the predicates are fetched per chunk once
 // those rows are known. From the fourth chunk of a segment reader on, once those rows have touched at least this
 // share of the pages they span, these columns are read ahead like the predicate columns. Above 1, never. Applies to

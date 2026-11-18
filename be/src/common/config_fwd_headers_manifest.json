@@ -578,6 +578,7 @@
         "enable_orc_libdeflate_decompression",
         "orc_writer_version",
         "remote_prefetch_window_blocks",
+        "remote_prefetch_window_min_blocks",
         "remote_prefetch_late_read_ahead_ratio",
         "starlet_star_cache_block_size_bytes"
       ]
@@ -940,6 +941,8 @@
         "enable_lake_prepared_split_pre_refinement",
         "lake_scan_parallel_segment_open",
         "lake_scan_read_ahead_segments",
+        "lake_merge_start_read_ahead",
+        "lake_merge_batch_append",
         "lake_flush_thread_num_per_store",
         "lake_tablet_rows_splitted_ratio",
         "lake_tablet_ignore_invalid_delete_predicate",

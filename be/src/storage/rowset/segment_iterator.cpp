@@ -1270,7 +1270,8 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
     }
     _prefetch_window = std::make_unique<SegmentPrefetchWindow>(
             std::move(columns), &_scan_range, start_row, config::remote_prefetch_window_blocks,
-            config::remote_prefetch_late_read_ahead_ratio, config::starlet_star_cache_block_size_bytes, _opts.stats);
+            config::remote_prefetch_late_read_ahead_ratio, config::starlet_star_cache_block_size_bytes, _opts.stats,
+            static_cast<size_t>(std::max(0, config::remote_prefetch_window_min_blocks)));
 }
 
 Status SegmentIterator::_init_reused_scan() {
