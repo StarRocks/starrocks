@@ -26,6 +26,7 @@
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "butil/time.h"
+#include "column/array_column.h"
 #include "column/column.h"
 #include "column/const_column.h"
 #include "column/flat_json/json_flattener.h"
@@ -1854,6 +1855,43 @@ TEST_F(JsonFunctionsTest, map_to_json) {
         Datum json2 = ptr->get(1);
         ASSERT_FALSE(json2.is_null());
         ASSERT_EQ(R"({"palo": 3})", json2.get_json()->to_string_uncheck());
+    }
+}
+
+TEST_F(JsonFunctionsTest, array_to_json) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // ARRAY<BIGINT> column with a NULL element
+    auto elements = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    auto array_column = ArrayColumn::create(std::move(elements), UInt32Column::create());
+    array_column->append_datum(DatumArray{Datum(int64_t(1)), Datum(), Datum(int64_t(3))});
+    array_column->append_datum(DatumArray{});
+
+    {
+        Columns input_columns{array_column};
+        auto maybe_res = JsonFunctions::to_json(ctx.get(), input_columns);
+        ASSERT_TRUE(maybe_res.ok());
+        ColumnPtr ptr = maybe_res.value();
+        ASSERT_EQ(2, ptr->size());
+        ASSERT_EQ("[1, null, 3]", ptr->get(0).get_json()->to_string_uncheck());
+        ASSERT_EQ("[]", ptr->get(1).get_json()->to_string_uncheck());
+    }
+
+    // A constant array, such as an ARRAY literal, is serialized once and stays constant.
+    {
+        auto one_row = array_column->clone_empty();
+        one_row->append(*array_column, 0, 1);
+        Columns input_columns{ConstColumn::create(std::move(one_row), 3)};
+        auto maybe_res = JsonFunctions::to_json(ctx.get(), input_columns);
+        ASSERT_TRUE(maybe_res.ok());
+        ColumnPtr ptr = maybe_res.value();
+        ASSERT_TRUE(ptr->is_constant());
+        ASSERT_EQ(3, ptr->size());
+        for (size_t i = 0; i < 3; i++) {
+            Datum json = ptr->get(i);
+            ASSERT_FALSE(json.is_null());
+            ASSERT_EQ("[1, null, 3]", json.get_json()->to_string_uncheck());
+        }
     }
 }
 
