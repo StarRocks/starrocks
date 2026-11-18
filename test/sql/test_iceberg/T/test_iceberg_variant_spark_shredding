@@ -1,0 +1,103 @@
+-- name: test_iceberg_variant_spark_shredding
+-- Reads VARIANT data files written with Iceberg 1.12 from the same rows: by Spark 4.1 shredded
+-- (write.parquet.shred-variants=true) and unshredded, and by the plain Iceberg Java API shredded
+-- (GenericFileWriterFactory). The files and the script that generates them live in
+-- be/test/formats/parquet/test_data/variant_spark/ (gen_variant_spark.sh); expected_variant_spark.tsv there
+-- holds Spark's answers for the per-path query below. Every query must return the same rows on all tables.
+
+create external catalog iceberg_variant_spark_${uuid0}
+PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hadoop",
+    "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/warehouse/"
+);
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/warehouse/db > /dev/null
+shell: ossutil64 cp -r ../be/test/formats/parquet/test_data/variant_spark/ oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/ --include "*.parquet" > /dev/null
+
+use iceberg_variant_spark_${uuid0}.db;
+set time_zone = 'Asia/Shanghai';
+
+create table shred (id int, v variant) properties ('format-version' = '3');
+create table noshred (id int, v variant) properties ('format-version' = '3');
+create table api_shred (id int, v variant) properties ('format-version' = '3');
+
+alter table shred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/shred_01_typed.parquet', file_format='parquet');
+alter table shred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/shred_02_conflict.parquet', file_format='parquet');
+alter table shred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/shred_03_nulls.parquet', file_format='parquet');
+alter table shred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/shred_04_scalars.parquet', file_format='parquet');
+alter table shred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/shred_05_inference.parquet', file_format='parquet');
+alter table shred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/shred_06_top_int.parquet', file_format='parquet');
+alter table noshred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/noshred_01_typed.parquet', file_format='parquet');
+alter table noshred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/noshred_02_conflict.parquet', file_format='parquet');
+alter table noshred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/noshred_03_nulls.parquet', file_format='parquet');
+alter table noshred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/noshred_04_scalars.parquet', file_format='parquet');
+alter table noshred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/noshred_05_inference.parquet', file_format='parquet');
+alter table noshred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/noshred_06_top_int.parquet', file_format='parquet');
+alter table api_shred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/api_shred_01_typed.parquet', file_format='parquet');
+alter table api_shred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/api_shred_02_conflict.parquet', file_format='parquet');
+alter table api_shred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/api_shred_03_nulls.parquet', file_format='parquet');
+alter table api_shred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/api_shred_04_scalars.parquet', file_format='parquet');
+alter table api_shred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/api_shred_05_inference.parquet', file_format='parquet');
+alter table api_shred execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/data/api_shred_06_top_int.parquet', file_format='parquet');
+
+select count(*), count(v), min(id), max(id) from shred;
+select count(*), count(v), min(id), max(id) from noshred;
+select count(*), count(v), min(id), max(id) from api_shred;
+
+-- Whole documents.
+-- id 2 holds a pre-1970 timestamp, which is rendered wrong as text today, so it is left out of the recorded rows
+-- until that is fixed; the equality checks between the tables still cover it.
+-- A whole document renders a timestamp with time zone in the BE host's time zone, not the session's, so those
+-- values are masked here; the path queries and get_variant_datetime below check them in the session time zone.
+select id, regexp_replace(cast(v as string), '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:.]+[+-][0-9]{2}:[0-9]{2}', '<timestamptz>')
+from shred where id < 100 and id != 2 order by id;
+function: assert_equal_result("select id, cast(v as string) from shred order by id", "select id, cast(v as string) from noshred order by id")
+function: assert_equal_result("select id, cast(v as string) from shred order by id", "select id, cast(v as string) from api_shred order by id")
+
+-- The same paths as expected_variant_spark.tsv.
+select id, cast(variant_query(v, '$.i') as string), cast(variant_query(v, '$.s') as string), cast(variant_query(v, '$.dec') as string),
+       cast(variant_query(v, '$.t') as string), cast(variant_query(v, '$.o.x') as string), cast(variant_query(v, '$.o.z.w') as string),
+       cast(variant_query(v, '$.arr[1]') as string), cast(variant_query(v, '$.ao[0].k') as string), cast(variant_query(v, '$.x') as string)
+from shred where id < 100 and id != 2 order by id;
+function: assert_equal_result("select id, cast(variant_query(v, '$.i') as string), cast(variant_query(v, '$.s') as string), cast(variant_query(v, '$.dec') as string), cast(variant_query(v, '$.t') as string), cast(variant_query(v, '$.o.x') as string), cast(variant_query(v, '$.o.z.w') as string), cast(variant_query(v, '$.arr[1]') as string), cast(variant_query(v, '$.ao[0].k') as string), cast(variant_query(v, '$.x') as string) from shred order by id", "select id, cast(variant_query(v, '$.i') as string), cast(variant_query(v, '$.s') as string), cast(variant_query(v, '$.dec') as string), cast(variant_query(v, '$.t') as string), cast(variant_query(v, '$.o.x') as string), cast(variant_query(v, '$.o.z.w') as string), cast(variant_query(v, '$.arr[1]') as string), cast(variant_query(v, '$.ao[0].k') as string), cast(variant_query(v, '$.x') as string) from noshred order by id")
+function: assert_equal_result("select id, cast(variant_query(v, '$.i') as string), cast(variant_query(v, '$.s') as string), cast(variant_query(v, '$.dec') as string), cast(variant_query(v, '$.t') as string), cast(variant_query(v, '$.o.x') as string), cast(variant_query(v, '$.o.z.w') as string), cast(variant_query(v, '$.arr[1]') as string), cast(variant_query(v, '$.ao[0].k') as string), cast(variant_query(v, '$.x') as string) from shred order by id", "select id, cast(variant_query(v, '$.i') as string), cast(variant_query(v, '$.s') as string), cast(variant_query(v, '$.dec') as string), cast(variant_query(v, '$.t') as string), cast(variant_query(v, '$.o.x') as string), cast(variant_query(v, '$.o.z.w') as string), cast(variant_query(v, '$.arr[1]') as string), cast(variant_query(v, '$.ao[0].k') as string), cast(variant_query(v, '$.x') as string) from api_shred order by id")
+
+-- Typed getters on the shredded types: int8/int64, decimal, double, bool, string, date, timestamp, timestamp_ntz.
+select id, get_variant_int(v, '$.i'), get_variant_int(v, '$.i8'), get_variant_double(v, '$.dec'), get_variant_double(v, '$.dbl'),
+       get_variant_bool(v, '$.b'), get_variant_string(v, '$.s'), get_variant_date(v, '$.d'), get_variant_datetime(v, '$.t'),
+       get_variant_datetime(v, '$.tn'), variant_typeof(variant_query(v, '$.t')), variant_typeof(variant_query(v, '$.tn'))
+from shred where id <= 6 order by id;
+function: assert_equal_result("select id, get_variant_int(v, '$.i'), get_variant_int(v, '$.i8'), get_variant_double(v, '$.dec'), get_variant_double(v, '$.dbl'), get_variant_bool(v, '$.b'), get_variant_string(v, '$.s'), get_variant_date(v, '$.d'), get_variant_datetime(v, '$.t'), get_variant_datetime(v, '$.tn'), variant_typeof(variant_query(v, '$.i')), variant_typeof(variant_query(v, '$.t')) from shred order by id", "select id, get_variant_int(v, '$.i'), get_variant_int(v, '$.i8'), get_variant_double(v, '$.dec'), get_variant_double(v, '$.dbl'), get_variant_bool(v, '$.b'), get_variant_string(v, '$.s'), get_variant_date(v, '$.d'), get_variant_datetime(v, '$.t'), get_variant_datetime(v, '$.tn'), variant_typeof(variant_query(v, '$.i')), variant_typeof(variant_query(v, '$.t')) from noshred order by id")
+function: assert_equal_result("select id, get_variant_int(v, '$.i'), get_variant_int(v, '$.i8'), get_variant_double(v, '$.dec'), get_variant_double(v, '$.dbl'), get_variant_bool(v, '$.b'), get_variant_string(v, '$.s'), get_variant_date(v, '$.d'), get_variant_datetime(v, '$.t'), get_variant_datetime(v, '$.tn'), variant_typeof(variant_query(v, '$.i')), variant_typeof(variant_query(v, '$.t')) from shred order by id", "select id, get_variant_int(v, '$.i'), get_variant_int(v, '$.i8'), get_variant_double(v, '$.dec'), get_variant_double(v, '$.dbl'), get_variant_bool(v, '$.b'), get_variant_string(v, '$.s'), get_variant_date(v, '$.d'), get_variant_datetime(v, '$.t'), get_variant_datetime(v, '$.tn'), variant_typeof(variant_query(v, '$.i')), variant_typeof(variant_query(v, '$.t')) from api_shred order by id")
+
+-- Rows after the inference buffer keep `i` as a string and `x` only in the residual value.
+select count(get_variant_int(v, '$.i')), sum(get_variant_int(v, '$.i')), count(get_variant_string(v, '$.s')), count(variant_query(v, '$.x')), sum(get_variant_int(v, '$.x'))
+from shred where id between 101 and 250;
+select id, get_variant_int(v, '$.i'), get_variant_string(v, '$.i'), get_variant_string(v, '$.s'), get_variant_int(v, '$.x')
+from shred where id in (101, 200, 201, 250) order by id;
+
+-- Root shredded as an int, with strings and a null in the residual.
+select count(get_variant_int(v, '$')), sum(get_variant_int(v, '$')), count(get_variant_string(v, '$')) from shred where id between 301 and 405;
+select id, cast(v as string), variant_typeof(v), is_variant_null(v) from shred where id in (301, 302, 400, 401, 405) order by id;
+
+-- Predicates on shredded paths.
+function: assert_equal_result("select id from shred where get_variant_int(v, '$.i') between 150 and 160 order by id", "select id from noshred where get_variant_int(v, '$.i') between 150 and 160 order by id")
+function: assert_equal_result("select id from shred where get_variant_int(v, '$.i') between 150 and 160 order by id", "select id from api_shred where get_variant_int(v, '$.i') between 150 and 160 order by id")
+function: assert_equal_result("select id from shred where get_variant_string(v, '$.s') in ('alpha', 'r150', 'ten') order by id", "select id from noshred where get_variant_string(v, '$.s') in ('alpha', 'r150', 'ten') order by id")
+function: assert_equal_result("select id from shred where get_variant_string(v, '$.s') in ('alpha', 'r150', 'ten') order by id", "select id from api_shred where get_variant_string(v, '$.s') in ('alpha', 'r150', 'ten') order by id")
+function: assert_equal_result("select id from shred where get_variant_int(v, '$.o.z.w') >= 20 order by id", "select id from noshred where get_variant_int(v, '$.o.z.w') >= 20 order by id")
+function: assert_equal_result("select id from shred where get_variant_int(v, '$.o.z.w') >= 20 order by id", "select id from api_shred where get_variant_int(v, '$.o.z.w') >= 20 order by id")
+function: assert_equal_result("select id from shred where get_variant_datetime(v, '$.t') < '2000-01-01' order by id", "select id from noshred where get_variant_datetime(v, '$.t') < '2000-01-01' order by id")
+function: assert_equal_result("select id from shred where get_variant_datetime(v, '$.t') < '2000-01-01' order by id", "select id from api_shred where get_variant_datetime(v, '$.t') < '2000-01-01' order by id")
+function: assert_equal_result("select id from shred where get_variant_int(v, '$') > 390 order by id", "select id from noshred where get_variant_int(v, '$') > 390 order by id")
+function: assert_equal_result("select id from shred where get_variant_int(v, '$') > 390 order by id", "select id from api_shred where get_variant_int(v, '$') > 390 order by id")
+function: assert_equal_result("select id from shred where variant_query(v, '$.i') is null order by id", "select id from noshred where variant_query(v, '$.i') is null order by id")
+function: assert_equal_result("select id from shred where variant_query(v, '$.i') is null order by id", "select id from api_shred where variant_query(v, '$.i') is null order by id")
+select id from shred where get_variant_int(v, '$.i') between 150 and 160 order by id;
+select id from shred where variant_query(v, '$.i') is null and id < 100 order by id;
+
+drop table shred force;
+drop table noshred force;
+drop table api_shred force;
+drop catalog iceberg_variant_spark_${uuid0};
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_spark_shredding/${uuid0}/ > /dev/null
