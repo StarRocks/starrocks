@@ -532,6 +532,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: すべてが待機している場合の、クエリによるオブジェクトストレージ読み取りの割り当て。`remote_read_load_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` に対する相対値です。正の値である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
 - 導入バージョン: -
 
+### remote_read_skip_contended_cache_writes
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで、キャッシュディスクが混雑しているときに、リモート IO スケジューラーが取得したブロックの Data Cache への書き込みを省略できるかどうか。混雑とは、250 ms ごとのサンプリングで 2 回連続して、ディスク使用率が 90% 以上かつ読み取りがサービス時間の 20% 以上を占める状態を指します。対象は大規模なクエリスキャンの後半で取得されたブロックのみで、さらにそのブロックが `remote_read_retain_prefetched_bytes` の範囲でメモリに保持され、読み取り側にメモリから提供される場合に限ります。書き込みを省略したブロックを後で読み取る場合は、オブジェクトストレージから再取得します。キャッシュディスクがネットワークより遅く、後続のスキャンが直前のスキャンでキャッシュしたブロックを読み戻す場合に効果があります。`remote_io_scheduler_enable` が `false` の場合、または `remote_read_retain_prefetched_bytes` が `0` の場合は効果がありません。変更はその後に取得されるブロックに反映されます。
+- 導入バージョン: -
+
 ### remote_read_weight_decay_ios
 
 - デフォルト: 1024

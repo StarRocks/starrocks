@@ -541,6 +541,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: The share of the object store reads of queries relative to `remote_read_load_weight`, `remote_read_compaction_weight`, and `remote_read_background_weight` while all of them wait. It must be positive. Takes effect only when `remote_io_scheduler_enable` is `true`.
 - Introduced in: -
 
+### remote_read_skip_contended_cache_writes
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the remote I/O scheduler in a shared-data cluster may skip writing a fetched block to Data Cache while the cache disk is contended, that is, at least 90% busy with reads taking at least 20% of its service time for two consecutive 250 ms samples. Only blocks fetched for the later part of a large query scan qualify, and only after the block is retained in memory under `remote_read_retain_prefetched_bytes`, from which its readers are served. A later read of a skipped block fetches it from object storage again. Enabling this item can help when the cache disk is slower than the network and scans read back blocks that earlier scans have just cached. It has no effect when `remote_io_scheduler_enable` is `false` or `remote_read_retain_prefetched_bytes` is `0`. A change takes effect on blocks fetched afterwards.
+- Introduced in: -
+
 ### remote_read_weight_decay_ios
 
 - Default: 1024
