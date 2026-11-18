@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.util.List;
 
 /**
  * Verifies that querying Iceberg columns with unsupported V3 types
@@ -36,9 +37,7 @@ public class IcebergUnsupportedTypeQueryTest extends ConnectorPlanTestBase {
         String table = "iceberg0.unpartitioned_db.t_unknown_types";
         String sql = "SELECT ST_AsText(geography_col), ST_AsText(locations[1].shape), "
                 + "locations[1].label FROM " + table + " WHERE geography_col IS NOT NULL";
-        var statement = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
-        assertContains(StatementPlanner.plan(statement, connectContext).getExplainString(TExplainLevel.NORMAL),
-                "IcebergScanNode");
+        assertContains(planQuery(sql, TExplainLevel.NORMAL), "IcebergScanNode");
 
         SemanticException ex = Assertions.assertThrows(SemanticException.class,
                 () -> getFragmentPlan("SELECT locations FROM " + table));
@@ -46,6 +45,44 @@ public class IcebergUnsupportedTypeQueryTest extends ConnectorPlanTestBase {
         ex = Assertions.assertThrows(SemanticException.class,
                 () -> getFragmentPlan("CREATE VIEW nested_iceberg_geo AS " + sql));
         assertContains(ex.getMessage(), "Nested GEOGRAPHY/GEOMETRY types are not supported in saved SQL definitions");
+    }
+
+    @Test
+    public void testNestedGeometryAccessAndPruning() throws Exception {
+        String from = " FROM iceberg0.unpartitioned_db.t_unknown_types";
+        String sql = "SELECT ST_AsText(geom_scalar), ST_AsText(geom_array[1]), ST_AsBinary(geom_map[1]), "
+                + "ST_AsText(geom_struct.shape), ST_AsText(geom_locations[1].shape), id" + from;
+        assertContains(planQuery(sql, TExplainLevel.NORMAL), "IcebergScanNode");
+
+        assertContains(planQuery("SELECT ST_AsText(geom_struct.shape)" + from, TExplainLevel.VERBOSE),
+                "ColumnAccessPath: [/geom_struct/shape]", "struct<`shape` GEOMETRY>");
+        assertContains(planQuery("SELECT geom_struct.label" + from, TExplainLevel.VERBOSE),
+                "ColumnAccessPath: [/geom_struct/label]", "struct<`label` varchar");
+    }
+
+    private String planQuery(String sql, TExplainLevel level) throws Exception {
+        var statement = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+        return StatementPlanner.plan(statement, connectContext).getExplainString(level);
+    }
+
+    @Test
+    public void testNestedGeometryRefusals() {
+        String from = " FROM iceberg0.unpartitioned_db.t_unknown_types";
+        for (String container : List.of("geom_array", "geom_map", "geom_struct", "geom_locations")) {
+            SemanticException ex = Assertions.assertThrows(SemanticException.class,
+                    () -> getFragmentPlan("SELECT " + container + from));
+            assertContains(ex.getMessage(), "Nested GEOGRAPHY/GEOMETRY query results are not supported");
+        }
+
+        SemanticException ex = Assertions.assertThrows(SemanticException.class,
+                () -> getFragmentPlan("SELECT geom_struct.shape" + from));
+        assertContains(ex.getMessage(), "GEOMETRY query results are not supported");
+        ex = Assertions.assertThrows(SemanticException.class,
+                () -> getFragmentPlan("CREATE VIEW nested_iceberg_geometry AS SELECT ST_AsText(geom_array[1])" + from));
+        assertContains(ex.getMessage(), "Nested GEOGRAPHY/GEOMETRY types are not supported in saved SQL definitions");
+        ex = Assertions.assertThrows(SemanticException.class,
+                () -> getFragmentPlan("SELECT ST_AsText(bad_geom_array[1])" + from));
+        assertContains(ex.getMessage(), "Datatype of external table column [bad_geom_array] is not supported");
     }
 
     @Test
