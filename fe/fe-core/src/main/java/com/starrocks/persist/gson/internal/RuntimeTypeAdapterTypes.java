@@ -199,7 +199,11 @@ public class RuntimeTypeAdapterTypes {
                         .registerSubtype(StructType.class, "StructType")
                         .registerSubtype(PseudoType.class, "PseudoType")
                         .registerSubtype(AnyElementType.class, "AnyElementType")
-                        .registerSubtype(AnyArrayType.class, "AnyArrayType");
+                        .registerSubtype(AnyArrayType.class, "AnyArrayType")
+                        // Native GEO types of newer versions are persisted with the "GeoType" label. This version
+                        // has no GEO types: read them as a ScalarType, whose unknown primitive type becomes
+                        // INVALID_TYPE, so that FE can still start after a downgrade.
+                        .registerForwardCompatibleLabel(ScalarType.class, "GeoType");
         CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(com.starrocks.type.Type.class, column_type_adaptor_factory);
 
         // runtime adapter for class "DistributionInfo"

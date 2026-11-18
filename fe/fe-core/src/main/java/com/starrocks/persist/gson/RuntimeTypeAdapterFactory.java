@@ -337,6 +337,26 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
         return registerSubtype(type, type.getSimpleName());
     }
 
+    /**
+     * Registers {@code label} as an additional, read-only label of the already registered {@code type}.
+     * Values carrying this label are deserialized as {@code type}; serialization keeps using the label
+     * {@code type} was registered with. This lets an older version load metadata written with a subtype
+     * label that only a newer version defines, instead of failing with {@link SubtypeNotFoundException}.
+     *
+     * @throws IllegalArgumentException if {@code type} has not been registered or {@code label} is
+     *                                  already in use.
+     */
+    public RuntimeTypeAdapterFactory<T> registerForwardCompatibleLabel(Class<? extends T> type, String label) {
+        if (type == null || label == null) {
+            throw new NullPointerException();
+        }
+        if (!subtypeToLabel.containsKey(type) || labelToSubtype.containsKey(label)) {
+            throw new IllegalArgumentException("type must be registered and label must be unique");
+        }
+        labelToSubtype.put(label, type);
+        return this;
+    }
+
     public <R> TypeAdapter<R> create(Gson gson, TypeToken<R> type) {
         if (type.getRawType() != baseType && !subtypeToLabel.containsKey(type.getRawType())) {
             return null;
