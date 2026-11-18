@@ -489,8 +489,8 @@ public class AnalyzeAggregateTest {
     @Test
     public void testWindowFunnelFunction() {
         // For the argument `window_size`.
-        analyzeFail("SELECT window_funnel(-1, ti, 0, [ta='a', ta='b']) FROM tall",
-                "window argument must >= 0");
+        analyzeFail("SELECT window_funnel(-2, ti, 0, [ta='a', ta='b']) FROM tall",
+                "window argument must >= -1");
         analyzeFail("SELECT window_funnel('VARCHAR', ti, 0, [ta='a', ta='b']) FROM tall",
                 "window argument must be numerical type");
         analyzeFail("SELECT window_funnel(tc, ti, 0, [ta='a', ta='b']) FROM tall",
@@ -515,6 +515,8 @@ public class AnalyzeAggregateTest {
                 "No matching function with signature");
 
         // Successful statements.
+        analyzeSuccess("SELECT window_funnel(-1, ti, 0, [ta='a', ta='b']) FROM tall");
+        analyzeSuccess("SELECT window_funnel(-1, ti, 4, [ta='a', ta='a']) FROM tall");
         analyzeSuccess("SELECT window_funnel(0, ti, 0, [ta='a', ta='b']) FROM tall");
         analyzeSuccess("SELECT window_funnel(1, ti, 0, [ta='a', ta='b']) FROM tall");
         analyzeSuccess("SELECT window_funnel(1, ta, 0, [ta='a', ta='b']) FROM tall");
