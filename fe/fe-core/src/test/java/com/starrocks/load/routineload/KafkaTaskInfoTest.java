@@ -161,4 +161,53 @@ public class KafkaTaskInfoTest {
         kafkaProgress.modifyOffset(Lists.newArrayList(new Pair<>(1, 99L)));
         Assertions.assertTrue(kafkaTaskInfo.isProgressKeepUp(kafkaProgress));
     }
+
+    @Test
+    public void testFastPathKeepsLatestOffsetsForProgressKeepUp() throws Exception {
+        KafkaRoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob();
+        kafkaRoutineLoadJob.setPartitionOffset(0, 1000);
+        kafkaRoutineLoadJob.setPartitionOffset(1, 1000);
+
+        new MockUp<RoutineLoadMgr>() {
+            @Mock
+            public RoutineLoadJob getJob(long jobId) {
+                return kafkaRoutineLoadJob;
+            }
+        };
+
+        // the fast path must not ask Kafka at all
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties,
+                                                       List<Integer> partitions,
+                                                       ComputeResource computeResource) throws StarRocksException {
+                throw new StarRocksException("the fast path must not look up Kafka");
+            }
+        };
+
+        Map<Integer, Long> consumeFrom = Maps.newHashMap();
+        consumeFrom.put(0, 100L);
+        consumeFrom.put(1, 100L);
+        KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUIDUtil.genUUID(),
+                kafkaRoutineLoadJob,
+                System.currentTimeMillis(),
+                System.currentTimeMillis(),
+                consumeFrom,
+                Config.routine_load_task_timeout_second * 1000);
+        Assertions.assertTrue(kafkaTaskInfo.readyToExecute());
+        Assertions.assertEquals(Long.valueOf(1000L), kafkaTaskInfo.getLatestOffset().get(0));
+        Assertions.assertEquals(Long.valueOf(1000L), kafkaTaskInfo.getLatestOffset().get(1));
+
+        // the task stopped at offset 500 of partitions that go to 1000: it did not keep up,
+        // so afterCommitted() must not delay the next task by max_batch_interval
+        KafkaProgress kafkaProgress = new KafkaProgress();
+        kafkaProgress.addPartitionOffset(new Pair<>(0, 500L));
+        kafkaProgress.addPartitionOffset(new Pair<>(1, 500L));
+        Assertions.assertFalse(kafkaTaskInfo.isProgressKeepUp(kafkaProgress));
+
+        // consumed up to the cached latest offset on both partitions: it kept up
+        kafkaProgress.modifyOffset(Lists.newArrayList(new Pair<>(0, 999L), new Pair<>(1, 999L)));
+        Assertions.assertTrue(kafkaTaskInfo.isProgressKeepUp(kafkaProgress));
+    }
 }
