@@ -53,6 +53,7 @@ class ExecNode;
 class RowDescriptor;
 class DataSink;
 class DataStreamMgr;
+class MessageBodySink;
 class RuntimeProfile;
 class RuntimeState;
 class TPlanFragment;
@@ -214,6 +215,8 @@ private:
     // If this is a runtime filter merge node for some query.
     bool _is_runtime_filter_merge_node;
 
+    // Bound in prepare and retained until destruction so cancel and close can both notify readers.
+    std::vector<std::shared_ptr<MessageBodySink>> _stream_load_sinks;
     std::vector<StreamLoadContext*> _stream_load_contexts;
     bool _channel_stream_load = false;
 
