@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <benchmark/benchmark.h>
 #include <sched.h>
 
 #include <algorithm>
@@ -20,6 +19,9 @@
 #include <cstdint>
 #include <mutex>
 #include <vector>
+
+// Third-party benchmark harness
+#include <benchmark/benchmark.h>
 
 #include "base/concurrency/spinlock.h"
 #include "base/logging.h"
@@ -50,7 +52,7 @@ public:
 
     inline bool try_lock() { return __sync_bool_compare_and_swap(&_locked, false, true); }
 
-    void dcheck_locked() const { DCHECK(_locked); }
+    void dcheck_locked() { DCHECK(_locked); }
 
 private:
     __attribute__((noinline)) void slow_acquire() {
@@ -78,7 +80,7 @@ private:
 
 namespace {
 
-void ApplyThreadCounts(benchmark::internal::Benchmark* b) {
+void ApplyThreadCounts(benchmark::Benchmark* b) {
     b->Threads(1)
             ->Threads(2)
             ->Threads(4)
@@ -155,7 +157,7 @@ void BM_AcquireLatency(benchmark::State& state) {
     static constexpr uint64_t kSampleMask = 63; // Sample 1 in 64 acquisitions.
 
     std::vector<uint64_t> samples;
-    samples.reserve(4096);
+    samples.reserve(kMaxSamples);
     uint64_t iter = 0;
     size_t overwrite_pos = 0;
 

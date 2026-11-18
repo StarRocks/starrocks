@@ -63,9 +63,4 @@ ADD_BE_BENCH(${SRC_DIR}/bench/flat_json_vertical_compaction_mem_bench)
 target_sources(flat_json_vertical_compaction_mem_bench PRIVATE ${SRC_DIR}/service/mem_hook.cpp)
 ADD_BE_BENCH(${SRC_DIR}/bench/tdigest_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/spinlock_bench)
-# spinlock_bench only depends on Base; link the minimal Base library set so building
-# the spinlock_bench target does not require compiling all BE modules.
-set_target_properties(spinlock_bench PROPERTIES
-    LINK_LIBRARIES "benchmark;benchmark_main;Base;Gutil;StarRocksGen;${STARROCKS_DEPENDENCIES};${STARROCKS_STATIC_LINK_LIBS};${WL_LINK_DYNAMIC};${STARROCKS_SYSTEM_LINK_LIBS};${WL_START_GROUP};gtest;${WL_END_GROUP};-Wl,-rpath,${THIRDPARTY_DIR}/jemalloc/lib-shared:${THIRDPARTY_DIR}/lib:${THIRDPARTY_DIR}/lib64:${THIRDPARTY_DIR}/paimon-cpp/lib:${JAVA_HOME}/lib/server"
-)
 

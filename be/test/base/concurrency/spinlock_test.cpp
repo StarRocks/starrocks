@@ -30,6 +30,7 @@ namespace starrocks {
 TEST(SpinLockTest, LayoutAndConstContract) {
     static_assert(sizeof(SpinLock) == 1, "SpinLock must remain 1 byte");
     static_assert(alignof(SpinLock) == 1, "SpinLock must remain 1-byte aligned");
+    static_assert(std::is_trivially_copyable_v<SpinLock>);
     static_assert(std::is_trivially_move_constructible_v<SpinLock>);
     static_assert(std::is_trivially_move_assignable_v<SpinLock>);
 
@@ -42,11 +43,20 @@ TEST(SpinLockTest, BasicLockTryLockUnlock) {
     EXPECT_TRUE(lock.try_lock());
     EXPECT_FALSE(lock.try_lock());
     lock.dcheck_locked();
+    const SpinLock& const_lock = lock;
+    const_lock.dcheck_locked();
     lock.unlock();
 
     {
         std::lock_guard<SpinLock> guard(lock);
         lock.dcheck_locked();
+        const_lock.dcheck_locked();
+        EXPECT_FALSE(lock.try_lock());
+    }
+    {
+        std::unique_lock<SpinLock> ulock(lock);
+        EXPECT_TRUE(ulock.owns_lock());
+        const_lock.dcheck_locked();
         EXPECT_FALSE(lock.try_lock());
     }
     EXPECT_TRUE(lock.try_lock());
@@ -111,9 +121,12 @@ TEST(SpinLockTest, AcquireReleaseMultiWordVisibility) {
     SpinLock lock;
     constexpr int kNumThreads = 16;
     constexpr int kIterationsPerThread = 20000;
-    uint64_t word_a = 0;
-    uint64_t word_b = 0;
-    uint64_t word_sum = 0;
+    struct alignas(64) CacheLineWord {
+        uint64_t value = 0;
+    };
+    CacheLineWord word_a;
+    CacheLineWord word_b;
+    CacheLineWord word_sum;
 
     std::vector<std::thread> threads;
     threads.reserve(kNumThreads);
@@ -121,10 +134,10 @@ TEST(SpinLockTest, AcquireReleaseMultiWordVisibility) {
         threads.emplace_back([&]() {
             for (int i = 0; i < kIterationsPerThread; ++i) {
                 std::lock_guard<SpinLock> guard(lock);
-                ASSERT_EQ(word_a + word_b, word_sum);
-                word_a += 1;
-                word_b += 2;
-                word_sum = word_a + word_b;
+                ASSERT_EQ(word_a.value + word_b.value, word_sum.value);
+                word_a.value += 1;
+                word_b.value += 2;
+                word_sum.value = word_a.value + word_b.value;
             }
         });
     }
@@ -133,9 +146,9 @@ TEST(SpinLockTest, AcquireReleaseMultiWordVisibility) {
     }
 
     const uint64_t expected_total = static_cast<uint64_t>(kNumThreads) * kIterationsPerThread;
-    EXPECT_EQ(word_a, expected_total);
-    EXPECT_EQ(word_b, expected_total * 2);
-    EXPECT_EQ(word_sum, expected_total * 3);
+    EXPECT_EQ(word_a.value, expected_total);
+    EXPECT_EQ(word_b.value, expected_total * 2);
+    EXPECT_EQ(word_sum.value, expected_total * 3);
 }
 
 TEST(SpinLockTest, HighContentionOversubscribed64Threads) {
