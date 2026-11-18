@@ -34,7 +34,6 @@
 
 #pragma once
 
-#include <optional>
 #include <vector>
 
 #include "base/string/slice.h"
@@ -52,7 +51,6 @@ class ZstdDDict;
 } // namespace compression
 
 class BlockCompressionCodec;
-class MemTracker;
 class RandomAccessFile;
 class WritableFile;
 struct OlapReaderStatistics;
@@ -61,10 +59,6 @@ struct PageReadOptions {
     // block to read page
     //RandomAccessFile* read_file = nullptr;
     io::SeekableInputStream* read_file = nullptr;
-    // Optional owner of the borrowed stream's lazy IO buffers. Page payloads
-    // and decoded metadata continue to use the surrounding tracker. Borrowed
-    // only for the synchronous read; PageIO never retains this pointer.
-    std::optional<MemTracker*> read_file_mem_tracker;
     // location of the page
     PagePointer page_pointer;
     // decompressor for page body (null means page body is not compressed)
