@@ -40,12 +40,7 @@ Status AggregateStreamingSinkOperator::prepare_local_state(RuntimeState* state) 
 }
 
 void AggregateStreamingSinkOperator::close(RuntimeState* state) {
-<<<<<<< HEAD
-    auto* counter = ADD_COUNTER(_unique_metrics, "HashTableMemoryUsage", TUnit::BYTES);
-    counter->set(_aggregator->hash_map_memory_usage());
-=======
     _publish_hash_table_memory_usage();
->>>>>>> 04b5bb7 ([BugFix] Stop the streaming aggregate sink from reading a hash table handed to the source (#83452))
     _aggregator->unref(state);
     Operator::close(state);
 }

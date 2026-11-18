@@ -29,6 +29,7 @@
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/tablet_schema.h"
+#include "storage/tablet_schema_map.h"
 #include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
@@ -439,6 +440,76 @@ TEST_F(LakeRowsetTest, test_vertical_pass_shrinks_stream_buffer) {
     EXPECT_EQ(CompactionTask::stream_buffer_size(5000), task._stream_buffer_size);
     EXPECT_LT(task._stream_buffer_size, 1024 * 1024);
     EXPECT_EQ(1, context.stats->stream_buffer_shrunk_passes);
+}
+
+// get_rowsets() looks each schema up in GlobalTabletSchemaMap once, not once per rowset: the map takes one lock per
+// schema id, which every tablet of a table shares, so per-rowset lookups made scans of tablets with many rowsets
+// queue up on it. A conflicting cache entry for each schema makes every lookup build a new TabletSchema,
+// so rowsets share one schema object only if it was looked up once.
+TEST_F(LakeRowsetTest, test_get_rowsets_looks_up_each_schema_once) {
+    auto init_schema = [](TabletSchemaPB* schema, int64_t schema_id) {
+        schema->set_id(schema_id);
+        schema->set_keys_type(DUP_KEYS);
+        schema->set_num_short_key_columns(1);
+        schema->set_num_rows_per_row_block(65535);
+        auto* k = schema->add_column();
+        k->set_unique_id(1);
+        k->set_name("k");
+        k->set_type("INT");
+        k->set_is_key(true);
+        k->set_is_nullable(false);
+        auto* v = schema->add_column();
+        v->set_unique_id(2);
+        v->set_name("v");
+        v->set_type("INT");
+        v->set_is_key(false);
+        v->set_is_nullable(true);
+        v->set_aggregation("NONE");
+    };
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    metadata->set_next_rowset_id(5);
+    init_schema(metadata->mutable_schema(), next_id());
+    const int64_t archived_id = next_id();
+    auto& archived_pb = (*metadata->mutable_historical_schemas())[archived_id];
+    init_schema(&archived_pb, archived_id);
+    archived_pb.mutable_column(1)->set_unique_id(4);
+    for (uint32_t id = 1; id <= 4; ++id) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(id);
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(0);
+        rowset->set_data_size(0);
+    }
+    // Rowsets 1 and 3 were written with the tablet schema, rowsets 2 and 4 with the archived one.
+    (*metadata->mutable_rowset_to_schema())[2] = archived_id;
+    (*metadata->mutable_rowset_to_schema())[4] = archived_id;
+
+    auto conflicting_pb = metadata->schema();
+    conflicting_pb.mutable_column(1)->set_unique_id(3);
+    auto [conflicting, inserted] = GlobalTabletSchemaMap::Instance()->emplace(conflicting_pb);
+    ASSERT_TRUE(inserted);
+    auto conflicting_archived_pb = archived_pb;
+    conflicting_archived_pb.mutable_column(1)->set_unique_id(5);
+    auto [conflicting_archived, archived_inserted] =
+            GlobalTabletSchemaMap::Instance()->emplace(conflicting_archived_pb);
+    ASSERT_TRUE(archived_inserted);
+    auto lookup_1 = GlobalTabletSchemaMap::Instance()->emplace(metadata->schema()).first;
+    auto lookup_2 = GlobalTabletSchemaMap::Instance()->emplace(metadata->schema()).first;
+    ASSERT_NE(lookup_1.get(), lookup_2.get());
+
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), metadata);
+    ASSERT_EQ(4, rowsets.size());
+    auto current = rowsets[0]->tablet_schema();
+    auto archived = rowsets[1]->tablet_schema();
+    EXPECT_EQ(metadata->schema().id(), current->id());
+    EXPECT_EQ(2, current->column(1).unique_id());
+    EXPECT_EQ(archived_id, archived->id());
+    EXPECT_EQ(4, archived->column(1).unique_id());
+    EXPECT_EQ(current.get(), rowsets[2]->tablet_schema().get());
+    EXPECT_EQ(archived.get(), rowsets[3]->tablet_schema().get());
 }
 
 } // namespace starrocks::lake

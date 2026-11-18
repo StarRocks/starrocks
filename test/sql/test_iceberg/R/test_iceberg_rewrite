@@ -58,7 +58,7 @@ select count(*) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table$fi
 -- result:
 4
 -- !result
-drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table;
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table force;
 -- result:
 -- !result
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
@@ -67,3 +67,9 @@ drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
 -- !result
+CLEANUP {
+drop table if exists iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table force;
+drop database if exists iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists iceberg_sql_test_${uuid0};
+} END CLEANUP
