@@ -523,14 +523,24 @@ void PlanFragmentExecutor::close() {
 }
 
 Status PlanFragmentExecutor::_prepare_stream_load_pipe(const TExecPlanFragmentParams& request) {
-    for (const auto& [node_id, scan_ranges] : request.params.per_node_scan_ranges) {
-        for (const auto& scan_range : scan_ranges) {
-            if (scan_range.scan_range.__isset.broker_scan_range &&
-                scan_range.scan_range.broker_scan_range.__isset.channel_id) {
-                return Status::NotSupported("Non-pipeline engine does not support channel stream load");
-            }
+    auto check_channel_stream_load = [&]() -> Status {
+        const auto& scan_range_map = request.params.per_node_scan_ranges;
+        if (scan_range_map.size() == 0) {
+            return Status::OK();
         }
-    }
+        auto iter = scan_range_map.begin();
+        if (iter->second.size() == 0) {
+            return Status::OK();
+        }
+        if (!iter->second[0].scan_range.__isset.broker_scan_range) {
+            return Status::OK();
+        }
+        if (!iter->second[0].scan_range.broker_scan_range.__isset.channel_id) {
+            return Status::OK();
+        }
+        return Status::NotSupported("Non-pipeline engine does not support channel stream load");
+    };
+    RETURN_IF_ERROR(check_channel_stream_load());
 
     for (const auto& [node_id, scan_ranges] : request.params.per_node_scan_ranges) {
         for (const auto& scan_range : scan_ranges) {
@@ -538,6 +548,9 @@ Status PlanFragmentExecutor::_prepare_stream_load_pipe(const TExecPlanFragmentPa
                 continue;
             }
             const auto& broker_range = scan_range.scan_range.broker_scan_range;
+            if (broker_range.__isset.channel_id) {
+                continue;
+            }
             for (const auto& range : broker_range.ranges) {
                 if (range.file_type != TFileType::FILE_STREAM) {
                     continue;
