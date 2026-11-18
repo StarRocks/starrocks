@@ -1279,17 +1279,22 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 new com.starrocks.sql.ast.expression.StringLiteral(to.get().getId())));
     }
 
-    // A column, a TIMESTAMP or DATE literal, or a cast of one. Trino's with_timezone takes only a TIMESTAMP
-    // without a zone, which StarRocks has no type to check, and a function that computes the timestamp may differ
-    // between the dialects on its own (e.g. from_unixtime of a negative epoch is NULL in StarRocks), so any other
-    // source is rejected
+    // A column, a plain TIMESTAMP or DATE literal, or a cast of one or of a plain string. Trino's with_timezone takes
+    // only a TIMESTAMP without a zone, which StarRocks has no type to check, and a function that computes the
+    // timestamp may differ between the dialects on its own (e.g. from_unixtime of a negative epoch is NULL in
+    // StarRocks), so any other source is rejected. A column isn't traced back through a derived table or a CTE: it
+    // carries whatever its expression gives in the Trino dialect, as it does for every other consumer
     private static boolean isPlainSource(Expression expression) {
         if (expression instanceof Cast) {
             Expression operand = ((Cast) expression).getExpression();
-            return operand instanceof StringLiteral || isPlainSource(operand);
+            return (operand instanceof StringLiteral && isPlainTimestamp(timestampText(operand), 6))
+                    || isPlainSource(operand);
+        }
+        if (expression instanceof TimestampLiteral) {
+            return isPlainTimestamp(timestampText(expression), 6);
         }
         return expression instanceof Identifier || expression instanceof DereferenceExpression
-                || expression instanceof TimestampLiteral || (expression instanceof GenericLiteral
+                || (expression instanceof GenericLiteral
                 && ((GenericLiteral) expression).getType().equalsIgnoreCase("date"));
     }
 
@@ -1840,6 +1845,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         // is left as it is, so that it stays a constant for partition pruning
         if (hasWithTimezone && node.getType() instanceof DateTimeDataType && isWallClockType(node.getType())) {
             int precision = castPrecision((DateTimeDataType) node.getType(), node);
+            // Trino rounds a literal's digits past microseconds, which StarRocks drops, and the dialects may read a
+            // literal in another form differently, so those are rejected
+            if (isTimestampText(node.getExpression()) && !isPlainTimestamp(timestampText(node.getExpression()), 6)) {
+                throw unsupportedWithTimezone(node);
+            }
             return fitsPrecision(node.getExpression(), precision) ? cast : roundHalfUp(cast, precision);
         }
         return cast;
@@ -1854,16 +1864,22 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         if (expression instanceof GenericLiteral) {
             return ((GenericLiteral) expression).getType().equalsIgnoreCase("date");
         }
-        String value;
-        if (expression instanceof TimestampLiteral) {
-            value = ((TimestampLiteral) expression).getValue();
-        } else if (expression instanceof StringLiteral) {
-            value = ((StringLiteral) expression).getValue();
-        } else {
-            return false;
-        }
-        Matcher timestamp = PLAIN_TIMESTAMP.matcher(value);
-        return timestamp.matches() && (timestamp.group(1) == null || timestamp.group(1).length() <= precision);
+        return isTimestampText(expression) && isPlainTimestamp(timestampText(expression), precision);
+    }
+
+    private static boolean isTimestampText(Expression expression) {
+        return expression instanceof TimestampLiteral || expression instanceof StringLiteral;
+    }
+
+    private static String timestampText(Expression expression) {
+        return expression instanceof TimestampLiteral ? ((TimestampLiteral) expression).getValue()
+                : ((StringLiteral) expression).getValue();
+    }
+
+    // Whether text is a date or timestamp in the plain form with at most maxDigits fractional digits
+    private static boolean isPlainTimestamp(String text, int maxDigits) {
+        Matcher timestamp = PLAIN_TIMESTAMP.matcher(text);
+        return timestamp.matches() && (timestamp.group(1) == null || timestamp.group(1).length() <= maxDigits);
     }
 
     // A with_timezone value, or a cast of one to TIMESTAMP(p), which Trino rounds again in a cast to a lower precision
