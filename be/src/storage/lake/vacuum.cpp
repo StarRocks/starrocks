@@ -581,8 +581,15 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     }
     *vacuumed_version = final_retain_version;
     DCHECK_LE(version, final_retain_version);
+    // No tablet metadata exists below |min_version|: the round that reported it as the floor deleted
+    // everything below it. The walk already relies on that and stops reading there, but |version| is
+    // then the floor's prev_garbage_version, somewhere below the floor, and starting the delete range at
+    // |version + 1| deleted the metadata between the two again, every round, for as long as the same
+    // version stayed retained. On a versioned object store bucket each of those deletes of an already
+    // deleted key leaves one more delete marker.
+    const int64_t first_metadata_version = std::max<int64_t>(version + 1, min_version);
     if (vacuum_version_range == nullptr) {
-        for (auto v = version + 1; v < final_retain_version; v++) {
+        for (auto v = first_metadata_version; v < final_retain_version; v++) {
             if (retain_info.contains_version(v)) {
                 continue;
             }
@@ -591,7 +598,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     } else {
         // The vacuum_version_range is used to collect the version range of the tablet metadata files to be deleted.
         // So we can decide the final version range to be deleted when aggregate partition is enabled.
-        vacuum_version_range->merge(version + 1, final_retain_version);
+        vacuum_version_range->merge(first_metadata_version, final_retain_version);
     }
     tablet_info.set_min_version(final_retain_version);
     *total_datafile_size += prepare_vacuum_file_size;
