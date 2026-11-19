@@ -203,6 +203,24 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
     reader->close();
 }
 
+// The remote read scheduler waits of a prepared tablet's segment opens reach the scan's waits, which the profile
+// reports; the prepared-tablet breakdown has no fields of its own for them.
+TEST_F(LakeDuplicateTabletReaderTest, test_prepare_stats_keep_remote_io_waits) {
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+    OlapReaderStatistics prepare_stats;
+    prepare_stats.io_ns_remote = 5;
+    prepare_stats.remote_io_queue_wait_ns = 100;
+    prepare_stats.remote_io_fill_wait_ns = 200;
+    prepare_stats.remote_io_fill_joins = 2;
+    reader->record_tablet_prepare_stats(prepare_stats);
+    reader->record_tablet_prepare_stats(prepare_stats);
+    const auto& stats = reader->stats();
+    EXPECT_EQ(10, stats.lake_prepared_tablet_io_remote_ns);
+    EXPECT_EQ(200, stats.remote_io_queue_wait_ns);
+    EXPECT_EQ(400, stats.remote_io_fill_wait_ns);
+    EXPECT_EQ(4, stats.remote_io_fill_joins);
+}
+
 // With the remote I/O scheduler enabled, a query scan that fills the cache builds a read-ahead window for its segment
 // readers. A file that cannot warm the cache (a local file here) turns the window off at its first warm-up, and the
 // scan reads exactly what it reads without the scheduler; reads without a query context build no window at all.

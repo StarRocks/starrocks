@@ -138,6 +138,21 @@ TEST(StorageValueTypesTest, StatisticsDefaultToZero) {
     EXPECT_EQ(0, writer_stats.segment_count);
 }
 
+TEST(StorageValueTypesTest, AddRemoteIoWaits) {
+    OlapReaderStatistics from;
+    from.remote_io_queue_wait_ns = 10;
+    from.remote_io_fill_wait_ns = 20;
+    from.remote_io_fill_joins = 3;
+    OlapReaderStatistics total;
+    total.remote_io_queue_wait_ns = 1;
+    total.add_remote_io_waits(from);
+    total.merge_from(from);
+    EXPECT_EQ(21, total.remote_io_queue_wait_ns);
+    EXPECT_EQ(40, total.remote_io_fill_wait_ns);
+    EXPECT_EQ(6, total.remote_io_fill_joins);
+    EXPECT_EQ(0, total.io_ns_remote);
+}
+
 TEST(StorageValueTypesTest, MergeSegmentInitPhaseStatistics) {
     // Parallel rowset readers contribute to an existing total. Neither an empty reader nor a later
     // reader should reset or drop a phase that was already measured.
