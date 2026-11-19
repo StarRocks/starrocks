@@ -36,11 +36,7 @@ set(COMMON_TEST_FILES
     table_metrics_mgr_test.cpp
     thrift_client_test.cpp
     thrift_plan_redaction_test.cpp
-<<<<<<< HEAD
-=======
-    util/thrift_key_redaction_test.cpp
     paimon_routing_redaction_test.cpp
->>>>>>> 6ee844b ([Feature] Support INSERT INTO Paimon tables (#82701))
     thread/cpu_usage_info_test.cpp
     metrics/thread_pool_metric_group_test.cpp
     thread/priority_thread_pool_test.cpp
