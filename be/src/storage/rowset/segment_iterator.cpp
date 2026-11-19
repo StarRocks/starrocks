@@ -1181,6 +1181,10 @@ Status SegmentIterator::_init_scan_range_and_context() {
 }
 
 bool SegmentIterator::_should_read_ahead() const {
+#ifndef USE_STAROS
+    // Read-ahead goes through the shared-data remote I/O scheduler, which exists only in StarOS builds.
+    return false;
+#else
     // Only a lake query read that fills the cache, in ascending row order, reads ahead. Loads, background work such as
     // compaction, and reads nobody attributed read what they need as they go.
     const auto& remote_read = _opts.lake_io_opts.remote_read;
@@ -1189,10 +1193,12 @@ bool SegmentIterator::_should_read_ahead() const {
            _segment->lake_tablet_manager() != nullptr && _opts.lake_io_opts.fill_data_cache &&
            !_opts.lake_io_opts.skip_disk_cache && !_opts.lake_io_opts.cache_file_only && !_scan_range.empty() &&
            (_opts.asc_hint || config::desc_hint_split_range <= 0);
+#endif // USE_STAROS
 }
 
 void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
     _reset_prefetch_window();
+#ifdef USE_STAROS
     if (!_should_read_ahead()) {
         return;
     }
@@ -1246,6 +1252,9 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
     _prefetch_window = std::make_unique<SegmentPrefetchWindow>(
             std::move(columns), &_scan_range, start_row, config::remote_prefetch_window_blocks,
             config::remote_prefetch_late_read_ahead_ratio, config::starlet_star_cache_block_size_bytes, _opts.stats);
+#else
+    (void)start_row;
+#endif // USE_STAROS
 }
 
 Status SegmentIterator::_init_reused_scan() {
