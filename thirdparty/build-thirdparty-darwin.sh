@@ -1628,24 +1628,39 @@ build_formula_openssl() {
     sync_lib64_links
 }
 
-build_formula_simdjson() {
-    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
-        build_simdjson
-        return
-    fi
+simdjson_version() {
+    local prefix="$1"
+    local header
+    local version
 
-    ensure_formula simdjson
-    local prefix
-    prefix="$(formula_prefix simdjson)"
-    link_if_missing "${prefix}/include/simdjson.h" "${TP_INCLUDE_DIR}/simdjson.h"
-    link_if_missing "${prefix}/lib/libsimdjson_static.a" "${TP_INSTALL_DIR}/lib/libsimdjson.a"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libsimdjson*.dylib"
-    link_formula_metadata "${prefix}"
-    sync_lib64_links
+    for header in "${prefix}/include/simdjson/simdjson_version.h" "${prefix}/include/simdjson.h"; do
+        [[ -f "${header}" ]] || continue
+        version="$(sed -n -E 's/^#define[[:space:]]+SIMDJSON_VERSION[[:space:]]+"([^"]+)".*/\1/p' "${header}" | head -n 1)"
+        if [[ -n "${version}" ]]; then
+            echo "${version}"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+build_formula_simdjson() {
+    build_simdjson
 }
 
 build_simdjson() {
-    if [[ -f "${TP_INSTALL_DIR}/lib/libsimdjson.a" && -f "${TP_INCLUDE_DIR}/simdjson.h" ]]; then
+    local expected_version="${SIMDJSON_SOURCE#simdjson-}"
+    local installed_version
+    installed_version="$(simdjson_version "${TP_INSTALL_DIR}" || true)"
+
+    if [[ -f "${TP_INSTALL_DIR}/lib/libsimdjson.a" &&
+          ! -L "${TP_INSTALL_DIR}/lib/libsimdjson.a" &&
+          -f "${TP_INCLUDE_DIR}/simdjson.h" &&
+          ! -L "${TP_INCLUDE_DIR}/simdjson.h" &&
+          -d "${TP_INCLUDE_DIR}/simdjson" &&
+          ! -L "${TP_INCLUDE_DIR}/simdjson" &&
+          "${installed_version}" == "${expected_version}" ]]; then
         return 0
     fi
 
@@ -1664,7 +1679,13 @@ build_simdjson() {
         -DBUILD_SHARED_LIBS=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
     "${CMAKE_CMD}" --build . -j"${PARALLEL}"
-    mkdir -p "${TP_INSTALL_DIR}/lib"
+    rm -rf "${TP_INCLUDE_DIR}/simdjson" \
+        "${TP_INSTALL_DIR}/lib/cmake/simdjson"
+    rm -f "${TP_INCLUDE_DIR}/simdjson.h" \
+        "${TP_INSTALL_DIR}/lib/libsimdjson"* \
+        "${TP_INSTALL_DIR}/lib64/libsimdjson"* \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/simdjson.pc"
+    mkdir -p "${TP_INSTALL_DIR}/lib" "${TP_INCLUDE_DIR}"
     cp libsimdjson.a "${TP_INSTALL_DIR}/lib/libsimdjson.a"
     cp -r ../include/* "${TP_INCLUDE_DIR}/"
     sync_lib64_links
@@ -3226,7 +3247,7 @@ for package in "${packages[@]}"; do
             build_formula_rapidjson
             ;;
         simdjson)
-            build_formula_simdjson
+            build_simdjson
             ;;
         snappy)
             build_formula_snappy
