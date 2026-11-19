@@ -896,7 +896,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_array_of_variant_path_with_variant_
 }
 
 // A float and an integer are merged into a double only when the double holds every value of the integer type exactly.
-PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_float_and_integer_is_lossless) {
+PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_float_and_other_numbers_keep_their_types) {
     const auto choose = [](const TypeDescriptor& lhs, const TypeDescriptor& rhs) {
         auto common = VariantColumnMerger::choose_common_type(lhs, rhs);
         EXPECT_TRUE(common.ok()) << common.status().to_string();
@@ -905,17 +905,18 @@ PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_float_and_integer_is_l
     const TypeDescriptor largeint(TYPE_LARGEINT);
     const TypeDescriptor variant(TYPE_VARIANT);
 
-    // Exact in a double: unchanged.
-    EXPECT_EQ(TYPE_DOUBLE_DESC, choose(TYPE_INT_DESC, TYPE_DOUBLE_DESC));
-    EXPECT_EQ(TYPE_DOUBLE_DESC, choose(TYPE_DOUBLE_DESC, TYPE_INT_DESC));
-    EXPECT_EQ(TYPE_DOUBLE_DESC, choose(TYPE_SMALLINT_DESC, TYPE_FLOAT_DESC));
-    EXPECT_EQ(TYPE_DOUBLE_DESC, choose(TYPE_FLOAT_DESC, TYPE_DOUBLE_DESC));
-    // Not exact in a double: both sides keep their own type under VARIANT, whatever the order.
+    // Widening to DOUBLE would change the variant type (and the text) of the other side's values, so both sides keep
+    // their own type under VARIANT, whatever the order.
+    EXPECT_EQ(variant, choose(TYPE_INT_DESC, TYPE_DOUBLE_DESC));
+    EXPECT_EQ(variant, choose(TYPE_DOUBLE_DESC, TYPE_INT_DESC));
+    EXPECT_EQ(variant, choose(TYPE_SMALLINT_DESC, TYPE_FLOAT_DESC));
+    EXPECT_EQ(variant, choose(TYPE_FLOAT_DESC, TYPE_DOUBLE_DESC));
     EXPECT_EQ(variant, choose(TYPE_BIGINT_DESC, TYPE_DOUBLE_DESC));
     EXPECT_EQ(variant, choose(TYPE_DOUBLE_DESC, TYPE_BIGINT_DESC));
     EXPECT_EQ(variant, choose(TYPE_BIGINT_DESC, TYPE_FLOAT_DESC));
     EXPECT_EQ(variant, choose(largeint, TYPE_DOUBLE_DESC));
-    // Integers alone are still widened.
+    // The same type, and integers alone, are unchanged / widened: integer widths are one logical number type.
+    EXPECT_EQ(TYPE_DOUBLE_DESC, choose(TYPE_DOUBLE_DESC, TYPE_DOUBLE_DESC));
     EXPECT_EQ(TYPE_BIGINT_DESC, choose(TYPE_INT_DESC, TYPE_BIGINT_DESC));
 }
 
