@@ -115,7 +115,9 @@ public class DeltaLakeMetadataTest {
             @Mock
             public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot deltaLakeSnapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
-                        Lists.newArrayList(), Lists.newArrayList("ts"), snapshot, null,
+                        Lists.newArrayList(), Lists.newArrayList("ts"), snapshot,
+                        DeltaLakeEngine.create(new Configuration(false),
+                                new DeltaLakeCatalogProperties(Maps.newHashMap()), null, null),
                         new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
                                 123));
             }

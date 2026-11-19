@@ -3776,6 +3776,37 @@ public abstract class FileSystem extends Configured
         private final Set<Key> toAutoClose = new HashSet<>();
 
         /**
+<<<<<<< HEAD
+=======
+         * StarRocks: last access time (ms) of every cached entry whose key carries a credential fingerprint
+         * ({@link HadoopExt#HADOOP_DYNAMIC_CREDENTIAL_PREFIX}). A vended credential rotates, so each rotation
+         * is a new key; without eviction the map would grow with every token. Explicit access scopes
+         * protect readers until their resources are closed. An unprotected entry idle for
+         * {@link #credentialIdleTtlMs} leaves the map and waits in {@link #pendingClose} for one more TTL
+         * before it is closed: an InputFile/OutputFile created before the eviction may still hold the
+         * instance, and every new lookup of the key refreshes its access time, so a holder would have to
+         * keep using an instance nobody else asked for in two TTLs. Entries without a fingerprint, and the
+         * unique instances of {@link FileSystem#newInstance}, are never evicted, as before.
+         */
+        private final Map<Key, Long> credentialLastAccessMs = new HashMap<>();
+        private final List<PendingClose> pendingClose = new ArrayList<>();
+        private long nextCredentialSweepMs = 0;
+
+        @VisibleForTesting
+        static volatile long credentialIdleTtlMs = TimeUnit.HOURS.toMillis(1);
+
+        private static final class PendingClose {
+            final FileSystem fs;
+            final long evictedAtMs;
+
+            PendingClose(FileSystem fs, long evictedAtMs) {
+                this.fs = fs;
+                this.evictedAtMs = evictedAtMs;
+            }
+        }
+
+        /**
+>>>>>>> b3ea3f5 ([BugFix] Reclaim idle Azure filesystem clients in Delta Lake (#83557))
          * Semaphore used to serialize creation of new FS instances.
          */
         private final Semaphore creatorPermits;
@@ -3922,6 +3953,100 @@ public abstract class FileSystem extends Configured
             return discardedInstances.get();
         }
 
+<<<<<<< HEAD
+=======
+        /**
+         * Must be called with the Cache lock held.
+         */
+        private FileSystem getAndTouch(Key key) {
+            FileSystem fs = map.get(key);
+            if (fs != null && key.isEvictable()) {
+                credentialLastAccessMs.put(key, System.currentTimeMillis());
+            }
+            return fs;
+        }
+
+        /**
+         * Move entries idle for {@link #credentialIdleTtlMs} from the map to {@link #pendingClose}, and
+         * return the pending instances that have waited one more TTL; the caller closes them outside the
+         * lock. Runs at most once a minute (or once per TTL if shorter). Must be called with the Cache lock
+         * held.
+         */
+        private List<FileSystem> evictIdleCredentialEntries() {
+            if (credentialLastAccessMs.isEmpty() && pendingClose.isEmpty()) {
+                return Collections.emptyList();
+            }
+            long now = System.currentTimeMillis();
+            if (now < nextCredentialSweepMs) {
+                return Collections.emptyList();
+            }
+            long ttl = credentialIdleTtlMs;
+            nextCredentialSweepMs = now + Math.min(ttl, TimeUnit.MINUTES.toMillis(1));
+
+            List<FileSystem> toClose = new ArrayList<>();
+            Iterator<PendingClose> pending = pendingClose.iterator();
+            while (pending.hasNext()) {
+                PendingClose p = pending.next();
+                if (now - p.evictedAtMs >= ttl) {
+                    pending.remove();
+                    toClose.add(p.fs);
+                }
+            }
+
+            int evicted = 0;
+            Iterator<Map.Entry<Key, Long>> it = credentialLastAccessMs.entrySet().iterator();
+            while (it.hasNext()) {
+                Map.Entry<Key, Long> entry = it.next();
+                if (now - entry.getValue() >= ttl
+                        && !HadoopExt.getInstance().hasActiveFileSystemAccess(
+                                entry.getKey().cloudConf, entry.getKey().credFingerprint)) {
+                    it.remove();
+                    FileSystem fs = map.remove(entry.getKey());
+                    toAutoClose.remove(entry.getKey());
+                    if (fs != null) {
+                        pendingClose.add(new PendingClose(fs, now));
+                    }
+                    evicted++;
+                }
+            }
+            if (evicted > 0 || !toClose.isEmpty()) {
+                LOGGER.info("{} FileSystem cache: evicted {} idle entries with a credential fingerprint, closing {}"
+                                + " evicted earlier; {} cached, {} pending close",
+                        HadoopExt.LOGGER_MESSAGE_PREFIX, evicted, toClose.size(), credentialLastAccessMs.size(),
+                        pendingClose.size());
+            }
+            return toClose;
+        }
+
+        private static void closeEvicted(List<FileSystem> toClose) {
+            for (FileSystem fs : toClose) {
+                // FileSystem.close() calls remove(key, fs); a newer instance cached under the same key is not
+                // this one, so remove() puts it back.
+                IOUtils.cleanupWithLogger(LOGGER, fs);
+            }
+        }
+
+        @VisibleForTesting
+        synchronized int size() {
+            return map.size();
+        }
+
+        @VisibleForTesting
+        synchronized int pendingCloseSize() {
+            return pendingClose.size();
+        }
+
+        @VisibleForTesting
+        void sweepNowForTesting() {
+            List<FileSystem> toClose;
+            synchronized (this) {
+                nextCredentialSweepMs = 0;
+                toClose = evictIdleCredentialEntries();
+            }
+            closeEvicted(toClose);
+        }
+
+>>>>>>> b3ea3f5 ([BugFix] Reclaim idle Azure filesystem clients in Delta Lake (#83557))
         synchronized void remove(Key key, FileSystem fs) {
             FileSystem cachedFs = map.remove(key);
             if (fs == cachedFs) {

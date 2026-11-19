@@ -45,7 +45,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
-import io.delta.kernel.engine.Engine;
 import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.ScanBuilderImpl;
@@ -210,7 +209,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             Table table, ScalarOperator operator, boolean enableCollectColumnStats) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         Metadata metadata = deltaLakeTable.getDeltaMetadata();
-        Engine engine = deltaLakeTable.getDeltaEngine();
+        DeltaLakeEngine engine = (DeltaLakeEngine) deltaLakeTable.getDeltaEngine();
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
 
         StructType schema = metadata.getSchema();
@@ -290,6 +289,79 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                 }
             }
         };
+<<<<<<< HEAD
+=======
+
+        if (residual.residual.isEmpty()) {
+            return engine.withFileSystemAccess(baseIterator);
+        }
+        // Evaluate the cast-on-string-partition residual StarRocks-side: keep a file unless its partition value
+        // provably cannot satisfy the residual (partitionMayMatch drops only on a definitive false), consistent
+        // with the backend filter and never dropping a possibly-matching file.
+        return engine.withFileSystemAccess(new CloseableIterator<>() {
+            Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> nextMatch = null;
+            boolean finished = false;
+
+            @Override
+            public boolean hasNext() {
+                advance();
+                return nextMatch != null;
+            }
+
+            @Override
+            public Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> next() {
+                advance();
+                if (nextMatch == null) {
+                    throw new java.util.NoSuchElementException();
+                }
+                Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> result = nextMatch;
+                nextMatch = null;
+                return result;
+            }
+
+            private void advance() {
+                if (nextMatch != null || finished) {
+                    return;
+                }
+                while (baseIterator.hasNext()) {
+                    Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> candidate = baseIterator.next();
+                    if (PartitionCastPredicatePruner.partitionMayMatch(
+                            residual.residual, candidate.first.getPartitionValues())) {
+                        nextMatch = candidate;
+                        return;
+                    }
+                }
+                finished = true;
+            }
+
+            @Override
+            public void close() {
+                try {
+                    baseIterator.close();
+                } catch (IOException e) {
+                    LOG.error("Failed to close delta lake scan file iterator", e);
+                }
+            }
+        });
+    }
+
+    // Partition columns of string type. Delta partitioning is always identity, so every string partition column is
+    // an identity string partition column for ExternalScanPredicates.splitStringPartitionCast. Also used by the
+    // scan statistics to tell which conjuncts this residual prunes.
+    public static Set<String> identityStringPartitionColumns(DeltaLakeTable table, Set<String> partitionColumns) {
+        Set<String> lowerPartitionColumns = new HashSet<>();
+        for (String name : partitionColumns) {
+            lowerPartitionColumns.add(name.toLowerCase(Locale.ROOT));
+        }
+        Set<String> result = new HashSet<>();
+        for (Column column : table.getColumns()) {
+            if (lowerPartitionColumns.contains(column.getName().toLowerCase(Locale.ROOT))
+                    && column.getType().isStringType()) {
+                result.add(column.getName().toLowerCase(Locale.ROOT));
+            }
+        }
+        return result;
+>>>>>>> b3ea3f5 ([BugFix] Reclaim idle Azure filesystem clients in Delta Lake (#83557))
     }
 
     private RemoteFileInfoSource buildRemoteInfoSource(Table table, GetRemoteFilesParams params) {

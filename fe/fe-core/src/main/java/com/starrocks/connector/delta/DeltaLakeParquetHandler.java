@@ -56,10 +56,13 @@ public class DeltaLakeParquetHandler extends DefaultParquetHandler {
             CloseableIterator<ColumnarBatch> currentFileReader = batchReader.read(filePath, physicalSchema, Optional.empty());
 
             List<ColumnarBatch> result = Lists.newArrayList();
-            while (currentFileReader != null && currentFileReader.hasNext()) {
-                result.add(currentFileReader.next());
+            try {
+                while (currentFileReader != null && currentFileReader.hasNext()) {
+                    result.add(currentFileReader.next());
+                }
+            } finally {
+                Utils.closeCloseables(currentFileReader);
             }
-            Utils.closeCloseables(currentFileReader);
             return result;
         }
     }
