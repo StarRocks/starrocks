@@ -459,6 +459,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         taskConsumeSecond = stmt.getTaskConsumeSecond();
         taskTimeoutSecond = stmt.getTaskTimeoutSecond();
+        // remembers which settings were given under a descriptive name, to report them under that name
+        jobProperties.putAll(stmt.getDescriptivePropertyValues());
 
         // set warehouse
         Map<String, String> prop = stmt.getJobProperties();
@@ -1917,9 +1919,35 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         jobProperties.put("desireTaskConcurrentNum", String.valueOf(desireTaskConcurrentNum));
         jobProperties.put("taskConsumeSecond", String.valueOf(taskConsumeSecond));
         jobProperties.put("taskTimeoutSecond", String.valueOf(taskTimeoutSecond));
+        // A job with a setting given under a descriptive name also reports the settings in effect under the descriptive
+        // names, see RoutineLoadPropertyNames; the output of any other job stays as it was. A job runs durations in
+        // whole seconds.
+        if (RoutineLoadPropertyNames.hasDescriptiveValues(this.jobProperties)) {
+            jobProperties.put("loadInterval", taskSchedIntervalS + "s");
+            jobProperties.put("maxConsumeDuration", taskConsumeSecond + "s");
+            jobProperties.put("loadTimeout", taskTimeoutSecond + "s");
+            jobProperties.put("maxConcurrency", String.valueOf(desireTaskConcurrentNum));
+            jobProperties.put("maxErrorRows", String.valueOf(maxErrorNum));
+            jobProperties.put("errorWindowRows",
+                    String.valueOf(maxBatchRows * RoutineLoadPropertyNames.ERROR_WINDOW_ROWS_PER_BATCH_ROW));
+        }
         jobProperties.putAll(this.jobProperties);
+        // the stored descriptive values keep the user's spelling for SHOW CREATE; the settings in effect are above
+        RoutineLoadPropertyNames.LEGACY_NAMES.keySet().forEach(jobProperties::remove);
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(jobProperties);
+    }
+
+    // Emits a setting under the descriptive name when the user gave it that way, otherwise under the legacy name, so a
+    // job created with legacy names still produces a statement that an older FE accepts.
+    private void appendAliasedPropertySql(StringBuilder sb, String descriptiveName, long legacyValue) {
+        String value = RoutineLoadPropertyNames.matchingDescriptiveValue(jobProperties, descriptiveName, legacyValue);
+        if (value != null) {
+            sb.append("\"").append(descriptiveName).append("\"=\"").append(value).append("\",\n");
+        } else {
+            sb.append("\"").append(RoutineLoadPropertyNames.LEGACY_NAMES.get(descriptiveName)).append("\"=\"");
+            sb.append(legacyValue).append("\",\n");
+        }
     }
 
     private static String columnDescsToSql(List<ImportColumnDesc> columnDescs) {
@@ -1948,26 +1976,16 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     public String jobPropertiesToSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("(\n");
-        sb.append("\"").append(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY).append("\"=\"");
-        sb.append(desireTaskConcurrentNum).append("\",\n");
-
-        sb.append("\"").append(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY).append("\"=\"");
-        sb.append(maxErrorNum).append("\",\n");
+        appendAliasedPropertySql(sb, RoutineLoadPropertyNames.MAX_CONCURRENCY, desireTaskConcurrentNum);
+        appendAliasedPropertySql(sb, RoutineLoadPropertyNames.MAX_ERROR_ROWS, maxErrorNum);
 
         sb.append("\"").append(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY).append("\"=\"");
         sb.append(maxFilterRatio).append("\",\n");
 
-        sb.append("\"").append(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY).append("\"=\"");
-        sb.append(taskSchedIntervalS).append("\",\n");
-
-        sb.append("\"").append(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY).append("\"=\"");
-        sb.append(maxBatchRows).append("\",\n");
-
-        sb.append("\"").append(CreateRoutineLoadStmt.TASK_CONSUME_SECOND).append("\"=\"");
-        sb.append(taskConsumeSecond).append("\",\n");
-
-        sb.append("\"").append(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND).append("\"=\"");
-        sb.append(taskTimeoutSecond).append("\",\n");
+        appendAliasedPropertySql(sb, RoutineLoadPropertyNames.LOAD_INTERVAL, taskSchedIntervalS);
+        appendAliasedPropertySql(sb, RoutineLoadPropertyNames.ERROR_WINDOW_ROWS, maxBatchRows);
+        appendAliasedPropertySql(sb, RoutineLoadPropertyNames.MAX_CONSUME_DURATION, taskConsumeSecond);
+        appendAliasedPropertySql(sb, RoutineLoadPropertyNames.LOAD_TIMEOUT, taskTimeoutSecond);
 
         sb.append("\"").append(CreateRoutineLoadStmt.FORMAT).append("\"=\"");
         sb.append(getFormat()).append("\",\n");
@@ -2264,6 +2282,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             }
         }
 
+        // A setting changed through its legacy name is reported under that name from now on; one changed through a
+        // descriptive name carries both, and its descriptive value is stored below.
+        RoutineLoadPropertyNames.forgetReplacedDescriptiveValues(jobProperties, this.jobProperties);
         this.jobProperties.putAll(copiedJobProperties);
     }
 
