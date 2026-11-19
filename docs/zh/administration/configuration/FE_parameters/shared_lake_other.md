@@ -818,7 +818,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 计数
 - 是否可变: Yes
-- 描述: 设置在为 lake（云原生）表构建发布批次时，可能分组的连续事务版本的上限。该值传递给事务图批处理例程（参见 getReadyToPublishTxnListBatch），用于限定 TransactionStateBatch 的候选范围大小。较大的值可以通过批处理更多提交来提高发布吞吐量，但会增加原子发布的范围（更长的可见性延迟和更大的回滚表面），并且批次可能在达到该上限之前结束。批次会在 Replication 事务或 DELETE 事务（这类事务单独发布）之前结束；当 `lake_enable_batch_publish_multi_table` 为 `false` 时，也会在写入多张表的事务之前结束。此外，当某个分区的版本不连续（例如 Schema Change 占用了一个版本）或其已导入的物化索引发生变化时，以及在表已被删除的事务之前，批次也会结束。当 `lake_enable_batch_publish_retry_freeze` 为 `true` 时，重试的批次只包含上一次尝试中的事务。根据工作负载和可见性/延迟要求进行调整。
+- 描述: 设置在为 lake（云原生）表构建发布批次时，可能分组的连续事务版本的上限。该值传递给事务图批处理例程（参见 getReadyToPublishTxnListBatch），用于限定 TransactionStateBatch 的候选范围大小。较大的值可以通过批处理更多提交来提高发布吞吐量，但会增加原子发布的范围（更长的可见性延迟和更大的回滚表面），并且批次可能在达到该上限之前结束。批次会在 Replication 事务或 DELETE 事务（这类事务单独发布）之前结束；当 `lake_enable_batch_publish_multi_table` 为 `false` 时，也会在写入多张表的事务之前结束。此外，当某个分区的版本不连续（例如 Schema Change 占用了一个版本）或其已导入的物化索引发生变化时，以及在表已被删除的事务之前，批次也会结束。当 `lake_enable_batch_publish_retry_freeze` 为 `true` 时，重试的批次只包含上一次尝试中的事务。调低该上限时，已经发出发布请求的批次不会被拆分。根据工作负载和可见性/延迟要求进行调整。
 - 引入版本: v3.2.0
 
 ### `lake_batch_publish_min_version_num`
@@ -827,7 +827,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 已废弃。自 v4.2.1 起，设置后不生效。保留该参数只是为了让 **fe.conf** 中已有的配置以及针对该参数的 `ADMIN SET FRONTEND CONFIG` 语句不会报错。存算分离模式下，批量发布每一轮都会从每个无需再等待其他事务的已提交事务开始组成批次，不论批次大小都会发布，每个批次最多包含 `lake_batch_publish_max_version_num` 个事务。此前，该参数指定一个批次至少包含的事务数，事务数不足的批次在当轮不发布。如果某个批次始终达不到这一数量（例如某张表最后几次导入之后再没有新的导入，或者导入排在一个同时写入多张表的事务之后），该批次每一轮都会被跳过，其中已提交的事务一直不可见，后续写入这些表的导入也只能排队等待。
+- 描述: 已废弃。自 v4.2.1 起，设置后不生效。保留该参数只是为了让 **fe.conf** 中已有的配置以及针对该参数的 `ADMIN SET FRONTEND CONFIG` 语句不会报错。存算分离模式下，批量发布每一轮都会从每个无需再等待其他事务的已提交事务开始组成批次，不论批次大小都会发布，新批次的大小受 `lake_batch_publish_max_version_num` 限制。此前，该参数指定一个批次至少包含的事务数，事务数不足的批次在当轮不发布。如果某个批次始终达不到这一数量（例如某张表最后几次导入之后再没有新的导入，或者导入排在一个同时写入多张表的事务之后），该批次每一轮都会被跳过，其中已提交的事务一直不可见，后续写入这些表的导入也只能排队等待。
 - 引入版本: v3.2.0
 
 ### `lake_publish_version_retry_interval_ms`
@@ -863,7 +863,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 存算分离表的批量发布（Batch Publish）没有完成时，重试是否只包含上一次尝试中的事务，只包含一个事务的批次同样适用，这样重试不会把之后提交的事务加进来。不开启时，重试会重新攒批，把这些事务也加进来，各分区的新版本号随之改变，上一次尝试在旧版本号上已经完成的工作也就无法复用。设为 `false` 可恢复原来的攒批方式，从下一轮发布起生效。仅当 `lake_enable_batch_publish_version` 为 `true` 时生效。
+- 描述: 存算分离表的批量发布（Batch Publish）没有完成时，重试是否只包含上一次尝试中的事务，只包含一个事务的批次同样适用，这样重试不会把之后提交的事务加进来。如果尚未发出发布请求，下一轮可以重新组批。关闭此开关时，重试保留已发出批次中的事务，并可追加随后提交的事务。追加事务可能推进分区的目标版本，导致上一次在原目标版本完成的工作无法复用。仅当 `lake_enable_batch_publish_version` 为 `true` 时生效。
 - 引入版本: v26.2
 
 ### `lake_enable_tablet_creation_optimization`

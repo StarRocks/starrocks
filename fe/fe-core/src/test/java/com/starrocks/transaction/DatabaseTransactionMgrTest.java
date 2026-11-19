@@ -1469,8 +1469,29 @@ public class DatabaseTransactionMgrTest {
 
     // As the publish daemon does when it sends a publish attempt for these txns.
     private static void markSent(DatabaseTransactionMgr mgr, long... txnIds) {
+        List<TransactionState> states = new ArrayList<>();
         for (long txnId : txnIds) {
-            mgr.getTransactionState(txnId).setHasSendTask(true);
+            states.add(mgr.getTransactionState(txnId));
+        }
+        new TransactionStateBatch(states).recordLakePublishAttempt();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testLowerBatchLimitDoesNotSplitSentBatch(boolean freeze) throws AnalysisException {
+        int oldMax = Config.lake_batch_publish_max_version_num;
+        boolean oldFreeze = Config.lake_enable_batch_publish_retry_freeze;
+        try {
+            Config.lake_enable_batch_publish_retry_freeze = freeze;
+            DatabaseTransactionMgr mgr = dbTransMgrWithThreeBatchableTxns();
+            long first = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+            long second = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+            markSent(mgr, first, second);
+            Config.lake_batch_publish_max_version_num = 1;
+            assertEquals(List.of(first, second), mgr.getReadyToPublishTxnListBatch().get(0).getTxnIds());
+        } finally {
+            Config.lake_batch_publish_max_version_num = oldMax;
+            Config.lake_enable_batch_publish_retry_freeze = oldFreeze;
         }
     }
 

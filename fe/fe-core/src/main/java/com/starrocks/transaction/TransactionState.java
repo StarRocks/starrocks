@@ -344,7 +344,8 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
 
     // these states need not be serialized
     private final Map<Long, PublishVersionTask> publishVersionTasks; // Only for OlapTable
-    private boolean hasSendTask;
+    private volatile boolean hasSendTask;
+    private volatile List<Long> lakePublishAttempt = List.of();
     // Start of the latest publish attempt, see updateSendTaskTime().
     private long publishVersionTime = -1;
     // When the first publish request carrying this txn went out, see recordPublishRequestSentTime().
@@ -617,6 +618,7 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
         this.latch = txnState.latch;
         this.publishVersionTasks = txnState.publishVersionTasks;
         this.hasSendTask = txnState.hasSendTask;
+        this.lakePublishAttempt = txnState.lakePublishAttempt;
         this.publishVersionTime = txnState.publishVersionTime;
         this.publishRequestSentTime = txnState.publishRequestSentTime;
         this.publishVersionFinishTime = txnState.publishVersionFinishTime;
@@ -752,6 +754,15 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
     // the start of the attempt stamped by updateSendTaskTime(), alone.
     public void setHasSendTask(boolean hasSendTask) {
         this.hasSendTask = hasSendTask;
+    }
+
+    List<Long> getLakePublishAttempt() {
+        return lakePublishAttempt;
+    }
+
+    void recordLakePublishAttempt(List<Long> attempt) {
+        lakePublishAttempt = attempt;
+        setHasSendTask(true);
     }
 
     // Called when a publish request carrying this txn goes out; only the first call records the time.

@@ -104,7 +104,6 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.LongPredicate;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -1170,9 +1169,15 @@ public class DatabaseTransactionMgr {
     private record PartitionCommitState(long version, List<Long> loadedIndexIds) {
     }
 
-    private boolean hasSentPublishTask(long txnId) {
-        TransactionState state = idToRunningTransactionState.get(txnId);
-        return state != null && state.hasSendTask();
+    private void addLakePublishBatch(List<TransactionStateBatch> result, List<TransactionState> states,
+                                     List<Long> attempt, boolean freeze) {
+        if (!attempt.isEmpty() && !TransactionStateBatch.preservesLakePublishAttempt(
+                states.stream().map(TransactionState::getTransactionId).toList(), attempt, freeze)) {
+            states = attempt.stream().map(idToRunningTransactionState::get).toList();
+        }
+        if (!states.isEmpty() && states.stream().noneMatch(Objects::isNull)) {
+            result.add(new TransactionStateBatch(states));
+        }
     }
 
     public List<TransactionStateBatch> getReadyToPublishTxnListBatch() {
@@ -1182,30 +1187,29 @@ public class DatabaseTransactionMgr {
         try {
             List<Long> txnIds = transactionGraph.getTxnsWithoutDependency();
             for (long txnId : txnIds) {
-                // A head that was already sent belongs to a publish attempt that did not finish. Retry it with
-                // only the txns of that attempt, the only ones sent: taking in txns committed since would move
-                // every partition's new version and waste what the attempt already published. Such a retry is
-                // as big as the attempt was.
                 TransactionState head = idToRunningTransactionState.get(txnId);
-                boolean retryLastAttempt = Config.lake_enable_batch_publish_retry_freeze
-                        && head != null && head.hasSendTask();
-                LongPredicate canJoin = retryLastAttempt ? this::hasSentPublishTask : id -> true;
+                if (head == null) {
+                    continue;
+                }
+                List<Long> attempt = head.getLakePublishAttempt();
+                boolean freeze = Config.lake_enable_batch_publish_retry_freeze;
+                if (freeze && !attempt.isEmpty()) {
+                    addLakePublishBatch(result, List.of(), attempt, true);
+                    continue;
+                }
                 List<Long> txnsWithDependency;
                 if (Config.lake_enable_batch_publish_multi_table) {
                     txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatchMultiTable(
-                            Config.lake_batch_publish_max_version_num, txnId, canJoin);
+                            Config.lake_batch_publish_max_version_num, txnId);
                 } else {
                     txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
-                            Config.lake_batch_publish_max_version_num, txnId, canJoin);
+                            Config.lake_batch_publish_max_version_num, txnId);
                 }
                 List<TransactionState> states = txnsWithDependency.stream().map(idToRunningTransactionState::get)
                         .filter(Objects::nonNull)
                         .collect(Collectors.toList());
-                if (states.isEmpty()) {
-                    continue;
-                }
-                if (states.size() == 1) { // fast path: no batch
-                    result.add(new TransactionStateBatch(states));
+                if (states.size() <= 1) {
+                    addLakePublishBatch(result, states, attempt, freeze);
                     continue;
                 }
 
@@ -1269,8 +1273,7 @@ public class DatabaseTransactionMgr {
                     }
                 }
 
-                TransactionStateBatch batch = new TransactionStateBatch(states);
-                result.add(batch);
+                addLakePublishBatch(result, states, attempt, freeze);
             }
         } finally {
             readUnlock();

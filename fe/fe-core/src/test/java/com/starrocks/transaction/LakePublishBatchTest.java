@@ -69,6 +69,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1380,6 +1381,133 @@ public class LakePublishBatchTest {
     }
 
     @Test
+    public void testNodeSelectionFailureDoesNotFreezeBatch() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_AGG_OFF);
+        Partition partition = Lists.newArrayList(table.getPartitions()).get(0);
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        List<Long> txnIds = new ArrayList<>();
+        VisibleStateWaiter first = commitOnPartition(db, table, partition, "no_cn_first_", txnIds);
+        VisibleStateWaiter second = commitOnPartition(db, table, partition, "no_cn_second_", txnIds);
+        AtomicBoolean unavailable = new AtomicBoolean(true);
+        AtomicInteger failures = new AtomicInteger();
+        Set<Long> partitionTablets = tabletIds(partition);
+        new MockUp<Utils>() {
+            @Mock
+            public ComputeNode getComputeNode(Invocation invocation, long tabletId, ComputeResource resource,
+                                              WarehouseManager warehouseManager) throws NoAliveBackendException {
+                if (unavailable.get() && partitionTablets.contains(tabletId)) {
+                    failures.incrementAndGet();
+                    throw new NoAliveBackendException("injected no alive CN");
+                }
+                return invocation.proceed();
+            }
+        };
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        long retriesBefore = MetricRepo.COUNTER_LAKE_PUBLISH_BATCH_RETRY.getValue();
+        daemon.runAfterLeaseValid();
+        Awaitility.await().atMost(15, TimeUnit.SECONDS).until(() ->
+                failures.get() > 0 && !daemon.publishingLakeTransactionsBatchTableId.contains(table.getId()));
+        for (long txnId : txnIds) {
+            TransactionState state = mgr.getTransactionState(db.getId(), txnId);
+            assertFalse(state.hasSendTask());
+            assertEquals(-1, state.getPublishRequestSentTime());
+            assertEquals(List.of(), state.getLakePublishAttempt());
+            assertFalse(state.getTableCommitInfo(table.getId())
+                    .getPartitionCommitInfo(partition.getDefaultPhysicalPartition().getId()).isPublishSent());
+        }
+        assertEquals(retriesBefore, MetricRepo.COUNTER_LAKE_PUBLISH_BATCH_RETRY.getValue());
+        VisibleStateWaiter third = commitOnPartition(db, table, partition, "no_cn_third_", txnIds);
+        Assertions.assertTrue(mgr.getReadyPublishTransactionsBatch().stream()
+                .anyMatch(batch -> batch.getTxnIds().equals(txnIds)));
+        unavailable.set(false);
+        awaitPublish(daemon, first, second, third);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testPartialPublishCannotFinishOnlyTheHead(boolean leaveBatchPublishEnabled) throws Exception {
+        int oldMax = Config.lake_batch_publish_max_version_num;
+        boolean oldFreeze = Config.lake_enable_batch_publish_retry_freeze;
+        boolean oldBatchPublish = Config.lake_enable_batch_publish_version;
+        Config.lake_batch_publish_max_version_num = 2;
+        Config.lake_enable_batch_publish_retry_freeze = true;
+        Config.lake_enable_batch_publish_version = true;
+        try {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+            String tableName = "partial_batch_" + leaveBatchPublishEnabled;
+            starRocksAssert.withTable("CREATE TABLE " + tableName + " (dt DATE NOT NULL, k BIGINT NOT NULL, v STRING) "
+                    + "PRIMARY KEY(dt, k) PARTITION BY RANGE(dt) ("
+                    + "PARTITION p1 VALUES [('2021-08-20'), ('2021-08-21')),"
+                    + "PARTITION p2 VALUES [('2021-08-21'), ('2021-08-22'))) "
+                    + "DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                    + "PROPERTIES(\"replication_num\" = \"1\", \"file_bundling\" = \"false\");");
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+            List<Partition> partitions = Lists.newArrayList(table.getPartitions());
+            Partition successful = partitions.get(0);
+            Partition failing = partitions.get(1);
+            GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            List<Long> txnIds = new ArrayList<>();
+            VisibleStateWaiter first = commitOnPartition(db, table, successful, "partial_batch_first_", txnIds);
+            long secondId = mgr.beginTransaction(db.getId(), List.of(table.getId()), "partial_batch_second_" + UUIDUtil.genUUID(),
+                    transactionSource, TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+            txnIds.add(secondId);
+            List<TabletCommitInfo> tablets = new ArrayList<>(getPartitionTabletCommitInfos(successful));
+            tablets.addAll(getPartitionTabletCommitInfos(failing));
+            VisibleStateWaiter second = mgr.commitTransaction(db.getId(), secondId, tablets, List.of(), null);
+            Assertions.assertTrue(mgr.getReadyPublishTransactionsBatch().stream()
+                    .anyMatch(batch -> batch.getTxnIds().equals(txnIds)));
+            TransactionState head = mgr.getTransactionState(db.getId(), txnIds.get(0));
+            TransactionStateBatch stale = new TransactionStateBatch(List.of(head));
+            long visibleBefore = successful.getDefaultPhysicalPartition().getVisibleVersion();
+            Set<Long> failingTablets = tabletIds(failing);
+            Set<Long> successfulTablets = tabletIds(successful);
+            List<Long> requestedVersions = new CopyOnWriteArrayList<>();
+            AtomicBoolean failPublish = new AtomicBoolean(true);
+            AtomicInteger failures = new AtomicInteger();
+            new MockUp<MockedBackend.MockLakeService>() {
+                @Mock
+                public Future<PublishVersionResponse> publishVersion(Invocation invocation, PublishVersionRequest request) {
+                    if (request.tabletIds != null) {
+                        if (request.tabletIds.stream().anyMatch(successfulTablets::contains)) {
+                            requestedVersions.add(request.newVersion);
+                        }
+                        if (failPublish.get() && request.tabletIds.stream().anyMatch(failingTablets::contains)) {
+                            failures.incrementAndGet();
+                            return CompletableFuture.failedFuture(
+                                    new RpcException("injected failure on the second partition"));
+                        }
+                    }
+                    return invocation.proceed();
+                }
+            };
+            PublishVersionDaemon daemon = new PublishVersionDaemon();
+            daemon.runAfterLeaseValid();
+            Awaitility.await().atMost(15, TimeUnit.SECONDS).until(() ->
+                    failures.get() > 0 && !daemon.publishingLakeTransactionsBatchTableId.contains(table.getId()));
+            Assertions.assertTrue(head.getTableCommitInfo(table.getId())
+                    .getPartitionCommitInfo(successful.getDefaultPhysicalPartition().getId()).getVersionTime() > 0);
+            Config.lake_batch_publish_max_version_num = 1;
+            daemon.publishVersionForLakeTableBatch(List.of(stale));
+            assertFalse(daemon.publishingLakeTransactionsBatchTableId.contains(table.getId()));
+            assertEquals(TransactionStatus.COMMITTED, mgr.getTransactionState(db.getId(), head.getTransactionId())
+                    .getTransactionStatus());
+            assertEquals(visibleBefore, successful.getDefaultPhysicalPartition().getVisibleVersion());
+            Config.lake_enable_batch_publish_version = leaveBatchPublishEnabled;
+            failPublish.set(false);
+            awaitPublish(daemon, first, second);
+            Assertions.assertTrue(requestedVersions.size() >= 2
+                    && requestedVersions.stream().allMatch(version -> version == visibleBefore + 2),
+                    requestedVersions.toString());
+            assertEquals(visibleBefore + 2, successful.getDefaultPhysicalPartition().getVisibleVersion());
+        } finally {
+            Config.lake_batch_publish_max_version_num = oldMax;
+            Config.lake_enable_batch_publish_retry_freeze = oldFreeze;
+            Config.lake_enable_batch_publish_version = oldBatchPublish;
+        }
+    }
+
+    @Test
     public void testFailedBatchIsRetriedWithTheSameTxns() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_AGG_OFF);
@@ -1496,11 +1624,17 @@ public class LakePublishBatchTest {
                     if (tablets.stream().anyMatch(tablet -> partitionTablets.contains(tablet.getId()))) {
                         retryFlags.add(isRetryPublish);
                     }
-                    if (failPublish.get()) {
-                        injectedFailures.incrementAndGet();
-                        throw new RpcException("injected publish failure");
-                    }
                     invocation.proceed();
+                }
+            };
+            new MockUp<MockedBackend.MockLakeService>() {
+                @Mock
+                public Future<PublishVersionResponse> publishVersion(Invocation invocation, PublishVersionRequest request) {
+                    if (failPublish.get() && request.tabletIds.stream().anyMatch(partitionTablets::contains)) {
+                        injectedFailures.incrementAndGet();
+                        return CompletableFuture.failedFuture(new RpcException("injected publish failure"));
+                    }
+                    return invocation.proceed();
                 }
             };
             PublishVersionDaemon daemon = new PublishVersionDaemon();
@@ -1572,14 +1706,20 @@ public class LakePublishBatchTest {
                                             boolean isRetryPublish) throws RpcException {
                 if (failingTablets.contains(tablets.get(0).getId())) {
                     failingFlags.add(isRetryPublish);
-                    if (failPublish.get()) {
-                        injectedFailures.incrementAndGet();
-                        throw new RpcException("injected publish failure");
-                    }
                 } else {
                     succeedingFlags.add(isRetryPublish);
                 }
                 invocation.proceed();
+            }
+        };
+        new MockUp<MockedBackend.MockLakeService>() {
+            @Mock
+            public Future<PublishVersionResponse> publishVersion(Invocation invocation, PublishVersionRequest request) {
+                if (failPublish.get() && request.tabletIds.stream().anyMatch(failingTablets::contains)) {
+                    injectedFailures.incrementAndGet();
+                    return CompletableFuture.failedFuture(new RpcException("injected publish failure"));
+                }
+                return invocation.proceed();
             }
         };
         PublishVersionDaemon daemon = new PublishVersionDaemon();

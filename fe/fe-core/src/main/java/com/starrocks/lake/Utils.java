@@ -70,8 +70,54 @@ import javax.validation.constraints.NotNull;
 
 public class Utils {
     private static final Logger LOG = LogManager.getLogger(Utils.class);
+    private static final ThreadLocal<PublishDispatch> PUBLISH_DISPATCH = new ThreadLocal<>();
 
     private Utils() {
+    }
+
+    public static PublishDispatch observePublishDispatch(Runnable onFirstRequest, Runnable onFirstVersionRequest) {
+        PublishDispatch dispatch = new PublishDispatch(PUBLISH_DISPATCH.get(), onFirstRequest, onFirstVersionRequest);
+        PUBLISH_DISPATCH.set(dispatch);
+        return dispatch;
+    }
+
+    public static final class PublishDispatch implements AutoCloseable {
+        private final PublishDispatch previous;
+        private Runnable onFirstRequest;
+        private Runnable onFirstVersionRequest;
+
+        private PublishDispatch(PublishDispatch previous, Runnable onFirstRequest, Runnable onFirstVersionRequest) {
+            this.previous = previous;
+            this.onFirstRequest = onFirstRequest;
+            this.onFirstVersionRequest = onFirstVersionRequest;
+        }
+
+        private void dispatch(boolean versionRequest) {
+            if (onFirstRequest != null) {
+                onFirstRequest.run();
+                onFirstRequest = null;
+            }
+            if (versionRequest && onFirstVersionRequest != null) {
+                onFirstVersionRequest.run();
+                onFirstVersionRequest = null;
+            }
+        }
+
+        @Override
+        public void close() {
+            if (previous == null) {
+                PUBLISH_DISPATCH.remove();
+            } else {
+                PUBLISH_DISPATCH.set(previous);
+            }
+        }
+    }
+
+    private static void beforePublishRpc(boolean versionRequest) {
+        PublishDispatch dispatch = PUBLISH_DISPATCH.get();
+        if (dispatch != null) {
+            dispatch.dispatch(versionRequest);
+        }
     }
 
     public static Long chooseNodeId(ShardInfo shardInfo) {
@@ -278,6 +324,7 @@ public class Utils {
             // per call. It has to match the deadline the request carries: a shorter brpc wait would make
             // FE give up while the node is still publishing. The override is consumed by this one call.
             TalkTimeoutController.setTalkTimeout(timeoutMs);
+            beforePublishRpc(true);
             Future<PublishVersionResponse> future = lakeService.publishVersion(request);
             responseList.add(future);
             nodeList.add(node);
@@ -694,6 +741,7 @@ public class Utils {
         // Same per-call override as the non-aggregate path, see publishVersionBatch. The aggregator waits
         // for every sub-request, each of which carries this same timeout, so FE must not wait for less.
         TalkTimeoutController.setTalkTimeout(Config.lake_publish_version_timeout_ms);
+        beforePublishRpc(true);
         Future<PublishVersionResponse> future = lakeService.aggregatePublishVersion(request);
 
         try {
@@ -869,6 +917,7 @@ public class Utils {
 
             ComputeNode node = entry.getKey();
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
+            beforePublishRpc(false);
             Future<PublishLogVersionResponse> future = lakeService.publishLogVersionBatch(request);
             responseList.add(future);
             nodeList.add(node);

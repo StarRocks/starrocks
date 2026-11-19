@@ -200,12 +200,12 @@ public class PartitionCommitInfo implements Writable {
         this.versionTime = now;
     }
 
-    // Marks the publish request as sent and returns whether an earlier request was already sent. Call it right
-    // before sending, after every check that can still skip the send.
-    public boolean getAndMarkPublishSent() {
-        boolean sent = publishSent;
+    public boolean isPublishSent() {
+        return publishSent;
+    }
+
+    public void markPublishSent() {
         publishSent = true;
-        return sent;
     }
 
     // 0 when the last attempt did not fail.
