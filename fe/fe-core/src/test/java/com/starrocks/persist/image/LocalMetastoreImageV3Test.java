@@ -38,6 +38,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
+import com.starrocks.common.Pair;
 import com.starrocks.common.Range;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.DataCacheInfo;
@@ -51,6 +52,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TFunctionBinaryType;
@@ -65,6 +67,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -307,7 +311,24 @@ public class LocalMetastoreImageV3Test {
             Assertions.assertEquals(SectionId.LOCAL_METASTORE_DB.getValue(), sections.get(0).getType());
             Assertions.assertEquals(SectionId.LOCAL_METASTORE_TABLE.getValue(), sections.get(1).getType());
             Assertions.assertEquals(SectionId.LOCAL_METASTORE_PARTITION.getValue(), sections.get(2).getType());
-            reader.load(v3Loaded.getImageV3Loaders());
+            // Scope the assertion to partition attachment. Table restoration rebuilds the schema separately.
+            List<Pair<SectionId, SectionLoader>> loaders = v3Loaded.getImageV3Loaders().stream()
+                    .map(loader -> {
+                        if (!SectionId.LOCAL_METASTORE_PARTITION.equals(loader.first)) {
+                            return loader;
+                        }
+                        SectionLoader checked = section -> {
+                            try (MockedStatic<IMinMaxStatsMgr> minMaxStats =
+                                         Mockito.mockStatic(IMinMaxStatsMgr.class, Mockito.CALLS_REAL_METHODS)) {
+                                loader.second.load(section);
+                                minMaxStats.verify(() -> IMinMaxStatsMgr.invalidateTable(Mockito.any(OlapTable.class)),
+                                        Mockito.never());
+                            }
+                        };
+                        return Pair.create(loader.first, checked);
+                    })
+                    .toList();
+            reader.load(loaders);
         }
 
         // Every entry of the image was attached to its parent: the loaded metastore accounts for all of them. The

@@ -1445,12 +1445,24 @@ public class OlapTable extends Table {
     }
 
     public void addPartition(Partition partition) {
+        attachPartition(partition);
+        invalidateMinMaxStats();
+    }
+
+    /**
+     * Restores the partition lookup maps during image loading.
+     * Invalidate MIN/MAX statistics only when changing the serving table.
+     */
+    public void addPartitionForImageLoad(Partition partition) {
+        attachPartition(partition);
+    }
+
+    private void attachPartition(Partition partition) {
         idToPartition.put(partition.getId(), partition);
         nameToPartition.put(partition.getName(), partition);
         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
             physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
         }
-        invalidateMinMaxStats();
     }
 
     public void removePhysicalPartition(PhysicalPartition physicalPartition) {

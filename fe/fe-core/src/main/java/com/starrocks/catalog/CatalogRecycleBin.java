@@ -1695,7 +1695,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
                 for (PartitionPB partitionPb : pb.getPartitionsList()) {
-                    olapTable.addPartition(Partition.fromProto(partitionPb));
+                    olapTable.addPartitionForImageLoad(Partition.fromProto(partitionPb));
                 }
                 for (PartitionPB partitionPb : pb.getTempPartitionsList()) {
                     olapTable.addTempPartition(Partition.fromProto(partitionPb));

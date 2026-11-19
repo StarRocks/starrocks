@@ -6454,7 +6454,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (loaded.temp) {
                 table.addTempPartition(loaded.partition);
             } else {
-                table.addPartition(loaded.partition);
+                table.addPartitionForImageLoad(loaded.partition);
             }
         });
         finishLoad();

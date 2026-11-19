@@ -51,7 +51,7 @@ final class BackupCatalogProtos {
         }
         if (table instanceof OlapTable) {
             OlapTable olap = (OlapTable) table;
-            pb.getPartitionsList().forEach(partition -> olap.addPartition(Partition.fromProto(partition)));
+            pb.getPartitionsList().forEach(partition -> olap.addPartitionForImageLoad(Partition.fromProto(partition)));
             pb.getTempPartitionsList().forEach(partition -> olap.addTempPartition(Partition.fromProto(partition)));
         } else if (pb.getPartitionsCount() != 0 || pb.getTempPartitionsCount() != 0) {
             throw new IllegalArgumentException("partitions on backup table " + table.getType());
