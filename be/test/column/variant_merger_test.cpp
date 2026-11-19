@@ -934,4 +934,63 @@ PARALLEL_TEST(VariantColumnMergerTest, bigint_typed_column_hoisted_to_variant_ke
     assert_variant_row_json(variant, 2, "-9007199254740993");
 }
 
+// One shredded path per input, as a scan produces from data files whose writers inferred different layouts.
+static MutableColumnPtr build_single_path_shredded_variant(std::string path, const TypeDescriptor& type,
+                                                           MutableColumnPtr typed) {
+    auto col = VariantColumn::create();
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    for (size_t i = 0; i < typed->size(); ++i) {
+        append_primitive_int8_row(metadata.get(), remain.get(), 1);
+    }
+    MutableColumns typed_columns;
+    typed_columns.emplace_back(std::move(typed));
+    col->set_shredded_columns({std::move(path)}, {type}, std::move(typed_columns), std::move(metadata),
+                              std::move(remain));
+    return col;
+}
+
+static MutableColumnPtr build_nullable_double_column(const std::vector<double>& values) {
+    auto data = DoubleColumn::create();
+    auto null = NullColumn::create();
+    for (double v : values) {
+        data->append(v);
+        null->append(0);
+    }
+    return NullableColumn::create(std::move(data), std::move(null));
+}
+
+// Appending chunks whose shredded schemas differ (the per-chunk path that sorts, unions and exchanges take)
+// must keep every row and every value: BIGINT above 2^53 + DOUBLE + ARRAY on the same path, then a disjoint path.
+PARALLEL_TEST(VariantColumnMergerTest, append_across_shredded_schemas_keeps_rows_and_values) {
+    auto a_bigint = build_single_path_shredded_variant("a", TYPE_BIGINT_DESC,
+                                                       build_nullable_int64_column({9007199254740993, 2}, {0, 0}));
+    auto a_double = build_single_path_shredded_variant("a", TYPE_DOUBLE_DESC, build_nullable_double_column({1.5}));
+    auto a_array = build_single_path_shredded_variant("a", TYPE_ARRAY_BIGINT_DESC,
+                                                      build_nullable_array_int64_column({{1, 2}}, {0}));
+    auto b_varchar =
+            build_single_path_shredded_variant("b", TYPE_VARCHAR_DESC, build_nullable_varchar_column({"x"}, {0}));
+
+    auto dst = VariantColumn::create();
+    dst->append(*a_bigint);
+    ASSERT_EQ(2, dst->size());
+    dst->append(*a_double, 0, 1);
+    ASSERT_EQ(3, dst->size());
+    const uint32_t first[] = {0};
+    dst->append_selective(*a_array, first, 0, 1);
+    ASSERT_EQ(4, dst->size());
+    dst->append(*b_varchar, 0, 1);
+    ASSERT_EQ(5, dst->size());
+    dst->append_value_multiple_times(*a_bigint, 1, 2);
+    ASSERT_EQ(7, dst->size());
+
+    assert_variant_row_json(dst.get(), 0, R"({"a":9007199254740993})");
+    assert_variant_row_json(dst.get(), 1, R"({"a":2})");
+    assert_variant_row_json(dst.get(), 2, R"({"a":1.5})");
+    assert_variant_row_json(dst.get(), 3, R"({"a":[1,2]})");
+    assert_variant_row_json(dst.get(), 4, R"({"b":"x"})");
+    assert_variant_row_json(dst.get(), 5, R"({"a":2})");
+    assert_variant_row_json(dst.get(), 6, R"({"a":2})");
+}
+
 } // namespace starrocks
