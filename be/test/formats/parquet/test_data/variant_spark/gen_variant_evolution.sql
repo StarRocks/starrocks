@@ -14,6 +14,9 @@
 --
 -- prune: ids 0-2999 sorted by id, written in row groups of about 800 rows and pages of 100 rows.
 --   v = {"n": id, "s": "s<id, 6 digits>", "m": id when id % 10 != 0, else missing, "g": id / 1000}
+--   `$.n` is shredded as int8 (inferred from the first rows), so values above 127 stay in the fallback `value`.
+-- prune_int16: the same row groups with v = {"w": 1000 + id}; every value fits int16, so `$.w` is shredded as int16
+--   and its fallback `value` is null everywhere.
 
 SET spark.sql.session.timeZone=UTC;
 
@@ -21,12 +24,16 @@ CREATE NAMESPACE IF NOT EXISTS iceberg_fs.variant_spark_gen;
 DROP TABLE IF EXISTS iceberg_fs.variant_spark_gen.evo PURGE;
 DROP TABLE IF EXISTS iceberg_fs.variant_spark_gen.evo_noshred PURGE;
 DROP TABLE IF EXISTS iceberg_fs.variant_spark_gen.prune PURGE;
+DROP TABLE IF EXISTS iceberg_fs.variant_spark_gen.prune_int16 PURGE;
 
 CREATE TABLE iceberg_fs.variant_spark_gen.evo (id INT, v VARIANT) USING iceberg
 TBLPROPERTIES ('format-version'='3', 'write.parquet.shred-variants'='true');
 CREATE TABLE iceberg_fs.variant_spark_gen.evo_noshred (id INT, v VARIANT) USING iceberg
 TBLPROPERTIES ('format-version'='3', 'write.parquet.shred-variants'='false');
 CREATE TABLE iceberg_fs.variant_spark_gen.prune (id INT, v VARIANT) USING iceberg
+TBLPROPERTIES ('format-version'='3', 'write.parquet.shred-variants'='true',
+               'write.parquet.row-group-size-bytes'='8192', 'write.parquet.page-row-limit'='100');
+CREATE TABLE iceberg_fs.variant_spark_gen.prune_int16 (id INT, v VARIANT) USING iceberg
 TBLPROPERTIES ('format-version'='3', 'write.parquet.shred-variants'='true',
                'write.parquet.row-group-size-bytes'='8192', 'write.parquet.page-row-limit'='100');
 
@@ -69,4 +76,8 @@ INSERT INTO iceberg_fs.variant_spark_gen.prune
 SELECT /*+ REPARTITION(1) */ CAST(id AS INT),
        parse_json(CASE WHEN id % 10 = 0 THEN format_string('{"n":%d,"s":"s%06d","g":%d}', id, id, id DIV 1000)
                        ELSE format_string('{"n":%d,"s":"s%06d","m":%d,"g":%d}', id, id, id, id DIV 1000) END)
+FROM range(0, 3000) ORDER BY id;
+
+INSERT INTO iceberg_fs.variant_spark_gen.prune_int16
+SELECT /*+ REPARTITION(1) */ CAST(id AS INT), parse_json(format_string('{"w":%d}', 1000 + id))
 FROM range(0, 3000) ORDER BY id;
