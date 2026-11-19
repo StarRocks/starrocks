@@ -170,10 +170,12 @@ TEST_F(PaimonChunkSinkTest, EmptyDriverReportsVersionedTerminalProducerAndNoSnap
     EXPECT_EQ(1, state.sink_commit_infos().size());
 }
 
-TEST_F(PaimonChunkSinkTest, OverwriteModesPrepareNativeFiles) {
-    for (const auto* mode : {"FULL", "STATIC", "DYNAMIC"}) {
+TEST_F(PaimonChunkSinkTest, WriteModesPrepareNativeFiles) {
+    for (const auto mode : {TPaimonOverwriteMode::APPEND, TPaimonOverwriteMode::FULL, TPaimonOverwriteMode::STATIC,
+                            TPaimonOverwriteMode::DYNAMIC}) {
         auto ctx = context(false, true);
-        ctx->sink.__set_overwrite_mode(mode);
+        ctx->sink.__isset.overwrite_mode = false;
+        ctx->sink.__set_write_mode(mode);
         connector::PaimonChunkSink sink(ctx, 0);
         ASSERT_OK(sink.init(nullptr, &profile, &manager));
         auto rows = chunk({1});
@@ -185,6 +187,15 @@ TEST_F(PaimonChunkSinkTest, OverwriteModesPrepareNativeFiles) {
         ASSERT_TRUE(await(sink));
         ASSERT_OK(sink.status());
     }
+}
+
+TEST_F(PaimonChunkSinkTest, RejectsConflictingOverwriteModes) {
+    auto ctx = context();
+    ctx->sink.__set_write_mode(TPaimonOverwriteMode::FULL);
+    connector::PaimonChunkSink sink(ctx, 0);
+    auto status = sink.init(nullptr, &profile, &manager);
+    ASSERT_TRUE(status.is_invalid_argument()) << status;
+    EXPECT_EQ("Conflicting Paimon overwrite modes", status.message());
 }
 
 TEST_F(PaimonChunkSinkTest, FullRowsGroupedByActualPartitionAndPreparedFilesSurviveLateCancellation) {

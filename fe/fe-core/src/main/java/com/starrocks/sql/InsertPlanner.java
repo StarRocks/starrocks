@@ -121,6 +121,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.thrift.TPaimonOverwriteMode;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.IntegerType;
@@ -1389,14 +1390,14 @@ public class InsertPlanner {
         return root.withNewRoot(new LogicalProjectOperator(projection));
     }
 
-    private static String paimonOverwriteMode(InsertStmt insertStmt) {
+    private static TPaimonOverwriteMode paimonOverwriteMode(InsertStmt insertStmt) {
         if (!insertStmt.isOverwrite()) {
-            return "APPEND";
+            return TPaimonOverwriteMode.APPEND;
         }
         if (insertStmt.isStaticKeyPartitionInsert()) {
-            return "STATIC";
+            return TPaimonOverwriteMode.STATIC;
         }
-        return insertStmt.isDynamicOverwrite() ? "DYNAMIC" : "FULL";
+        return insertStmt.isDynamicOverwrite() ? TPaimonOverwriteMode.DYNAMIC : TPaimonOverwriteMode.FULL;
     }
 
     private OptExprBuilder fillKeyPartitionsColumn(ColumnRefFactory columnRefFactory,

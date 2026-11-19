@@ -68,6 +68,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.thrift.TPaimonOverwriteMode;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -286,8 +287,8 @@ public class PaimonMetadata implements ConnectorMetadata {
             Identifier identifier = new Identifier(dbName, tableName);
             FileStoreTable table = loadWriteTarget(identifier, operation);
             List<CommitMessage> messages = collected.validateOwnership(table);
-            if (messages.isEmpty() && (operation.getOverwriteMode().equals("APPEND")
-                    || operation.getOverwriteMode().equals("DYNAMIC"))) {
+            TPaimonOverwriteMode mode = operation.getOverwriteMode();
+            if (messages.isEmpty() && (mode == TPaimonOverwriteMode.APPEND || mode == TPaimonOverwriteMode.DYNAMIC)) {
                 operation.transition(PaimonSinkExtra.PublicationState.WRITING,
                         PaimonSinkExtra.PublicationState.PREPARED);
                 operation.transition(PaimonSinkExtra.PublicationState.PREPARED,
@@ -374,20 +375,12 @@ public class PaimonMetadata implements ConnectorMetadata {
     private static void configureOverwrite(InnerTableCommit commit, PaimonSinkExtra operation,
                                            List<CommitMessage> messages) {
         switch (operation.getOverwriteMode()) {
-            case "APPEND":
-                return;
-            case "FULL":
-                commit.withOverwrite(Collections.emptyMap());
-                return;
-            case "STATIC":
-                commit.withOverwrite(operation.getStaticPartition());
-                return;
-            case "DYNAMIC":
-                commit.withOverwriteStaticPartitions(messages.stream().map(CommitMessage::partition)
-                        .distinct().collect(Collectors.toList()));
-                return;
-            default:
-                throw new StarRocksConnectorException("Unsupported Paimon overwrite operation");
+            case APPEND -> {
+            }
+            case FULL -> commit.withOverwrite(Collections.emptyMap());
+            case STATIC -> commit.withOverwrite(operation.getStaticPartition());
+            case DYNAMIC -> commit.withOverwriteStaticPartitions(messages.stream().map(CommitMessage::partition)
+                    .distinct().collect(Collectors.toList()));
         }
     }
 
