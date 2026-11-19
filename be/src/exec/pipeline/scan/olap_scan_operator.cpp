@@ -72,6 +72,20 @@ OlapScanOperator::~OlapScanOperator() {
     _ctx->unref(state);
 }
 
+void OlapScanOperator::set_precondition_ready(RuntimeState* state) {
+    ScanOperator::set_precondition_ready(state);
+    // The IN filters are shared per scan node: driver 0 judges them for everyone.
+    if (_driver_sequence != 0) {
+        return;
+    }
+    auto* pruner = down_cast<OlapScanNode*>(_scan_node)->runtime_filter_partition_pruner();
+    if (pruner == nullptr) {
+        return;
+    }
+    pruner->prune_by_in_filters(get_factory()->get_runtime_in_filters());
+    COUNTER_SET(add_rf_partitions_pruned_counter(unique_metrics()), pruner->pruned_partition_count());
+}
+
 bool OlapScanOperator::has_output() const {
     if (!_ctx->is_prepare_finished() || _ctx->is_finished()) {
         return false;
