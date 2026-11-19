@@ -192,6 +192,8 @@ private:
     Weight weight(int i) const noexcept;
     // append all unprocessed centroids into current unprocessed vector
     void mergeUnprocessed(const std::vector<const TDigest*>& tdigests);
+    // append the unprocessed centroids of a single tdigest
+    void appendUnprocessed(const TDigest& other);
     // merge all processed centroids together into a single sorted vector
     void mergeProcessed(const std::vector<const TDigest*>& tdigests);
     void processIfNecessary();

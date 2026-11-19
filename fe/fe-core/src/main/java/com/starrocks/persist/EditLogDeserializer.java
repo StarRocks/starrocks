@@ -84,6 +84,7 @@ public class EditLogDeserializer {
     private static final ImmutableMap<Short, Class<? extends Writable>> OPTYPE_TO_DESER_CLASS
             = ImmutableMap.<Short, Class<? extends Writable>>builder()
             .put(OperationType.OP_SAVE_TRANSACTION_ID_V2, TransactionIdInfo.class)
+            .put(OperationType.OP_SAVE_GTID, GtidInfo.class)
             .put(OperationType.OP_SAVE_AUTO_INCREMENT_ID, AutoIncrementInfo.class)
             .put(OperationType.OP_DELETE_AUTO_INCREMENT_ID, AutoIncrementInfo.class)
             .put(OperationType.OP_CREATE_DB_V2, CreateDbInfo.class)
@@ -102,6 +103,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_PARTITION, DropPartitionInfo.class)
             .put(OperationType.OP_DROP_PARTITIONS, DropPartitionsInfo.class)
             .put(OperationType.OP_MODIFY_PARTITION_V2, ModifyPartitionInfo.class)
+            .put(OperationType.OP_MODIFY_PARTITION_VACUUM_STATE, PartitionVacuumStateInfo.class)
             .put(OperationType.OP_BATCH_MODIFY_PARTITION, BatchModifyPartitionsInfo.class)
             .put(OperationType.OP_RECOVER_DB_V2, RecoverInfo.class)
             .put(OperationType.OP_RECOVER_TABLE_V2, RecoverInfo.class)

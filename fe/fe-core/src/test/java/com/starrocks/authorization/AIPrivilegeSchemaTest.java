@@ -104,7 +104,7 @@ public class AIPrivilegeSchemaTest {
         ObjectType type = objectType("AI FUNCTION");
         Assertions.assertEquals(15, type.getId());
         Set<String> families = GlobalStateMgr.getCurrentState().getBuiltinFunctions().stream()
-                .filter(Function::isAi).filter(Function::isUserVisible)
+                .filter(Function::isAI).filter(Function::isUserVisible)
                 .map(Function::functionName).collect(Collectors.toSet());
         Assertions.assertFalse(families.isEmpty());
         for (String family : families) {
@@ -122,8 +122,8 @@ public class AIPrivilegeSchemaTest {
             Assertions.assertTrue(json.contains("\"name\":\"" + family + "\""));
             Assertions.assertEquals(object, GsonUtils.GSON.fromJson(json, PEntryObject.class));
         }
-        for (List<String> tokens : List.of(List.of("lower"), List.of("ai_query"), List.of("AI_QUERY"),
-                List.of("missing_ai_function"), List.of("db", "ai_complete"))) {
+        for (List<String> tokens : List.of(List.of("lower"), List.of("missing_ai_function"), List.of("MISSING_AI_FUNCTION"),
+                List.of("db", "ai_complete"))) {
             Assertions.assertThrows(PrivilegeException.class, () -> authorizationProvider.generateObject(type, tokens));
         }
     }
@@ -181,7 +181,7 @@ public class AIPrivilegeSchemaTest {
     public void testFunctionExecutionRejectsWildcardAndUnregisteredFamiliesEvenForRoot() {
         NativeAccessController controller = new NativeAccessController();
         Assertions.assertDoesNotThrow(() -> controller.checkAIFunctionAction(context, "ai_complete", PrivilegeType.USAGE));
-        for (String name : List.of("*", "lower", "ai_query", "missing_ai_function")) {
+        for (String name : List.of("*", "lower", "missing_ai_function")) {
             Assertions.assertThrows(AccessDeniedException.class,
                     () -> controller.checkAIFunctionAction(context, name, PrivilegeType.USAGE));
         }
@@ -350,7 +350,7 @@ public class AIPrivilegeSchemaTest {
                 .filter(row -> ROLE.equals(row.getGrantee()) && "AI FUNCTION".equals(row.getObject_type()))
                 .collect(Collectors.toList());
         Set<String> families = GlobalStateMgr.getCurrentState().getBuiltinFunctions().stream()
-                .filter(Function::isAi).filter(Function::isUserVisible)
+                .filter(Function::isAI).filter(Function::isUserVisible)
                 .map(Function::functionName).collect(Collectors.toSet());
         Assertions.assertEquals(families, rows.stream().map(TGetGrantsToRolesOrUserItem::getObject_name)
                 .collect(Collectors.toSet()));

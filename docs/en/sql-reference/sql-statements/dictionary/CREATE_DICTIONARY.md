@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Creates a dictionary object based on an original object."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../../_assets/commonMarkdown/_beta.mdx'

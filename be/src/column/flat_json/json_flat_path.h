@@ -76,6 +76,11 @@ public:
     // base-typed values too, but unlike base_type_count they do not mark the node as also seen as a
     // primitive, which is what the object/primitive conflict check keys on.
     uint32_t flat_base_type_hits = 0;
+    // A path created under this node may have missed some of its values: JsonPathDeriver dropped children of this
+    // node to bound its trie, and a dropped path that shows up again starts its stats afresh, without the values
+    // seen before it was dropped. Such a path is typed JSON, which holds any value. Paths created under it inherit
+    // this.
+    bool partial_children = false;
 
     JsonFlatPath() = default;
     JsonFlatPath(JsonFlatPath&&) = default;

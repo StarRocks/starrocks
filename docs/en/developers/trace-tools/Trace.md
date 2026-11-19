@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "How to use StarRocks trace tools to collect and analyze distributed query execution traces for debugging and performance investigation."
+products: [oss]
 ---
 
 ### Background

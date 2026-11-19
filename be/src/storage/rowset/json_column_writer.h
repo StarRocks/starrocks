@@ -15,7 +15,9 @@
 #pragma once
 
 #include <map>
+#include <optional>
 
+#include "column/flat_json/flat_json_internal.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/object_column_writer.h"
 
@@ -69,6 +71,10 @@ public:
 protected:
     Status _init_flat_writers();
     Status _write_flat_column();
+    // Accounts the values written to the sub-column writer at `index` to its value stats, see JsonValueStatsPB.
+    void _update_value_stats(size_t index, const Column& column);
+    // Stores the value stats in the metadata of the JSON-typed sub-columns.
+    void _save_value_stats();
 
 private:
     Status _flat_column(MutableColumns& json_datas);
@@ -82,6 +88,8 @@ protected:
     std::vector<std::string> _flat_paths;
     std::vector<LogicalType> _flat_types;
     MutableColumns _flat_columns;
+    // One per sub-column writer; set for the JSON-typed sub-columns other than the remain.
+    std::vector<std::optional<flat_json::JsonValueStats>> _value_stats;
 
     MutableColumns _json_datas;
     size_t _estimate_size = 0;
@@ -90,6 +98,8 @@ protected:
     std::shared_ptr<BloomFilter> _remain_filter;
     bool _is_flat = false;
     const FlatJsonConfig* _flat_json_config = nullptr;
+    // JSON columns of the segment writer, see ColumnWriterOptions::json_columns_in_segment.
+    size_t _json_columns_in_segment = 1;
 
     // Store original options for sub-column global dict setup
     // FIXME: avoid copy the map

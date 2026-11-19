@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <functional>
 #include <memory>
 #include <string>
 
@@ -32,15 +31,14 @@ inline constexpr size_t kGeoTopologySimplifyMaxWork = 20'000'000;
 // Evaluation owns its mutable retained indices and R-tree. It emits only source
 // vertices, preserves the tree/families/holes/contacts, and bounds two-sided path
 // and polygon-boundary Hausdorff distance by tolerance. Different SQL rows do not
-// share a boundary constraint. Standard allocations use the BE memory hooks;
-// the caller's checkpoint supplies cancellation/query-status/memory checks.
+// share a boundary constraint. Standard allocations use the BE memory hooks.
 class PreparedGeoTopologySimplify {
 public:
     ~PreparedGeoTopologySimplify();
     static StatusOr<std::unique_ptr<PreparedGeoTopologySimplify>> prepare(
-            Slice wkb, const std::function<Status()>& checkpoint = {}, size_t work_limit = kGeoTopologySimplifyMaxWork);
+            Slice wkb, size_t work_limit = kGeoTopologySimplifyMaxWork);
     // Zero returns the original bytes after preparation validated every component.
-    StatusOr<std::string> simplify(double tolerance, const std::function<Status()>& checkpoint = {}) const;
+    StatusOr<std::string> simplify(double tolerance) const;
 
 private:
     struct Impl;

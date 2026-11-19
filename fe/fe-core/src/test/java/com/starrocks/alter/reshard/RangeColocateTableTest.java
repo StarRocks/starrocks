@@ -19,6 +19,7 @@ import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateRangeMgr;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
@@ -29,13 +30,21 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.service.ExecuteEnv;
+import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TCreatePartitionRequest;
+import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TCreateTabletReq;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -289,5 +298,119 @@ public class RangeColocateTableTest {
         // t_shared_v1_a still has a single tablet against the three ranges set above; do not leave that
         // misaligned group behind for the rest of the class.
         starRocksAssert.dropTables(List.of("t_shared_v1_a", "t_shared_v1_b"));
+    }
+
+    private OlapTable getTable(String name) {
+        return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), name);
+    }
+
+    private void createSortKeyLongerThanColocateColumns(String table, String group) throws Exception {
+        starRocksAssert.withTable("create table " + table + " (k1 int, k2 int, v int)\n"
+                + "duplicate key(k1, k2)\n"
+                + "partition by range(k2) (partition p1 values less than ('100'))\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1', 'colocate_with' = '" + group + ":k1');");
+    }
+
+    @Test
+    public void testAddPartitionWhenSortKeyIsLongerThanColocateColumns() throws Exception {
+        createSortKeyLongerThanColocateColumns("t_addp_prefix", "rg_addp_prefix");
+        starRocksAssert.alterTable("alter table t_addp_prefix add partition p2 values less than ('200')");
+
+        OlapTable table = getTable("t_addp_prefix");
+        Assertions.assertNotNull(table.getPartition("p2"));
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        long grpId = colocateTableIndex.getGroup(table.getId()).grpId;
+        int rangeCount = colocateTableIndex.getColocateRangeMgr().getColocateRanges(grpId).size();
+        Assertions.assertEquals(rangeCount, table.getPartition("p2").getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablets().size());
+    }
+
+    @Test
+    public void testAddTemporaryPartitionWhenSortKeyIsLongerThanColocateColumns() throws Exception {
+        createSortKeyLongerThanColocateColumns("t_addtp_prefix", "rg_addtp_prefix");
+        starRocksAssert.alterTable("alter table t_addtp_prefix add temporary partition tp2 values less than ('200')");
+
+        Assertions.assertNotNull(getTable("t_addtp_prefix").getPartition("tp2", true));
+    }
+
+    @Test
+    public void testAutomaticPartitionWhenSortKeyIsLongerThanColocateColumns() throws Exception {
+        starRocksAssert.withTable("create table t_autop_prefix (tenant_id int, dt date, v int)\n"
+                + "duplicate key(tenant_id, dt)\n"
+                + "partition by date_trunc('day', dt)\n"
+                + "order by(tenant_id, dt)\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 'rg_autop_prefix:tenant_id');");
+        OlapTable table = getTable("t_autop_prefix");
+
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setTxn_id(1000L);
+        request.setPartition_values(List.of(List.of("2026-01-01")));
+        TCreatePartitionResult result = new FrontendServiceImpl(ExecuteEnv.getInstance()).createPartition(request);
+
+        Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code(),
+                String.valueOf(result.getStatus().getError_msgs()));
+        Assertions.assertNotNull(table.getPartition("p20260101"));
+    }
+
+    @Test
+    public void testAddPartitionWhenColocateColumnsAreTheWholeSortKey() throws Exception {
+        starRocksAssert.withTable("create table t_addp_whole (k1 int, k2 int, v int)\n"
+                + "duplicate key(k1, k2)\n"
+                + "partition by range(k2) (partition p1 values less than ('100'))\n"
+                + "order by(k1)\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 'rg_addp_whole');");
+        starRocksAssert.alterTable("alter table t_addp_whole add partition p2 values less than ('200')");
+
+        Assertions.assertNotNull(getTable("t_addp_whole").getPartition("p2"));
+    }
+
+    @Test
+    public void testAddPartitionAfterRenamingColocateColumn() throws Exception {
+        createSortKeyLongerThanColocateColumns("t_addp_rename", "rg_addp_rename");
+        starRocksAssert.alterTable("alter table t_addp_rename rename column k1 to k1_renamed");
+        starRocksAssert.alterTable("alter table t_addp_rename add partition p2 values less than ('200')");
+
+        Assertions.assertNotNull(getTable("t_addp_rename").getPartition("p2"));
+    }
+
+    @Test
+    public void testCheckDistributionRejectsDifferentColocateColumnType() throws Exception {
+        starRocksAssert.withTable("create table t_check_type (k1 int, k2 int, v int)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 'rg_check_type:k1');");
+        OlapTable table = getTable("t_check_type");
+        long dbId = db.getId();
+        ColocateGroupSchema other = new ColocateGroupSchema(
+                new ColocateTableIndex.GroupId(dbId, 987654321L),
+                List.of(new Column("k1", IntegerType.BIGINT)), 0, (short) 1, DistributionInfo.DistributionInfoType.RANGE);
+
+        DdlException e = Assertions.assertThrows(DdlException.class,
+                () -> other.checkDistribution(table, table.getDefaultDistributionInfo()));
+        Assertions.assertTrue(e.getMessage().contains("must have the same data type"), e.getMessage());
+    }
+
+    @Test
+    public void testCheckDistributionRejectsSortKeyShorterThanColocateColumns() throws Exception {
+        starRocksAssert.withTable("create table t_check_short (k1 int, v int)\n"
+                + "order by(k1)\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 'rg_check_short');");
+        OlapTable table = getTable("t_check_short");
+        ColocateGroupSchema other = new ColocateGroupSchema(
+                new ColocateTableIndex.GroupId(db.getId(), 987654322L),
+                List.of(new Column("k1", IntegerType.INT), new Column("k2", IntegerType.INT)),
+                0, (short) 1, DistributionInfo.DistributionInfoType.RANGE);
+
+        DdlException e = Assertions.assertThrows(DdlException.class,
+                () -> other.checkDistribution(table, table.getDefaultDistributionInfo()));
+        Assertions.assertTrue(e.getMessage().contains("distribution columns size must be the same"), e.getMessage());
     }
 }

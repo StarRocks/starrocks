@@ -198,11 +198,22 @@ Place images in `_assets/` and reference:
 2. Set `sidebar_position` in its frontmatter to order it within that section
 3. Add English and Chinese versions; add Japanese version when applicable
 
-### For Bug Fixes
+### Pull Requests
 
 1. Create PR with `[Doc]` prefix in title
 2. Sign off commit: `git commit -s`
-3. Select "Doc" checkbox in PR template
+3. Use `.github/PULL_REQUEST_TEMPLATE.md` as the PR description. Copy the whole
+   template and fill it in. Do not write a free-form description and do not drop
+   sections: every block is required, including the final
+   "Bugfix cherry-pick branch check" block.
+4. Select the "Doc" checkbox in the PR template
+5. In "Bugfix cherry-pick branch check", always tick "I have checked the version
+   labels which the pr will be auto-backported to the target branch". Tick a
+   version (4.2, 4.1, ...) only to have the PR auto-backported to that branch.
+   When you open the branch PRs yourself (manual backports, for example because
+   links differ between branches), leave every version unticked.
+6. On a backport PR that you open yourself, tick "This is a backport pr" and
+   link the original PR in "Why I'm doing".
 
 ### Translation
 
@@ -261,6 +272,37 @@ Changing a page's path changes its URL. Add a redirect to the `MOVED_DOCS` list 
 1. Edit the markdown file
 2. Update all language versions if needed
 3. Verify links still work
+
+### Add a Metric to the Metrics Reference
+
+Metric entries live in `<lang>/administration/management/monitoring/metric_details/`, split into
+alphabetical buckets: `a-c.md`, `d-h.md`, `i-p.md`, `q-r.md`, `s.md`, `t-z.md`.
+
+Every metric is exported under a fixed role prefix -- `starrocks_fe_` for an FE metric,
+`starrocks_be_` for a BE metric -- that the Prometheus visitor adds at scrape time. **Strip that
+prefix before doing anything else.** The remainder is the whole basis for the entry: it is the
+heading text, and its first letter picks the file.
+
+| Exported name | Remainder (the heading) | File |
+| --- | --- | --- |
+| `starrocks_fe_thrift_server_expired_connections_total` | `thrift_server_expired_connections_total` | `t-z.md` |
+| `starrocks_be_flat_json_write_rows_total` | `flat_json_write_rows_total` | `d-h.md` |
+| `starrocks_fe_safe_mode` | `safe_mode` | `s.md` |
+
+Never bucket on the exported name. Every metric begins with `starrocks_`, so bucketing on the full
+name files all of them under `s.md`. That mistake is already there at scale: `s.md` holds a large
+backlog of entries that kept the prefix in the heading and belong in other buckets. Do not read
+those as the convention, do not copy their shape, and do not add to them -- the correct model is any
+entry in the other five files.
+
+The remainder is also the name the metric is declared under in code (FE: the `Metric` name in
+`MetricRepo`; BE: the `METRIC_DEFINE_*` name), so it is worth confirming the heading against the
+source rather than against a neighboring entry.
+
+Write the entry as an H2 of the bare name in backticks, followed by the same bullets the neighboring
+entries in that file use (`Unit`, `Type` where the metric has one, and `Description`, in the labels
+already used by that language's file). Keep the file alphabetically ordered, and add the entry to
+`en/`, `zh/`, and `ja/`.
 
 ### Add Code Example
 

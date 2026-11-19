@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -29,6 +30,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -75,6 +77,24 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     @SerializedName(value = "baseIndexMetaId")
     private long baseIndexMetaId = -1L;
 
+    /*
+     * indexMetaIdToIndexIds, idToVisibleIndex and idToShadowIndex are copy-on-write for readers that hold no lock. A
+     * query is planned off a copy of the table taken under its READ lock (OlapTable#copyOnlyForQuery), but that copy
+     * shares this object, so the planner reads these maps after the lock is released.
+     *
+     * Writers -- DDL, tablet split / merge, the recycle bin and the replayer -- must still hold the table's WRITE
+     * lock. Copy-on-write does not make two writers safe against each other (each would copy the same map and one
+     * change would be lost); it only keeps a writer from changing a map that a reader already holds. A writer never
+     * modifies a map, or an id list in indexMetaIdToIndexIds, that it has published: it publishes a new one, so a
+     * reader holds either the old or the new one, each complete.
+     *
+     * Two reads may still see two different states; a plan that overlaps a change of the layout it uses is
+     * re-planned through OlapTable#lastSchemaUpdateTime. An index is published before its id, so a newly published
+     * id resolves. An id read earlier stops resolving once its generation is erased; the recycle bin erases only
+     * generations a newer one has superseded, so a reader walking all generations must skip a missing index.
+     * (queryIndexMetaIdToIndexId is a ConcurrentHashMap updated key by key, and is not copied.)
+     */
+
     /**
      * Support multi-version materialized indexes for tablet split.
      * A single index meta may correspond to multiple materialized indexes in tablet split process.
@@ -82,7 +102,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
      * index meta id -> List<index id>
      */
     @SerializedName(value = "indexMetaIdToIndexIds")
-    private Map<Long, List<Long>> indexMetaIdToIndexIds = Maps.newHashMap();
+    private volatile Map<Long, List<Long>> indexMetaIdToIndexIds = Maps.newHashMap();
 
     /**
      * Transitional query layout for an ORDER BY != PK tablet split.
@@ -109,14 +129,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
      * Not change the SerializedName for compatibility.
      */
     @SerializedName(value = "idToVisibleRollupIndex")
-    private Map<Long, MaterializedIndex> idToVisibleIndex = Maps.newHashMap();
+    private volatile Map<Long, MaterializedIndex> idToVisibleIndex = Maps.newHashMap();
     /**
      * Shadow indexes are indexes which are not visible to user.
      * Query will not run on these shadow indexes, and user can not see them neither.
      * But load process will load data into these shadow indexes.
      */
     @SerializedName(value = "idToShadowIndex")
-    private Map<Long, MaterializedIndex> idToShadowIndex = Maps.newHashMap();
+    private volatile Map<Long, MaterializedIndex> idToShadowIndex = Maps.newHashMap();
 
     /**
      * committed version(hash): after txn is committed, set committed version(hash)
@@ -173,12 +193,24 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     private final AtomicLong minRetainVersion = new AtomicLong(0);
 
-    private final AtomicLong lastSuccVacuumVersion = new AtomicLong(0);
+    // The version this partition's incremental vacuum has advanced to -- everything below it is reclaimed.
+    // Equals the visible version once vacuum has caught up, and trails it while a reclaim backlog remains.
+    // Persisted so SHOW PARTITIONS / partitions_meta's VacuumVersion (and the vacuum scheduler) survive an
+    // FE restart / failover instead of resetting to 0.
+    @SerializedName(value = "lastSuccVacuumVersion")
+    private AtomicLong lastSuccVacuumVersion = new AtomicLong(0);
 
     // Purpose: the previous autovacuum round's computeMinActiveTxnId(), used to debounce a
     //   transiently-too-high value (begin-vs-vacuum race) before allowing txn-log deletion.
     // Persistence: in-memory only, NOT persisted (no @SerializedName); resets to 0 on restart/failover.
     private volatile long lastMinActiveTxnId = 0;
+
+    // Incremental (bounded, resumable) vacuum protocol state, grouped into one object (see
+    // VacuumState). Persisted in the image via @SerializedName, and between snapshots via the
+    // OP_MODIFY_PARTITION_VACUUM_STATE edit log the autovacuum coordinator writes each round, so an
+    // in-flight pass survives an FE restart / failover.
+    @SerializedName(value = "vacuumState")
+    private volatile VacuumState vacuumState = new VacuumState();
 
     @SerializedName(value = "bucketNum")
     private int bucketNum = 0;
@@ -327,6 +359,18 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.lastMinActiveTxnId = lastMinActiveTxnId;
     }
 
+    public VacuumState getVacuumState() {
+        return vacuumState;
+    }
+
+    // Replace the whole state object. Used on edit-log / image replay; the value is null-guarded so an
+    // old image entry without the field cannot null it out.
+    public void setVacuumState(VacuumState vacuumState) {
+        if (vacuumState != null) {
+            this.vacuumState = vacuumState;
+        }
+    }
+
     public long getExtraFileSize() {
         return extraFileSize.get();
     }
@@ -399,9 +443,9 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         Preconditions.checkState(!idToVisibleIndex.containsKey(baseIndex.getId()),
                 String.format("base index id %d already exists", baseIndex.getId()));
 
+        idToVisibleIndex = copyWith(idToVisibleIndex, baseIndex.getId(), baseIndex);
+        indexMetaIdToIndexIds = copyWith(indexMetaIdToIndexIds, baseIndex.getMetaId(), ImmutableList.of(baseIndex.getId()));
         baseIndexMetaId = baseIndex.getMetaId();
-        indexMetaIdToIndexIds.put(baseIndex.getMetaId(), Lists.newArrayList(baseIndex.getId()));
-        idToVisibleIndex.put(baseIndex.getId(), baseIndex);
     }
 
     /**
@@ -459,18 +503,28 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         Preconditions.checkState(!idToVisibleIndex.containsKey(mIndex.getId()) && !idToShadowIndex.containsKey(mIndex.getId()),
                 String.format("index id %d already exists", mIndex.getId()));
 
-        indexMetaIdToIndexIds.put(mIndex.getMetaId(), Lists.newArrayList(mIndex.getId()));
         if (mIndex.getState().isVisible()) {
-            idToVisibleIndex.put(mIndex.getId(), mIndex);
+            idToVisibleIndex = copyWith(idToVisibleIndex, mIndex.getId(), mIndex);
         } else {
-            idToShadowIndex.put(mIndex.getId(), mIndex);
+            idToShadowIndex = copyWith(idToShadowIndex, mIndex.getId(), mIndex);
         }
+        indexMetaIdToIndexIds = copyWith(indexMetaIdToIndexIds, mIndex.getMetaId(), ImmutableList.of(mIndex.getId()));
     }
 
     // Add new version base or rollup materialized index.
     // 1. mIndex.state is NORMAL.
     // 2. indexMetaIdToIndexIds currently contains mIndex.metaId.
     public void addMaterializedIndex(MaterializedIndex mIndex, boolean isBaseIndex) {
+        checkMaterializedIndexAddable(mIndex, isBaseIndex);
+
+        idToVisibleIndex = copyWith(idToVisibleIndex, mIndex.getId(), mIndex);
+        List<Long> indexIds = indexMetaIdToIndexIds.get(mIndex.getMetaId());
+        indexMetaIdToIndexIds = copyWith(indexMetaIdToIndexIds, mIndex.getMetaId(),
+                ImmutableList.<Long>builderWithExpectedSize(indexIds.size() + 1).addAll(indexIds).add(mIndex.getId()).build());
+    }
+
+    // Throws unless addMaterializedIndex(mIndex, isBaseIndex) would succeed, without changing anything.
+    public void checkMaterializedIndexAddable(MaterializedIndex mIndex, boolean isBaseIndex) {
         Preconditions.checkState(indexMetaIdToIndexIds.containsKey(mIndex.getMetaId()),
                 String.format("index meta id %d not exist", mIndex.getMetaId()));
         Preconditions.checkState(!idToVisibleIndex.containsKey(mIndex.getId()) && !idToShadowIndex.containsKey(mIndex.getId()),
@@ -479,49 +533,77 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
                 String.format("index meta id %d not match baseIndexMetaId %d", mIndex.getMetaId(), baseIndexMetaId));
         Preconditions.checkState(mIndex.getState() == IndexState.NORMAL,
                 String.format("index state %s is not NORMAL", mIndex.getState()));
-
-        indexMetaIdToIndexIds.get(mIndex.getMetaId()).add(mIndex.getId());
-        idToVisibleIndex.put(mIndex.getId(), mIndex);
     }
 
     public MaterializedIndex deleteMaterializedIndexByIndexId(long indexId) {
-        MaterializedIndex index = idToVisibleIndex.remove(indexId);
+        MaterializedIndex index = getIndex(indexId);
         if (index == null) {
-            index = idToShadowIndex.remove(indexId);
+            return null;
         }
 
-        if (index != null) {
-            queryIndexMetaIdToIndexId.remove(index.getMetaId(), indexId);
-            List<Long> indexIds = indexMetaIdToIndexIds.get(index.getMetaId());
-            Preconditions.checkState(indexIds != null && indexIds.remove(indexId),
-                    String.format("index id %d not found in indexMetaIdToIndexIds", indexId));
+        long indexMetaId = index.getMetaId();
+        List<Long> indexIds = indexMetaIdToIndexIds.get(indexMetaId);
+        Preconditions.checkState(indexIds != null && indexIds.contains(indexId),
+                String.format("index id %d not found in indexMetaIdToIndexIds", indexId));
 
-            if (indexIds.isEmpty()) {
-                indexMetaIdToIndexIds.remove(index.getMetaId());
-            }
+        queryIndexMetaIdToIndexId.remove(indexMetaId, indexId);
+        List<Long> remainingIds = indexIds.stream().filter(id -> id != indexId).collect(ImmutableList.toImmutableList());
+        indexMetaIdToIndexIds = remainingIds.isEmpty()
+                ? copyWithout(indexMetaIdToIndexIds, indexMetaId)
+                : copyWith(indexMetaIdToIndexIds, indexMetaId, remainingIds);
+        if (idToVisibleIndex.containsKey(indexId)) {
+            idToVisibleIndex = copyWithout(idToVisibleIndex, indexId);
+        } else {
+            idToShadowIndex = copyWithout(idToShadowIndex, indexId);
         }
-
         return index;
     }
 
     public List<MaterializedIndex> deleteMaterializedIndexByMetaId(long indexMetaId) {
         List<MaterializedIndex> indices = Lists.newArrayList();
-        List<Long> indexIds = indexMetaIdToIndexIds.remove(indexMetaId);
-        if (indexIds != null) {
-            for (long indexId : indexIds) {
-                MaterializedIndex index = idToVisibleIndex.remove(indexId);
-                if (index != null) {
-                    indices.add(index);
-                    continue;
-                }
+        List<Long> indexIds = indexMetaIdToIndexIds.get(indexMetaId);
+        if (indexIds == null) {
+            return indices;
+        }
 
-                index = idToShadowIndex.remove(indexId);
-                if (index != null) {
-                    indices.add(index);
-                }
+        indexMetaIdToIndexIds = copyWithout(indexMetaIdToIndexIds, indexMetaId);
+        Map<Long, MaterializedIndex> visibleIndexes = copyOf(idToVisibleIndex);
+        Map<Long, MaterializedIndex> shadowIndexes = copyOf(idToShadowIndex);
+        for (long indexId : indexIds) {
+            MaterializedIndex index = visibleIndexes.remove(indexId);
+            if (index != null) {
+                indices.add(index);
+                continue;
+            }
+
+            index = shadowIndexes.remove(indexId);
+            if (index != null) {
+                indices.add(index);
             }
         }
+        idToVisibleIndex = visibleIndexes;
+        idToShadowIndex = shadowIndexes;
         return indices;
+    }
+
+    private static <V> Map<Long, V> copyWith(Map<Long, V> map, long key, V value) {
+        Map<Long, V> copy = copyOf(map);
+        copy.put(key, value);
+        return copy;
+    }
+
+    private static <V> Map<Long, V> copyWithout(Map<Long, V> map, long key) {
+        Map<Long, V> copy = copyOf(map);
+        copy.remove(key);
+        return copy;
+    }
+
+    private static <V> Map<Long, V> copyOf(Map<Long, V> map) {
+        // Sized like Maps.newHashMap() rather than to fit, so a map of up to 11 entries -- a physical partition has a
+        // few indexes -- enumerates them in the order it did when it was modified in place.
+        Map<Long, V> copy = new HashMap<>(16);
+        copy.putAll(map);
+        return copy;
     }
 
     public long getNextVersion() {
@@ -608,10 +690,15 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public void pinQueryableIndex(long indexMetaId, long indexId) {
+        checkQueryableIndexPinnable(indexMetaId, indexId);
+        queryIndexMetaIdToIndexId.put(indexMetaId, indexId);
+    }
+
+    // Throws unless pinQueryableIndex(indexMetaId, indexId) would succeed, without changing anything.
+    public void checkQueryableIndexPinnable(long indexMetaId, long indexId) {
         MaterializedIndex index = getIndex(indexId);
         Preconditions.checkState(index != null && index.getMetaId() == indexMetaId,
                 String.format("query index id %d not exist for meta id %d", indexId, indexMetaId));
-        queryIndexMetaIdToIndexId.put(indexMetaId, indexId);
     }
 
     public boolean isQueryableIndexPinned(long indexMetaId) {
@@ -781,12 +868,15 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public boolean hasMaterializedView() {
-        List<Long> baseIndexIds = indexMetaIdToIndexIds.get(baseIndexMetaId);
-        Preconditions.checkState(baseIndexIds != null && !baseIndexIds.isEmpty(),
-                String.format("base index meta id %d not exist or index list is empty", baseIndexMetaId));
-        Set<Long> visibleIndexIds = Sets.newHashSet(idToVisibleIndex.keySet());
-        visibleIndexIds.removeAll(baseIndexIds);
-        return !visibleIndexIds.isEmpty();
+        // Decided from the visible indexes alone: the base index id list changes with every tablet split, merge
+        // and recycle-bin erase, and a lock-free reader combining the two can see them at different moments.
+        long baseMetaId = baseIndexMetaId;
+        for (MaterializedIndex index : idToVisibleIndex.values()) {
+            if (index.getMetaId() != baseMetaId) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public boolean hasStorageData() {
@@ -807,7 +897,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
      */
 
     public boolean visualiseShadowIndex(long shadowIndexId, boolean isBaseIndex) {
-        MaterializedIndex shadowIdx = idToShadowIndex.remove(shadowIndexId);
+        MaterializedIndex shadowIdx = idToShadowIndex.get(shadowIndexId);
         if (shadowIdx == null) {
             return false;
         }
@@ -820,10 +910,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
             if (shadowIdx.getShardGroupId() == PhysicalPartition.INVALID_SHARD_GROUP_ID) {
                 shadowIdx.setShardGroupId(shardGroupId);
             }
+        }
+        // Made visible before it leaves the shadow map, so there is no moment at which it is in neither.
+        idToVisibleIndex = copyWith(idToVisibleIndex, shadowIndexId, shadowIdx);
+        indexMetaIdToIndexIds = copyWith(indexMetaIdToIndexIds, shadowIdx.getMetaId(), ImmutableList.of(shadowIndexId));
+        idToShadowIndex = copyWithout(idToShadowIndex, shadowIndexId);
+        if (isBaseIndex) {
             baseIndexMetaId = shadowIdx.getMetaId();
         }
-        indexMetaIdToIndexIds.put(shadowIdx.getMetaId(), Lists.newArrayList(shadowIndexId));
-        idToVisibleIndex.put(shadowIndexId, shadowIdx);
         LOG.info("visualise the shadow index: {}", shadowIndexId);
         return true;
     }
@@ -945,6 +1039,18 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         }
         if (versionTxnType == null) {
             versionTxnType = TransactionType.TXN_NORMAL;
+        }
+
+        // lastSuccVacuumVersion is now serialized (@SerializedName), but an image written by an older FE that
+        // predates that field restores it as 0, so every already-drained partition would be needlessly
+        // vacuumed again after such an upgrade. The completed-pass floor is durable in
+        // vacuumState.minRetainedVersion (also serialized), so re-derive the watermark from it here --
+        // mirroring the edit-log replay path. For an image that already carries the field this is a no-op.
+        if (vacuumState != null) {
+            long vacuumFloor = vacuumState.getMinRetainedVersion();
+            if (vacuumFloor > lastSuccVacuumVersion.get()) {
+                lastSuccVacuumVersion.set(vacuumFloor);
+            }
         }
 
         if (baseIndexMetaId == -1L) {

@@ -137,6 +137,12 @@ Status BundleSeekableInputStream::touch_cache(int64_t offset, size_t length) {
     return _stream->touch_cache(_offset + offset, length);
 }
 
+StatusOr<std::shared_ptr<io::CacheWarmHandle>> BundleSeekableInputStream::warm_cache_async(int64_t offset,
+                                                                                           size_t length, bool urgent) {
+    // Cache blocks belong to the bundle object, so the slice offset becomes an object offset.
+    return _stream->warm_cache_async(_offset + offset, length, urgent);
+}
+
 StatusOr<std::unique_ptr<io::NumericStatistics>> BundleSeekableInputStream::get_numeric_statistics() {
     return _stream->get_numeric_statistics();
 }

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Replaces all occurrences of characters in a string with another string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # replace

@@ -174,6 +174,13 @@ public:
 
     bool is_initialized() const { return buffer_ != nullptr; }
 
+    // Byte access for decoders that parse byte-aligned data themselves (e.g. RLE run headers): only valid
+    // while is_byte_aligned(); advance_bytes() then moves past the bytes consumed that way.
+    bool is_byte_aligned() const { return bit_offset_ == 0; }
+    const uint8_t* aligned_byte_ptr() const { return buffer_ + byte_offset_; }
+    int aligned_bytes_left() const { return max_bytes_ - byte_offset_; }
+    void advance_bytes(int num_bytes);
+
     void reset(const uint8_t* buffer, int buffer_len);
 
 private:

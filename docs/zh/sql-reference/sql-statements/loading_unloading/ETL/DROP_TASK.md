@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "删除通过 SUBMIT TASK 提交的异步 ETL 任务及其关联任务运行。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP TASK

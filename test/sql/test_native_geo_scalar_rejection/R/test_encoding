@@ -1,0 +1,80 @@
+-- name: test_scalar_geo_encoding
+CREATE TABLE geo_encoding_${uuid0} (id INT, wkt VARCHAR(64)) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO geo_encoding_${uuid0} VALUES (1, 'POINT (1 2)'), (2, NULL), (3, 'POINT EMPTY');
+-- result:
+-- !result
+function: assert_query_error_contains("SELECT encode_sort_key(g) FROM (SELECT id, ST_GeogFromText(wkt) g FROM geo_encoding_${uuid0}) t", "encode_sort_key does not support geo arguments: GEOGRAPHY")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT encode_sort_key(id, NULL, g) FROM (SELECT id, ST_GeogFromText(wkt) g FROM geo_encoding_${uuid0}) t", "encode_sort_key does not support geo arguments: GEOGRAPHY")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT encode_fingerprint_sha256(g) FROM (SELECT id, ST_GeogFromText(wkt) g FROM geo_encoding_${uuid0}) t", "encode_fingerprint_sha256 does not support geo arguments: GEOGRAPHY")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT encode_fingerprint_sha256(id, NULL, g) FROM (SELECT id, ST_GeogFromText(wkt) g FROM geo_encoding_${uuid0}) t", "encode_fingerprint_sha256 does not support geo arguments: GEOGRAPHY")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT encode_fingerprint_sha256(g) FROM (SELECT id, ST_GeogFromText(wkt) g FROM geo_encoding_${uuid0}) t WHERE id=2", "encode_fingerprint_sha256 does not support geo arguments: GEOGRAPHY")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT encode_fingerprint_sha256_v2(g) FROM (SELECT id, ST_GeogFromText(wkt) g FROM geo_encoding_${uuid0}) t", "encode_fingerprint_sha256_v2 does not support geo arguments: GEOGRAPHY")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT encode_fingerprint_sha256_v2(id, NULL, g) FROM (SELECT id, ST_GeogFromText(wkt) g FROM geo_encoding_${uuid0}) t", "encode_fingerprint_sha256_v2 does not support geo arguments: GEOGRAPHY")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT encode_fingerprint_sha256_v2(g) FROM (SELECT id, ST_GeogFromText(wkt) g FROM geo_encoding_${uuid0}) t WHERE id=2", "encode_fingerprint_sha256_v2 does not support geo arguments: GEOGRAPHY")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT encode_sort_key(g) FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') g FROM geo_encoding_${uuid0}) t", "encode_sort_key does not support geo arguments: GEOMETRY")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT encode_sort_key(id, NULL, g) FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') g FROM geo_encoding_${uuid0}) t", "encode_sort_key does not support geo arguments: GEOMETRY")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT encode_fingerprint_sha256(g) FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') g FROM geo_encoding_${uuid0}) t", "encode_fingerprint_sha256 does not support geo arguments: GEOMETRY")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT encode_fingerprint_sha256(id, NULL, g) FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') g FROM geo_encoding_${uuid0}) t", "encode_fingerprint_sha256 does not support geo arguments: GEOMETRY")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT encode_fingerprint_sha256(g) FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') g FROM geo_encoding_${uuid0}) t WHERE id=2", "encode_fingerprint_sha256 does not support geo arguments: GEOMETRY")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT encode_fingerprint_sha256_v2(g) FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') g FROM geo_encoding_${uuid0}) t", "encode_fingerprint_sha256_v2 does not support geo arguments: GEOMETRY")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT encode_fingerprint_sha256_v2(id, NULL, g) FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') g FROM geo_encoding_${uuid0}) t", "encode_fingerprint_sha256_v2 does not support geo arguments: GEOMETRY")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT encode_fingerprint_sha256_v2(g) FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') g FROM geo_encoding_${uuid0}) t WHERE id=2", "encode_fingerprint_sha256_v2 does not support geo arguments: GEOMETRY")
+-- result:
+None
+-- !result
+SELECT id, encode_sort_key(ST_AsText(g)) IS NOT NULL, encode_fingerprint_sha256(ST_AsText(g)) IS NOT NULL, encode_fingerprint_sha256_v2(ST_AsText(g)) IS NOT NULL FROM (SELECT id, ST_GeogFromText(wkt) g FROM geo_encoding_${uuid0}) t ORDER BY id;
+-- result:
+1	1	1	1
+2	1	1	1
+3	1	1	1
+-- !result
+DROP TABLE geo_encoding_${uuid0};
+-- result:
+-- !result

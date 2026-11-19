@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW AUTHENTICATION displays authentication information of users in the cluster."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW AUTHENTICATION

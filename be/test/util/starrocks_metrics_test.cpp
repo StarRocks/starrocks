@@ -34,6 +34,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <mutex>
 #include <string>
 
@@ -154,6 +155,9 @@ private:
     std::stringstream _ss;
 };
 
+// The counters checked below live in process-wide singletons, so any other suite that ran
+// earlier in this binary may already have bumped them. Assert on the delta each increment
+// produces instead of on an absolute value.
 TEST_F(BackendMetricsTest, Normal) {
     TestMetricsVisitor visitor;
     auto agent_metrics = AgentMetrics::instance();
@@ -175,58 +179,67 @@ TEST_F(BackendMetricsTest, Normal) {
         ASSERT_STREQ("1", metric->to_string().c_str());
     }
     {
-        runtime_metrics->fragment_requests_total.increment(12);
         auto metric = metrics->get_metric("fragment_requests_total");
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("12", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        runtime_metrics->fragment_requests_total.increment(12);
+        ASSERT_EQ(before + 12, std::stoll(metric->to_string()));
     }
     {
-        runtime_metrics->fragment_request_duration_us.increment(101);
         auto metric = metrics->get_metric("fragment_request_duration_us");
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("101", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        runtime_metrics->fragment_request_duration_us.increment(101);
+        ASSERT_EQ(before + 101, std::stoll(metric->to_string()));
     }
     {
-        runtime_metrics->lake_txn_log_collect_legacy_total.increment(1);
         auto metric = metrics->get_metric("lake_txn_log_collect_legacy_total");
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("1", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        runtime_metrics->lake_txn_log_collect_legacy_total.increment(1);
+        ASSERT_EQ(before + 1, std::stoll(metric->to_string()));
     }
     {
-        http_metrics->http_requests_total.increment(102);
         auto metric = metrics->get_metric("http_requests_total");
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("102", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        http_metrics->http_requests_total.increment(102);
+        ASSERT_EQ(before + 102, std::stoll(metric->to_string()));
     }
     {
-        http_metrics->http_request_send_bytes.increment(104);
         auto metric = metrics->get_metric("http_request_send_bytes");
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("104", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        http_metrics->http_request_send_bytes.increment(104);
+        ASSERT_EQ(before + 104, std::stoll(metric->to_string()));
     }
     {
-        service_metrics->short_circuit_request_total.increment(1);
         auto metric = metrics->get_metric("short_circuit_request_total");
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("1", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        service_metrics->short_circuit_request_total.increment(1);
+        ASSERT_EQ(before + 1, std::stoll(metric->to_string()));
     }
     {
-        query_scan_metrics->query_scan_bytes.increment(104);
         auto metric = metrics->get_metric("query_scan_bytes");
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("104", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        query_scan_metrics->query_scan_bytes.increment(104);
+        ASSERT_EQ(before + 104, std::stoll(metric->to_string()));
     }
     {
-        query_scan_metrics->query_scan_rows.increment(105);
         auto metric = metrics->get_metric("query_scan_rows");
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("105", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        query_scan_metrics->query_scan_rows.increment(105);
+        ASSERT_EQ(before + 105, std::stoll(metric->to_string()));
     }
     {
-        storage_metrics->push_requests_success_total.increment(106);
         auto metric = metrics->get_metric("push_requests_total", MetricLabels().add("status", "SUCCESS"));
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("106", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        storage_metrics->push_requests_success_total.increment(106);
+        ASSERT_EQ(before + 106, std::stoll(metric->to_string()));
     }
     {
         vector_index_cache_metrics->update(/*capacity=*/1024, /*usage=*/256, /*lookup_count=*/2, /*hit_count=*/1);
@@ -236,85 +249,97 @@ TEST_F(BackendMetricsTest, Normal) {
         ASSERT_STREQ("1024", metric->to_string().c_str());
     }
     {
-        storage_metrics->push_requests_fail_total.increment(107);
         auto metric = metrics->get_metric("push_requests_total", MetricLabels().add("status", "FAIL"));
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("107", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        storage_metrics->push_requests_fail_total.increment(107);
+        ASSERT_EQ(before + 107, std::stoll(metric->to_string()));
     }
     {
-        storage_metrics->push_request_duration_us.increment(108);
         auto metric = metrics->get_metric("push_request_duration_us");
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("108", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        storage_metrics->push_request_duration_us.increment(108);
+        ASSERT_EQ(before + 108, std::stoll(metric->to_string()));
     }
     {
-        storage_metrics->push_request_write_bytes.increment(109);
         auto metric = metrics->get_metric("push_request_write_bytes");
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("109", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        storage_metrics->push_request_write_bytes.increment(109);
+        ASSERT_EQ(before + 109, std::stoll(metric->to_string()));
     }
     {
-        storage_metrics->push_request_write_rows.increment(110);
         auto metric = metrics->get_metric("push_request_write_rows");
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("110", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        storage_metrics->push_request_write_rows.increment(110);
+        ASSERT_EQ(before + 110, std::stoll(metric->to_string()));
     }
     // engine request
     {
-        storage_metrics->create_tablet_requests_total.increment(15);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "create_tablet").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("15", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        storage_metrics->create_tablet_requests_total.increment(15);
+        ASSERT_EQ(before + 15, std::stoll(metric->to_string()));
     }
     {
-        storage_metrics->drop_tablet_requests_total.increment(16);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "drop_tablet").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("16", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        storage_metrics->drop_tablet_requests_total.increment(16);
+        ASSERT_EQ(before + 16, std::stoll(metric->to_string()));
     }
     {
-        storage_metrics->report_all_tablets_requests_total.increment(17);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "report_all_tablets").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("17", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        storage_metrics->report_all_tablets_requests_total.increment(17);
+        ASSERT_EQ(before + 17, std::stoll(metric->to_string()));
     }
     {
-        storage_metrics->report_tablet_requests_total.increment(18);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "report_tablet").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("18", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        storage_metrics->report_tablet_requests_total.increment(18);
+        ASSERT_EQ(before + 18, std::stoll(metric->to_string()));
     }
     {
-        agent_metrics->schema_change_requests_total.increment(19);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "schema_change").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("19", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        agent_metrics->schema_change_requests_total.increment(19);
+        ASSERT_EQ(before + 19, std::stoll(metric->to_string()));
     }
     {
-        storage_metrics->create_rollup_requests_total.increment(20);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "create_rollup").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("20", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        storage_metrics->create_rollup_requests_total.increment(20);
+        ASSERT_EQ(before + 20, std::stoll(metric->to_string()));
     }
     {
-        storage_metrics->storage_migrate_requests_total.increment(21);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "storage_migrate").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("21", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        storage_metrics->storage_migrate_requests_total.increment(21);
+        ASSERT_EQ(before + 21, std::stoll(metric->to_string()));
     }
     {
-        storage_metrics->delete_requests_total.increment(22);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "delete").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("22", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        storage_metrics->delete_requests_total.increment(22);
+        ASSERT_EQ(before + 22, std::stoll(metric->to_string()));
     }
     {
         auto metric = metrics->get_metric("engine_requests_total",
@@ -348,43 +373,49 @@ TEST_F(BackendMetricsTest, Normal) {
         ASSERT_EQ(std::to_string(before + 27), metric->to_string());
     }
     {
-        agent_metrics->clone_requests_total.increment(23);
         auto metric = metrics->get_metric("engine_requests_total",
                                           MetricLabels().add("type", "clone").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("23", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        agent_metrics->clone_requests_total.increment(23);
+        ASSERT_EQ(before + 23, std::stoll(metric->to_string()));
     }
     //  comapction
     {
-        storage_metrics->base_compaction_deltas_total.increment(30);
         auto metric = metrics->get_metric("compaction_deltas_total", MetricLabels().add("type", "base"));
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("30", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        storage_metrics->base_compaction_deltas_total.increment(30);
+        ASSERT_EQ(before + 30, std::stoll(metric->to_string()));
     }
     {
-        storage_metrics->cumulative_compaction_deltas_total.increment(31);
         auto metric = metrics->get_metric("compaction_deltas_total", MetricLabels().add("type", "cumulative"));
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("31", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        storage_metrics->cumulative_compaction_deltas_total.increment(31);
+        ASSERT_EQ(before + 31, std::stoll(metric->to_string()));
     }
     {
-        storage_metrics->base_compaction_bytes_total.increment(32);
         auto metric = metrics->get_metric("compaction_bytes_total", MetricLabels().add("type", "base"));
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("32", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        storage_metrics->base_compaction_bytes_total.increment(32);
+        ASSERT_EQ(before + 32, std::stoll(metric->to_string()));
     }
     {
-        storage_metrics->cumulative_compaction_bytes_total.increment(33);
         auto metric = metrics->get_metric("compaction_bytes_total", MetricLabels().add("type", "cumulative"));
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("33", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        storage_metrics->cumulative_compaction_bytes_total.increment(33);
+        ASSERT_EQ(before + 33, std::stoll(metric->to_string()));
     }
     // Gauge
     {
-        runtime_metrics->memory_pool_bytes_total.increment(40);
         auto metric = metrics->get_metric("memory_pool_bytes_total");
         ASSERT_TRUE(metric != nullptr);
-        ASSERT_STREQ("40", metric->to_string().c_str());
+        const int64_t before = std::stoll(metric->to_string());
+        runtime_metrics->memory_pool_bytes_total.increment(40);
+        ASSERT_EQ(before + 40, std::stoll(metric->to_string()));
     }
 }
 

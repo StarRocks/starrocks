@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "StarRocks のレガシーリストパーティション化は事前定義された値リストに基づいてデータを分割し、カテゴリカルデータ向けに管理を簡素化します。"
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # リストパーティション化 (レガシー)

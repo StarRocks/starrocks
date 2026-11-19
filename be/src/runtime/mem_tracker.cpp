@@ -240,6 +240,9 @@ std::string MemTracker::err_msg(const std::string& msg, std::string_view fragmen
         str << "fragment: " << fragment_instance_id << " ";
     }
     str << "Used: " << consumption() << ", Limit: " << limit() << ". ";
+    // The closing sentence is a contract: FE (StatisticsCollectJob#isSharedMemoryExhausted) matches it to
+    // tell a shared budget running out (retry) from a statement's own limit (fail). Pinned by
+    // MemTrackerTest.err_msg_closing_sentence_per_type; change both together.
     switch (type()) {
     case MemTrackerType::NO_SET:
         break;

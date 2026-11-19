@@ -20,11 +20,9 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.OptimizerFactory;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
@@ -254,6 +252,54 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testPrunePrefixOnlyKeepsTrailingNullPartition() throws Exception {
+        // Nothing constrains b, so (5, NULL) qualifies for `a = 5`. It sorts below (5, MIN) and lives
+        // in p0, which ends on that key; the lookup started at (5, MIN) and only kept p1 and p2.
+        starRocksAssert.withTable("CREATE TABLE `t_prefix_null_range` (\n" +
+                "  `a` tinyint NOT NULL,\n" +
+                "  `b` tinyint NULL,\n" +
+                "  `v` int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`a`)\n" +
+                "PARTITION BY RANGE(`a`, `b`) (\n" +
+                "  PARTITION p0 VALUES LESS THAN ('5', '-128'),\n" +
+                "  PARTITION p1 VALUES LESS THAN ('5', '10'),\n" +
+                "  PARTITION p2 VALUES LESS THAN ('50', '0'),\n" +
+                "  PARTITION p3 VALUES LESS THAN ('60', '0'))\n" +
+                "DISTRIBUTED BY HASH(`v`) BUCKETS 2\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.query("select * from t_prefix_null_range where a = 5")
+                .explainContains("partitions=3/4");
+        starRocksAssert.query("select * from t_prefix_null_range where a in (5, 55)")
+                .explainContains("partitions=4/4");
+        // An inclusive lower bound fills b with MIN the same way.
+        starRocksAssert.query("select * from t_prefix_null_range where a between 5 and 40")
+                .explainContains("partitions=3/4");
+        // A predicate on b already rules its NULLs out, so p0 stays pruned.
+        starRocksAssert.query("select * from t_prefix_null_range where a = 5 and b < 3")
+                .explainContains("partitions=1/4");
+        starRocksAssert.dropTable("t_prefix_null_range");
+
+        // With b NOT NULL there is nothing below (5, MIN) to keep.
+        starRocksAssert.withTable("CREATE TABLE `t_prefix_not_null_range` (\n" +
+                "  `a` tinyint NOT NULL,\n" +
+                "  `b` tinyint NOT NULL,\n" +
+                "  `v` int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`a`)\n" +
+                "PARTITION BY RANGE(`a`, `b`) (\n" +
+                "  PARTITION p0 VALUES LESS THAN ('5', '-128'),\n" +
+                "  PARTITION p1 VALUES LESS THAN ('5', '10'),\n" +
+                "  PARTITION p2 VALUES LESS THAN ('50', '0'),\n" +
+                "  PARTITION p3 VALUES LESS THAN ('60', '0'))\n" +
+                "DISTRIBUTED BY HASH(`v`) BUCKETS 2\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.query("select * from t_prefix_not_null_range where a = 5")
+                .explainContains("partitions=2/4");
+        starRocksAssert.dropTable("t_prefix_not_null_range");
+    }
+
+    @Test
     public void testInClauseCombineOr_1() throws Exception {
         String plan = getFragmentPlan("select * from ptest where (d2 > '1000-01-01') or (d2 in (null, '2020-01-01'));");
         assertTrue(plan.contains("  0:OlapScanNode\n" +
@@ -324,9 +370,12 @@ public class PartitionPruneTest extends PlanTestBase {
     private void testRemovePredicate(String sql, String expected) throws Exception {
         Pair<ScalarOperator, LogicalScanOperator> pair = buildConjunctAndScan(sql);
         StatisticsCalculator calculator = new StatisticsCalculator();
-        OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
-        ScalarOperator newPredicate = calculator.removePartitionPredicate(pair.first, pair.second, context);
+        ScalarOperator newPredicate = calculator.removePartitionPredicate(pair.first, pair.second, null);
         Assertions.assertEquals(expected, newPredicate.toString());
+        // an OLAP list partition scan only reads the selected partitions, whatever the source of its statistics
+        Statistics analyzed = Statistics.builder().setStatsSource(Statistics.StatsSource.ANALYZE).build();
+        Assertions.assertEquals(expected,
+                calculator.removePartitionPredicate(pair.first, pair.second, analyzed).toString());
     }
 
     private void testAssertContains(String sql, String expected) throws Exception {

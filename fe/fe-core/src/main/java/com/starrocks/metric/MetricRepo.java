@@ -326,6 +326,10 @@ public final class MetricRepo {
             new LongCounterMetric("publish_version_daemon_loop_total",
                     MetricUnit.OPERATIONS, "counter of publish version daemon loop runs");
 
+    public static final LongCounterMetric COUNTER_LAKE_PUBLISH_BATCH_RETRY =
+            new LongCounterMetric("lake_publish_batch_retry_total", MetricUnit.OPERATIONS,
+                    "counter of lake publish batches whose first txn was already sent by an earlier attempt");
+
     public static final LongCounterMetric SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL =
             new LongCounterMetric("sync_stats_load_budget_exhausted_total", Metric.MetricUnit.OPERATIONS,
                     "Times we have exhausted the budget");
@@ -521,6 +525,7 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P999;
     public static LeaderAwareGaugeMetricLong GAUGE_SPM_BASELINE_COUNT;
     public static LeaderAwareGaugeMetricLong GAUGE_MAX_JOURNAL_REPLAY_LAG;
+    public static LeaderAwareGaugeMetricLong GAUGE_GTID_TIMESTAMP_AHEAD_OF_CLOCK_MS;
     public static LeaderAwareGaugeMetric<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
@@ -729,6 +734,17 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_MAX_JOURNAL_REPLAY_LAG);
+
+        GAUGE_GTID_TIMESTAMP_AHEAD_OF_CLOCK_MS = new LeaderAwareGaugeMetricLong(
+                "gtid_timestamp_ahead_of_clock_ms", MetricUnit.MILLISECONDS,
+                "gtid generator lastTimestamp minus the local wall clock, floored at 0; " +
+                "positive means the generator is ahead") {
+            @Override
+            public Long getValueLeader() {
+                return GlobalStateMgr.getCurrentState().getGtidGenerator().getTimestampAheadOfClockMs();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_GTID_TIMESTAMP_AHEAD_OF_CLOCK_MS);
 
         GAUGE_SPM_BASELINE_COUNT = new LeaderAwareGaugeMetricLong(
                 SPM_BASELINE_COUNT_METRIC_NAME,
@@ -1145,6 +1161,7 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_RUNNING_TASKS);
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_PUBLISH_VERSION_DAEMON_LOOP);
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LAKE_PUBLISH_BATCH_RETRY);
         COUNTER_ROUTINE_LOAD_ROWS =
                 new LongCounterMetric("routine_load_rows", MetricUnit.ROWS, "total rows of routine load");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ROUTINE_LOAD_ROWS);

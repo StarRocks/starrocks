@@ -220,6 +220,11 @@ public class InsertLoadJob extends LoadJob {
     }
 
     @Override
+    public Set<Long> getTableIds() {
+        return Sets.newHashSet(tableId);
+    }
+
+    @Override
     public Set<String> getTableNames(boolean noThrow) throws MetaNotFoundException {
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (database == null) {

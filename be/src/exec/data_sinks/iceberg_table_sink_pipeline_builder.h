@@ -26,6 +26,25 @@ namespace starrocks {
 
 class IcebergTableSink;
 class TDataSink;
+class TIcebergTableSink;
+
+namespace connector {
+struct IcebergChunkSinkContext;
+} // namespace connector
+
+// Translate the FE's encryption signal onto a data sink context. Declared here rather than kept file-local
+// so it can be tested directly: the builder class itself lives entirely in the .cpp, and reaching
+// these through create_*_sink_context would need a RuntimeState and a PipelineBuilderContext.
+//
+// Refuses rather than defaults a missing DEK length: choosing one could write a key weaker than the
+// table's encryption.data-key-length policy and commit it with nothing surfaced.
+Status apply_iceberg_encryption_signal(const TIcebergTableSink& t_iceberg_sink,
+                                       connector::IcebergChunkSinkContext* ctx);
+
+// Fails when the FE sends an encryption signal to a sink that writes position-delete files (DELETE, and
+// UPDATE / MERGE). An encrypted table is format version 3, which only accepts deletion vectors, so FE
+// refuses those statements; BE refuses too rather than write plaintext delete files into such a table.
+Status refuse_iceberg_encryption_signal_for_position_deletes(const TIcebergTableSink& t_iceberg_sink);
 
 Status decompose_iceberg_table_sink_to_pipeline(const IcebergTableSink& sink, pipeline::OpFactories prev_operators,
                                                 const TDataSink& thrift_sink,

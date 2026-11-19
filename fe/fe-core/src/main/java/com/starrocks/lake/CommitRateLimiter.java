@@ -15,6 +15,8 @@
 package com.starrocks.lake;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.compaction.CompactionMgr;
@@ -77,6 +79,39 @@ public class CommitRateLimiter {
         return Config.lake_ingest_slowdown_ratio;
     }
 
+    /**
+     * A partition whose compaction score makes the commit path reject commits into it.
+     */
+    public record RejectingPartition(long partitionId, double compactionScore, long upperBound) {
+    }
+
+    /**
+     * The first partition of the table whose compaction score makes {@link #check} reject a commit into it, or empty
+     * when none does. Mirrors the commit path: the limiter runs only when lake_enable_ingest_slowdown is on
+     * (LakeTableTxnStateListener.preCommit), it rejects only above a positive upper bound, a partition without a
+     * compaction score yet is not throttled, and only partitions the table still has are checked. The caller holds
+     * the table's read or write lock while this reads the partitions and their scores.
+     */
+    public static Optional<RejectingPartition> findPartitionRejectingCommits(@NotNull CompactionMgr compactionMgr,
+                                                                             long dbId, @NotNull OlapTable table) {
+        if (!Config.lake_enable_ingest_slowdown) {
+            return Optional.empty();
+        }
+        long upperBound = compactionScoreUpperBound();
+        if (upperBound <= 0) {
+            return Optional.empty();
+        }
+        long tableId = table.getId();
+        for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+            long partitionId = partition.getId();
+            Quantiles compactionScore = getCompactionScore(compactionMgr, dbId, tableId, partitionId);
+            if (compactionScore != null && compactionScore.getMax() > upperBound) {
+                return Optional.of(new RejectingPartition(partitionId, compactionScore.getMax(), upperBound));
+            }
+        }
+        return Optional.empty();
+    }
+
     // 0 means no limit
     static long compactionScoreUpperBound() {
         long upper = Config.lake_compaction_score_upper_bound;
@@ -102,7 +137,7 @@ public class CommitRateLimiter {
     /**
      * Checks the commit rate for the given partition IDs and throws a CommitRateExceededException if necessary.
      *
-     * @param partitionIds the set of partition IDs to check. Must not be null.
+     * @param partitionIds the set of physical partition IDs to check. Must not be null.
      * @throws CommitFailedException       if the allow commit time exceeds the transaction timeout
      * @throws CommitRateExceededException if the commit rate exceeds the threshold
      */
@@ -161,22 +196,43 @@ public class CommitRateLimiter {
 
     private void setAllowCommitTimeOnce(@NotNull Set<Long> partitionIds) {
         if (transactionState.getAllowCommitTimeMs() < 0) {
+            long maxScorePartitionId = -1;
             double maxCompactionScore = 0;
             for (Long partitionId : partitionIds) {
-                maxCompactionScore = Math.max(maxCompactionScore, getPartitionCompactionScore(partitionId));
+                double compactionScore = getPartitionCompactionScore(partitionId);
+                if (compactionScore > maxCompactionScore) {
+                    maxScorePartitionId = partitionId;
+                    maxCompactionScore = compactionScore;
+                }
             }
             long allowCommitTime = getAllowCommitTime(transactionState, maxCompactionScore);
             transactionState.setAllowCommitTimeMs(allowCommitTime);
+            if (allowCommitTime > transactionState.getWriteEndTimeMs()) {
+                LOG.info("txn {} commit is delayed {}ms after write end, because compaction score {} of partition {}"
+                                + " in table {} exceeds the slowdown threshold {}, write took {}ms",
+                        transactionState.getTransactionId(), allowCommitTime - transactionState.getWriteEndTimeMs(),
+                        maxCompactionScore, maxScorePartitionId, tableId, slowdownThreshold(),
+                        transactionState.getWriteDurationMs());
+            }
         }
     }
 
+    // partitionId is a physical partition id, the key under which compaction statistics are recorded
     private double getPartitionCompactionScore(@NotNull Long partitionId) {
-        long dbId = transactionState.getDbId();
-        // TODO: Should be able to fetch statistics by partition id
-        PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, tableId, partitionId);
-        PartitionStatistics statistics = compactionMgr.getStatistics(partitionIdentifier);
-        Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
-        return compactionScore != null ? compactionScore.getMax() : 0;
+        Quantiles compactionScore = getCompactionScore(compactionMgr, transactionState.getDbId(), tableId, partitionId);
+        if (compactionScore == null) {
+            // Expected only before the partition's first load becomes visible. Anything else means the lookup key
+            // does not match the one the statistics were recorded under, and the partition escapes throttling.
+            LOG.info("txn {} found no compaction score for partition {} in table {}, its commit is not throttled"
+                            + " by this partition", transactionState.getTransactionId(), partitionId, tableId);
+            return 0;
+        }
+        return compactionScore.getMax();
+    }
+
+    private static Quantiles getCompactionScore(CompactionMgr compactionMgr, long dbId, long tableId, long partitionId) {
+        PartitionStatistics statistics = compactionMgr.getStatistics(new PartitionIdentifier(dbId, tableId, partitionId));
+        return statistics == null ? null : statistics.getCompactionScore();
     }
 
     // Returns the first partition id and its compaction score that exceeds the upper bound

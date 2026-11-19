@@ -131,4 +131,37 @@ public class TableMetaSyncerTest {
         extTable.updateMeta(request.getDb_name(), response.getTable_meta(), response.getBackends());
         Assertions.assertEquals(4, extTable.getPartitions().size());
     }
+
+    // A sink into an external table forwards the remote table's flat_json.* settings to the writing CNs
+    // (OlapTableSink), so the metadata sync must build the flat JSON config from the synced properties.
+    @Test
+    public void syncTableMetaBuildsFlatJsonConfig() throws Exception {
+        DDLStmtExecutor.execute(analyzeSuccess(
+                "CREATE TABLE test_flat_json_table (k1 INT, j1 JSON) " +
+                "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1 " +
+                "properties (\"replication_num\" = \"1\", \"flat_json.enable\" = \"false\")"),
+                starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(analyzeSuccess(
+                "CREATE EXTERNAL TABLE test_flat_json_ext_table (k1 INT, j1 JSON) " +
+                "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) " +
+                "properties (" +
+                    "\"host\" = \"127.0.0.2\"," +
+                    "\"port\" = \"9020\"," +
+                    "\"user\" = \"root\"," +
+                    "\"password\" = \"\"," +
+                    "\"database\" = \"test_db\"," +
+                    "\"table\" = \"test_flat_json_table\"" +
+                ")"), starRocksAssert.getCtx());
+
+        TGetTableMetaRequest request = new TGetTableMetaRequest();
+        request.setDb_name("test_db");
+        request.setTable_name("test_flat_json_table");
+        TGetTableMetaResponse response = new LeaderImpl().getTableMeta(request);
+
+        ExternalOlapTable extTable = (ExternalOlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb("test_db").getTable("test_flat_json_ext_table");
+        extTable.updateMeta(request.getDb_name(), response.getTable_meta(), response.getBackends());
+        Assertions.assertNotNull(extTable.getFlatJsonConfig());
+        Assertions.assertFalse(extTable.getFlatJsonConfig().getFlatJsonEnable());
+    }
 }

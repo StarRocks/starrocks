@@ -236,6 +236,23 @@ TEST_F(TestHll, Normal) {
     }
 }
 
+TEST_F(TestHll, DuplicateAtExplicitCapacity) {
+    HyperLogLog hll;
+    for (int value = 0; value < HLL_EXPLICLIT_INT64_NUM; ++value) {
+        hll.update(hash(value));
+    }
+
+    uint8_t buffer[HLL_REGISTERS_COUNT + 1];
+    hll.update(hash(0));
+    hll.serialize(buffer);
+    EXPECT_EQ(HLL_DATA_EXPLICIT, buffer[0]);
+    EXPECT_EQ(HLL_EXPLICLIT_INT64_NUM, hll.estimate_cardinality());
+
+    hll.update(hash(HLL_EXPLICLIT_INT64_NUM));
+    hll.serialize(buffer);
+    EXPECT_EQ(HLL_DATA_SPARSE, buffer[0]);
+}
+
 TEST_F(TestHll, InvalidPtr) {
     {
         HyperLogLog hll(Slice((char*)nullptr, 0));
@@ -284,6 +301,22 @@ TEST_F(TestHll, AllocateFail) {
     // deserialize should fail gracefully and leave object empty
     HyperLogLog hll_after_fail(Slice((char*)buf, len));
     EXPECT_EQ(0, hll_after_fail.estimate_cardinality());
+}
+
+TEST_F(TestHll, UpdateAfterExplicitMergeAllocationFailure) {
+    HyperLogLog hll;
+    for (int value = 0; value < HLL_EXPLICLIT_INT64_NUM; ++value) {
+        hll.update(hash(value));
+    }
+
+    HyperLogLog other(hash(HLL_EXPLICLIT_INT64_NUM));
+    {
+        ScopedHllAllocateFail scoped_fail;
+        ASSERT_THROW(hll.merge(other), std::bad_alloc);
+    }
+
+    hll.update(hash(0));
+    EXPECT_EQ(HLL_REGISTERS_COUNT + 1, hll.max_serialized_size());
 }
 
 } // namespace starrocks

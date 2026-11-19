@@ -1,0 +1,152 @@
+-- name: test_load_job_privilege
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_open (k int, v varchar(3) not null) duplicate key(k) distributed by hash(k) buckets 1 properties("replication_num" = "1");
+-- result:
+-- !result
+create table t_secret (k int, v varchar(3) not null) duplicate key(k) distributed by hash(k) buckets 1 properties("replication_num" = "1");
+-- result:
+-- !result
+set enable_insert_strict = false;
+-- result:
+-- !result
+set insert_max_filter_ratio = 1;
+-- result:
+-- !result
+insert into t_open values (1, 'ok'), (2, 'open-row');
+-- result:
+-- !result
+insert into t_secret values (1, 'ok'), (2, 'secret-row');
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_load_job_privilege.csv -XPUT -H "Expect:100-continue" -H label:sl_secret_${uuid0} -H column_separator:, -H max_filter_ratio:1 ${url}/api/db_${uuid0}/t_secret/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+[UC]id_open=select id from information_schema.loads where db_name='db_${uuid0}' and table_name='t_open' and type='INSERT';
+[UC]id_secret=select id from information_schema.loads where db_name='db_${uuid0}' and table_name='t_secret' and type='INSERT';
+select tracking_log from information_schema.load_tracking_logs where job_id=${id_secret};
+-- result:
+Error: String 'secret-row'(length=10) is too long. The max length of 'v' is 3. Row: [2, 'secret-row']
+
+-- !result
+create user if not exists u_${uuid0};
+-- result:
+-- !result
+grant impersonate on user root to u_${uuid0};
+-- result:
+-- !result
+grant select on table db_${uuid0}.t_open to user u_${uuid0};
+-- result:
+-- !result
+execute as u_${uuid0} with no revert;
+-- result:
+-- !result
+select table_name, type from information_schema.loads where db_name='db_${uuid0}' order by table_name, type;
+-- result:
+t_open	INSERT
+-- !result
+select tracking_log from information_schema.load_tracking_logs where job_id=${id_open};
+-- result:
+Error: String 'open-row'(length=8) is too long. The max length of 'v' is 3. Row: [2, 'open-row']
+
+-- !result
+select tracking_log from information_schema.load_tracking_logs where job_id=${id_secret};
+-- result:
+-- !result
+select count(*) from information_schema.stream_loads where db_name='db_${uuid0}';
+-- result:
+0
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+grant insert on table db_${uuid0}.t_secret to user u_${uuid0};
+-- result:
+-- !result
+execute as u_${uuid0} with no revert;
+-- result:
+-- !result
+select table_name, type, tracking_sql is null, properties is null from information_schema.loads where db_name='db_${uuid0}' order by table_name, type;
+-- result:
+t_open	INSERT	0	0
+t_secret	INSERT	1	1
+t_secret	STREAM_LOAD	1	1
+-- !result
+select tracking_log from information_schema.load_tracking_logs where job_id=${id_secret};
+-- result:
+None
+-- !result
+select tracking_url is null, tracking_sql is null from information_schema.stream_loads where db_name='db_${uuid0}';
+-- result:
+1	1
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+create user if not exists u_op_${uuid0};
+-- result:
+-- !result
+grant impersonate on user root to u_op_${uuid0};
+-- result:
+-- !result
+grant operate on system to user u_op_${uuid0};
+-- result:
+-- !result
+execute as u_op_${uuid0} with no revert;
+-- result:
+-- !result
+select table_name, type, tracking_sql is null, properties is null from information_schema.loads where db_name='db_${uuid0}' order by table_name, type;
+-- result:
+t_open	INSERT	1	1
+t_secret	INSERT	1	1
+t_secret	STREAM_LOAD	1	1
+-- !result
+select tracking_log from information_schema.load_tracking_logs where job_id=${id_open};
+-- result:
+None
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+grant select on table db_${uuid0}.t_secret to user u_${uuid0};
+-- result:
+-- !result
+execute as u_${uuid0} with no revert;
+-- result:
+-- !result
+select table_name, type, tracking_sql is null, properties is null from information_schema.loads where db_name='db_${uuid0}' order by table_name, type;
+-- result:
+t_open	INSERT	0	0
+t_secret	INSERT	0	0
+t_secret	STREAM_LOAD	0	0
+-- !result
+select tracking_log from information_schema.load_tracking_logs where job_id=${id_secret};
+-- result:
+Error: String 'secret-row'(length=10) is too long. The max length of 'v' is 3. Row: [2, 'secret-row']
+
+-- !result
+select tracking_url is null, tracking_sql is null from information_schema.stream_loads where db_name='db_${uuid0}';
+-- result:
+0	0
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+drop user u_${uuid0};
+-- result:
+-- !result
+drop user u_op_${uuid0};
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

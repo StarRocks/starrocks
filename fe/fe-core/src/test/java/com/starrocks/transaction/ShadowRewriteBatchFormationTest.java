@@ -84,9 +84,7 @@ public class ShadowRewriteBatchFormationTest {
 
     @Test
     public void testShadowRewriteTxnIsNeverBatchedWithNormalDml() {
-        int oldMin = Config.lake_batch_publish_min_version_num;
         int oldMax = Config.lake_batch_publish_max_version_num;
-        Config.lake_batch_publish_min_version_num = 1;
         Config.lake_batch_publish_max_version_num = 10;
         try {
             DatabaseTransactionMgr mgr = newDbTxnMgr();
@@ -117,16 +115,13 @@ public class ShadowRewriteBatchFormationTest {
                         "shadow-rewrite txn must never be batched with a normal txn");
             }
         } finally {
-            Config.lake_batch_publish_min_version_num = oldMin;
             Config.lake_batch_publish_max_version_num = oldMax;
         }
     }
 
     @Test
     public void testNormalDmlBatchesTogetherWithoutShadowRewrite() {
-        int oldMin = Config.lake_batch_publish_min_version_num;
         int oldMax = Config.lake_batch_publish_max_version_num;
-        Config.lake_batch_publish_min_version_num = 1;
         Config.lake_batch_publish_max_version_num = 10;
         try {
             DatabaseTransactionMgr mgr = newDbTxnMgr();
@@ -143,7 +138,6 @@ public class ShadowRewriteBatchFormationTest {
             // Two adjacent normal DML txns with consecutive versions batch together.
             Assertions.assertEquals(2, batch.size());
         } finally {
-            Config.lake_batch_publish_min_version_num = oldMin;
             Config.lake_batch_publish_max_version_num = oldMax;
         }
     }

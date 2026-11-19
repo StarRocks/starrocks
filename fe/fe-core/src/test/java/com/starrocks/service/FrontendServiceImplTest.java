@@ -33,6 +33,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
@@ -62,6 +63,7 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -126,6 +128,8 @@ import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TPrivilegeRequirement;
 import com.starrocks.thrift.TRefreshConnectionsRequest;
 import com.starrocks.thrift.TRefreshConnectionsResponse;
+import com.starrocks.thrift.TRefreshTableRequest;
+import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TStatus;
@@ -221,6 +225,33 @@ public class FrontendServiceImplTest {
         TImmutablePartitionRequest request = new TImmutablePartitionRequest();
         TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
         Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+    }
+
+    @Test
+    public void testRefreshTableInvalidateOnlyLoadsNothing() throws TException {
+        List<String> invalidated = new ArrayList<>();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public void invalidateCachedTable(String catalogName, String dbName, String tableName) {
+                invalidated.add(catalogName + "." + dbName + "." + tableName);
+            }
+        };
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void refreshExternalTable(ConnectContext context, TableName tableName, List<String> partitions) {
+                Assertions.fail("an invalidate-only request must not refresh the table");
+            }
+        };
+
+        TRefreshTableRequest request = new TRefreshTableRequest();
+        request.setCatalog_name("c");
+        request.setDb_name("d");
+        request.setTable_name("t");
+        request.setInvalidate_only(true);
+        TRefreshTableResponse response = new FrontendServiceImpl(exeEnv).refreshTable(request);
+
+        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+        Assertions.assertEquals(List.of("c.d.t"), invalidated);
     }
 
     @Test
@@ -2826,6 +2857,69 @@ public class FrontendServiceImplTest {
         } finally {
             Config.authentication_chain = savedAuthChain;
             GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropSecurityIntegration(siName);
+        }
+    }
+
+    @Test
+    public void testBearerStreamLoadIsRecordedUnderTheTokenUser() throws Exception {
+        // A BE forwarding a Bearer stream load sends an empty `user`: the principal is in the
+        // token. Both the load task and the pipeline put stage must carry the user the token
+        // authenticated as, or SHOW STREAM LOAD shows no user and user-scoped resource groups
+        // never match.
+        String siName = "jwt_corp_load_user";
+        String[] savedAuthChain = Config.authentication_chain;
+        boolean savedPipelineStreamLoad = Config.enable_pipeline_stream_load;
+        withJwtSecurityIntegration(siName);
+        long txnId = -1;
+        try (MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            String token = new MockTokenUtils().generateTestOIDCToken(3600 * 1000);
+            TLoadTxnBeginRequest begin = new TLoadTxnBeginRequest();
+            begin.setLabel(UUID.randomUUID().toString());
+            begin.setDb("test");
+            begin.setTbl("site_access_auto");
+            begin.setUser("");
+            begin.setPasswd(token);
+            begin.setAuth_type("bearer");
+            begin.setUser_ip("10.1.2.3");
+            TLoadTxnBeginResult begun = impl.loadTxnBegin(begin);
+            Assertions.assertEquals(TStatusCode.OK, begun.getStatus().getStatus_code(),
+                    String.valueOf(begun.getStatus()));
+            txnId = begun.getTxnId();
+            Assertions.assertEquals("harbor", GlobalStateMgr.getCurrentState().getStreamLoadMgr()
+                    .getTaskByLabel(begin.getLabel()).getUser());
+
+            // The put stage: authenticating the token set the context's user; the pipeline branch
+            // must not overwrite it with the empty declared one. Planning itself may fail here.
+            Config.enable_pipeline_stream_load = true;
+            TStreamLoadPutRequest put = new TStreamLoadPutRequest();
+            put.setDb("test");
+            put.setTbl("site_access_auto");
+            put.setUser("");
+            put.setPasswd(token);
+            put.setAuth_type("bearer");
+            put.setUser_ip("10.1.2.3");
+            put.setTxnId(txnId);
+            put.setBackend_id(10001);
+            put.setFileType(TFileType.FILE_STREAM);
+            ConnectContext context = new ConnectContext();
+            context.setQualifiedUser("harbor");
+            try {
+                impl.streamLoadPutImpl(context, put);
+            } catch (Exception e) {
+                // Only the user set before planning matters.
+            }
+            Assertions.assertEquals("harbor", context.getQualifiedUser());
+        } finally {
+            Config.enable_pipeline_stream_load = savedPipelineStreamLoad;
+            if (txnId != -1) {
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getId(),
+                        txnId, "test cleanup");
+            }
+            Config.authentication_chain = savedAuthChain;
+            GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                    .replayDropSecurityIntegration(siName);
         }
     }
 

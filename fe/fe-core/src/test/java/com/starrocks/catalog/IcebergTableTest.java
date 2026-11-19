@@ -181,6 +181,28 @@ public class IcebergTableTest extends TableTestBase {
     }
 
     @Test
+    public void testUuidBucketProperty() {
+        // Iceberg buckets a uuid by its 16 bytes, StarRocks reads it as a string: the BE parses it back.
+        Schema uuidSchema = new Schema(Types.NestedField.required(1, "id", Types.IntegerType.get()),
+                Types.NestedField.required(2, "u", Types.UUIDType.get()));
+        PartitionSpec spec = PartitionSpec.builderFor(uuidSchema).bucket("u", 4).build();
+        TestTables.TestTable nativeTable = create(uuidSchema, spec, "uuid_bucket", 2);
+        List<Column> schema = new ArrayList<>();
+        schema.add(new Column("id", INT));
+        schema.add(new Column("u", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, nativeTable, Maps.newHashMap());
+        Assertions.assertTrue(icebergTable.hasBucketProperties());
+        List<BucketProperty> bucketProperties = icebergTable.getBucketProperties();
+        Assertions.assertEquals(1, bucketProperties.size());
+        Assertions.assertEquals(TBucketFunction.MURMUR3_X86_32_UUID, bucketProperties.get(0).getBucketFunction());
+        Assertions.assertEquals(4, bucketProperties.get(0).getBucketNum());
+        // uuid and string buckets hash differently, so they must not colocate.
+        Assertions.assertFalse(bucketProperties.get(0).satisfy(
+                new BucketProperty(TBucketFunction.MURMUR3_X86_32, 4, schema.get(1))));
+    }
+
+    @Test
     public void testHasBucketProperties() {
         // two specs
         new MockUp<TestTables.TestTable>() {
@@ -335,6 +357,26 @@ public class IcebergTableTest extends TableTestBase {
                 "iceberg_catalog", "resource", "db", "sort_nested_middle", "", columns, nestedMiddleTable,
                 Maps.newHashMap()));
         Assertions.assertTrue(ddl.contains("\nORDER BY (b DESC NULLS LAST)\n"), ddl);
+    }
+
+    @Test
+    public void testShowCreateTableShowsDefaultOfRequiredColumn() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                Types.NestedField.required("age").withId(2).ofType(Types.IntegerType.get())
+                        .withInitialDefault(20).withWriteDefault(20).build(),
+                Types.NestedField.required(3, "k", Types.IntegerType.get()),
+                Types.NestedField.optional("score").withId(4).ofType(Types.IntegerType.get())
+                        .withInitialDefault(60).withWriteDefault(60).build());
+        TestTables.TestTable table = TestTables.create(tableDir, "required_default", schema,
+                PartitionSpec.unpartitioned(), 3);
+        String ddl = AstToStringBuilder.getExternalCatalogTableDdlStmt(new IcebergTable(1, "required_default",
+                "iceberg_catalog", "resource", "db", "required_default", "",
+                IcebergApiConverter.toFullSchemas(schema, table), table, Maps.newHashMap()));
+        Assertions.assertTrue(ddl.contains("`id` int(11) DEFAULT NULL,"), ddl);
+        Assertions.assertTrue(ddl.contains("`age` int(11) NOT NULL DEFAULT \"20\","), ddl);
+        Assertions.assertTrue(ddl.contains("`k` int(11) NOT NULL,"), ddl);
+        Assertions.assertTrue(ddl.contains("`score` int(11) DEFAULT \"60\""), ddl);
     }
 
     @Test

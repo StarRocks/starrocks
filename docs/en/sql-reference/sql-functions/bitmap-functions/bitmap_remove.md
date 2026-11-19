@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Removes input from the Bitmap value lhs and returns a result set."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_remove

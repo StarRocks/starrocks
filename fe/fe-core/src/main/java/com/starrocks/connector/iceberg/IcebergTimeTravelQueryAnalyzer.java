@@ -16,6 +16,7 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.metadata.iceberg.IcebergEntriesTable;
 import com.starrocks.connector.metadata.iceberg.IcebergFilesTable;
 import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -102,6 +103,7 @@ public final class IcebergTimeTravelQueryAnalyzer {
     private static boolean isTimeTravelTable(Table table) {
         return table instanceof IcebergTable
                 || table instanceof LogicalIcebergMetadataTable
-                || table instanceof IcebergFilesTable;
+                || table instanceof IcebergFilesTable
+                || table instanceof IcebergEntriesTable;
     }
 }

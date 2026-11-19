@@ -28,6 +28,7 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
+#include "testutil/column_test_helper.h"
 #include "types/date_value.h"
 #include "types/decimalv2_value.h"
 #include "types/decimalv3.h"
@@ -105,26 +106,19 @@ public:
 TEST_P(ColumnHashTest, test_fixed_length_numeric_types) {
     // Test int8
     {
-        auto col = Int8Column::create();
-        col->append(1);
-        col->append(2);
-        col->append(-1);
+        auto col = ColumnTestHelper::build_column<int8_t>({1, 2, -1});
         this->test_hash_function(col, 0, 3);
     }
 
     // Test int16
     {
-        auto col = Int16Column::create();
-        col->append(100);
-        col->append(200);
+        auto col = ColumnTestHelper::build_column<int16_t>({100, 200});
         this->test_hash_function(col, 0, 2);
     }
 
     // Test int32
     {
-        auto col = Int32Column::create();
-        col->append(1000);
-        col->append(2000);
+        auto col = ColumnTestHelper::build_column<int32_t>({1000, 2000});
         this->test_hash_function(col, 0, 2);
     }
 
@@ -146,17 +140,13 @@ TEST_P(ColumnHashTest, test_fixed_length_numeric_types) {
 
     // Test float
     {
-        auto col = FloatColumn::create();
-        col->append(1.5f);
-        col->append(2.5f);
+        auto col = ColumnTestHelper::build_column<float>({1.5f, 2.5f});
         this->test_hash_function(col, 0, 2);
     }
 
     // Test double
     {
-        auto col = DoubleColumn::create();
-        col->append(1.5);
-        col->append(2.5);
+        auto col = ColumnTestHelper::build_column<double>({1.5, 2.5});
         this->test_hash_function(col, 0, 2);
     }
 }
@@ -199,10 +189,7 @@ TEST_P(ColumnHashTest, test_decimal_types) {
 TEST_P(ColumnHashTest, test_binary_types) {
     // Test BinaryColumn (VARCHAR)
     {
-        auto col = BinaryColumn::create();
-        col->append("hello");
-        col->append("world");
-        col->append("xxx");
+        auto col = ColumnTestHelper::build_column<Slice>({"hello", "world", "xxx"});
         this->test_hash_function(col, 0, 3);
     }
 }
@@ -224,8 +211,7 @@ TEST_P(ColumnHashTest, test_nullable_column) {
 
 // Test const column
 TEST_P(ColumnHashTest, test_const_column) {
-    auto data_col = Int32Column::create();
-    data_col->append(42);
+    auto data_col = ColumnTestHelper::build_column<int32_t>({42});
     auto col = ConstColumn::create(data_col, 3);
 
     this->test_hash_function(col, 0, 3);
@@ -267,12 +253,8 @@ TEST_P(ColumnHashTest, test_map_column) {
 // Test struct column
 TEST_P(ColumnHashTest, test_struct_column) {
     std::vector<std::string> field_names{"id", "name"};
-    auto id_col = Int32Column::create();
-    auto name_col = BinaryColumn::create();
-    id_col->append(1);
-    name_col->append("alice");
-    id_col->append(2);
-    name_col->append("bob");
+    auto id_col = ColumnTestHelper::build_column<int32_t>({1, 2});
+    auto name_col = ColumnTestHelper::build_column<Slice>({"alice", "bob"});
 
     Columns fields{id_col, name_col};
     auto col = StructColumn::create(fields, field_names);
@@ -294,11 +276,7 @@ TEST_P(ColumnHashTest, test_json_column) {
 
 // Test hash functions with selection
 TEST_P(ColumnHashTest, test_hash_with_selection) {
-    auto col = Int32Column::create();
-    col->append(1);
-    col->append(2);
-    col->append(3);
-    col->append(4);
+    auto col = ColumnTestHelper::build_column<int32_t>({1, 2, 3, 4});
 
     uint8_t selection[] = {1, 0, 1, 1};
     this->test_hash_function_with_selection(col, selection, 0, 4);
@@ -306,12 +284,7 @@ TEST_P(ColumnHashTest, test_hash_with_selection) {
 
 // Test hash functions with selective indices
 TEST_P(ColumnHashTest, test_hash_selective) {
-    auto col = Int32Column::create();
-    col->append(1);
-    col->append(2);
-    col->append(3);
-    col->append(4);
-    col->append(5);
+    auto col = ColumnTestHelper::build_column<int32_t>({1, 2, 3, 4, 5});
 
     uint16_t sel[] = {0, 2, 4};
     this->test_hash_function_selective(col, sel, 3);
@@ -319,10 +292,8 @@ TEST_P(ColumnHashTest, test_hash_selective) {
 
 // Test hash consistency - same value should produce same hash
 TEST_P(ColumnHashTest, test_hash_consistency) {
-    auto col1 = Int32Column::create();
-    auto col2 = Int32Column::create();
-    col1->append(42);
-    col2->append(42);
+    auto col1 = ColumnTestHelper::build_column<int32_t>({42});
+    auto col2 = ColumnTestHelper::build_column<int32_t>({42});
 
     std::vector<uint32_t> hash1(1, 0);
     std::vector<uint32_t> hash2(1, 0);

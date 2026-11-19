@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "2 つのネイティブ平面ポリゴンが共有する面積、辺、孤立した接触点を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Intersection

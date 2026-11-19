@@ -106,6 +106,7 @@ protected:
     static constexpr int LOAD_START_TIME = 19;
     static constexpr int LOAD_COMMIT_TIME = 20;
     static constexpr int LOAD_FINISH_TIME = 21;
+    static constexpr int PROPERTIES = 22;
 };
 
 // Pin the wall-clock that an epoch-ms job timestamp renders to in two
@@ -279,6 +280,28 @@ TEST_F(SchemaLoadsScannerTest, sentinel_ms_renders_null) {
 
     EXPECT_TRUE(is_null_at(chunk, CREATE_TIME));
     EXPECT_TRUE(is_null_at(chunk, LOAD_START_TIME));
+}
+
+// The FE leaves out the properties of a job for a user who may not read the rows the job loads, and they must read
+// NULL rather than fail to parse.
+TEST_F(SchemaLoadsScannerTest, unset_properties_render_null) {
+    SchemaLoadsScanner scanner;
+    init_scanner(scanner, "UTC");
+
+    TLoadInfo info = make_min_load_info(1);
+    info.__isset.properties = false;
+    scanner._result.loads = {make_min_load_info(2), info};
+    scanner._cur_idx = 0;
+
+    auto chunk = create_chunk(scanner.get_slot_descs());
+    bool eos = false;
+    EXPECT_OK(scanner.get_next(&chunk, &eos));
+    EXPECT_OK(scanner.get_next(&chunk, &eos));
+    ASSERT_EQ(2, chunk->num_rows());
+
+    auto* properties = down_cast<NullableColumn*>(chunk->get_column_raw_ptr_by_slot_id(PROPERTIES));
+    EXPECT_FALSE(properties->is_null(0));
+    EXPECT_TRUE(properties->is_null(1));
 }
 
 // getLoads answers in pages now, and the cursor for the page after the current one

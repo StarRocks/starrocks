@@ -71,6 +71,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
@@ -146,6 +147,13 @@ public abstract class AlterJobV2 implements Writable {
 
     // Whether pruneMeta() has run on this in-memory job since it reached its final state. Not persisted.
     private transient volatile boolean metaPruned;
+
+    // Physical partitions this job has sent a lake publish request for, see PublishVersionRequest.is_retry_publish.
+    // Not persisted: a leader that has just taken over sends its first request as a first attempt.
+    private transient Set<Long> lakePublishSentPartitions;
+    // Set once a FORCE cancel has sent a no-op publish. That publish writes each partition's commit version with the
+    // job's gtid but without the alter's changes, so a later normal publish must not take a stored version as its own.
+    private transient volatile boolean lakeNoOpPublishSent;
 
     public AlterJobV2(long jobId, JobType jobType, long dbId, long tableId, String tableName, long timeoutMs) {
         this.jobId = jobId;
@@ -592,6 +600,59 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     /**
+     * Gate for the FORCE-cancel no-op publish, checked BEFORE it is sent. Returns false while any
+     * affected partition's visible version is still below {@code commitVersion - 1}, i.e. a load
+     * committed at a version below the alter's reserved {@code commitVersion} has not finished on FE.
+     *
+     * <p>Such a load may already be published on BE while its FE finishTransaction has not run yet.
+     * The no-op publish of {@code commitVersion} (base {@code commitVersion - 1}) would then succeed,
+     * but {@link #advanceVisibleVersionForForceSkip} skips the partition (visible is not
+     * {@code commitVersion - 1}). Once the load finishes, visible stays at {@code commitVersion - 1}
+     * while nextVersion is already {@code commitVersion + 1}, so no later load can ever finish.
+     * Refusing lets the operator retry once those loads are visible. On a file_bundling table a load
+     * that is stuck in publish can be skipped first with ADMIN SKIP COMMITTED TRANSACTION.
+     *
+     * <p>Once visible is {@code commitVersion - 1} it cannot move until this job publishes or is
+     * cancelled ({@code run()} and {@code cancel()} are both synchronized on the job), so checking
+     * before the no-op publish is enough. Live cancel path only; replay never calls this.
+     */
+    protected boolean readyToForceSkipPublish(Map<Long, Long> commitVersionMap) {
+        if (commitVersionMap == null || commitVersionMap.isEmpty()) {
+            return true;
+        }
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return true;
+        }
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (table == null) {
+            return true;
+        }
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
+        try {
+            for (Map.Entry<Long, Long> entry : commitVersionMap.entrySet()) {
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(entry.getKey());
+                if (physicalPartition == null) {
+                    continue;
+                }
+                long commitVersion = entry.getValue();
+                if (physicalPartition.getVisibleVersion() < commitVersion - 1) {
+                    LOG.warn("refuse to force-cancel alter job {} of table {}: partition {} visible version {} is "
+                                    + "behind the reserved commit version {} - 1. Wait for the earlier loads to become "
+                                    + "visible (on a file_bundling table a publish-stuck one can be skipped with "
+                                    + "ADMIN SKIP COMMITTED TRANSACTION), then retry", jobId, tableId, entry.getKey(),
+                            physicalPartition.getVisibleVersion(), commitVersion);
+                    return false;
+                }
+            }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
+        }
+        return true;
+    }
+
+    /**
      * should be called before executing the job.
      * return false if table is not stable.
      */
@@ -665,7 +726,30 @@ public abstract class AlterJobV2 implements Writable {
         return true;
     }
 
+    // Marks the publish request of |physicalPartitionId| as sent and returns whether an earlier request was already
+    // sent, i.e. whether this one is a retry that may find some tablets already at the new version. Call it right
+    // before sending, after every check that can still skip the send.
+    protected synchronized boolean getAndMarkLakePublishSent(long physicalPartitionId) {
+        if (lakePublishSentPartitions == null) {
+            lakePublishSentPartitions = Sets.newHashSet();
+        }
+        return !lakePublishSentPartitions.add(physicalPartitionId) && !lakeNoOpPublishSent;
+    }
+
+    // Call before sending a FORCE cancel's no-op publish. A no-op publish that fails part way leaves the job in
+    // FINISHED_REWRITING, and from then on publishVersion() refuses to finish it: only another FORCE cancel can.
+    protected void markLakeNoOpPublishSent() {
+        lakeNoOpPublishSent = true;
+    }
+
     protected boolean publishVersion() {
+        // The no-op publish may have written some partition's commit version with the job's gtid but without the
+        // alter's changes. A normal publish that reaches such a partition while BE still caches that version takes
+        // it as its own and succeeds, and the job would finish without the alter applied there. This also drops the
+        // result of a normal publish that was still running when the no-op publish was sent.
+        if (lakeNoOpPublishSent) {
+            return false;
+        }
         if (publishVersionFuture == null) {
             ThreadPoolExecutor executor = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor();
             try {

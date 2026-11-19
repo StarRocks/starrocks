@@ -17,9 +17,12 @@
 #include <fmt/core.h>
 
 #include <algorithm>
+#include <limits>
 #include <optional>
 #include <string_view>
+#include <unordered_set>
 
+#include "base/container/raw_container.h"
 #include "base/simd/simd.h"
 #include "base/string/slice.h"
 #include "column/array_column.h"
@@ -48,11 +51,11 @@ namespace {
 
 TypeDescriptor resolve_virtual_slot_type(VariantColumnReader* source, const VariantPath& leaf_path) {
     if (source == nullptr) {
-        return TypeDescriptor(LogicalType::TYPE_UNKNOWN);
+        return TYPE_UNKNOWN_DESC;
     }
     const TypeDescriptor* leaf_type = source->typed_value_read_type_for_path(leaf_path);
     if (leaf_type == nullptr) {
-        return TypeDescriptor(LogicalType::TYPE_UNKNOWN);
+        return TYPE_UNKNOWN_DESC;
     }
     return *leaf_type;
 }
@@ -102,6 +105,105 @@ const ShreddedFieldNode* find_deepest_shredded_ancestor_for_path(const std::vect
     }
     // Every object segment is shredded: the path itself (or its array boundary) is the node.
     return nullptr;
+}
+
+// Integer rank for a lossless widening check; -1 for every other type.
+static int integer_rank(LogicalType type) {
+    switch (type) {
+    case TYPE_TINYINT:
+        return 0;
+    case TYPE_SMALLINT:
+        return 1;
+    case TYPE_INT:
+        return 2;
+    case TYPE_BIGINT:
+        return 3;
+    default:
+        return -1;
+    }
+}
+
+// The value of an integer literal of a predicate on a `slot_type` column, widened to int64.
+static std::optional<int64_t> integer_literal(const Datum& datum, LogicalType slot_type) {
+    if (datum.is_null()) {
+        return std::nullopt;
+    }
+    switch (slot_type) {
+    case TYPE_TINYINT:
+        return datum.get_int8();
+    case TYPE_SMALLINT:
+        return datum.get_int16();
+    case TYPE_INT:
+        return datum.get_int32();
+    case TYPE_BIGINT:
+        return datum.get_int64();
+    default:
+        return std::nullopt;
+    }
+}
+
+static bool integer_fits(int64_t value, LogicalType type) {
+    switch (type) {
+    case TYPE_TINYINT:
+        return value >= std::numeric_limits<int8_t>::min() && value <= std::numeric_limits<int8_t>::max();
+    case TYPE_SMALLINT:
+        return value >= std::numeric_limits<int16_t>::min() && value <= std::numeric_limits<int16_t>::max();
+    case TYPE_INT:
+        return value >= std::numeric_limits<int32_t>::min() && value <= std::numeric_limits<int32_t>::max();
+    case TYPE_BIGINT:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Writers shred an integer path in the narrowest width that holds its values (int8/int16 for small numbers), while
+// the virtual slot reads it as a wider integer. Comparing the narrower leaf values with a literal gives the same
+// answer as comparing the widened values, as long as the literal itself fits the leaf type: convert_to() only
+// converts the literal, and one outside the leaf range would wrap and prune matching rows. So a predicate can be
+// delegated across the widening only when it has no literal (IS [NOT] NULL) or every literal fits the leaf type.
+static bool can_delegate_across_integer_widening(const std::vector<const ColumnPredicate*>& predicates,
+                                                 const TypeDescriptor& leaf_type, const TypeDescriptor& slot_type) {
+    const int leaf_rank = integer_rank(leaf_type.type);
+    const int slot_rank = integer_rank(slot_type.type);
+    if (leaf_rank < 0 || slot_rank < 0 || leaf_rank > slot_rank) {
+        return false;
+    }
+    for (const ColumnPredicate* predicate : predicates) {
+        if (predicate == nullptr) {
+            return false;
+        }
+        std::vector<Datum> literals;
+        switch (predicate->type()) {
+        case PredicateType::kIsNull:
+        case PredicateType::kNotNull:
+            continue;
+        case PredicateType::kEQ:
+        case PredicateType::kNE:
+        case PredicateType::kGT:
+        case PredicateType::kGE:
+        case PredicateType::kLT:
+        case PredicateType::kLE:
+            literals.emplace_back(predicate->value());
+            break;
+        case PredicateType::kInList:
+        case PredicateType::kNotInList:
+            literals = predicate->values();
+            if (literals.empty()) {
+                return false;
+            }
+            break;
+        default:
+            return false;
+        }
+        for (const Datum& literal : literals) {
+            std::optional<int64_t> value = integer_literal(literal, slot_type.type);
+            if (!value.has_value() || !integer_fits(*value, leaf_type.type)) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 Status rewrite_delegate_predicates(const std::vector<const ColumnPredicate*>& predicates,
@@ -206,9 +308,12 @@ Status ListColumnReader::read_range(const Range<uint64_t>& range, const Filter* 
     _element_reader->get_levels(&def_levels, &rep_levels, &num_levels);
 
     auto& offsets = array_column->offsets_column_raw_ptr()->get_data();
-    offsets.resize(num_levels + 1);
-    NullColumn null_column(num_levels);
+    // def_rep_to_offset writes every offset after offsets[0] and every null flag it produces, so neither needs
+    // zero filling to the worst case of one row per level.
+    raw::stl_vector_resize_uninitialized(&offsets, num_levels + 1);
+    NullColumn null_column;
     auto& is_nulls = null_column.get_data();
+    raw::stl_vector_resize_uninitialized(&is_nulls, num_levels);
     size_t num_offsets = 0;
     bool has_null = false;
     def_rep_to_offset(get_column_parquet_field()->level_info, def_levels, rep_levels, num_levels, &offsets[0],
@@ -309,9 +414,12 @@ Status MapColumnReader::read_range(const Range<uint64_t>& range, const Filter* f
     }
 
     auto& offsets = map_column->offsets_column_raw_ptr()->get_data();
-    offsets.resize(num_levels + 1);
-    NullColumn null_column(num_levels);
+    // def_rep_to_offset writes every offset after offsets[0] and every null flag it produces, so neither needs
+    // zero filling to the worst case of one row per level.
+    raw::stl_vector_resize_uninitialized(&offsets, num_levels + 1);
+    NullColumn null_column;
     auto& is_nulls = null_column.get_data();
+    raw::stl_vector_resize_uninitialized(&is_nulls, num_levels);
     size_t num_offsets = 0;
     bool has_null = false;
 
@@ -640,7 +748,7 @@ StatusOr<bool> StructColumnReader::row_group_bloom_filter(const std::vector<cons
         if (!val || !val->is_constant()) {
             return false;
         }
-        auto val_str = down_cast<const ConstColumn*>(val.get())->data_column()->debug_item(0);
+        auto val_str = down_cast<const ConstColumn*>(val.get())->data_column()->raw_item_value(0);
         auto t = get_type_info(root->get_child(1)->type().type);
         ColumnPredicate* pred = nullptr;
         pred = new_column_eq_predicate(t, rewritten_subfield_predicate->column_id(), val_str);
@@ -836,10 +944,49 @@ void StructColumnReader::_handle_null_rows(uint8_t* is_nulls, bool* has_null, si
 // VariantColumnReader
 // ==================================================================
 
+static Status _prepare_object_presence(ObjectPresenceSource* source) {
+    if (source == nullptr || source->reader == nullptr) {
+        return Status::OK();
+    }
+    RETURN_IF_ERROR(source->reader->prepare());
+    // The levels are the whole point of this reader, whatever the rest of the query needs.
+    source->reader->set_need_parse_levels(true);
+    return Status::OK();
+}
+
+// Reads the presence leaf of one object group for this batch and derives which rows hold the group. It stays empty
+// (no row is present) when the leaf has no definition levels: nothing above it is optional, so it cannot tell.
+static Status _read_object_presence(const Range<uint64_t>& range, const Filter* filter, ObjectPresenceSource* source) {
+    if (source == nullptr || source->reader == nullptr) {
+        return Status::OK();
+    }
+    source->present.clear();
+    ColumnPtr leaf_column = ColumnHelper::create_column(*source->read_type, true);
+    RETURN_IF_ERROR(source->reader->read_range(range, filter, leaf_column));
+    level_t* def_levels = nullptr;
+    level_t* rep_levels = nullptr;
+    size_t num_levels = 0;
+    source->reader->get_levels(&def_levels, &rep_levels, &num_levels);
+    if (def_levels == nullptr) {
+        return Status::OK();
+    }
+    if (rep_levels != nullptr || num_levels != leaf_column->size()) {
+        return Status::InternalError(
+                strings::Substitute("variant object presence leaf has $0 levels for $1 rows (repeated=$2)", num_levels,
+                                    leaf_column->size(), rep_levels != nullptr));
+    }
+    source->present.resize(num_levels);
+    for (size_t i = 0; i < num_levels; ++i) {
+        source->present[i] = def_levels[i] >= source->group_def_level ? 1 : 0;
+    }
+    return Status::OK();
+}
+
 static Status _prepare_shredded_field_node(ShreddedFieldNode* node) {
     if (node == nullptr) {
         return Status::InvalidArgument("node should not be null");
     }
+    RETURN_IF_ERROR(_prepare_object_presence(node->presence.get()));
     if (node->value_reader != nullptr) {
         RETURN_IF_ERROR(node->value_reader->prepare());
     }
@@ -972,7 +1119,8 @@ static bool _requested_paths_are_scalar_typed_leaves(const std::vector<ShreddedF
     }
     for (const auto& path : requested_paths) {
         const ShreddedFieldNode* node = find_shredded_field_node_for_path(nodes, path);
-        if (node == nullptr || node->kind != ShreddedFieldNode::Kind::SCALAR || node->typed_value_reader == nullptr) {
+        if (node == nullptr || node->kind != ShreddedFieldNode::Kind::SCALAR || node->typed_value_reader == nullptr ||
+            node->raw_encoding != ShreddedRawEncoding::NONE) {
             return false;
         }
     }
@@ -1000,9 +1148,176 @@ static void _clear_shredded_field_node_columns(ShreddedFieldNode* node) {
     node->value_column = nullptr;
     node->typed_value_column = nullptr;
     node->array_element_value_column = nullptr;
+    if (node->presence != nullptr) {
+        node->presence->present.clear();
+    }
     for (auto& child : node->children) {
         _clear_shredded_field_node_columns(&child);
     }
+}
+
+// The shredding spec requires `value` to be null wherever a scalar `typed_value` is set; only objects may have both.
+// Reading such a row would silently let typed_value win and drop `value`, so fail on it. This runs after a node's columns
+// are read, so it only inspects data that the query actually uses.
+static Status _check_shredded_scalar_node_no_conflict(const ShreddedFieldNode& node) {
+    if (node.kind != ShreddedFieldNode::Kind::SCALAR || node.value_column == nullptr ||
+        node.typed_value_column == nullptr) {
+        return Status::OK();
+    }
+    const size_t num_rows = node.typed_value_column->size();
+    for (size_t row = 0; row < num_rows; ++row) {
+        const Column* typed_data = nullptr;
+        size_t typed_row = 0;
+        if (!ParquetUtils::get_non_null_data_column_and_row(node.typed_value_column.get(), row, &typed_data,
+                                                            &typed_row)) {
+            continue;
+        }
+        Slice fallback;
+        if (ColumnHelper::get_binary_slice_at(node.value_column.get(), row, &fallback) && fallback.size > 0) {
+            return Status::Corruption(strings::Substitute(
+                    "invalid shredded VARIANT: value and typed_value are both set for field '$0' at row $1",
+                    node.full_path, row));
+        }
+    }
+    return Status::OK();
+}
+
+// Whether `node`, or anything below it, holds a value in `row`: its own fallback `value`, a typed value, or an object
+// group that is present. An ARRAY node counts by its typed list only: its children are element-indexed.
+static bool _shredded_node_has_content(const ShreddedFieldNode& node, size_t row) {
+    Slice fallback;
+    if (node.value_column != nullptr && ColumnHelper::get_binary_slice_at(node.value_column.get(), row, &fallback) &&
+        fallback.size > 0) {
+        return true;
+    }
+    const Column* typed_data = nullptr;
+    size_t typed_row = 0;
+    if (node.typed_value_column != nullptr &&
+        ParquetUtils::get_non_null_data_column_and_row(node.typed_value_column.get(), row, &typed_data, &typed_row)) {
+        return true;
+    }
+    if (node.presence != nullptr && node.presence->is_present(row)) {
+        return true;
+    }
+    if (node.kind == ShreddedFieldNode::Kind::ARRAY) {
+        return false;
+    }
+    for (const auto& child : node.children) {
+        if (_shredded_node_has_content(child, row)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool _has_non_empty_binary(const Column* column, size_t row) {
+    Slice slice;
+    return column != nullptr && ColumnHelper::get_binary_slice_at(column, row, &slice) && slice.size > 0;
+}
+
+// An array element must not have both `value` and a scalar `typed_value`, like any other scalar.
+static Status _check_shredded_array_elements_no_conflict(const ShreddedFieldNode& node) {
+    if (node.kind != ShreddedFieldNode::Kind::ARRAY || !node.scalar_array_layout ||
+        node.typed_value_column == nullptr || node.array_element_value_column == nullptr) {
+        return Status::OK();
+    }
+    const size_t num_rows = node.typed_value_column->size();
+    for (size_t row = 0; row < num_rows; ++row) {
+        const Column* typed_list = nullptr;
+        const Column* value_list = nullptr;
+        size_t typed_row = 0;
+        size_t value_row = 0;
+        if (!ParquetUtils::get_non_null_data_column_and_row(node.typed_value_column.get(), row, &typed_list,
+                                                            &typed_row) ||
+            !ParquetUtils::get_non_null_data_column_and_row(node.array_element_value_column.get(), row, &value_list,
+                                                            &value_row) ||
+            !typed_list->is_array() || !value_list->is_array()) {
+            continue;
+        }
+        const auto* typed_array = down_cast<const ArrayColumn*>(typed_list);
+        const auto* value_array = down_cast<const ArrayColumn*>(value_list);
+        const auto& typed_offsets = typed_array->offsets().get_data();
+        const auto& value_offsets = value_array->offsets().get_data();
+        const size_t count = std::min<size_t>(typed_offsets[typed_row + 1] - typed_offsets[typed_row],
+                                              value_offsets[value_row + 1] - value_offsets[value_row]);
+        for (size_t i = 0; i < count; ++i) {
+            const Column* typed_data = nullptr;
+            size_t typed_element_row = 0;
+            if (ParquetUtils::get_non_null_data_column_and_row(typed_array->elements_column().get(),
+                                                               typed_offsets[typed_row] + i, &typed_data,
+                                                               &typed_element_row) &&
+                _has_non_empty_binary(value_array->elements_column().get(), value_offsets[value_row] + i)) {
+                return Status::Corruption(strings::Substitute(
+                        "invalid shredded VARIANT: value and typed_value are both set for element $0 of '$1' at row $2",
+                        i, node.full_path, row));
+            }
+        }
+    }
+    return Status::OK();
+}
+
+// The `value` of a row that has shredded object fields must be an object (basic type 2) or absent: the fields could
+// not be merged into anything else. Rows that have neither the object group nor any field are not concerned.
+static bool _variant_value_is_object(const Slice& value) {
+    return value.size > 0 && (static_cast<uint8_t>(value.data[0]) & 0x03) == 2;
+}
+
+static Status _check_shredded_object_value_is_object(const ShreddedFieldNode& node) {
+    if (node.kind == ShreddedFieldNode::Kind::ARRAY || node.children.empty() || node.value_column == nullptr) {
+        return Status::OK();
+    }
+    const size_t num_rows = node.value_column->size();
+    for (size_t row = 0; row < num_rows; ++row) {
+        Slice value;
+        if (!ColumnHelper::get_binary_slice_at(node.value_column.get(), row, &value) || value.size == 0 ||
+            _variant_value_is_object(value)) {
+            continue;
+        }
+        bool has_fields = node.presence != nullptr && node.presence->is_present(row);
+        for (const auto& child : node.children) {
+            has_fields = has_fields || _shredded_node_has_content(child, row);
+        }
+        if (has_fields) {
+            return Status::Corruption(strings::Substitute(
+                    "invalid shredded VARIANT: non-object value with shredded fields for '$0' at row $1",
+                    node.full_path, row));
+        }
+    }
+    return Status::OK();
+}
+
+// The same rules for the top level of the variant, where `value` is a column of the variant group: a scalar or array
+// typed_value excludes `value`, and an object typed_value only goes with an object `value`.
+static Status _check_root_value_conflicts(const BinaryColumn* value_column, ImmutableNullData value_nulls,
+                                          const Column* root_typed_value_column,
+                                          const std::vector<ShreddedFieldNode>& shredded_fields,
+                                          const ObjectPresenceSource* root_presence) {
+    const size_t num_rows = value_column->size();
+    for (size_t row = 0; row < num_rows; ++row) {
+        if (value_nulls[row] || value_column->get_slice(row).size == 0) {
+            continue;
+        }
+        const Column* typed_data = nullptr;
+        size_t typed_row = 0;
+        if (root_typed_value_column != nullptr &&
+            ParquetUtils::get_non_null_data_column_and_row(root_typed_value_column, row, &typed_data, &typed_row)) {
+            return Status::Corruption(strings::Substitute(
+                    "invalid shredded VARIANT: value and typed_value are both set at the top level at row $0", row));
+        }
+        if (_variant_value_is_object(value_column->get_slice(row))) {
+            continue;
+        }
+        // A present root object group counts even when every field is null: the value is then an empty object.
+        bool has_fields = root_presence != nullptr && root_presence->is_present(row);
+        for (const auto& node : shredded_fields) {
+            has_fields = has_fields || _shredded_node_has_content(node, row);
+        }
+        if (has_fields) {
+            return Status::Corruption(strings::Substitute(
+                    "invalid shredded VARIANT: non-object value with shredded fields at the top level at row $0", row));
+        }
+    }
+    return Status::OK();
 }
 
 static Status _read_shredded_field_node(const Range<uint64_t>& range, const Filter* filter, ShreddedFieldNode* node,
@@ -1015,6 +1330,9 @@ static Status _read_shredded_field_node(const Range<uint64_t>& range, const Filt
         return Status::OK();
     }
     const bool read_node_columns = _should_read_shredded_field_node_columns(*node, requested_paths);
+    if (read_node_columns && node->typed_value_reader != nullptr && !node->unsupported_reason.empty()) {
+        return Status::NotSupported(strings::Substitute("$0, path=$1", node->unsupported_reason, node->full_path));
+    }
     // All-null fallback `value` has no usable remain payload for any row in this row group.
     // Keep value_column as nullptr so downstream reconstruction treats it the same as
     // "no fallback payload", while still reading typed_value/children normally.
@@ -1050,12 +1368,20 @@ static Status _read_shredded_field_node(const Range<uint64_t>& range, const Filt
                 "shredded field '$0': typed_value_column size $1 != array_element_value_column size $2", node->name,
                 node->typed_value_column->size(), node->array_element_value_column->size()));
     }
+    // Presence only matters when the whole row is rebuilt; a read of chosen paths skips the extra column.
+    if (requested_paths == nullptr) {
+        RETURN_IF_ERROR(_read_object_presence(range, filter, node->presence.get()));
+    } else if (node->presence != nullptr) {
+        node->presence->present.clear();
+    }
+    RETURN_IF_ERROR(_check_shredded_scalar_node_no_conflict(*node));
+    RETURN_IF_ERROR(_check_shredded_array_elements_no_conflict(*node));
     const std::vector<VariantPath>* child_requested_paths =
             _child_requested_paths(*node, read_node_columns, requested_paths);
     for (auto& child : node->children) {
         RETURN_IF_ERROR(_read_shredded_field_node(range, filter, &child, child_requested_paths));
     }
-    return Status::OK();
+    return _check_shredded_object_value_is_object(*node);
 }
 
 static void _collect_shredded_field_io_range(const ShreddedFieldNode& node,
@@ -1074,6 +1400,9 @@ static void _collect_shredded_field_io_range(const ShreddedFieldNode& node,
     }
     if (read_node_columns && node.array_element_value_reader != nullptr) {
         node.array_element_value_reader->collect_column_io_range(ranges, end_offset, types, active);
+    }
+    if (requested_paths == nullptr && node.presence != nullptr && node.presence->reader != nullptr) {
+        node.presence->reader->collect_column_io_range(ranges, end_offset, types, active);
     }
     const std::vector<VariantPath>* child_requested_paths =
             _child_requested_paths(node, read_node_columns, requested_paths);
@@ -1097,6 +1426,9 @@ static void _select_shredded_field_offset_index(const ShreddedFieldNode& node, c
     }
     if (read_node_columns && node.array_element_value_reader != nullptr) {
         node.array_element_value_reader->select_offset_index(range, rg_first_row);
+    }
+    if (requested_paths == nullptr && node.presence != nullptr && node.presence->reader != nullptr) {
+        node.presence->reader->select_offset_index(range, rg_first_row);
     }
     const std::vector<VariantPath>* child_requested_paths =
             _child_requested_paths(node, read_node_columns, requested_paths);
@@ -1127,6 +1459,277 @@ static const Column* _find_first_typed_col(const ShreddedFieldNode& node) {
 static Status _collect_overlays_for_array_element(size_t element_row, const std::vector<ShreddedFieldNode>& nodes,
                                                   std::string_view metadata_raw,
                                                   std::vector<VariantBuilder::Overlay>* overlays, int depth = 0);
+
+// A typed_value read raw is written as the variant primitive of its Parquet logical type: the timestamp kinds keep the
+// value and the time zone flag as they are in the file, and a UUID keeps its identity. Anything else goes through the
+// column type.
+static StatusOr<VariantRowValue> _encode_typed_scalar(ShreddedRawEncoding encoding, const TypeDescriptor& read_type,
+                                                      const std::string& path, const Datum& datum) {
+    VariantType type = VariantType::NULL_TYPE;
+    switch (encoding) {
+    case ShreddedRawEncoding::NONE:
+        return VariantEncoder::encode_datum(datum, read_type);
+    case ShreddedRawEncoding::TIMESTAMP_TZ_MICROS:
+        type = VariantType::TIMESTAMP_TZ;
+        break;
+    case ShreddedRawEncoding::TIMESTAMP_NTZ_MICROS:
+        type = VariantType::TIMESTAMP_NTZ;
+        break;
+    case ShreddedRawEncoding::TIMESTAMP_TZ_NANOS:
+        type = VariantType::TIMESTAMP_TZ_NANOS;
+        break;
+    case ShreddedRawEncoding::TIMESTAMP_NTZ_NANOS:
+        type = VariantType::TIMESTAMP_NTZ_NANOS;
+        break;
+    case ShreddedRawEncoding::TIME_NTZ_MICROS:
+        type = VariantType::TIME_NTZ;
+        break;
+    case ShreddedRawEncoding::UUID:
+        type = VariantType::UUID;
+        break;
+    }
+    std::string value(1, static_cast<char>(static_cast<uint8_t>(type) << VariantValue::kValueHeaderBitShift));
+    if (encoding == ShreddedRawEncoding::UUID) {
+        const Slice bytes = datum.get_slice();
+        if (bytes.size != 16) {
+            return Status::Corruption(
+                    strings::Substitute("shredded UUID '$0' has $1 bytes, expected 16", path, bytes.size));
+        }
+        value.append(bytes.data, bytes.size);
+    } else {
+        const int64_t raw = datum.get_int64();
+        for (int shift = 0; shift < 64; shift += 8) {
+            value.push_back(static_cast<char>((static_cast<uint64_t>(raw) >> shift) & 0xff));
+        }
+    }
+    static constexpr char kEmptyDictionary[] = {0x01, 0x00, 0x00};
+    return VariantRowValue::create(std::string_view(kEmptyDictionary, sizeof(kEmptyDictionary)), value);
+}
+
+// Object fields that a shredded field owns. When a key is both in the `value` residual and a shredded field, the
+// shredded field wins whether or not it has a value in the row (the Iceberg reader removes the key when the shredded
+// field is missing). The fields are removed from the object bytes without touching the metadata dictionary, so the
+// field ids of the others, and the fallback values of the same row, stay valid.
+using ShreddedNameSet = std::unordered_set<std::string_view>;
+
+static void _collect_shredded_names(const std::vector<ShreddedFieldNode>& nodes, ShreddedNameSet* names) {
+    for (const auto& node : nodes) {
+        names->insert(node.name);
+    }
+}
+
+// The names to look up, either as a prebuilt set (reused for a whole batch) or straight from the shredded children,
+// which allocates nothing and is meant for the few children of a nested object.
+class ShreddedNames {
+public:
+    ShreddedNames(const ShreddedNameSet& set) : _set(&set) {}
+    ShreddedNames(const std::vector<ShreddedFieldNode>& nodes) : _nodes(&nodes) {}
+
+    bool empty() const { return _set != nullptr ? _set->empty() : _nodes->empty(); }
+
+    bool contains(std::string_view name) const {
+        if (_set != nullptr) {
+            return _set->count(name) > 0;
+        }
+        return std::any_of(_nodes->begin(), _nodes->end(),
+                           [&](const ShreddedFieldNode& node) { return node.name == name; });
+    }
+
+private:
+    const ShreddedNameSet* _set = nullptr;
+    const std::vector<ShreddedFieldNode>* _nodes = nullptr;
+};
+
+static void _write_little_endian(std::string* out, uint64_t value, size_t size) {
+    for (size_t i = 0; i < size; ++i) {
+        out->push_back(static_cast<char>((value >> (8 * i)) & 0xff));
+    }
+}
+
+// True when the object `value_raw` has a field named in `names`. Reads only: no allocation and no copy, and it stops at the
+// first such field.
+static StatusOr<bool> _has_object_field_named(std::string_view metadata_raw, std::string_view value_raw,
+                                              const ShreddedNames& names) {
+    if (names.empty() || value_raw.empty() || (static_cast<uint8_t>(value_raw[0]) & 0x03) != 2) {
+        return false;
+    }
+    const VariantRowRef row(metadata_raw, value_raw);
+    ASSIGN_OR_RETURN(const VariantObjectInfo info, row.get_value().get_object_info());
+    for (uint32_t i = 0; i < info.num_elements; ++i) {
+        const uint32_t id = VariantUtil::read_little_endian_unsigned32(
+                value_raw.data() + info.id_start_offset + static_cast<size_t>(i) * info.id_size, info.id_size);
+        ASSIGN_OR_RETURN(const std::string_view key, row.get_metadata().get_key(id));
+        if (names.contains(key)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Copies `value_raw` without the fields named in `names` into `out`. Returns false, and leaves `out` alone, when it
+// is not an object or has none of them.
+static StatusOr<bool> _remove_object_fields(std::string_view metadata_raw, std::string_view value_raw,
+                                            const ShreddedNames& names, std::string* out) {
+    if (names.empty() || value_raw.empty() || (static_cast<uint8_t>(value_raw[0]) & 0x03) != 2) {
+        return false;
+    }
+    const VariantRowRef row(metadata_raw, value_raw);
+    ASSIGN_OR_RETURN(const VariantObjectInfo info, row.get_value().get_object_info());
+    // The drop list is allocated only once a field is dropped.
+    std::vector<bool> drop;
+    size_t dropped = 0;
+    for (uint32_t i = 0; i < info.num_elements; ++i) {
+        const uint32_t id = VariantUtil::read_little_endian_unsigned32(
+                value_raw.data() + info.id_start_offset + static_cast<size_t>(i) * info.id_size, info.id_size);
+        ASSIGN_OR_RETURN(const std::string_view key, row.get_metadata().get_key(id));
+        if (names.contains(key)) {
+            if (drop.empty()) {
+                drop.assign(info.num_elements, false);
+            }
+            drop[i] = true;
+            ++dropped;
+        }
+    }
+    if (dropped == 0) {
+        return false;
+    }
+
+    // The value of a field spans from its offset to the next offset above it: the offsets follow the order of the
+    // names, which is not always the order of the values. The offsets are 32-bit values of an untrusted file, so every
+    // position is computed and compared as a size_t, never as a sum of 32-bit values that can wrap.
+    if (info.data_start_offset > value_raw.size()) {
+        return Status::Corruption("variant object data starts after its end");
+    }
+    const size_t data_size = value_raw.size() - info.data_start_offset;
+    std::vector<uint32_t> offsets(static_cast<size_t>(info.num_elements) + 1);
+    for (size_t i = 0; i < offsets.size(); ++i) {
+        offsets[i] = VariantUtil::read_little_endian_unsigned32(
+                value_raw.data() + info.offset_start_offset + i * info.offset_size, info.offset_size);
+    }
+    std::vector<uint32_t> ascending(offsets);
+    std::sort(ascending.begin(), ascending.end());
+
+    std::string ids;
+    std::string new_offsets;
+    std::string data;
+    uint32_t kept = 0;
+    for (uint32_t i = 0; i < info.num_elements; ++i) {
+        if (drop[i]) {
+            continue;
+        }
+        const size_t begin = offsets[i];
+        if (begin >= data_size) {
+            return Status::Corruption("variant object field offset is out of bounds");
+        }
+        const auto next = std::upper_bound(ascending.begin(), ascending.end(), offsets[i]);
+        if (next == ascending.end() || static_cast<size_t>(*next) > data_size) {
+            return Status::Corruption("variant object field offsets are out of bounds");
+        }
+        _write_little_endian(&new_offsets, data.size(), info.offset_size);
+        ids.append(value_raw.data() + info.id_start_offset + static_cast<size_t>(i) * info.id_size, info.id_size);
+        data.append(value_raw.data() + info.data_start_offset + begin, static_cast<size_t>(*next) - begin);
+        ++kept;
+    }
+    _write_little_endian(&new_offsets, data.size(), info.offset_size);
+
+    // The header byte keeps the sizes of the ids and offsets and the width of the field count.
+    out->clear();
+    out->push_back(value_raw[0]);
+    _write_little_endian(out, kept, info.id_start_offset - 1);
+    out->append(ids);
+    out->append(new_offsets);
+    out->append(data);
+    return true;
+}
+
+// The elements of an array that no special layout covers (an array of arrays) are read by a plain reader as nested
+// STRUCT<value, typed_value> data. The functions below apply the shredding rules to that data, group by group.
+static int _type_field_index(const TypeDescriptor& type, std::string_view name) {
+    for (size_t i = 0; i < type.field_names.size(); ++i) {
+        if (type.field_names[i] == name) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+static bool _is_shredded_group_type(const TypeDescriptor& type) {
+    return type.type == TYPE_STRUCT && _type_field_index(type, "typed_value") >= 0;
+}
+
+static StatusOr<std::optional<VariantRowValue>> _resolve_shredded_group(const Datum& group, const TypeDescriptor& type,
+                                                                        std::string_view metadata_raw, int depth) {
+    if (depth > kMaxShreddedArrayNestingDepth) {
+        return Status::ResourceBusy("shredded array nesting depth limit exceeded");
+    }
+    if (group.is_null()) {
+        return std::optional<VariantRowValue>();
+    }
+    const auto& fields = group.get_struct();
+    const int value_index = _type_field_index(type, "value");
+    const int typed_index = _type_field_index(type, "typed_value");
+    const bool has_value =
+            value_index >= 0 && !fields[value_index].is_null() && fields[value_index].get_slice().size > 0;
+    if (typed_index >= 0 && !fields[typed_index].is_null()) {
+        const Datum& typed = fields[typed_index];
+        const TypeDescriptor& typed_type = type.children[typed_index];
+        if (typed_type.type == TYPE_ARRAY) {
+            const TypeDescriptor& element_type = typed_type.children[0];
+            VariantArrayBuilder builder;
+            for (const Datum& element : typed.get_array()) {
+                if (!_is_shredded_group_type(element_type)) {
+                    ASSIGN_OR_RETURN(auto encoded, VariantEncoder::encode_datum(element, element_type));
+                    builder.add(std::move(encoded));
+                    continue;
+                }
+                ASSIGN_OR_RETURN(auto resolved,
+                                 _resolve_shredded_group(element, element_type, metadata_raw, depth + 1));
+                if (resolved.has_value()) {
+                    builder.add(std::move(*resolved));
+                } else {
+                    builder.add_null();
+                }
+            }
+            ASSIGN_OR_RETURN(auto built, builder.build());
+            return std::optional<VariantRowValue>(std::move(built));
+        }
+        if (typed_type.type == TYPE_STRUCT) {
+            std::optional<VariantRowRef> base;
+            if (has_value) {
+                const Slice residual = fields[value_index].get_slice();
+                base.emplace(metadata_raw, std::string_view(residual.data, residual.size));
+            }
+            std::vector<VariantBuilder::Overlay> overlays;
+            const auto& object_fields = typed.get_struct();
+            for (size_t i = 0; i < typed_type.field_names.size(); ++i) {
+                ASSIGN_OR_RETURN(auto child, _resolve_shredded_group(object_fields[i], typed_type.children[i],
+                                                                     metadata_raw, depth + 1));
+                if (child.has_value()) {
+                    VariantPath path;
+                    path.segments.emplace_back(VariantSegment::make_object(typed_type.field_names[i]));
+                    overlays.emplace_back(VariantBuilder::Overlay{.path = std::move(path), .value = std::move(*child)});
+                }
+            }
+            if (overlays.empty() && !base.has_value()) {
+                // A present object with no fields is `{}`.
+                static constexpr char kMetadata[] = {0x01, 0x00, 0x00};
+                static constexpr char kValue[] = {0x02, 0x00, 0x00};
+                ASSIGN_OR_RETURN(auto empty_object,
+                                 VariantRowValue::create(std::string_view(kMetadata, 3), std::string_view(kValue, 3)));
+                return std::optional<VariantRowValue>(std::move(empty_object));
+            }
+            ASSIGN_OR_RETURN(auto built, VariantBuilder::build_row_from_overlays(base, std::move(overlays)));
+            return std::optional<VariantRowValue>(std::move(built));
+        }
+        ASSIGN_OR_RETURN(auto encoded, VariantEncoder::encode_datum(typed, typed_type));
+        return std::optional<VariantRowValue>(std::move(encoded));
+    }
+    if (has_value) {
+        const Slice bytes = fields[value_index].get_slice();
+        return std::optional<VariantRowValue>(VariantRowValue(metadata_raw, std::string_view(bytes.data, bytes.size)));
+    }
+    return std::optional<VariantRowValue>();
+}
 
 // Rebuild one ARRAY value for `row` by merging:
 // 1) typed array elements (and their child overlays), and
@@ -1278,13 +1881,28 @@ static StatusOr<std::optional<VariantRowValue>> _rebuild_array_overlay(size_t ro
         for (uint32_t i = 0; i < total; ++i) {
             // First, try to use the typed value directly (common case for fully-typed arrays).
             if (i < typed_count) {
-                auto element_value = VariantEncoder::encode_datum(typed_elements->get(typed_begin + i), element_type);
-                if (element_value.ok()) {
-                    array_builder.add(std::move(element_value).value());
+                if (_is_shredded_group_type(element_type)) {
+                    ASSIGN_OR_RETURN(auto resolved, _resolve_shredded_group(typed_elements->get(typed_begin + i),
+                                                                            element_type, metadata_raw, depth + 1));
+                    if (resolved.has_value()) {
+                        array_builder.add(std::move(*resolved));
+                    } else {
+                        array_builder.add_null();
+                    }
                     continue;
                 }
-                return element_value.status().clone_and_prepend(strings::Substitute(
-                        "encode shredded array scalar element failed, path=$0, index=$1", array_node.full_path, i));
+                const Datum typed_datum = typed_elements->get(typed_begin + i);
+                // A NULL typed element of a scalar array has no typed value: encoding it would give a variant null and
+                // hide the element's own `value`, so it falls through to element.value, the base element and null.
+                if (!(array_node.scalar_array_layout && typed_datum.is_null())) {
+                    auto element_value = VariantEncoder::encode_datum(typed_datum, element_type);
+                    if (element_value.ok()) {
+                        array_builder.add(std::move(element_value).value());
+                        continue;
+                    }
+                    return element_value.status().clone_and_prepend(strings::Substitute(
+                            "encode shredded array scalar element failed, path=$0, index=$1", array_node.full_path, i));
+                }
             }
 
             // For scalar-array layout, fallback to element.value first.
@@ -1335,7 +1953,8 @@ static Status _collect_overlays_for_array_element(size_t element_row, const std:
             size_t typed_row = 0;
             if (ParquetUtils::get_non_null_data_column_and_row(node.typed_value_column.get(), element_row, &typed_col,
                                                                &typed_row)) {
-                auto typed_value = VariantEncoder::encode_datum(typed_col->get(typed_row), *node.typed_value_read_type);
+                auto typed_value = _encode_typed_scalar(node.raw_encoding, *node.typed_value_read_type, node.full_path,
+                                                        typed_col->get(typed_row));
                 if (!typed_value.ok()) {
                     return typed_value.status().clone_and_prepend(strings::Substitute(
                             "encode shredded array element scalar failed, path=$0", node.full_path));
@@ -1489,7 +2108,7 @@ static Status _collect_element_typed_paths(const std::vector<ShreddedFieldNode>&
             typed->append_nulls(num_elements);
         } else if (node.typed_value_column == nullptr) {
             continue;
-        } else if (node.kind == ShreddedFieldNode::Kind::SCALAR) {
+        } else if (node.kind == ShreddedFieldNode::Kind::SCALAR && node.raw_encoding == ShreddedRawEncoding::NONE) {
             type = *node.typed_value_read_type;
             typed = node.typed_value_column->clone();
         } else if (_is_structured_array_node(node)) {
@@ -1497,7 +2116,8 @@ static Status _collect_element_typed_paths(const std::vector<ShreddedFieldNode>&
             ASSIGN_OR_RETURN(auto nested, build_array_variant_column(node, element_metadata, depth + 1));
             typed = nested->clone();
         } else {
-            // Unsupported nested array layout: keep it as a VARIANT path rebuilt per element.
+            // Unsupported nested array layout, or a scalar stored in a raw encoding (timestamp, TIME, UUID) that is
+            // not readable as its column type: keep it as a VARIANT path rebuilt per element.
             type = TypeDescriptor(TYPE_VARIANT);
             typed = ColumnHelper::create_column(type, true);
             for (size_t e = 0; e < num_elements; ++e) {
@@ -1748,7 +2368,8 @@ StatusOr<std::optional<VariantRowValue>> VariantColumnReader::build_variant_bind
         size_t typed_row = 0;
         if (ParquetUtils::get_non_null_data_column_and_row(node.typed_value_column.get(), row, &typed_col,
                                                            &typed_row)) {
-            auto typed_value = VariantEncoder::encode_datum(typed_col->get(typed_row), *node.typed_value_read_type);
+            auto typed_value = _encode_typed_scalar(node.raw_encoding, *node.typed_value_read_type, node.full_path,
+                                                    typed_col->get(typed_row));
             if (!typed_value.ok()) {
                 return typed_value.status().clone_and_prepend(
                         strings::Substitute("encode shredded scalar failed, path=$0", node.full_path));
@@ -1781,6 +2402,17 @@ StatusOr<std::optional<VariantRowValue>> VariantColumnReader::build_variant_bind
             return std::optional<VariantRowValue>(std::move(owned_base));
         }
         return std::optional<VariantRowValue>();
+    }
+
+    // A shredded child owns its key: a residual field of the same name is dropped, even when the child has no value.
+    std::string pruned_residual;
+    if (base.has_value()) {
+        const std::string_view residual = base->get_value().raw();
+        ASSIGN_OR_RETURN(const bool changed,
+                         _remove_object_fields(metadata_raw, residual, node.children, &pruned_residual));
+        if (changed) {
+            base.emplace(metadata_raw, std::string_view(pruned_residual));
+        }
     }
 
     std::vector<VariantBuilder::Overlay> overlays;
@@ -1889,7 +2521,8 @@ static void collect_top_bindings(const std::vector<ShreddedFieldNode>& nodes,
                             .type = variant_type_desc(),
                             .node = node,
                             .parsed_path = path});
-        } else if (node->kind == ShreddedFieldNode::Kind::SCALAR && node->typed_value_column != nullptr) {
+        } else if (node->kind == ShreddedFieldNode::Kind::SCALAR && node->typed_value_column != nullptr &&
+                   node->raw_encoding == ShreddedRawEncoding::NONE) {
             out->push_back({.kind = TopBinding::Kind::SCALAR,
                             .path = std::move(path_str),
                             .type = *node->typed_value_read_type,
@@ -2135,14 +2768,67 @@ static void build_has_typed_value_bitmap(const std::vector<ShreddedFieldNode>& s
     }
 }
 
+// Whether the binary `value` column holds a non-empty value in `row`.
+static bool _fallback_value_present(const Column* column, size_t row) {
+    Slice slice;
+    return column != nullptr && ColumnHelper::get_binary_slice_at(column, row, &slice) && slice.size > 0;
+}
+
+// Whether any node holds a fallback `value` in `row`. Such a value is decoded with the metadata of the row, so a row
+// that has one must keep its metadata.
+static bool _any_shredded_fallback(const std::vector<ShreddedFieldNode>& nodes, size_t row) {
+    for (const auto& node : nodes) {
+        if (_fallback_value_present(node.value_column.get(), row)) {
+            return true;
+        }
+        if (node.kind != ShreddedFieldNode::Kind::ARRAY && _any_shredded_fallback(node.children, row)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The object nodes that are present in `row` with nothing in them, i.e. the empty objects the typed columns cannot
+// show. The outermost one is taken: whatever is below an empty object is empty too.
+static void _collect_empty_object_nodes(const std::vector<ShreddedFieldNode>& nodes, size_t row,
+                                        std::vector<const ShreddedFieldNode*>* out) {
+    for (const auto& node : nodes) {
+        if (node.kind == ShreddedFieldNode::Kind::ARRAY) {
+            continue;
+        }
+        if (node.presence != nullptr && node.presence->is_present(row)) {
+            bool has_content = false;
+            Slice fallback;
+            if (node.value_column != nullptr &&
+                ColumnHelper::get_binary_slice_at(node.value_column.get(), row, &fallback) && fallback.size > 0) {
+                has_content = true;
+            }
+            for (const auto& child : node.children) {
+                has_content = has_content || _shredded_node_has_content(child, row);
+            }
+            if (!has_content) {
+                out->push_back(&node);
+                continue;
+            }
+        }
+        _collect_empty_object_nodes(node.children, row, out);
+    }
+}
+
 class VariantReadRangeBatchContext {
 public:
     VariantReadRangeBatchContext(const std::vector<ShreddedFieldNode>& shredded_fields,
                                  const std::vector<TopBinding>& materialized_bindings,
                                  const Column* root_typed_value_column, const TypeDescriptor* root_typed_value_type,
                                  const BinaryColumn* metadata_column, const BinaryColumn* value_column,
-                                 ImmutableNullData metadata_nulls, ImmutableNullData value_nulls)
-            : materialized_bindings(materialized_bindings),
+                                 ImmutableNullData metadata_nulls, ImmutableNullData value_nulls,
+                                 const ObjectPresenceSource* root_presence = nullptr,
+                                 ShreddedRawEncoding root_raw_encoding = ShreddedRawEncoding::NONE,
+                                 const ShreddedFieldNode* root_array_node = nullptr)
+            : shredded_fields(&shredded_fields),
+              root_raw_encoding(root_raw_encoding),
+              root_array_node(root_array_node),
+              materialized_bindings(materialized_bindings),
               root_typed_value_column(root_typed_value_column),
               root_typed_value_type(root_typed_value_type),
               metadata_column(metadata_column),
@@ -2167,7 +2853,105 @@ public:
                 }
             }
         }
+        if (root_array_node != nullptr && root_array_node->typed_value_column != nullptr) {
+            for (size_t i = 0; i < num_rows; ++i) {
+                const Column* list_data = nullptr;
+                size_t list_row = 0;
+                if (ParquetUtils::get_non_null_data_column_and_row(root_array_node->typed_value_column.get(), i,
+                                                                   &list_data, &list_row)) {
+                    has_typed_value_bitmap[i] = true;
+                }
+            }
+        }
+        if (root_presence != nullptr && !root_presence->present.empty()) {
+            mark_rows_with_empty_objects(*root_presence);
+        }
+        // After the empty objects: a present `{}` row is flagged above and must not read as a variant null.
+        mark_variant_null_rows();
     }
+
+    // The shredded field owns its key: a row whose residual `value` holds the name of a shredded field of the top-level
+    // object has to drop that key. A read-only probe flags the rows, so that a column without such a key is not rewritten;
+    // the residual is rebuilt only for a flagged row, when the row is materialized. Call it once after the constructor.
+    Status mark_rows_with_shadowed_keys() {
+        if (shredded_fields->empty()) {
+            return Status::OK();
+        }
+        _collect_shredded_names(*shredded_fields, &shredded_names);
+        const size_t num_rows = has_typed_value_bitmap.size();
+        for (size_t i = 0; i < num_rows; ++i) {
+            if (metadata_nulls[i] || value_nulls[i]) {
+                continue;
+            }
+            const Slice metadata = metadata_column->get_slice(i);
+            const Slice value = value_column->get_slice(i);
+            if (metadata.size == 0 || value.size == 0) {
+                continue;
+            }
+            ASSIGN_OR_RETURN(const bool shadowed,
+                             _has_object_field_named(std::string_view(metadata.data, metadata.size),
+                                                     std::string_view(value.data, value.size), shredded_names));
+            if (shadowed) {
+                if (shadow_row.empty()) {
+                    shadow_row.assign(num_rows, 0);
+                }
+                shadow_row[i] = 1;
+                any_shadowed = true;
+            }
+        }
+        return Status::OK();
+    }
+
+    // The variant group is present (its metadata is set) but holds neither a value nor a typed value: the variant is
+    // a variant null, not a SQL NULL. A null metadata is what makes the whole variant SQL NULL.
+    void mark_variant_null_rows() {
+        const size_t num_rows = has_typed_value_bitmap.size();
+        for (size_t i = 0; i < num_rows; ++i) {
+            if (metadata_nulls[i] || has_typed_value_bitmap[i] || metadata_column->get_slice(i).size == 0) {
+                continue;
+            }
+            if (!value_nulls[i] && value_column->get_slice(i).size != 0) {
+                continue;
+            }
+            if (variant_null_row.empty()) {
+                variant_null_row.assign(num_rows, 0);
+            }
+            variant_null_row[i] = 1;
+            any_variant_null = true;
+        }
+    }
+
+    // A present root object group with no value in it is `{}` (or holds empty objects below), and the typed columns
+    // do not show it. Such a row needs a remain payload that carries the empty objects; flag it here.
+    void mark_rows_with_empty_objects(const ObjectPresenceSource& root_presence) {
+        const size_t num_rows = has_typed_value_bitmap.size();
+        synthesize_row.assign(num_rows, 0);
+        std::vector<const ShreddedFieldNode*> empties;
+        for (size_t i = 0; i < num_rows; ++i) {
+            if (!root_presence.is_present(i) || metadata_nulls[i]) {
+                continue;
+            }
+            const bool base_absent = value_nulls[i] || value_column->get_slice(i).size == 0;
+            empties.clear();
+            _collect_empty_object_nodes(*shredded_fields, i, &empties);
+            // Empty nested objects are added by rebuilding the remain payload with a new metadata dictionary. That
+            // would break a fallback value of the row, which is decoded with the metadata of the row, so such a row
+            // keeps what the typed columns show.
+            const bool add_empties = !empties.empty() && !_any_shredded_fallback(*shredded_fields, i);
+            if ((base_absent && !has_typed_value_bitmap[i]) || add_empties) {
+                synthesize_row[i] = 1;
+                any_synthesized = true;
+                has_typed_value_bitmap[i] = true;
+            }
+        }
+    }
+
+    const std::vector<ShreddedFieldNode>* shredded_fields;
+
+    // How the scalar root typed_value is written as a variant, when it is read raw.
+    ShreddedRawEncoding root_raw_encoding;
+    // The root typed_value when it is an array; its elements are resolved when the row is rebuilt.
+    const ShreddedFieldNode* root_array_node;
 
     // Final output bindings after applying requested paths and per-batch materialization
     // decisions. These drive typed_paths/typed_columns layout in the result VariantColumn.
@@ -2186,11 +2970,23 @@ public:
     // Per-row "any typed payload exists" summary over shredded fields plus root typed_value.
     // Used only for top-level row null/materialization decisions.
     std::vector<bool> has_typed_value_bitmap;
+    // Rows that are a variant null; empty unless the batch has one.
+    std::vector<uint8_t> variant_null_row;
+    bool any_variant_null = false;
+    // Rows whose remain payload must be rebuilt to carry empty objects; empty unless the file has object presence.
+    std::vector<uint8_t> synthesize_row;
+    bool any_synthesized = false;
+    // Names of the top-level shredded fields, and the rows whose residual `value` holds one of them.
+    ShreddedNameSet shredded_names;
+    std::vector<uint8_t> shadow_row;
+    bool any_shadowed = false;
+
     // Parallel to materialized_bindings: the batch ARRAY<VARIANT> column of each ARRAY binding, nullptr otherwise.
     std::vector<ColumnPtr> array_binding_columns;
 
     bool can_bulk_append_base_payload(bool has_outer_null_channel) const {
-        if (root_typed_value_column != nullptr) {
+        if (root_typed_value_column != nullptr || any_variant_null || any_synthesized || any_shadowed ||
+            root_array_node != nullptr) {
             return false;
         }
         if (has_outer_null_channel) {
@@ -2234,8 +3030,20 @@ public:
 
     StatusOr<bool> prepare() {
         const bool has_typed_value = _batch_ctx.has_typed_value_bitmap[_row];
+        if (_batch_ctx.metadata_nulls[_row]) {
+            return false;
+        }
+        if (_batch_ctx.any_variant_null && _batch_ctx.variant_null_row[_row]) {
+            static constexpr char kVariantNull[] = {0x00};
+            const Slice metadata = _batch_ctx.metadata_column->get_slice(_row);
+            _raw_metadata = std::string_view(metadata.data, metadata.size);
+            _raw_value = std::string_view();
+            _row_metadata = _raw_metadata;
+            _row_value = std::string_view(kVariantNull, sizeof(kVariantNull));
+            return true;
+        }
         // Iceberg shredded rows may carry payload only in typed_value with base `value` null.
-        if (_batch_ctx.metadata_nulls[_row] || (_batch_ctx.value_nulls[_row] && !has_typed_value)) {
+        if (_batch_ctx.value_nulls[_row] && !has_typed_value) {
             return false;
         }
 
@@ -2250,11 +3058,14 @@ public:
         _row_metadata = _raw_metadata;
         _row_value = _raw_value;
 
+        RETURN_IF_ERROR(_drop_shadowed_residual_keys());
         ASSIGN_OR_RETURN(bool use_root_typed_row, _try_use_root_typed_row());
         if (use_root_typed_row) {
             return true;
         }
 
+        RETURN_IF_ERROR(_try_synthesize_empty_objects());
+        RETURN_IF_ERROR(_try_use_root_array_row());
         return true;
     }
 
@@ -2294,6 +3105,84 @@ public:
     }
 
 private:
+    // Rebuilds the remain payload of a row that holds empty objects: `{}` for the root, `{"p":{}}` for an empty `p`
+    // and so on. The typed values of the row are overlaid on it later, so only the empty objects are added here.
+    Status _try_synthesize_empty_objects() {
+        if (!_batch_ctx.any_synthesized || !_batch_ctx.synthesize_row[_row]) {
+            return Status::OK();
+        }
+        std::vector<const ShreddedFieldNode*> empties;
+        _collect_empty_object_nodes(*_batch_ctx.shredded_fields, _row, &empties);
+        std::optional<VariantRowRef> base;
+        if (!_raw_value.empty()) {
+            base.emplace(_raw_metadata, _raw_value);
+        }
+        std::vector<VariantBuilder::Overlay> overlays;
+        for (const ShreddedFieldNode* node : empties) {
+            ASSIGN_OR_RETURN(auto empty_object, _make_empty_object());
+            overlays.emplace_back(
+                    VariantBuilder::Overlay{.path = node->parsed_full_path, .value = std::move(empty_object)});
+        }
+        if (overlays.empty()) {
+            ASSIGN_OR_RETURN(auto empty_object, _make_empty_object());
+            overlays.emplace_back(VariantBuilder::Overlay{.path = VariantPath(), .value = std::move(empty_object)});
+        }
+        ASSIGN_OR_RETURN(auto built, VariantBuilder::build_row_from_overlays(base, std::move(overlays)));
+        const auto metadata_raw = built.get_metadata().raw();
+        const auto value_raw = built.get_value().raw();
+        _root_typed_metadata_buf.assign(metadata_raw.data(), metadata_raw.size());
+        _root_typed_value_buf.assign(value_raw.data(), value_raw.size());
+        _row_metadata = std::string_view(_root_typed_metadata_buf.data(), _root_typed_metadata_buf.size());
+        _row_value = std::string_view(_root_typed_value_buf.data(), _root_typed_value_buf.size());
+        return Status::OK();
+    }
+
+    // A root typed_value array holds {value, typed_value} elements. Resolve each of them like an array field does and
+    // use the result as the row, with a base array in `value` as the fallback.
+    Status _try_use_root_array_row() {
+        const ShreddedFieldNode* node = _batch_ctx.root_array_node;
+        if (node == nullptr) {
+            return Status::OK();
+        }
+        std::optional<std::string_view> base_value;
+        if (!_raw_value.empty()) {
+            base_value = _raw_value;
+        }
+        ASSIGN_OR_RETURN(auto rebuilt, _rebuild_array_overlay(_row, *node, _raw_metadata, base_value));
+        if (!rebuilt.has_value()) {
+            return Status::OK();
+        }
+        const auto metadata_raw = rebuilt->get_metadata().raw();
+        const auto value_raw = rebuilt->get_value().raw();
+        _root_typed_metadata_buf.assign(metadata_raw.data(), metadata_raw.size());
+        _root_typed_value_buf.assign(value_raw.data(), value_raw.size());
+        _row_metadata = std::string_view(_root_typed_metadata_buf.data(), _root_typed_metadata_buf.size());
+        _row_value = std::string_view(_root_typed_value_buf.data(), _root_typed_value_buf.size());
+        return Status::OK();
+    }
+
+    // Metadata with an empty dictionary (version 1) and an object with no fields.
+    static StatusOr<VariantRowValue> _make_empty_object() {
+        static constexpr char kMetadata[] = {0x01, 0x00, 0x00};
+        static constexpr char kValue[] = {0x02, 0x00, 0x00};
+        return VariantRowValue::create(std::string_view(kMetadata, sizeof(kMetadata)),
+                                       std::string_view(kValue, sizeof(kValue)));
+    }
+
+    // Drops the residual fields that a shredded field owns. The metadata stays the one of the file.
+    Status _drop_shadowed_residual_keys() {
+        if (!_batch_ctx.any_shadowed || !_batch_ctx.shadow_row[_row]) {
+            return Status::OK();
+        }
+        ASSIGN_OR_RETURN(const bool changed, _remove_object_fields(_raw_metadata, _raw_value, _batch_ctx.shredded_names,
+                                                                   &_shadow_value_buf));
+        if (changed) {
+            _raw_value = std::string_view(_shadow_value_buf);
+            _row_value = _raw_value;
+        }
+        return Status::OK();
+    }
+
     StatusOr<bool> _try_use_root_typed_row() {
         if (_batch_ctx.root_typed_value_column == nullptr) {
             return false;
@@ -2307,8 +3196,9 @@ private:
         }
 
         DCHECK(_batch_ctx.root_typed_value_type != nullptr);
-        ASSIGN_OR_RETURN(auto encoded, VariantEncoder::encode_datum(root_typed_data->get(root_typed_row),
-                                                                    *_batch_ctx.root_typed_value_type));
+        ASSIGN_OR_RETURN(auto encoded,
+                         _encode_typed_scalar(_batch_ctx.root_raw_encoding, *_batch_ctx.root_typed_value_type, "$",
+                                              root_typed_data->get(root_typed_row)));
 
         auto metadata_raw = encoded.get_metadata().raw();
         auto value_raw = encoded.get_value().raw();
@@ -2329,16 +3219,23 @@ private:
     std::string_view _row_value;
     std::string _root_typed_metadata_buf;
     std::string _root_typed_value_buf;
+    std::string _shadow_value_buf;
 };
 
 Status VariantColumnReader::prepare() {
-    if (_top_level.metadata_reader == nullptr || _top_level.value_reader == nullptr) {
-        return Status::InternalError("Both metadata and value readers are required");
+    if (_top_level.metadata_reader == nullptr) {
+        return Status::InternalError("The metadata reader is required");
     }
     RETURN_IF_ERROR(_top_level.metadata_reader->prepare());
-    RETURN_IF_ERROR(_top_level.value_reader->prepare());
+    if (_top_level.value_reader != nullptr) {
+        RETURN_IF_ERROR(_top_level.value_reader->prepare());
+    }
     if (_top_level.root_typed_value_reader != nullptr) {
         RETURN_IF_ERROR(_top_level.root_typed_value_reader->prepare());
+    }
+    RETURN_IF_ERROR(_prepare_object_presence(_top_level.root_presence.get()));
+    if (_top_level.root_array_node != nullptr) {
+        RETURN_IF_ERROR(_prepare_shredded_field_node(_top_level.root_array_node.get()));
     }
     for (auto& node : _shredded_fields) {
         RETURN_IF_ERROR(_prepare_shredded_field_node(&node));
@@ -2353,7 +3250,8 @@ Status VariantColumnReader::prepare() {
     // per-row reconstruction. For nullable variant columns, top-level metadata is only
     // decoded when statistics cannot prove the outer null mask is all zero.
     _skip_base_payload = false;
-    if (!_requested_shredded_paths.empty() && _top_level.root_typed_value_reader == nullptr) {
+    if (!_requested_shredded_paths.empty() && _top_level.root_typed_value_reader == nullptr &&
+        _top_level.root_array_node == nullptr) {
         _skip_base_payload = _requested_paths_are_scalar_typed_leaves(_shredded_fields, _requested_shredded_paths);
     }
     return Status::OK();
@@ -2370,9 +3268,13 @@ VariantVirtualZoneMapReader::VariantVirtualZoneMapReader(VariantColumnReader* so
           _virtual_slot_type(std::move(virtual_slot_type)) {}
 
 void VariantColumnReader::get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) {
-    // Only value_reader carries def/rep levels; metadata_reader levels would be dead-written.
-    // _top_level.value_reader != nullptr is guaranteed by the constructor DCHECK.
-    _top_level.value_reader->get_levels(def_levels, rep_levels, num_levels);
+    // value_reader carries the def/rep levels; metadata_reader levels would be dead-written. Without a value column
+    // the metadata column is the only top-level one, and its levels are those of the variant group as well.
+    if (_top_level.value_reader != nullptr) {
+        _top_level.value_reader->get_levels(def_levels, rep_levels, num_levels);
+    } else {
+        _top_level.metadata_reader->get_levels(def_levels, rep_levels, num_levels);
+    }
 }
 
 static void _set_need_parse_levels_for_shredded_field(ShreddedFieldNode* node, bool need_parse_levels) {
@@ -2401,6 +3303,7 @@ void VariantColumnReader::set_need_parse_levels(bool need_parse_levels) {
     if (_top_level.root_typed_value_reader != nullptr) {
         _top_level.root_typed_value_reader->set_need_parse_levels(need_parse_levels);
     }
+    _set_need_parse_levels_for_shredded_field(_top_level.root_array_node.get(), need_parse_levels);
     for (auto& node : _shredded_fields) {
         _set_need_parse_levels_for_shredded_field(&node, need_parse_levels);
     }
@@ -2413,6 +3316,9 @@ void VariantColumnReader::collect_column_io_range(std::vector<SharedBufferedInpu
     if (_top_level.metadata_reader != nullptr && !skip_flags.skip_metadata) {
         _top_level.metadata_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
+    if (_null_only) {
+        return;
+    }
     if (_top_level.value_reader != nullptr && !skip_flags.skip_payload) {
         _top_level.value_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
@@ -2421,6 +3327,13 @@ void VariantColumnReader::collect_column_io_range(std::vector<SharedBufferedInpu
     }
     const std::vector<VariantPath>* requested_paths =
             _requested_shredded_paths.empty() ? nullptr : &_requested_shredded_paths;
+    if (requested_paths == nullptr && _top_level.root_presence != nullptr &&
+        _top_level.root_presence->reader != nullptr) {
+        _top_level.root_presence->reader->collect_column_io_range(ranges, end_offset, types, active);
+    }
+    if (_top_level.root_array_node != nullptr) {
+        _collect_shredded_field_io_range(*_top_level.root_array_node, ranges, end_offset, types, active, nullptr);
+    }
     for (const auto& node : _shredded_fields) {
         _collect_shredded_field_io_range(node, ranges, end_offset, types, active, requested_paths);
     }
@@ -2432,6 +3345,9 @@ void VariantColumnReader::select_offset_index(const SparseRange<uint64_t>& range
     if (_top_level.metadata_reader != nullptr && !skip_flags.skip_metadata) {
         _top_level.metadata_reader->select_offset_index(range, rg_first_row);
     }
+    if (_null_only) {
+        return;
+    }
     if (_top_level.value_reader != nullptr && !skip_flags.skip_payload) {
         _top_level.value_reader->select_offset_index(range, rg_first_row);
     }
@@ -2440,6 +3356,13 @@ void VariantColumnReader::select_offset_index(const SparseRange<uint64_t>& range
     }
     const std::vector<VariantPath>* requested_paths =
             _requested_shredded_paths.empty() ? nullptr : &_requested_shredded_paths;
+    if (requested_paths == nullptr && _top_level.root_presence != nullptr &&
+        _top_level.root_presence->reader != nullptr) {
+        _top_level.root_presence->reader->select_offset_index(range, rg_first_row);
+    }
+    if (_top_level.root_array_node != nullptr) {
+        _select_shredded_field_offset_index(*_top_level.root_array_node, range, rg_first_row, nullptr);
+    }
     for (const auto& node : _shredded_fields) {
         _select_shredded_field_offset_index(node, range, rg_first_row, requested_paths);
     }
@@ -2447,7 +3370,14 @@ void VariantColumnReader::select_offset_index(const SparseRange<uint64_t>& range
 
 VariantColumnReader::TopLevelSkipFlags VariantColumnReader::_compute_top_level_skip_flags() const {
     TopLevelSkipFlags flags;
-    flags.skip_payload = _top_level.root_typed_value_reader == nullptr &&
+    if (_null_only) {
+        // The outer null mask is the metadata column's null mask; it needs no other column, and when the
+        // statistics prove it has no null, not even the metadata column.
+        flags.skip_payload = true;
+        flags.skip_metadata = _column_chunk_has_no_null(_top_level.metadata_reader.get());
+        return flags;
+    }
+    flags.skip_payload = _top_level.root_typed_value_reader == nullptr && _top_level.root_array_node == nullptr &&
                          _requested_paths_are_scalar_typed_leaves(_shredded_fields, _requested_shredded_paths) &&
                          _requested_scalar_fallback_values_all_null(_shredded_fields, _requested_shredded_paths);
     flags.skip_metadata = flags.skip_payload && _column_chunk_has_no_null(_top_level.metadata_reader.get());
@@ -2545,6 +3475,41 @@ StatusOr<bool> VariantColumnReader::_read_range_skip_base_payload(const Range<ui
     return true;
 }
 
+// Null-mask-only read (`v IS [NOT] NULL`). Metadata null <-> variant row is SQL NULL (shredding spec), so the
+// outer null mask comes from the metadata column alone. The data rows are placeholders: the FE only sends this
+// path when nothing reads the column's values.
+Status VariantColumnReader::_read_range_null_only(const Range<uint64_t>& range, const Filter* filter,
+                                                  VariantColumn* variant_column, NullableColumn* nullable_column) {
+    const size_t num_rows = range.span_size();
+    if (nullable_column == nullptr) {
+        if (!variant_column->append_nulls(num_rows)) {
+            return Status::InternalError("failed to append placeholder rows to the variant column");
+        }
+        return Status::OK();
+    }
+
+    auto& outer_nulls = nullable_column->null_column_raw_ptr()->get_data();
+    if (_column_chunk_has_no_null(_top_level.metadata_reader.get())) {
+        outer_nulls.resize(outer_nulls.size() + num_rows, 0);
+    } else {
+        ColumnPtr metadata_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        RETURN_IF_ERROR(_top_level.metadata_reader->read_range(range, filter, metadata_col));
+        const auto* metadata_nullable = down_cast<const NullableColumn*>(metadata_col.get());
+        if (metadata_nullable->size() != num_rows) {
+            return Status::InternalError(
+                    strings::Substitute("variant metadata rows mismatch in null-only read, expected=$0, actual=$1",
+                                        num_rows, metadata_nullable->size()));
+        }
+        const auto& metadata_nulls = metadata_nullable->null_column()->get_data();
+        outer_nulls.insert(outer_nulls.end(), metadata_nulls.begin(), metadata_nulls.end());
+    }
+    if (!variant_column->append_nulls(num_rows)) {
+        return Status::InternalError("failed to append placeholder rows to the variant column");
+    }
+    nullable_column->update_has_null();
+    return Status::OK();
+}
+
 Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
     auto* dst_mut = dst->as_mutable_raw_ptr();
     VariantColumn* variant_column = nullptr;
@@ -2557,6 +3522,10 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
         DCHECK(dst->is_variant());
         DCHECK(!get_column_parquet_field()->is_nullable);
         variant_column = down_cast<VariantColumn*>(dst_mut);
+    }
+
+    if (_null_only) {
+        return _read_range_null_only(range, filter, variant_column, nullable_column);
     }
 
     // Fast path: all requested paths are SCALAR typed_value leaves and base payload is not needed.
@@ -2574,17 +3543,34 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     ColumnPtr metadata_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     ColumnPtr value_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     RETURN_IF_ERROR(_top_level.metadata_reader->read_range(range, filter, metadata_col));
-    RETURN_IF_ERROR(_top_level.value_reader->read_range(range, filter, value_col));
+    if (_top_level.value_reader != nullptr) {
+        RETURN_IF_ERROR(_top_level.value_reader->read_range(range, filter, value_col));
+    } else {
+        // No value column: every row has an absent base payload.
+        value_col->as_mutable_raw_ptr()->append_nulls(metadata_col->size());
+    }
     // root_typed_value_reader is always nullptr when _skip_base_payload is true, so this branch
     // is only reached from the non-skip path.
     if (_top_level.root_typed_value_reader != nullptr) {
         DCHECK(!_skip_base_payload);
         DCHECK(_top_level.root_typed_value_type != nullptr);
+        if (!_top_level.root_unsupported_reason.empty()) {
+            return Status::NotSupported(_top_level.root_unsupported_reason);
+        }
         _top_level.root_typed_value_column = ColumnHelper::create_column(*_top_level.root_typed_value_type, true);
         RETURN_IF_ERROR(
                 _top_level.root_typed_value_reader->read_range(range, filter, _top_level.root_typed_value_column));
     } else {
         _top_level.root_typed_value_column = nullptr;
+    }
+
+    if (_requested_shredded_paths.empty()) {
+        RETURN_IF_ERROR(_read_object_presence(range, filter, _top_level.root_presence.get()));
+    } else if (_top_level.root_presence != nullptr) {
+        _top_level.root_presence->present.clear();
+    }
+    if (_top_level.root_array_node != nullptr) {
+        RETURN_IF_ERROR(_read_shredded_field_node(range, filter, _top_level.root_array_node.get(), nullptr));
     }
 
     if (!shredded_already_read) {
@@ -2601,6 +3587,8 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     const auto* value_column = down_cast<const BinaryColumn*>(value_nullable->data_column().get());
     const auto& metadata_nulls = metadata_nullable->null_column()->get_data();
     const auto& value_nulls = value_nullable->null_column()->get_data();
+    RETURN_IF_ERROR(_check_root_value_conflicts(value_column, value_nulls, _top_level.root_typed_value_column.get(),
+                                                _shredded_fields, _top_level.root_presence.get()));
     // Verify metadata and value columns are aligned
     DCHECK_EQ(metadata_column->size(), value_column->size());
     DCHECK_EQ(metadata_nulls.size(), value_nulls.size());
@@ -2646,8 +3634,11 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     // batch_ctx is built first so has_typed_value_bitmap is available for both code paths.
     VariantReadRangeBatchContext batch_ctx(
             _shredded_fields, materialized_bindings, _top_level.root_typed_value_column.get(),
-            _top_level.root_typed_value_type.get(), metadata_column, value_column, metadata_nulls, value_nulls);
+            _top_level.root_typed_value_type.get(), metadata_column, value_column, metadata_nulls, value_nulls,
+            _top_level.root_presence.get(), _top_level.root_raw_encoding, _top_level.root_array_node.get());
     batch_ctx.array_binding_columns.resize(materialized_bindings.size());
+    // A residual that is corrupt where a shadowed key is looked up fails the read, as the rebuild of the row would.
+    RETURN_IF_ERROR(batch_ctx.mark_rows_with_shadowed_keys());
     if (has_array_binding) {
         // Array elements are decoded with the metadata of the row they belong to.
         std::vector<Slice> row_metadata(num_rows);
@@ -2725,6 +3716,8 @@ const ColumnReader* VariantColumnReader::filterable_typed_value_reader_for_path(
     const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
     if (found_node == nullptr) return nullptr;
     if (found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
+    // A raw typed_value is not a column of the type the query would compare it with.
+    if (found_node->raw_encoding != ShreddedRawEncoding::NONE) return nullptr;
     if (found_node->typed_value_reader == nullptr) return nullptr;
     if (found_node->typed_value_read_type == nullptr) return nullptr;
     {
@@ -2738,13 +3731,17 @@ ColumnReader* VariantColumnReader::scalar_typed_value_reader_for_path(const Vari
     const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
     if (found_node == nullptr) return nullptr;
     if (found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
+    if (found_node->raw_encoding != ShreddedRawEncoding::NONE) return nullptr;
     if (found_node->typed_value_reader == nullptr) return nullptr;
     return found_node->typed_value_reader.get();
 }
 
 const TypeDescriptor* VariantColumnReader::typed_value_read_type_for_path(const VariantPath& path) const {
     const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
-    if (found_node == nullptr || found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
+    if (found_node == nullptr || found_node->kind != ShreddedFieldNode::Kind::SCALAR ||
+        found_node->raw_encoding != ShreddedRawEncoding::NONE) {
+        return nullptr;
+    }
     return found_node->typed_value_read_type.get();
 }
 
@@ -2780,7 +3777,9 @@ bool VariantVirtualZoneMapReader::_prepare_delegate_predicates(
     // ColumnPredicate::convert_to() converts only the literal; it does not derive the inverse
     // predicate of CAST(leaf AS virtual_type). For a lossy cross-type projection, delegating
     // the converted predicate to leaf statistics can incorrectly prune matching rows.
-    if (*leaf_type != _virtual_slot_type) {
+    // The exception is a lossless integer widening whose literals all fit the narrower leaf type.
+    if (*leaf_type != _virtual_slot_type &&
+        !can_delegate_across_integer_widening(predicates, *leaf_type, _virtual_slot_type)) {
         VLOG_FILE << "skip cross-type variant virtual predicate pushdown for path="
                   << _leaf_path.to_shredded_path().value_or("") << ", leaf type=" << leaf_type->debug_string()
                   << ", virtual slot type=" << _virtual_slot_type.debug_string();

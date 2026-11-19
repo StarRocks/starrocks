@@ -17,6 +17,7 @@
 #include <boost/algorithm/string.hpp>
 #include <orc/OrcFile.hh>
 
+#include "cctz/time_zone.h"
 #include "column/column_helper.h"
 #include "common/object_pool.h"
 #include "exprs/expr.h"
@@ -30,9 +31,11 @@ namespace starrocks {
 
 class OrcMinMaxDecoder {
 public:
-    // to decode min and max value from column stats.
+    // to decode min and max value from column stats. reader_tz, when set, converts a TIMESTAMP_INSTANT bound as the
+    // column reader converts its values (the reader zone's offset at that instant) instead of tz_offset_in_seconds.
     static Status decode(SlotDescriptor* slot, const orc::Type* type, const orc::proto::ColumnStatistics& stats,
-                         Column* min_col, Column* max_col, int64_t tz_offset_in_seconds);
+                         Column* min_col, Column* max_col, int64_t tz_offset_in_seconds,
+                         const cctz::time_zone* reader_tz = nullptr);
 };
 
 } // namespace starrocks

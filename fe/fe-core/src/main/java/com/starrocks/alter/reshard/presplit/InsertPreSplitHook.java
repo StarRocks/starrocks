@@ -61,9 +61,11 @@ import java.util.Set;
  * per-session opt-out, and target resolve + authorization. The conservative-skip
  * statement gates live alongside them: the statement-shape gates in
  * {@link #passesCommonPreFilters}, and the materialized-view gate in
- * {@link #resolveEligibleTable}. Each {@link InsertPreSplitSource} supplies the
- * source-specific detection + resolve, and the submit flow (plus the
- * automatic-partition gate) lives in {@link PreSplitFlow}.
+ * {@link #resolveEligibleTable}, which admits a view only as its own system
+ * refresh's static overwrite, and only a view without a row id (incremental
+ * views go to the derived tier instead). Each {@link InsertPreSplitSource}
+ * supplies the source-specific detection + resolve, and the submit flow (plus
+ * the automatic-partition gate) lives in {@link PreSplitFlow}.
  *
  * <p>The entry point is fail-safe: any throw is swallowed and the load proceeds
  * without pre-split, because the hook runs before the planner and must never
@@ -129,30 +131,34 @@ public final class InsertPreSplitHook {
             PreSplitPartitionScope partitionScope =
                     PreSplitPartitionScope.staticOverwrite(sourcePartitionNames, temporaryPartitionNames);
             // Classify the target BEFORE tryRunEligibleInsert, which returns on a set-operation or CTE
-            // query shape before it ever looks at the target. A materialized view refreshed by one of
+            // query shape before it ever looks at the target. An incremental view refreshed by one of
             // those shapes would otherwise be dropped with nothing recorded, even though the derived
             // tier does not care what the refresh query looks like.
             ResolvedTable resolvedTable = resolveTarget(insertStmt, context);
-            if (resolvedTable != null && resolvedTable.olapTable() instanceof MaterializedView) {
-                // Establish that the derived tier can carve this view BEFORE the feature flag gets a
-                // say: an ordinary async view's full refresh is also an INSERT OVERWRITE and lands
-                // here, and consulting the flag first would count every such refresh against this
-                // feature's own config gate, describing a view pre-split was never a candidate for.
-                // The skip reason itself is the same one resolveEligibleTable would record -- that
-                // resolver has always declined materialized-view targets -- so this only reports it
-                // earlier, and spares those refreshes a table lock they gain nothing from.
-                if (!MaterializedViewRowIdBoundaries.isDerivable(resolvedTable.olapTable())) {
-                    PreSplitMetrics.recordEligibilitySkip(SkipReason.MATERIALIZED_VIEW_TARGET);
+            // An incremental view goes to the derived tier; a view without a row id falls through to the
+            // sampled route, where resolveEligibleTable decides (see there for why only the system
+            // static overwrite admits a view).
+            if (resolvedTable != null && resolvedTable.olapTable() instanceof MaterializedView materializedView) {
+                if (materializedView.getRowIdStrategy() != null) {
+                    // Decided before the feature flag gets a say, so an incremental view this tier cannot
+                    // key is not counted against this feature's own config gate.
+                    if (!MaterializedViewRowIdBoundaries.isDerivable(materializedView)) {
+                        PreSplitMetrics.recordEligibilitySkip(SkipReason.MATERIALIZED_VIEW_TARGET);
+                        return;
+                    }
+                    // A multi-partition refresh of an auto-increment view is declined before the flag gets a
+                    // say: turning the flag on would not make it eligible, so charging it to the config gate
+                    // would misreport it. One counter serves the whole view, so each partition's ids sit in
+                    // one band of the id space. Fingerprints are uniform in every partition, so a fingerprint
+                    // view goes on to the flow, which carves all of them with the same cuts.
+                    if (partitionScope.catalogPartitionNames().size() != 1
+                            && !MaterializedViewRowIdBoundaries.isFingerprintRowId(materializedView)) {
+                        PreSplitMetrics.recordEligibilitySkip(SkipReason.MULTIPLE_TEMPORARY_PARTITIONS);
+                        return;
+                    }
+                    runStaticOverwriteMaterializedViewPreSplit(resolvedTable, context, partitionScope, estimates);
                     return;
                 }
-                // Part of identifying the candidate, not of serving it: turning the flag on would not make
-                // a multi-partition refresh eligible, so charging it to the config gate would misreport it.
-                if (partitionScope.catalogPartitionNames().size() != 1) {
-                    PreSplitMetrics.recordEligibilitySkip(SkipReason.MULTIPLE_TEMPORARY_PARTITIONS);
-                    return;
-                }
-                runStaticOverwriteMaterializedViewPreSplit(resolvedTable, context, partitionScope, estimates);
-                return;
             }
             tryRunEligibleInsert(insertStmt, context, -1L, partitionScope, true);
         } catch (Throwable unexpected) {
@@ -163,9 +169,9 @@ public final class InsertPreSplitHook {
     }
 
     /**
-     * Derived-tier route for a static overwrite whose target is a materialized view. The sampled
-     * sources cannot serve one (see {@link #resolveEligibleTable}), but an incremental view's hidden
-     * row-id sort key needs no sample at all.
+     * Derived-tier route for a static overwrite whose target is an incremental materialized view. The
+     * sampled sources cannot serve one (see {@link #resolveEligibleTable}), but its hidden row-id sort
+     * key needs no sample at all.
      *
      * <p>Deliberately does NOT run {@link #authorizeTargetSideEffects}. That re-check guards the
      * sampled paths because they read source data through an internal ROOT context, so it verifies the
@@ -233,7 +239,8 @@ public final class InsertPreSplitHook {
             return;
         }
         try (PreSplitProfile.Scope ignored = PreSplitProfile.startAttempt(context, source.loadKind())) {
-            ResolvedTable resolvedTable = resolveEligibleTable(insertStmt, context);
+            boolean admitPctView = staticOverwrite && insertStmt.isSystem();
+            ResolvedTable resolvedTable = resolveEligibleTable(insertStmt, context, admitPctView);
             if (resolvedTable == null) {
                 PreSplitProfile.recordOutcome("SKIPPED: TARGET_NOT_ELIGIBLE");
                 return;
@@ -244,7 +251,16 @@ public final class InsertPreSplitHook {
                 PreSplitProfile.recordOutcome("SKIPPED: UNSUPPORTED_TARGET_COLUMN_LIST");
                 return;
             }
-            authorizeTargetSideEffects(resolvedTable, context);
+            // A view gets here only as its own refresh (admitPctView), so the target re-check is skipped
+            // for the reason runStaticOverwriteMaterializedViewPreSplit skips it: the refresh already
+            // required privileges on the view, the INSERT check never applies to a view, and a denial
+            // thrown here would be swallowed into a silent no-op. Its USAGE check on a non-default
+            // warehouse is skipped with it, which widens nothing: the sampler runs on the compute
+            // resource the refresh itself writes with. The SELECT re-check on the source, which the
+            // ROOT sampler reads, still runs in prepare.
+            if (!(resolvedTable.olapTable() instanceof MaterializedView)) {
+                authorizeTargetSideEffects(resolvedTable, context);
+            }
 
             PreSplitFlow.Prepared prepared = source.prepare(
                     insertStmt, selectRelation, resolvedTable.olapTable(), resolvedTable.database(), context);
@@ -314,6 +330,11 @@ public final class InsertPreSplitHook {
             return false;
         }
         if (context.getTxnId() != 0 || insertStmt.getTxnId() != DmlStmt.INVALID_TXN_ID) {
+            return false;
+        }
+        // The online range rewrite copies a partition onto itself while its job owns the target's tablets, so there is
+        // nothing to split and nothing to record.
+        if (insertStmt.isShadowRewrite()) {
             return false;
         }
         return !insertStmt.isStaticKeyPartitionInsert();
@@ -512,22 +533,25 @@ public final class InsertPreSplitHook {
         return olapTable == null ? null : new ResolvedTable(database, olapTable);
     }
 
-    private static ResolvedTable resolveEligibleTable(InsertStmt insertStmt, ConnectContext context) {
+    private static ResolvedTable resolveEligibleTable(
+            InsertStmt insertStmt, ConnectContext context, boolean admitPctView) {
         ResolvedTable resolvedTable = resolveTarget(insertStmt, context);
         if (resolvedTable == null) {
             return null;
         }
         OlapTable olapTable = resolvedTable.olapTable();
-        // Materialized-view targets have always been declined here; this only records the reason
-        // instead of returning silently, so an operator can tell it apart from the statement never
-        // having been a pre-split candidate. An eligible incremental view is served by the derived
-        // tier, which reaches its target without going through this resolver.
+        // A declined view records its reason rather than returning silently, so an operator can tell it
+        // apart from the statement never having been a pre-split candidate.
         //
-        // The exclusion is not one rule: an INCREMENTAL view is keyed by its hidden row-id column,
-        // which no sampled source can map back to a column of the refresh query, so sampling cannot
-        // serve it at all. A PCT view is keyed by ordinary columns and could in principle be sampled
-        // -- it is declined by this pre-existing conservative gate, not by a technical limit.
-        if (olapTable instanceof MaterializedView) {
+        // User DML into a view reaches the generic routes -- the pre-analysis hook runs before
+        // InsertAnalyzer rejects it -- so those routes keep declining every view. An INCREMENTAL view
+        // is keyed by its hidden row-id column, which no sampled source can map back to a column of
+        // the refresh query; an eligible one is served by the derived tier, which reaches its target
+        // without going through this resolver. A PCT view refreshed by the system (admitPctView: the
+        // static-overwrite route of a system statement) is keyed by ordinary columns and is sampled
+        // like a table.
+        if (olapTable instanceof MaterializedView materializedView
+                && !(admitPctView && materializedView.getRowIdStrategy() == null)) {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.MATERIALIZED_VIEW_TARGET);
             return null;
         }

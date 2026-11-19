@@ -49,8 +49,7 @@ TEST_F(DefaultValueColumnIteratorTest, delete_after_column) {
     ASSERT_EQ(1u, row_ranges.size());
     ASSERT_EQ(10u, row_ranges.span_size());
 
-    TypeDescriptor type_desc(LogicalType::TYPE_INT);
-    MutableColumnPtr column = ColumnHelper::create_column(type_desc, true);
+    MutableColumnPtr column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     size_t num_rows = 10;
     st = iter.next_batch(&num_rows, column.get());

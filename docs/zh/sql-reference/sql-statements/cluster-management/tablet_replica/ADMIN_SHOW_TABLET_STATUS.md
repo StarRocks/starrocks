@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN SHOW TABLET STATUS displays Tablet status in cloud-native tables including metadata and data file status."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SHOW TABLET STATUS

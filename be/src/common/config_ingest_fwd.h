@@ -92,6 +92,11 @@ CONF_Int32(streaming_load_rpc_max_alive_time_sec, "1200");
 // actual timeout is min(tablet_writer_open_rpc_timeout_sec, load_timeout_sec / 2)
 CONF_mInt32(tablet_writer_open_rpc_timeout_sec, "300");
 
+// Combined lock-wait budget for receiving a replicated segment, in milliseconds.
+// The deadline is computed at the BRPC handler entry and shared by both channel locks.
+// Nonpositive values use be_exit_after_disk_write_hang_second converted to milliseconds; a positive value overrides it.
+CONF_mInt32(tablet_writer_add_segment_lock_timeout_ms, "0");
+
 // The interval that the secondary replica checks it's status on the primary replica if the last check rpc successes.
 CONF_mInt32(load_replica_status_check_interval_ms_on_success, "15000");
 
@@ -154,6 +159,19 @@ CONF_mInt32(max_consumer_num_per_group, "3");
 
 // Max pulsar consumer num in one data consumer group, for routine load.
 CONF_mInt32(max_pulsar_consumer_num_per_group, "10");
+
+// Max number of idle routine load data consumers kept for reuse. The default covers the consumer groups of at
+// least 16 concurrent tasks per node (3 consumers each, see max_consumer_num_per_group); when the pool is full,
+// returning a consumer evicts the one idle for the longest.
+CONF_mInt32(routine_load_kafka_consumer_pool_size, "64");
+
+// How long a routine load Kafka consumer holds off the next fetch of a partition once its local queue is over
+// queued.min.messages or queued.max.messages.kbytes: librdkafka's fetch.queue.backoff.ms, 1000 ms by default.
+// librdkafka does not fetch earlier when the queue drains, so a consumer that reads its queue in less time waits for
+// the rest of it. A job's property.fetch.queue.backoff.ms overrides it, a negative value keeps librdkafka's default,
+// and values above 300000 count as 300000. 0 makes librdkafka's broker thread poll in a busy loop while the queue
+// stays over those thresholds. After a change, the pool no longer reuses consumers created before it.
+CONF_mInt32(routine_load_kafka_fetch_queue_backoff_ms, "10");
 
 // kafka request timeout
 CONF_Int32(routine_load_kafka_timeout_second, "10");
@@ -230,7 +248,9 @@ CONF_mBool(enable_load_spill_parallel_merge, "true");
 // as auto-increment ID assignment must happen before the memtable is submitted for flush.
 CONF_mBool(enable_parallel_memtable_finalize, "true");
 
-CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
+// Shared-data only. Write the combined txn logs of a load's partitions to object storage in parallel, on
+// put_combined_txn_log_thread_pool, instead of one partition after another.
+CONF_mBool(enable_put_combinded_txn_log_parallel, "true");
 
 // Shared-data only. Seconds a node keeps the shard info of a tablet it does not own, so that touching
 // the tablet again within this time does not ask starmgr for it (GetShard RPC). It keeps what it had

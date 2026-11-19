@@ -44,8 +44,8 @@ ColumnPB make_column_pb(int32_t unique_id, const std::string& name, LogicalType 
 }
 
 AggStateDesc make_agg_state_desc() {
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_BIGINT);
-    std::vector<TypeDescriptor> arg_types{TypeDescriptor::from_logical_type(TYPE_BIGINT)};
+    auto return_type = TYPE_BIGINT_DESC;
+    std::vector<TypeDescriptor> arg_types{TYPE_BIGINT_DESC};
     return AggStateDesc("sum", return_type, std::move(arg_types), false, 1);
 }
 

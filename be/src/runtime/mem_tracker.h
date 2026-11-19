@@ -221,6 +221,26 @@ public:
         }
     }
 
+    // Reclassify live memory without changing any shared ancestor (in particular process).
+    // The two tracker paths are immutable. Their common suffix must not be debited/credited,
+    // even temporarily: concurrent limit checks observe those counters.
+    void transfer_to(MemTracker* dst, int64_t bytes) {
+        DCHECK(dst != nullptr);
+        DCHECK_GE(bytes, 0);
+        size_t src_end = _all_trackers.size();
+        size_t dst_end = dst->_all_trackers.size();
+        while (src_end > 0 && dst_end > 0 && _all_trackers[src_end - 1] == dst->_all_trackers[dst_end - 1]) {
+            --src_end;
+            --dst_end;
+        }
+        for (size_t i = 0; i < src_end; ++i) {
+            _all_trackers[i]->_consumption->add(-bytes);
+        }
+        for (size_t i = 0; i < dst_end; ++i) {
+            dst->_all_trackers[i]->_consumption->add(bytes);
+        }
+    }
+
     // the function can be used to transform memory stats from process mem_tracker to child mem_tracker
     void consume_without_root(int64_t bytes) {
         if (bytes == 0) {

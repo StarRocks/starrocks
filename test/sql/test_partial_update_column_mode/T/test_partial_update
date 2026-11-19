@@ -66,8 +66,11 @@ insert into site_access values
 (29,'2024-07-29','bsgs','zs',29);
 
 select * from site_access;
-shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_8.csv -XPUT -H partial_update:true  -H label:label10324  -H columns:site_id,event_day,user_name -H column_separator:,  -H partial_update:true -H partial_update_mode:column -H merge_condition:event_day ${url}/api/test_column_partial_update_with_condition_update/site_access/_stream_load
+-- Shared-nothing column mode cannot evaluate merge_condition, so the load must fail and leave every row
+-- unchanged. The failure message carries the BE address, so it is checked through information_schema.loads.
+[UC]shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_8.csv -XPUT -H partial_update:true  -H label:label10324  -H columns:site_id,event_day,user_name -H column_separator:,  -H partial_update:true -H partial_update_mode:column -H merge_condition:event_day ${url}/api/test_column_partial_update_with_condition_update/site_access/_stream_load
 sync;
+select state, instr(error_msg, 'partial update with column mode and condition update at the same time') > 0 from information_schema.loads where db_name = 'test_column_partial_update_with_condition_update' and label = 'label10324';
 select * from site_access;
 
 drop database test_column_partial_update_with_condition_update;

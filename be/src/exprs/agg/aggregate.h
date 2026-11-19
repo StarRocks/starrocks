@@ -338,6 +338,10 @@ public:
     // use that wrapper too yet still return NULL over an empty frame -- so each such function opts in itself.
     virtual bool is_result_non_nullable() const { return false; }
 
+    // Whether a state, once it holds a value, ignores every later update/merge (e.g. any_value keeps the first
+    // value it sees). The aggregator then feeds such a function only the rows that created a new group.
+    virtual bool is_first_value_only() const { return false; }
+
     // Contains a loop with calls to "merge" function.
     // You can collect arguments into array "states"
     // and do a single call to "merge_batch" for devirtualization and inlining.

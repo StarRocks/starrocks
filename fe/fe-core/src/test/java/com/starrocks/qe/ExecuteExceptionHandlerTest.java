@@ -33,8 +33,8 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.thrift.TAIModelConfiguration;
-import com.starrocks.thrift.TAIModelSource;
+import com.starrocks.thrift.TAIProvider;
+import com.starrocks.thrift.TAIProviderProtocol;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TStatusCode;
 import org.junit.jupiter.api.Assertions;
@@ -59,7 +59,6 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         Assertions.assertThrows(RemoteFileNotFoundException.class,
                 () -> ExecuteExceptionHandler.handle(new RemoteFileNotFoundException("mock"), retryContext));
     }
-
 
     @Test
     public void testHandleRemoteFileNotFoundException_2() throws Exception {
@@ -181,7 +180,9 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         String name = "rpc_retry_provider";
         manager.createProvider(name, AIProviderType.CHAT, providerProperties("original"), "");
         try {
-            String sql = "select ai_custom_query('" + name + "', ai_custom_query('" + name + "', k1)) from t7";
+            String sql = "select ai_complete(provider => '" + name
+                    + "', model => 'explicit-model', prompt => ai_complete(provider => '" + name
+                    + "', model => 'explicit-model', prompt => k1)) from t7";
             StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
             ExecPlan original = getExecPlan(sql);
             assertProviderConfiguration(original, "original");
@@ -199,14 +200,12 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
 
             manager.alterProvider(name, Map.of("protocol", "anthropic"), false);
             retry.setRetryTime(1);
-            RpcException failure = new RpcException("mock protocol retry");
-            Assertions.assertSame(failure, Assertions.assertThrows(RpcException.class,
-                    () -> ExecuteExceptionHandler.handle(failure, retry)));
-            Assertions.assertSame(altered, retry.getExecPlan());
+            ExecuteExceptionHandler.handle(new RpcException("mock protocol retry"), retry);
+            Assertions.assertNotSame(altered, retry.getExecPlan());
+            assertProviderConfiguration(retry.getExecPlan(), "altered", TAIProviderProtocol.ANTHROPIC);
             assertProviderConfiguration(altered, "altered");
             assertProviderConfiguration(original, "original");
-            SemanticException error = Assertions.assertThrows(SemanticException.class, () -> getExecPlan(sql));
-            Assertions.assertEquals("AI functions require an OPENAI provider protocol, not ANTHROPIC", error.getDetailMsg());
+            assertProviderConfiguration(getExecPlan(sql), "altered", TAIProviderProtocol.ANTHROPIC);
         } finally {
             manager.dropProvider(name, true);
         }
@@ -218,7 +217,7 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         String name = "schema_retry_provider";
         String originalId = manager.createProvider(name, AIProviderType.CHAT, providerProperties("original"), "");
         try {
-            String sql = "select ai_custom_query('" + name + "', k1) from t7";
+            String sql = "select ai_complete(provider => '" + name + "', model => 'explicit-model', prompt => k1) from t7";
             StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
             ExecPlan original = getExecPlan(sql);
             assertProviderConfiguration(original, "original");
@@ -257,7 +256,7 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         String name = "lake_meta_retry_provider";
         manager.createProvider(name, AIProviderType.CHAT, providerProperties("original"), "");
         try {
-            String sql = "select ai_custom_query('" + name + "', k1) from t7";
+            String sql = "select ai_complete(provider => '" + name + "', model => 'explicit-model', prompt => k1) from t7";
             StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
             ExecPlan original = getExecPlan(sql);
             ExecuteExceptionHandler.RetryContext retry =
@@ -290,22 +289,25 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
     }
 
     private static void assertProviderConfiguration(ExecPlan plan, String version) {
-        List<Map<String, TAIModelConfiguration>> configurations = plan.getFragments().stream()
+        assertProviderConfiguration(plan, version, TAIProviderProtocol.OPENAI);
+    }
+
+    private static void assertProviderConfiguration(ExecPlan plan, String version, TAIProviderProtocol protocol) {
+        List<Map<String, TAIProvider>> configurations = plan.getFragments().stream()
                 .flatMap(fragment -> fragment.getPlanRoot().treeToThrift().getNodes().stream())
                 .filter(node -> node.getNode_type() == TPlanNodeType.AI_PROJECT_NODE)
-                .map(node -> node.getAi_project_node().getAi_model_configs())
+                .map(node -> node.getAi_project_node().getAi_provider_mapping())
                 .toList();
         Assertions.assertFalse(configurations.isEmpty());
         configurations.forEach(configs -> {
-            Assertions.assertEquals(Set.of("provider:0"), configs.keySet());
-            TAIModelConfiguration configuration = configs.get("provider:0");
-            Assertions.assertEquals(TAIModelSource.PROVIDER, configuration.getSource());
-            Assertions.assertEquals(version + "-model", configuration.getChat().getModel());
-            Assertions.assertEquals(version + "-test-key", configuration.getChat().getApi_key());
+            Assertions.assertEquals(Set.of(configs.values().iterator().next().getId()), configs.keySet());
+            TAIProvider configuration = configs.values().iterator().next();
+            Assertions.assertEquals(version + "-model", configuration.getParams().get("model"));
+            Assertions.assertEquals(version + "-test-key", configuration.getParams().get("api_key"));
             Assertions.assertEquals("https://" + version + ".example.test/v1/chat/completions",
-                    configuration.getChat().getEndpoint());
-            Assertions.assertEquals("openai_compatible", configuration.getChat().getProvider());
-            Assertions.assertEquals(1200, configuration.getChat().getTimeout_ms());
+                    configuration.getParams().get("endpoint"));
+            Assertions.assertEquals(protocol, configuration.getProtocol());
+            Assertions.assertEquals("1200", configuration.getParams().get("timeout_ms"));
         });
     }
 

@@ -173,6 +173,8 @@ StatusOr<ColumnPtr> build_variant_projection_column(const VariantColumn* variant
     reader.prepare(variant_column, &path);
 
     const bool src_is_const = variant_src->is_constant();
+    TzOffsetCache offset_cache;
+    offset_cache.bind(zone);
     for (size_t row = 0; row < num_rows; ++row) {
         if (variant_src->is_null(row)) {
             builder.append_null();
@@ -184,7 +186,8 @@ StatusOr<ColumnPtr> build_variant_projection_column(const VariantColumn* variant
             builder.append_null();
             continue;
         }
-        auto cast_status = VariantRowConverter::cast_to<ResultType, false>(read.value.as_ref(), zone, builder);
+        auto cast_status =
+                VariantRowConverter::cast_to<ResultType, false>(read.value.as_ref(), zone, builder, &offset_cache);
         RETURN_IF_ERROR(cast_status);
     }
 
@@ -335,6 +338,9 @@ VariantShreddedReadHints build_variant_shredded_hints(const std::vector<ColumnAc
     }
 
     std::unordered_set<std::string> unique_paths;
+    // An OFFSET child (`v IS [NOT] NULL`) asks only for the outer null mask. It reads no leaf: next to
+    // FIELD children it adds nothing, alone it turns on the null-mask-only read.
+    bool null_mask_requested = false;
     for (const auto& access_path : *column_access_paths) {
         if (access_path == nullptr || access_path->path() != column_name) {
             continue;
@@ -349,6 +355,10 @@ VariantShreddedReadHints build_variant_shredded_hints(const std::vector<ColumnAc
 
         std::vector<VariantSegment> segments;
         for (const auto& child : access_path->children()) {
+            if (child->is_offset() && child->children().empty()) {
+                null_mask_requested = true;
+                continue;
+            }
             if (!collect_variant_leaf_paths(child.get(), &segments, &hints)) {
                 hints.clear();
                 return hints;
@@ -388,6 +398,7 @@ VariantShreddedReadHints build_variant_shredded_hints(const std::vector<ColumnAc
     }
     hints.shredded_paths = std::move(pruned_paths);
     hints.parsed_shredded_paths = std::move(pruned_parsed_paths);
+    hints.null_only = null_mask_requested && hints.parsed_shredded_paths.empty();
     return hints;
 }
 

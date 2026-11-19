@@ -1,0 +1,100 @@
+-- name: test_range_rollup_schema_change @cloud
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (k1 int not null, k2 int not null, v1 int)
+duplicate key(k1, k2)
+order by(k1, k2)
+properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t select x, x % 50, x % 97 from table(generate_series(1, 2000)) as g(x);
+-- result:
+-- !result
+alter table t add rollup r_dup(k2, k1, v1) duplicate key(k2) order by (k2, k1);
+-- result:
+-- !result
+function: wait_alter_table_finish("ROLLUP", 8)
+-- result:
+None
+-- !result
+show tablet from t where IndexName = 'r_dup';
+-- result:
+[REGEX]^\d+\t[^\n]*\(-∞, \[-?\d+, -?\d+\]\)\n(\d+\t[^\n]*\[\[-?\d+, -?\d+\], \[-?\d+, -?\d+\]\)\n)*\d+\t[^\n]*\[\[-?\d+, -?\d+\], \+∞\)$
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+set enable_sync_materialized_view_rewrite = false;
+-- result:
+-- !result
+select k2, count(*), sum(k1), sum(v1) from t where k2 = 7 group by k2;
+-- result:
+7	40	39280	1838
+-- !result
+select k2, count(*), sum(k1), sum(v1) from r_dup [_SYNC_MV_] where k2 = 7 group by k2;
+-- result:
+7	40	39280	1838
+-- !result
+alter table t modify column v1 bigint;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t select x, x % 50, x % 97 from table(generate_series(2001, 2100)) as g(x);
+-- result:
+-- !result
+show tablet from t where IndexName = 'r_dup';
+-- result:
+[REGEX]^\d+\t[^\n]*\(-∞, \[-?\d+, -?\d+\]\)\n(\d+\t[^\n]*\[\[-?\d+, -?\d+\], \[-?\d+, -?\d+\]\)\n)*\d+\t[^\n]*\[\[-?\d+, -?\d+\], \+∞\)$
+-- !result
+select k2, count(*), sum(k1), sum(v1) from t where k2 = 7 group by k2;
+-- result:
+7	42	43344	1925
+-- !result
+select k2, count(*), sum(k1), sum(v1) from r_dup [_SYNC_MV_] where k2 = 7 group by k2;
+-- result:
+7	42	43344	1925
+-- !result
+select count(*) from t;
+-- result:
+2100
+-- !result
+select count(*) from r_dup [_SYNC_MV_];
+-- result:
+2100
+-- !result
+alter table t add rollup r_v(v1, k1) order by (v1, k1);
+-- result:
+-- !result
+function: wait_alter_table_finish("ROLLUP", 8)
+-- result:
+None
+-- !result
+alter table t drop column v1;
+-- result:
+E: (1064, 'DROP COLUMN on a sort-key column is not supported on tables with range distribution, because it would change the column set or type/semantics that the existing range tablet boundary values were recorded under. Column: v1 Index: r_v')
+-- !result
+alter table t modify column v1 varchar(32);
+-- result:
+E: (1064, 'MODIFY COLUMN on a sort-key column is not supported on tables with range distribution, because it would change the column set or type/semantics that the existing range tablet boundary values were recorded under. Column: v1 Index: r_v')
+-- !result
+select count(*) from t;
+-- result:
+2100
+-- !result
+select count(*) from r_v [_SYNC_MV_];
+-- result:
+2100
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

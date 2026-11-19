@@ -2,13 +2,12 @@
 displayed_sidebar: docs
 description: "Grants roles or privileges on specific objects to a user, a role, or an external group."
 toc_max_heading_level: 4
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # GRANT
 
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
-import GrantCreateWarehouse from '../../../_assets/commonMarkdown/grant_create_warehouse.mdx'
-import GrantWarehouse from '../../../_assets/commonMarkdown/grant_warehouse.mdx'
 
 ## 功能
 
@@ -25,7 +24,7 @@ import GrantWarehouse from '../../../_assets/commonMarkdown/grant_warehouse.mdx'
 :::tip
 
 - 只有拥有 `user_admin` 角色的用户才可以将任意权限授予给任意用户和角色。
-- 角色被赋予给用户之后，用户需要通过 [SET ROLE](SET_ROLE.md) 手动激活角色，方可利用角色的权限。如果希望用户登录时默认激活角色，则可以通过 [ALTER USER](ALTER_USER.md) 或 [SET DEFAULT ROLE](SET_DEFAULT_ROLE.md) 为用户设置默认角色。如果希望系统内所有用户都能够在登录时默认激活所有权限，则可以设置全局变量 `SET GLOBAL activate_all_roles_on_login = TRUE;`。
+- 角色被赋予给用户之后，用户需要通过 [SET ROLE](SET_ROLE.md) 手动激活角色，方可利用角色的权限。如果希望用户登录时默认激活角色，则可以通过 [ALTER USER](ALTER_USER.md) 或 [SET DEFAULT ROLE](SET_DEFAULT_ROLE.md) 为用户设置默认角色。如果希望系统内所有用户都能够在登录时默认激活其被授予的所有角色，则可以设置全局变量 `SET GLOBAL activate_all_roles_on_login = TRUE;`。
 - 普通用户可以将自身拥有的授权中带有 WITH GRANT OPTION 关键字的权限赋予给其他用户和角色，参见示例七。
 
 :::
@@ -36,7 +35,12 @@ import GrantWarehouse from '../../../_assets/commonMarkdown/grant_warehouse.mdx'
 
 #### System 相关
 
-<GrantCreateWarehouse />
+```SQL
+GRANT
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME | SECURITY } 
+    ON SYSTEM
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
+```
 
 #### AI 函数与 Provider
 
@@ -47,7 +51,7 @@ GRANT USAGE ON AI PROVIDER <provider_name> TO {ROLE <role_name> | USER <user_ide
 GRANT USAGE ON ALL AI PROVIDERS TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
 ```
 
-AI FUNCTION 使用不带数据库前缀、无参数签名的公开内建函数族名称。`USAGE ON ALL AI FUNCTIONS` 覆盖当前及未来的函数族，带有 `WITH GRANT OPTION` 时可以转授单个或全部函数族的使用权限，但不包含 Provider 使用权限。Provider 名称保持精确匹配。参见 [AI 权限](../../sql-functions/ai-functions/ai_functions.mdx#ai-function-privileges)。
+AI FUNCTION 使用不带数据库前缀、无参数签名的公开内建函数族名称。`USAGE ON ALL AI FUNCTIONS` 覆盖当前及未来的函数族，带有 `WITH GRANT OPTION` 时可以转授单个或全部函数族的使用权限，但不包含 Provider 使用权限。Provider 名称保持精确匹配。参见 [AI 权限](../../../administration/user_privs/authorization/privilege_item.md#ai-function-privileges)。
 
 
 #### Resource group 相关
@@ -214,8 +218,6 @@ GRANT
     TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
-<GrantWarehouse />
-
 ### 授予角色给用户或者其他角色
 
 ```SQL
@@ -228,7 +230,7 @@ GRANT <role_name> [,<role_name>, ...] TO EXTERNAL GROUP <external_group_name>
 
 - 在角色被赋予给用户之后，用户需要通过 [SET ROLE](SET_ROLE.md) 手动激活角色，方可利用角色的权限。
 - 如果希望用户登录时就默认激活角色，则可以通过 [ALTER USER](ALTER_USER.md) 或者 [SET DEFAULT ROLE](SET_DEFAULT_ROLE.md) 为用户设置默认角色。
-- 如果希望系统内所有用户都能够在登录时默认激活所有权限，则可以设置全局变量 `SET GLOBAL activate_all_roles_on_login = TRUE;`。
+- 如果希望系统内所有用户都能够在登录时默认激活其被授予的所有角色，则可以设置全局变量 `SET GLOBAL activate_all_roles_on_login = TRUE;`。
 
 ## 示例
 

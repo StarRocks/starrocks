@@ -96,6 +96,12 @@ public class PaimonScanNode extends ScanNode {
     private long starrocksNativeReaderLength, paimonNativeReaderLength, jniReaderLength;
     private int deletionVectorCount;
     private long deletionVectorReaderScanRange;
+    // Candidate file metadata, before residual filtering, row merging and reader-range splitting.
+    // -1 means unavailable (including system-table splits without DataFileMeta).
+    private long scanSplitCount = -1;
+    private long scanDataFileCount = -1;
+    private long scanDataFileBytes = -1;
+    private long scanDataFileRows = -1;
 
     public PaimonScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -159,8 +165,20 @@ public class PaimonScanNode extends ScanNode {
 
     @Override
     public boolean hasMoreScanRanges() {
-        return incrementalScanRanges && !reachLimit && (pendingRangeIndex < scanRangeLocationsList.size()
-                || (remoteFileInfoSource != null && remoteFileInfoSource.hasMoreOutput()));
+        if (!incrementalScanRanges || reachLimit) {
+            return false;
+        }
+        if (pendingRangeIndex < scanRangeLocationsList.size()) {
+            return true;
+        }
+        if (remoteFileInfoSource == null) {
+            return false;
+        }
+        boolean hasMore = remoteFileInfoSource.hasMoreOutput();
+        if (!hasMore && scanSplitCount < 0) {
+            computeScanMetrics(List.of());
+        }
+        return hasMore;
     }
 
     @Override
@@ -228,6 +246,7 @@ public class PaimonScanNode extends ScanNode {
         PaimonSplitsInfo splitsInfo = remoteFileDesc.getPaimonSplitsInfo();
         String predicateInfo = encodeObjectToString(splitsInfo.getPredicate());
         List<Split> splits = splitsInfo.getPaimonSplits();
+        computeScanMetrics(splits);
 
         if (splits.isEmpty()) {
             return;
@@ -269,6 +288,35 @@ public class PaimonScanNode extends ScanNode {
                             "Number of partitions allowed: %s, number of partitions to be scanned: %s. " +
                             "Please adjust the SQL or change the limit by set variable scan_lake_partition_num_limit.",
                     partitionLimit, selectedPartitions.size());
+        }
+    }
+
+    private void computeScanMetrics(List<Split> splits) {
+        if (scanSplitCount < 0) {
+            scanSplitCount = 0;
+            scanDataFileCount = 0;
+            scanDataFileBytes = 0;
+            scanDataFileRows = 0;
+        }
+        scanSplitCount += splits.size();
+        // An unknown batch makes file totals unavailable for the entire scan, including later batches.
+        if (scanDataFileCount < 0) {
+            return;
+        }
+        for (Split split : splits) {
+            Optional<DataSplit> dataSplit = PaimonSplitUtils.getDataSplit(split);
+            if (dataSplit.isEmpty()) {
+                // Do not report a partial total as the size of the whole scan.
+                scanDataFileCount = -1;
+                scanDataFileBytes = -1;
+                scanDataFileRows = -1;
+                return;
+            }
+            for (DataFileMeta file : dataSplit.get().dataFiles()) {
+                scanDataFileCount++;
+                scanDataFileBytes += file.fileSize();
+                scanDataFileRows += file.rowCount();
+            }
         }
     }
 
@@ -512,6 +560,14 @@ public class PaimonScanNode extends ScanNode {
         output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
 
         if (detailLevel == TExplainLevel.VERBOSE) {
+            if (scanSplitCount >= 0) {
+                output.append(prefix).append("Paimon Scan Metrics:\n");
+                output.append(prefix).append("  splits=").append(scanSplitCount).append("\n");
+                output.append(prefix).append("  data_files=").append(scanDataFileCount).append("\n");
+                output.append(prefix).append("  data_file_bytes=").append(scanDataFileBytes).append("\n");
+                output.append(prefix).append("  data_file_rows=").append(scanDataFileRows).append("\n");
+            }
+
             HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
 
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {

@@ -2,6 +2,7 @@
 sidebar_position: 110
 displayed_sidebar: docs
 description: "Fluss catalog を使用して Apache Fluss テーブルのデータをクエリします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'

@@ -23,12 +23,15 @@ import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateRangeMgr;
+import com.starrocks.catalog.ColocateRangeUtils;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
@@ -39,6 +42,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
@@ -49,9 +53,14 @@ import com.starrocks.proto.TabletRangePB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.TabletList;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -902,5 +911,229 @@ public class SplitTabletJobColocateTest {
                         db, table, Map.of(oldTabletId, newTabletRanges)));
         Assertions.assertTrue(thrown.getMessage().contains("no covering ColocateRange"),
                 "expected 'no covering ColocateRange' in message, got: " + thrown.getMessage());
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Split of a rollup tablet whose sort key is shorter or longer than the base sort key
+    // ---------------------------------------------------------------------------------------------
+
+    /** A tuple of INT values; a null element is a NULL. */
+    private static Tuple intTuple(Integer... values) {
+        List<Variant> variants = new ArrayList<>(values.length);
+        for (Integer value : values) {
+            variants.add(value == null ? Variant.nullVariant(IntegerType.INT) : Variant.of(IntegerType.INT, value.toString()));
+        }
+        return new Tuple(variants);
+    }
+
+    private List<ColocateRange> colocateRanges() {
+        return GlobalStateMgr.getCurrentState().getColocateTableIndex().getColocateRanges(groupId.grpId);
+    }
+
+    /**
+     * Moves this test onto a table (k1, k2, k3, v1) sorted by (k1, k2, k3) with a rollup over {@code rollupColumns}
+     * sorted by all of them, and returns the rollup index. The group of this test first gets three ColocateRanges on k1,
+     * (-inf, 100), [100, 200) and [200, +inf), each with its own PACK shard group; the new table joins the group aligned
+     * with them and the table created by setUp leaves it. The rollup has one tablet per ColocateRange, in range order,
+     * each with the range expanded in the rollup's own sort key and its shard in the index SPREAD shard group and the
+     * range's PACK shard group, as partition creation lays out an index of a range colocate table. The rollup holds
+     * rows, so a split of one of its tablets is an online split.
+     */
+    private MaterializedIndex useTableWithRollupInThreeRanges(List<String> rollupColumns) throws Exception {
+        ColocateTableIndex idx = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        StarOSAgent agent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+        long firstPackGroup = colocateRanges().get(0).getShardGroupId();
+        long secondPackGroup = agent.createShardGroup(db.getId(), table.getId(), 0L, 0L, PlacementPolicy.PACK);
+        long thirdPackGroup = agent.createShardGroup(db.getId(), table.getId(), 0L, 0L, PlacementPolicy.PACK);
+        idx.getColocateRangeMgr().setColocateRanges(groupId.grpId, List.of(
+                new ColocateRange(Range.lt(intTuple(100)), firstPackGroup),
+                new ColocateRange(Range.gelt(intTuple(100), intTuple(200)), secondPackGroup),
+                new ColocateRange(Range.ge(intTuple(200)), thirdPackGroup)));
+        String seedName = table.getName();
+        String tableName = seedName + "_rollup";
+        starRocksAssert.withTable("create table " + tableName + " (k1 int, k2 int, k3 int, v1 int)\n"
+                + "duplicate key(k1, k2, k3)\n"
+                + "order by(k1, k2, k3)\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 'p3_grp_" + tableSeq + ":k1');");
+        // The table created by setUp has a single tablet against the three ranges: no misaligned member may stay.
+        starRocksAssert.dropTable(seedName);
+        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Assertions.assertEquals(groupId, idx.getGroup(table.getId()));
+
+        List<Column> schema = new ArrayList<>();
+        List<Integer> sortKeyIdxes = new ArrayList<>();
+        List<Integer> sortKeyUniqueIds = new ArrayList<>();
+        for (String columnName : rollupColumns) {
+            Column column = new Column(table.getColumn(columnName));
+            column.setIsKey(true);
+            sortKeyIdxes.add(schema.size());
+            sortKeyUniqueIds.add(column.getUniqueId());
+            schema.add(column);
+        }
+        long rollupMetaId = GlobalStateMgr.getCurrentState().getNextId();
+        table.setIndexMeta(rollupMetaId, "r_" + rollupColumns.size(), schema, 0, 0, (short) Math.min(schema.size(), 3),
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, sortKeyIdxes, sortKeyUniqueIds);
+        List<Column> rollupSortKey = MetaUtils.getRangeDistributionColumns(table, rollupMetaId);
+        Assertions.assertEquals(rollupColumns.size(), rollupSortKey.size());
+
+        PhysicalPartition partition = table.getAllPhysicalPartitions().iterator().next();
+        long spreadGroup = agent.createShardGroup(db.getId(), table.getId(), partition.getId(), rollupMetaId);
+        MaterializedIndex rollup = new MaterializedIndex(rollupMetaId, rollupMetaId,
+                MaterializedIndex.IndexState.NORMAL, spreadGroup);
+        TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partition.getId(), rollup.getId(),
+                TStorageMedium.HDD, true);
+        Map<String, String> properties = new HashMap<>();
+        properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
+        properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(partition.getId()));
+        properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(rollup.getId()));
+        for (ColocateRange colocateRange : colocateRanges()) {
+            long shardId = agent.createShards(1, table.getPartitionFilePathInfo(partition.getId()),
+                    table.getPartitionFileCacheInfo(partition.getId()),
+                    List.of(spreadGroup, colocateRange.getShardGroupId()), null, properties,
+                    WarehouseManager.DEFAULT_RESOURCE).get(0);
+            rollup.addTablet(new LakeTablet(shardId, new TabletRange(ColocateRangeUtils.expandToFullSortKey(
+                    colocateRange.getRange(), rollupSortKey, 1))), tabletMeta);
+        }
+        rollup.setRowCount(100);
+        partition.createRollupIndex(rollup);
+        Assertions.assertFalse(idx.isGroupUnstable(groupId));
+        return rollup;
+    }
+
+    /** Has the publish split every tablet into {@code left} and {@code right}; returns the new tablet ids in order. */
+    private static List<Long> installTwoChildSplit(Range<Tuple> left, Range<Tuple> right) {
+        List<Long> children = new ArrayList<>();
+        installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
+            children.clear();
+            children.addAll(newTabletIds);
+            Map<Long, TabletRangePB> result = new HashMap<>();
+            result.put(newTabletIds.get(0), new TabletRange(left).toProto());
+            result.put(newTabletIds.get(1), new TabletRange(right).toProto());
+            return result;
+        });
+        return children;
+    }
+
+    /**
+     * Has StarOS report every shard in exactly {@code reportedGroupIds}, and records the shard groups the immediate PACK
+     * reconcile after the split adds to ({@code added}) and removes from ({@code removed}) each shard.
+     */
+    private static void mockShardGroupMembership(List<Long> reportedGroupIds, Map<Long, List<Long>> added,
+                                                 Map<Long, List<Long>> removed) {
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) {
+                List<ShardInfo> infos = new ArrayList<>();
+                for (long id : shardIds) {
+                    infos.add(ShardInfo.newBuilder().setShardId(id).addAllGroupIds(reportedGroupIds).build());
+                }
+                return infos;
+            }
+
+            @Mock
+            public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds) {
+                added.put(shardId, new ArrayList<>(addGroupIds));
+                removed.put(shardId, new ArrayList<>(removeGroupIds));
+            }
+        };
+    }
+
+    /** Splits {@code tabletId} of the current table in two and runs the job to FINISHED. */
+    private void runSplitJobOfTablet(long tabletId) throws Exception {
+        Map<String, String> properties = Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2");
+        SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(tabletId)), properties);
+        clause.setTabletReshardTargetSize(-2);
+        TabletReshardJob job = new SplitTabletJobFactory(db, table, clause).createTabletReshardJob();
+        job.init();
+        for (int i = 0; i < 8 && job.getJobState() != TabletReshardJob.JobState.FINISHED; i++) {
+            job.run();
+        }
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
+    }
+
+    /**
+     * A within-prefix split of a tablet of a rollup sorted by (k1, k2), shorter than the base sort key, is judged with
+     * the rollup's own sort key, like a split of the base index: the child that starts at the lower bound of its
+     * ColocateRange lies inside the range, so the group stays stable and both children are placed into the range's PACK
+     * group.
+     */
+    @Test
+    public void testWithinPrefixSplitOfShorterRollupKeepsGroupStableAndPlacesChildren() throws Exception {
+        MaterializedIndex rollup = useTableWithRollupInThreeRanges(List.of("k1", "k2"));
+        Tablet parent = rollup.getTablets().get(1);
+        Assertions.assertEquals(Range.gelt(intTuple(100, null), intTuple(200, null)), parent.getRange().getRange());
+        long packGroup = colocateRanges().get(1).getShardGroupId();
+        List<Long> children = installTwoChildSplit(Range.gelt(intTuple(100, null), intTuple(150, 0)),
+                Range.gelt(intTuple(150, 0), intTuple(200, null)));
+        Map<Long, List<Long>> added = new HashMap<>();
+        mockShardGroupMembership(List.of(rollup.getShardGroupId()), added, new HashMap<>());
+
+        runSplitJobOfTablet(parent.getId());
+
+        Assertions.assertEquals(3, colocateRanges().size(), "a within-prefix split adds no ColocateRange");
+        Assertions.assertFalse(GlobalStateMgr.getCurrentState().getColocateTableIndex().isGroupUnstable(groupId),
+                "a within-prefix split of a rollup tablet must leave the group stable");
+        Assertions.assertEquals(2, children.size());
+        for (long child : children) {
+            Assertions.assertEquals(List.of(packGroup), added.get(child),
+                    "child " + child + " must be placed into the PACK group of its ColocateRange");
+        }
+    }
+
+    /**
+     * The same for a rollup sorted by (k1, k2, k3, v1), longer than the base sort key: the child that ends at the upper
+     * bound of its ColocateRange lies inside the range, so the group stays stable and both children are placed.
+     */
+    @Test
+    public void testWithinPrefixSplitOfLongerRollupKeepsGroupStable() throws Exception {
+        MaterializedIndex rollup = useTableWithRollupInThreeRanges(List.of("k1", "k2", "k3", "v1"));
+        Tablet parent = rollup.getTablets().get(1);
+        Assertions.assertEquals(Range.gelt(intTuple(100, null, null, null), intTuple(200, null, null, null)),
+                parent.getRange().getRange());
+        long packGroup = colocateRanges().get(1).getShardGroupId();
+        List<Long> children = installTwoChildSplit(Range.gelt(intTuple(100, null, null, null), intTuple(150, 0, 0, 0)),
+                Range.gelt(intTuple(150, 0, 0, 0), intTuple(200, null, null, null)));
+        Map<Long, List<Long>> added = new HashMap<>();
+        mockShardGroupMembership(List.of(rollup.getShardGroupId()), added, new HashMap<>());
+
+        runSplitJobOfTablet(parent.getId());
+
+        Assertions.assertEquals(3, colocateRanges().size(), "a within-prefix split adds no ColocateRange");
+        Assertions.assertFalse(GlobalStateMgr.getCurrentState().getColocateTableIndex().isGroupUnstable(groupId),
+                "a within-prefix split of a rollup tablet must leave the group stable");
+        Assertions.assertEquals(2, children.size());
+        for (long child : children) {
+            Assertions.assertEquals(List.of(packGroup), added.get(child),
+                    "child " + child + " must be placed into the PACK group of its ColocateRange");
+        }
+    }
+
+    /**
+     * A child of a rollup tablet whose lower bound is canonical in the rollup's own sort key, (150, NULL) for the sort
+     * key (k1, k2), introduces a ColocateRange boundary like a canonical child of the base index: the boundary is
+     * spliced, the group is marked unstable so the checker aligns every member, and the child moves to the PACK group of
+     * the new ColocateRange.
+     */
+    @Test
+    public void testCanonicalLowerBoundOfRollupChildSplicesColocateRange() throws Exception {
+        MaterializedIndex rollup = useTableWithRollupInThreeRanges(List.of("k1", "k2"));
+        Tablet parent = rollup.getTablets().get(1);
+        long packGroup = colocateRanges().get(1).getShardGroupId();
+        List<Long> children = installTwoChildSplit(Range.gelt(intTuple(100, null), intTuple(150, null)),
+                Range.gelt(intTuple(150, null), intTuple(200, null)));
+        Map<Long, List<Long>> added = new HashMap<>();
+        Map<Long, List<Long>> removed = new HashMap<>();
+        mockShardGroupMembership(List.of(rollup.getShardGroupId(), packGroup), added, removed);
+
+        runSplitJobOfTablet(parent.getId());
+
+        List<ColocateRange> ranges = colocateRanges();
+        Assertions.assertEquals(4, ranges.size(), "the canonical lower bound (150, NULL) must splice a ColocateRange");
+        Assertions.assertEquals(Range.gelt(intTuple(150), intTuple(200)), ranges.get(2).getRange());
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getColocateTableIndex().isGroupUnstable(groupId));
+        Assertions.assertEquals(2, children.size());
+        Assertions.assertEquals(List.of(ranges.get(2).getShardGroupId()), added.get(children.get(1)));
+        Assertions.assertEquals(List.of(packGroup), removed.get(children.get(1)));
+        Assertions.assertFalse(added.containsKey(children.get(0)), "the child below the new boundary stays in place");
     }
 }

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 description: "From v3.1 onwards, StarRocks supports metrics for asynchronous materialized views."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Monitoring Metrics for Asynchronous Materialized Views

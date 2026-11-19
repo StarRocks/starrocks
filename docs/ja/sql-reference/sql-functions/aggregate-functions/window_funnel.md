@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "WINDOW_FUNNEL関数はスライディングウィンドウ内でイベントチェーンを検索し、連続イベントの最大数を計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # window_funnel

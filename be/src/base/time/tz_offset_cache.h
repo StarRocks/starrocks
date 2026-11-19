@@ -18,6 +18,7 @@
 #include <cctz/time_zone.h>
 
 #include <cstdint>
+#include <vector>
 
 namespace starrocks {
 
@@ -48,6 +49,41 @@ public:
     // Returns the UTC offset (seconds east) in force for `tz` at absolute unix time `unix_sec`.
     int64_t offset_for_unix(int64_t unix_sec, const cctz::time_zone& tz);
 
+    // Batch forms for a reader converting a column of instants in one zone. Both compare the zone once per call
+    // instead of once per value (cctz::time_zone's operator== is out of line, ~5 ns per hit in offset_for_unix), and
+    // share a table of the zone's offset changes over a range of instants, kept across calls and extended to the
+    // transitions around it, so later batches in the same range reuse it.
+    //
+    // uniform_offset_for_unix: true, with *offset, when one offset is in force over all of [lo, hi]. A reader passes
+    // the min and max of a batch and on true adds one constant to every value -- always for a zone without daylight
+    // saving time, and for time-clustered data.
+    bool uniform_offset_for_unix(int64_t lo, int64_t hi, const cctz::time_zone& tz, int64_t* offset);
+
+    // The least and greatest offsets in force over [lo, hi], e.g. to turn the UTC min/max of a column chunk into local
+    // bounds that hold every value between them, though local times are not monotonic across a daylight saving
+    // change. False when the range cannot be tabled (see offsets_for_unix); a caller then has no safe bounds.
+    bool offset_range_for_unix(int64_t lo, int64_t hi, const cctz::time_zone& tz, int64_t* min_offset,
+                               int64_t* max_offset);
+
+    // offsets[i] is the offset at unix_secs[i]; rows with is_null[i] != 0 (is_null may be nullptr) get 0. Each value
+    // is found in the table of offset changes over the batch's range (a few compares even for decades of daylight
+    // saving time); only a range with more than kMaxTableTransitions changes falls back to a cctz lookup per value.
+    void offsets_for_unix(const int64_t* unix_secs, const uint8_t* is_null, size_t n, const cctz::time_zone& tz,
+                          int64_t* offsets);
+
+    // Per-value form of the batch forms, for a caller converting values one at a time in one zone: bind(tz) once
+    // before a run of values (it compares the zone), then offset_in_bound_zone(unix_sec) per value, without a zone
+    // comparison. A value outside the table rebuilds it over the values seen so far, widened by their span, so the
+    // table is rebuilt a logarithmic number of times for any data; once that needs more than kMaxTableTransitions
+    // transitions, values outside the table are looked up in cctz one by one (as without the cache).
+    void bind(const cctz::time_zone& tz);
+    int64_t offset_in_bound_zone(int64_t unix_sec) {
+        if (unix_sec >= _segment_lo && unix_sec <= _segment_hi) {
+            return _segment_offset;
+        }
+        return _offset_in_bound_zone_slow(unix_sec);
+    }
+
     // Interprets the wall-clock fields (year, month, day, hour, minute, second) as being in `tz`
     // and returns the absolute unix-second instant, matching cctz::convert(civil_second, tz)'s
     // tie-break exactly: a SKIPPED (nonexistent) civil time resolves to the transition instant, a
@@ -75,6 +111,57 @@ private:
         int64_t lo = 0; // inclusive, unix seconds
         int64_t hi = 0; // exclusive, unix seconds
     } _abs_window;
+    // Offsets of one zone: offsets[j] is in force from trans[j - 1] (from lo for j = 0) up to trans[j]; trans holds
+    // the transition instants in (lo, hi], ascending. Built for [requested_lo, requested_hi] and widened to the
+    // transitions around it, [lo, hi] (inclusive). Only used by the batch and bound forms.
+    static constexpr size_t kMaxTableTransitions = 512;
+    static constexpr int64_t kMaxTableSeconds = int64_t(1) << 40; // ~34,800 years around 1970
+    static constexpr int64_t kMinGrowSeconds = 366LL * 86400;
+    struct OffsetTable {
+        bool has_value = false;
+        cctz::time_zone zone;
+        int64_t requested_lo = 0;
+        int64_t requested_hi = 0;
+        int64_t lo = 0;
+        int64_t hi = 0;
+        std::vector<int64_t> trans;
+        std::vector<int64_t> offsets;
+        // buckets[b]: the number of transitions at or before trans[0] + (b << kBucketShift), so an instant between
+        // trans[0] and trans.back() starts its search one bucket (~24 days, shorter than daylight saving phases)
+        // before its index instead of binary searching. Empty when the range needs more than kMaxBuckets.
+        std::vector<uint32_t> buckets;
+    } _table, _new_table;
+    static constexpr int kBucketShift = 21;
+    static constexpr size_t kMaxBuckets = 1 << 16;
+    // The last range _cover could not build a table for.
+    struct {
+        bool has_value = false;
+        cctz::time_zone zone;
+        int64_t lo = 0;
+        int64_t hi = 0;
+    } _failed;
+    // The zone of bind(), and whether a table for the values seen in it could not be built.
+    bool _bound = false;
+    cctz::time_zone _bound_zone;
+    bool _grow_failed = false;
+    // _table holds offsets of the bound zone; kept by bind() and _cover() so offset_in_bound_zone compares no zone.
+    bool _table_in_bound_zone = false;
+    // The stretch of the bound zone without a transition that the last value outside it fell in, with its offset:
+    // the inline check of offset_in_bound_zone (empty: lo > hi).
+    int64_t _segment_lo = 1;
+    int64_t _segment_hi = 0;
+    int64_t _segment_offset = 0;
+    int64_t _offset_in_bound_zone_slow(int64_t unix_sec);
+    // Makes _table cover [lo, hi] in `tz`; false, leaving _table as it was, when that needs more than
+    // kMaxTableTransitions transitions or the zone's transitions cannot be enumerated up to hi.
+    bool _cover(int64_t lo, int64_t hi, const cctz::time_zone& tz);
+    static bool _build_table(int64_t lo, int64_t hi, const cctz::time_zone& tz, OffsetTable* table);
+    // Appends the transitions after table->hi up to `hi`; false, leaving the table as it was, past
+    // kMaxTableTransitions or the zone's transition table.
+    static bool _extend_table(int64_t hi, const cctz::time_zone& tz, OffsetTable* table);
+    static bool _finish_extension(OffsetTable* table, size_t old_size);
+    // Index into _table.offsets for an instant the table covers: the number of transitions at or before it.
+    size_t _table_index(int64_t unix_sec) const;
 
     // Bounds are in the same "civil fields reinterpreted as literal UTC seconds" domain as
     // `unix_for_civil`'s civil_as_utc_sec parameter, not cctz::civil_second -- comparing plain

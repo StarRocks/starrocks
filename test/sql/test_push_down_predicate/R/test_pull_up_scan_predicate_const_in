@@ -1,0 +1,27 @@
+-- name: test_pull_up_scan_predicate_const_in
+CREATE TABLE pullup_const_in_${uuid0} (
+  k_id INT NOT NULL,
+  c_int INT NULL,
+  c_bigint BIGINT NULL,
+  c_tinyint TINYINT NULL
+) DUPLICATE KEY(k_id) DISTRIBUTED BY HASH(k_id) BUCKETS 2 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO pullup_const_in_${uuid0} VALUES (1, 1, 1, 1), (2, 0, 5, 2), (3, NULL, 7, NULL);
+-- result:
+-- !result
+set enable_predicate_expr_reuse = true;
+-- result:
+-- !result
+SELECT count(*) FROM ( SELECT MOD ( CAST ( c_int AS BOOLEAN ) = c_bigint , 3 ) FROM pullup_const_in_${uuid0} ) t(c1) WHERE c1 IN (FALSE, TRUE);
+-- result:
+2
+-- !result
+SELECT count(*) FROM ( SELECT MOD ( CAST ( c_int AS BOOLEAN ) = c_bigint , 3 ) FROM pullup_const_in_${uuid0} ) t(c1) WHERE c1 IN (FALSE, 2);
+-- result:
+1
+-- !result
+SELECT count(*) FROM ( SELECT MOD ( CAST ( c_int AS BOOLEAN ) = c_bigint , 3 ) FROM pullup_const_in_${uuid0} ) t(c1) WHERE c1 NOT IN (0, 1);
+-- result:
+0
+-- !result

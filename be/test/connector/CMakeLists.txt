@@ -77,6 +77,8 @@ set_target_properties(connector_file_test PROPERTIES COMPILE_FLAGS "-fno-access-
 
 set(CONNECTOR_HIVE_TEST_LINK_LIBS
     ConnectorHive
+    # hdfs_scanner_test uses formats::IcebergDeleteFileMeta directly; ConnectorHive links Formats privately
+    Formats
     ${CONNECTOR_COMMON_TEST_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
     ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
@@ -88,7 +90,6 @@ set(CONNECTOR_HIVE_TEST_LINK_LIBS
 
 add_executable(connector_hive_test
         ${BE_TEST_MACOS_LINK_STUBS}
-        ${BE_TEST_JNI_ENV_STUB}
         hive/hive_test_main.cpp
         hive/hive_connector_test.cpp
         hive/hive_chunk_sink_test.cpp

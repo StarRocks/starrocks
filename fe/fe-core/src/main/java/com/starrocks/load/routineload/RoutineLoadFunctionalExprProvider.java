@@ -21,6 +21,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.FunctionalExprProvider;
+import com.starrocks.load.LoadJobVisibility;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.type.PrimitiveType;
@@ -246,6 +247,11 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
 
     @Override
     protected boolean delegatePostRowFilter(ConnectContext cxt, RoutineLoadJob job) {
+        // Which jobs the user may see, and how much of each, is decided by LoadJobVisibility before filtering.
+        if (LoadJobVisibility.isEnabled()) {
+            return true;
+        }
+        // With the load job privilege check off, the check SHOW ROUTINE LOAD had before it: INSERT on the table.
         try {
             try {
                 Authorizer.checkTableAction(

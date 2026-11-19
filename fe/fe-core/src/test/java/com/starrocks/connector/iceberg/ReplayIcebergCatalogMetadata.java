@@ -23,6 +23,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersion;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -34,15 +35,19 @@ import com.starrocks.connector.ReplayConnectorMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.type.Type;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.types.Conversions;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -78,6 +83,16 @@ public class ReplayIcebergCatalogMetadata extends ReplayConnectorMetadata {
     public void registerTable(String dbName, String tableName, List<Column> columns, long rowCount,
                               Map<String, ColumnStatistic> columnStats, List<String> partitionTransforms,
                               List<String> partitionNames, Map<String, Long> partitionRowCounts) throws IOException {
+        registerTable(dbName, tableName, columns, rowCount, columnStats, partitionTransforms, partitionNames,
+                partitionRowCounts, 1);
+    }
+
+    // formatVersion: the source table's iceberg format version (external_table_format_version), 1 when the dump
+    // did not capture it. Some rewrites depend on it, e.g. global late materialization needs V3.
+    public void registerTable(String dbName, String tableName, List<Column> columns, long rowCount,
+                              Map<String, ColumnStatistic> columnStats, List<String> partitionTransforms,
+                              List<String> partitionNames, Map<String, Long> partitionRowCounts,
+                              int formatVersion) throws IOException {
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
         PartitionSpec spec = buildPartitionSpec(schema, partitionTransforms);
         long tableId = GlobalStateMgr.getCurrentState().getNextId();
@@ -88,7 +103,7 @@ public class ReplayIcebergCatalogMetadata extends ReplayConnectorMetadata {
         // db/table names passed to MockIcebergTable stay as declared.
         String nativeName = tableName + "_" + tableId;
         TestTables.TestTable nativeTable = TestTables.create(
-                new File(baseDir, dbName + "_" + nativeName), nativeName, schema, spec, 1);
+                new File(baseDir, dbName + "_" + nativeName), nativeName, schema, spec, formatVersion);
         // For a partitioned table, append one DataFile per captured partition so native planFiles can prune.
         // Batch them into a single commit -- per-partition commits would be O(partitions) and slow.
         if (!spec.isUnpartitioned() && partitionNames != null && !partitionNames.isEmpty()) {
@@ -105,13 +120,18 @@ public class ReplayIcebergCatalogMetadata extends ReplayConnectorMetadata {
                 long recordCount = partitionRowCounts == null
                         ? evenSplit : partitionRowCounts.getOrDefault(partitionName, evenSplit);
                 try {
-                    DataFile file = DataFiles.builder(nativeTable.spec())
+                    DataFiles.Builder builder = DataFiles.builder(nativeTable.spec())
                             .withPath("/replay/data-" + (idx++) + ".parquet")
                             .withFileSizeInBytes(Math.max(1L, recordCount))
-                            .withPartitionPath(partitionName)
-                            .withRecordCount(recordCount)
-                            .build();
-                    append.appendFile(file);
+                            .withRecordCount(recordCount);
+                    // withPartitionPath parses "null" as a value of the partition type and fails, so the null
+                    // partition (e.g. "ss_sold_date_sk=null") is built from its values instead.
+                    if (partitionName.contains("=null")) {
+                        builder.withPartition(parseNullablePartition(nativeTable.spec(), partitionName));
+                    } else {
+                        builder.withPartitionPath(partitionName);
+                    }
+                    append.appendFile(builder.build());
                 } catch (Exception e) {
                     // A partition name written under an older, evolved partition spec need not parse against
                     // the single current spec rebuilt above (e.g. an old "dt_month=..." path over a table now
@@ -123,10 +143,62 @@ public class ReplayIcebergCatalogMetadata extends ReplayConnectorMetadata {
                 }
             }
             append.commit();
+        } else if (spec.isUnpartitioned() && rowCount > 0) {
+            // One file holding the whole table, so an unpartitioned scan selects 1/1 partitions like on the cluster
+            // instead of planning an empty table.
+            nativeTable.newAppend().appendFile(DataFiles.builder(nativeTable.spec())
+                    .withPath("/replay/data-0.parquet")
+                    .withFileSizeInBytes(rowCount)
+                    .withRecordCount(rowCount)
+                    .build()).commit();
         }
         MockIcebergTable table = new MockIcebergTable(tableId, tableName, catalogName, null,
-                dbName, tableName, columns, nativeTable, Maps.newHashMap(), "");
+                dbName, tableName, toConnectorColumns(columns, schema), nativeTable, Maps.newHashMap(), "");
         register(dbName, tableName, table, rowCount, columnStats, partitionNames);
+    }
+
+    // Column types as the iceberg connector derives them from the iceberg schema. The dumped DDL loses some of that:
+    // "decimal(7,2)" parses as DECIMAL64, while the connector maps an iceberg decimal(7,2) to DECIMAL32, which changes
+    // casts, row sizes and costs.
+    private static List<Column> toConnectorColumns(List<Column> columns, Schema schema) {
+        List<Column> result = Lists.newArrayList();
+        for (Column column : columns) {
+            Types.NestedField field = schema.findField(column.getName());
+            Type type = field == null ? null : ColumnTypeConverter.fromIcebergType(field.type());
+            if (type == null || type.isUnknown() || type.equals(column.getType())) {
+                result.add(column);
+            } else {
+                result.add(new Column(column.getName(), type, column.isAllowNull(), column.getComment()));
+            }
+        }
+        return result;
+    }
+
+    // Partition values of a metastore-style path ("col=val/col2=val2"), where "null" is a null value.
+    private static StructLike parseNullablePartition(PartitionSpec spec, String partitionName) {
+        String[] parts = partitionName.split("/");
+        Object[] values = new Object[spec.fields().size()];
+        for (int i = 0; i < values.length; i++) {
+            String value = parts[i].substring(parts[i].indexOf('=') + 1);
+            values[i] = "null".equals(value) ? null
+                    : Conversions.fromPartitionString(spec.partitionType().fields().get(i).type(), value);
+        }
+        return new StructLike() {
+            @Override
+            public int size() {
+                return values.length;
+            }
+
+            @Override
+            public <T> T get(int pos, Class<T> javaClass) {
+                return javaClass.cast(values[pos]);
+            }
+
+            @Override
+            public <T> void set(int pos, T value) {
+                values[pos] = value;
+            }
+        };
     }
 
     // Rebuild the iceberg PartitionSpec from the captured transform strings (as produced by

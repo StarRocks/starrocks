@@ -3,6 +3,7 @@ sidebar_position: 100
 displayed_sidebar: docs
 description: "StarRocks 从 v3.1 起支持 Paimon catalog，无导入直接查询 Apache Paimon 数据及转换导入。"
 toc_max_heading_level: 5
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
@@ -24,7 +25,7 @@ Paimon catalog 是一种 external catalog，可以让您在不进行数据导入
 
 ## 使用注意事项
 
-Paimon catalog 仅支持查询数据，不支持通过 Paimon catalog 在 Paimon 集群中执行 DROP、DELETE 或 INSERT 操作。
+Paimon catalog 支持查询数据、创建和删除 Paimon 数据库与表，以及通过 INSERT INTO 写入数据。不支持 INSERT OVERWRITE、UPDATE、DELETE、CREATE TABLE LIKE 和 CREATE TABLE AS SELECT。
 
 ## Paimon to StarRocks data types
 
@@ -700,6 +701,161 @@ SHOW CREATE CATALOG paimon_catalog_fs;
 DROP Catalog paimon_catalog_fs;
 ```
 
+## 创建和删除 Paimon 数据库与表
+
+以下操作直接创建或删除 Paimon 原生对象。示例使用已有的 `paimon_catalog_fs` catalog，其 warehouse 和存储凭证已配置。
+
+### CREATE DATABASE
+
+#### 语法
+
+```SQL
+CREATE DATABASE [IF NOT EXISTS] <catalog_name>.<database_name>;
+```
+
+#### 参数
+
+- `catalog_name`：已有的 Paimon catalog 名称。
+- `database_name`：要创建的数据库名称。
+- `IF NOT EXISTS`：数据库已存在时不报错。
+
+不支持数据库 `PROPERTIES`，数据库使用 catalog 的存储配置。
+
+#### 示例
+
+```SQL
+CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+```
+
+### CREATE TABLE
+
+#### 语法
+
+```SQL
+CREATE TABLE [IF NOT EXISTS] <catalog_name>.<database_name>.<table_name> (
+    <column_name> <column_type> [NULL | NOT NULL] [DEFAULT NULL] [COMMENT '<column_comment>']
+    [, ...]
+)
+[ENGINE = paimon]
+[PRIMARY KEY (<column_name> [, ...])]
+[COMMENT '<table_comment>']
+[PARTITION BY (<column_name> [, ...])]
+[PROPERTIES ("<key>" = "<value>" [, ...])];
+```
+
+#### 参数
+
+- **表名与引擎**：指定已有 Paimon catalog 中的数据库和新表名称。目标为 Paimon catalog 时，可以省略 `ENGINE = paimon`。`IF NOT EXISTS` 会忽略表已存在的错误，但仍会校验表定义和属性。
+- **列定义**：支持 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、FLOAT、DOUBLE、DATE、DATETIME、CHAR、VARCHAR、VARBINARY、精度不超过 38 的 DECIMAL，以及 ARRAY、MAP、STRUCT 和 VARIANT。DATETIME 映射为 Paimon TIMESTAMP(6)。VARIANT 仍受现有读取限制约束。仅支持 `DEFAULT NULL`，主键列不能设置默认值。可以通过 `COMMENT` 设置列注释和表注释。
+- **主键**：使用 `PRIMARY KEY (column, ...)` 或 `primary-key` 表属性定义。主键列不必位于表的开头，未显式指定可空性时会在 Paimon schema 中设为非空，不能显式声明为 `NULL`。同时指定两种形式时，解析后的列名及顺序必须一致。
+- **分区**：使用 `PARTITION BY (column, ...)` 指定普通分区列，不支持分区表达式和显式分区定义。
+- **表属性**：通过 `PROPERTIES` 指定 Paimon 表选项，例如 `bucket` 和 `file.format`。表使用 catalog 配置的 warehouse 和存储凭证，不允许通过表属性覆盖 catalog、存储位置、凭证或 schema。未知选项会被拒绝。部分写入相关的配置错误可能在写入时才报错。暂不支持 `fields.<column>.aggregate-function` 等动态列属性。
+
+#### 示例
+
+创建空的 append-only 分区表：
+
+```SQL
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.append_demo (
+    id BIGINT NOT NULL,
+    payload VARCHAR(100) COMMENT 'Payload',
+    dt DATE
+)
+ENGINE = paimon
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "-1",
+    "file.format" = "parquet"
+);
+```
+
+创建主键分区表：
+
+```SQL
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.pk_demo (
+    payload VARCHAR(100),
+    id BIGINT,
+    dt DATE
+)
+PRIMARY KEY (id, dt)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "2",
+    "bucket-key" = "id",
+    "file.format" = "parquet"
+);
+```
+
+也可以省略 `PRIMARY KEY (id, dt)` 子句，并在 `PROPERTIES` 中添加 `"primary-key" = "id,dt"`。
+
+#### 限制
+
+- 不支持 `DISTRIBUTED BY`、`ORDER BY`、`ROLLUP`、生成列、聚合列和 `AUTO_INCREMENT`。
+- 不支持非 NULL 的列默认值。
+- 不支持 `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`，也不支持通过 `INSERT OVERWRITE`、`UPDATE`、`DELETE` 写入数据。
+
+### DROP TABLE
+
+#### 语法
+
+```SQL
+DROP TABLE [IF EXISTS] <catalog_name>.<database_name>.<table_name>;
+```
+
+`IF EXISTS` 表示表不存在时不报错。此操作删除 Paimon 原生表，不只是移除 StarRocks 中的表引用。
+
+#### 示例
+
+```SQL
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.append_demo;
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.pk_demo;
+```
+
+### DROP DATABASE
+
+#### 语法
+
+```SQL
+DROP DATABASE [IF EXISTS] <catalog_name>.<database_name> [FORCE];
+```
+
+`IF EXISTS` 表示数据库不存在时不报错。数据库必须为空才能删除；`FORCE` 不会启用级联删除。
+
+#### 示例
+
+删除数据库中的表后，再删除数据库：
+
+```SQL
+DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
+```
+
+## 向 Paimon 写入数据
+
+可以使用 `INSERT INTO ... VALUES` 或 `INSERT INTO ... SELECT` 向 Paimon catalog 中的原生 file-store 表写入数据。Append-only 表支持 `bucket = -1` 或正数固定分桶。主键表要求正数固定分桶和 `deduplicate` 合并引擎。写入已有主键会执行整行 upsert，不是部分列更新。
+
+```sql
+CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+CREATE TABLE paimon_catalog_fs.ddl_demo.write_demo (
+    id INT NOT NULL,
+    p VARCHAR(32),
+    value VARCHAR(64)
+)
+PARTITION BY (p)
+PROPERTIES ('bucket' = '-1', 'file.format' = 'parquet');
+
+INSERT INTO paimon_catalog_fs.ddl_demo.write_demo VALUES (1, 'a', 'one');
+INSERT INTO paimon_catalog_fs.ddl_demo.write_demo PARTITION (p = 'b')
+SELECT 2, 'two';
+```
+
+支持显式列列表和 `BY NAME`。指定静态分区时，输入中不包含分区列，分区列在原生 schema 中的位置不受限制。省略的可空列填充 NULL，必填列必须提供值。对于配置了 Paimon 原生默认值的列，需要显式提供值，暂不支持省略该列或使用 `DEFAULT`。
+
+写入要求使用 Parquet 数据文件，并且 FE/BE 版本一致、BE 安装原生 Paimon writer。写入使用 catalog 的存储凭据。`paimon_reader_mode` 只选择读取方式，不改变写入实现。暂不支持显式事务、部分列更新、主键表动态分桶、跨分区主键更新、data evolution、row tracking、全局索引和外部数据路径。
+
+分区列支持布尔、整数、字符串和日期类型。空字符串、纯空白字符串以及保留的默认分区名称会被拒绝，因为原生 SDK 无法将这些值与 NULL 分区区分保存。每个 Sink Driver 默认最多管理 64 个活跃的分区/分桶 Writer，原生和 Arrow 分配的内存预算为 256 MiB；超过限制会在发布前使语句失败。可通过表属性 `starrocks.paimon.max-active-writers`（1–4096）和 `starrocks.paimon.max-writer-memory-bytes`（2 MiB–4 GiB，以字节指定）调整限制，同时仍受查询内存限制约束。
+
+FE 发布 Paimon 原生快照后，数据才对读取可见。空输入的 INSERT INTO 不改变数据。如果客户端收到 Paimon 提交结果未知的错误，应先核实本次操作，再决定是否重试：快照可能已经发布，重复追加可能产生重复行。Query Profile 中的 `PaimonOperationId` 和 `PaimonPublicationState` 可用于定位该操作。
+
 ## 查看 Paimon 表的 schema
 
 您可以使用以下语法之一查看 Paimon 表的 schema：
@@ -755,6 +911,42 @@ SELECT * FROM <table_name> WHERE <column_name> > 100 LIMIT 10;
 ```
 
 此优化需要启用连接器的增量扫描范围。较小的 LIMIT 也会减少每批请求的扫描范围数量。Manifest 批次和已提交的扫描任务仍可能提前读取部分文件；没有匹配行的查询可能需要检查所有候选文件。主键表、删除向量、数据演进和 SDK 查询授权场景仍使用 Paimon 原生的 split 规划，以保留合并和访问控制语义。
+
+### 查看计划扫描的数据量
+
+`EXPLAIN VERBOSE` 和 `EXPLAIN COSTS` 会为每个 Paimon 扫描节点显示候选文件指标，普通 `EXPLAIN` 不显示该指标块：
+
+```text
+0:PaimonScanNode
+   ...
+   avgRowSize=2.0
+   Paimon Scan Metrics:
+     splits=2
+     data_files=3
+     data_file_bytes=12000000000
+     data_file_rows=9000000000
+   limit: 10
+   cardinality: 10
+```
+
+这些指标统计 Paimon 规划器完成分区裁剪、文件裁剪以及规划阶段的 LIMIT 裁剪后选中的 split。
+统计使用扫描规划中已加载的文件元数据，与 reader 的选择无关。将文件拆分为多个扫描范围不会重复计算文件数、字节数或行数。
+对于全局索引 split，指标统计底层候选文件，尚未应用索引限定的行范围。
+
+| 字段 | 含义 |
+| --- | --- |
+| `splits` | 拆分扫描范围前，Paimon 输入 split 的数量。 |
+| `data_files` | 选中 split 中的数据文件条目数。 |
+| `data_file_bytes` | 这些数据文件在存储中的大小总和，单位为字节。 |
+| `data_file_rows` | 文件元数据中的记录数总和，尚未进行剩余条件过滤、删除向量过滤或主键合并。 |
+
+空扫描的指标为零。如果任一 split 缺少数据文件元数据（例如某些系统表的 split），三个文件指标均为 `-1`，表示不可用，避免返回零或不完整的总量。扫描规划前不显示该指标块。
+
+`cardinality` 仍表示优化器估算的输出行数，可能受谓词和 `LIMIT` 影响而减少。`data_file_rows` 不会被该输出估算值截断。
+字节数统计整个候选数据文件，不包含删除文件或索引文件，也不考虑列投影、页裁剪、缓存命中或提前结束执行。
+它反映候选扫描数据量，不表示实际 I/O、输出大小或执行限制。因此，即使 `LIMIT` 很小，仍可能选中很大的文件。
+
+对于增量扫描，这些指标只累加目前已规划的 split。文件规划开始前不显示该指标块；规划完成前，这些值是部分累计值，不表示整张表的总量。
 
 ## 从 Paimon 导入数据
 

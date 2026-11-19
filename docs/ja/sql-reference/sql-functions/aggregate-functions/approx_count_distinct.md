@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "集計関数の近似値を返し、COUNT(DISTINCT col) より高速でメモリ効率的です。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # approx_count_distinct

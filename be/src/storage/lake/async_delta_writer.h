@@ -26,6 +26,7 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 #include "storage/lake/delta_writer_finish_mode.h"
+#include "storage_primitive/flat_json_config.h"
 
 namespace starrocks {
 class MemTracker;
@@ -242,6 +243,12 @@ public:
         return *this;
     }
 
+    // See DeltaWriterBuilder::set_flat_json_config.
+    AsyncDeltaWriterBuilder& set_flat_json_config(std::shared_ptr<FlatJsonConfig> flat_json_config) {
+        _flat_json_config = std::move(flat_json_config);
+        return *this;
+    }
+
     StatusOr<AsyncDeltaWriterPtr> build();
 
 private:
@@ -265,6 +272,7 @@ private:
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
     bool _multi_node_write = false;
+    std::shared_ptr<FlatJsonConfig> _flat_json_config;
 };
 
 } // namespace starrocks::lake

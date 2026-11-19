@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された日付の年内の週番号を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # weekofyear

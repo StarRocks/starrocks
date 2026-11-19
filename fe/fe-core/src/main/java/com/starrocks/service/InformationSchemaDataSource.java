@@ -228,6 +228,7 @@ public class InformationSchemaDataSource {
             ConnectContext context = new ConnectContext();
             context.setCurrentUserIdentity(authContext.getCurrentUserIdentity());
             context.setCurrentRoleIds(authContext.getCurrentRoleIds());
+            context.setGroups(authContext.getGroups());
             return context;
         }
     }
@@ -561,6 +562,8 @@ public class InformationSchemaDataSource {
                     table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
             // METADATA_SWITCH_VERSION
             partitionMetaInfo.setMetadata_switch_version(physicalPartition.getMetadataSwitchVersion());
+            // VACUUM_VERSION: success watermark of the last completed incremental vacuum pass.
+            partitionMetaInfo.setVacuum_version(physicalPartition.getLastSuccVacuumVersion());
             // MIN_VI_BUILT_VERSION / MAX_VI_BUILT_VERSION
             // Vector-index built-version span across this partition's base-index tablets, for
             // observability (null = no vector index). Async: actual [min, max] — MIN < VISIBLE_VERSION
@@ -735,7 +738,8 @@ public class InformationSchemaDataSource {
 
         AuthorizationMgr authMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
-            for (RolePrivilegeCollectionV2 role : authMgr.getApplicableRoles(currentUser)) {
+            for (RolePrivilegeCollectionV2 role : authMgr.getApplicableRoles(currentUser,
+                    result.authContext.getGroups(), result.authContext.getCurrentRoleIds())) {
                 String roleName = role.getName();
                 String roleHost = "%";
 

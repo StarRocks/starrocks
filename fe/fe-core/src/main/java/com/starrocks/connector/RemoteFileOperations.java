@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveUtils;
 import com.starrocks.connector.hive.Partition;
@@ -229,6 +230,9 @@ public class RemoteFileOperations {
             Path writePath,
             Path targetPath,
             List<String> fileNames) {
+        // Resolving the file system is itself a request on a cache miss, and it happens on this thread;
+        // the renames below are handed to another one, where no lock is held.
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         FileSystem fileSystem;
         try {
             fileSystem = FileSystem.get(writePath.toUri(), conf);
@@ -276,6 +280,7 @@ public class RemoteFileOperations {
 
         runWhenPathNotExist.run();
 
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             if (!FileSystem.get(source.toUri(), conf).rename(source, target)) {
                 throw new StarRocksConnectorException("Failed to rename %s to %s: rename returned false", source, target);
@@ -286,6 +291,9 @@ public class RemoteFileOperations {
     }
 
     public void removeNotCurrentQueryFiles(Path partitionPath, String queryId) {
+        // The listing; each delete under it reports separately through HiveUtils.checkedDelete, because
+        // each one is its own request.
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             FileSystem fileSystem = FileSystem.get(partitionPath.toUri(), conf);
             RemoteIterator<LocatedFileStatus> iterator = fileSystem.listFiles(partitionPath, false);
@@ -338,6 +346,7 @@ public class RemoteFileOperations {
     }
 
     public FileStatus[] listStatus(Path path) {
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             FileSystem fileSystem = FileSystem.get(path.toUri(), conf);
             return fileSystem.listStatus(path);

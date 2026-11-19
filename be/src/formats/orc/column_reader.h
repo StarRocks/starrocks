@@ -16,7 +16,9 @@
 
 #include <orc/OrcFile.hh>
 #include <utility>
+#include <vector>
 
+#include "base/time/tz_offset_cache.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
@@ -242,6 +244,12 @@ public:
     ~TimestampColumnReader() override = default;
 
     Status get_next(orc::ColumnVectorBatch* cvb, Column* col, size_t from, size_t size) override;
+
+private:
+    // Offset windows of the reader time zone and per-batch scratch for TIMESTAMP_INSTANT values.
+    TzOffsetCache _offset_cache;
+    std::vector<int64_t> _offsets;
+    std::vector<uint8_t> _is_null;
 };
 
 class ComplexColumnReader : public ORCColumnReader {

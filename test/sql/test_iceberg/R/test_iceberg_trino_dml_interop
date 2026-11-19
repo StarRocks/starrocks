@@ -1,0 +1,164 @@
+-- name: test_iceberg_trino_orc_position_delete
+trino: CREATE SCHEMA iceberg.trino_orc_pd_${uuid0} WITH (location = 'oss://${oss_bucket}/trino_orc_pd_${uuid0}.db');
+-- result:
+-- !result
+trino: CREATE TABLE iceberg.trino_orc_pd_${uuid0}.t (id integer, v varchar) WITH (format = 'ORC', format_version = 2);
+-- result:
+-- !result
+trino: INSERT INTO iceberg.trino_orc_pd_${uuid0}.t VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd');
+-- result:
+4
+-- !result
+trino: DELETE FROM iceberg.trino_orc_pd_${uuid0}.t WHERE id = 1;
+-- result:
+1
+-- !result
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+delete from ice_cat_${uuid0}.trino_orc_pd_${uuid0}.t where v = 'c';
+-- result:
+-- !result
+select * from ice_cat_${uuid0}.trino_orc_pd_${uuid0}.t order by id;
+-- result:
+2	b
+4	d
+-- !result
+trino: SELECT * FROM iceberg.trino_orc_pd_${uuid0}.t ORDER BY id;
+-- result:
+2	b
+4	d
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result
+trino: DROP TABLE iceberg.trino_orc_pd_${uuid0}.t;
+-- result:
+-- !result
+trino: DROP SCHEMA iceberg.trino_orc_pd_${uuid0};
+-- result:
+-- !result
+-- name: test_iceberg_trino_row_lineage
+trino: CREATE SCHEMA iceberg.trino_lineage_${uuid0} WITH (location = 'oss://${oss_bucket}/trino_lineage_${uuid0}.db');
+-- result:
+-- !result
+trino: CREATE TABLE iceberg.trino_lineage_${uuid0}.t (id integer, v varchar) WITH (format = 'PARQUET', format_version = 3);
+-- result:
+-- !result
+trino: INSERT INTO iceberg.trino_lineage_${uuid0}.t VALUES (1, 'a');
+-- result:
+1
+-- !result
+trino: INSERT INTO iceberg.trino_lineage_${uuid0}.t VALUES (2, 'b');
+-- result:
+1
+-- !result
+trino: INSERT INTO iceberg.trino_lineage_${uuid0}.t VALUES (3, 'c');
+-- result:
+1
+-- !result
+trino: UPDATE iceberg.trino_lineage_${uuid0}.t SET v = 'a2' WHERE id = 1;
+-- result:
+1
+-- !result
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+select id, v, _row_id, _last_updated_sequence_number from ice_cat_${uuid0}.trino_lineage_${uuid0}.t order by id;
+-- result:
+1	a2	0	5
+2	b	1	3
+3	c	2	4
+-- !result
+delete from ice_cat_${uuid0}.trino_lineage_${uuid0}.t where id = 3;
+-- result:
+-- !result
+select id, v, _row_id, _last_updated_sequence_number from ice_cat_${uuid0}.trino_lineage_${uuid0}.t order by id;
+-- result:
+1	a2	0	5
+2	b	1	3
+-- !result
+trino: SELECT id, v, "$row_id", "$last_updated_sequence_number" FROM iceberg.trino_lineage_${uuid0}.t ORDER BY id;
+-- result:
+1	a2	0	5
+2	b	1	3
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result
+trino: DROP TABLE iceberg.trino_lineage_${uuid0}.t;
+-- result:
+-- !result
+trino: DROP SCHEMA iceberg.trino_lineage_${uuid0};
+-- result:
+-- !result
+-- name: test_iceberg_trino_orc_row_position
+trino: SET SESSION iceberg.orc_writer_max_stripe_rows = 1000;
+-- result:
+-- !result
+trino: SET SESSION iceberg.orc_writer_min_stripe_size = '1kB';
+-- result:
+-- !result
+trino: SET SESSION iceberg.orc_writer_max_stripe_size = '4kB';
+-- result:
+-- !result
+trino: CREATE SCHEMA iceberg.trino_orc_pos_${uuid0} WITH (location = 'oss://${oss_bucket}/trino_orc_pos_${uuid0}.db');
+-- result:
+-- !result
+trino: CREATE TABLE iceberg.trino_orc_pos_${uuid0}.t (id bigint, v varchar) WITH (format = 'ORC', format_version = 2);
+-- result:
+-- !result
+trino: INSERT INTO iceberg.trino_orc_pos_${uuid0}.t SELECT x, 'v' || CAST(x AS varchar) FROM UNNEST(sequence(1, 10000)) AS u(x);
+-- result:
+10000
+-- !result
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+select min(_pos), max(_pos), count(distinct _pos) from ice_cat_${uuid0}.trino_orc_pos_${uuid0}.t;
+-- result:
+0	9999	10000
+-- !result
+select count(*) from ice_cat_${uuid0}.trino_orc_pos_${uuid0}.t where _pos % 2 = 0;
+-- result:
+5000
+-- !result
+select count(*) from ice_cat_${uuid0}.trino_orc_pos_${uuid0}.t where abs(_pos - 1000) <= 1;
+-- result:
+3
+-- !result
+delete from ice_cat_${uuid0}.trino_orc_pos_${uuid0}.t where _pos % 2 = 0;
+-- result:
+-- !result
+select count(*) from ice_cat_${uuid0}.trino_orc_pos_${uuid0}.t;
+-- result:
+5000
+-- !result
+trino: SELECT count(*) FROM iceberg.trino_orc_pos_${uuid0}.t;
+-- result:
+5000
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result
+trino: DROP TABLE iceberg.trino_orc_pos_${uuid0}.t;
+-- result:
+-- !result
+trino: DROP SCHEMA iceberg.trino_orc_pos_${uuid0};
+-- result:
+-- !result

@@ -14,6 +14,8 @@
 
 #include "runtime/runtime_filter_factory.h"
 
+#include <memory>
+
 #include "column/column_helper.h"
 #include "common/object_pool.h"
 #include "common/system/cpu_info.h"
@@ -45,6 +47,25 @@ RuntimeFilter* RuntimeFilterFactory::to_empty_filter(ObjectPool* pool, RuntimeFi
             [&]<LogicalType LT>() -> RuntimeFilter* {
                 return new ComposedRuntimeEmptyFilter<LT>(*down_cast<const MinMaxRuntimeFilter<LT>*>(min_max_filter),
                                                           *membership_filter);
+            });
+
+    if (pool != nullptr && filter != nullptr) {
+        return pool->add(filter);
+    } else {
+        return filter;
+    }
+}
+
+RuntimeFilter* RuntimeFilterFactory::create_pass_all_filter(ObjectPool* pool, LogicalType type, int8_t join_mode) {
+    RuntimeFilter* filter =
+            type_dispatch_filter(type, static_cast<RuntimeFilter*>(nullptr), [&]<LogicalType LT>() -> RuntimeFilter* {
+                auto rf = std::make_unique<ComposedRuntimeEmptyFilter<LT>>();
+                rf->get_membership_filter()->set_join_mode(join_mode);
+                if (!rf->min_max_filter().set_pass_all()) {
+                    return nullptr;
+                }
+                rf->insert_null();
+                return rf.release();
             });
 
     if (pool != nullptr && filter != nullptr) {
@@ -140,17 +161,18 @@ struct TryCreateRuntimeBitsetFilter {
         const size_t l3_cache_size = CpuInfo::get_l3_cache_size();
 
         const auto [min_value, max_value] = calc_min_max_from_columns<LT>(columns, column_offset);
-        const size_t value_interval = static_cast<size_t>(RuntimeBitsetFilter<LT>::to_numeric(max_value)) -
-                                      RuntimeBitsetFilter<LT>::to_numeric(min_value) + 1;
-
-        VLOG_FILE << "[BITSET] min_value=" << min_value << ", max_value=" << max_value
-                  << ", value_interval=" << value_interval;
-
-        if (min_value > max_value || value_interval == 0) {
+        if (min_value > max_value) {
             return nullptr;
         }
+        // max - min in size_t is exact for every pair (it is at most 2^64 - 1); adding 1 and 7 to it is
+        // not, and used to wrap the size of a near-full-domain BIGINT range to 0 bytes.
+        const size_t span = static_cast<size_t>(RuntimeBitsetFilter<LT>::to_numeric(max_value)) -
+                            RuntimeBitsetFilter<LT>::to_numeric(min_value);
+        const size_t bitset_memory_usage = Bitset<LT>::num_bytes_for_span(span);
 
-        const size_t bitset_memory_usage = (value_interval + 7) / 8;
+        VLOG_FILE << "[BITSET] min_value=" << min_value << ", max_value=" << max_value << ", span=" << span
+                  << ", bitset_memory_usage=" << bitset_memory_usage;
+
         const size_t bloom_memory_usage = row_count;
         if (bitset_memory_usage <= bloom_memory_usage ||
             (bitset_memory_usage <= bloom_memory_usage * 4 && bitset_memory_usage <= l2_cache_size) ||
@@ -164,16 +186,13 @@ struct TryCreateRuntimeBitsetFilter {
     }
 };
 
-RuntimeFilter* RuntimeFilterFactory::create_join_filter(ObjectPool* pool, LogicalType type, int8_t join_mode,
-                                                        const Columns& columns, size_t column_offset,
-                                                        size_t row_count) {
+RuntimeFilter* RuntimeFilterFactory::try_create_bitset_filter(ObjectPool* pool, LogicalType type,
+                                                              const Columns& columns, size_t column_offset,
+                                                              size_t row_count) {
     RuntimeFilter* filter =
             type_dispatch_bitset_filter(type, static_cast<RuntimeFilter*>(nullptr), TryCreateRuntimeBitsetFilter(),
                                         columns, column_offset, row_count);
-    if (filter == nullptr) {
-        return create_bloom_filter(pool, type, join_mode);
-    }
-    if (pool != nullptr) {
+    if (filter != nullptr && pool != nullptr) {
         return pool->add(filter);
     }
     return filter;

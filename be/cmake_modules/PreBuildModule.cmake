@@ -55,7 +55,10 @@ if ("${USE_STAROS}" STREQUAL "ON")
     add_library(Azure::azure-storage-blobs ALIAS azure-storage-blobs)
     add_library(Azure::azure-storage-files-datalake ALIAS azure-storage-files-datalake)
 
-    set(prometheus-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp" CACHE PATH "prometheus cpp client search path")
+    # starlet's own dependencies come from THIRDPARTY_DIR (thirdparty/build-thirdparty.sh builds
+    # the versions the pinned starlet release needs); STARLET_INSTALL_DIR only provides starlet.
+    # FORCE replaces search paths cached by builds that took them from the starlet artifacts.
+    set(prometheus-cpp_DIR "${THIRDPARTY_DIR}/lib/cmake/prometheus-cpp" CACHE PATH "prometheus cpp client search path" FORCE)
     find_package (prometheus-cpp CONFIG REQUIRED)
     get_target_property(prometheus-cpp_INCLUDE_DIR prometheus-cpp::core INTERFACE_INCLUDE_DIRECTORIES)
     message(STATUS "Using prometheus-cpp")
@@ -65,15 +68,15 @@ if ("${USE_STAROS}" STREQUAL "ON")
     # gcp cloud storage related dependencies
     set(ZLIB_INCLUDE_DIR "${THIRDPARTY_DIR}/include")
     set(ZLIB_LIBRARY "${THIRDPARTY_DIR}/lib/libz.a")
-    set(Crc32c_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/Crc32c" CACHE PATH "Crc32c search path")
+    set(Crc32c_DIR "${THIRDPARTY_DIR}/lib/cmake/Crc32c" CACHE PATH "Crc32c search path" FORCE)
     find_package (Crc32c CONFIG REQUIRED)
-    set(nlohmann_json_DIR "${STARLET_INSTALL_DIR}/third_party/share/cmake/nlohmann_json" CACHE PATH "nlohmann json search path")
+    set(nlohmann_json_DIR "${THIRDPARTY_DIR}/share/cmake/nlohmann_json" CACHE PATH "nlohmann json search path" FORCE)
     find_package (nlohmann_json CONFIG REQUIRED)
-    set(google_cloud_cpp_common_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/google_cloud_cpp_common" CACHE PATH "google cloud cpp common search path")
+    set(google_cloud_cpp_common_DIR "${THIRDPARTY_DIR}/lib/cmake/google_cloud_cpp_common" CACHE PATH "google cloud cpp common search path" FORCE)
     find_package (google_cloud_cpp_common CONFIG REQUIRED)
-    set(google_cloud_cpp_rest_internal_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/google_cloud_cpp_rest_internal" CACHE PATH "google cloud cpp rest internal search path")
+    set(google_cloud_cpp_rest_internal_DIR "${THIRDPARTY_DIR}/lib/cmake/google_cloud_cpp_rest_internal" CACHE PATH "google cloud cpp rest internal search path" FORCE)
     find_package (google_cloud_cpp_rest_internal CONFIG REQUIRED)
-    set(google_cloud_cpp_storage_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/google_cloud_cpp_storage" CACHE PATH "google cloud cpp storage search path")
+    set(google_cloud_cpp_storage_DIR "${THIRDPARTY_DIR}/lib/cmake/google_cloud_cpp_storage" CACHE PATH "google cloud cpp storage search path" FORCE)
     find_package (google_cloud_cpp_storage CONFIG REQUIRED)
 
     set(starlet_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake" CACHE PATH "starlet search path")

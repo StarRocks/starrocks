@@ -50,8 +50,6 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.pipe.PipeName;
-import com.starrocks.sql.common.AIModelConfigs;
-import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.ListUtils;
@@ -79,7 +77,7 @@ public class Authorizer {
 
     public static void checkAIFunctionUsage(ConnectContext context, FunctionCallExpr call) {
         Function function = call.getFn();
-        if (!function.isAi()) {
+        if (!function.isAI()) {
             return;
         }
         if (context.getCurrentUserIdentity() == null) {
@@ -91,18 +89,17 @@ public class Authorizer {
             AccessDeniedException.reportAccessDenied(null, context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.USAGE.name(), "AI FUNCTION", function.functionName());
         }
-        if (function.getAiModelSource() == TAIModelSource.PROVIDER) {
-            String name = AIModelConfigs.providerName(call.getChild(AIModelConfigs.getProviderArgument(function)));
-            AIProvider provider = context.getGlobalStateMgr().getAIProviderMgr().getProvider(name);
-            if (provider == null) {
-                throw new SemanticException("AI provider '%s' does not exist", name);
-            }
-            try {
-                checkAIProviderAction(context, provider, PrivilegeType.USAGE);
-            } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(null, context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.USAGE.name(), "AI PROVIDER", name);
-            }
+    }
+
+    public static void checkAIProviderUsage(ConnectContext context, AIProvider provider) {
+        if (context.getCurrentUserIdentity() == null) {
+            throw new SemanticException("AI providers require a user identity in the execution context");
+        }
+        try {
+            checkAIProviderAction(context, provider, PrivilegeType.USAGE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(null, context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.USAGE.name(), "AI PROVIDER", provider.getName());
         }
     }
 
@@ -277,6 +274,11 @@ public class Authorizer {
     public static void checkAnyActionOnTableLikeObject(ConnectContext context, String dbName,
                                                        BasicTable tableBasicInfo) throws AccessDeniedException {
         doCheckTableLikeObject(context, dbName, tableBasicInfo, null);
+    }
+
+    public static void checkActionOnTableLikeObject(ConnectContext context, String dbName, BasicTable tableBasicInfo,
+                                                    PrivilegeType privilegeType) throws AccessDeniedException {
+        doCheckTableLikeObject(context, dbName, tableBasicInfo, privilegeType);
     }
 
     private static void doCheckTableLikeObject(ConnectContext context, String dbName,

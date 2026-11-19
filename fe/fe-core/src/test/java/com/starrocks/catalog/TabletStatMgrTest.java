@@ -16,6 +16,9 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.alter.reshard.ReshardingPhysicalPartition;
+import com.starrocks.alter.reshard.SplitTabletJob;
+import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.common.Config;
@@ -35,6 +38,8 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -55,8 +60,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.mockito.Mockito;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -81,6 +91,10 @@ public class TabletStatMgrTest {
     private static final AtomicInteger STUBBED_NODE_COUNT = new AtomicInteger();
     // The bound the scan handed to the drain on the last runScan.
     private static int capturedBound;
+    // The merge signal the scan handed to the drain on the last runScan.
+    private static long capturedMinAdjacentTabletPairSize;
+    // The size signal the scan handed to the drain on the last runScan.
+    private static long capturedMaxTabletSize;
 
     private static final AtomicInteger NODE_COUNT_RESOLUTIONS = new AtomicInteger();
 
@@ -93,6 +107,8 @@ public class TabletStatMgrTest {
     private static final String SCAN_DB_NAME = "tablet_stat_scan_test";
 
     private Database registeredDb;
+    // tablet_reshard_target_size property the scan fixture's range table carries; 0 leaves it unset.
+    private long scanTableTargetSize;
 
     @BeforeEach
     public void before() {
@@ -688,6 +704,9 @@ public class TabletStatMgrTest {
         LakeTable table = createLakeTableForTest();
         // Reshard, and with it the early-split signal, only looks at range-distribution tables.
         table.setDefaultDistributionInfo(new RangeDistributionInfo());
+        if (scanTableTargetSize > 0) {
+            table.setTabletReshardTargetSize(scanTableTargetSize);
+        }
 
         MaterializedIndex index =
                 table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex();
@@ -717,6 +736,8 @@ public class TabletStatMgrTest {
     private long runScan(boolean leader, int stubbedNodeCount, long... tabletSizes) {
         long[] captured = {-1L};
         capturedBound = -1;
+        capturedMinAdjacentTabletPairSize = -1L;
+        capturedMaxTabletSize = -1L;
         STUBBED_NODE_COUNT.set(stubbedNodeCount);
         NODE_COUNT_RESOLUTIONS.set(0);
 
@@ -741,6 +762,8 @@ public class TabletStatMgrTest {
                     long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize, int adaptiveBound) {
                 captured[0] = maxAdaptiveSplitTabletSize;
                 capturedBound = adaptiveBound;
+                capturedMinAdjacentTabletPairSize = minAdjacentTabletPairSize;
+                capturedMaxTabletSize = maxTabletSize;
             }
         };
 
@@ -797,9 +820,9 @@ public class TabletStatMgrTest {
 
     @Test
     public void emitsTheEarlySignalOnlyForUnderProvisionedIndexes() {
-        // 4 nodes -> bound 4. 22 GiB over that bound wants 5.5 GiB tablets, so only a tablet worth two
-        // of them splits: 12 GiB does, 6 and 4 do not. The largest is neither the first nor the last the
-        // scan walks, so a fold that keeps the wrong one cannot land on the right answer by accident.
+        // 4 nodes -> bound 4. Every tablet worth two 2 GiB children qualifies -- 6, 12 and 4 GiB all do -- and
+        // the signal is the largest. It is neither the first nor the last the scan walks, so a fold that keeps
+        // the wrong one cannot land on the right answer by accident.
         assertEquals(12L << 30, runScan(true, 4, 6L << 30, 12L << 30, 4L << 30));
         assertEquals(1, NODE_COUNT_RESOLUTIONS.get(),
                 "the merge floor and the early ceiling must derive from ONE probed sample per table");
@@ -817,6 +840,83 @@ public class TabletStatMgrTest {
         // it. This is the one live-warehouse tablet count where the ceiling and the merge floor differ,
         // so it is what keeps the ceiling from being replaced by the floor already in scope.
         assertEquals(0L, runScan(true, 1, 8L << 30));
+    }
+
+    /**
+     * Runs one scan with the cluster target pinned at 10 GiB and tablet_reshard_min_split_size at the given
+     * value, so the fill floor these cases reason about does not drift with the configuration defaults.
+     */
+    private long runScanWithMinimum(long minSplitSize, int stubbedNodeCount, long... tabletSizes) {
+        long savedTargetSize = Config.tablet_reshard_target_size;
+        long savedMinSplitSize = Config.tablet_reshard_min_split_size;
+        Config.tablet_reshard_target_size = 10L << 30;
+        Config.tablet_reshard_min_split_size = minSplitSize;
+        try {
+            return runScan(true, stubbedNodeCount, tabletSizes);
+        } finally {
+            Config.tablet_reshard_target_size = savedTargetSize;
+            Config.tablet_reshard_min_split_size = savedMinSplitSize;
+        }
+    }
+
+    @Test
+    public void theEarlySignalFollowsTheTableTargetSize() {
+        // A 5 GiB tablet on four nodes against the 10 GiB cluster target: the adaptive rule is on and the tablet
+        // is worth two 2 GiB children, so it signals.
+        assertEquals(5L << 30, runScanWithMinimum(2L << 30, 4, 5L << 30));
+        // The same tablet in a table whose own target is 2 GiB, equal to the minimum: that switches the adaptive
+        // rule off for this table, whatever the cluster target says.
+        scanTableTargetSize = 2L << 30;
+        assertEquals(0L, runScanWithMinimum(2L << 30, 4, 5L << 30),
+                "a range table's own target, not the cluster's, decides whether the adaptive rule is on");
+    }
+
+    @Test
+    public void aNonNarrowedIndexLeavesItsBigTabletsToTheSizeSignal() {
+        // Two nodes and one 21 GiB tablet: the index is short of its bound but already holds bound x target of
+        // data, so the adaptive rule is off and the tablet is the size rule's. No early signal; the size signal
+        // still carries the tablet to the drain.
+        assertEquals(0L, runScanWithMinimum(2L << 30, 2, 21L << 30));
+        assertEquals(21L << 30, capturedMaxTabletSize);
+    }
+
+    @Test
+    public void aStalledIndexEmitsTheEarlySignal() {
+        // Two 4 GiB tablets on three nodes: the planner fills the third slot with a split down to the 2 GiB
+        // floor. Without this signal only the 15 GiB size rule would ever reach that planner.
+        assertEquals(4L << 30, runScanWithMinimum(2L << 30, 3, 4L << 30, 4L << 30));
+    }
+
+    @Test
+    public void tenNodesStalledAtEightTabletsEmitTheEarlySignal() {
+        long[] sizes = new long[8];
+        Arrays.fill(sizes, 4L << 30);
+        assertEquals(4L << 30, runScanWithMinimum(2L << 30, 10, sizes));
+    }
+
+    @Test
+    public void noEarlySignalForTabletsUnderTwoFloors() {
+        // A third child of either 3 GiB tablet would be 1.5 GiB, under the floor: the planner has nothing to do.
+        assertEquals(0L, runScanWithMinimum(2L << 30, 3, 3L << 30, 3L << 30));
+    }
+
+    @Test
+    public void aMinimumAtTheTargetSilencesTheFillSignal() {
+        assertEquals(0L, runScanWithMinimum(10L << 30, 3, 4L << 30, 4L << 30));
+    }
+
+    @Test
+    public void aFilledIndexEmitsNeitherSignal() {
+        // What the fill leaves on three nodes: three tablets, whose adjacent pairs are all far under the merge
+        // threshold. The index is at its bound, so no early signal, and at the merge floor, so no merge signal
+        // either -- the fill never hands auto-merge an index to narrow again.
+        assertEquals(0L, runScanWithMinimum(2L << 30, 3, 2L << 30, 2L << 30, 4L << 30));
+        assertEquals(Long.MAX_VALUE, capturedMinAdjacentTabletPairSize, "a filled index must not signal a merge");
+
+        // Control: one tablet more puts the index above the floor, and the same scan does signal the merge,
+        // so the assertion above is about the width and not about a capture that never fires.
+        runScanWithMinimum(2L << 30, 3, 2L << 30, 2L << 30, 2L << 30, 2L << 30);
+        assertEquals(4L << 30, capturedMinAdjacentTabletPairSize);
     }
 
     @Test
@@ -1031,6 +1131,7 @@ public class TabletStatMgrTest {
         // row-count collection carry no such risk and must keep refreshing regardless.
         LakeTable table = createLakeTableForTest();
         table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        companionJobManager(table, PH_PARTITION_ID);
 
         long tablet1Id =
                 table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex().getTablets()
@@ -1259,5 +1360,128 @@ public class TabletStatMgrTest {
         List<?> tablets = Deencapsulation.getField(snapshot, "tablets");
 
         Assertions.assertEquals(baseTabletCount + rollupTabletCount, tablets.size());
+    }
+
+    @Test
+    public void testFreePartitionAcceptsSharedFileProofWithRetainedJobs(@Mocked LakeService lakeService) {
+        LakeTable table = createRangeLakeTableForTest();
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        TabletReshardJobMgr manager = companionJobManager(table, PH_PARTITION_ID - 1);
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+        List<Tablet> tablets = table.getPhysicalPartition(PH_PARTITION_ID).getLatestBaseIndex().getTablets();
+        collectLakeTabletStatsOnce(lakeService, db, table, () -> cleanTabletResponse(tablets));
+        for (Tablet tablet : tablets) {
+            Assertions.assertFalse(((LakeTablet) tablet).hasSharedFiles());
+            Assertions.assertEquals(10L, ((LakeTablet) tablet).getRowCount(-1));
+        }
+        Mockito.verify(manager, Mockito.times(1)).isPhysicalPartitionReshardingLocked(table, PH_PARTITION_ID);
+    }
+
+    @Test
+    public void testDelayedSharedFileProofStaysWithOriginalTabletGeneration(@Mocked LakeService lakeService) {
+        LakeTable table = createRangeLakeTableForTest();
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        companionJobManager(table, PH_PARTITION_ID - 1);
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+        MaterializedIndex index = table.getPhysicalPartition(PH_PARTITION_ID).getLatestBaseIndex();
+        List<Tablet> original = new ArrayList<>(index.getTablets());
+        LakeTablet replacement = new LakeTablet(original.get(0).getId());
+        collectLakeTabletStatsOnce(lakeService, db, table, () -> {
+            index.removeTablet(replacement.getId());
+            index.addTablet(replacement, new TabletMeta(DB_ID, TABLE_ID, PH_PARTITION_ID, INDEX_ID,
+                    TStorageMedium.HDD, true));
+            return cleanTabletResponse(original);
+        });
+        Assertions.assertFalse(((LakeTablet) original.get(0)).hasSharedFiles());
+        Assertions.assertTrue(replacement.hasSharedFiles());
+        Assertions.assertEquals(0L, replacement.getDataSize(true));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OlapTable.OlapTableState.class, names = {"NORMAL", "TABLET_RESHARD"},
+            mode = EnumSource.Mode.EXCLUDE)
+    public void testOtherAlterStatesKeepSharedFileProofConservative(OlapTable.OlapTableState state,
+            @Mocked LakeService lakeService) {
+        LakeTable table = createRangeLakeTableForTest();
+        table.setState(state);
+        companionJobManager(table, PH_PARTITION_ID - 1);
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+        List<Tablet> tablets = table.getPhysicalPartition(PH_PARTITION_ID).getLatestBaseIndex().getTablets();
+        collectLakeTabletStatsOnce(lakeService, db, table, () -> cleanTabletResponse(tablets));
+        for (Tablet tablet : tablets) {
+            Assertions.assertTrue(((LakeTablet) tablet).hasSharedFiles());
+            Assertions.assertEquals(10L, ((LakeTablet) tablet).getRowCount(-1));
+        }
+    }
+
+    private TabletStatResponse cleanTabletResponse(List<Tablet> tablets) {
+        TabletStatResponse response = new TabletStatResponse();
+        response.tabletStats = new ArrayList<>();
+        for (Tablet tablet : tablets) {
+            TabletStat stat = new TabletStat();
+            stat.tabletId = tablet.getId();
+            stat.numRows = 10L;
+            stat.dataSize = 100L;
+            stat.hasSharedFiles = false;
+            response.tabletStats.add(stat);
+        }
+        return response;
+    }
+
+    private TabletReshardJobMgr companionJobManager(OlapTable table, long busyPartitionId) {
+        TabletReshardJobMgr manager = Mockito.spy(new TabletReshardJobMgr());
+        Map<Long, TabletReshardJob> jobs = manager.getTabletReshardJobs();
+        jobs.put(1L, new SplitTabletJob(1L, 1L, table.getId(),
+                Map.of(busyPartitionId, new ReshardingPhysicalPartition(busyPartitionId, Map.of()))));
+        for (long id = 2; id <= 20; id++) {
+            SplitTabletJob historical = new SplitTabletJob(id, 1L, table.getId(),
+                    Map.of(busyPartitionId + 1, new ReshardingPhysicalPartition(busyPartitionId + 1, Map.of())));
+            Deencapsulation.setField(historical, "jobState", TabletReshardJob.JobState.FINISHED);
+            jobs.put(id, historical);
+        }
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public TabletReshardJobMgr getTabletReshardJobMgr() {
+                return manager;
+            }
+        };
+        return manager;
+    }
+
+    @Test
+    public void testTotalRowsCountsBaseIndexOnly() {
+        // BasicStatsMeta.totalRows is compared against base index row counts by the optimizer, so the rows of a
+        // rollups which should not be counted again.
+        LakeTable table = createLakeTableForTest();
+        PhysicalPartition physicalPartition = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition();
+        for (Tablet tablet : physicalPartition.getLatestBaseIndex().getTablets()) {
+            ((LakeTablet) tablet).setRowCount(100);
+        }
+
+        MaterializedIndex rollupIndex = new MaterializedIndex(INDEX_ID + 100, MaterializedIndex.IndexState.NORMAL);
+        LakeTablet rollupTablet = new LakeTablet(30L);
+        rollupTablet.setRowCount(7);
+        rollupIndex.addTablet(rollupTablet, null, false);
+        physicalPartition.createRollupIndex(rollupIndex);
+
+        registeredDb = new Database(SCAN_DB_ID, SCAN_DB_NAME);
+        registeredDb.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(registeredDb);
+
+        BasicStatsMeta meta = new BasicStatsMeta(SCAN_DB_ID, TABLE_ID, Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddBasicStatsMeta(meta);
+        try {
+            new TabletStatMgr().runAfterCatalogReady();
+
+            assertEquals(200, physicalPartition.getLatestBaseIndex().getRowCount());
+            assertEquals(7, rollupIndex.getRowCount());
+            assertEquals(200, meta.getTotalRows());
+        } finally {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().remove(TABLE_ID);
+        }
     }
 }

@@ -15,6 +15,8 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
@@ -181,6 +183,43 @@ public class AnalyzeDeleteTest {
                     "info should recommend Primary Key table: " + info);
         } finally {
             Config.enable_non_primary_key_delete_warning = original;
+        }
+    }
+
+    // A DELETE on a table without a primary key runs as a delete job that begins and commits a
+    // transaction of its own. Inside an explicit transaction it would take effect at once and
+    // ROLLBACK could not undo it, so it is rejected for every keys type but Primary Key.
+    @Test
+    public void testNonPrimaryKeyDeleteRejectedInExplicitTxn() throws Exception {
+        AnalyzeTestUtil.starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tunique_txn_delete` (\n" +
+                "  `k1` bigint NOT NULL,\n" +
+                "  `v1` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        ConnectContext ctx = AnalyzeTestUtil.getConnectContext();
+        ctx.setThreadLocalInfo();
+        long originalTxnId = ctx.getTxnId();
+        try {
+            ctx.setTxnId(10001L);
+            String[][] cases = {
+                    {"delete from tjson where v_int = 1", "tjson"},                           // Duplicate Key
+                    {"delete from tunique_txn_delete where k1 = 1", "tunique_txn_delete"},    // Unique Key
+                    {"delete from test_object where v1 = 1", "test_object"},                  // Aggregate Key
+            };
+            for (String[] c : cases) {
+                ctx.getState().reset();
+                analyzeFail(c[0], "DELETE on non-Primary-Key table '" + c[1]
+                        + "' is not supported in an explicit transaction");
+                Assertions.assertEquals(ErrorCode.ERR_EXPLICIT_TXN_DELETE_ON_NON_PRIMARY_KEY_TABLE,
+                        ctx.getState().getErrorCode(), c[0]);
+            }
+            // A Primary Key table's DELETE joins the explicit transaction and stays allowed.
+            analyzeSuccess("delete from tprimary where pk = 1");
+        } finally {
+            ctx.setTxnId(originalTxnId);
+            ctx.getState().reset();
         }
     }
 }

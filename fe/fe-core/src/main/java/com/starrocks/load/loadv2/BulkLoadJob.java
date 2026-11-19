@@ -90,6 +90,10 @@ public abstract class BulkLoadJob extends LoadJob {
 
     // include broker desc and data desc
     protected BrokerFileGroupAggInfo fileGroupAggInfo = new BrokerFileGroupAggInfo();
+    // The ids of the target tables. Persisted because fileGroupAggInfo is rebuilt only for a pending job, and only
+    // on the leader.
+    @SerializedName("tids")
+    protected Set<Long> tableIds = Sets.newHashSet();
     protected List<TabletCommitInfo> commitInfos = Lists.newArrayList();
     protected List<TabletFailInfo> failInfos = Lists.newArrayList();
 
@@ -202,6 +206,7 @@ public abstract class BulkLoadJob extends LoadJob {
                 fileGroup.parse(db, dataDescription);
                 fileGroupAggInfo.addFileGroup(fileGroup);
             }
+            tableIds = fileGroupAggInfo.getAllTableIds();
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
@@ -226,6 +231,16 @@ public abstract class BulkLoadJob extends LoadJob {
             }
         }
         return result;
+    }
+
+    @Override
+    public Set<Long> getTableIds() {
+        // Empty when the target tables are unknown, as for a finished job persisted by an older version.
+        return tableIds;
+    }
+
+    public static void setTableIds(BulkLoadJob bulkLoadJob, Set<Long> tableIds) {
+        bulkLoadJob.tableIds = tableIds;
     }
 
     @Override

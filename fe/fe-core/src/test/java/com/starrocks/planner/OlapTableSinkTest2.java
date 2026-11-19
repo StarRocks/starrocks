@@ -25,6 +25,8 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TOlapTablePartition;
@@ -183,7 +185,10 @@ public class OlapTableSinkTest2 {
             // a lock-free UPDATE/DELETE/INSERT builds its sink from, must still double-write.
             published.addDoubleWritePartition(p1, tp1);
             OlapTable copy = new OlapTable();
-            published.copyOnlyForQuery(copy);
+            // Under the read lock, as the planner copies a published table.
+            try (AutoCloseableLock ignored = new AutoCloseableLock(db.getId(), published.getId(), LockType.READ)) {
+                published.copyOnlyForQuery(copy);
+            }
             Assertions.assertEquals(Map.of(p1, tp1), OlapTableSink.doubleWriteRoutes(db.getId(), copy));
 
             // Cancelled after the copy: the temp partition is gone, so the route must be too.
@@ -198,7 +203,9 @@ public class OlapTableSinkTest2 {
             // load's txn id: below the watershed, drained by the job, and unknown to the copy's partitions.
             published.clearDoubleWritePartition();
             OlapTable copyBeforeTemp = new OlapTable();
-            published.copyOnlyForQuery(copyBeforeTemp);
+            try (AutoCloseableLock ignored = new AutoCloseableLock(db.getId(), published.getId(), LockType.READ)) {
+                published.copyOnlyForQuery(copyBeforeTemp);
+            }
             copyBeforeTemp.dropTempPartition("tp1", false);
             published.addDoubleWritePartition(p1, tp1);
             Assertions.assertEquals(Map.of(), OlapTableSink.doubleWriteRoutes(db.getId(), copyBeforeTemp));

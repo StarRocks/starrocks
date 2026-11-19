@@ -34,6 +34,8 @@ import com.starrocks.qe.SessionVariable.PaimonReaderMode;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -77,6 +79,205 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 
 public class PaimonScanNodeTest {
+    @Test
+    public void testExplainScanMetricsAcrossReaders(@Mocked GlobalStateMgr globalStateMgr,
+                                                   @Mocked MetadataMgr metadataMgr,
+                                                   @Mocked PaimonTable table) {
+        ConnectContext context = new ConnectContext();
+        context.setSessionVariable(new SessionVariable());
+        context.setThreadLocalInfo();
+        context.getSessionVariable().setConnectorMaxSplitSize(1_000_000_000L);
+        try {
+            for (Reader reader : Reader.values()) {
+                context.getSessionVariable().setPaimonReaderMode(reader == Reader.JNI ? "JNI" : "AUTO");
+                boolean rawConvertible = reader == Reader.STARROCKS;
+                List<Split> splits = List.of(
+                        dataSplit(0, rawConvertible, List.of(dataFile("a.parquet", 3_000_000_000L, 2_000_000_000L),
+                                dataFile("b.parquet", 4_000_000_000L, 3_000_000_000L))),
+                        dataSplit(1, rawConvertible, List.of(dataFile("c.parquet", 5_000_000_000L, 4_000_000_000L))));
+                PaimonScanNode node = planScan(table, metadataMgr, splits);
+                // Output cardinality and a pushed-down LIMIT must not replace candidate file totals.
+                node.computeStatistics(Statistics.builder().setOutputRowCount(10).build());
+                node.setLimit(10);
+                assertScanMetrics(node, 2, 3, 12_000_000_000L, 9_000_000_000L);
+                String costs = node.getCostExplain("", "  ");
+                Assertions.assertTrue(costs.contains("cardinality: 10\n"), costs);
+                Assertions.assertTrue(costs.contains("limit: 10\n"), costs);
+                Assertions.assertEquals(rawConvertible ? 12 : 2, node.getScanRangeLocations(0).size());
+                for (TScanRangeLocations range : node.getScanRangeLocations(0)) {
+                    THdfsScanRange hdfsRange = range.getScan_range().getHdfs_scan_range();
+                    Assertions.assertEquals(reader == Reader.JNI, hdfsRange.isUse_paimon_jni_reader());
+                    Assertions.assertEquals(reader == Reader.NATIVE, hdfsRange.isUse_paimon_native_reader());
+                }
+            }
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testExplainEmptyScanMetrics(boolean incremental, @Mocked GlobalStateMgr globalStateMgr,
+                                          @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table) {
+        ConnectContext context = new ConnectContext();
+        context.setSessionVariable(new SessionVariable());
+        context.setThreadLocalInfo();
+        try {
+            PaimonScanNode node = planScan(table, metadataMgr, List.of(), incremental);
+            Assertions.assertFalse(node.hasMoreScanRanges());
+            assertScanMetrics(node, 0, 0, 0, 0);
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testExplainUnknownFileMetrics(@Mocked GlobalStateMgr globalStateMgr,
+                                            @Mocked MetadataMgr metadataMgr,
+                                            @Mocked PaimonTable table) {
+        ConnectContext context = new ConnectContext();
+        context.setSessionVariable(new SessionVariable());
+        context.setThreadLocalInfo();
+        try {
+            // A split without file metadata must not leave the preceding data split's partial totals.
+            List<Split> splits = List.of(
+                    dataSplit(0, true, List.of(dataFile("a.parquet", 100, 200))), new TestSplit());
+            assertScanMetrics(planScan(table, metadataMgr, splits), 2, -1, -1, -1);
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testExplainIndexedSplitMetrics(@Mocked GlobalStateMgr globalStateMgr,
+                                             @Mocked MetadataMgr metadataMgr,
+                                             @Mocked PaimonTable table) {
+        ConnectContext context = new ConnectContext();
+        context.setSessionVariable(new SessionVariable());
+        context.setThreadLocalInfo();
+        try {
+            DataSplit split = dataSplit(0, false, List.of(dataFile("a.parquet", 100, 200)));
+            IndexedSplit indexedSplit = new IndexedSplit(split, List.of(new Range(0L, 0L)), null);
+            // Index row ranges do not turn candidate file totals into output-row estimates.
+            assertScanMetrics(planScan(table, metadataMgr, List.of(indexedSplit)), 1, 1, 100, 200);
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testExplainMetricsAcrossBatches(boolean incremental, @Mocked GlobalStateMgr globalStateMgr,
+                                              @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table) {
+        ConnectContext context = new ConnectContext();
+        context.setSessionVariable(new SessionVariable());
+        context.setThreadLocalInfo();
+        try {
+            FileStoreTable nativeTable = createNativeTable();
+            List<RemoteFileInfo> batches = List.of(
+                    createRemoteFiles(dataSplit(0, true, List.of(dataFile("a.parquet", 100, 200)))).get(0),
+                    createRemoteFiles(dataSplit(1, true, List.of(dataFile("b.parquet", 300, 400)))).get(0),
+                    createRemoteFiles(new TestSplit()).get(0),
+                    createRemoteFiles(dataSplit(2, true, List.of(dataFile("c.parquet", 500, 600)))).get(0));
+            new Expectations() {
+                {
+                    GlobalStateMgr.getCurrentState().getMetadataMgr();
+                    result = metadataMgr;
+                    table.getNativeTable();
+                    result = nativeTable;
+                    if (incremental) {
+                        metadataMgr.getRemoteFilesAsync((Table) any, (GetRemoteFilesParams) any);
+                        result = new RemoteFileInfoDefaultSource(batches);
+                    } else {
+                        metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesParams) any);
+                        result = batches;
+                    }
+                }
+            };
+            TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+            desc.setTable(table);
+            PaimonScanNode node = new PaimonScanNode(new PlanNodeId(0), desc, "PaimonScanNode");
+            node.setupScanRangeLocations(desc, null, incremental ? 10 : -1);
+            if (incremental) {
+                Assertions.assertFalse(node.getVerboseExplain("", "  ").contains("Paimon Scan Metrics:"));
+                Assertions.assertEquals(1, node.getScanRangeLocations(1).size());
+                assertScanMetrics(node, 1, 1, 100, 200);
+                Assertions.assertEquals(1, node.getScanRangeLocations(1).size());
+                assertScanMetrics(node, 2, 2, 400, 600);
+                Assertions.assertEquals(1, node.getScanRangeLocations(1).size());
+                assertScanMetrics(node, 3, -1, -1, -1);
+                Assertions.assertEquals(1, node.getScanRangeLocations(1).size());
+                Assertions.assertFalse(node.hasMoreScanRanges());
+            } else {
+                Assertions.assertEquals(4, node.getScanRangeLocations(0).size());
+            }
+            // Missing file metadata in an earlier batch must remain unknown after a later data split.
+            assertScanMetrics(node, 4, -1, -1, -1);
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    private static PaimonScanNode planScan(PaimonTable table, MetadataMgr metadataMgr, List<Split> splits) {
+        return planScan(table, metadataMgr, splits, false);
+    }
+
+    private static PaimonScanNode planScan(PaimonTable table, MetadataMgr metadataMgr,
+                                         List<Split> splits, boolean incremental) {
+        List<RemoteFileInfo> files = createRemoteFiles(splits.toArray(new Split[0]));
+        FileStoreTable nativeTable = createNativeTable();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getMetadataMgr();
+                result = metadataMgr;
+                if (incremental) {
+                    metadataMgr.getRemoteFilesAsync(table, (GetRemoteFilesParams) any);
+                    result = new RemoteFileInfoDefaultSource(splits.isEmpty() ? List.of() : files);
+                } else {
+                    metadataMgr.getRemoteFiles(table, (GetRemoteFilesParams) any);
+                    result = files;
+                }
+                table.getNativeTable();
+                result = nativeTable;
+                minTimes = 0;
+            }
+        };
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        PaimonScanNode node = new PaimonScanNode(new PlanNodeId(0), desc, "PaimonScanNode");
+        for (String explain : List.of(node.getExplainString("", "  ", TExplainLevel.NORMAL),
+                node.getVerboseExplain("", "  "), node.getCostExplain("", "  "))) {
+            Assertions.assertFalse(explain.contains("Paimon Scan Metrics:"), explain);
+        }
+        node.setupScanRangeLocations(desc, null, incremental ? 10 : -1);
+        return node;
+    }
+
+    private static DataFileMeta dataFile(String name, long bytes, long rows) {
+        return DataFileMeta.create(name, bytes, rows, EMPTY_MIN_KEY, EMPTY_MAX_KEY,
+                EMPTY_STATS, EMPTY_STATS, 0L, rows - 1, 1L, DUMMY_LEVEL, List.of(), null, null,
+                FileSource.APPEND, List.of(), null, null, List.of());
+    }
+
+    private static DataSplit dataSplit(int bucket, boolean rawConvertible, List<DataFileMeta> files) {
+        return DataSplit.builder().withSnapshot(1L).withPartition(BinaryRow.EMPTY_ROW).withBucket(bucket)
+                .withBucketPath("file:///warehouse/bucket-" + bucket).withDataFiles(files)
+                .isStreaming(false).rawConvertible(rawConvertible).build();
+    }
+
+    private static void assertScanMetrics(PaimonScanNode node, long splits, long files, long bytes, long rows) {
+        String normal = node.getExplainString("", "  ", TExplainLevel.NORMAL);
+        Assertions.assertFalse(normal.contains("Paimon Scan Metrics:"), normal);
+        // COSTS delegates to the verbose node details; exercise the actual rendered paths.
+        for (String explain : List.of(node.getVerboseExplain("", "  "), node.getCostExplain("", "  "))) {
+            Assertions.assertTrue(explain.contains("Paimon Scan Metrics:\n"), explain);
+            Assertions.assertTrue(explain.contains("  splits=" + splits + "\n"), explain);
+            Assertions.assertTrue(explain.contains("  data_files=" + files + "\n"), explain);
+            Assertions.assertTrue(explain.contains("  data_file_bytes=" + bytes + "\n"), explain);
+            Assertions.assertTrue(explain.contains("  data_file_rows=" + rows + "\n"), explain);
+        }
+    }
+
     @Test
     public void testInit(@Mocked GlobalStateMgr globalStateMgr,
                          @Mocked CatalogConnector connector,

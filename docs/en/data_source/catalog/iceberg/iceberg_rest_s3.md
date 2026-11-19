@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "How to create an Iceberg REST Catalog in StarRocks for accessing AWS S3 tables through the AWS Glue REST endpoint."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Create Iceberg REST Catalog for AWS S3 Tables

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Stream Load 不支持识别 CSV 格式文件开头前几行的列名。"
+products: [oss, enterprise]
 ---
 
 # Stream Load 导入常见问题

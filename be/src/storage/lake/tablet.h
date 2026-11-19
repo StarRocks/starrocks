@@ -101,8 +101,6 @@ public:
 
     StatusOr<TxnLogPtr> get_txn_slog(int64_t txn_id);
 
-    StatusOr<TxnLogPtr> get_txn_vlog(int64_t version);
-
     // `segment_max_rows` is used in vertical writer
     // NOTE: This method may update the version hint
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,

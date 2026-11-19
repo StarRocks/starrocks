@@ -17,6 +17,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "base/hash/unaligned_access.h"
+
 namespace SIMD::Expand {
 
 // Branchless expand-load.
@@ -35,6 +37,9 @@ namespace SIMD::Expand {
 // sized to exactly `num_valid` can over-read by one. Pad `src_data` by one
 // element or ensure it has at least `num_valid + 1` allocated entries.
 
+// Every expand_load variant reads `src_data` without assuming it is aligned for DataType (vector loads are
+// unaligned, scalar ones go through starrocks::unaligned_load), so it may point into a byte buffer such as a
+// parquet page, where the values start wherever the definition levels end.
 void expand_load_simd(int32_t* dst_data, const int32_t* src_data, const uint8_t* nulls, size_t count);
 void expand_load_simd(int64_t* dst_data, const int64_t* src_data, const uint8_t* nulls, size_t count);
 
@@ -42,7 +47,7 @@ template <class DataType>
 inline void expand_load_branchless(DataType* dst_data, const DataType* src_data, const uint8_t* nulls, size_t count) {
     size_t cnt = 0;
     for (size_t i = 0; i < count; ++i) {
-        dst_data[i] = src_data[cnt];
+        dst_data[i] = starrocks::unaligned_load<DataType>(src_data + cnt);
         cnt += !nulls[i];
     }
 }

@@ -22,6 +22,7 @@
 #include "column/const_column.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 namespace {
@@ -35,15 +36,10 @@ std::string slice_to_string(const Slice& s) {
 TEST(ColumnViewBaseCoreTest, AppendSelectiveToWithoutConcat) {
     auto view = ColumnView::create(BinaryColumn::create(), 1, -1);
 
-    auto src0 = BinaryColumn::create();
-    src0->append("a");
-    src0->append("b");
-    src0->append("c");
+    auto src0 = ColumnTestHelper::build_column<Slice>({"a", "b", "c"});
     view->append(*src0, 0, 2);
 
-    auto src1 = BinaryColumn::create();
-    src1->append("x");
-    src1->append("y");
+    auto src1 = ColumnTestHelper::build_column<Slice>({"x", "y"});
     const uint32_t selective[] = {1, 0};
     view->append_selective(*src1, selective, 0, 2);
 
@@ -61,9 +57,7 @@ TEST(ColumnViewBaseCoreTest, AppendSelectiveToWithoutConcat) {
 TEST(ColumnViewBaseCoreTest, AppendSelectiveToWithConcatAndNulls) {
     auto view = ColumnView::create(NullableColumn::create(BinaryColumn::create(), NullColumn::create()), -1, -1);
 
-    auto data = BinaryColumn::create();
-    data->append("v0");
-    data->append("ignored");
+    auto data = ColumnTestHelper::build_column<Slice>({"v0", "ignored"});
 
     auto nulls = NullColumn::create();
     nulls->append(0);
@@ -87,9 +81,7 @@ TEST(ColumnViewBaseCoreTest, AppendSelectiveToWithConcatAndNulls) {
 // ColumnViewBase::capacity_limit_reached() used to throw. It must return a Status for a view with or without a
 // concatenated column, without forcing the deferred concatenation.
 TEST(ColumnViewBaseCoreTest, CapacityLimitReached) {
-    auto src = BinaryColumn::create();
-    src->append("a");
-    src->append("b");
+    auto src = ColumnTestHelper::build_column<Slice>({"a", "b"});
 
     // Concatenation disabled by the rows limit: reads stay on the habitats.
     auto view = ColumnView::create(BinaryColumn::create(), 1, -1);
@@ -115,8 +107,7 @@ TEST(ColumnViewBaseCoreTest, CapacityLimitReached) {
 // reports MAX_CAPACITY_LIMIT rows, so both appends stay within the source. The view is never read.
 TEST(ColumnViewBaseCoreTest, CapacityLimitReachedRejectsTooManyRows) {
     const uint64_t capacity_limit = Column::MAX_CAPACITY_LIMIT;
-    auto value = BinaryColumn::create();
-    value->append("a");
+    auto value = ColumnTestHelper::build_column<Slice>({"a"});
     auto src = ConstColumn::create(std::move(value), capacity_limit);
     ASSERT_OK(src->capacity_limit_reached());
 

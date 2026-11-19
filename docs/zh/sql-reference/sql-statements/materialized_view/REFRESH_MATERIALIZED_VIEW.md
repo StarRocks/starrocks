@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "手动刷新指定异步物化视图或其中部分分区。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # REFRESH MATERIALIZED VIEW

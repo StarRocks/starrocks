@@ -149,7 +149,7 @@ StatusOr<AIProviderHttpRequest> OpenAICompatibleProvider::build_request(const AI
             return invalid_request();
         }
         break;
-    case AICapability::TEXT_EMBEDDING:
+    case AICapability::EMBEDDING:
         if (!writer.Key("input") || !writer.String(request.prompt.data(), request.prompt.size()) ||
             !writer.Key("encoding_format") || !writer.String("float")) {
             return invalid_request();
@@ -164,7 +164,7 @@ StatusOr<AIProviderHttpRequest> OpenAICompatibleProvider::build_request(const AI
             const bool reserved = option.key == "model" ||
                                   (request.capability == AICapability::CHAT &&
                                    (option.key == "messages" || option.key == "stream")) ||
-                                  (request.capability == AICapability::TEXT_EMBEDDING &&
+                                  (request.capability == AICapability::EMBEDDING &&
                                    (option.key == "input" || option.key == "encoding_format"));
             if (reserved || !writer.Key(option.key.data(), option.key.size()) ||
                 !writer.RawValue(option.serialized_json.data(), option.serialized_json.size(),
@@ -212,7 +212,7 @@ AIProviderParseResult OpenAICompatibleProvider::parse_response(std::string_view 
         return AIProviderStructuredError{.code = classify_error(document), .usage = usage};
     }
 
-    if (capability == AICapability::TEXT_EMBEDDING) {
+    if (capability == AICapability::EMBEDDING) {
         const auto data = document.FindMember("data");
         if (data == document.MemberEnd() || !data->value.IsArray() || data->value.Size() != 1 ||
             !data->value[0].IsObject()) {

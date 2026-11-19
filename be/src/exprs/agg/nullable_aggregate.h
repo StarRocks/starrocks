@@ -141,6 +141,10 @@ public:
     // whether it ever emits a NULL, not this generic nullable wrapper.
     bool is_result_non_nullable() const override { return nested_function->is_result_non_nullable(); }
 
+    // NULL inputs are skipped, so the first value kept is the first non-NULL one; the aggregator only takes the
+    // new-group shortcut while it has seen no NULL input.
+    bool is_first_value_only() const override { return nested_function->is_first_value_only(); }
+
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         // Scalar function compute will return non-nullable column
         // for nullable column when the real whole chunk data all not-null.
@@ -347,7 +351,10 @@ public:
 
         if (columns[0]->is_nullable()) {
             if (columns[0]->is_null(row_num)) {
-                // Always ingore nulls.
+                if constexpr (!IgnoreNull) {
+                    this->data(state).is_null = false;
+                    this->nested_function->process_null(ctx, this->data(state).mutable_nest_state());
+                }
                 return;
             }
             const auto* column = down_cast<const NullableColumn*>(columns[0]);
