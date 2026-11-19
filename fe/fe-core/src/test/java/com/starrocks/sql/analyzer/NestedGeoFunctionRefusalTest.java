@@ -63,8 +63,7 @@ public class NestedGeoFunctionRefusalTest {
         List<Type> result = new ArrayList<>();
         for (Type leaf : List.of(IntegerType.INT,
                 ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, new GeoTypeDescriptor(
-                        GeoTypeDescriptor.LogicalType.GEOGRAPHY, GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
-                        GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326)),
+                        GeoTypeDescriptor.LogicalType.GEOGRAPHY, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326)),
                 ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry("EPSG:3857")))) {
             result.addAll(List.of(leaf, new ArrayType(leaf), new MapType(IntegerType.INT, leaf),
                     new StructType(List.of(leaf)), new ArrayType(new StructType(List.of(new ArrayType(leaf))))));

@@ -50,8 +50,7 @@ public class InsertPlannerGeoAssignmentTest {
 
     private static Stream<Type> geoTypes() {
         return Stream.of(ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
-                new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                        GeoTypeDescriptor.CoordinateSystem.SPHERICAL, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
+                new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
                         "OGC:CRS84", 4326)),
                 geometry("EPSG:3857"), geometry("EPSG:4326"), geometry("LOCAL:linear"));
     }
