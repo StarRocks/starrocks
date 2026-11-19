@@ -37,6 +37,7 @@
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
+#include "column/flat_json/flat_json_internal.h"
 #include "column/flat_json/json_merger.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
@@ -1287,4 +1288,302 @@ INSTANTIATE_TEST_SUITE_P(JsonBoolExtractionCases, JsonBoolExtractionTest,
                                            std::make_tuple(R"({"bool_field": "1"})", true),
                                            std::make_tuple(R"({"bool_field": "0"})", false)));
 
+<<<<<<< HEAD
+=======
+TEST_F(JsonFlattenerTest, testRemainFilterReportsKeysNestedUnderAPrunedKey) {
+    config::json_flat_sparsity_factor = 1;
+    const int32_t old_chunk_size = config::vector_chunk_size;
+    config::vector_chunk_size = 16;
+    DeferOp restore_chunk_size([&]() { config::vector_chunk_size = old_chunk_size; });
+    // The bounded-trie optimization is a separate backport. Exercise the existing sparsity-pruning
+    // route here: "x" only occurs in the first two rows, then its entire subtree goes to remain.
+    auto json_column = JsonColumn::create();
+    for (int row = 0; row < 200; row++) {
+        std::string json = R"({"0id": )" + std::to_string(row);
+        if (row < 2) {
+            json += R"(, "x": {)";
+            for (int k = 0; k < 20; k++) {
+                json += (k ? ", " : "") + std::string("\"leaf") + std::to_string(k) + "\": " + std::to_string(row);
+            }
+            json += "}";
+        }
+        json += "}";
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(json));
+        json_column->append(&jv);
+    }
+
+    std::vector<const Column*> columns{json_column.get()};
+    JsonPathDeriver jf;
+    jf.set_generate_filter(true);
+    jf.derived(columns);
+
+    ASSERT_TRUE(jf.has_remain_json());
+    ASSERT_EQ(std::vector<std::string>{"0id"}, jf.flat_paths());
+    ASSERT_TRUE(nullptr != jf.remain_fitler());
+    // A reader probes the final component of x.leafN, not just the root "x".
+    EXPECT_TRUE(jf.remain_fitler()->test_bytes("x", 1));
+    for (int k = 0; k < 20; k++) {
+        std::string leaf = "leaf" + std::to_string(k);
+        EXPECT_TRUE(jf.remain_fitler()->test_bytes(leaf.data(), leaf.size())) << leaf;
+    }
+
+    JsonFlattener flattener(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    flattener.flatten(json_column.get());
+    Columns flat_columns;
+    for (auto& c : flattener.mutable_result()) {
+        flat_columns.emplace_back(std::move(c));
+    }
+    JsonMerger merger(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    auto merged = merger.merge(flat_columns);
+    const auto* merged_json =
+            merged->is_nullable() ? down_cast<const NullableColumn*>(merged.get())->data_column().get() : merged.get();
+    ASSERT_EQ(json_column->size(), merged_json->size());
+    for (size_t row = 0; row < json_column->size(); row++) {
+        EXPECT_EQ(0, json_column->get_object(row)->compare(*down_cast<const JsonColumn*>(merged_json)->get_object(row)))
+                << row;
+    }
+}
+
+// A path is flattened to a numeric type only if that type holds every value exactly; otherwise it is flattened
+// as JSON. Integers past 2^53 next to doubles, and negative integers next to integers past INT64_MAX, would
+// otherwise read back as different numbers.
+TEST_F(JsonFlattenerTest, testNumericPathTypeKeepsValuesExact) {
+    config::json_flat_sparsity_factor = 0.3;
+    struct Case {
+        std::vector<std::string> jsons;
+        LogicalType expected_type;
+    };
+    // clang-format off
+    std::vector<Case> cases = {
+        {{R"({"a": 1234567890123456789})", R"({"a": 1.5})"}, TYPE_JSON},
+        {{R"({"a": -1234567890123456789})", R"({"a": 1.5})"}, TYPE_JSON},
+        {{R"({"a": -3})", R"({"a": 18446744073709551615})"}, TYPE_JSON},
+        {{R"({"a": -1234567890123})", R"({"a": 18446744073709551615})"}, TYPE_JSON},
+        // Exact as before.
+        {{R"({"a": 9007199254740992})", R"({"a": 1.5})"}, TYPE_DOUBLE},
+        {{R"({"a": 1})", R"({"a": 1.5})"}, TYPE_DOUBLE},
+        {{R"({"a": -3})", R"({"a": 9223372036854775807})"}, TYPE_BIGINT},
+        {{R"({"a": 5})", R"({"a": 18446744073709551615})"}, TYPE_LARGEINT},
+        {{R"({"a": 1.5})", R"({"a": 1e300})"}, TYPE_DOUBLE},
+    };
+    // clang-format on
+    for (const auto& c : cases) {
+        SCOPED_TRACE(c.jsons[0] + " " + c.jsons[1]);
+        auto json_column = JsonColumn::create();
+        for (const auto& json : c.jsons) {
+            ASSIGN_OR_ABORT(auto jv, JsonValue::parse(json));
+            json_column->append(&jv);
+        }
+        std::vector<const Column*> columns{json_column.get()};
+        JsonPathDeriver jf;
+        jf.derived(columns);
+        ASSERT_EQ(std::vector<std::string>{"a"}, jf.flat_paths());
+        EXPECT_EQ(c.expected_type, jf.flat_types()[0]);
+
+        JsonFlattener flattener(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+        flattener.flatten(json_column.get());
+        Columns flat_columns;
+        for (auto& col : flattener.mutable_result()) {
+            flat_columns.emplace_back(std::move(col));
+        }
+        JsonMerger merger(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+        auto merged = merger.merge(flat_columns);
+        const auto* merged_json = merged->is_nullable()
+                                          ? down_cast<const NullableColumn*>(merged.get())->data_column().get()
+                                          : merged.get();
+        ASSERT_EQ(json_column->size(), merged_json->size());
+        for (size_t row = 0; row < json_column->size(); row++) {
+            const auto* got = down_cast<const JsonColumn*>(merged_json)->get_object(row);
+            EXPECT_EQ(0, json_column->get_object(row)->compare(*got))
+                    << "row " << row << ": " << got->to_string_uncheck();
+        }
+    }
+}
+
+// Before numeric paths were kept exact, the deriver met negative integers with integers past INT64_MAX at
+// LARGEINT, so existing segments may hold negative LARGEINT values. Rebuilding them as JSON -- whole-JSON reads
+// (JsonMerger) and the conversion to a JSON sub-column (HyperJsonTransformer) -- must keep them negative.
+TEST_F(JsonFlattenerTest, testLegacyNegativeLargeintSubColumnKeepsSign) {
+    const std::vector<int128_t> values = {-2, std::numeric_limits<int64_t>::min(), 5,
+                                          static_cast<int128_t>(std::numeric_limits<uint64_t>::max())};
+    const std::vector<std::string> expected = {"-2", "-9223372036854775808", "5", "18446744073709551615"};
+    auto data = Int128Column::create();
+    for (auto v : values) {
+        data->append(v);
+    }
+    ColumnPtr largeint = NullableColumn::create(std::move(data), NullColumn::create(values.size(), 0));
+
+    JsonMerger merger({"a"}, {TYPE_LARGEINT}, false);
+    auto merged = merger.merge({largeint});
+    const auto* merged_json =
+            merged->is_nullable() ? down_cast<const NullableColumn*>(merged.get())->data_column().get() : merged.get();
+    ASSERT_EQ(values.size(), merged_json->size());
+    for (size_t row = 0; row < values.size(); row++) {
+        EXPECT_EQ(R"({"a": )" + expected[row] + "}",
+                  down_cast<const JsonColumn*>(merged_json)->get_object(row)->to_string_uncheck())
+                << "row " << row;
+    }
+
+    HyperJsonTransformer transformer({"a"}, {TYPE_JSON}, false);
+    transformer.init_compaction_task({"a"}, {TYPE_LARGEINT}, false);
+    ASSERT_OK(transformer.trans({largeint}));
+    auto result = transformer.mutable_result();
+    ASSERT_EQ(1, result.size());
+    const auto* json_values =
+            down_cast<const JsonColumn*>(down_cast<NullableColumn*>(result[0].get())->data_column().get());
+    ASSERT_EQ(values.size(), json_values->size());
+    for (size_t row = 0; row < values.size(); row++) {
+        // Compare the text: JsonValue::compare also tells apart the integer encodings (SmallInt, Int, UInt).
+        EXPECT_EQ(expected[row], json_values->get_object(row)->to_string_uncheck()) << "row " << row;
+    }
+}
+
+TEST_F(JsonFlattenerTest, testScalarToJsonPreservesSqlNull) {
+    auto strings = BinaryColumn::create();
+    strings->append(Slice("[1,2]"));
+    strings->append_default();
+    strings->append(Slice("[oops"));
+    auto nulls = NullColumn::create();
+    nulls->append(0);
+    nulls->append(1);
+    nulls->append(0);
+    ColumnPtr source = NullableColumn::create(std::move(strings), std::move(nulls));
+
+    for (bool compaction : {false, true}) {
+        HyperJsonTransformer transformer({"a"}, {TYPE_JSON}, false);
+        if (compaction) {
+            transformer.init_compaction_task({"a"}, {TYPE_VARCHAR}, false);
+        } else {
+            transformer.init_read_task({"a"}, {TYPE_VARCHAR}, false);
+        }
+        ASSERT_OK(transformer.trans({source}));
+        auto result = transformer.mutable_result();
+        ASSERT_EQ(1, result.size());
+        ASSERT_EQ(3, result[0]->size());
+        EXPECT_FALSE(result[0]->is_null(0));
+        EXPECT_TRUE(result[0]->is_null(1));
+        EXPECT_FALSE(result[0]->is_null(2));
+        const auto* json =
+                down_cast<const JsonColumn*>(down_cast<const NullableColumn*>(result[0].get())->data_column().get());
+        EXPECT_EQ(0, JsonValue::from_string("[1,2]").compare(*json->get_object(0)));
+        EXPECT_EQ(0, JsonValue::from_string("[oops").compare(*json->get_object(2)));
+    }
+}
+
+// flat_column_to_json rebuilds a VARCHAR sub-column as JSON strings -- a JSON-looking value stays a string --
+// keeps NULL rows NULL, unfolds a constant input, and leaves its source (owned by the caller) unchanged.
+TEST_F(JsonFlattenerTest, testFlatColumnToJsonKeepsStringsAndReadsSource) {
+    auto strings = BinaryColumn::create();
+    strings->append(Slice(R"({"a":1})"));
+    strings->append_default();
+    strings->append(Slice("plain"));
+    auto nulls = NullColumn::create();
+    nulls->append(0);
+    nulls->append(1);
+    nulls->append(0);
+    ColumnPtr source = NullableColumn::create(std::move(strings), std::move(nulls));
+    const Column* source_data = down_cast<const NullableColumn*>(source.get())->data_column().get();
+
+    auto result = flat_json::flat_column_to_json(source, TYPE_VARCHAR);
+    ASSERT_EQ(3, result->size());
+    ASSERT_TRUE(result->is_nullable());
+    EXPECT_FALSE(result->is_null(0));
+    EXPECT_TRUE(result->is_null(1));
+    EXPECT_FALSE(result->is_null(2));
+    const auto* json =
+            down_cast<const JsonColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
+    EXPECT_EQ(0, JsonValue::from_string(R"({"a":1})").compare(*json->get_object(0)));
+    EXPECT_TRUE(json->get_object(0)->to_vslice().isString());
+    EXPECT_EQ(0, JsonValue::from_string("plain").compare(*json->get_object(2)));
+    // the source is unchanged
+    EXPECT_EQ(source_data, down_cast<const NullableColumn*>(source.get())->data_column().get());
+    EXPECT_EQ(R"({"a":1})", source_data->get(0).get_slice().to_string());
+
+    // a constant input is unfolded to one value per row
+    auto one = BinaryColumn::create();
+    one->append(Slice("[1]"));
+    ColumnPtr constant = ConstColumn::create(std::move(one), 2);
+    auto from_const = flat_json::flat_column_to_json(constant, TYPE_VARCHAR);
+    ASSERT_EQ(2, from_const->size());
+    const auto* const_json =
+            down_cast<const JsonColumn*>(down_cast<const NullableColumn*>(from_const.get())->data_column().get());
+    for (size_t i = 0; i < 2; i++) {
+        EXPECT_FALSE(from_const->is_null(i));
+        EXPECT_EQ(0, JsonValue::from_string("[1]").compare(*const_json->get_object(i)));
+    }
+}
+
+// flat_column_to_json gives every scalar flat type back the JSON value the whole-document rebuild writes:
+// BIGINT and DOUBLE keep their numbers, LARGEINT goes back to the signed or unsigned 64-bit encoding it was
+// merged from (so a value above INT64_MAX stays exact), a JSON sub-column passes through, and a non-nullable
+// source has no NULL rows.
+TEST_F(JsonFlattenerTest, testFlatColumnToJsonNumericAndJsonSources) {
+    auto values_of = [](const MutableColumnPtr& result) {
+        std::vector<vpack::Slice> slices;
+        const auto* json =
+                down_cast<const JsonColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
+        for (size_t i = 0; i < result->size(); i++) {
+            slices.emplace_back(json->get_object(i)->to_vslice());
+        }
+        return slices;
+    };
+
+    {
+        auto data = Int64Column::create();
+        data->append(-7);
+        data->append(std::numeric_limits<int64_t>::max());
+        auto result = flat_json::flat_column_to_json(std::move(data), TYPE_BIGINT);
+        ASSERT_EQ(2, result->size());
+        EXPECT_FALSE(result->has_null());
+        auto v = values_of(result);
+        EXPECT_EQ(-7, v[0].getInt());
+        EXPECT_EQ(std::numeric_limits<int64_t>::max(), v[1].getInt());
+    }
+    {
+        const auto above_int64 = static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 5;
+        auto data = Int128Column::create();
+        data->append(static_cast<int128_t>(above_int64));
+        data->append(static_cast<int128_t>(-3));
+        auto nulls = NullColumn::create();
+        nulls->append(0);
+        nulls->append(0);
+        ColumnPtr source = NullableColumn::create(std::move(data), std::move(nulls));
+        auto result = flat_json::flat_column_to_json(source, TYPE_LARGEINT);
+        auto v = values_of(result);
+        ASSERT_TRUE(v[0].isUInt());
+        EXPECT_EQ(above_int64, v[0].getUInt());
+        ASSERT_TRUE(v[1].isInt() || v[1].isSmallInt());
+        EXPECT_EQ(-3, v[1].getInt());
+    }
+    {
+        auto data = DoubleColumn::create();
+        data->append(0.1);
+        data->append_default();
+        auto nulls = NullColumn::create();
+        nulls->append(0);
+        nulls->append(1);
+        ColumnPtr source = NullableColumn::create(std::move(data), std::move(nulls));
+        auto result = flat_json::flat_column_to_json(source, TYPE_DOUBLE);
+        ASSERT_EQ(2, result->size());
+        EXPECT_TRUE(result->is_null(1));
+        auto v = values_of(result);
+        ASSERT_TRUE(v[0].isDouble());
+        EXPECT_EQ(0.1, v[0].getDouble());
+    }
+    {
+        auto data = JsonColumn::create();
+        ASSIGN_OR_ABORT(auto object, JsonValue::parse(R"({"k": [1, "x"]})"));
+        data->append(&object);
+        auto text = JsonValue::from_string(R"({"k":1})");
+        data->append(&text);
+        auto result = flat_json::flat_column_to_json(std::move(data), TYPE_JSON);
+        const auto* json =
+                down_cast<const JsonColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
+        EXPECT_EQ(0, object.compare(*json->get_object(0)));
+        EXPECT_EQ(0, text.compare(*json->get_object(1)));
+        EXPECT_TRUE(json->get_object(1)->to_vslice().isString());
+    }
+}
+
+>>>>>>> 126fb1c3613... [Enhancement][RB-345] Rebuild flat JSON sub-columns as JSON instead of casting them (#70427)
 } // namespace starrocks

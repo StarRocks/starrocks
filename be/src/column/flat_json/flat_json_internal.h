@@ -46,6 +46,13 @@ extern const FlatJsonHashMap<LogicalType, JsonFlatMergeFunc> JSON_MERGE_FUNC;
 
 uint8_t get_compatibility_type(vpack::ValueType type1, uint8_t type2);
 
+// Turns the values of a flat sub-column of `src_type` back into JSON, each one the way JsonMerger writes it into
+// the rebuilt document (JSON_MERGE_FUNC). Returns a nullable JSON column with the same rows.
+// A cast to JSON is not the same thing: it parses a VARCHAR that looks like JSON text, so the JSON string
+// "{\"a\":1}" stored in a VARCHAR sub-column would come back as the object {"a": 1}.
+// REQUIRES: JSON_MERGE_FUNC.contains(src_type)
+MutableColumnPtr flat_column_to_json(const ColumnPtr& src, LogicalType src_type);
+
 // What JsonPathDeriver::_visit_json_paths collects for a path, gathered from the values of a JSON-typed
 // sub-column. Kept in the segment (JsonValueStatsPB) so a later derivation from metadata can type the path by
 // its values instead of leaving it JSON.

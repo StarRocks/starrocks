@@ -15,6 +15,7 @@
 #include "storage/rowset/cast_column_iterator.h"
 
 #include "column/column_helper.h"
+#include "column/flat_json/flat_json_internal.h"
 #include "common/object_pool.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
@@ -23,17 +24,28 @@
 namespace starrocks {
 
 CastColumnIterator::CastColumnIterator(std::unique_ptr<ColumnIterator> source_iter, const TypeDescriptor& source_type,
-                                       const TypeDescriptor& target_type, bool nullable_source)
+                                       const TypeDescriptor& target_type, bool nullable_source, bool flat_json_source)
         : ColumnIteratorDecorator(source_iter.release(), kTakesOwnership),
           _obj_pool(new ObjectPool()),
 
+<<<<<<< HEAD
           _source_chunk() {
+=======
+          _source_chunk(),
+          _zone_map_forwardable(zone_map_survives_cast(source_type, target_type)),
+          _flat_json_to_json(flat_json_source && target_type.type == TYPE_JSON &&
+                             flat_json::JSON_MERGE_FUNC.contains(source_type.type)),
+          _source_type(source_type.type) {
+>>>>>>> 126fb1c3613... [Enhancement][RB-345] Rebuild flat JSON sub-columns as JSON instead of casting them (#70427)
     auto slot_id = SlotId{0};
     auto column = ColumnHelper::create_column(source_type, nullable_source);
     auto slot_desc = SlotDescriptor(slot_id, "", source_type);
     auto column_ref = _obj_pool->add(new ColumnRef(&slot_desc));
     CHECK(column != nullptr) << "source type=" << source_type;
     _source_chunk.append_column(std::move(column), slot_id);
+    if (_flat_json_to_json) {
+        return;
+    }
     _cast_expr = VectorizedCastExprFactory::from_type(source_type, target_type, column_ref, _obj_pool.get(), false);
     CHECK(_cast_expr != nullptr) << "Fail to create cast expr for source type=" << source_type
                                  << " target type=" << target_type;
@@ -42,8 +54,13 @@ CastColumnIterator::CastColumnIterator(std::unique_ptr<ColumnIterator> source_it
 CastColumnIterator::~CastColumnIterator() = default;
 
 Status CastColumnIterator::do_cast(Column* target) {
-    ASSIGN_OR_RETURN(auto cast_result, _cast_expr->evaluate_checked(nullptr, &_source_chunk));
-    cast_result = ColumnHelper::unfold_const_column(_cast_expr->type(), _source_chunk.num_rows(), cast_result);
+    ColumnPtr cast_result;
+    if (_flat_json_to_json) {
+        cast_result = flat_json::flat_column_to_json(_source_chunk.get_column_by_index(0), _source_type);
+    } else {
+        ASSIGN_OR_RETURN(cast_result, _cast_expr->evaluate_checked(nullptr, &_source_chunk));
+        cast_result = ColumnHelper::unfold_const_column(_cast_expr->type(), _source_chunk.num_rows(), cast_result);
+    }
     if ((target->is_nullable() == cast_result->is_nullable()) && (target->size() == 0)) {
         target->swap_column(*(cast_result->as_mutable_raw_ptr()));
     } else if (!target->is_nullable() && cast_result->is_nullable()) {
