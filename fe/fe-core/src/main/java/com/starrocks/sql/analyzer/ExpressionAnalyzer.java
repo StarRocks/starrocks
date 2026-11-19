@@ -46,6 +46,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
@@ -448,6 +449,28 @@ public class ExpressionAnalyzer {
         public Visitor(AnalyzeState analyzeState, ConnectContext session) {
             this.analyzeState = analyzeState;
             this.session = session;
+        }
+
+        @Override
+        public Void visit(ParseNode node, Scope scope) {
+            node.accept(this, scope);
+            if (node instanceof Expr expression) {
+                checkNestedGeoType(expression.getType(), expression);
+                if (expression instanceof FunctionCallExpr call && call.getFn() != null) {
+                    // The final argument type also covers varargs.
+                    for (Type argumentType : call.getFn().getArgs()) {
+                        checkNestedGeoType(argumentType, expression);
+                    }
+                }
+            }
+            return null;
+        }
+
+        private void checkNestedGeoType(Type type, Expr expression) {
+            if (type.hasNestedGeoType()) {
+                throw new SemanticException("Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT: "
+                        + type.toSql() + " in " + ExprToSql.toSql(expression), expression.getPos());
+            }
         }
 
         @Override
@@ -1260,10 +1283,6 @@ public class ExpressionAnalyzer {
         }
 
         private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {
-            if ((FunctionSet.ROW.equals(fnName) || FunctionSet.NAMED_STRUCT.equals(fnName)) &&
-                    node.getChildren().stream().anyMatch(child -> child.getType().isGeoType())) {
-                throw new SemanticException(fnName + " does not support native GEO arguments", node.getPos());
-            }
             switch (fnName) {
                 case FunctionSet.AES_ENCRYPT:
                 case FunctionSet.AES_DECRYPT:

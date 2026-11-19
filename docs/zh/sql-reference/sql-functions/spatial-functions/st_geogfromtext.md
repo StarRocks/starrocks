@@ -25,6 +25,8 @@ GEOGRAPHY ST_GeogFromText(VARCHAR wkt, INT srid)
 
 返回 `GEOGRAPHY` 值。如果任一参数为 `NULL`、WKT 无效、坐标超出支持范围或 `srid` 不是 `4326`，则返回 `NULL`。
 
+原生 `GEOGRAPHY` 和 `GEOMETRY` 值不能嵌套在 `ARRAY`、`MAP` 或 `STRUCT` 中。即使外层表达式返回标量，或地理空间值为 `NULL`，分析阶段也会拒绝这些类型。
+
 ## 示例
 
 ```SQL
