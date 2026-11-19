@@ -254,6 +254,25 @@ TEST(VariantRowValueTest, ToJsonZonedTimestampOutsideNanosecondRange) {
     EXPECT_EQ(R"("1500-01-01 00:00:00+00:00")", to_json(-14831769600LL * 1000000));
 }
 
+TEST(VariantRowValueTest, ToJsonMicrosecondTimestampsBeforeEpoch) {
+    const auto to_json = [](VariantType type, int64_t micros) {
+        std::string bytes(1 + sizeof(int64_t), '\0');
+        bytes[0] = static_cast<char>(static_cast<uint8_t>(type) << 2);
+        micros = arrow::bit_util::ToLittleEndian(micros);
+        memcpy(bytes.data() + 1, &micros, sizeof(micros));
+        VariantRowValue row(VariantMetadata::kEmptyMetadata, bytes);
+        auto json = row.to_json(cctz::utc_time_zone());
+        EXPECT_TRUE(json.ok()) << json.status();
+        return json.value_or("");
+    };
+    // A fraction of a second before 1970 must not be split into a negative microsecond part.
+    EXPECT_EQ(R"("1969-12-31 23:59:59.999999+00:00")", to_json(VariantType::TIMESTAMP_TZ, -1));
+    EXPECT_EQ(R"("1969-12-31 23:59:59.999999")", to_json(VariantType::TIMESTAMP_NTZ, -1));
+    EXPECT_EQ(R"("1969-12-31 23:59:58.5+00:00")", to_json(VariantType::TIMESTAMP_TZ, -1500000));
+    EXPECT_EQ(R"("1969-12-31 23:59:59")", to_json(VariantType::TIMESTAMP_NTZ, -1000000));
+    EXPECT_EQ(R"("1970-01-01 00:00:00.000001+00:00")", to_json(VariantType::TIMESTAMP_TZ, 1));
+}
+
 TEST(VariantRowValueTest, ToJsonNanosecondTimestamps) {
     const auto primitive = [](VariantType type, int64_t nanos) {
         std::string bytes(1 + sizeof(int64_t), '\0');
