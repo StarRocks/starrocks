@@ -835,7 +835,7 @@ public class ExplicitTxnTest {
             @Mock
             public VisibleStateWaiter retryCommitOnRateLimitExceeded(Invocation invocation,
                     Database database, long txnId, List<TabletCommitInfo> commitInfos, List<TabletFailInfo> failInfos,
-                    TxnCommitAttachment attachment, long timeoutMs) throws StarRocksException, LockTimeoutException {
+                    TxnCommitAttachment attachment, long timeoutMs) throws StarRocksException {
                 VisibleStateWaiter waiter = invocation.proceed(database, txnId, commitInfos, failInfos, attachment, timeoutMs);
                 // Publish synchronously because this fixture does not run the publish-version daemon.
                 GlobalTransactionMgr txnMgr = invocation.getInvokedInstance();
