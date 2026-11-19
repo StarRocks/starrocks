@@ -23,11 +23,8 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-<<<<<<< HEAD
-#include "testutil/parallel_test.h"
-=======
 #include "testutil/column_test_helper.h"
->>>>>>> db72de7 ([Enhancement] Support appending BinaryColumn into LargeBinaryColumn (#70967))
+#include "testutil/parallel_test.h"
 
 namespace starrocks {
 
