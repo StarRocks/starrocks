@@ -137,7 +137,8 @@ inline void bench_atomic_max(std::atomic_int64_t* target, int64_t value) {
 // - std::unordered_map<..., std::shared_ptr<...>> for _stats_items and _exec_stats_items
 // - swap() in merge() that destroys map buckets and shared_ptrs on every aggregate()
 // - compare_exchange_strong(x, 0) scalar draining
-class LegacyQueryStatistics {
+template <typename LockType = LegacySpinLock>
+class LegacyQueryStatisticsTpl {
 public:
     void merge_pb(const PQueryStatistics& statistics) {
         if (statistics.has_scan_rows()) scan_rows += statistics.scan_rows();
@@ -151,7 +152,7 @@ public:
         }
         if (statistics.has_transmitted_bytes()) transmitted_bytes += statistics.transmitted_bytes();
         {
-            std::lock_guard<LegacySpinLock> l(_lock);
+            std::lock_guard<LockType> l(_lock);
             for (int i = 0; i < statistics.stats_items_size(); ++i) {
                 const auto& item = statistics.stats_items(i);
                 update_stats_item(item.table_id(), item.scan_rows(), item.scan_bytes());
@@ -164,7 +165,7 @@ public:
         }
     }
 
-    void merge(int sender_id, LegacyQueryStatistics& other) {
+    void merge(int sender_id, LegacyQueryStatisticsTpl& other) {
         (void)sender_id;
         int64_t rows = other.scan_rows.load();
         if (other.scan_rows.compare_exchange_strong(rows, 0)) this->scan_rows += rows;
@@ -186,11 +187,11 @@ public:
         std::unordered_map<int64_t, std::shared_ptr<ScanStats>> other_stats_item;
         std::unordered_map<uint32_t, std::shared_ptr<NodeExecStats>> other_exec_stats_items;
         {
-            std::lock_guard<LegacySpinLock> l(other._lock);
+            std::lock_guard<LockType> l(other._lock);
             other_stats_item.swap(other._stats_items);
             other_exec_stats_items.swap(other._exec_stats_items);
         }
-        std::lock_guard<LegacySpinLock> l(_lock);
+        std::lock_guard<LockType> l(_lock);
         for (const auto& [table_id, stats_item] : other_stats_item) {
             update_stats_item(table_id, stats_item->scan_rows, stats_item->scan_bytes);
         }
@@ -254,17 +255,20 @@ private:
     std::atomic_int64_t read_local_cnt{0};
     std::atomic_int64_t read_remote_cnt{0};
     std::atomic_int64_t transmitted_bytes{0};
-    LegacySpinLock _lock;
+    LockType _lock;
     std::unordered_map<int64_t, std::shared_ptr<ScanStats>> _stats_items;
     std::unordered_map<uint32_t, std::shared_ptr<NodeExecStats>> _exec_stats_items;
 };
 
-// Candidate 1: Production dd5c030 baseline (std::map + outer LegacySpinLock held across lookup & merge_pb)
-class LegacyMapSpinLockRecvr {
-public:
-    using StatsType = LegacyQueryStatistics;
+using LegacyQueryStatistics = LegacyQueryStatisticsTpl<LegacySpinLock>;
 
-    ~LegacyMapSpinLockRecvr() {
+// Candidate 1: Production dd5c030 baseline (std::map + outer SpinLock held across lookup & merge_pb)
+template <typename LockType>
+class LegacyMapRecvrTpl {
+public:
+    using StatsType = LegacyQueryStatisticsTpl<LockType>;
+
+    ~LegacyMapRecvrTpl() {
         for (auto& pair : _query_statistics) {
             delete pair.second;
         }
@@ -272,11 +276,11 @@ public:
     }
 
     void insert(const PQueryStatistics& statistics, int sender_id) {
-        std::lock_guard<LegacySpinLock> l(_lock);
-        LegacyQueryStatistics* qs = nullptr;
+        std::lock_guard<LockType> l(_lock);
+        StatsType* qs = nullptr;
         auto iter = _query_statistics.find(sender_id);
         if (iter == _query_statistics.end()) {
-            qs = new LegacyQueryStatistics;
+            qs = new StatsType;
             _query_statistics[sender_id] = qs;
         } else {
             qs = iter->second;
@@ -284,49 +288,56 @@ public:
         qs->merge_pb(statistics);
     }
 
-    void aggregate(LegacyQueryStatistics* statistics) {
-        std::lock_guard<LegacySpinLock> l(_lock);
+    void aggregate(StatsType* statistics) {
+        std::lock_guard<LockType> l(_lock);
         for (auto& pair : _query_statistics) {
             statistics->merge(pair.first, *pair.second);
         }
     }
 
 private:
-    std::map<int, LegacyQueryStatistics*> _query_statistics;
-    LegacySpinLock _lock;
+    std::map<int, StatsType*> _query_statistics;
+    LockType _lock;
 };
 
-// Candidate 2: PR #73796 baseline (phmap::parallel_flat_hash_map<..., 4, std::shared_mutex>)
-class PhmapSharedMutexRecvr {
-public:
-    using StatsType = LegacyQueryStatistics;
+using LegacyMapSpinLockRecvr = LegacyMapRecvrTpl<LegacySpinLock>;
+using LegacyMapBackoffLockRecvr = LegacyMapRecvrTpl<BackoffSpinLock>;
 
-    ~PhmapSharedMutexRecvr() {
+// Candidate 2: PR #73796 baseline (phmap::parallel_flat_hash_map<..., 4, std::shared_mutex>)
+template <typename LockType>
+class PhmapSharedMutexRecvrTpl {
+public:
+    using StatsType = LegacyQueryStatisticsTpl<LockType>;
+
+    ~PhmapSharedMutexRecvrTpl() {
         _query_statistics.for_each_m([](auto& pair) { delete pair.second; });
         _query_statistics.clear();
     }
 
     void insert(const PQueryStatistics& statistics, int sender_id) {
-        LegacyQueryStatistics* qs = nullptr;
+        StatsType* qs = nullptr;
         _query_statistics.lazy_emplace_l(
-                sender_id, [&](LegacyQueryStatistics* const& existing) { qs = existing; },
+                sender_id, [&](StatsType* const& existing) { qs = existing; },
                 [&](const auto& ctor) {
-                    qs = new LegacyQueryStatistics;
+                    qs = new StatsType;
                     ctor(sender_id, qs);
                 });
         qs->merge_pb(statistics);
     }
 
-    void aggregate(LegacyQueryStatistics* statistics) {
+    void aggregate(StatsType* statistics) {
         _query_statistics.for_each([&statistics](const auto& pair) { statistics->merge(pair.first, *pair.second); });
     }
 
 private:
-    phmap::parallel_flat_hash_map<int, LegacyQueryStatistics*, phmap::Hash<int>, phmap::EqualTo<int>,
-                                  phmap::Allocator<phmap::Pair<const int, LegacyQueryStatistics*>>, 4,
+    phmap::parallel_flat_hash_map<int, StatsType*, phmap::Hash<int>, phmap::EqualTo<int>,
+                                  phmap::Allocator<phmap::Pair<const int, StatsType*>>, 4,
                                   std::shared_mutex>
             _query_statistics;
 };
+
+using PhmapSharedMutexRecvr = PhmapSharedMutexRecvrTpl<LegacySpinLock>;
+using PhmapSharedMutexBackoffLockRecvr = PhmapSharedMutexRecvrTpl<BackoffSpinLock>;
 
 // Parameterized FastQueryStatistics (inline phmap::flat_hash_map, in-place draining, .exchange(0))
 template <typename LockType>
@@ -893,7 +904,9 @@ void ApplyEosBurstScales(benchmark::Benchmark* b) {
 }
 
 BENCHMARK_TEMPLATE(BM_InsertOnly, LegacyMapSpinLockRecvr)->Apply(ApplyInsertScales);
+BENCHMARK_TEMPLATE(BM_InsertOnly, LegacyMapBackoffLockRecvr)->Apply(ApplyInsertScales);
 BENCHMARK_TEMPLATE(BM_InsertOnly, PhmapSharedMutexRecvr)->Apply(ApplyInsertScales);
+BENCHMARK_TEMPLATE(BM_InsertOnly, PhmapSharedMutexBackoffLockRecvr)->Apply(ApplyInsertScales);
 BENCHMARK_TEMPLATE(BM_InsertOnly, SingleConsolidatedRecvr)->Apply(ApplyInsertScales);
 BENCHMARK_TEMPLATE(BM_InsertOnly, Striped8LegacyLockRecvr)->Apply(ApplyInsertScales);
 BENCHMARK_TEMPLATE(BM_InsertOnly, Striped16LegacyLockRecvr)->Apply(ApplyInsertScales);
@@ -902,7 +915,9 @@ BENCHMARK_TEMPLATE(BM_InsertOnly, Striped32BackoffLockRecvr)->Apply(ApplyInsertS
 BENCHMARK_TEMPLATE(BM_InsertOnly, ProductionQueryStatisticsRecvrAdapter)->Apply(ApplyInsertScales);
 
 BENCHMARK_TEMPLATE(BM_MixedInsertAndAggregate, LegacyMapSpinLockRecvr)->Apply(ApplyMixedScales);
+BENCHMARK_TEMPLATE(BM_MixedInsertAndAggregate, LegacyMapBackoffLockRecvr)->Apply(ApplyMixedScales);
 BENCHMARK_TEMPLATE(BM_MixedInsertAndAggregate, PhmapSharedMutexRecvr)->Apply(ApplyMixedScales);
+BENCHMARK_TEMPLATE(BM_MixedInsertAndAggregate, PhmapSharedMutexBackoffLockRecvr)->Apply(ApplyMixedScales);
 BENCHMARK_TEMPLATE(BM_MixedInsertAndAggregate, SingleConsolidatedRecvr)->Apply(ApplyMixedScales);
 BENCHMARK_TEMPLATE(BM_MixedInsertAndAggregate, Striped8LegacyLockRecvr)->Apply(ApplyMixedScales);
 BENCHMARK_TEMPLATE(BM_MixedInsertAndAggregate, Striped16LegacyLockRecvr)->Apply(ApplyMixedScales);
@@ -911,7 +926,9 @@ BENCHMARK_TEMPLATE(BM_MixedInsertAndAggregate, Striped32BackoffLockRecvr)->Apply
 BENCHMARK_TEMPLATE(BM_MixedInsertAndAggregate, ProductionQueryStatisticsRecvrAdapter)->Apply(ApplyMixedScales);
 
 BENCHMARK_TEMPLATE(BM_EosAggregateBurst, LegacyMapSpinLockRecvr)->Apply(ApplyEosBurstScales);
+BENCHMARK_TEMPLATE(BM_EosAggregateBurst, LegacyMapBackoffLockRecvr)->Apply(ApplyEosBurstScales);
 BENCHMARK_TEMPLATE(BM_EosAggregateBurst, PhmapSharedMutexRecvr)->Apply(ApplyEosBurstScales);
+BENCHMARK_TEMPLATE(BM_EosAggregateBurst, PhmapSharedMutexBackoffLockRecvr)->Apply(ApplyEosBurstScales);
 BENCHMARK_TEMPLATE(BM_EosAggregateBurst, SingleConsolidatedRecvr)->Apply(ApplyEosBurstScales);
 BENCHMARK_TEMPLATE(BM_EosAggregateBurst, Striped8LegacyLockRecvr)->Apply(ApplyEosBurstScales);
 BENCHMARK_TEMPLATE(BM_EosAggregateBurst, Striped16LegacyLockRecvr)->Apply(ApplyEosBurstScales);
