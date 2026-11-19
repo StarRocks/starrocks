@@ -262,10 +262,12 @@ std::shared_ptr<const TabletSchema> Metacache::lookup_tablet_schema(const Metaca
     }
 }
 
-std::shared_ptr<Segment> Metacache::lookup_segment(const MetacacheKey& key) {
+std::shared_ptr<Segment> Metacache::lookup_segment(const MetacacheKey& key, bool count_miss) {
     auto handle = _segment_metadata_cache->lookup(CacheKey(key.view()));
     if (handle == nullptr) {
-        g_segment_cache_miss << 1;
+        if (count_miss) {
+            g_segment_cache_miss << 1;
+        }
         return nullptr;
     }
     DeferOp defer([this, handle]() { _segment_metadata_cache->release(handle); });
