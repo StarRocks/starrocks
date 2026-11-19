@@ -2033,4 +2033,35 @@ public class SubqueryTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "ASSERT NUMBER OF ROWS");
     }
+
+    @Test
+    public void testAssertRowsRelationOutputIsNullable() throws Exception {
+        // ASSERT_ROWS fills a NULL row when its input is empty, so a NOT NULL column read through it is nullable.
+        // The assert here sits on a gather exchange over an aggregation (SELECT DISTINCT ... LIMIT 1).
+        String sql = "select max(t1c) from ASSERT_ROWS(select distinct t1c from test_all_type_not_null limit 1) a " +
+                "cross join (values (1), (2)) b(x)";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ASSERT NUMBER OF ROWS");
+        assertContains(plan, "args: INT; result: INT; args nullable: true; result nullable: true");
+        assertNotContains(plan, "args nullable: false");
+
+        sql = "select max(t1c) from ASSERT_ROWS(select t1c from test_all_type_not_null limit 1) a " +
+                "cross join (values (1), (2)) b(x)";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "args nullable: false");
+    }
+
+    @Test
+    public void testAssertRowsRelationDoesNotFoldConstant() throws Exception {
+        // A constant read through ASSERT_ROWS is NULL on empty input, so neither the projection nor a predicate
+        // above the assert may treat it as the constant.
+        String sql = "select c, c is null from ASSERT_ROWS(" +
+                "select 1 as c from test_all_type_not_null where t1a = \"x\" limit 1) a";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:Project\n" +
+                "  |  <slot 12> : 11: expr\n" +
+                "  |  <slot 13> : 11: expr IS NULL\n" +
+                "  |  \n" +
+                "  3:ASSERT NUMBER OF ROWS");
+    }
 }
