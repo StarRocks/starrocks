@@ -936,6 +936,7 @@
         "lake_replication_parallel_copy_min_file_count",
         "lake_replication_enable_light_schema_change",
         "enable_lake_segment_metadata_filter",
+        "lake_scan_warm_index",
         "enable_lake_prepared_split_pre_refinement",
         "lake_scan_parallel_segment_open",
         "lake_flush_thread_num_per_store",
