@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.ast.CTERelation;
@@ -134,6 +135,7 @@ import io.trino.sql.tree.CurrentSchema;
 import io.trino.sql.tree.CurrentTime;
 import io.trino.sql.tree.CurrentUser;
 import io.trino.sql.tree.DataType;
+import io.trino.sql.tree.DataTypeParameter;
 import io.trino.sql.tree.DateTimeDataType;
 import io.trino.sql.tree.DereferenceExpression;
 import io.trino.sql.tree.DoubleLiteral;
@@ -187,6 +189,7 @@ import io.trino.sql.tree.Rollup;
 import io.trino.sql.tree.Row;
 import io.trino.sql.tree.RowDataType;
 import io.trino.sql.tree.SearchedCaseExpression;
+import io.trino.sql.tree.SelectItem;
 import io.trino.sql.tree.SetOperation;
 import io.trino.sql.tree.SimpleCaseExpression;
 import io.trino.sql.tree.SimpleGroupBy;
@@ -219,12 +222,17 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.ARRAY_AGG_DISTINCT;
@@ -245,10 +253,88 @@ import static com.starrocks.type.FloatType.FLOAT;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
-    private final long sqlMode;
+    private static final String WITH_TIMEZONE = "with_timezone";
+    private static final String AT_TIMEZONE = "at_timezone";
+    // A date or timestamp string in the plain form Trino and StarRocks both take, with its fractional seconds
+    private static final Pattern PLAIN_TIMESTAMP = Pattern.compile(
+            "\\s*(\\d{4})-\\d{1,2}-\\d{1,2}(?:\\s+\\d{1,2}:\\d{1,2}(?::\\d{1,2}(?:\\.(\\d+))?)?)?\\s*");
+    private static final Set<String> MILLISECOND_PARSE_FUNCTIONS = Set.of("date_parse", "parse_datetime",
+            "from_iso8601_timestamp");
+    // Trino functions that read only the wall-clock fields of their first argument and return a value without a zone
+    private static final Set<String> WALL_CLOCK_FUNCTIONS = Set.of("date", "year", "quarter", "month", "week",
+            "week_of_year", "day", "day_of_month", "day_of_week", "dow", "day_of_year", "doy", "year_of_week", "yow",
+            "hour", "minute", "second", "last_day_of_month");
 
-    public AstBuilder(long sqlMode) {
+    private final long sqlMode;
+    // Expressions that their consumer reads only as a wall-clock time; Trino expressions compare by value, so by identity
+    private final Set<Expression> wallClockArguments = Collections.newSetFromMap(new IdentityHashMap<>());
+    // with_timezone values whose consumer formats them, which in Trino rounds the instant to milliseconds; by identity
+    private final Set<Expression> formattedArguments = Collections.newSetFromMap(new IdentityHashMap<>());
+    // Whether the statement has a date_format or format_datetime call that may print other than Trino. Its argument
+    // can be a with_timezone value through a cast, a derived table or a CTE, which isn't tracked, so every
+    // with_timezone in such a statement is rejected
+    private final boolean hasFormatUnlikeTrino;
+    // Expressions that their consumer reads by value or that the statement returns: comparison, BETWEEN, IN and
+    // IS NULL operands, sort and grouping keys, and the outermost query's columns; by identity
+    private final Set<Expression> valueArguments = Collections.newSetFromMap(new IdentityHashMap<>());
+    // Whether the statement calls with_timezone. Then every TIMESTAMP(p) cast in it rounds as in Trino, because a
+    // derived table or a CTE can hand the cast's value to with_timezone or compare it with a with_timezone value
+    private final boolean hasWithTimezone;
+    // Whether the statement calls date_parse, which returns TIMESTAMP(3) in Trino and drops the digits that StarRocks
+    // keeps. Rounding a with_timezone value of it would round those digits, and that isn't tracked through
+    // Whether the statement calls a parse that returns TIMESTAMP(3) in Trino and drops the digits that StarRocks keeps
+    // (date_parse, parse_datetime, from_iso8601_timestamp). Rounding a with_timezone value of it would round those
+    // digits, and that isn't tracked through casts or projections, so every with_timezone in such a statement is
+    // rejected
+    private final boolean hasMillisecondParse;
+
+    public AstBuilder(long sqlMode, Node statement) {
         this.sqlMode = sqlMode;
+        this.hasFormatUnlikeTrino = containsFormatCallUnlikeTrino(statement);
+        this.hasWithTimezone = containsCall(statement, Set.of(WITH_TIMEZONE));
+        this.hasMillisecondParse = containsCall(statement, MILLISECOND_PARSE_FUNCTIONS);
+        addValueArguments(statement);
+        addOutputColumns(statement);
+    }
+
+    private void addValueArguments(Node node) {
+        if (node instanceof ComparisonExpression) {
+            valueArguments.add(((ComparisonExpression) node).getLeft());
+            valueArguments.add(((ComparisonExpression) node).getRight());
+        } else if (node instanceof BetweenPredicate) {
+            valueArguments.addAll(List.of(((BetweenPredicate) node).getValue(), ((BetweenPredicate) node).getMin(),
+                    ((BetweenPredicate) node).getMax()));
+        } else if (node instanceof InPredicate) {
+            valueArguments.add(((InPredicate) node).getValue());
+            if (((InPredicate) node).getValueList() instanceof InListExpression) {
+                valueArguments.addAll(((InListExpression) ((InPredicate) node).getValueList()).getValues());
+            }
+        } else if (node instanceof IsNullPredicate) {
+            valueArguments.add(((IsNullPredicate) node).getValue());
+        } else if (node instanceof IsNotNullPredicate) {
+            valueArguments.add(((IsNotNullPredicate) node).getValue());
+        } else if (node instanceof SortItem) {
+            valueArguments.add(((SortItem) node).getSortKey());
+        } else if (node instanceof SimpleGroupBy) {
+            valueArguments.addAll(((SimpleGroupBy) node).getExpressions());
+        }
+        node.getChildren().forEach(this::addValueArguments);
+    }
+
+    private void addOutputColumns(Node node) {
+        if (node instanceof Explain) {
+            addOutputColumns(((Explain) node).getStatement());
+        } else if (node instanceof Query) {
+            addOutputColumns(((Query) node).getQueryBody());
+        } else if (node instanceof SetOperation) {
+            ((SetOperation) node).getRelations().forEach(this::addOutputColumns);
+        } else if (node instanceof QuerySpecification) {
+            for (SelectItem item : ((QuerySpecification) node).getSelect().getSelectItems()) {
+                if (item instanceof SingleColumn) {
+                    valueArguments.add(((SingleColumn) item).getExpression());
+                }
+            }
+        }
     }
 
     private static final ImmutableMap<Join.Type, JoinOperator> JOIN_TYPE_MAP =
@@ -799,7 +885,24 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitFunctionCall(FunctionCall node, ParseTreeContext context) {
+        if (isAtTimezoneOfWithTimezone(node)) {
+            return convertWithTimezone(node, (FunctionCall) node.getArguments().get(0), node.getArguments().get(1),
+                    context);
+        }
+        if (isWithTimezone(node)) {
+            return convertWithTimezone(node, node, null, context);
+        }
+        if (node.getName().toString().equalsIgnoreCase(WITH_TIMEZONE)) {
+            throw unsupportedWithTimezone(node);
+        }
+        addWallClockArguments(node);
         List<Expr> arguments = visit(node.getArguments(), context, Expr.class);
+        // A format rounds a TIMESTAMP cast of a with_timezone value to milliseconds too
+        if (!node.getArguments().isEmpty() && node.getArguments().get(0) instanceof Cast
+                && formattedArguments.contains(node.getArguments().get(0))
+                && isWithTimezoneTimestamp(node.getArguments().get(0))) {
+            arguments.set(0, roundHalfUp(arguments.get(0), 3));
+        }
 
         Expr callExpr;
         String functionName = node.getName().toString();
@@ -845,6 +948,10 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             }
         } else {
             callExpr = new FunctionCallExpr(functionName, arguments);
+        }
+        if (functionName.equalsIgnoreCase("date_trunc") && node.getArguments().size() == 2
+                && wallClockArguments.contains(node.getArguments().get(1))) {
+            callExpr = resolveSkippedTruncation(callExpr, node.getArguments().get(1));
         }
         if (node.getWindow().isPresent()) {
             return visitWindow((FunctionCallExpr) callExpr, node.getWindow().get(), context);
@@ -1128,9 +1235,354 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitAtTimeZone(AtTimeZone node, ParseTreeContext context) {
+        if (isWithTimezone(node.getValue())) {
+            return convertWithTimezone(node, (FunctionCall) node.getValue(), node.getTimeZone(), context);
+        }
         Expr dt = (Expr) visit(node.getValue(), context);
         Expr tz = (Expr) visit(node.getTimeZone(), context);
         return new FunctionCallExpr("convert_tz", List.of(dt, new VariableExpr("time_zone"), tz));
+    }
+
+    /*
+     * StarRocks has no TIMESTAMP WITH TIME ZONE, so with_timezone is supported only where the result is exact without
+     * one: when a consumer reads the zoned value only as a wall-clock time (a CAST to TIMESTAMP or DATE, date(), field
+     * functions, EXTRACT, date_format or format_datetime without a zone pattern, or date_trunc directly under one of
+     * these). Then with_timezone(ts, z1) AT TIME ZONE z2 and at_timezone(with_timezone(ts, z1), z2) are
+     * convert_tz(ts, z1, z2), and with_timezone(ts, z1) itself is ts.
+     *
+     * Both are exact only when attaching z1 is: z1 has a fixed offset, or ts is a TIMESTAMP literal that z1 neither
+     * skips nor repeats, so its offset is resolved here. Trino and convert_tz resolve a skipped or repeated time in z1
+     * differently, which is why a column with a DST zone is rejected. Converting the instant to z2 is exact in any
+     * zone. Zones must be literals spelled as the BE resolves them: UTC, +HH:MM or a region ID. Every other use is
+     * rejected with an UnsupportedException, which skips the StarRocks-dialect fallback.
+     */
+    private Expr convertWithTimezone(Expression node, FunctionCall withTimezone, Expression toZone,
+                                     ParseTreeContext context) {
+        Expression timestamp = withTimezone.getArguments().get(0);
+        Optional<ZoneId> fromZone = backendZone(withTimezone.getArguments().get(1));
+        Optional<ZoneId> to = toZone == null ? fromZone : backendZone(toZone);
+        Optional<String> from = fromZone.flatMap(zone -> attachedOffset(timestamp, zone));
+        if (hasFormatUnlikeTrino || hasMillisecondParse || !isPlainSource(timestamp)
+                || !wallClockArguments.contains(node) || from.isEmpty() || to.isEmpty()) {
+            throw unsupportedWithTimezone(node);
+        }
+        // Trino promotes a DATE argument to TIMESTAMP. A format rounds the instant to milliseconds, which is rounding ts
+        // in the fixed offset attached to it, before the value is read in its zone
+        boolean formatted = formattedArguments.contains(node);
+        Expr value = roundHalfUp(new CastExpr(new TypeDef(DATETIME), (Expr) visit(timestamp, context)),
+                formatted ? 3 : 6);
+        if (toZone == null && (fromZone.get().getRules().isFixedOffset() || !formatted)) {
+            return value;
+        }
+        // The rounding can cross a DST transition of the zone the value is read in
+        return new FunctionCallExpr("convert_tz", List.of(value,
+                new com.starrocks.sql.ast.expression.StringLiteral(from.get()),
+                new com.starrocks.sql.ast.expression.StringLiteral(to.get().getId())));
+    }
+
+    // A column, a plain TIMESTAMP or DATE literal, or a cast of one or of a plain string. Trino's with_timezone takes
+    // only a TIMESTAMP without a zone, which StarRocks has no type to check, and a function that computes the
+    // timestamp may differ between the dialects on its own (e.g. from_unixtime of a negative epoch is NULL in
+    // StarRocks), so any other source is rejected. A column isn't traced back through a derived table or a CTE: it
+    // carries whatever its expression gives in the Trino dialect, as it does for every other consumer
+    private static boolean isPlainSource(Expression expression) {
+        if (expression instanceof Cast) {
+            Expression operand = ((Cast) expression).getExpression();
+            if (isTimestampText(operand)) {
+                return isPlainTimestamp(timestampText(operand), 6);
+            }
+            // A column may hold text, whose digits past microseconds Trino rounds and StarRocks drops. Below
+            // microseconds rounding the dropped digits gives the same result, so only those casts take a column
+            return isPlainSource(operand) && (!isColumn(operand) || castsBelowMicroseconds((Cast) expression));
+        }
+        if (isTimestampText(expression)) {
+            return !(expression instanceof StringLiteral) && isPlainTimestamp(timestampText(expression), 6);
+        }
+        return isColumn(expression);
+    }
+
+    private static boolean isColumn(Expression expression) {
+        return expression instanceof Identifier || expression instanceof DereferenceExpression;
+    }
+
+    // A cast to DATE, TIMESTAMP or TIMESTAMP(0) to TIMESTAMP(5)
+    private static boolean castsBelowMicroseconds(Cast cast) {
+        if (!(cast.getType() instanceof DateTimeDataType)) {
+            return isWallClockType(cast.getType());
+        }
+        Optional<DataTypeParameter> precision = ((DateTimeDataType) cast.getType()).getPrecision();
+        return precision.isEmpty() || (precision.get() instanceof NumericParameter
+                && Integer.parseInt(((NumericParameter) precision.get()).getValue()) < 6);
+    }
+
+    private static RuntimeException unsupportedWithTimezone(Expression node) {
+        return unsupportedException(String.format("Trino parser on StarRocks does not support %s here: "
+                + "with_timezone is supported only as a plain call read as a wall-clock time (CAST to TIMESTAMP or "
+                + "DATE, date and field functions, EXTRACT, date_format or format_datetime without a zone pattern, or "
+                + "date_trunc under one of these), with literal zones (UTC, +HH:MM or a region ID), and with a "
+                + "fixed-offset zone or a TIMESTAMP literal that isn't in a DST transition of that zone", node));
+    }
+
+    // The zone to attach to timestamp as convert_tz takes it, if attaching it is exact: a fixed offset, or the single
+    // offset of a TIMESTAMP literal in zone
+    private static Optional<String> attachedOffset(Expression timestamp, ZoneId zone) {
+        if (!(timestamp instanceof TimestampLiteral)) {
+            return zone.getRules().isFixedOffset() ? Optional.of(zone.getId()) : Optional.empty();
+        }
+        String value = ((TimestampLiteral) timestamp).getValue();
+        String formattedValue = value.length() <= 10 ? value + " 00:00:00" : value;
+        try {
+            // with_timezone takes a timestamp without a zone
+            if (TimeUtils.parseTimeZoneFromString(formattedValue) != null) {
+                return Optional.empty();
+            }
+            LocalDateTime dateTime = DateUtils.parseStrictDateTime(TimeUtils.parseDateTimeFromString(formattedValue));
+            List<ZoneOffset> offsets = zone.getRules().getValidOffsets(dateTime);
+            if (offsets.size() != 1 || !isBackendOffset(offsets.get(0))) {
+                return Optional.empty();
+            }
+            return Optional.of(offsets.get(0).equals(ZoneOffset.UTC) ? "UTC" : offsets.get(0).getId());
+        } catch (ParsingException | DateTimeException e) {
+            return Optional.empty();
+        }
+    }
+
+    // A literal zone in a spelling that Trino and the BE resolve to the same zone: UTC, +HH:MM within the offsets the
+    // BE takes, or a region ID as written. The returned ID is how the BE takes it
+    private static Optional<ZoneId> backendZone(Expression zone) {
+        if (!(zone instanceof StringLiteral)) {
+            return Optional.empty();
+        }
+        String id = ((StringLiteral) zone).getValue();
+        try {
+            if (id.equals("UTC")) {
+                return Optional.of(ZoneId.of(id));
+            }
+            if (id.matches("[+-]\\d{2}:\\d{2}")) {
+                ZoneOffset offset = ZoneOffset.of(id);
+                if (!isBackendOffset(offset)) {
+                    return Optional.empty();
+                }
+                return Optional.of(offset.getTotalSeconds() == 0 ? ZoneId.of("UTC") : offset);
+            }
+            if (id.contains("/") && ZoneId.getAvailableZoneIds().contains(id)) {
+                return Optional.of(ZoneId.of(id));
+            }
+        } catch (DateTimeException e) {
+            return Optional.empty();
+        }
+        return Optional.empty();
+    }
+
+    // convert_tz in the BE takes offsets in whole minutes from -12:59 to +14:59, and Trino up to +14:00
+    private static boolean isBackendOffset(ZoneOffset offset) {
+        int seconds = offset.getTotalSeconds();
+        return seconds % 60 == 0 && seconds >= -(12 * 3600 + 59 * 60) && seconds <= 14 * 3600;
+    }
+
+    // with_timezone(ts, zone) as a plain call; Trino rejects a window, FILTER, DISTINCT or ORDER BY on it
+    private static boolean isWithTimezone(Expression expression) {
+        return expression instanceof FunctionCall && isPlainCall((FunctionCall) expression, WITH_TIMEZONE);
+    }
+
+    // at_timezone(with_timezone(ts, from), to) as a plain call
+    private static boolean isAtTimezoneOfWithTimezone(FunctionCall call) {
+        return isPlainCall(call, AT_TIMEZONE) && isWithTimezone(call.getArguments().get(0));
+    }
+
+    private static boolean isPlainCall(FunctionCall call, String name) {
+        return call.getName().toString().equalsIgnoreCase(name) && call.getArguments().size() == 2
+                && call.getWindow().isEmpty() && call.getFilter().isEmpty() && !call.isDistinct()
+                && call.getOrderBy().isEmpty();
+    }
+
+    // Marks the arguments of node that it reads only as a wall-clock time. date_trunc keeps the zone in Trino, so it
+    // passes its consumer's reading on only to a with_timezone value it truncates directly
+    private void addWallClockArguments(FunctionCall node) {
+        String name = node.getName().toString().toLowerCase();
+        List<Expression> arguments = node.getArguments();
+        if (WALL_CLOCK_FUNCTIONS.contains(name) && arguments.size() == 1) {
+            wallClockArguments.add(arguments.get(0));
+        } else if ((name.equals("date_format") || name.equals("format_datetime")) && !isFormatCallUnlikeTrino(node)) {
+            wallClockArguments.add(arguments.get(0));
+            formattedArguments.add(arguments.get(0));
+        } else if (name.equals("date_trunc") && arguments.size() == 2 && wallClockArguments.contains(node)
+                && isTruncationExact(arguments.get(0), arguments.get(1))) {
+            wallClockArguments.add(arguments.get(1));
+        }
+    }
+
+    private static boolean containsCall(Node node, Set<String> names) {
+        if (node instanceof FunctionCall && names.contains(((FunctionCall) node).getName().toString().toLowerCase())) {
+            return true;
+        }
+        return node.getChildren().stream().anyMatch(child -> containsCall(child, names));
+    }
+
+    private static boolean containsFormatCallUnlikeTrino(Node node) {
+        if (node instanceof FunctionCall && isFormatCallUnlikeTrino((FunctionCall) node)) {
+            return true;
+        }
+        return node.getChildren().stream().anyMatch(AstBuilder::containsFormatCallUnlikeTrino);
+    }
+
+    // A date_format or format_datetime call whose format isn't a literal, or may not print what Trino prints
+    private static boolean isFormatCallUnlikeTrino(FunctionCall node) {
+        String name = node.getName().toString().toLowerCase();
+        if (!name.equals("date_format") && !name.equals("format_datetime")) {
+            return false;
+        }
+        List<Expression> arguments = node.getArguments();
+        return arguments.size() != 2 || !(arguments.get(1) instanceof StringLiteral)
+                || isFormatUnlikeTrino(name, ((StringLiteral) arguments.get(1)).getValue());
+    }
+
+    // Whether a date_format (MySQL-style) or format_datetime (Joda) format may not print what Trino prints. Only the
+    // directives and Joda fields that Trino and the BE format alike are supported, and the BE formatters return NULL
+    // when a field would reach the 127th byte of their output, so a format must fit in 126 bytes at its longest
+    private static boolean isFormatUnlikeTrino(String function, String format) {
+        OptionalInt length = function.equals("date_format") ? mysqlFormatMaxBytes(format) : jodaFormatMaxBytes(format);
+        return length.isEmpty() || length.getAsInt() > 126;
+    }
+
+    // The longest output of each MySQL-style directive that Trino's date_format and the BE format alike
+    private static final Map<Character, Integer> MYSQL_DIRECTIVE_BYTES = ImmutableMap.<Character, Integer>builder()
+            .put('Y', 4).put('y', 2).put('m', 2).put('c', 2).put('M', 9).put('b', 3).put('d', 2).put('e', 2)
+            .put('j', 3).put('W', 9).put('a', 3).put('H', 2).put('k', 2).put('h', 2).put('I', 2).put('l', 2)
+            .put('i', 2).put('s', 2).put('S', 2).put('f', 6).put('p', 2).put('r', 11).put('T', 8).put('%', 1)
+            .build();
+
+    // Without a supported directive, StarRocks may read the format as a Java-style mask (e.g. yyyy-MM-dd), which
+    // Trino prints as written; an unpaired trailing % is dropped by Trino and printed by the BE
+    private static OptionalInt mysqlFormatMaxBytes(String format) {
+        int bytes = 0;
+        boolean directive = false;
+        for (int i = 0; i < format.length(); i++) {
+            char c = format.charAt(i);
+            if (c != '%') {
+                bytes += utf8Bytes(c);
+                continue;
+            }
+            Integer width = i + 1 < format.length() ? MYSQL_DIRECTIVE_BYTES.get(format.charAt(i + 1)) : null;
+            if (width == null) {
+                return OptionalInt.empty();
+            }
+            bytes += width;
+            directive = true;
+            i++;
+        }
+        return directive && !format.startsWith("yyyy") ? OptionalInt.of(bytes) : OptionalInt.empty();
+    }
+
+    // UTF-8 bytes of a UTF-16 char; each half of a surrogate pair counts two of the pair's four bytes
+    private static int utf8Bytes(char c) {
+        return c < 0x80 ? 1 : (c < 0x800 || Character.isSurrogate(c) ? 2 : 3);
+    }
+
+    // Joda fields that the BE formats as Joda does, outside quotes: y, M, d, H, h, m, s, a, E and up to six S. The BE
+    // drops an escaped quote ('') that Joda prints
+    private static OptionalInt jodaFormatMaxBytes(String format) {
+        if (format.contains("''")) {
+            return OptionalInt.empty();
+        }
+        int bytes = 0;
+        boolean quoted = false;
+        for (int i = 0; i < format.length(); i++) {
+            char c = format.charAt(i);
+            if (c == '\'') {
+                quoted = !quoted;
+                continue;
+            }
+            if (quoted || !Character.isLetter(c)) {
+                bytes += utf8Bytes(c);
+                continue;
+            }
+            int run = 1;
+            while (i + 1 < format.length() && format.charAt(i + 1) == c) {
+                run++;
+                i++;
+            }
+            int width;
+            switch (c) {
+                case 'y':
+                    width = run == 2 ? 2 : Math.max(run, 4);
+                    break;
+                case 'M':
+                    width = run >= 4 ? 9 : (run == 3 ? 3 : Math.max(run, 2));
+                    break;
+                case 'E':
+                    width = run >= 4 ? 9 : 3;
+                    break;
+                case 'a':
+                    width = 2;
+                    break;
+                case 'd':
+                case 'H':
+                case 'h':
+                case 'm':
+                case 's':
+                    width = Math.max(run, 2);
+                    break;
+                case 'S':
+                    if (run > 6) {
+                        return OptionalInt.empty();
+                    }
+                    width = run;
+                    break;
+                default:
+                    return OptionalInt.empty();
+            }
+            bytes += width;
+        }
+        return OptionalInt.of(bytes);
+    }
+
+    // The zone whose wall-clock time a with_timezone value is: z2 of a conversion, or z1
+    private static Optional<ZoneId> resultZone(Expression expression) {
+        if (expression instanceof AtTimeZone && isWithTimezone(((AtTimeZone) expression).getValue())) {
+            return backendZone(((AtTimeZone) expression).getTimeZone());
+        }
+        if (isWithTimezone(expression)
+                || (expression instanceof FunctionCall && isAtTimezoneOfWithTimezone((FunctionCall) expression))) {
+            return backendZone(((FunctionCall) expression).getArguments().get(1));
+        }
+        return Optional.empty();
+    }
+
+    // Whether truncating a with_timezone value to its wall-clock unit matches Trino. Below a day, Trino truncates in
+    // the value's offset, which differs from the round trip below when the truncation lands in a gap of a zone whose
+    // DST shift isn't a whole hour (e.g. Australia/Lord_Howe), so those units need a fixed-offset zone
+    private static boolean isTruncationExact(Expression unit, Expression value) {
+        Optional<ZoneId> zone = resultZone(value);
+        if (zone.isEmpty() || !(unit instanceof StringLiteral)) {
+            return false;
+        }
+        return zone.get().getRules().isFixedOffset() || Set.of("day", "week", "month", "quarter", "year")
+                .contains(((StringLiteral) unit).getValue().toLowerCase());
+    }
+
+    // date_trunc of a with_timezone value truncates its wall-clock time, which can land on a time its zone skips (e.g.
+    // midnight on a DST change at 00:00). Trino moves such a result to the end of the gap; a round trip through the
+    // zone does the same in FE folding and the BE, and leaves every other time as it is
+    private Expr resolveSkippedTruncation(Expr truncated, Expression argument) {
+        ZoneId zoneId = resultZone(argument).orElseThrow();
+        if (zoneId.getRules().isFixedOffset()) {
+            return truncated;
+        }
+        Expr name = new com.starrocks.sql.ast.expression.StringLiteral(zoneId.getId());
+        Expr utc = new com.starrocks.sql.ast.expression.StringLiteral("UTC");
+        return new FunctionCallExpr("convert_tz", List.of(
+                new FunctionCallExpr("convert_tz", List.of(truncated, name, utc)), utc, name));
+    }
+
+    // TIMESTAMP without a time zone, or DATE: a cast to these keeps the wall-clock time and drops the zone
+    private static boolean isWallClockType(DataType dataType) {
+        if (dataType instanceof DateTimeDataType) {
+            DateTimeDataType dateTimeType = (DateTimeDataType) dataType;
+            return dateTimeType.getType() == DateTimeDataType.Type.TIMESTAMP && !dateTimeType.isWithTimeZone();
+        }
+        return dataType instanceof GenericDataType
+                && ((GenericDataType) dataType).getName().getValue().equalsIgnoreCase("date");
     }
 
     @Override
@@ -1141,6 +1593,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitExtract(Extract node, ParseTreeContext context) {
+        if (!node.getField().name().startsWith("TIMEZONE")) {
+            wallClockArguments.add(node.getExpression());
+        }
         String fieldString = node.getField().toString().toLowerCase();
         Expr expr = Trino2SRFunctionCallTransformer.convert(fieldString,
                 Lists.newArrayList((Expr) visit(node.getExpression(), context)));
@@ -1384,7 +1839,121 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitCast(Cast node, ParseTreeContext context) {
-        return new CastExpr(new TypeDef(getType(node.getType())), (Expr) visit(node.getExpression(), context));
+        if (isWallClockType(node.getType())) {
+            wallClockArguments.add(node.getExpression());
+        }
+        Expr cast = new CastExpr(new TypeDef(getType(node.getType())), (Expr) visit(node.getExpression(), context));
+        // A cast to TIMESTAMP(p) rounds the wall-clock time in the value's zone, even onto a time the zone skips.
+        // A cast of a TIMESTAMP cast to TIME or TIMESTAMP WITH TIME ZONE would need other rounding, so it is rejected
+        if (isWithTimezoneTimestamp(node.getExpression()) && node.getType() instanceof DateTimeDataType) {
+            if (!isWallClockType(node.getType())) {
+                throw unsupportedWithTimezone(node);
+            }
+            // Trino rounds the value again where a later cast or format reads it. That is only tracked within an
+            // expression, so a value with fractional seconds must be read here or returned by the statement, not
+            // passed through a derived table, a CTE or another function
+            int precision = castPrecision((DateTimeDataType) node.getType(), node);
+            if (precision > 0 && !wallClockArguments.contains(node) && !valueArguments.contains(node)) {
+                throw unsupportedWithTimezone(node);
+            }
+            return roundHalfUp(cast, precision);
+        }
+        // Trino rounds every cast to TIMESTAMP(p), where a DATETIME cast keeps the digits. A literal that already fits
+        // is left as it is, so that it stays a constant for partition pruning
+        if (hasWithTimezone && node.getType() instanceof DateTimeDataType && isWallClockType(node.getType())) {
+            int precision = castPrecision((DateTimeDataType) node.getType(), node);
+            // Trino rounds a literal's digits past microseconds, which StarRocks drops, and the dialects may read a
+            // literal in another form differently, so those are rejected
+            if (isTimestampText(node.getExpression()) && !isPlainTimestamp(timestampText(node.getExpression()), 6)) {
+                throw unsupportedWithTimezone(node);
+            }
+            // Other operands may be text with digits past microseconds too. Below microseconds rounding the dropped
+            // digits gives the same result, so a cast to TIMESTAMP(6) or above takes only a literal or NULL
+            if (precision >= 6 && !isTimestampText(node.getExpression())
+                    && !(node.getExpression() instanceof io.trino.sql.tree.NullLiteral)) {
+                throw unsupportedWithTimezone(node);
+            }
+            return fitsPrecision(node.getExpression(), precision) ? cast : roundHalfUp(cast, precision);
+        }
+        return cast;
+    }
+
+    // A NULL, a DATE literal, or a TIMESTAMP or string literal in the plain form with at most `precision` fractional
+    // digits. Any other literal is rounded, which is exact wherever Trino takes it
+    private static boolean fitsPrecision(Expression expression, int precision) {
+        if (expression instanceof io.trino.sql.tree.NullLiteral) {
+            return true;
+        }
+        return isTimestampText(expression) && isPlainTimestamp(timestampText(expression), precision);
+    }
+
+    // A TIMESTAMP, DATE or string literal
+    private static boolean isTimestampText(Expression expression) {
+        return expression instanceof TimestampLiteral || expression instanceof StringLiteral
+                || (expression instanceof GenericLiteral
+                && ((GenericLiteral) expression).getType().equalsIgnoreCase("date"));
+    }
+
+    private static String timestampText(Expression expression) {
+        if (expression instanceof TimestampLiteral) {
+            return ((TimestampLiteral) expression).getValue();
+        }
+        return expression instanceof StringLiteral ? ((StringLiteral) expression).getValue()
+                : ((GenericLiteral) expression).getValue();
+    }
+
+    // Whether text is a date or timestamp in the plain form with at most maxDigits fractional digits, from year 1
+    // on, where time_slice and date_trunc round it
+    private static boolean isPlainTimestamp(String text, int maxDigits) {
+        Matcher timestamp = PLAIN_TIMESTAMP.matcher(text);
+        return timestamp.matches() && Integer.parseInt(timestamp.group(1)) > 0
+                && (timestamp.group(2) == null || timestamp.group(2).length() <= maxDigits);
+    }
+
+    // A with_timezone value, or a cast of one to TIMESTAMP(p), which Trino rounds again in a cast to a lower precision
+    // and in a format
+    private static boolean isWithTimezoneTimestamp(Expression expression) {
+        if (expression instanceof Cast && ((Cast) expression).getType() instanceof DateTimeDataType
+                && isWallClockType(((Cast) expression).getType())) {
+            return isWithTimezoneTimestamp(((Cast) expression).getExpression());
+        }
+        return resultZone(expression).isPresent();
+    }
+
+    // A cast to TIMESTAMP(p) keeps p fractional digits, and TIMESTAMP is TIMESTAMP(3). Only the precisions that
+    // roundHalfUp handles, and those that keep every DATETIME digit, are supported
+    private int castPrecision(DateTimeDataType type, Cast node) {
+        int precision = 3;
+        if (type.getPrecision().isPresent() && type.getPrecision().get() instanceof NumericParameter) {
+            precision = Integer.parseInt(((NumericParameter) type.getPrecision().get()).getValue());
+        } else if (type.getPrecision().isPresent()) {
+            precision = -1;
+        }
+        if (precision != 0 && precision != 3 && precision < 6) {
+            throw unsupportedException(String.format("Trino parser on StarRocks does not support %s: with_timezone "
+                    + "is supported only in a CAST to TIMESTAMP, TIMESTAMP(0), TIMESTAMP(3) or TIMESTAMP(6) and above",
+                    node));
+        }
+        return precision;
+    }
+
+    // Trino rounds half up to `precision` fractional digits when casting a zoned value to TIMESTAMP(precision), and
+    // to milliseconds when formatting it; a DATETIME keeps microseconds. time_slice, unlike date_trunc, takes
+    // milliseconds in the FE analyzer
+    private static Expr roundHalfUp(Expr value, int precision) {
+        if (precision >= 6) {
+            return value;
+        }
+        Expr shifted = new FunctionCallExpr(FunctionSet.MICROSECONDS_ADD,
+                List.of(value, new IntLiteral(precision == 0 ? 500_000 : 500, IntegerType.INT)));
+        if (precision == 0) {
+            return new FunctionCallExpr("date_trunc",
+                    List.of(new com.starrocks.sql.ast.expression.StringLiteral("second"), shifted));
+        }
+        // The BE takes the interval of time_slice only as an INT
+        return new FunctionCallExpr(FunctionSet.TIME_SLICE, List.of(shifted, new IntLiteral(1, IntegerType.INT),
+                new com.starrocks.sql.ast.expression.StringLiteral("millisecond"),
+                new com.starrocks.sql.ast.expression.StringLiteral("floor")));
     }
 
     @Override
