@@ -146,6 +146,7 @@ private:
 class QueryStatisticsRecvr {
 public:
     static constexpr size_t kNumStripes = 16;
+    static_assert((kNumStripes & (kNumStripes - 1)) == 0, "kNumStripes must be a power of two");
 
     QueryStatisticsRecvr() = default;
     ~QueryStatisticsRecvr() = default;

@@ -31,8 +31,6 @@
 #include <benchmark/benchmark.h>
 
 #include "absl/container/inlined_vector.h"
-#include "base/concurrency/spinlock.h"
-#include "base/logging.h"
 #include "base/phmap/phmap.h"
 #include "gen_cpp/data.pb.h"
 #include "runtime/query_statistics.h"
@@ -571,26 +569,49 @@ template <typename Tag>
 struct PooledLatencyAggregator {
     std::mutex mu;
     std::vector<uint64_t> pooled_samples;
+    std::vector<uint64_t> pooled_insert_samples;
+    std::vector<uint64_t> pooled_agg_samples;
     int completed_threads{0};
 
-    void record_and_publish(benchmark::State& state, const std::vector<uint64_t>& samples) {
+    static double compute_percentile(const std::vector<uint64_t>& sorted, double q) {
+        const size_t idx = static_cast<size_t>(q * static_cast<double>(sorted.size() - 1));
+        return static_cast<double>(sorted[idx]);
+    }
+
+    void record_and_publish(benchmark::State& state, const std::vector<uint64_t>& samples,
+                            const std::vector<uint64_t>* insert_samples = nullptr,
+                            const std::vector<uint64_t>* agg_samples = nullptr) {
         std::lock_guard<std::mutex> lock(mu);
         if (completed_threads == 0) {
             pooled_samples.clear();
+            pooled_insert_samples.clear();
+            pooled_agg_samples.clear();
         }
         pooled_samples.insert(pooled_samples.end(), samples.begin(), samples.end());
+        if (insert_samples != nullptr) {
+            pooled_insert_samples.insert(pooled_insert_samples.end(), insert_samples->begin(), insert_samples->end());
+        }
+        if (agg_samples != nullptr) {
+            pooled_agg_samples.insert(pooled_agg_samples.end(), agg_samples->begin(), agg_samples->end());
+        }
         ++completed_threads;
         if (completed_threads == state.threads()) {
             completed_threads = 0;
             if (!pooled_samples.empty()) {
                 std::sort(pooled_samples.begin(), pooled_samples.end());
-                const auto percentile = [this](double q) -> double {
-                    const size_t idx = static_cast<size_t>(q * static_cast<double>(pooled_samples.size() - 1));
-                    return static_cast<double>(pooled_samples[idx]);
-                };
-                state.counters["p50_ns"] = benchmark::Counter(percentile(0.50));
-                state.counters["p99_ns"] = benchmark::Counter(percentile(0.99));
-                state.counters["p999_ns"] = benchmark::Counter(percentile(0.999));
+                state.counters["p50_ns"] = benchmark::Counter(compute_percentile(pooled_samples, 0.50));
+                state.counters["p99_ns"] = benchmark::Counter(compute_percentile(pooled_samples, 0.99));
+                state.counters["p999_ns"] = benchmark::Counter(compute_percentile(pooled_samples, 0.999));
+            }
+            if (!pooled_insert_samples.empty()) {
+                std::sort(pooled_insert_samples.begin(), pooled_insert_samples.end());
+                state.counters["insert_p50_ns"] = benchmark::Counter(compute_percentile(pooled_insert_samples, 0.50));
+                state.counters["insert_p99_ns"] = benchmark::Counter(compute_percentile(pooled_insert_samples, 0.99));
+            }
+            if (!pooled_agg_samples.empty()) {
+                std::sort(pooled_agg_samples.begin(), pooled_agg_samples.end());
+                state.counters["agg_p50_ns"] = benchmark::Counter(compute_percentile(pooled_agg_samples, 0.50));
+                state.counters["agg_p99_ns"] = benchmark::Counter(compute_percentile(pooled_agg_samples, 0.99));
             }
         }
     }
@@ -687,16 +708,26 @@ void BM_MixedInsertAndAggregate(benchmark::State& state) {
     static PooledLatencyAggregator<RecvrType> latency_agg;
     const int num_senders = static_cast<int>(state.range(0));
     const int num_plan_nodes = static_cast<int>(state.range(1));
+    // state.range(2) (agg_every) is a power of two (8 or 32).
     const uint64_t agg_mask = static_cast<uint64_t>(state.range(2)) - 1;
 
     env.enter(state.threads(), num_senders, num_plan_nodes, false);
 
     static constexpr size_t kMaxSamples = 1U << 15;
-    static constexpr uint64_t kSampleMask = 63;
+    // Prime sampling stride coprime to power-of-two agg_every intervals (8, 32)
+    // so sampling never phase-locks onto only aggregate() or only insert().
+    static constexpr uint64_t kSampleStride = 67;
     std::vector<uint64_t> samples;
+    std::vector<uint64_t> insert_samples;
+    std::vector<uint64_t> agg_samples;
     samples.reserve(kMaxSamples);
+    insert_samples.reserve(kMaxSamples);
+    agg_samples.reserve(kMaxSamples >> 2);
     uint64_t iter = 0;
+    uint64_t sample_countdown = static_cast<uint64_t>(state.thread_index() % kSampleStride) + 1;
     size_t overwrite_pos = 0;
+    size_t insert_overwrite_pos = 0;
+    size_t agg_overwrite_pos = 0;
     const int thread_offset = state.thread_index() * 13;
 
     for (auto _ : state) {
@@ -704,7 +735,8 @@ void BM_MixedInsertAndAggregate(benchmark::State& state) {
         const int sender_id = static_cast<int>((seq + thread_offset) % num_senders);
         const bool do_agg = ((seq + state.thread_index()) & agg_mask) == 0;
 
-        if ((seq & kSampleMask) == 0) {
+        if (--sample_countdown == 0) {
+            sample_countdown = kSampleStride;
             const auto t0 = std::chrono::steady_clock::now();
             if (do_agg) {
                 typename RecvrType::StatsType out;
@@ -721,6 +753,19 @@ void BM_MixedInsertAndAggregate(benchmark::State& state) {
             } else {
                 samples[overwrite_pos++ & (kMaxSamples - 1)] = ns;
             }
+            if (do_agg) {
+                if (agg_samples.size() < kMaxSamples) {
+                    agg_samples.push_back(ns);
+                } else {
+                    agg_samples[agg_overwrite_pos++ & (kMaxSamples - 1)] = ns;
+                }
+            } else {
+                if (insert_samples.size() < kMaxSamples) {
+                    insert_samples.push_back(ns);
+                } else {
+                    insert_samples[insert_overwrite_pos++ & (kMaxSamples - 1)] = ns;
+                }
+            }
         } else {
             if (do_agg) {
                 typename RecvrType::StatsType out;
@@ -732,7 +777,7 @@ void BM_MixedInsertAndAggregate(benchmark::State& state) {
         }
     }
 
-    latency_agg.record_and_publish(state, samples);
+    latency_agg.record_and_publish(state, samples, &insert_samples, &agg_samples);
     env.leave(state.threads());
     state.SetItemsProcessed(state.iterations());
 }
@@ -749,11 +794,20 @@ void BM_EosAggregateBurst(benchmark::State& state) {
     env.enter(state.threads(), num_senders, num_plan_nodes, true);
 
     static constexpr size_t kMaxSamples = 1U << 15;
-    static constexpr uint64_t kSampleMask = 31;
+    // Prime sampling stride coprime to the period-4 operation selector so every thread
+    // samples tail inserts (1/4) and EOS aggregates (3/4) in true workload proportion.
+    static constexpr uint64_t kSampleStride = 37;
     std::vector<uint64_t> samples;
+    std::vector<uint64_t> insert_samples;
+    std::vector<uint64_t> agg_samples;
     samples.reserve(kMaxSamples);
+    insert_samples.reserve(kMaxSamples >> 1);
+    agg_samples.reserve(kMaxSamples);
     uint64_t iter = 0;
+    uint64_t sample_countdown = static_cast<uint64_t>(state.thread_index() % kSampleStride) + 1;
     size_t overwrite_pos = 0;
+    size_t insert_overwrite_pos = 0;
+    size_t agg_overwrite_pos = 0;
 
     for (auto _ : state) {
         const uint64_t seq = iter++;
@@ -761,7 +815,8 @@ void BM_EosAggregateBurst(benchmark::State& state) {
         const bool is_tail_insert = ((seq + state.thread_index()) & 3) == 0;
         const int sender_id = static_cast<int>(seq % num_senders);
 
-        if ((seq & kSampleMask) == 0) {
+        if (--sample_countdown == 0) {
+            sample_countdown = kSampleStride;
             const auto t0 = std::chrono::steady_clock::now();
             if (is_tail_insert) {
                 env.recvr->insert(env.payload, sender_id);
@@ -778,6 +833,19 @@ void BM_EosAggregateBurst(benchmark::State& state) {
             } else {
                 samples[overwrite_pos++ & (kMaxSamples - 1)] = ns;
             }
+            if (is_tail_insert) {
+                if (insert_samples.size() < kMaxSamples) {
+                    insert_samples.push_back(ns);
+                } else {
+                    insert_samples[insert_overwrite_pos++ & (kMaxSamples - 1)] = ns;
+                }
+            } else {
+                if (agg_samples.size() < kMaxSamples) {
+                    agg_samples.push_back(ns);
+                } else {
+                    agg_samples[agg_overwrite_pos++ & (kMaxSamples - 1)] = ns;
+                }
+            }
         } else {
             if (is_tail_insert) {
                 env.recvr->insert(env.payload, sender_id);
@@ -789,7 +857,7 @@ void BM_EosAggregateBurst(benchmark::State& state) {
         }
     }
 
-    latency_agg.record_and_publish(state, samples);
+    latency_agg.record_and_publish(state, samples, &insert_samples, &agg_samples);
     env.leave(state.threads());
     state.SetItemsProcessed(state.iterations());
 }
