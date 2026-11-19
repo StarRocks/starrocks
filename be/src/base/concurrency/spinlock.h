@@ -17,6 +17,7 @@
 
 #pragma once
 #include "base/logging.h"
+#include "gutil/compiler_util.h"
 
 namespace starrocks {
 
@@ -31,7 +32,7 @@ public:
 
     // Acquires the lock, spins until the lock becomes available.
     void lock() {
-        if (!try_lock()) [[unlikely]] {
+        if (UNLIKELY(!try_lock())) {
             slow_acquire();
         }
     }
