@@ -2090,11 +2090,13 @@ static bool segment_schema_matches(Segment& segment, const TabletSchemaPtr& tabl
 }
 
 SegmentPtr TabletManager::lookup_opened_segment(const FileInfo& segment_info, const TabletSchemaPtr& tablet_schema) {
-    auto segment = metacache()->lookup_segment(MetacacheKey::segment(segment_info), /*count_miss=*/false);
+    auto segment = metacache()->lookup_segment(MetacacheKey::segment(segment_info), /*count=*/false);
     if (segment == nullptr || !segment->has_opened() ||
         (tablet_schema != nullptr && !segment_schema_matches(*segment, tablet_schema))) {
         return nullptr;
     }
+    // Counted only when the probe supplies the segment: a rejected entry is looked up, and counted, by the load.
+    metacache()->count_segment_hit();
     return segment;
 }
 

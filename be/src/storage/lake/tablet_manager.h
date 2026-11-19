@@ -465,7 +465,7 @@ public:
                                       OlapReaderStatistics* stats = nullptr);
     // The metadata cache entry load_segment() would return without reading anything: one whose footer is already
     // open and that was opened with |tablet_schema|. nullptr otherwise, including for an entry still being opened.
-    // Does not block and does not count a miss: the caller loads the segment then.
+    // Does not block, and counts a cache hit only for a segment it returns: on nullptr the caller loads the segment.
     SegmentPtr lookup_opened_segment(const FileInfo& segment_info, const TabletSchemaPtr& tablet_schema);
 
     StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
