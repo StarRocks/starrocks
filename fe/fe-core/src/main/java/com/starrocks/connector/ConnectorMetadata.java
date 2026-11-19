@@ -130,6 +130,10 @@ public interface ConnectorMetadata {
      * @param tblName - the string represents the table name
      * @return a Table instance
      */
+    default Table getTable(ConnectContext context, String dbName, String tblName, ConnectorTableVersion version) {
+        throw new UnsupportedOperationException("Versioned schema lookup is not supported");
+    }
+
     default Table getTable(ConnectContext context, String dbName, String tblName) {
         return null;
     }

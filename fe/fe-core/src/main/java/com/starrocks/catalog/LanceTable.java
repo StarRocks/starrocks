@@ -66,6 +66,11 @@ public class LanceTable extends Table {
         return getName();
     }
 
+    @Override
+    public boolean isTemporal() {
+        return true;
+    }
+
     public long getDatasetVersion() {
         return datasetVersion;
     }

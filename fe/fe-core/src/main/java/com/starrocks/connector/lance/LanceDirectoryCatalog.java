@@ -75,6 +75,10 @@ class LanceDirectoryCatalog {
         return invoke("describeTable", warehouse, options, table);
     }
 
+    String describeTable(String warehouse, String options, String table, String version, String tag) {
+        return invoke("describeTable", warehouse, options, table, version, tag);
+    }
+
     private String invoke(String method, String... args) {
         ClassLoader previous = Thread.currentThread().getContextClassLoader();
         try {

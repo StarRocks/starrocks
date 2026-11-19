@@ -27,11 +27,14 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableVersion;
+import com.starrocks.connector.PointerType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalcUtils;
@@ -56,8 +59,10 @@ public class LanceMetadata implements ConnectorMetadata {
     private final Map<String, Database> databases;
     private final Map<String, List<Table>> tables;
 
+    private record SnapshotKey(String table, String version, String tag) {}
+
     // MetadataMgr retains a metadata instance for the lifetime of a query.
-    private final Map<String, LanceTable> snapshots = new ConcurrentHashMap<>();
+    private final Map<SnapshotKey, LanceTable> snapshots = new ConcurrentHashMap<>();
 
     public LanceMetadata(String catalogName, Map<String, String> properties) {
         this(catalogName, properties, new LanceDirectoryCatalog());
@@ -151,9 +156,17 @@ public class LanceMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
+        return getTable(context, dbName, tblName, null);
+    }
+
+    @Override
+    public Table getTable(ConnectContext context, String dbName, String tblName, ConnectorTableVersion selector) {
         Table registered = tables.getOrDefault(dbName, List.of()).stream()
                 .filter(table -> table.getName().equalsIgnoreCase(tblName)).findFirst().orElse(null);
         if (registered != null || !rootDatabase.equals(dbName)) {
+            if (registered != null && selector != null) {
+                throw new StarRocksConnectorException("Historical metadata is unavailable for a registered Lance table");
+            }
             return registered;
         }
         List<String> matches = listTableNames(context, dbName).stream()
@@ -165,13 +178,32 @@ public class LanceMetadata implements ConnectorMetadata {
             throw new StarRocksConnectorException("Ambiguous Lance table name: " + tblName);
         }
         String name = matches.get(0);
-        return context == null || context.getQueryId() == null ? loadSnapshot(dbName, name)
-                : snapshots.computeIfAbsent(name, ignored -> loadSnapshot(dbName, name));
+        SnapshotKey key = snapshotKey(name, selector);
+        return context == null || context.getQueryId() == null ? loadSnapshot(dbName, key)
+                : snapshots.computeIfAbsent(key, snapshot -> loadSnapshot(dbName, snapshot));
     }
 
-    private LanceTable loadSnapshot(String dbName, String name) {
-        JsonObject description = JsonParser.parseString(directory.describeTable(warehouse, storageOptions, name))
-                .getAsJsonObject();
+    private static SnapshotKey snapshotKey(String name, ConnectorTableVersion selector) {
+        if (selector == null) {
+            return new SnapshotKey(name, null, null);
+        }
+        ConstantOperator value = selector.getConstantOperator();
+        if (selector.getPointerType() == PointerType.VERSION && !value.isNull()) {
+            if (value.getType().isIntegerType() && ((Number) value.getValue()).longValue() > 0) {
+                return new SnapshotKey(name, value.getValue().toString(), null);
+            }
+            if (value.getType().isStringType() && !value.getVarchar().isEmpty()) {
+                return new SnapshotKey(name, null, value.getVarchar());
+            }
+        }
+        throw new StarRocksConnectorException("Expected a positive Lance version or a non-empty tag");
+    }
+
+    private LanceTable loadSnapshot(String dbName, SnapshotKey key) {
+        String name = key.table();
+        String json = key.version() == null && key.tag() == null ? directory.describeTable(warehouse, storageOptions, name)
+                : directory.describeTable(warehouse, storageOptions, name, key.version(), key.tag());
+        JsonObject description = JsonParser.parseString(json).getAsJsonObject();
         List<Column> columns = LanceApiConverter.fromSchema(description.getAsJsonObject("schema"));
         long id = tableIds.computeIfAbsent(name, ignored -> CONNECTOR_ID_GENERATOR.getNextId().asLong());
         return new LanceTable(id, catalogName, dbName, name,

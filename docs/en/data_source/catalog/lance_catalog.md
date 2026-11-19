@@ -74,6 +74,13 @@ SAS tokens and temporary S3 credentials are static catalog configuration; the co
 - The catalog is read-only. Local file URIs must be accessible at the same path on the FE and the BE selected for the scan.
 - The native reader is packaged as `be/lib/libstarrocks_lance.so` on Linux. BE scans do not require a Java reader or JVM. The FE metadata SDK uses its bundled native library in an isolated class loader.
 
+A query pins each Lance table to the dataset version used to read its schema. To read a historical schema and data, specify a positive version number or a Lance tag. Separate references may select different versions.
+
+```sql
+SELECT * FROM lance_catalog.`default`.events FOR VERSION AS OF 3;
+SELECT * FROM lance_catalog.`default`.events FOR VERSION AS OF 'stable';
+```
+
 Lance uses Rust SDK 12.0.0 and is **disabled by default**. Default builds skip Cargo, Rust toolchain downloads, and Lance SDK packaging. Enable it explicitly for the FE metadata libraries and every BE/CN that will execute Lance scans:
 
 ```bash
@@ -88,7 +95,5 @@ WITH_CONNECTOR_LANCE=ON ./run-be-ut.sh --build-target connector_lance_test --mod
 ```
 
 Direct CMake builds use `-DWITH_CONNECTOR_LANCE=ON`. Set `WITH_CONNECTOR_LANCE=OFF` to explicitly disable it. A default or explicitly disabled build excludes a previously built Lance shared library from the BE package. The enabled FE package includes `fe/lib/lance-metadata-lib`. Default FE packages omit these SDK libraries; directory listing and schema discovery require an enabled FE package. Query execution also requires an enabled BE package.
-
-The reader opens a dataset once and keeps that immutable snapshot for all batches of a scan. The FE does not yet pin a common version across separate scan operators, including self-joins.
 
 Build the optional native dependency first with `./thirdparty/build-lance.sh -j 2`, using an installed Rust >= 1.96.1 toolchain and protobuf/protoc. This installs the library, matching header, CMake package, and test fixture under `thirdparty/installed/lance` (or `$TP_INSTALL_DIR/lance`). Use `--prefix` and `--protoc` for a custom thirdparty installation. Run this step in the target platform's thirdparty environment, with the same minimum OS and CPU baseline as StarRocks. The StarRocks build only consumes the installed package; it never invokes Cargo or downloads a Rust toolchain. Rust dependencies are pinned by `Cargo.lock`; `--offline` requires a prepared Cargo cache. See `thirdparty/lance/README.md` in the source tree for packaging details.

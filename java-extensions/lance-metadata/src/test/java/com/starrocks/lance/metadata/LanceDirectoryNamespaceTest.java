@@ -41,6 +41,30 @@ class LanceDirectoryNamespaceTest {
     Path warehouse;
 
     @Test
+    void readNumericAndTaggedSchemasAfterDroppingAColumn() throws Exception {
+        Field id = new Field("id", FieldType.notNullable(new ArrowType.Int(64, true)), null);
+        Field old = new Field("old_name", FieldType.nullable(ArrowType.Utf8.INSTANCE), null);
+        String root = warehouse.toString();
+        try (RootAllocator allocator = new RootAllocator();
+                Dataset dataset = Dataset.create(allocator, warehouse.resolve("events.lance").toString(),
+                        new Schema(List.of(id, old)), new WriteParams.Builder().build())) {
+            dataset.tags().create("Release", dataset.version());
+            dataset.dropColumns(List.of("old_name"));
+        }
+        ObjectMapper json = new ObjectMapper();
+        JsonNode latest = json.readTree(LanceDirectoryNamespace.describeTable(root, "{}", "events"));
+        JsonNode first = json.readTree(LanceDirectoryNamespace.describeTable(root, "{}", "events", "1", null));
+        JsonNode tagged = json.readTree(LanceDirectoryNamespace.describeTable(root, "{}", "events", null, "Release"));
+        assertEquals(2, latest.get("version").asLong());
+        assertEquals(1, latest.at("/schema/fields").size());
+        assertEquals(1, first.get("version").asLong());
+        assertEquals("old_name", first.at("/schema/fields/1/name").asText());
+        assertEquals(first, tagged);
+        assertThrows(Exception.class, () -> LanceDirectoryNamespace.describeTable(root, "{}", "events", null, "unknown-tag"));
+        assertThrows(Exception.class, () -> LanceDirectoryNamespace.describeTable(root, "{}", "events", "99", null));
+    }
+
+    @Test
     void discoverDatasetsAndReadSchemaWithoutRegistration() throws Exception {
         Schema schema = new Schema(List.of(
                 new Field("ID", FieldType.notNullable(new ArrowType.Int(64, true)), null),

@@ -74,6 +74,13 @@ SAS トークンと一時的な S3 認証情報は静的な Catalog 構成です
 - Catalog は読み取り専用です。ローカルファイル URI は、FE とスキャンを実行する BE の両方で同じパスからアクセスできる必要があります。
 - Linux ではネイティブ読み取りライブラリは `be/lib/libstarrocks_lance.so` としてパッケージ化されます。BE のスキャンに Java リーダーや JVM は不要です。FE のメタデータ SDK は、独立した ClassLoader 内で同梱のネイティブライブラリを使用します。
 
+各クエリはスキーマの取得に使用したバージョンで Lance テーブルを読み取ります。正の整数のバージョン番号または Lance タグで、過去のスキーマとデータを参照できます。
+
+```sql
+SELECT * FROM lance_catalog.`default`.events FOR VERSION AS OF 3;
+SELECT * FROM lance_catalog.`default`.events FOR VERSION AS OF 'stable';
+```
+
 Lance は Rust SDK 12.0.0 を使用し、ビルド時は**デフォルトで無効**です。デフォルトのビルドでは Cargo、Rust ツールチェーンのダウンロード、Lance SDK のパッケージ化をスキップします。FE のメタデータライブラリと、Lance スキャンを実行するすべての BE/CN で明示的に有効にしてください。
 
 ```bash
@@ -88,7 +95,5 @@ WITH_CONNECTOR_LANCE=ON ./run-be-ut.sh --build-target connector_lance_test --mod
 ```
 
 CMake で直接ビルドする場合は `-DWITH_CONNECTOR_LANCE=ON` を使用します。`WITH_CONNECTOR_LANCE=OFF` で明示的に無効にできます。デフォルトまたは明示的に無効なビルドでは、以前ビルドした Lance 共有ライブラリも BE パッケージから除外されます。有効な FE パッケージには `fe/lib/lance-metadata-lib` が含まれます。デフォルトの FE パッケージにはこれらの SDK ライブラリが含まれないため、ディレクトリの一覧表示とスキーマ検出には Lance を有効にした FE パッケージが必要です。クエリの実行には、有効にした BE パッケージも必要です。
-
-読み取り処理はデータセットを一度だけ開き、1 回のスキャンのすべてのバッチで同じ不変スナップショットを維持します。FE はまだ、自己結合を含む別々のスキャンオペレーター間で共通のバージョンを固定しません。
 
 インストール済みの Rust >= 1.96.1 と protobuf/protoc を使用し、まず `./thirdparty/build-lance.sh -j 2` でオプションのネイティブ依存ライブラリをビルドします。ライブラリ、対応するヘッダー、CMake パッケージ、テストデータは `thirdparty/installed/lance`（または `$TP_INSTALL_DIR/lance`）にインストールされます。カスタムの thirdparty インストールには `--prefix` と `--protoc` を指定します。StarRocks と同じ最小 OS および CPU 基準を使用し、対象プラットフォームの thirdparty 環境でビルドしてください。StarRocks のビルドはインストール済みのパッケージを使用するだけで、Cargo の実行や Rust ツールチェーンのダウンロードは行いません。Rust の依存関係は `Cargo.lock` で固定されており、`--offline` には準備済みの Cargo キャッシュが必要です。詳細はソースツリーの `thirdparty/lance/README.md` を参照してください。

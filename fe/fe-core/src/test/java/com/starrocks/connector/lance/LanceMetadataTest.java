@@ -16,7 +16,10 @@ package com.starrocks.connector.lance;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.LanceTable;
+import com.starrocks.connector.ConnectorTableVersion;
+import com.starrocks.connector.PointerType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -137,6 +140,26 @@ public class LanceMetadataTest {
         LanceTable next = (LanceTable) new LanceMetadata(catalog).getTable(context, "default", "users");
         Assertions.assertEquals(2, next.getDatasetVersion());
         Assertions.assertEquals(pinned.getId(), next.getId());
+    }
+
+    @Test
+    public void testMovedTagRemainsPinnedWithinTheQuery() {
+        LanceDirectoryCatalog directory = org.mockito.Mockito.mock(LanceDirectoryCatalog.class);
+        org.mockito.Mockito.when(directory.listTables("/warehouse", "{}")).thenReturn("[\"events\"]");
+        String description = "{\"location\":\"/warehouse/events.lance\",\"schema\":" + SCHEMA + ",\"version\":";
+        org.mockito.Mockito.when(directory.describeTable("/warehouse", "{}", "events", null, "release"))
+                .thenReturn(description + "4}", description + "5}");
+        LanceMetadata catalog = new LanceMetadata("catalog",
+                java.util.Map.of("lance.catalog.warehouse", "/warehouse"), directory);
+        ConnectContext context = org.mockito.Mockito.mock(ConnectContext.class);
+        org.mockito.Mockito.when(context.getQueryId()).thenReturn(java.util.UUID.randomUUID());
+        ConnectorTableVersion tag = new ConnectorTableVersion(PointerType.VERSION, ConstantOperator.createVarchar("release"));
+        LanceMetadata query = new LanceMetadata(catalog);
+        LanceTable first = (LanceTable) query.getTable(context, "default", "events", tag);
+        Assertions.assertEquals(4, first.getDatasetVersion());
+        Assertions.assertSame(first, query.getTable(context, "default", "EVENTS", tag));
+        LanceMetadata next = new LanceMetadata(catalog);
+        Assertions.assertEquals(5, ((LanceTable) next.getTable(context, "default", "events", tag)).getDatasetVersion());
     }
 
     private static final String SCHEMA = """

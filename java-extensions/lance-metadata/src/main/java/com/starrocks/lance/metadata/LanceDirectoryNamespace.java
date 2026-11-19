@@ -57,6 +57,11 @@ public final class LanceDirectoryNamespace {
     }
 
     public static String describeTable(String warehouse, String options, String table) throws Exception {
+        return describeTable(warehouse, options, table, null, null);
+    }
+
+    public static String describeTable(String warehouse, String options, String table, String version, String tag)
+            throws Exception {
         try (DirectoryNamespace namespace = open(warehouse, options)) {
             DescribeTableResponse response = namespace.describeTable(
                     new DescribeTableRequest().id(List.of(table)));
@@ -65,12 +70,17 @@ public final class LanceDirectoryNamespace {
             }
             // Do not return credentials or SDK-specific objects to the FE class loader.
             Map<String, String> storage = JSON.readValue(options, new TypeReference<Map<String, String>>() {});
-            try (Dataset dataset = Dataset.open().uri(response.getLocation())
-                    .readOptions(new ReadOptions.Builder().setStorageOptions(storage).build()).build()) {
+            ReadOptions.Builder read = new ReadOptions.Builder().setStorageOptions(storage);
+            if (version != null) {
+                read.setVersion(Long.parseLong(version));
+            }
+            try (Dataset dataset = Dataset.open().uri(response.getLocation()).readOptions(read.build()).build();
+                    Dataset tagged = tag == null ? null : dataset.checkoutTag(tag)) {
                 // Namespace JSON types omit details such as decimal precision. Read the persisted schema instead.
                 // getLanceSchema does not allocate Arrow C Data buffers in the FE.
-                return JSON.writeValueAsString(Map.of("location", response.getLocation(), "version", dataset.version(), "schema",
-                        JSON.readTree(dataset.getLanceSchema().asArrowSchema().toJson())));
+                Dataset selected = tagged == null ? dataset : tagged;
+                return JSON.writeValueAsString(Map.of("location", response.getLocation(), "version", selected.version(),
+                        "schema", JSON.readTree(selected.getLanceSchema().asArrowSchema().toJson())));
             }
         }
     }

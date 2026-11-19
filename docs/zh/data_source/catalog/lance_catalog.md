@@ -74,6 +74,13 @@ SAS Token 和临时 S3 凭据属于静态 Catalog 配置，Connector 不会从�
 - Catalog 为只读。本地文件 URI 必须在 FE 和执行扫描的 BE 上以相同路径可访问。
 - Linux 上的原生读取库打包为 `be/lib/libstarrocks_lance.so`。BE 扫描不需要 Java 读取器或 JVM。FE 元数据 SDK 在独立 ClassLoader 中使用其自带的原生库。
 
+每条查询按读取 schema 时的版本固定 Lance 表。使用正整数版本号或 Lance tag 可以读取对应版本的 schema 和数据。同一查询可以显式引用不同版本。
+
+```sql
+SELECT * FROM lance_catalog.`default`.events FOR VERSION AS OF 3;
+SELECT * FROM lance_catalog.`default`.events FOR VERSION AS OF 'stable';
+```
+
 Lance 使用 Rust SDK 12.0.0，构建时**默认关闭**。默认构建跳过 Cargo、Rust 工具链下载和 Lance SDK 打包。需要为 FE 元数据依赖库以及执行 Lance 扫描的每个 BE/CN 显式启用：
 
 ```bash
@@ -88,7 +95,5 @@ WITH_CONNECTOR_LANCE=ON ./run-be-ut.sh --build-target connector_lance_test --mod
 ```
 
 直接使用 CMake 构建时，设置 `-DWITH_CONNECTOR_LANCE=ON`。设置 `WITH_CONNECTOR_LANCE=OFF` 可显式关闭。默认构建或显式关闭的构建会从 BE 安装包中排除之前构建的 Lance 动态库。启用后的 FE 安装包包含 `fe/lib/lance-metadata-lib`。默认 FE 安装包不包含这些 SDK 库，因此目录列举和 Schema 发现需要启用了 Lance 的 FE 安装包，查询执行还需要启用了 Lance 的 BE 安装包。
-
-读取器只打开一次数据集，在一次扫描的所有批次中保持同一个不可变快照。FE 尚未在多个独立扫描算子之间固定共同版本，自连接也存在此限制。
 
 先使用已安装的 Rust >= 1.96.1 工具链和 protobuf/protoc，执行 `./thirdparty/build-lance.sh -j 2` 构建可选原生依赖。该步骤将动态库、匹配的头文件、CMake 包和测试数据集安装到 `thirdparty/installed/lance`（或 `$TP_INSTALL_DIR/lance`）。自定义 thirdparty 安装路径时可指定 `--prefix` 和 `--protoc`。请在目标平台的 thirdparty 环境中构建，采用与 StarRocks 相同的最低操作系统和 CPU 基线。StarRocks 构建只使用已安装的包，不调用 Cargo，也不下载 Rust 工具链。Rust 依赖由 `Cargo.lock` 锁定；使用 `--offline` 需要准备好 Cargo 缓存。打包详情参见源码中的 `thirdparty/lance/README.md`。
