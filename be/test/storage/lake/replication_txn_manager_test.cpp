@@ -23,19 +23,7 @@
 #include <functional>
 #include <thread>
 
-<<<<<<< HEAD
 #include "common/config.h"
-=======
-#include "base/path/filesystem_util.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "base/utility/defer_op.h"
-#include "column/chunk_factory.h"
-#include "common/config_rowset_fwd.h"
-#include "common/config_storage_fwd.h"
-#include "common/storage_define.h"
-#include "common/system/master_info.h"
->>>>>>> 11cf399 ([BugFix] Respect segment overlap after online optimize version overwrite (#83411))
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -63,6 +51,7 @@
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "util/defer_op.h"
 #include "util/filesystem_util.h"
 
 namespace starrocks {
