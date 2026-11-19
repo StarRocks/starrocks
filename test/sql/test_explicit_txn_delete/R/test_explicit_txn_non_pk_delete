@@ -88,7 +88,7 @@ insert into t_dup select g, g from table(generate_series(1, 10)) t(g);
 set enable_sql_transaction = true;
 -- result:
 -- !result
-begin;
+begin with label pk_delete_rollback_${uuid0};
 -- result:
 -- !result
 delete from t_pk where k in (1, 2);
@@ -101,6 +101,11 @@ E: (5309, "Getting analyzing error. Detail message: DELETE on non-Primary-Key ta
 rollback;
 -- result:
 -- !result
+select STATE from information_schema.loads
+where DB_NAME = 'db_${uuid0}' and LABEL = 'pk_delete_rollback_${uuid0}' and TYPE = 'INSERT';
+-- result:
+CANCELLED
+-- !result
 select count(*) from t_pk where k in (1, 2);
 -- result:
 2
@@ -109,7 +114,7 @@ select count(*) from t_dup where k in (1, 2);
 -- result:
 2
 -- !result
-begin;
+begin with label pk_delete_commit_${uuid0};
 -- result:
 -- !result
 delete from t_pk where k in (1, 2);
@@ -121,6 +126,11 @@ E: (5309, "Getting analyzing error. Detail message: DELETE on non-Primary-Key ta
 -- !result
 commit;
 -- result:
+-- !result
+select STATE from information_schema.loads
+where DB_NAME = 'db_${uuid0}' and LABEL = 'pk_delete_commit_${uuid0}' and TYPE = 'INSERT';
+-- result:
+FINISHED
 -- !result
 select count(*) from t_pk where k in (1, 2);
 -- result:
