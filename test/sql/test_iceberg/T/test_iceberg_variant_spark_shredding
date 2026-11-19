@@ -47,12 +47,15 @@ select count(*), count(v), min(id), max(id) from api_shred;
 -- Whole documents.
 -- id 2 holds a pre-1970 timestamp, which is rendered wrong as text today, so it is left out of the recorded rows
 -- until that is fixed; the equality checks between the tables still cover it.
--- A whole document renders a timestamp with time zone in the BE host's time zone, not the session's, so those
--- values are masked here; the path queries and get_variant_datetime below check them in the session time zone.
-select id, regexp_replace(cast(v as string), '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:.]+[+-][0-9]{2}:[0-9]{2}', '<timestamptz>')
-from shred where id < 100 and id != 2 order by id;
+select id, cast(v as string) from shred where id < 100 and id != 2 order by id;
 function: assert_equal_result("select id, cast(v as string) from shred order by id", "select id, cast(v as string) from noshred order by id")
 function: assert_equal_result("select id, cast(v as string) from shred order by id", "select id, cast(v as string) from api_shred order by id")
+
+-- Timestamps with time zone are rendered and converted in the session time zone, not the BE host's.
+set time_zone = 'UTC';
+select id, cast(v as string), cast(v as json), cast(variant_query(v, '$.t') as datetime) from shred where id in (1, 21) order by id;
+set time_zone = 'Asia/Shanghai';
+select id, cast(v as string), cast(v as json), cast(variant_query(v, '$.t') as datetime) from shred where id in (1, 21) order by id;
 
 -- The same paths as expected_variant_spark.tsv.
 select id, cast(variant_query(v, '$.i') as string), cast(variant_query(v, '$.s') as string), cast(variant_query(v, '$.dec') as string),

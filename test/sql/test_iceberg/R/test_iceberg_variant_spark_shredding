@@ -98,12 +98,11 @@ select count(*), count(v), min(id), max(id) from api_shred;
 -- result:
 276	273	1	405
 -- !result
-select id, regexp_replace(cast(v as string), '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:.]+[+-][0-9]{2}:[0-9]{2}', '<timestamptz>')
-from shred where id < 100 and id != 2 order by id;
+select id, cast(v as string) from shred where id < 100 and id != 2 order by id;
 -- result:
-1	{"ao":[{"k":1,"s":"a"},{"k":2,"s":"b"}],"arr":[1,2,3],"b":true,"d":"2024-01-02","dbl":1.25,"dec":12.345,"i":1,"i8":5,"o":{"x":1,"y":"p","z":{"w":10}},"s":"alpha","t":"<timestamptz>","tn":"2024-01-02 03:04:05"}
-3	{"ao":[],"arr":[],"b":true,"d":"9999-12-31","dbl":1.0000000000000001e+300,"dec":9999999.999,"i":9223372036854775807,"i8":127,"o":{"x":-3,"y":"","z":{"w":0}},"s":"中文 字符串","t":"<timestamptz>","tn":"9999-12-31 23:59:59.999999"}
-4	{"ao":[{"k":4,"s":"d"},{"k":5,"s":"e"}],"arr":[-1,0,1],"b":false,"d":"2000-02-29","dbl":0.0,"dec":0.0,"i":-9223372036854775808,"i8":-128,"o":{"x":4,"y":"r","z":{"w":40}},"s":"longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglong","t":"<timestamptz>","tn":"2000-02-29 12:00:00"}
+1	{"ao":[{"k":1,"s":"a"},{"k":2,"s":"b"}],"arr":[1,2,3],"b":true,"d":"2024-01-02","dbl":1.25,"dec":12.345,"i":1,"i8":5,"o":{"x":1,"y":"p","z":{"w":10}},"s":"alpha","t":"2024-01-02 11:04:05.123456+08:00","tn":"2024-01-02 03:04:05"}
+3	{"ao":[],"arr":[],"b":true,"d":"9999-12-31","dbl":1.0000000000000001e+300,"dec":9999999.999,"i":9223372036854775807,"i8":127,"o":{"x":-3,"y":"","z":{"w":0}},"s":"中文 字符串","t":"2262-04-12 07:47:16.854775+08:00","tn":"9999-12-31 23:59:59.999999"}
+4	{"ao":[{"k":4,"s":"d"},{"k":5,"s":"e"}],"arr":[-1,0,1],"b":false,"d":"2000-02-29","dbl":0.0,"dec":0.0,"i":-9223372036854775808,"i8":-128,"o":{"x":4,"y":"r","z":{"w":40}},"s":"longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglong","t":"2000-02-29 20:00:00+08:00","tn":"2000-02-29 12:00:00"}
 5	{"ao":[{"k":6,"s":"f"}],"arr":[7,8],"b":true,"dbl":2.5,"dec":3.14,"i":5,"i8":6,"o":{"x":5,"y":"s","z":{"w":50}},"s":"gamma"}
 6	{"i":6,"o":{"x":6,"y":"t","z":{"w":60}},"s":"delta"}
 7	{"ao":"none","arr":{"k":1},"b":1,"dec":"1.5","i":"seven","o":[1,2],"s":7}
@@ -120,7 +119,7 @@ from shred where id < 100 and id != 2 order by id;
 18	eighteen
 19	[1,"a",{"x":1}]
 20	3.5
-21	"<timestamptz>"
+21	"2024-05-06 15:08:09+08:00"
 -- !result
 function: assert_equal_result("select id, cast(v as string) from shred order by id", "select id, cast(v as string) from noshred order by id")
 -- result:
@@ -129,6 +128,22 @@ None
 function: assert_equal_result("select id, cast(v as string) from shred order by id", "select id, cast(v as string) from api_shred order by id")
 -- result:
 None
+-- !result
+set time_zone = 'UTC';
+-- result:
+-- !result
+select id, cast(v as string), cast(v as json), cast(variant_query(v, '$.t') as datetime) from shred where id in (1, 21) order by id;
+-- result:
+1	{"ao":[{"k":1,"s":"a"},{"k":2,"s":"b"}],"arr":[1,2,3],"b":true,"d":"2024-01-02","dbl":1.25,"dec":12.345,"i":1,"i8":5,"o":{"x":1,"y":"p","z":{"w":10}},"s":"alpha","t":"2024-01-02 03:04:05.123456+00:00","tn":"2024-01-02 03:04:05"}	{"ao": [{"k": 1, "s": "a"}, {"k": 2, "s": "b"}], "arr": [1, 2, 3], "b": true, "d": "2024-01-02", "dbl": 1.25, "dec": 12.345, "i": 1, "i8": 5, "o": {"x": 1, "y": "p", "z": {"w": 10}}, "s": "alpha", "t": "2024-01-02 03:04:05.123456+00:00", "tn": "2024-01-02 03:04:05"}	2024-01-02 03:04:05.123456
+21	"2024-05-06 07:08:09+00:00"	"2024-05-06 07:08:09+00:00"	None
+-- !result
+set time_zone = 'Asia/Shanghai';
+-- result:
+-- !result
+select id, cast(v as string), cast(v as json), cast(variant_query(v, '$.t') as datetime) from shred where id in (1, 21) order by id;
+-- result:
+1	{"ao":[{"k":1,"s":"a"},{"k":2,"s":"b"}],"arr":[1,2,3],"b":true,"d":"2024-01-02","dbl":1.25,"dec":12.345,"i":1,"i8":5,"o":{"x":1,"y":"p","z":{"w":10}},"s":"alpha","t":"2024-01-02 11:04:05.123456+08:00","tn":"2024-01-02 03:04:05"}	{"ao": [{"k": 1, "s": "a"}, {"k": 2, "s": "b"}], "arr": [1, 2, 3], "b": true, "d": "2024-01-02", "dbl": 1.25, "dec": 12.345, "i": 1, "i8": 5, "o": {"x": 1, "y": "p", "z": {"w": 10}}, "s": "alpha", "t": "2024-01-02 11:04:05.123456+08:00", "tn": "2024-01-02 03:04:05"}	2024-01-02 11:04:05.123456
+21	"2024-05-06 15:08:09+08:00"	"2024-05-06 15:08:09+08:00"	None
 -- !result
 select id, cast(variant_query(v, '$.i') as string), cast(variant_query(v, '$.s') as string), cast(variant_query(v, '$.dec') as string),
        cast(variant_query(v, '$.t') as string), cast(variant_query(v, '$.o.x') as string), cast(variant_query(v, '$.o.z.w') as string),
