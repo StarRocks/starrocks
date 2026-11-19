@@ -261,9 +261,10 @@ PARALLEL_TEST(VariantStrictMaterializationTest, full_int128_payload_is_preserved
 }
 
 PARALLEL_TEST(VariantStrictMaterializationTest, array_with_nested_variant_uses_strict_materialization) {
-    auto elements = VariantColumn::create();
+    auto variants = VariantColumn::create();
     const char truncated[] = {static_cast<char>(static_cast<uint8_t>(VariantType::INT32) << 2)};
-    elements->append_shredded(Slice(VariantMetadata::kEmptyMetadata), Slice(truncated, sizeof(truncated)));
+    variants->append_shredded(Slice(VariantMetadata::kEmptyMetadata), Slice(truncated, sizeof(truncated)));
+    auto elements = NullableColumn::create(std::move(variants), NullColumn::create(1, DATUM_NOT_NULL));
     auto offsets = UInt32Column::create();
     offsets->append(0);
     offsets->append(1);
