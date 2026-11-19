@@ -4418,6 +4418,7 @@ public class StmtExecutor {
                                               java.util.function.Consumer<TResultBatch> consumer) {
         coord = null;
         try {
+            SimpleExecutor.checkInternalQueryState(context);
             UUID uuid = context.getQueryId();
             context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
             coord = getCoordinatorFactory().createQueryScheduler(
@@ -4428,9 +4429,7 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
                     new QeProcessorImpl.QueryInfo(context, getRedactedOriginStmtInString(), coord));
 
-            if (context.isStatementCancelled()) {
-                throw new StarRocksException("Metadata collection cancelled");
-            }
+            coord.setTimeoutSecond(SimpleExecutor.checkInternalQueryState(context));
             coord.exec();
             RowBatch batch;
             do {

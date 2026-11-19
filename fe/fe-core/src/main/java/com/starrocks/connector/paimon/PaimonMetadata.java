@@ -51,6 +51,7 @@ import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
@@ -946,6 +947,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
         if (evaluateIndex && paimonNativeTable instanceof FileStoreTable fileStore) {
+            SimpleExecutor.checkInternalQueryState(caller);
             try (Timer ignored = Tracers.watchScope(EXTERNAL, "PaimonGlobalIndex.Evaluate")) {
                 PaimonGlobalIndexRequest request = PaimonGlobalIndexPlanner.request(fileStore, snapshotId,
                         params.getPredicate(), ((PaimonScanRangeParams) params).getColumnNames());
@@ -958,7 +960,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                     Tracers.record(EXTERNAL, "PaimonGlobalIndex.Result", "no supported indexed scalar predicate");
                 }
             } catch (RuntimeException e) {
-                if (caller.isStatementCancelled() || com.starrocks.qe.SimpleExecutor.outerRemainingQueryTimeoutS() <= 0) {
+                if (caller.isStatementCancelled() || SimpleExecutor.remainingQueryTimeoutS(caller) <= 0) {
                     throw new StarRocksConnectorException("Paimon index evaluation cancelled or timed out", e);
                 }
                 Tracers.record(EXTERNAL, "PaimonGlobalIndex.Fallback", String.valueOf(e.getMessage()));
@@ -966,6 +968,10 @@ public class PaimonMetadata implements ConnectorMetadata {
                 LOG.debug("Paimon Global Index unavailable for {}.{}", paimonTable.getCatalogDBName(),
                         paimonTable.getCatalogTableName(), e);
             }
+        }
+        if (evaluateIndex) {
+            // Discovery or result collection may have exhausted the parent budget, even without an exception.
+            SimpleExecutor.checkInternalQueryState(caller);
         }
         PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
         List<Split> splits = scan.withMetricRegistry(paimonMetricRegistry).plan().splits();

@@ -164,6 +164,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -1158,6 +1159,54 @@ public class PaimonMetadataTest {
                             emptyTableMetadata, context, tableName, tablePredicate);
                     assertTrue(splitsInfo.getPaimonSplits().isEmpty());
                 }
+            }
+        } finally {
+            ConnectContext.remove();
+            FileUtils.deleteDirectory(tmpDir.toFile());
+        }
+    }
+
+    @Test
+    public void testExpiredIndexDiscoveryDoesNotPlanFallback() throws Exception {
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_index_deadline_");
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setQueryId(java.util.UUID.randomUUID());
+        context.getSessionVariable().setPaimonGlobalIndexMode("distributed");
+        context.getSessionVariable().setQueryTimeoutS(30);
+        context.setThreadLocalInfo();
+        AtomicInteger discoveries = new AtomicInteger();
+        new MockUp<PaimonGlobalIndexPlanner>() {
+            @Mock
+            public PaimonGlobalIndexRequest request(FileStoreTable table, long snapshotId, ScalarOperator predicate,
+                    Map<Integer, String> columnNames) {
+                context.setStartTime(Instant.now().minusSeconds(31));
+                if (discoveries.incrementAndGet() == 1) {
+                    throw new IllegalStateException("index manifest unavailable");
+                }
+                return null;
+            }
+        };
+        new MockUp<PaimonGlobalIndexCollectJob>() {
+            @Mock
+            public GlobalIndexResult collect(ConnectContext caller) {
+                throw new AssertionError("Expired discovery must not start an internal query");
+            }
+        };
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
+            catalog.createDatabase("test_db", true);
+            createEmptyTable(catalog, "indexed_table", true);
+            PaimonMetadata scanMetadata = new PaimonMetadata("paimon", new HdfsEnvironment(), catalog,
+                    new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable table = (PaimonTable) scanMetadata.getTable(context, "test_db", "indexed_table");
+            GetRemoteFilesParams params = new PaimonScanRangeParams(GetRemoteFilesParams.newBuilder()
+                    .setFieldNames(List.of("id")).setTableVersionRange(TvrTableSnapshot.of(-1L)), Map.of(1, "id"));
+            // Both a failed discovery and an ineligible result must stop if the parent budget is exhausted.
+            for (int attempt = 1; attempt <= 2; attempt++) {
+                context.setStartTime();
+                RuntimeException error = assertThrows(RuntimeException.class,
+                        () -> scanMetadata.getRemoteFiles(table, params));
+                assertTrue(error.getMessage().contains("timed out"), error.getMessage());
+                assertEquals(attempt, discoveries.get());
             }
         } finally {
             ConnectContext.remove();

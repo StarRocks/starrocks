@@ -16,6 +16,7 @@ package com.starrocks.connector.metadata;
 
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.sql.StatementPlanner;
@@ -36,6 +37,7 @@ public class MetadataExecutor {
             ExecPlan execPlan;
             StatementBase parsedStmt;
             try {
+                SimpleExecutor.checkInternalQueryState(context);
                 parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
                 execPlan = StatementPlanner.plan(parsedStmt, context, job.getSinkType());
             } catch (Exception e) {
@@ -50,12 +52,6 @@ public class MetadataExecutor {
             if (parent != null && parent.getExecutor() != null) {
                 parent.getExecutor().registerSubStmtExecutor(executor);
             }
-            int remaining = parent == null ? Integer.MAX_VALUE : com.starrocks.qe.SimpleExecutor.outerRemainingQueryTimeoutS();
-            if (context.isStatementCancelled() || remaining <= 0) {
-                context.getState().setError("Metadata collection cancelled");
-                return;
-            }
-            context.getSessionVariable().setQueryTimeoutS(Math.min(context.getSessionVariable().getQueryTimeoutS(), remaining));
             context.setQueryId(UUIDUtil.genUUID());
             context.getSessionVariable().setEnableMaterializedViewRewrite(false);
 

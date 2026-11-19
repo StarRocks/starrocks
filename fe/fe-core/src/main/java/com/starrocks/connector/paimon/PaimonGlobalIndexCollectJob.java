@@ -74,10 +74,7 @@ public final class PaimonGlobalIndexCollectJob extends MetadataCollectJob {
     }
 
     public GlobalIndexResult collect(ConnectContext caller) {
-        int remaining = SimpleExecutor.outerRemainingQueryTimeoutS();
-        if (remaining <= 0 || caller.isStatementCancelled()) {
-            throw new IllegalStateException("Metadata collection cancelled or timed out");
-        }
+        SimpleExecutor.checkInternalQueryState(caller);
         // Check policies in the user's context before creating the trusted internal task.
         TableName name = new TableName(getCatalogName(), getDbName(), getTableName());
         var masks = Authorizer.getColumnMaskingPolicy(caller, name, origin.getFullSchema());
@@ -99,7 +96,6 @@ public final class PaimonGlobalIndexCollectJob extends MetadataCollectJob {
         if (resourceGroup != null) {
             variables.setResourceGroup(resourceGroup.getName());
         }
-        variables.setQueryTimeoutS(Math.min(remaining, caller.getSessionVariable().getMetadataCollectQueryTimeoutS()));
         variables.setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
         variables.setEnableShortCircuit(false);
         // Bound each RPC result batch as well as the aggregate; a large combined chunk
@@ -107,10 +103,7 @@ public final class PaimonGlobalIndexCollectJob extends MetadataCollectJob {
         getContext().getSessionVariable().setChunkSize(1);
         getContext().getSessionVariable().setPipelineDop(1);
         asyncCollectMetadata();
-        if (caller.isStatementCancelled() || getContext().isStatementCancelled()
-                || com.starrocks.qe.SimpleExecutor.outerRemainingQueryTimeoutS() <= 0) {
-            throw new IllegalStateException("Paimon Global Index collection cancelled");
-        }
+        SimpleExecutor.checkInternalQueryState(getContext());
         if (getContext().getState().getStateType() != QueryState.MysqlStateType.EOF || getMetadataJobCoord() == null) {
             throw new IllegalStateException("Incomplete Paimon Global Index result: "
                     + getContext().getState().getErrorMessage());

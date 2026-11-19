@@ -16,14 +16,17 @@ package com.starrocks.sql.spm;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricLabel;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.utframe.AIProviderTestUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -111,6 +114,40 @@ public class SPMPlanRewriteTest extends PlanTestBase {
             AIProviderTestUtil.setChatProperty("endpoint", oldEndpoint);
             AIProviderTestUtil.setChatProperty("model", oldModel);
             AIProviderTestUtil.setChatProperty("protocol", oldProvider);
+        }
+    }
+
+    @Test
+    public void testMetadataCollectionSkipsMatchingBaseline() {
+        SPMStmtExecutor.execute(connectContext, createBaselinePlanStmt("select * from t0 where v2 = 1"));
+        String sql = "select * from t0 where v2 = 20";
+        var defaults = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable();
+        boolean previous = defaults.isEnableSPMRewrite();
+        try {
+            defaults.setEnableSPMRewrite(true);
+            MetadataCollectJob job = new MetadataCollectJob("default_catalog", "test", "t0",
+                    TResultSinkType.CUSTOMIZED) {
+                @Override
+                protected String buildCollectMetadataSQL() {
+                    return sql;
+                }
+            };
+            job.init(connectContext.getSessionVariable());
+            var metadata = job.getContext();
+            metadata.getSqlPlanStorage().storeBaselinePlan(connectContext.getSqlPlanStorage().getBaselines(null));
+            StatementBase original = SqlParser.parseOneWithStarRocksDialect(sql, metadata.getSessionVariable());
+            SPMPlanner internal = new SPMPlanner(metadata);
+            Assertions.assertSame(original, internal.plan(original));
+            Assertions.assertNull(internal.getBaseline());
+            Assertions.assertFalse(metadata.getSessionVariable().isEnableSPMRewrite());
+
+            // The same baseline still matches for an ordinary user query.
+            SPMPlanner user = new SPMPlanner(connectContext);
+            user.plan(SqlParser.parseOneWithStarRocksDialect(sql, connectContext.getSessionVariable()));
+            Assertions.assertNotNull(user.getBaseline());
+            Assertions.assertTrue(connectContext.getSessionVariable().isEnableSPMRewrite());
+        } finally {
+            defaults.setEnableSPMRewrite(previous);
         }
     }
 

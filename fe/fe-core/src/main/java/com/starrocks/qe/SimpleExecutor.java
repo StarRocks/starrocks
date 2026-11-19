@@ -261,10 +261,28 @@ public class SimpleExecutor {
         return remainingQueryTimeoutS(outer);
     }
 
-    private static int remainingQueryTimeoutS(ConnectContext context) {
-        long elapsedSeconds = context.getStartTime() > 0
-                ? Math.max(0, (System.currentTimeMillis() - context.getStartTime()) / 1000) : 0;
-        return (int) Math.max(Integer.MIN_VALUE, context.getSessionVariable().getQueryTimeoutS() - elapsedSeconds);
+    /** Remaining budget of an explicit context and its parents, independent of the thread-local binding. */
+    public static int remainingQueryTimeoutS(ConnectContext context) {
+        long now = System.currentTimeMillis();
+        long remaining = Integer.MAX_VALUE;
+        for (ConnectContext current = context; current != null; current = current.getParent()) {
+            long elapsedSeconds = current.getStartTime() > 0
+                    ? Math.max(0, (now - current.getStartTime()) / 1000) : 0;
+            remaining = Math.min(remaining, current.getSessionVariable().getQueryTimeoutS() - elapsedSeconds);
+        }
+        return (int) Math.max(Integer.MIN_VALUE, remaining);
+    }
+
+    /** Check before starting more internal work; keep total session timeouts unchanged. */
+    public static int checkInternalQueryState(ConnectContext context) {
+        if (context.isStatementCancelled()) {
+            throw new SemanticException("Internal query was cancelled");
+        }
+        int remaining = remainingQueryTimeoutS(context);
+        if (remaining <= 0) {
+            throw new SemanticException("Internal query timed out");
+        }
+        return remaining;
     }
 
     public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
