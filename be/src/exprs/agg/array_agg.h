@@ -228,24 +228,8 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-<<<<<<< HEAD
-        if constexpr (lt_is_string_or_binary<LT>) {
-            MemPool* mem_pool = ctx->mem_pool();
-            if constexpr (std::is_same_v<State<LT, is_distinct, MyHashSet>,
-                                         ArrayAggWindowState<LT, is_distinct, MyHashSet>>) {
-                mem_pool = &this->data(state).mem_pool;
-            }
-            const auto slice = GetContainer<LT>::get_data(columns[0], row_num);
-            this->data(state).update_with_slice(mem_pool, slice);
-        } else {
-            const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-            // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
-            this->data(state).update(ctx->mem_pool(), column, row_num, 1);
-        }
-=======
         // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
         this->data(state).update(ctx->mem_pool(), *columns[0], row_num, 1);
->>>>>>> b927469 ([Refactor] Split ArrayAggAggregateState to ArrayAggAggregateState<Fixedlength> and ArrayAggAggregateState<String> (#70826))
     }
 
     void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const override {
@@ -255,7 +239,6 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         const auto* input_column = down_cast<const ArrayColumn*>(column);
         auto offset_size = input_column->get_element_offset_size(row_num);
-<<<<<<< HEAD
         const auto& array_element = input_column->elements();
         const auto* element_data_column = ColumnHelper::get_data_column(&array_element);
 
@@ -282,45 +265,18 @@ public:
                 ctx->set_error("array_agg: unexpected array element column type");
                 return;
             }
-
-            MemPool* mem_pool = ctx->mem_pool();
-            if constexpr (std::is_same_v<State<LT, is_distinct, MyHashSet>,
-                                         ArrayAggWindowState<LT, is_distinct, MyHashSet>>) {
-                mem_pool = &this->data(state).mem_pool;
-            }
-            size_t end = offset_size.first + offset_size.second;
-            ColumnHelper::with_binary_data_column(&array_element, [&](const auto* typed_column) {
-                for (size_t i = offset_size.first; i < end; ++i) {
-                    if (!array_element.is_null(i)) {
-                        this->data(state).update_with_slice(mem_pool, typed_column->get_slice(i));
-                    } else {
-                        this->data(state).append_null();
-                    }
-                }
-            });
-        } else {
-            // Array elements are normally nullable, but nothing in the type system guarantees it.
-            size_t element_null_count = array_element.is_nullable()
-                                                ? down_cast<const NullableColumn&>(array_element)
-                                                          .null_count(offset_size.first, offset_size.second)
-                                                : 0;
-            DCHECK_LE(element_null_count, offset_size.second);
-
-            this->data(state).update(ctx->mem_pool(), *down_cast<const InputColumnType*>(element_data_column),
-                                     offset_size.first, offset_size.second - element_null_count);
-            this->data(state).append_null(element_null_count);
         }
-=======
-        auto& array_element = down_cast<const NullableColumn&>(input_column->elements());
 
-        const auto* element_data_column = ColumnHelper::get_data_column(&array_element);
-        size_t element_null_count = array_element.null_count(offset_size.first, offset_size.second);
+        // Array elements are normally nullable, but nothing in the type system guarantees it.
+        size_t element_null_count = array_element.is_nullable()
+                                            ? down_cast<const NullableColumn&>(array_element)
+                                                      .null_count(offset_size.first, offset_size.second)
+                                            : 0;
         DCHECK_LE(element_null_count, offset_size.second);
 
         this->data(state).update(ctx->mem_pool(), *element_data_column, offset_size.first,
                                  offset_size.second - element_null_count);
         this->data(state).append_null(element_null_count);
->>>>>>> b927469 ([Refactor] Split ArrayAggAggregateState to ArrayAggAggregateState<Fixedlength> and ArrayAggAggregateState<String> (#70826))
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
