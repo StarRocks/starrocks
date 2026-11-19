@@ -138,7 +138,6 @@ enum TGeoEdgeAlgorithm {
 // Semantic and physical metadata for native geo types.
 struct TGeoTypeDesc {
     1: optional TGeoLogicalType logical_type
-    // 2: coordinate_system, removed: it always followed from logical_type. Do not reuse this id.
     3: optional TGeoEdgeAlgorithm edge_algorithm
     4: optional string crs
     5: optional i32 srid

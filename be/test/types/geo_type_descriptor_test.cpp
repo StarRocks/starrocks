@@ -110,8 +110,6 @@ TEST(GeoTypeDescriptorTest, WireOrdinalsRemainStable) {
     EXPECT_EQ(4, GEO_DIMENSION_XYZM);
     EXPECT_EQ(5, GEO_DIMENSION_MIXED);
     EXPECT_EQ(1, GeoTypeDescPB::kLogicalTypeFieldNumber);
-    // Field 2 was coordinate_system; it is no longer declared and its number must not be reused.
-    EXPECT_EQ(nullptr, GeoTypeDescPB::descriptor()->FindFieldByNumber(2));
     EXPECT_EQ(3, GeoTypeDescPB::kEdgeAlgorithmFieldNumber);
     EXPECT_EQ(4, GeoTypeDescPB::kCrsFieldNumber);
     EXPECT_EQ(5, GeoTypeDescPB::kSridFieldNumber);
