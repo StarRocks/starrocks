@@ -69,6 +69,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
@@ -994,9 +995,9 @@ public class StatisticsCalculatorTest {
         }
 
         // The big side is preserved, the small side only matches a part of it
-        final var bigKey = columnRefFactory.create("big_key", IntegerType.INT, true);
+        final var bigKey = columnRefFactory.create("big_key", FloatType.DOUBLE, true);
         final var bigVal = columnRefFactory.create("big_val", IntegerType.INT, true);
-        final var smallKey = columnRefFactory.create("small_key", IntegerType.INT, true);
+        final var smallKey = columnRefFactory.create("small_key", FloatType.DOUBLE, true);
         columnRefFactory.updateColumnToRelationIds(bigKey.getId(), 0);
         columnRefFactory.updateColumnToRelationIds(bigVal.getId(), 0);
         columnRefFactory.updateColumnToRelationIds(smallKey.getId(), 1);
@@ -1042,13 +1043,13 @@ public class StatisticsCalculatorTest {
         Assertions.assertEquals(200000, bigKeyStat.getDistinctValuesCount(), 0.0001);
         Assertions.assertEquals(1, bigKeyStat.getMinValue(), 0.0001);
         Assertions.assertEquals(200000, bigKeyStat.getMaxValue(), 0.0001);
-        // The preserved key keeps the joined histogram: the intersection of the two single buckets is [1, 100] with 100
+        // The preserved key keeps the joined histogram: the intersection of the two single buckets is [1, 100]
         final var statBuckets = bigKeyStat.getHistogram().getBuckets();
         Assertions.assertEquals(1, statBuckets.size());
         for (Bucket actual : statBuckets) {
             Assertions.assertEquals(1, actual.getLower(), 0.0001);
             Assertions.assertEquals(100, actual.getUpper(), 0.0001);
-            Assertions.assertEquals(100L, actual.getCount());
+            Assertions.assertEquals(99L, actual.getCount());
             Assertions.assertEquals(1L, actual.getUpperRepeats());
             Assertions.assertEquals(101L, actual.getDistinctCount().orElseThrow());
         }

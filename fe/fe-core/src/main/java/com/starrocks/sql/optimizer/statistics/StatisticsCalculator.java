@@ -172,6 +172,7 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.type.DateType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -2032,7 +2033,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             Histogram joined = current.getHistogram();
             Histogram histogram = joined == null || joined == raw.getHistogram()
                     ? raw.getHistogram()
-                    : setHistogramNDV(joined, current.getDistinctValuesCount());
+                    : setHistogramNDV(joined, current.getDistinctValuesCount(), column.getType());
             restored.put(column, ColumnStatistic.buildFrom(current)
                     .setMinValue(raw.getMinValue())
                     .setMaxValue(raw.getMaxValue())
@@ -2047,8 +2048,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     // Copy the histogram and set each buckets NDV count to the correct distinctCount
-    static Histogram setHistogramNDV(Histogram histogram, double distinctCount) {
-        if (histogram == null || histogram.getBuckets().isEmpty()) {
+    static Histogram setHistogramNDV(Histogram histogram, double distinctCount, Type type) {
+        // Fixed point types estimate the bucket NDV from the bucket bounds
+        if (histogram == null || histogram.getBuckets().isEmpty() || type.isFixedPointType()) {
             return histogram;
         }
         List<Bucket> buckets = histogram.getBuckets();
