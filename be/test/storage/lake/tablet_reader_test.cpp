@@ -52,6 +52,7 @@
 #include "fs/fs_util.h"
 #include "fs/remote_read_context.h"
 #include "gen_cpp/InternalService_types.h"
+#include "io/seekable_input_stream.h"
 #include "platform/key_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
@@ -1519,6 +1520,183 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
     EXPECT_EQ(2, reader->stats().rowsets_read_count);
     EXPECT_EQ(1, reader->stats().segments_read_count);
     EXPECT_EQ(1, reader->stats().phy_segments_count);
+}
+
+// A local file system whose files accept cache warm-ups, as starlet's do, so that segment readers build real read-ahead
+// windows on local segment files. A warm-up only returns a handle; the reads go to the local file as before.
+class WarmableFileSystem final : public FileSystem {
+public:
+    explicit WarmableFileSystem(std::shared_ptr<FileSystem> fs) : _fs(std::move(fs)) {}
+
+    std::atomic<int64_t> warms{0};
+
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& fname) override {
+        ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(opts, fname));
+        std::shared_ptr<io::SeekableInputStream> stream = std::make_shared<WarmableStream>(std::move(file), &warms);
+        return std::make_unique<RandomAccessFile>(std::move(stream), fname);
+    }
+    Type type() const override { return _fs->type(); }
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                  const std::string& fname) override {
+        return _fs->new_sequential_file(opts, fname);
+    }
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
+                                                              const std::string& fname) override {
+        return _fs->new_writable_file(opts, fname);
+    }
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& fname) override {
+        return _fs->new_writable_file(fname);
+    }
+    Status path_exists(const std::string& fname) override { return _fs->path_exists(fname); }
+    Status get_children(const std::string& dir, std::vector<std::string>* result) override {
+        return _fs->get_children(dir, result);
+    }
+    Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override {
+        return _fs->iterate_dir(dir, cb);
+    }
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
+        return _fs->iterate_dir2(dir, cb);
+    }
+    Status delete_file(const std::string& fname) override { return _fs->delete_file(fname); }
+    Status create_dir(const std::string& dirname) override { return _fs->create_dir(dirname); }
+    Status create_dir_if_missing(const std::string& dirname, bool* created) override {
+        return _fs->create_dir_if_missing(dirname, created);
+    }
+    Status create_dir_recursive(const std::string& dirname) override { return _fs->create_dir_recursive(dirname); }
+    Status delete_dir(const std::string& dirname) override { return _fs->delete_dir(dirname); }
+    Status delete_dir_recursive(const std::string& dirname) override { return _fs->delete_dir_recursive(dirname); }
+    Status sync_dir(const std::string& dirname) override { return _fs->sync_dir(dirname); }
+    StatusOr<bool> is_directory(const std::string& path) override { return _fs->is_directory(path); }
+    Status canonicalize(const std::string& path, std::string* result) override {
+        return _fs->canonicalize(path, result);
+    }
+    StatusOr<uint64_t> get_file_size(const std::string& fname) override { return _fs->get_file_size(fname); }
+    StatusOr<uint64_t> get_file_modified_time(const std::string& fname) override {
+        return _fs->get_file_modified_time(fname);
+    }
+    Status rename_file(const std::string& src, const std::string& target) override {
+        return _fs->rename_file(src, target);
+    }
+    Status link_file(const std::string& old_path, const std::string& new_path) override {
+        return _fs->link_file(old_path, new_path);
+    }
+
+private:
+    class Handle final : public io::CacheWarmHandle {
+    public:
+        size_t submitted_blocks() const override { return 1; }
+        size_t pending_blocks() const override { return 0; }
+    };
+    class WarmableStream final : public io::SeekableInputStreamWrapper {
+    public:
+        WarmableStream(std::unique_ptr<RandomAccessFile> file, std::atomic<int64_t>* warms)
+                : io::SeekableInputStreamWrapper(file.get(), kDontTakeOwnership),
+                  _file(std::move(file)),
+                  _warms(warms) {}
+        StatusOr<std::shared_ptr<io::CacheWarmHandle>> warm_cache_async(int64_t, size_t, bool) override {
+            _warms->fetch_add(1);
+            return std::make_shared<Handle>();
+        }
+
+    private:
+        std::unique_ptr<RandomAccessFile> _file;
+        std::atomic<int64_t>* _warms;
+    };
+
+    std::shared_ptr<FileSystem> _fs;
+};
+
+// Real read-ahead windows: with files that can warm the cache, a non-split query scan of one rowset of three segments
+// starts the read-ahead of the two segments after the first while it reads the first, and reports them in
+// SegmentReadAheadStarted. Nothing starts early with lake_scan_read_ahead_segments = 0 or without the scheduler, and
+// the rows are the same in every case.
+TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_starts_segment_windows) {
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    std::vector<std::pair<int, int>> expected;
+    {
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+        ASSERT_OK(writer->open());
+        for (int s = 0; s < 3; s++) {
+            std::vector<int> k(20000);
+            std::vector<int> v(20000);
+            for (int i = 0; i < 20000; i++) {
+                k[i] = s * 20000 + i;
+                v[i] = k[i] * 3;
+                expected.emplace_back(k[i], v[i]);
+            }
+            auto c0 = Int32Column::create();
+            auto c1 = Int32Column::create();
+            c0->append_numbers(k.data(), k.size() * sizeof(int));
+            c1->append_numbers(v.data(), v.size() * sizeof(int));
+            ASSERT_OK(writer->write(Chunk({std::move(c0), std::move(c1)}, _schema)));
+            ASSERT_OK(writer->finish());
+        }
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_id(1);
+        for (const auto& file : writer->segments()) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
+        }
+        ASSERT_EQ(3, rowset->segment_metas_size());
+        writer->close();
+    }
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    ASSIGN_OR_ABORT(auto local_fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
+    auto fs = std::make_shared<WarmableFileSystem>(local_fs);
+    const bool scheduler_was_enabled = remote_io_scheduler_enabled();
+    DeferOp restore([&] { g_remote_io_scheduler_enabled.store(scheduler_was_enabled); });
+    ConfigResetGuard<int32_t> window_guard(&config::remote_prefetch_window_blocks, 128);
+
+    auto scan = [&](bool scheduler, int32_t segments_ahead, OlapReaderStatistics* stats) {
+        g_remote_io_scheduler_enabled.store(scheduler);
+        ConfigResetGuard<int32_t> ahead_guard(&config::lake_scan_read_ahead_segments, segments_ahead);
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        CHECK_OK(reader->prepare());
+        TabletReaderParams params;
+        params.reader_type = ReaderType::READER_QUERY;
+        params.lake_io_opts.fill_data_cache = true;
+        params.lake_io_opts.fs = fs;
+        params.lake_io_opts.remote_read = RemoteReadContext::for_query(1, 1, 0, 42);
+        CHECK_OK(reader->open(params));
+        std::vector<std::pair<int, int>> rows;
+        auto chunk = ChunkFactory::new_chunk(*_schema, 4096);
+        while (true) {
+            chunk->reset();
+            Status st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                rows.emplace_back(chunk->get(i)[0].get_int32(), chunk->get(i)[1].get_int32());
+            }
+        }
+        reader->close();
+        *stats = reader->stats();
+        return rows;
+    };
+
+    OlapReaderStatistics stats;
+    EXPECT_EQ(expected, scan(true, 16, &stats));
+    // The first segment reads ahead at its own turn; the two after it start while it is read.
+    EXPECT_EQ(2, stats.segment_read_ahead_started);
+    EXPECT_GT(stats.remote_prefetch_blocks, 0);
+    EXPECT_GT(fs->warms.load(), 0);
+
+    EXPECT_EQ(expected, scan(true, 0, &stats));
+    EXPECT_EQ(0, stats.segment_read_ahead_started);
+    EXPECT_GT(stats.remote_prefetch_blocks, 0);
+
+    const int64_t warms = fs->warms.load();
+    EXPECT_EQ(expected, scan(false, 16, &stats));
+    EXPECT_EQ(0, stats.segment_read_ahead_started);
+    EXPECT_EQ(0, stats.remote_prefetch_blocks);
+    EXPECT_EQ(warms, fs->warms.load());
 }
 
 // A non-split query scan reads ahead across the segments of a rowset, not only across rowsets. While the remote I/O
