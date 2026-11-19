@@ -52,6 +52,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `planCpuCosts` DOUBLE COMMENT "クエリ計画段階のCPU使用量（ナノ秒）",
   `planMemCosts` DOUBLE COMMENT "クエリ計画段階のメモリ使用量（バイト）",
   `pendingTimeMs` BIGINT COMMENT "クエリがキューで待機した時間（ミリ秒）",
+  `queryFeMemory` BIGINT COMMENT "クエリがFE上で割り当てたメモリ（バイト）",
   `candidateMVs` VARCHAR(65533) NULL COMMENT "候補マテリアライズドビューのリスト",
   `hitMvs` VARCHAR(65533) NULL COMMENT "ヒットしたマテリアライズドビューのリスト",
   `warehouse` VARCHAR(32) NULL COMMENT "Warehouse名"
