@@ -14,14 +14,20 @@
 
 package com.starrocks.type;
 
+import com.google.gson.annotations.SerializedName;
+
 import java.util.Objects;
 
 /**
  * A native GEOGRAPHY or GEOMETRY type. It holds the single copy of the semantic descriptor, which is validated
- * against the primitive type on construction and never changes afterwards. The descriptor is not persisted in FE
- * metadata.
+ * against the primitive type on construction and never changes afterwards.
+ * <p>
+ * In FE metadata the descriptor is written whole, as {@code "geo":{...}}. A GEO {@link ScalarType} that is not a
+ * {@code GeoType} is metadata written before descriptors were persisted: it has no descriptor and stays a plain
+ * {@code ScalarType}.
  */
 public class GeoType extends ScalarType {
+    @SerializedName(value = "geo")
     private final GeoTypeDescriptor descriptor;
 
     public GeoType(PrimitiveType primitiveType, GeoTypeDescriptor descriptor) {
