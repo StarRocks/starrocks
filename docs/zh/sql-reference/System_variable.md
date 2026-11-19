@@ -297,8 +297,8 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### enable_exchange_sink_buffer_flush
 
-* 描述：是否限制 Exchange Sink 在 Shuffle 时用于缓存待发送数据的内存。Exchange Sink 会为每个目标 Pipeline Driver 保留一个未填满的 Chunk，通常在 Chunk 填满后才发送；当该变量为 `true` 且一个 Driver 的这些 Chunk 占用的内存超过 BE 配置项 `exchange_sink_buffer_flush_threshold_bytes` 时，会立即发送。设置为 `false` 可在当前会话中恢复之前的行为。
-* 默认值：true
+* 描述：是否限制 Exchange Sink 在 Shuffle 时用于缓存待发送数据的内存。Exchange Sink 会为每个目标 Pipeline Driver 保留一个未填满的 Chunk，通常在 Chunk 填满后才发送；当该变量为 `true` 且一个 Driver 的这些 Chunk 占用的内存超过 BE 配置项 `exchange_sink_buffer_flush_threshold_bytes` 时，会立即发送。默认关闭，设置为 `true` 可在当前会话中开启。
+* 默认值：false
 * 引入版本：-
 
 

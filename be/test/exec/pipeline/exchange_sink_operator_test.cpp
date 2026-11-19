@@ -262,6 +262,7 @@ TEST_F(ExchangeSinkOperatorTest, shuffle_chunk_buffer_counters_follow_reset) {
 static void run_memory_limited_shuffle(ShuffleSinkHarness& harness, RuntimeState* state, bool json_payload,
                                        int num_pushes) {
     auto* sink = harness.sink();
+    sink->set_enable_shuffle_buffer_flush_for_testing(true);
     const size_t chunk_size = state->chunk_size();
     auto reference = make_payload_chunk(chunk_size, json_payload);
     const int64_t one_chunk_bytes = static_cast<int64_t>(reference->memory_usage());
