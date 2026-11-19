@@ -525,12 +525,7 @@ struct TUserIdentity {
     3: optional bool is_domain
     4: optional bool is_ephemeral
     5: optional TUserRoles current_role_ids
-<<<<<<< HEAD
     // The groups resolved by the session, forwarded when the FE rebuilds a schema-scan RPC caller.
-=======
-    // The groups of the session (directory memberOf, token claims, group providers), so that an FE rebuilding the
-    // caller from this identity also grants the roles mapped to those groups.
->>>>>>> fe8be24 ([BugFix][RB-904] Honor group-granted roles in information_schema RPCs (#82567))
     6: optional list<string> groups
 }
 
