@@ -18,6 +18,8 @@
 #include <utility>
 
 #include "connector/async_flush_stream_poller.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/workgroup/work_group.h"
 #include "formats/utils.h"
 #include "glog/logging.h"
 
@@ -29,13 +31,14 @@ ConnectorSinkOperator::ConnectorSinkOperator(OperatorFactory* factory, int32_t i
                                              std::unique_ptr<connector::AsyncFlushStreamPoller> io_poller,
                                              std::shared_ptr<connector::SinkMemoryManager> sink_mem_mgr,
                                              connector::SinkOperatorMemoryManager* op_mem_mgr,
-                                             FragmentContext* fragment_context)
+                                             FragmentContext* fragment_context, std::atomic<int32_t>& num_sinkers)
         : Operator(factory, id, "connector_sink", plan_node_id, false, driver_sequence),
           _connector_chunk_sink(std::move(connector_chunk_sink)),
           _io_poller(std::move(io_poller)),
           _sink_mem_mgr(std::move(sink_mem_mgr)),
           _op_mem_mgr(op_mem_mgr),
-          _fragment_context(fragment_context) {}
+          _fragment_context(fragment_context),
+          _num_sinkers(num_sinkers) {}
 
 Status ConnectorSinkOperator::prepare(RuntimeState* state) {
 #ifndef BE_TEST
@@ -84,6 +87,10 @@ bool ConnectorSinkOperator::is_finished() const {
 
 Status ConnectorSinkOperator::set_finishing(RuntimeState* state) {
     _no_more_input = true;
+    if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        _fragment_context->workgroup()->executors()->driver_executor()->report_audit_statistics(state->query_ctx(),
+                                                                                                state->fragment_ctx());
+    }
     RETURN_IF_ERROR(_connector_chunk_sink->finish());
     return Status::OK();
 }
@@ -119,6 +126,7 @@ ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(
 }
 
 OperatorPtr ConnectorSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+    _increment_num_sinkers_no_barrier();
     auto chunk_sink = _data_sink_provider->create_chunk_sink(_sink_context, driver_sequence).value();
     auto io_poller = std::make_unique<connector::AsyncFlushStreamPoller>();
     chunk_sink->set_io_poller(io_poller.get());
@@ -126,7 +134,7 @@ OperatorPtr ConnectorSinkOperatorFactory::create(int32_t degree_of_parallelism, 
     chunk_sink->set_operator_mem_mgr(op_mem_mgr);
     return std::make_shared<ConnectorSinkOperator>(this, _id, Operator::s_pseudo_plan_node_id_for_final_sink,
                                                    driver_sequence, std::move(chunk_sink), std::move(io_poller),
-                                                   _sink_mem_mgr, op_mem_mgr, _fragment_context);
+                                                   _sink_mem_mgr, op_mem_mgr, _fragment_context, _num_sinkers);
 }
 
 } // namespace starrocks::pipeline
