@@ -96,6 +96,8 @@ public abstract class DataSink {
             return true;
         } else if (table instanceof IcebergTable) {
             return true;
+        } else if (table.isPaimonTable()) {
+            return true;
         } else if (table instanceof HiveTable) {
             return true;
         } else if (table instanceof TableFunctionTable) {

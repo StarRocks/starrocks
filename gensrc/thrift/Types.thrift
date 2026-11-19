@@ -701,6 +701,21 @@ struct THiveFileInfo {
     5: optional i64 file_size_in_bytes
 }
 
+// One producer's final PrepareCommit result. The SDK version is separate from
+// SerializeList's binary payload; producer identity also covers an empty result.
+struct TPaimonCommitInfo {
+    1: optional string operation_id
+    2: optional string producer_id
+    3: optional i32 attempt_id
+    4: optional i32 serializer_version
+    5: optional binary commit_messages
+    6: optional i64 schema_id
+    7: optional string table_identity
+    8: optional i64 row_count
+    9: optional list<string> owned_files
+    10: optional bool prepare_complete
+}
+
 // Extension point for TSinkCommitInfo. DO NOT MODIFY: do not add fields here,
 // and do not rename, renumber or remove it. The field numbers inside are
 // allocated separately, so anything added here collides with them, and
@@ -712,6 +727,7 @@ struct TSinkCommitInfoExt {
 struct TSinkCommitInfo {
     1: optional TIcebergDataFile iceberg_data_file
     2: optional THiveFileInfo hive_file_info
+    3: optional TPaimonCommitInfo paimon_commit_info
     // ... for other tables sink commit info
 
     100: optional bool is_overwrite;
