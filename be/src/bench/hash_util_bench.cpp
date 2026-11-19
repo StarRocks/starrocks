@@ -13,12 +13,14 @@
 // limitations under the License.
 
 #include <benchmark/benchmark.h>
+#include <zlib.h>
 
 #include <cstring>
 #include <mutex>
 #include <vector>
 
 #include "base/hash/hash_util.hpp"
+#include "base/hash/xxh3.h"
 
 namespace starrocks {
 
@@ -99,11 +101,118 @@ static void BM_HashUtil_RowsetIdHash64(benchmark::State& state) {
     state.SetBytesProcessed(int64_t(state.iterations()) * 24);
 }
 
-BENCHMARK(BM_HashUtil_Hash32)->Arg(0)->Arg(8)->Arg(32)->Arg(128)->Arg(1024);
+static void BM_HashUtil_ZlibSoftwareCrc32(benchmark::State& state) {
+    std::call_once(g_bench_buf_init, init_bench_buffer);
+    int32_t len = state.range(0);
+    uint32_t seed = 0x13579bdu;
+    uint32_t res = 0;
+    const char* buf = g_bench_buf;
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(buf);
+        res ^= static_cast<uint32_t>(
+                ::crc32(seed, reinterpret_cast<const unsigned char*>(buf), static_cast<uInt>(len)));
+        benchmark::DoNotOptimize(res);
+    }
+    state.SetBytesProcessed(int64_t(state.iterations()) * int64_t(len));
+}
+
+static void BM_HashUtil_ZlibCrcHash(benchmark::State& state) {
+    std::call_once(g_bench_buf_init, init_bench_buffer);
+    int32_t len = state.range(0);
+    uint32_t seed = 0x13579bdu;
+    uint32_t res = 0;
+    const char* buf = g_bench_buf;
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(buf);
+        res ^= HashUtil::zlib_crc_hash(buf, len, seed);
+        benchmark::DoNotOptimize(res);
+    }
+    state.SetBytesProcessed(int64_t(state.iterations()) * int64_t(len));
+}
+
+ALWAYS_INLINE static inline uint32_t xxh3_hash_inlined(const void* data, int32_t bytes, uint32_t seed) {
+    if (bytes >= 4 && bytes <= 8) {
+        uint64_t h =
+                XXH3_len_4to8_64b(static_cast<const xxh_u8*>(data), static_cast<size_t>(bytes), XXH3_kSecret, seed);
+#if !defined(__AVX512DQ__)
+        XXH_COMPILER_GUARD(h);
+#endif
+        return static_cast<uint32_t>(h);
+    }
+    if (bytes >= 9 && bytes <= 16) {
+        uint64_t h =
+                XXH3_len_9to16_64b(static_cast<const xxh_u8*>(data), static_cast<size_t>(bytes), XXH3_kSecret, seed);
+#if !defined(__AVX512DQ__)
+        XXH_COMPILER_GUARD(h);
+#endif
+        return static_cast<uint32_t>(h);
+    }
+    if (bytes >= 1 && bytes <= 3) {
+        uint64_t h =
+                XXH3_len_1to3_64b(static_cast<const xxh_u8*>(data), static_cast<size_t>(bytes), XXH3_kSecret, seed);
+#if !defined(__AVX512DQ__)
+        XXH_COMPILER_GUARD(h);
+#endif
+        return static_cast<uint32_t>(h);
+    }
+    return static_cast<uint32_t>(HashUtil::xx_hash3_64(data, bytes, seed));
+}
+
+template <typename T>
+static void BM_ColumnHash_XXH3_OutOfLine(benchmark::State& state) {
+    constexpr size_t kChunkSize = 4096;
+    std::vector<T> data(kChunkSize);
+    for (size_t i = 0; i < kChunkSize; ++i) {
+        data[i] = static_cast<T>(i * 1315423911ULL + 0x9e3779b97f4a7c15ULL);
+    }
+    std::vector<uint32_t> hashes(kChunkSize, HashUtil::XXH3_SEED_32);
+    for (auto _ : state) {
+        for (size_t i = 0; i < kChunkSize; ++i) {
+            hashes[i] = static_cast<uint32_t>(HashUtil::xx_hash3_64(&data[i], sizeof(T), hashes[i]));
+        }
+        benchmark::DoNotOptimize(hashes.data());
+        benchmark::ClobberMemory();
+    }
+    state.SetBytesProcessed(int64_t(state.iterations()) * int64_t(kChunkSize * sizeof(T)));
+    state.SetItemsProcessed(int64_t(state.iterations()) * int64_t(kChunkSize));
+}
+
+template <typename T>
+static void BM_ColumnHash_XXH3_Inlined(benchmark::State& state) {
+    constexpr size_t kChunkSize = 4096;
+    std::vector<T> data(kChunkSize);
+    for (size_t i = 0; i < kChunkSize; ++i) {
+        data[i] = static_cast<T>(i * 1315423911ULL + 0x9e3779b97f4a7c15ULL);
+    }
+    std::vector<uint32_t> hashes(kChunkSize, HashUtil::XXH3_SEED_32);
+    for (auto _ : state) {
+        for (size_t i = 0; i < kChunkSize; ++i) {
+            hashes[i] = xxh3_hash_inlined(&data[i], sizeof(T), hashes[i]);
+        }
+        benchmark::DoNotOptimize(hashes.data());
+        benchmark::ClobberMemory();
+    }
+    state.SetBytesProcessed(int64_t(state.iterations()) * int64_t(kChunkSize * sizeof(T)));
+    state.SetItemsProcessed(int64_t(state.iterations()) * int64_t(kChunkSize));
+}
+
+BENCHMARK(BM_HashUtil_Hash32)->Arg(0)->Arg(4)->Arg(8)->Arg(16)->Arg(32)->Arg(128)->Arg(1024);
 BENCHMARK(BM_HashUtil_Hash64)->Arg(0)->Arg(8)->Arg(32)->Arg(128)->Arg(1024);
-BENCHMARK(BM_HashUtil_CrcHash32)->Arg(0)->Arg(8)->Arg(32)->Arg(128)->Arg(1024);
+BENCHMARK(BM_HashUtil_CrcHash32)->Arg(0)->Arg(4)->Arg(8)->Arg(16)->Arg(32)->Arg(128)->Arg(1024);
 BENCHMARK(BM_HashUtil_CrcHash64)->Arg(0)->Arg(8)->Arg(32)->Arg(128)->Arg(1024);
 BENCHMARK(BM_HashUtil_RowsetIdHash64);
+BENCHMARK(BM_HashUtil_ZlibSoftwareCrc32)->Arg(4)->Arg(8)->Arg(16)->Arg(32)->Arg(128)->Arg(1024);
+BENCHMARK(BM_HashUtil_ZlibCrcHash)->Arg(4)->Arg(8)->Arg(16)->Arg(32)->Arg(128)->Arg(1024);
+BENCHMARK_TEMPLATE(BM_ColumnHash_XXH3_OutOfLine, int8_t);
+BENCHMARK_TEMPLATE(BM_ColumnHash_XXH3_Inlined, int8_t);
+BENCHMARK_TEMPLATE(BM_ColumnHash_XXH3_OutOfLine, int16_t);
+BENCHMARK_TEMPLATE(BM_ColumnHash_XXH3_Inlined, int16_t);
+BENCHMARK_TEMPLATE(BM_ColumnHash_XXH3_OutOfLine, int32_t);
+BENCHMARK_TEMPLATE(BM_ColumnHash_XXH3_Inlined, int32_t);
+BENCHMARK_TEMPLATE(BM_ColumnHash_XXH3_OutOfLine, int64_t);
+BENCHMARK_TEMPLATE(BM_ColumnHash_XXH3_Inlined, int64_t);
+BENCHMARK_TEMPLATE(BM_ColumnHash_XXH3_OutOfLine, __int128);
+BENCHMARK_TEMPLATE(BM_ColumnHash_XXH3_Inlined, __int128);
 
 } // namespace starrocks
 
