@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <benchmark/benchmark.h>
 #include <sched.h>
 
 #include <algorithm>
@@ -27,8 +28,6 @@
 #include <shared_mutex>
 #include <unordered_map>
 #include <vector>
-
-#include <benchmark/benchmark.h>
 
 #include "absl/container/inlined_vector.h"
 #include "base/phmap/phmap.h"
@@ -89,8 +88,7 @@ public:
     void unlock() { _locked.store(false, std::memory_order_release); }
 
     inline bool try_lock() {
-        return !_locked.load(std::memory_order_relaxed) &&
-               !_locked.exchange(true, std::memory_order_acquire);
+        return !_locked.load(std::memory_order_relaxed) && !_locked.exchange(true, std::memory_order_acquire);
     }
 
 private:
@@ -331,8 +329,7 @@ public:
 
 private:
     phmap::parallel_flat_hash_map<int, StatsType*, phmap::Hash<int>, phmap::EqualTo<int>,
-                                  phmap::Allocator<phmap::Pair<const int, StatsType*>>, 4,
-                                  std::shared_mutex>
+                                  phmap::Allocator<phmap::Pair<const int, StatsType*>>, 4, std::shared_mutex>
             _query_statistics;
 };
 
@@ -879,7 +876,7 @@ void ApplyInsertScales(benchmark::Benchmark* b) {
             b->Args({senders, nodes});
         }
     }
-    for (int threads : {1, 4, 16, 32, 64, 128}) {
+    for (int threads : {1, 4, 16, 32, 64, 128, 256}) {
         b->Threads(threads);
     }
     b->UseRealTime();
@@ -889,7 +886,7 @@ void ApplyMixedScales(benchmark::Benchmark* b) {
     for (int agg_every : {32, 8}) {
         b->Args({90, 16, agg_every});
     }
-    for (int threads : {1, 4, 8, 16, 32, 64, 128}) {
+    for (int threads : {1, 4, 8, 16, 32, 64, 128, 256}) {
         b->Threads(threads);
     }
     b->UseRealTime();
@@ -897,7 +894,7 @@ void ApplyMixedScales(benchmark::Benchmark* b) {
 
 void ApplyEosBurstScales(benchmark::Benchmark* b) {
     b->Args({90, 16});
-    for (int threads : {1, 4, 8, 16, 32, 64}) {
+    for (int threads : {1, 4, 8, 16, 32, 64, 128, 256}) {
         b->Threads(threads);
     }
     b->UseRealTime();
