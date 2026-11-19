@@ -102,7 +102,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -130,9 +132,14 @@ public class IcebergApiConverter {
     private static final Logger LOG = LogManager.getLogger(IcebergApiConverter.class);
     private static final ObjectMapper NAME_MAPPING_READER = new ObjectMapper();
     public static final String PARTITION_NULL_VALUE = "null";
+    public static final String IDENTIFIER_FIELDS = "identifier-fields";
     private static final Pattern ICEBERG_BUCKET_PATTERN = Pattern.compile("bucket\\[(\\d+)]");
     private static final Pattern ICEBERG_TRUNCATE_PATTERN = Pattern.compile("truncate\\[(\\d+)]");
     private static final int FAKE_FIELD_ID = -1;
+    private static final List<String> DATA_FILE_FORMATS = List.of("parquet", "orc", "avro");
+    // the names Iceberg's parquet writer parses; SR's own aliases zlib and none are not among them
+    private static final List<String> PARQUET_CODECS =
+            List.of("uncompressed", "snappy", "gzip", "lzo", "brotli", "lz4", "zstd", "lz4_raw");
 
     public static IcebergTable toIcebergTable(Table nativeTbl, String catalogName, String remoteDbName,
                                               String remoteTableName, String nativeCatalogType) {
@@ -181,6 +188,54 @@ public class IcebergApiConverter {
         AtomicInteger nextFieldId = new AtomicInteger(1);
         icebergSchema = TypeUtil.assignFreshIds(icebergSchema, nextFieldId::getAndIncrement);
         return new Schema(icebergSchema.asStructType().fields());
+    }
+
+    // Resolves comma-separated top-level column names into the schema's identifier fields; Iceberg validates each.
+    public static Schema withIdentifierFields(Schema schema, String identifierFields) throws DdlException {
+        Set<Integer> fieldIds = resolveIdentifierFieldIds(schema, identifierFields);
+        try {
+            return new Schema(schema.columns(), fieldIds);
+        } catch (IllegalArgumentException e) {
+            throw new DdlException(e.getMessage(), e);
+        }
+    }
+
+    private static Set<Integer> resolveIdentifierFieldIds(Schema schema, String identifierFields) throws DdlException {
+        Set<Integer> fieldIds = new LinkedHashSet<>();
+        for (String name : identifierFields.split(",")) {
+            String colName = name.trim();
+            if (colName.isEmpty()) {
+                continue;
+            }
+            Types.NestedField field = schema.columns().stream()
+                    .filter(f -> f.name().equalsIgnoreCase(colName)).findFirst().orElse(null);
+            if (field == null) {
+                throw new DdlException("Unknown column '" + colName + "' in property " + IDENTIFIER_FIELDS);
+            }
+            if (!fieldIds.add(field.fieldId())) {
+                throw new DdlException("Duplicate column '" + colName + "' in property " + IDENTIFIER_FIELDS);
+            }
+        }
+        if (fieldIds.isEmpty()) {
+            throw new DdlException("Property " + IDENTIFIER_FIELDS + " must name at least one column");
+        }
+        return fieldIds;
+    }
+
+    // Inverse of withIdentifierFields, for SHOW CREATE TABLE. Null when there are none, or when the property would
+    // not resolve back to the same fields (nested identifiers set by other engines, names with commas, padding or
+    // case collisions), so replaying the DDL never fails or picks other columns.
+    public static String toIdentifierFieldsProperty(Schema schema) {
+        Set<Integer> ids = schema.identifierFieldIds();
+        if (ids.isEmpty()) {
+            return null;
+        }
+        String property = ids.stream().sorted().map(schema::findColumnName).collect(Collectors.joining(","));
+        try {
+            return resolveIdentifierFieldIds(schema, property).equals(ids) ? property : null;
+        } catch (DdlException e) {
+            return null;
+        }
     }
 
     public static SortOrder toIcebergSortOrder(Schema schema, List<OrderByElement> orderByElements) throws DdlException {
@@ -892,10 +947,46 @@ public class IcebergApiConverter {
         }
     }
 
+    // These values are stored in the table metadata for every engine, so they must be ones Iceberg itself accepts.
+    public static void checkWriteProperty(String key, String value) {
+        switch (key) {
+            case TableProperties.DEFAULT_FILE_FORMAT:
+                checkOneOf(key, value, DATA_FILE_FORMATS);
+                break;
+            case TableProperties.PARQUET_COMPRESSION:
+            case TableProperties.DELETE_PARQUET_COMPRESSION:
+                checkOneOf(key, value, PARQUET_CODECS);
+                break;
+            case TableProperties.WRITE_TARGET_FILE_SIZE_BYTES:
+                // parsed as Iceberg's PropertyUtil.propertyAsLong does, without trimming
+                long size;
+                try {
+                    size = Long.parseLong(value);
+                } catch (NumberFormatException e) {
+                    size = 0;
+                }
+                if (size <= 0) {
+                    throw new StarRocksConnectorException("Invalid value '%s' for property '%s', expected a positive integer",
+                            value, key);
+                }
+                break;
+            default:
+        }
+    }
+
+    private static void checkOneOf(String key, String value, List<String> allowed) {
+        if (!allowed.contains(value.toLowerCase(Locale.ROOT))) {
+            throw new StarRocksConnectorException("Unsupported value '%s' for property '%s', supported: %s",
+                    value, key, String.join(", ", allowed));
+        }
+    }
+
     public static Map<String, String> rebuildCreateTableProperties(Map<String, String> createProperties) {
         ImmutableMap.Builder<String, String> tableProperties = ImmutableMap.builder();
         createProperties.entrySet().forEach(tableProperties::put);
-        String fileFormat = createProperties.getOrDefault(FILE_FORMAT, TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
+        // the alias codec follows the alias format, else the native default format
+        String fileFormat = createProperties.getOrDefault(FILE_FORMAT, createProperties.getOrDefault(
+                TableProperties.DEFAULT_FILE_FORMAT, TableProperties.DEFAULT_FILE_FORMAT_DEFAULT));
         String compressionCodec = createProperties.get(COMPRESSION_CODEC);
 
         if (!createProperties.containsKey(TableProperties.DEFAULT_FILE_FORMAT)) {

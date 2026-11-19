@@ -177,6 +177,7 @@ Key table properties:
 - `write.metadata.metrics.default`: Default metrics mode for the column statistics StarRocks writes into data files. Options: `none`, `counts`, `truncate(N)`, `full` (Default: `truncate(16)`). `none` writes no statistics, `counts` writes only value and null counts, `truncate(N)` also writes lower and upper bounds with STRING and BINARY bounds truncated to N characters (bytes), and `full` writes untruncated bounds.
 - `write.metadata.metrics.column.<col>`: Metrics mode for column `<col>`, overriding the default. Options are the same as `write.metadata.metrics.default`.
 - `write.metadata.metrics.max-inferred-column-defaults`: When `write.metadata.metrics.default` is not set, only the first N columns get the default `truncate(16)` and the remaining columns get `none` (Default: `100`).
+- `identifier-fields`: Comma-separated names of the columns that identify a row, stored as the Iceberg schema's identifier fields. Each column must be a top-level `NOT NULL` column of a primitive type other than FLOAT or DOUBLE. This property can only be set in CREATE TABLE.
 
 ### Examples
 
