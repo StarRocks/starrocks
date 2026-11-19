@@ -281,6 +281,15 @@ under the License.
                 <artifactId>hadoop-common</artifactId>
                 <version>${hadoop.version}</version>
                 <exclusions>
+                    <!-- Broker serves Thrift and uses Hadoop filesystem clients. -->
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-security</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-http</artifactId>
+                    </exclusion>
                     <exclusion>
                         <artifactId>avro</artifactId>
                         <groupId>org.apache.avro</groupId>
@@ -308,6 +317,15 @@ under the License.
                 <artifactId>hadoop-hdfs</artifactId>
                 <version>${hadoop.version}</version>
                 <exclusions>
+                    <!-- hadoop-hdfs also pulls in the unused Jetty server stack. -->
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-security</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-http</artifactId>
+                    </exclusion>
                     <exclusion>
                         <groupId>com.fasterxml.jackson.core</groupId>
                         <artifactId>*</artifactId>

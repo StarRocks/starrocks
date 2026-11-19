@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP DATABASE deletes a database from StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP DATABASE

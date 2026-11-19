@@ -1249,6 +1249,9 @@ public class MaterializedViewHandler extends AlterHandler {
                 return;
             }
             tbl.setState(olapTableState);
+            if (olapTableState == OlapTableState.NORMAL && tbl.isCloudNativeTableOrMaterializedView()) {
+                GlobalStateMgr.getCurrentState().getCompactionMgr().resumeCompactionAfterAlter(dbId, tbl);
+            }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }

@@ -26,6 +26,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -90,5 +91,21 @@ class VarTracerTest {
             executor.shutdownNow();
             assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
         }
+    }
+
+    @Test
+    public void testSameTimePointKeepsRecordOrder() {
+        VarTracer tracer = new VarTracer();
+        List<String> names = List.of("g.Table", "g.Requests", "g.IOTime", "g.Retries", "g.Slowest",
+                "a", "z", "m", "b", "y");
+        for (String name : names) {
+            tracer.record(7, name, "v");
+        }
+        // recorded again later, all at one new time point: still in the order first recorded
+        for (String name : names) {
+            tracer.record(9, name, "v2");
+        }
+        assertEquals(names,
+                tracer.getAllVarsWithOrder().stream().map(v -> v.name).collect(Collectors.toList()));
     }
 }

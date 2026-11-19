@@ -705,6 +705,8 @@ Status Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) 
     rowset->rowset_meta()->get_full_meta_pb(&rowset_meta_pb, rowset->rowset_meta()->skip_tablet_schema());
     RETURN_IF_ERROR(RowsetMetaManager::save(data_dir()->get_meta(), tablet_uid(), rowset_meta_pb));
 
+    // The old cumulative point describes the rowsets being replaced.
+    set_cumulative_layer_point(kInvalidCumulativePoint);
     modify_rowsets_without_lock({rowset}, origin_rowsets, nullptr);
     return Status::OK();
 }

@@ -2,6 +2,7 @@
 sidebar_position: 20
 description: "StarRocks in Docker: 実データを使用したジョインによるクエリ"
 displayed_sidebar: docs
+products: [oss]
 ---
 import DDL from '../_assets/quick-start/_DDL.mdx'
 import Clients from '../_assets/quick-start/_clientsAllin1.mdx'

@@ -57,8 +57,10 @@
 #include "storage/rowset/options.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/sort_key_bounds.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
+#include "storage/tablet_schema_map.h"
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/disjunctive_predicates.h"
 #include "storage_primitive/predicate_tree/predicate_tree.hpp"
@@ -229,6 +231,40 @@ TEST_F(LakeRowsetTest, test_data_size_after_deletion_scales_by_live_fraction) {
 
     Rowset rs(_tablet_mgr.get(), metadata, 0, /*compaction_segment_limit=*/0);
     EXPECT_EQ(600, rs.data_size_after_deletion());
+}
+
+// A segment written by the tablet writer records its sort key bounds in the encoded form only.
+TEST_F(LakeRowsetTest, WriterStoresEncodedSortKeyBounds) {
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+    ASSERT_OK(writer->open());
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    for (int key : {3, 7, 11, 42}) {
+        c0->append(key);
+        c1->append(key * 2);
+    }
+    Chunk chunk({c0, c1}, _schema);
+    ASSERT_OK(writer->write(chunk));
+    ASSERT_OK(writer->finish());
+    ASSERT_EQ(1, writer->segments().size());
+
+    SegmentMetadataPB meta;
+    writer->segments()[0].to_proto(0, &meta);
+    writer->close();
+
+    EXPECT_FALSE(meta.has_deprecated_sort_key_min());
+    EXPECT_FALSE(meta.has_deprecated_sort_key_max());
+    EXPECT_TRUE(meta.has_sort_key_min_encoded());
+    EXPECT_TRUE(meta.has_sort_key_max_encoded());
+    EXPECT_TRUE(has_segment_sort_key_bounds(meta));
+
+    VariantTuple min, max;
+    ASSERT_OK(decode_segment_sort_key_bounds(meta, &min, &max));
+    ASSERT_EQ(1, min.size());
+    ASSERT_EQ(1, max.size());
+    EXPECT_EQ(3, min[0].value().get_int32());
+    EXPECT_EQ(42, max[0].value().get_int32());
 }
 
 TEST_F(LakeRowsetTest, test_load_segments) {
@@ -2257,12 +2293,12 @@ public:
         {
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(files[0].path);
-            auto* min_tuple = segment_meta->mutable_sort_key_min();
+            auto* min_tuple = segment_meta->mutable_deprecated_sort_key_min();
             auto* min_var = min_tuple->add_values();
             *min_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             min_var->set_value("0");
 
-            auto* max_tuple = segment_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_deprecated_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             max_var->set_value("10");
@@ -2274,12 +2310,12 @@ public:
         {
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(files[1].path);
-            auto* min_tuple = segment_meta->mutable_sort_key_min();
+            auto* min_tuple = segment_meta->mutable_deprecated_sort_key_min();
             auto* min_var = min_tuple->add_values();
             *min_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             min_var->set_value("20");
 
-            auto* max_tuple = segment_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_deprecated_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             max_var->set_value("30");
@@ -2291,12 +2327,12 @@ public:
         {
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(files[2].path);
-            auto* min_tuple = segment_meta->mutable_sort_key_min();
+            auto* min_tuple = segment_meta->mutable_deprecated_sort_key_min();
             auto* min_var = min_tuple->add_values();
             *min_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             min_var->set_value("40");
 
-            auto* max_tuple = segment_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_deprecated_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             max_var->set_value("50");
@@ -2781,6 +2817,38 @@ TEST_F(LakeRowsetTest, test_segments_stops_after_cancel) {
     cancelled.store(false);
     ASSIGN_OR_ABORT(auto segments, rowset->segments(lake_io_opts, nullptr, &cancelled));
     ASSERT_EQ(3, segments.size());
+}
+
+// segments() returns a rowset's segments in metadata order, also when the parallel load runs a refused submit at once,
+// ahead of the earlier segments still queued: a caller indexes them by metadata position.
+TEST_F(LakeRowsetTest, test_segments_keep_metadata_order_after_refused_submit) {
+    create_rowsets_for_testing();
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, true);
+    _tablet_mgr->metacache()->prune();
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    int submits = 0;
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::submit", [&](void* arg) {
+        if (++submits == 2) {
+            *static_cast<Status*>(arg) = Status::ServiceUnavailable("injected submit refusal");
+        }
+    });
+
+    // Rowset captures _parallel_load in its constructor.
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = false};
+    ASSIGN_OR_ABORT(auto segments, rowset->segments(lake_io_opts));
+    ASSERT_EQ(3, submits);
+    const auto& rs_meta = _tablet_metadata->rowsets(0);
+    ASSERT_EQ(rs_meta.segment_metas_size(), segments.size());
+    for (int i = 0; i < rs_meta.segment_metas_size(); i++) {
+        ASSERT_NE(nullptr, segments[i]);
+        EXPECT_EQ(_tablet_mgr->segment_location(_tablet_metadata->id(), rs_meta.segment_metas(i).filename()),
+                  segments[i]->file_name());
+    }
 }
 
 // A query that is not cancelled reads exactly what it read before.
@@ -3446,6 +3514,76 @@ TEST_F(LakeRowsetTest, test_checked_segments_cancel_after_first_footer_stops_fan
     ASSIGN_OR_ABORT(auto retried, rowset->get_segments_checked(opts, &stats, &cancelled));
     EXPECT_EQ(3, retried.size());
     EXPECT_EQ(4, stats.segments_opened);
+}
+
+// get_rowsets() looks each schema up in GlobalTabletSchemaMap once, not once per rowset: the map takes one lock per
+// schema id, which every tablet of a table shares, so per-rowset lookups made scans of tablets with many rowsets
+// queue up on it. A conflicting cache entry for each schema makes every lookup build a new TabletSchema,
+// so rowsets share one schema object only if it was looked up once.
+TEST_F(LakeRowsetTest, test_get_rowsets_looks_up_each_schema_once) {
+    auto init_schema = [](TabletSchemaPB* schema, int64_t schema_id) {
+        schema->set_id(schema_id);
+        schema->set_keys_type(DUP_KEYS);
+        schema->set_num_short_key_columns(1);
+        schema->set_num_rows_per_row_block(65535);
+        auto* k = schema->add_column();
+        k->set_unique_id(1);
+        k->set_name("k");
+        k->set_type("INT");
+        k->set_is_key(true);
+        k->set_is_nullable(false);
+        auto* v = schema->add_column();
+        v->set_unique_id(2);
+        v->set_name("v");
+        v->set_type("INT");
+        v->set_is_key(false);
+        v->set_is_nullable(true);
+        v->set_aggregation("NONE");
+    };
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    metadata->set_next_rowset_id(5);
+    init_schema(metadata->mutable_schema(), next_id());
+    const int64_t archived_id = next_id();
+    auto& archived_pb = (*metadata->mutable_historical_schemas())[archived_id];
+    init_schema(&archived_pb, archived_id);
+    archived_pb.mutable_column(1)->set_unique_id(4);
+    for (uint32_t id = 1; id <= 4; ++id) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(id);
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(0);
+        rowset->set_data_size(0);
+    }
+    // Rowsets 1 and 3 were written with the tablet schema, rowsets 2 and 4 with the archived one.
+    (*metadata->mutable_rowset_to_schema())[2] = archived_id;
+    (*metadata->mutable_rowset_to_schema())[4] = archived_id;
+
+    auto conflicting_pb = metadata->schema();
+    conflicting_pb.mutable_column(1)->set_unique_id(3);
+    auto [conflicting, inserted] = GlobalTabletSchemaMap::Instance()->emplace(conflicting_pb);
+    ASSERT_TRUE(inserted);
+    auto conflicting_archived_pb = archived_pb;
+    conflicting_archived_pb.mutable_column(1)->set_unique_id(5);
+    auto [conflicting_archived, archived_inserted] =
+            GlobalTabletSchemaMap::Instance()->emplace(conflicting_archived_pb);
+    ASSERT_TRUE(archived_inserted);
+    auto lookup_1 = GlobalTabletSchemaMap::Instance()->emplace(metadata->schema()).first;
+    auto lookup_2 = GlobalTabletSchemaMap::Instance()->emplace(metadata->schema()).first;
+    ASSERT_NE(lookup_1.get(), lookup_2.get());
+
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), metadata);
+    ASSERT_EQ(4, rowsets.size());
+    auto current = rowsets[0]->tablet_schema();
+    auto archived = rowsets[1]->tablet_schema();
+    EXPECT_EQ(metadata->schema().id(), current->id());
+    EXPECT_EQ(2, current->column(1).unique_id());
+    EXPECT_EQ(archived_id, archived->id());
+    EXPECT_EQ(4, archived->column(1).unique_id());
+    EXPECT_EQ(current.get(), rowsets[2]->tablet_schema().get());
+    EXPECT_EQ(archived.get(), rowsets[3]->tablet_schema().get());
 }
 
 } // namespace starrocks::lake

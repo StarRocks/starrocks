@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ネイティブ GEO 値の次元加重重心を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Centroid

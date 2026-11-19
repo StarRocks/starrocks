@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the ISO standard day of the week for the specified date as an integer within the range of 1 to 7."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # dayofweek_iso

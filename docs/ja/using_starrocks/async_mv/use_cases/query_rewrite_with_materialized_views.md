@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "StarRocks automatically rewrites queries to use asynchronous materialized views for transparent query acceleration, including supported rewrite patterns."
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # マテリアライズドビューを用いたクエリの書き換え

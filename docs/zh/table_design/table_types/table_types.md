@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Overview of StarRocks table types: Duplicate Key, Aggregate, Unique Key, and Primary Key, with use case guidance for various analytics scenarios."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 表类型概览

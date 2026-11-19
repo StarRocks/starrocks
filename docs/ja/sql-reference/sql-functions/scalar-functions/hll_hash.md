@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "値をhll型に変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hll_hash

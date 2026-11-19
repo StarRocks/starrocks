@@ -2,6 +2,7 @@
 sidebar_position: 30
 description: 计算与存储分离
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # Separate storage and compute
@@ -254,7 +255,7 @@ Empty set (0.04 sec)
 
 #### 创建一个存算分离存储卷
 
-之前您在 MinIO 中创建了一个名为 `my-starrocks-volume` 的 bucket，并验证了 MinIO 有一个名为 `AAAAAAAAAAAAAAAAAAAA` 的访问密钥。以下 SQL 将在 MionIO bucket 中使用访问密钥和密钥创建一个存储卷。
+之前您在 MinIO 中创建了一个名为 `my-starrocks-volume` 的 bucket，并验证了 MinIO 有一个名为 `AAAAAAAAAAAAAAAAAAAA` 的访问密钥。以下 SQL 将在 MinIO bucket 中使用访问密钥和密钥创建一个存储卷。
 
 ```sql
 CREATE STORAGE VOLUME s3_volume

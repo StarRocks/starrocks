@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "入力文字列の64ビットのXXH64ハッシュ値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # xx_hash64

@@ -2,14 +2,12 @@
 displayed_sidebar: docs
 toc_max_heading_level: 4
 description: "Grants roles or privileges on specific objects to a user, a role, or an external group."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # GRANT
 
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
-import MultiServiceAccess from '../../../_assets/commonMarkdown/multi-service-access.mdx'
-import GrantCreateWarehouse from '../../../_assets/commonMarkdown/grant_create_warehouse.mdx'
-import GrantWarehouse from '../../../_assets/commonMarkdown/grant_warehouse.mdx'
 
 Grants roles or privileges on specific objects to a user, a role, or an external group.
 
@@ -24,7 +22,7 @@ Before a GRANT operation is performed, make sure that the related user or role h
 :::tip
 
 - Only users with the `user_admin` role can grant any privilege to other users and roles.
-- After a role is granted to a user, you must run [SET ROLE](SET_ROLE.md) to activate this role before you perform operations as this role. If you want all default roles to be activated upon login, run [ALTER USER](ALTER_USER.md) or [SET DEFAULT ROLE](SET_DEFAULT_ROLE.md). If you want all privileges in the system to be activated for all users upon login, set the global variable `SET GLOBAL activate_all_roles_on_login = TRUE;`.
+- After a role is granted to a user, you must run [SET ROLE](SET_ROLE.md) to activate this role before you perform operations as this role. If you want all default roles to be activated upon login, run [ALTER USER](ALTER_USER.md) or [SET DEFAULT ROLE](SET_DEFAULT_ROLE.md). If you want all roles granted to each user to be activated upon login, set the global variable `SET GLOBAL activate_all_roles_on_login = TRUE;`.
 - Common users can only grant privileges that have the `WITH GRANT OPTION` keyword to other users and roles.
 :::
 
@@ -34,7 +32,12 @@ Before a GRANT operation is performed, make sure that the related user or role h
 
 #### System
 
-<GrantCreateWarehouse />
+```SQL
+GRANT
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME | SECURITY } 
+    ON SYSTEM
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
+```
 
 #### AI functions and providers
 
@@ -212,8 +215,6 @@ GRANT
     TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
-<GrantWarehouse />
-
 ### Grant roles to roles, users, or external groups
 
 ```SQL
@@ -290,4 +291,6 @@ GRANT db_admin, user_admin, cluster_admin TO EXTERNAL GROUP admin_group;
 
 <UserPrivilegeCase />
 
-<MultiServiceAccess />
+---
+---
+For the best practices of multi-service access control, see [Multi-service access control](../../../administration/user_privs/authorization/User_privilege.md#multi-service-access-control).

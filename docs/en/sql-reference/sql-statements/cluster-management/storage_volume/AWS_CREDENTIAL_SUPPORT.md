@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Compare AWS credential support in the FE runtime and StarOS-backed storage volumes."
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # AWS credential support for storage volumes

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された日付の曜日インデックスを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # weekday

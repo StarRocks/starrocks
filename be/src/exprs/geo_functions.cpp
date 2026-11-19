@@ -17,7 +17,6 @@
 #include <algorithm>
 #include <array>
 #include <bit>
-#include <charconv>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -48,41 +47,28 @@
 #include "gutil/compiler_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
+#include "types/geo_srid.h"
 
 namespace starrocks {
 
 namespace {
 
-constexpr int32_t kCrs84Srid = 4326;
-
 // Row dimensions are not part of the descriptor: kernels decode each row's own WKB header and reject Z/M rows.
 Status check_geography_boundary(const GeoColumn& column) {
     const auto& descriptor = column.descriptor();
     const auto& type = descriptor.type;
-    if (type.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY || type.coordinate_system != GEO_COORDINATE_SYSTEM_SPHERICAL ||
-        type.edge_algorithm != GEO_EDGE_ALGORITHM_SPHERICAL || type.crs != "OGC:CRS84" ||
-        (type.srid.has_value() && type.srid.value() != kCrs84Srid)) {
+    if (type.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY || type.edge_algorithm != GEO_EDGE_ALGORITHM_SPHERICAL ||
+        type.crs != "OGC:CRS84" || (type.srid.has_value() && type.srid.value() != kCrs84Srid)) {
         return Status::NotSupported("Unsupported GEOGRAPHY SQL boundary descriptor");
     }
     return Status::OK();
 }
 
-std::optional<int32_t> derive_srid(std::string_view crs) {
-    if (crs == "OGC:CRS84") return kCrs84Srid;
-    constexpr std::string_view prefix = "EPSG:";
-    if (!crs.starts_with(prefix)) return std::nullopt;
-    int32_t srid;
-    const auto* begin = crs.data() + prefix.size();
-    const auto* end = crs.data() + crs.size();
-    auto [parsed_end, error] = std::from_chars(begin, end, srid);
-    return error == std::errc() && parsed_end == end ? std::optional<int32_t>(srid) : std::nullopt;
-}
-
 Status check_geometry_boundary(const GeoColumn& column) {
     const auto& descriptor = column.descriptor();
     const auto& type = descriptor.type;
-    if (type.logical_type != GEO_LOGICAL_TYPE_GEOMETRY || type.coordinate_system != GEO_COORDINATE_SYSTEM_CARTESIAN ||
-        type.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR || type.crs.empty() || type.srid != derive_srid(type.crs)) {
+    if (type.logical_type != GEO_LOGICAL_TYPE_GEOMETRY || type.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR ||
+        type.crs.empty() || type.srid != derive_geo_srid(type.crs)) {
         return Status::NotSupported("Unsupported GEOMETRY SQL boundary descriptor");
     }
     return Status::OK();
@@ -2403,7 +2389,7 @@ Status GeoFunctions::native_geo_transform_prepare(FunctionContext* context, Func
     auto state = std::make_unique<NativeGeoCrsState>();
     state->source = source_type->geo_type->crs;
     state->target = target_crs;
-    if (state->source.empty() || source_type->geo_type->srid != derive_srid(state->source)) {
+    if (state->source.empty() || source_type->geo_type->srid != derive_geo_srid(state->source)) {
         return Status::InvalidArgument("Source GEOMETRY CRS is missing or conflicts with SRID metadata");
     }
     ASSIGN_OR_RETURN(const int32_t source_srid, supported_transform_srid(state->source));

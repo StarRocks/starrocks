@@ -64,6 +64,9 @@ refresh materialized view mv_online_by_city with sync mode;
 set enable_materialized_view_rewrite = true;
 -- result:
 -- !result
+set materialized_view_rewrite_mode = "force";
+-- result:
+-- !result
 function: check_hit_materialized_view("select d.city_name, sum(f.online_seconds) from iceberg_mv_${uuid0}.ice_db_${uuid0}.f_driver_online_detail_h f left join d_city d on d.city_id = f.city_id where f.date_id >= 20260101 and f.date_id < 20260103 and f.business = 'Transport' and f.granularity = 'WHEELS' group by d.city_name", "mv_online_by_city")
 -- result:
 None

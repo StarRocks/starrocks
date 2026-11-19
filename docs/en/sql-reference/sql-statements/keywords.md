@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Reference list of reserved and non-reserved keywords in StarRocks SQL."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Keywords

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "FILE 値の inline フィールドを取得します。"
 sidebar_position: 80
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

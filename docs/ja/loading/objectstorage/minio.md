@@ -3,6 +3,7 @@ sidebar_position: 80
 displayed_sidebar: docs
 description: "MinIO から INSERT+FILES()、Broker Load、Spark Load を使用してデータをロードする方法。"
 toc_max_heading_level: 4
+products: [oss, enterprise, anywhere]
 ---
 
 # MinIO からのデータロード

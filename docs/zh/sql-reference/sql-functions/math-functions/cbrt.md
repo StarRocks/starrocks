@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算参数的立方根。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # cbrt

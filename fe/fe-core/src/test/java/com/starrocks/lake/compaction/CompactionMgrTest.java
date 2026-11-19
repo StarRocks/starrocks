@@ -17,6 +17,7 @@ package com.starrocks.lake.compaction;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -232,9 +233,12 @@ public class CompactionMgrTest {
             // The scheduler defers the pending UNSHARE (e.g. its request could not be sent). SplitTabletJob keeps
             // re-triggering it on every reshard tick, which must not erase the retry deadline.
             compactionManager.enableCompactionAfter(partition, 60_000);
+            compactionManager.deferCompactionForAlter(partition, 120_000);
+            long retryTime = compactionManager.getStatistics(partition).getNextCompactionTime();
             compactionManager.triggerUnshareCompaction(partition);
             Assertions.assertEquals(PartitionStatistics.CompactionPriority.UNSHARE,
                     compactionManager.getStatistics(partition).getPriority());
+            Assertions.assertEquals(retryTime, compactionManager.getStatistics(partition).getNextCompactionTime());
             Assertions.assertTrue(compactionManager.choosePartitionsToCompact(new HashSet<>()).isEmpty());
 
             // Once the request is dropped back to DEFAULT, the next trigger is a new request and runs at once.
@@ -258,6 +262,7 @@ public class CompactionMgrTest {
                 compactionManager.handleLoadingFinished(partition, 1, System.currentTimeMillis(),
                         Quantiles.compute(Lists.newArrayList(1d)));
                 compactionManager.enableCompactionAfter(partition, 60_000);
+                compactionManager.deferCompactionForAlter(partition, 120_000);
             }
 
             // A new manual or UNSHARE request runs on the next cycle even while the partition is cooling down.
@@ -412,5 +417,32 @@ public class CompactionMgrTest {
         // Unknown partitions are a no-op rather than an error: the scheduler may drop a request for a
         // partition the manager has already forgotten.
         compactionMgr.resetPriority(new PartitionIdentifier(9, 9, 9));
+    }
+
+    @Test
+    public void testResumeCompactionAfterAlterPreservesOtherRetryTimes() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        LakeTable table = new LakeTable();
+        table.setId(2);
+        table.addPartition(new Partition(10, 3, "regular", new MaterializedIndex(), null));
+        table.addTempPartition(new Partition(11, 4, "temporary", new MaterializedIndex(), null));
+        PartitionIdentifier first = new PartitionIdentifier(1, 2, 3);
+        PartitionIdentifier second = new PartitionIdentifier(1, 2, 4);
+        PartitionIdentifier otherTable = new PartitionIdentifier(1, 5, 6);
+        long now = System.currentTimeMillis();
+        for (PartitionIdentifier partition : List.of(first, second, otherTable)) {
+            compactionManager.handleLoadingFinished(partition, 2, now, new Quantiles(1.0, 1.0, 50.0));
+        }
+        compactionManager.enableCompactionAfter(first, 60_000);
+        long failureRetryTime = compactionManager.getStatistics(first).getNextCompactionTime();
+        for (PartitionIdentifier partition : List.of(first, second, otherTable)) {
+            compactionManager.deferCompactionForAlter(partition, 120_000);
+        }
+        long otherTableRetryTime = compactionManager.getStatistics(otherTable).getNextCompactionTime();
+
+        compactionManager.resumeCompactionAfterAlter(1, table);
+        Assertions.assertEquals(failureRetryTime, compactionManager.getStatistics(first).getNextCompactionTime());
+        Assertions.assertEquals(0, compactionManager.getStatistics(second).getNextCompactionTime());
+        Assertions.assertEquals(otherTableRetryTime, compactionManager.getStatistics(otherTable).getNextCompactionTime());
     }
 }

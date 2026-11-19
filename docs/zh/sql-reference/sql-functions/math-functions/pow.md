@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回x的y次方。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # pow, power, dpow, fpow

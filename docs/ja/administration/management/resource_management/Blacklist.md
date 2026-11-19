@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "特定の SQL パターンをブラックリストに登録してクラスタクラッシュや高同時実行クエリを防ぎます。"
 sidebar_position: 80
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ブラックリスト管理

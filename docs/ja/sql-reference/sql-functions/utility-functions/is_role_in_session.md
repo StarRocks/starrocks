@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ロールが現在のセッションでアクティブかどうかを確認します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # is_role_in_session

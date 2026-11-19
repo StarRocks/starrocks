@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "グループ化後の値のセットに対して bitmap union を計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_union

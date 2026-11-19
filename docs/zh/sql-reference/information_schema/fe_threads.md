@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "fe_threads 提供每个 FE 节点上运行的线程的信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # fe_threads

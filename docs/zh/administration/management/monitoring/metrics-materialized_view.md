@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Asynchronous materialized view monitoring metrics support from v3.1 onwards."
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 异步物化视图监控指标

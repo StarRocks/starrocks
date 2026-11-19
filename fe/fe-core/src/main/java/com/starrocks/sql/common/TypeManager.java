@@ -487,7 +487,7 @@ public class TypeManager {
         }
         if (from.isScalarType()) {
             PrimitiveType primitive = ((ScalarType) from).getPrimitiveType();
-            return primitive != PrimitiveType.HLL && primitive != PrimitiveType.BITMAP &&
+            return !from.isGeoType() && primitive != PrimitiveType.HLL && primitive != PrimitiveType.BITMAP &&
                     primitive != PrimitiveType.PERCENTILE && primitive != PrimitiveType.FUNCTION &&
                     primitive != PrimitiveType.VARBINARY;
         }

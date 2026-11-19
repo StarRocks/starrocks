@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "使用显式 CRS 从 WKB 构造原生 GEOMETRY 值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_GeomFromWKB
