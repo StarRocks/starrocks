@@ -14,12 +14,15 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.collect.ForwardingSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -27,7 +30,10 @@ import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -248,6 +254,76 @@ public class MvRefreshUntrackedRowsTest extends MVTestBase {
             starRocksAssert.dropMaterializedView("mv_excluded");
             starRocksAssert.dropTable("tbl_excluded");
         }
+    }
+
+    @Test
+    public void testUntrackedRowsCheckLooksUpTrackedPartitionsWithoutScanningThem() throws Exception {
+        createDailyTable("tbl_lookup");
+        starRocksAssert.withMaterializedView(dailyMvSql("mv_lookup", "tbl_lookup", ""));
+        try {
+            MaterializedView mv = getMv("mv_lookup");
+            initAndExecuteTaskRun(buildMVTaskRun(mv, DB_NAME));
+            OlapTable baseTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(DB_NAME, "tbl_lookup");
+            Map<String, Map<Table, PCellSortedSet>> mvToBasePartitions =
+                    getMvUpdateInfo(mv).getMVPartNameToBasePCells();
+
+            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
+                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+            Map<String, MaterializedView.BasePartitionInfo> tracked =
+                    lookupOnlyKeys(versionMap.get(baseTable.getId()));
+            tracked.remove("p20220103");
+            versionMap.put(baseTable.getId(), tracked);
+
+            Assertions.assertEquals(Set.of("p20220103"),
+                    MvRefreshArbiter.getMvPartitionsWithUntrackedRows(mv, baseTable, mvToBasePartitions));
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_lookup");
+            starRocksAssert.dropTable("tbl_lookup");
+        }
+    }
+
+    @Test
+    public void testDropCheckLooksUpDroppedPartitionsWithoutScanningThem() throws Exception {
+        createDailyTable("tbl_drop_lookup");
+        starRocksAssert.withMaterializedView(dailyMvSql("mv_drop_lookup", "tbl_drop_lookup", ""));
+        try {
+            MaterializedView mv = getMv("mv_drop_lookup");
+            initAndExecuteTaskRun(buildMVTaskRun(mv, DB_NAME));
+            OlapTable baseTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(DB_NAME, "tbl_drop_lookup");
+
+            Assertions.assertEquals(Set.of("p20220103"),
+                    MvRefreshArbiter.getMvPartitionsAffectedByDrops(mv, baseTable, lookupOnly(Set.of("p20220103"))));
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_drop_lookup");
+            starRocksAssert.dropTable("tbl_drop_lookup");
+        }
+    }
+
+    // These checks run once per mv partition, so enumerating a whole partition set there is quadratic.
+    private static Set<String> lookupOnly(Set<String> names) {
+        return new ForwardingSet<>() {
+            @Override
+            protected Set<String> delegate() {
+                return names;
+            }
+
+            @Override
+            public Iterator<String> iterator() {
+                throw new AssertionError("enumerated a whole partition set");
+            }
+        };
+    }
+
+    private static Map<String, MaterializedView.BasePartitionInfo> lookupOnlyKeys(
+            Map<String, MaterializedView.BasePartitionInfo> versions) {
+        return new HashMap<>(versions) {
+            @Override
+            public Set<String> keySet() {
+                return lookupOnly(super.keySet());
+            }
+        };
     }
 
     private static void createDailyTable(String name) throws Exception {
