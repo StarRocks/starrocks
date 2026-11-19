@@ -21,11 +21,10 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.MultiInPredicate;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.type.GeoType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import org.junit.jupiter.api.Test;
 
@@ -54,8 +53,8 @@ public class ScalarGeoMultiInTest {
     public void testScalarGeoOnEitherSide() {
         var geography = new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
                 "OGC:CRS84", 4326);
-        for (Type geo : List.of(ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, geography),
-                ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry("EPSG:3857")))) {
+        for (Type geo : List.of(GeoType.createGeographyType(geography),
+                GeoType.createGeometryType("EPSG:3857"))) {
             for (boolean notIn : List.of(false, true)) {
                 for (boolean geoFirst : List.of(false, true)) {
                     for (Type other : List.of(geo, NullType.NULL, IntegerType.INT)) {
