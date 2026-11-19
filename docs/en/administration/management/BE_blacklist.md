@@ -98,6 +98,8 @@ The following fields are returned:
 
 Each time a BE/CN node loses connection to the FE node, or a query fails due to timeout on a BE/CN node, the FE node adds the BE/CN node to its BE and CN Blacklist. The FE node will constantly assess the connectivity of the BE/CN node in the blacklist by counting its connection failures within a certain duration of time. StarRocks will remove a blacklisted BE/CN node only if the number of its connection failures is below a pre-specified threshold.
 
+When a heartbeat confirms that a BE/CN node has restarted, the FE ignores late failure reports from requests started before it detected the restart. Subsequent blacklist checks exclude failures from those requests and remove the automatic entry once the minimum penalty time and the port checks are satisfied. Recovery from a disconnection without a restart follows the normal blacklist rules. Manual blacklist entries are unaffected. Each FE maintains its own blacklist.
+
 You can configure the automatic management of the BE and CN Blacklist using the following [FE configurations](../configuration/FE_parameters/FE_parameters.md):
 
 - `black_host_history_sec`: The time duration for retaining historical connection failures of BE/CN nodes in the Blacklist.

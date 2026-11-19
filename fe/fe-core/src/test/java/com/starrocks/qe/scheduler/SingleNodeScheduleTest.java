@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.starrocks.utframe.MockedBackend.MockPBackendService;
 
@@ -104,6 +105,34 @@ public class SingleNodeScheduleTest extends SchedulerTestBase {
 
         String sql = "select * from lineitem l join orders o on l.l_orderkey = o.o_orderkey";
         Assertions.assertThrows(RpcException.class, () -> startScheduling(sql), " should throw RpcException for retry");
+    }
+
+    @Test
+    public void testBatchDeployFailureReportsRequestStartTime() throws Exception {
+        AtomicLong reportedStartTime = new AtomicLong(-1);
+        new MockUp<SimpleScheduler>() {
+            @Mock
+            public void addToBlocklist(Long backendID, long requestStartTime) {
+                reportedStartTime.set(requestStartTime);
+            }
+        };
+        setBackendService(address -> new MockPBackendService() {
+            @Override
+            public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
+                    PExecBatchPlanFragmentsRequest request) {
+                return submit(() -> {
+                    throw new RpcException("batch deploy failed");
+                });
+            }
+        });
+
+        long beforeScheduling = System.currentTimeMillis();
+        String sql = "select count(1) from lineitem";
+        Assertions.assertThrows(RpcException.class, () -> startScheduling(sql));
+        // The batch rpc is not sent by each execution, so the start time has to be captured for them.
+        // Reporting zero would make the failure look older than any restart and drop it from the blacklist.
+        Assertions.assertTrue(reportedStartTime.get() >= beforeScheduling,
+                "batch deploy failure should report the request start time, but got " + reportedStartTime.get());
     }
 
 }
