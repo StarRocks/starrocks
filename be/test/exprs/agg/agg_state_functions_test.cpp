@@ -2015,9 +2015,10 @@ void test_nullable_wrapper_keeps_null_rows(const std::string& func_name, const T
 
 TEST_F(AggStateFunctionsTest, test_nullable_wrapper_single_row_update_keeps_null_rows) {
     const TypeDescriptor array_int_type = TypeDescriptor::create_array_type(TYPE_INT_DESC);
-    test_nullable_wrapper_keeps_null_rows(
-            "array_unique_agg", array_int_type,
-            ColumnTestHelper::build_array_column<int32_t>(array_int_type, true, {{1}, NullArrayRow{}, NullArrayRow{}}));
+    auto arrays = ColumnHelper::create_column(array_int_type, true);
+    arrays->append_datum(DatumArray{Datum((int32_t)1)});
+    arrays->append_nulls(2);
+    test_nullable_wrapper_keeps_null_rows("array_unique_agg", array_int_type, std::move(arrays));
     test_nullable_wrapper_keeps_null_rows("array_agg_distinct", TYPE_INT_DESC,
                                           ColumnTestHelper::build_nullable_column<int32_t>({1, 0, 0}, {0, 1, 1}));
 }
