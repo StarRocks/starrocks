@@ -329,4 +329,13 @@ public class ConstantOperatorTest {
             Assertions.assertEquals(-10, var2.distance(var1));
         }
     }
+
+    @Test
+    public void testCharAndVarcharWithOneValueHashAlike() {
+        // equals() treats CHAR and VARCHAR as one type, so hashCode() has to as well
+        ConstantOperator asChar = ConstantOperator.createChar("abc%", new CharType(4));
+        ConstantOperator asVarchar = ConstantOperator.createVarchar("abc%");
+        Assertions.assertEquals(asChar, asVarchar);
+        Assertions.assertEquals(asChar.hashCode(), asVarchar.hashCode());
+    }
 }
