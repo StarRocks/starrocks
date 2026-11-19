@@ -68,6 +68,16 @@ DateValue AvroUtils::int_to_date_value(int32_t from) {
     return DateValue::create(tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday);
 }
 
+std::pair<int64_t, int64_t> AvroUtils::split_epoch_to_second_and_micros(int64_t value, int64_t units_per_second) {
+    int64_t second = value / units_per_second;
+    int64_t remainder = value % units_per_second;
+    if (remainder < 0) {
+        second -= 1;
+        remainder += units_per_second;
+    }
+    return {second, remainder * (1000000 / units_per_second)};
+}
+
 StatusOr<TimestampValue> AvroUtils::long_to_timestamp_value(const avro::GenericDatum& datum,
                                                             const cctz::time_zone& timezone,
                                                             TzOffsetCache* offset_cache) {
@@ -83,12 +93,14 @@ StatusOr<TimestampValue> AvroUtils::long_to_timestamp_value(const avro::GenericD
     TimestampValue to{};
     switch (datum.logicalType().type()) {
     case avro::LogicalType::TIMESTAMP_MILLIS: {
-        from_unixtime(&to, from / 1000, (from % 1000) * 1000);
+        auto [second, microsecond] = split_epoch_to_second_and_micros(from, 1000);
+        from_unixtime(&to, second, microsecond);
         return to;
     }
 
     case avro::LogicalType::TIMESTAMP_MICROS: {
-        from_unixtime(&to, from / 1000000, (from % 1000000));
+        auto [second, microsecond] = split_epoch_to_second_and_micros(from, 1000000);
+        from_unixtime(&to, second, microsecond);
         return to;
     }
 

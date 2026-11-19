@@ -45,9 +45,7 @@ select count(*), count(v), min(id), max(id) from noshred;
 select count(*), count(v), min(id), max(id) from api_shred;
 
 -- Whole documents.
--- id 2 holds a pre-1970 timestamp, which is rendered wrong as text today, so it is left out of the recorded rows
--- until that is fixed; the equality checks between the tables still cover it.
-select id, cast(v as string) from shred where id < 100 and id != 2 order by id;
+select id, cast(v as string) from shred where id < 100 order by id;
 function: assert_equal_result("select id, cast(v as string) from shred order by id", "select id, cast(v as string) from noshred order by id")
 function: assert_equal_result("select id, cast(v as string) from shred order by id", "select id, cast(v as string) from api_shred order by id")
 
@@ -61,7 +59,7 @@ select id, cast(v as string), cast(v as json), cast(variant_query(v, '$.t') as d
 select id, cast(variant_query(v, '$.i') as string), cast(variant_query(v, '$.s') as string), cast(variant_query(v, '$.dec') as string),
        cast(variant_query(v, '$.t') as string), cast(variant_query(v, '$.o.x') as string), cast(variant_query(v, '$.o.z.w') as string),
        cast(variant_query(v, '$.arr[1]') as string), cast(variant_query(v, '$.ao[0].k') as string), cast(variant_query(v, '$.x') as string)
-from shred where id < 100 and id != 2 order by id;
+from shred where id < 100 order by id;
 function: assert_equal_result("select id, cast(variant_query(v, '$.i') as string), cast(variant_query(v, '$.s') as string), cast(variant_query(v, '$.dec') as string), cast(variant_query(v, '$.t') as string), cast(variant_query(v, '$.o.x') as string), cast(variant_query(v, '$.o.z.w') as string), cast(variant_query(v, '$.arr[1]') as string), cast(variant_query(v, '$.ao[0].k') as string), cast(variant_query(v, '$.x') as string) from shred order by id", "select id, cast(variant_query(v, '$.i') as string), cast(variant_query(v, '$.s') as string), cast(variant_query(v, '$.dec') as string), cast(variant_query(v, '$.t') as string), cast(variant_query(v, '$.o.x') as string), cast(variant_query(v, '$.o.z.w') as string), cast(variant_query(v, '$.arr[1]') as string), cast(variant_query(v, '$.ao[0].k') as string), cast(variant_query(v, '$.x') as string) from noshred order by id")
 function: assert_equal_result("select id, cast(variant_query(v, '$.i') as string), cast(variant_query(v, '$.s') as string), cast(variant_query(v, '$.dec') as string), cast(variant_query(v, '$.t') as string), cast(variant_query(v, '$.o.x') as string), cast(variant_query(v, '$.o.z.w') as string), cast(variant_query(v, '$.arr[1]') as string), cast(variant_query(v, '$.ao[0].k') as string), cast(variant_query(v, '$.x') as string) from shred order by id", "select id, cast(variant_query(v, '$.i') as string), cast(variant_query(v, '$.s') as string), cast(variant_query(v, '$.dec') as string), cast(variant_query(v, '$.t') as string), cast(variant_query(v, '$.o.x') as string), cast(variant_query(v, '$.o.z.w') as string), cast(variant_query(v, '$.arr[1]') as string), cast(variant_query(v, '$.ao[0].k') as string), cast(variant_query(v, '$.x') as string) from api_shred order by id")
 
